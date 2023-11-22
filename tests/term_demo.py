@@ -22,7 +22,7 @@ class MyTestCase(unittest.TestCase):
 
         self.agency = Agency([
             self.ceo,
-            [self.ceo, self.test_agent1],
+            [self.ceo, self.test_agent1, self.test_agent2],
             [self.ceo, self.test_agent2]
         ])
 

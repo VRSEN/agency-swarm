@@ -235,6 +235,9 @@ class BaseAgent(ABC):
         else:
             raise Exception("Invalid tool type.")
 
+    def add_instructions(self, manifesto: str):
+        self.instructions = manifesto + "\n\n" + self.instructions
+
     def get_oai_tools(self):
         tools = []
         for tool in self.tools:

@@ -18,7 +18,7 @@ agency = Agency([
     ceo,
     [ceo, test_agent1, test_agent2],
     [ceo, test_agent2],
-])
+], shared_instructions="./manifesto.md")
 
 with gr.Blocks() as demo:
     chatbot = gr.Chatbot()
@@ -32,7 +32,7 @@ with gr.Blocks() as demo:
 
     def bot(history):
         # Replace this with your actual chatbot logic
-        gen = agency.yield_completion(message=history[-1][0])
+        gen = agency.yield_completions(message=history[-1][0])
 
         try:
             # Yield each message from the generator

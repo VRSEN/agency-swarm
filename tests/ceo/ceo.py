@@ -3,7 +3,8 @@ from agency_swarm.agents import BaseAgent
 
 class Ceo(BaseAgent):
     def __init__(self):
-        super().__init__()
-        self.name = "Ceo"
-        self.description = "Ceo Agent"
-        self.instructions = "./instructions.md"
+        super().__init__(
+            name="CEO",
+            description="Ceo Agent",
+            instructions="./instructions.md"
+        )

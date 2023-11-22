@@ -7,26 +7,33 @@ from agency_swarm.threads import Thread
 from agency_swarm.tools import BaseTool
 from agency_swarm.user import User
 import uuid
+import os
+import inspect
 
 
 class Agency:
 
-    def __init__(self, agency_chart, manifesto=""):
+    def __init__(self, agency_chart, shared_instructions=""):
         self.ceo = None
         self.agents = []
         self.agents_and_threads = {}
+
+        if os.path.isfile(self.get_class_folder_path() + shared_instructions):
+            self._read_instructions(os.path.isfile(self.get_class_folder_path() + shared_instructions))
+        elif os.path.isfile(shared_instructions):
+            self._read_instructions(shared_instructions)
+        else:
+            self.shared_instructions = shared_instructions
 
         self._parse_agency_chart(agency_chart)
         self._create_send_message_tools()
         self._init_agents()
         self._init_threads()
 
-        self.manifesto = manifesto
-
         self.user = User()
         self.main_thread = Thread(self.user, self.ceo)
 
-    def yield_completion(self, message: str):
+    def yield_completions(self, message: str):
         return self.main_thread.get_completion(message=message)
 
     def run_demo(self):
@@ -96,6 +103,11 @@ class Agency:
     def get_agent_names(self):
         return [agent.name for agent in self.agents]
 
+    def _read_instructions(self, path):
+        path = path
+        with open(path, 'r') as f:
+            self.shared_instructions = f.read()
+
     def plot_agency_chart(self):
         pass
 
@@ -143,6 +155,7 @@ class Agency:
     def _init_agents(self):
         for agent in self.agents:
             agent.id = None
+            agent.add_instructions(self.shared_instructions)
             agent.init_oai()
 
     def _init_threads(self):
@@ -151,3 +164,6 @@ class Agency:
                 self.agents_and_threads[agent_name][other_agent] = Thread(self.get_agent_by_name(items["agent"]),
                                                                           self.get_agent_by_name(
                                                                               items["recipient_agent"]))
+
+    def get_class_folder_path(self):
+        return os.path.abspath(os.path.dirname(inspect.getfile(self.__class__)))
