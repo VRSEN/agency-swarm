@@ -1,0 +1,57 @@
+import unittest
+
+from agency_swarm.agency.agency import Agency
+from agency_swarm import set_openai_key
+from agency_swarm.threads import Thread
+from .test_agent.test_agent import TestAgent
+from .test_agent2.test_agent2 import TestAgent2
+from .ceo.ceo import Ceo
+import sys
+
+sys.path.insert(0, '../agency_swarm')
+import json
+
+
+class MyTestCase(unittest.TestCase):
+    def setUp(self):
+        set_openai_key("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")
+
+        self.test_agent1 = TestAgent()
+        self.test_agent2 = TestAgent2()
+        self.ceo = Ceo()
+
+        self.agency = Agency([
+            self.ceo,
+            [self.ceo, self.test_agent1],
+            [self.ceo, self.test_agent2]
+        ])
+
+        def custom_serializer(obj):
+            if isinstance(obj, Thread):
+                return {"agent": obj.agent.name, "recipient_agent": obj.recipient_agent.name}
+            # You can add more types here if needed
+            raise TypeError(f"Type {type(obj)} not serializable")
+
+        print(json.dumps(self.agency.agents_and_threads, indent=4, default=custom_serializer))
+
+        print("Ceo Tools: ", self.agency.ceo.tools)
+
+    def test_demo(self):
+        with gr.Blocks() as demo:
+            chatbot = gr.Chatbot()
+            msg = gr.Textbox()
+            clear = gr.ClearButton([msg, chatbot])
+
+            def respond(message, chat_history):
+                bot_message = random.choice(["How are you?", "I love you", "I'm very hungry"])
+                chat_history.append((message, bot_message))
+                time.sleep(2)
+                return "", chat_history
+
+            msg.submit(respond, [msg, chatbot], [msg, chatbot])
+
+        demo.launch()
+
+
+if __name__ == '__main__':
+    unittest.main()

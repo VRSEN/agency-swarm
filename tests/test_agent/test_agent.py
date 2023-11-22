@@ -2,5 +2,9 @@ from agency_swarm.agents import BaseAgent
 
 
 class TestAgent(BaseAgent):
-    description = "Test Agent"
-    instructions = "./instructions.md"
+    def __init__(self):
+        super().__init__(
+            name="Test Agent",
+            description="Test Agent",
+            instructions="./instructions.md"
+        )

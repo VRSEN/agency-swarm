@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from instructor import OpenAISchema
+from termcolor import colored
 
 
 class BaseTool(OpenAISchema, ABC):
@@ -7,5 +8,5 @@ class BaseTool(OpenAISchema, ABC):
         super().__init__(**kwargs)
 
     @abstractmethod
-    def run(self):
+    def run(self, **kwargs):
         pass

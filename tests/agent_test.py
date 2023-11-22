@@ -5,18 +5,21 @@ from .test_agent.test_agent import TestAgent
 import sys
 import os
 import json
+import inspect
 
 sys.path.insert(0, '../agency_swarm')
 
 
-class MyTestCase(unittest.TestCase):
+class AgentTest(unittest.TestCase):
     agent = None
 
     def setUp(self):
         set_openai_key("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")
+        with open(self.get_class_folder_path() + '/test_agent/instructions.md', 'r') as f:
+            self.test_instructions = f.read()
 
-    # it should create new settings file and init agent
     def test_init_agent(self):
+        """it should create assistant and save it to settings"""
         self.agent = TestAgent()
         self.assertTrue(self.agent.id)
 
@@ -30,14 +33,19 @@ class MyTestCase(unittest.TestCase):
                 if assistant_settings['id'] == self.agent.id:
                     self.assertTrue(self.agent._check_parameters(assistant_settings))
 
-    # it should load assistant from settings
+        self.assertEqual(self.agent.instructions, self.test_instructions)
+
     def test_load_agent(self):
+        """it should load assistant from settings"""
         self.agent = TestAgent()
         agent2 = TestAgent()
         self.assertEqual(self.agent.id, agent2.id)
+        self.assertEqual(self.agent.instructions, self.test_instructions)
+
+    def get_class_folder_path(self):
+        return os.path.abspath(os.path.dirname(inspect.getfile(self.__class__)))
 
     def tearDown(self):
-        # delete assistant from openai
         self.agent.delete_assistant()
 
         os.remove(self.agent.get_settings_path())

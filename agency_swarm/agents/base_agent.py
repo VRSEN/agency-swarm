@@ -1,17 +1,15 @@
+import inspect
 import json
 import os
-import inspect
-from abc import ABC, abstractmethod
-from typing import Dict, List, Literal, Union, Optional
+from abc import ABC
+from typing import Dict, Union, Any
+from typing import Literal, List
 
+from deepdiff import DeepDiff
 from pydantic import BaseModel
 
 from agency_swarm.tools import BaseTool
 from agency_swarm.util.oai import get_openai_client
-
-from deepdiff import DeepDiff
-
-import sys
 
 
 class DefaultTools(BaseModel):
@@ -19,17 +17,33 @@ class DefaultTools(BaseModel):
 
 
 class BaseAgent(ABC):
-    id: str = None
-    name: str = None
-    description: str = None
-    instructions: str = None  # can be file path
-    tools: List[Union[BaseTool, DefaultTools]] = []
-    files: Union[List[str], str] = []  # can be file or folder path
-    metadata: Dict[str, str] = {}
-    model: str = "gpt-4-1106-preview"
+    @property
+    def assistant(self):
+        if self._assistant is None:
+            raise Exception("Assistant is not initialized. Please run init_assistant() first.")
+        return self._assistant
 
-    def __init__(self):
-        if os.path.isfile(self.instructions):
+    @assistant.setter
+    def assistant(self, value):
+        self._assistant = value
+
+    def __init__(self, id: str = None, name: str = None, description: str = None, instructions: str = "",
+                 tools: List[Union[BaseTool, DefaultTools]] = None, files: Union[List[str], str] = None,
+                 metadata: Dict[str, str] = None, model: str = "gpt-4-1106-preview"):
+
+        self.id = id
+        self.name = name if name else self.__class__.__name__
+        self.description = description
+        self.instructions = instructions  # can be file path
+        self.tools = tools if tools else []  # Instance variable for tools
+        self.files = files if files else []  # can be file or folder path
+        self.metadata = metadata if metadata else {}
+        self.model = model
+
+        self._assistant: Any = None
+        self.functions: List[BaseTool] = []
+
+        if os.path.isfile(self.get_instructions_path()):
             self.instructions = self._read_instructions()
 
         if isinstance(self.files, str):
@@ -41,18 +55,15 @@ class BaseAgent(ABC):
                 self.files = [self.files]
                 self.files = self._upload_files()
 
-        for i, tool in enumerate(self.tools):
-            if isinstance(tool, BaseTool):
-                self.tools[i]['type'] = "function"
-                self.tools[i]["function"] = tool.openai_schema()
+        for tool in self.tools:
+            self.add_tool(tool)
 
         if not self.name:
             self.name = self.__class__.__name__
 
         self.client = get_openai_client()
-        self._init_assistant()
 
-    def _init_assistant(self):
+    def init_assistant(self):
         # check if settings.json exists
         path = self.get_settings_path()
 
@@ -75,8 +86,9 @@ class BaseAgent(ABC):
                         self.id = assistant_settings['id']
                         # update assistant if parameters are different
                         if not self._check_parameters(self.assistant.model_dump()):
+                            print("Updating assistant..." + self.name)
                             self._update_assistant()
-
+                        self._update_settings()
                         return
         # create assistant if settings.json does not exist or assistant with the same name does not exist
         self.assistant = self.client.beta.assistants.create(
@@ -104,25 +116,18 @@ class BaseAgent(ABC):
 
     def _check_parameters(self, assistant_settings):
         if self.name != assistant_settings['name']:
-            print("name")
             return False
         if self.description != assistant_settings['description']:
-            print("description")
             return False
         if self.instructions != assistant_settings['instructions']:
-            print("instructions")
             return False
         if DeepDiff(self.tools, assistant_settings['tools'], ignore_order=True) != {}:
-            print("tools")
             return False
         if set(self.files) != set(assistant_settings['file_ids']):
-            print("files")
             return False
         if DeepDiff(self.metadata, assistant_settings['metadata'], ignore_order=True) != {}:
-            print("metadata")
             return False
         if self.model != assistant_settings['model']:
-            print("model")
             return False
         return True
 
@@ -155,7 +160,7 @@ class BaseAgent(ABC):
                 json.dump(settings, f, indent=4)
 
     def _read_instructions(self):
-        with open(self.instructions, 'r') as f:
+        with open(self.get_instructions_path(), 'r') as f:
             return f.read()
 
     def _upload_files(self):
@@ -165,11 +170,18 @@ class BaseAgent(ABC):
             file_ids.append(file.id)
         return file_ids
 
+    def get_instructions_path(self):
+        return os.path.join(self.get_class_folder_path(), self.instructions)
+
     def get_settings_path(self):
         return os.path.join(self.get_class_folder_path(), 'settings.json')
 
     def get_class_folder_path(self):
         return os.path.abspath(os.path.dirname(inspect.getfile(self.__class__)))
+
+    def set_params(self, **params):
+        for k, v in params.items():
+            setattr(self, k, v)
 
     def get_params(self):
         return {
@@ -181,6 +193,20 @@ class BaseAgent(ABC):
             "metadata": self.metadata,
             "model": self.model
         }
+
+    def add_tool(self, tool):
+        if isinstance(tool, dict) and tool['type'] in ["code_interpreter", "retrieval"]:
+            self.tools.append({
+                "type": tool['type'],
+            })
+        elif issubclass(tool, BaseTool):
+            self.tools.append({
+                "type": "function",
+                "function": tool.openai_schema
+            })
+            self.functions.append(tool)
+        else:
+            raise Exception("Invalid tool type.")
 
     def delete_assistant(self):
         self.client.beta.assistants.delete(self.id)
