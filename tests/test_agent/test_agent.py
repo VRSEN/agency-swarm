@@ -1,5 +1,4 @@
 from agency_swarm.agents import BaseAgent
-from agency_swarm.tools import Retrieval
 
 
 class TestAgent(BaseAgent):
