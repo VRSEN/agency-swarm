@@ -1,12 +1,11 @@
+import sys
 import unittest
 
 from agency_swarm.agency.agency import Agency
-from agency_swarm import set_openai_key
 from agency_swarm.threads import Thread
+from .ceo.ceo import Ceo
 from .test_agent.test_agent import TestAgent
 from .test_agent2.test_agent2 import TestAgent2
-from .ceo.ceo import Ceo
-import sys
 
 sys.path.insert(0, '../agency_swarm')
 import json
@@ -14,8 +13,6 @@ import json
 
 class MyTestCase(unittest.TestCase):
     def setUp(self):
-        set_openai_key("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")
-
         self.test_agent1 = TestAgent()
         self.test_agent2 = TestAgent2()
         self.ceo = Ceo()

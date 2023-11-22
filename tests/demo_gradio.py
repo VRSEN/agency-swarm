@@ -1,14 +1,13 @@
+import sys
+
 import gradio as gr
 
-from agency_swarm import set_openai_key
 from agency_swarm.agency.agency import Agency
 from tests.ceo.ceo import Ceo
 from tests.test_agent.test_agent import TestAgent
 from tests.test_agent2.test_agent2 import TestAgent2
-import sys
-sys.path.insert(0, '../agency_swarm')
 
-set_openai_key("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")
+sys.path.insert(0, '../agency_swarm')
 
 test_agent1 = TestAgent()
 test_agent2 = TestAgent2()

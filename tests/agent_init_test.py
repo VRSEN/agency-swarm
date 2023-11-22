@@ -1,11 +1,10 @@
+import inspect
+import json
+import os
+import sys
 import unittest
 
-from agency_swarm import set_openai_key
 from .test_agent.test_agent import TestAgent
-import sys
-import os
-import json
-import inspect
 
 sys.path.insert(0, '../agency_swarm')
 
@@ -14,7 +13,6 @@ class AgentInitTest(unittest.TestCase):
     agent = None
 
     def setUp(self):
-        set_openai_key("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")
         self.agent = TestAgent().init_oai()
         with open(self.get_class_folder_path() + '/test_agent/instructions.md', 'r') as f:
             self.test_instructions = f.read()
