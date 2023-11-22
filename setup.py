@@ -5,14 +5,14 @@ with open('requirements.txt') as f:
     requirements = f.read().splitlines()
 
 setup(
-    name='agency',  # Replace with your package's name
+    name='agency-swarm',  # Replace with your package's name
     version='0.1.0',  # Initial version of your package
     author='VRSEN',  # Replace with your name
     author_email='arseny9795@gmail.com',  # Replace with your email address
-    description='This project allows anyone',  # Provide a short description
+    description='Create your own agency with an agent swarms.',  # Provide a short description
     long_description=open('README.md').read(),  # Long description read from the README.md
     long_description_content_type='text/markdown',  # Content type of the long description
-    url='https://github.com/yourusername/your_package_name',  # Replace with the URL of your package's repository
+    url='https://github.com/VRSEN/agency-swarm',  # Replace with the URL of your package's repository
     packages=find_packages(),  # Automatically find all packages and subpackages
     install_requires=requirements,
     classifiers=[
