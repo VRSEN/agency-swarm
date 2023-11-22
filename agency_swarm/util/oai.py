@@ -3,6 +3,9 @@ import threading
 import os
 import instructor
 
+from dotenv import load_dotenv
+load_dotenv()
+
 client_lock = threading.Lock()
 client = None
 

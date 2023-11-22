@@ -7,7 +7,7 @@ from .ceo.ceo import Ceo
 from .test_agent.test_agent import TestAgent
 from .test_agent2.test_agent2 import TestAgent2
 
-sys.path.insert(0, '../agency_swarm')
+sys.path.insert(0, '../agency-swarm')
 import json
 
 

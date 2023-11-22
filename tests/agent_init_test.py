@@ -6,7 +6,7 @@ import unittest
 
 from .test_agent.test_agent import TestAgent
 
-sys.path.insert(0, '../agency_swarm')
+sys.path.insert(0, '../agency-swarm')
 
 
 class AgentInitTest(unittest.TestCase):
