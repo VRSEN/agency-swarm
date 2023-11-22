@@ -34,7 +34,11 @@ def create_agent_template(path="./"):
 
     os.mkdir(path + "files")
 
+    with open(path + "__init__.py", "w") as f:
+        f.write("from . import *")
+
     print("Agent folder created successfully.")
+    print(f"Import it with: from {folder_name} import {class_name}")
 
 
 agent_template = """from agency_swarm.agents import BaseAgent
