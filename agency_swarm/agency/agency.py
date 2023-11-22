@@ -100,15 +100,11 @@ class Agency:
         pass
 
     def _create_send_message_tools(self):
-        print("agent1 tools", self.agents[1].tools)
         for agent_name, threads in self.agents_and_threads.items():
             recipient_names = list(threads.keys())
-            print("recipient_names", recipient_names)
             recipient_agents = self.get_agents_by_names(recipient_names)
             agent = self.get_agent_by_name(agent_name)
             agent.add_tool(self._create_send_message_tool(agent, recipient_agents))
-            print("Added send message tool to ", agent.name)
-        print("agent1 tools", self.agents[1].tools)
 
     def _create_send_message_tool(self, agent: BaseAgent, recipient_agents: List[BaseAgent]):
         recipients: List[str] = [agent.name for agent in recipient_agents]
@@ -147,7 +143,7 @@ class Agency:
     def _init_agents(self):
         for agent in self.agents:
             agent.id = None
-            agent.init_assistant()
+            agent.init_oai()
 
     def _init_threads(self):
         for agent_name, threads in self.agents_and_threads.items():

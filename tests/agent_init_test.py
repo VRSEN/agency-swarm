@@ -10,17 +10,17 @@ import inspect
 sys.path.insert(0, '../agency_swarm')
 
 
-class AgentTest(unittest.TestCase):
+class AgentInitTest(unittest.TestCase):
     agent = None
 
     def setUp(self):
         set_openai_key("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")
+        self.agent = TestAgent().init_oai()
         with open(self.get_class_folder_path() + '/test_agent/instructions.md', 'r') as f:
             self.test_instructions = f.read()
 
     def test_init_agent(self):
         """it should create assistant and save it to settings"""
-        self.agent = TestAgent()
         self.assertTrue(self.agent.id)
 
         self.settings_path = self.agent.get_settings_path()
@@ -37,20 +37,17 @@ class AgentTest(unittest.TestCase):
 
     def test_load_agent(self):
         """it should load assistant from settings"""
-        self.agent = TestAgent()
-        agent2 = TestAgent()
+        agent2 = TestAgent().init_oai()
         self.assertEqual(self.agent.id, agent2.id)
         self.assertEqual(self.agent.instructions, self.test_instructions)
+        print(self.agent.files_folder)
 
     def get_class_folder_path(self):
         return os.path.abspath(os.path.dirname(inspect.getfile(self.__class__)))
 
-    def tearDown(self):
-        self.agent.delete_assistant()
-
-        os.remove(self.agent.get_settings_path())
-
-        pass
+    # def tearDown(self):
+    #     self.agent.delete_assistant()
+    #     pass
 
 
 if __name__ == '__main__':

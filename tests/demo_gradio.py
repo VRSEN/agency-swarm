@@ -16,9 +16,8 @@ ceo = Ceo()
 
 agency = Agency([
     ceo,
-    [ceo, test_agent1],
+    [ceo, test_agent1, test_agent2],
     [ceo, test_agent2],
-    [test_agent1, test_agent2]
 ])
 
 with gr.Blocks() as demo:

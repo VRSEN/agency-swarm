@@ -59,6 +59,9 @@ class MessageOutput:
         if self.sender_name.lower() == "user":
             return "👤"
 
+        if self.sender_name.lower() == "ceo":
+            return "🤵‍"
+
         # output emoji based on hash of sender name
         encoded_str = self.sender_name.encode()
         hash_obj = hashlib.md5(encoded_str)

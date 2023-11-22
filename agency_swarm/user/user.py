@@ -1,7 +1,6 @@
 class User:
-    name: str
+    name: str = "User"
+
     def __init__(self, name: str = None):
-        if not name:
-            self.name = self.__class__.__name__
-        else:
-            self.name = name
+        # later, we can add more attributes to the user like bio, etc
+        pass
