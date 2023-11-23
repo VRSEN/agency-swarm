@@ -19,19 +19,19 @@ def create_agent_template(path="./", use_txt=False):
         raise Exception("Folder already exists.")
     os.mkdir(path)
 
-    # create init file
-    with open(path + "__init__.py", "w") as f:
-        f.write("from . import *")
-
     # create agent file
     class_name = agent_name.title().replace(" ", "").strip()
-    with open(path + class_name + ".py", "w") as f:
+    with open(path + folder_name + ".py", "w") as f:
         f.write(agent_template.format(
             class_name=class_name,
             agent_name=agent_name,
             agent_description=agent_description,
             ext="md" if not use_txt else "txt"
         ))
+
+    # create init file
+    with open(path + "__init__.py", "w") as f:
+        f.write(f"from .{folder_name} import {class_name}")
 
     # create instructions file
     instructions = "instructions.md" if not use_txt else "instructions.txt"
