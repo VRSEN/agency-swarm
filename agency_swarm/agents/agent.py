@@ -1,7 +1,6 @@
 import inspect
 import json
 import os
-from abc import ABC
 from typing import Dict, Union, Any, Type
 from typing import List
 
@@ -11,7 +10,8 @@ from agency_swarm.tools import BaseTool
 from agency_swarm.tools import Retrieval, CodeInterpreter
 from agency_swarm.util.oai import get_openai_client
 
-class BaseAgent(ABC):
+
+class Agent():
     @property
     def assistant(self):
         if self._assistant is None:

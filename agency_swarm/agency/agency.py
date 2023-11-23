@@ -1,14 +1,15 @@
-from typing import List, Literal, Optional
+import inspect
+import os
+import uuid
+from enum import Enum
+from typing import List
 
-from pydantic import BaseModel, Field, validator
+from pydantic import Field, field_validator
 
-from agency_swarm.agents import BaseAgent
+from agency_swarm.agents import Agent
 from agency_swarm.threads import Thread
 from agency_swarm.tools import BaseTool
 from agency_swarm.user import User
-import uuid
-import os
-import inspect
 
 
 class Agency:
@@ -45,7 +46,7 @@ class Agency:
 
     def _parse_agency_chart(self, agency_chart):
         for node in agency_chart:
-            if isinstance(node, BaseAgent):
+            if isinstance(node, Agent):
                 if self.ceo:
                     raise Exception("Only 1 ceo is supported for now.")
                 self.ceo = node
@@ -53,7 +54,7 @@ class Agency:
 
             elif isinstance(node, list):
                 for i, agent in enumerate(node):
-                    if not isinstance(agent, BaseAgent):
+                    if not isinstance(agent, Agent):
                         raise Exception("Invalid agency chart.")
 
                     index = self._add_agent(agent)
@@ -118,51 +119,57 @@ class Agency:
             agent = self.get_agent_by_name(agent_name)
             agent.add_tool(self._create_send_message_tool(agent, recipient_agents))
 
-    def _create_send_message_tool(self, agent: BaseAgent, recipient_agents: List[BaseAgent]):
-            recipients: List[str] = [agent.name for agent in recipient_agents]
+    def _create_send_message_tool(self, agent: Agent, recipient_agents: List[Agent]):
+        recipient_names = [agent.name for agent in recipient_agents]
+        recipients = Enum("recipient", {name: name for name in recipient_names})
 
-            agent_descriptions = ""
-            for recipient_agent in recipient_agents:
-                if not recipient_agent.description:
-                    continue
-                agent_descriptions += recipient_agent.name + ": "
-                agent_descriptions += recipient_agent.description + "\n"
+        agent_descriptions = ""
+        for recipient_agent in recipient_agents:
+            if not recipient_agent.description:
+                continue
+            agent_descriptions += recipient_agent.name + ": "
+            agent_descriptions += recipient_agent.description + "\n"
 
-            outer_self = self
+        outer_self = self
 
-            class SendMessage(BaseTool):
-                """Send messages to other specialized agents in this group chat."""
-                chain_of_thought: str = Field(...,
-                                            description="Think step by step to determine the correct recipient and "
-                                                        "message.")
-                recipient: str = Field(..., description=agent_descriptions)
-                message: str = Field(...,
-                                    description="Specify the task required for the recipient agent to complete. Focus on "
-                                                "clarifying what the task entails, rather than providing exact "
-                                                "instructions.")
-                caller_agent_name: str = Field(default=agent.name,
-                                            description="The agent calling this tool. Defaults to your name. Do not change it.")
+        class SendMessage(BaseTool):
+            """Send messages to other specialized agents in this group chat."""
+            chain_of_thought: str = Field(...,
+                                          description="Think step by step to determine the correct recipient and "
+                                                      "message.")
+            recipient: recipients = Field(..., description=agent_descriptions)
+            message: str = Field(...,
+                                 description="Specify the task required for the recipient agent to complete. Focus on "
+                                             "clarifying what the task entails, rather than providing exact "
+                                             "instructions.")
+            caller_agent_name: str = Field(default=agent.name,
+                                           description="The agent calling this tool. Defaults to your name. Do not change it.")
 
-                @validator('recipient')
-                def check_recipient(cls, value):
-                    if value not in outer_self.get_recipient_names():
-                        raise ValueError(f"Recipient {value} is not valid.")
-                    return value
+            @field_validator('recipient')
+            def check_recipient(cls, value):
+                if value.value not in recipient_names:
+                    raise ValueError(f"Recipient {value} is not valid. Valid recipients are: {recipient_names}")
+                return value
 
-                @validator('caller_agent_name')
-                def check_caller_agent_name(cls, value):
-                    if value != agent.name:
-                        raise ValueError(f"Caller agent name {value} is not valid.")
-                    return value
+            @field_validator('caller_agent_name')
+            def check_caller_agent_name(cls, value):
+                if value != agent.name:
+                    raise ValueError(f"Caller agent name must be {agent.name}.")
+                return value
 
-                def run(self):
-                    thread = outer_self.agents_and_threads[self.caller_agent_name][self.recipient]
+            def run(self):
+                thread = outer_self.agents_and_threads[self.caller_agent_name][self.recipient.value]
 
-                    message = thread.get_completion(message=self.message)
+                gen = thread.get_completion(message=self.message)
+                try:
+                    while True:
+                        yield next(gen)
+                except StopIteration as e:
+                    message = e.value
 
-                    return message
+                return message or ""
 
-            return SendMessage
+        return SendMessage
 
     def get_recipient_names(self):
         # This method should return the current list of valid recipient names

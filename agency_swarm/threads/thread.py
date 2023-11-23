@@ -1,7 +1,8 @@
+import inspect
 import time
 from typing import Literal
 
-from agency_swarm.agents import BaseAgent
+from agency_swarm.agents import Agent
 from agency_swarm.messages import MessageOutput
 from agency_swarm.user import User
 from agency_swarm.util.oai import get_openai_client
@@ -12,7 +13,7 @@ class Thread:
     thread = None
     run = None
 
-    def __init__(self, agent: Literal[BaseAgent, User], recipient_agent: BaseAgent):
+    def __init__(self, agent: Literal[Agent, User], recipient_agent: Agent):
         self.agent = agent
         self.recipient_agent = recipient_agent
         self.client = get_openai_client()
@@ -52,12 +53,12 @@ class Thread:
                 for tool_call in tool_calls:
                     yield MessageOutput("function", self.recipient_agent.name, self.agent.name, str(tool_call.function))
 
-                    # handle special case for send message tool that uses yield
-                    if tool_call.function.name == "SendMessage":
-                        gen = self._execute_tool(tool_call)
+                    output = self._execute_tool(tool_call)
+                    if inspect.isgenerator(output):
                         try:
                             while True:
-                                yield next(gen)
+                                print(1)
+                                yield next(output)
                         except StopIteration as e:
                             output = e.value
                     else:

@@ -6,7 +6,9 @@ import unittest
 
 sys.path.insert(0, '../agency-swarm')
 
-from test_agent.test_agent import TestAgent
+from test_agent import TestAgent
+
+from agency_swarm import set_openai_key
 
 
 class AgentInitTest(unittest.TestCase):
@@ -17,9 +19,14 @@ class AgentInitTest(unittest.TestCase):
         with open(self.get_class_folder_path() + '/test_agent/instructions.md', 'r') as f:
             self.test_instructions = f.read()
 
+
+
+
     def test_init_agent(self):
         """it should create assistant and save it to settings"""
         self.assertTrue(self.agent.id)
+
+        self.assertTrue(len(self.agent.tools) == 1)
 
         self.settings_path = self.agent.get_settings_path()
         self.assertTrue(os.path.exists(self.settings_path))

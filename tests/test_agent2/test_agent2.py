@@ -1,7 +1,7 @@
-from agency_swarm.agents import BaseAgent
+from agency_swarm.agents import Agent
 
 
-class TestAgent2(BaseAgent):
+class TestAgent2(Agent):
     def __init__(self):
         super().__init__()
         self.description = "Test Agent"

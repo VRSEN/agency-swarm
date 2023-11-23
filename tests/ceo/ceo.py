@@ -1,7 +1,7 @@
-from agency_swarm.agents import BaseAgent
+from agency_swarm.agents import Agent
 
 
-class Ceo(BaseAgent):
+class Ceo(Agent):
     def __init__(self):
         super().__init__(
             name="CEO",

@@ -2,6 +2,8 @@ import sys
 
 import gradio as gr
 
+from agency_swarm import set_openai_key
+
 sys.path.insert(0, '../agency-swarm')
 
 from agency_swarm.agency.agency import Agency

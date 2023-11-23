@@ -51,7 +51,7 @@ class MessageOutput:
         return text
 
     def get_sender_emoji(self):
-        if self.msg_type == "function":
+        if self.msg_type == "function" or self.msg_type == "function_output":
             return "🧠"
         if self.msg_type == "system":
             return "🤖"
