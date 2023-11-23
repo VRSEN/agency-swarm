@@ -165,27 +165,31 @@ class BaseAgent(ABC):
     def _upload_files(self):
         if isinstance(self.files_folder, str):
             f_path = os.path.join(self.get_class_folder_path(), self.files_folder)
-            if os.path.isdir(f_path):
-                f_paths = os.listdir(f_path)
-                f_paths = [os.path.join(f_path, f) for f in f_paths]
+            f_path = os.path.normpath(f_path)  # Normalize the path
 
-                for f_path in f_paths:
-                    file_id = self._get_id_from_file(f_path)
-                    if file_id:
-                        print("File already uploaded. Skipping... " + os.path.basename(f_path))
+            # Create the directory if it doesn't exist
+            if not os.path.isdir(f_path):
+                os.makedirs(f_path, exist_ok=True)
+
+            # Now that we're sure the directory exists, proceed with file handling
+            f_paths = os.listdir(f_path)
+            f_paths = [os.path.join(f_path, f) for f in f_paths]
+
+            for f_path in f_paths:
+                file_id = self._get_id_from_file(f_path)
+                if file_id:
+                    print("File already uploaded. Skipping... " + os.path.basename(f_path))
+                    self.file_ids.append(file_id)
+                else:
+                    print("Uploading new file... " + os.path.basename(f_path))
+                    with open(f_path, 'rb') as f:
+                        file_id = self.client.files.create(file=f, purpose="assistants").id
                         self.file_ids.append(file_id)
-                    else:
-                        print("Uploading new file... " + os.path.basename(f_path))
-                        with open(f_path, 'rb') as f:
-                            file_id = self.client.files.create(file=f, purpose="assistants").id
-                            self.file_ids.append(file_id)
-                            self._add_id_to_file(f_path, file_id)
+                        self._add_id_to_file(f_path, file_id)
 
-                    if Retrieval not in self.tools:
-                        print("Detected files without Retrieval. Adding Retrieval tool...")
-                        self.add_tool(Retrieval)
-            else:
-                raise Exception("Files folder path is not a directory.")
+                if Retrieval not in self.tools:
+                    print("Detected files without Retrieval. Adding Retrieval tool...")
+                    self.add_tool(Retrieval)
 
     def _add_id_to_file(self, f_path, id):
         """Add file id to file name"""
@@ -217,7 +221,8 @@ class BaseAgent(ABC):
         return os.path.join(self.get_class_folder_path(), 'settings.json')
 
     def get_class_folder_path(self):
-        return os.path.abspath(os.path.dirname(inspect.getfile(self.__class__)))
+        class_file = inspect.getfile(type(self))
+        return os.path.abspath(os.path.dirname(class_file))
 
     def set_params(self, **params):
         for k, v in params.items():
