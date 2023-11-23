@@ -251,8 +251,11 @@ class Agent():
         else:
             raise Exception("Invalid tool type.")
 
-    def add_instructions(self, manifesto: str):
-        self.instructions = manifesto + "\n\n" + self.instructions
+    def add_instructions(self, instructions: str):
+        if instructions in self.instructions:
+            return
+
+        self.instructions = instructions + "\n\n" + self.instructions
 
     def get_oai_tools(self):
         tools = []
