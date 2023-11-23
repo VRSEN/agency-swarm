@@ -4,9 +4,9 @@ import os
 import sys
 import unittest
 
-from .test_agent.test_agent import TestAgent
+sys.path.insert(0, '../agency-swarm')
 
-sys.path.insert(0, '../agency_swarm')
+from test_agent.test_agent import TestAgent
 
 
 class AgentInitTest(unittest.TestCase):

@@ -1,6 +1,6 @@
 from typing import List, Literal, Optional
 
-from pydantic import Field
+from pydantic import BaseModel, Field, validator
 
 from agency_swarm.agents import BaseAgent
 from agency_swarm.threads import Thread
@@ -119,38 +119,54 @@ class Agency:
             agent.add_tool(self._create_send_message_tool(agent, recipient_agents))
 
     def _create_send_message_tool(self, agent: BaseAgent, recipient_agents: List[BaseAgent]):
-        recipients: List[str] = [agent.name for agent in recipient_agents]
+            recipients: List[str] = [agent.name for agent in recipient_agents]
 
-        agent_descriptions = ""
-        for recipient_agent in recipient_agents:
-            if not recipient_agent.description:
-                continue
-            agent_descriptions += recipient_agent.name + ": "
-            agent_descriptions += recipient_agent.description + "\n"
+            agent_descriptions = ""
+            for recipient_agent in recipient_agents:
+                if not recipient_agent.description:
+                    continue
+                agent_descriptions += recipient_agent.name + ": "
+                agent_descriptions += recipient_agent.description + "\n"
 
-        outer_self = self
+            outer_self = self
 
-        class SendMessage(BaseTool):
-            """Send messages to other specialized agents in this group chat."""
-            chain_of_thought: str = Field(...,
-                                          description="Think step by step to determine the correct recipient and "
-                                                      "message.")
-            recipient: Literal[*recipients] = Field(..., description=agent_descriptions)
-            message: str = Field(...,
-                                 description="Specify the task required for the recipient agent to complete. Focus on "
-                                             "clarifying what the task entails, rather than providing exact "
-                                             "instructions.")
-            caller_agent_name: Literal[agent.name] = Field(agent.name,
-                                                           description="The agent calling this tool. Defaults to your name. Do not change it.")
+            class SendMessage(BaseTool):
+                """Send messages to other specialized agents in this group chat."""
+                chain_of_thought: str = Field(...,
+                                            description="Think step by step to determine the correct recipient and "
+                                                        "message.")
+                recipient: str = Field(..., description=agent_descriptions)
+                message: str = Field(...,
+                                    description="Specify the task required for the recipient agent to complete. Focus on "
+                                                "clarifying what the task entails, rather than providing exact "
+                                                "instructions.")
+                caller_agent_name: str = Field(default=agent.name,
+                                            description="The agent calling this tool. Defaults to your name. Do not change it.")
 
-            def run(self):
-                thread = outer_self.agents_and_threads[self.caller_agent_name][self.recipient]
+                @validator('recipient')
+                def check_recipient(cls, value):
+                    if value not in outer_self.get_recipient_names():
+                        raise ValueError(f"Recipient {value} is not valid.")
+                    return value
 
-                message = thread.get_completion(message=self.message)
+                @validator('caller_agent_name')
+                def check_caller_agent_name(cls, value):
+                    if value != agent.name:
+                        raise ValueError(f"Caller agent name {value} is not valid.")
+                    return value
 
-                return message
+                def run(self):
+                    thread = outer_self.agents_and_threads[self.caller_agent_name][self.recipient]
 
-        return SendMessage
+                    message = thread.get_completion(message=self.message)
+
+                    return message
+
+            return SendMessage
+
+    def get_recipient_names(self):
+        # This method should return the current list of valid recipient names
+        return [agent.name for agent in self.agents]
 
     def _init_agents(self):
         for agent in self.agents:
