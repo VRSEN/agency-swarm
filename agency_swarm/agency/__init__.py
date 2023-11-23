@@ -1,1 +1,1 @@
-from . import agency
+from .agency import Agency
