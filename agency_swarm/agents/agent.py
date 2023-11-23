@@ -233,10 +233,20 @@ class Agent():
         if not isinstance(tool, type):
             raise Exception("Tool must not be initialized.")
         if issubclass(tool, Retrieval):
+            # check that tools name is not already in tools
+            for t in self.tools:
+                if issubclass(t, Retrieval):
+                    return
             self.tools.append(tool)
         elif issubclass(tool, CodeInterpreter):
+            for t in self.tools:
+                if issubclass(t, Retrieval):
+                    return
             self.tools.append(tool)
         elif issubclass(tool, BaseTool):
+            for t in self.tools:
+                if t.__name__ == tool.__name__:
+                    self.tools.remove(t)
             self.tools.append(tool)
         else:
             raise Exception("Invalid tool type.")

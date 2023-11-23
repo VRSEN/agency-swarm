@@ -15,7 +15,6 @@ class AgentInitTest(unittest.TestCase):
     agent = None
 
     def setUp(self):
-        set_openai_key("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")
         self.agent = TestAgent().init_oai()
         with open(self.get_class_folder_path() + '/test_agent/instructions.md', 'r') as f:
             self.test_instructions = f.read()
