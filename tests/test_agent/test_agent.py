@@ -6,7 +6,7 @@ class TestAgent(BaseAgent):
         super().__init__(
             name="Test Agent",
             description="Test Agent",
-            instructions="./instructions.md",
+            instructions="./instructions.txt",
             files_folder="./files",
             tools=[]
         )
