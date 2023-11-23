@@ -55,11 +55,18 @@ class Thread:
                     # handle special case for send message tool that uses yield
                     if tool_call.function.name == "SendMessage":
                         gen = self._execute_tool(tool_call)
-                        try:
-                            while True:
-                                yield next(gen)
-                        except StopIteration as e:
-                            output = e.value
+
+                        # Check if gen is an iterator
+                        if hasattr(gen, '__iter__'):
+                            try:
+                                while True:
+                                    yield next(gen)
+                            except StopIteration as e:
+                                output = e.value
+                        else:
+                            # If gen is not an iterator, yield it directly
+                            yield gen
+                            output = gen
                     else:
                         output = self._execute_tool(tool_call)
                         yield MessageOutput("function_output", tool_call.function.name, self.agent.name, output)
