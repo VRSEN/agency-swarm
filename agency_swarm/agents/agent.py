@@ -45,8 +45,10 @@ class Agent():
 
         self.client = get_openai_client()
 
-        if os.path.isfile(self.get_instructions_path()):
-            self.instructions = self._read_instructions()
+        if os.path.isfile(self.instructions):
+            self._read_instructions(self.instructions)
+        if os.path.isfile(self.get_instructions_class_path()):
+            self._read_instructions(self.get_instructions_class_path())
 
         self._upload_files()
 
@@ -145,7 +147,7 @@ class Agent():
                 json.dump(settings, f, indent=4)
 
     def _update_settings(self):
-        path = os.path.join(self.get_class_folder_path(), 'settings.json')
+        path = self.get_settings_path()
         # check if settings.json exists
         if os.path.isfile(path):
             settings = []
@@ -158,13 +160,17 @@ class Agent():
             with open(path, 'w') as f:
                 json.dump(settings, f, indent=4)
 
-    def _read_instructions(self):
-        with open(self.get_instructions_path(), 'r') as f:
-            return f.read()
+    def _read_instructions(self, path):
+        with open(path, 'r') as f:
+            self.instructions =  f.read()
 
     def _upload_files(self):
         if isinstance(self.files_folder, str):
-            f_path = os.path.join(self.get_class_folder_path(), self.files_folder)
+            f_path = self.files_folder
+
+            if not os.path.isdir(f_path):
+                f_path = os.path.join(self.get_class_folder_path(), self.files_folder)
+
             if os.path.isdir(f_path):
                 f_paths = os.listdir(f_path)
                 f_paths = [os.path.join(f_path, f) for f in f_paths]
@@ -210,11 +216,11 @@ class Agent():
         else:
             raise Exception("File path is not a file.")
 
-    def get_instructions_path(self):
+    def get_instructions_class_path(self):
         return os.path.join(self.get_class_folder_path(), self.instructions)
 
     def get_settings_path(self):
-        return os.path.join(self.get_class_folder_path(), 'settings.json')
+        return os.path.join("./", 'settings.json')
 
     def get_class_folder_path(self):
         return os.path.abspath(os.path.dirname(inspect.getfile(self.__class__)))
