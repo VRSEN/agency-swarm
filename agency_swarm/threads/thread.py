@@ -18,7 +18,7 @@ class Thread:
         self.recipient_agent = recipient_agent
         self.client = get_openai_client()
 
-    def get_completion(self, message: str):
+    def get_completion(self, message: str, yield_messages=True):
         if not self.thread:
             self.thread = self.client.beta.threads.create()
             self.id = self.thread.id
@@ -29,7 +29,9 @@ class Thread:
             role="user",
             content=message
         )
-        yield MessageOutput("text", self.agent.name, self.recipient_agent.name, message)
+
+        if yield_messages:
+            yield MessageOutput("text", self.agent.name, self.recipient_agent.name, message)
 
         # create run
         self.run = self.client.beta.threads.runs.create(
@@ -51,19 +53,23 @@ class Thread:
                 tool_calls = self.run.required_action.submit_tool_outputs.tool_calls
                 tool_outputs = []
                 for tool_call in tool_calls:
-                    yield MessageOutput("function", self.recipient_agent.name, self.agent.name, str(tool_call.function))
+                    if yield_messages:
+                        yield MessageOutput("function", self.recipient_agent.name, self.agent.name, str(tool_call.function))
 
                     output = self._execute_tool(tool_call)
                     if inspect.isgenerator(output):
                         try:
                             while True:
-                                print(1)
-                                yield next(output)
+                                if yield_messages:
+                                    yield next(output)
+                                else:
+                                    next(output)
                         except StopIteration as e:
                             output = e.value
                     else:
                         output = self._execute_tool(tool_call)
-                        yield MessageOutput("function_output", tool_call.function.name, self.agent.name, output)
+                        if yield_messages:
+                            yield MessageOutput("function_output", tool_call.function.name, self.agent.name, output)
 
                     tool_outputs.append({"tool_call_id": tool_call.id, "output": output})
 
@@ -82,7 +88,10 @@ class Thread:
                     thread_id=self.id
                 )
                 message = messages.data[0].content[0].text.value
-                yield MessageOutput("text", self.recipient_agent.name, self.agent.name, message)
+
+                if yield_messages:
+                    yield MessageOutput("text", self.recipient_agent.name, self.agent.name, message)
+
                 return message
 
     def _execute_tool(self, tool_call):

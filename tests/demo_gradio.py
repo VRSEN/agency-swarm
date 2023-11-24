@@ -22,43 +22,6 @@ agency = Agency([
     [ceo, test_agent2],
 ], shared_instructions="./manifesto.md")
 
-with gr.Blocks() as demo:
-    chatbot = gr.Chatbot()
-    msg = gr.Textbox()
-    clear = gr.Button("Clear")
 
-    def user(user_message, history):
-        # Append the user message with a placeholder for bot response
-        user_message = "👤 User: " + user_message.strip()
-        return "", history + [[user_message, None]]
-
-    def bot(history):
-        # Replace this with your actual chatbot logic
-        gen = agency.yield_completions(message=history[-1][0])
-
-        try:
-            # Yield each message from the generator
-            for bot_message in gen:
-                if bot_message.sender_name.lower() == "user":
-                    continue
-
-                message = bot_message.get_sender_emoji() + " " + bot_message.get_formatted_content()
-
-                history.append((None, message))
-                yield history
-        except StopIteration:
-            # Handle the end of the conversation if necessary
-            pass
-
-    # Chain the events
-    msg.submit(user, [msg, chatbot], [msg, chatbot], queue=False).then(
-        bot, chatbot, chatbot
-    )
-    clear.click(lambda: None, None, chatbot, queue=False)
-
-    # Enable queuing for streaming intermediate outputs
-    demo.queue()
-
-# Launch the demo
-demo.launch()
+agency.demo_gradio()
 

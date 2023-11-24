@@ -34,7 +34,7 @@ class Agent():
         self.id = id
         self.name = name if name else self.__class__.__name__
         self.description = description
-        self.instructions = instructions  # can be file path
+        self.instructions = instructions
         self.tools = tools if tools else []
         self.files_folder = files_folder
         self.file_ids = file_ids if file_ids else []
@@ -42,6 +42,7 @@ class Agent():
         self.model = model
 
         self._assistant: Any = None
+        self._shared_instructions = None
 
         self.client = get_openai_client()
 
@@ -252,10 +253,14 @@ class Agent():
             raise Exception("Invalid tool type.")
 
     def add_instructions(self, instructions: str):
-        if instructions in self.instructions:
-            return
+        if self._shared_instructions is None:
+            self._shared_instructions = instructions
+        else:
+            self.instructions = self.instructions.replace(self._shared_instructions, "")
+            self.instructions = self.instructions.strip().strip("\n")
+            self._shared_instructions = instructions
 
-        self.instructions = instructions + "\n\n" + self.instructions
+        self.instructions = self._shared_instructions + "\n\n" + self.instructions
 
     def get_oai_tools(self):
         tools = []

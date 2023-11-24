@@ -34,15 +34,64 @@ class Agency:
         self.user = User()
         self.main_thread = Thread(self.user, self.ceo)
 
-    def yield_completions(self, message: str):
-        return self.main_thread.get_completion(message=message)
+    def get_completion(self, message: str, yield_messages=True):
+        return self.main_thread.get_completion(message=message, yield_messages=yield_messages)
+
+    def demo_gradio(self):
+        try:
+            import gradio as gr
+        except ImportError:
+            raise Exception("Please install gradio: pip install gradio")
+
+        with gr.Blocks() as demo:
+            chatbot = gr.Chatbot()
+            msg = gr.Textbox()
+
+            def user(user_message, history):
+                # Append the user message with a placeholder for bot response
+                user_message = "👤 User: " + user_message.strip()
+                return "", history + [[user_message, None]]
+
+            def bot(history):
+                # Replace this with your actual chatbot logic
+                gen = self.get_completion(message=history[-1][0])
+
+                try:
+                    # Yield each message from the generator
+                    for bot_message in gen:
+                        if bot_message.sender_name.lower() == "user":
+                            continue
+
+                        message = bot_message.get_sender_emoji() + " " + bot_message.get_formatted_content()
+
+                        history.append((None, message))
+                        yield history
+                except StopIteration:
+                    # Handle the end of the conversation if necessary
+                    pass
+
+            # Chain the events
+            msg.submit(user, [msg, chatbot], [msg, chatbot], queue=False).then(
+                bot, chatbot, chatbot
+            )
+
+            # Enable queuing for streaming intermediate outputs
+            demo.queue()
+
+        # Launch the demo
+        demo.launch()
 
     def run_demo(self):
         while True:
             text = input("USER: ")
 
-            for message in self.main_thread.get_completion(message=text):
-                message.cprint()
+            try:
+                gen = self.main_thread.get_completion(message=text)
+                while True:
+                    message = next(gen)
+                    message.cprint()
+            except StopIteration as e:
+                pass
 
     def _parse_agency_chart(self, agency_chart):
         for node in agency_chart:
