@@ -60,18 +60,16 @@ class Thread:
                     if inspect.isgenerator(output):
                         try:
                             while True:
-                                if yield_messages:
-                                    yield next(output)
-                                else:
-                                    next(output)
+                                item = next(output)
+                                if isinstance(item, MessageOutput) and yield_messages:
+                                    yield item
                         except StopIteration as e:
                             output = e.value
                     else:
-                        output = self._execute_tool(tool_call)
                         if yield_messages:
                             yield MessageOutput("function_output", tool_call.function.name, self.agent.name, output)
 
-                    tool_outputs.append({"tool_call_id": tool_call.id, "output": output})
+                    tool_outputs.append({"tool_call_id": tool_call.id, "output": str(output)})
 
                 # submit tool outputs
                 self.run = self.client.beta.threads.runs.submit_tool_outputs(
