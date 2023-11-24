@@ -182,7 +182,9 @@ class Agency:
         outer_self = self
 
         class SendMessage(BaseTool):
-            """Send messages to other specialized agents in this group chat."""
+            """Send messages to other specialized agents in your agency. The output of this tool is the response from the recipient agent.
+            To respond back to the agent, you must call this tool again, specifying the recipient and message.
+            Remember, user does not have access to the recipient's response."""
             chain_of_thought: str = Field(...,
                                           description="Think step by step to determine the correct recipient and "
                                                       "message.")
