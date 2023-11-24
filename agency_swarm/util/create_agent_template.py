@@ -49,13 +49,13 @@ def create_agent_template(path="./", use_txt=False):
     print(f"Import it with: from {folder_name} import {class_name}")
 
 
-agent_template = """from agency_swarm.agents import BaseAgent
+agent_template = """from agency_swarm.agents import Agent
 
 # from agency_swarm.tools import Retrieval, CodeInterpreter
 from .tools import *
 
 
-class {class_name}(BaseAgent):
+class {class_name}(Agent):
     def __init__(self):
         super().__init__(
             name="{agent_name}",
