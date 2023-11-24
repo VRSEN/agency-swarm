@@ -67,7 +67,7 @@ class Thread:
                             output = e.value
                     else:
                         if yield_messages:
-                            yield MessageOutput("function_output", tool_call.function.name, self.agent.name, output)
+                            yield MessageOutput("function_output", tool_call.function.name, self.recipient_agent.name, output)
 
                     tool_outputs.append({"tool_call_id": tool_call.id, "output": str(output)})
 
