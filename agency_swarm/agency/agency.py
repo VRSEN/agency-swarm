@@ -19,8 +19,8 @@ class Agency:
         self.agents = []
         self.agents_and_threads = {}
 
-        if os.path.isfile(self.get_class_folder_path() + shared_instructions):
-            self._read_instructions(os.path.isfile(self.get_class_folder_path() + shared_instructions))
+        if os.path.isfile(os.path.join(self.get_class_folder_path(), shared_instructions)):
+            self._read_instructions(os.path.join(self.get_class_folder_path(), shared_instructions))
         elif os.path.isfile(shared_instructions):
             self._read_instructions(shared_instructions)
         else:

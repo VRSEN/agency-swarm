@@ -48,8 +48,8 @@ class Agent():
 
         if os.path.isfile(self.instructions):
             self._read_instructions(self.instructions)
-        if os.path.isfile(self.get_instructions_class_path()):
-            self._read_instructions(self.get_instructions_class_path())
+        elif os.path.isfile(os.path.join(self.get_class_folder_path(), self.instructions)):
+            self._read_instructions(os.path.join(self.get_class_folder_path(), self.instructions))
 
         self._upload_files()
 
@@ -216,9 +216,6 @@ class Agent():
                 return None
         else:
             raise Exception("File path is not a file.")
-
-    def get_instructions_class_path(self):
-        return os.path.join(self.get_class_folder_path(), self.instructions)
 
     def get_settings_path(self):
         return os.path.join("./", 'settings.json')
