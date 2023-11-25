@@ -37,14 +37,14 @@ class Agency:
     def get_completion(self, message: str, yield_messages=True):
         return self.main_thread.get_completion(message=message, yield_messages=yield_messages)
 
-    def demo_gradio(self):
+    def demo_gradio(self, height=600):
         try:
             import gradio as gr
         except ImportError:
             raise Exception("Please install gradio: pip install gradio")
 
         with gr.Blocks() as demo:
-            chatbot = gr.Chatbot()
+            chatbot = gr.Chatbot(height=height)
             msg = gr.Textbox()
 
             def user(user_message, history):
