@@ -174,6 +174,9 @@ class Agent():
 
             if os.path.isdir(f_path):
                 f_paths = os.listdir(f_path)
+
+                f_paths = [f for f in f_paths if not f.startswith(".")]
+
                 f_paths = [os.path.join(f_path, f) for f in f_paths]
 
                 for f_path in f_paths:
@@ -202,7 +205,7 @@ class Agent():
             os.rename(f_path, f_path_new)
             return f_path_new
         else:
-            raise Exception("File path is not a file.")
+            raise Exception("Items in files folder must be files.")
 
     def _get_id_from_file(self, f_path):
         """Get file id from file name"""
@@ -215,7 +218,7 @@ class Agent():
             else:
                 return None
         else:
-            raise Exception("File path is not a file.")
+            raise Exception("Items in files folder must be files.")
 
     def get_settings_path(self):
         return os.path.join("./", 'settings.json')
