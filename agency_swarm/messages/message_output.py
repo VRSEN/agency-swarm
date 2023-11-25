@@ -44,7 +44,7 @@ class MessageOutput:
             return text
 
         if self.msg_type == "function_output":
-            text = self.sender_name + f"Function Output (by {self.receiver_name}): " + str(self.content) + "\n"
+            text = self.sender_name + f" Function Output (by {self.receiver_name}): " + str(self.content) + "\n"
             return text
 
         text = self.sender_name + f' (to {self.receiver_name})' ": " + self.content + "\n"

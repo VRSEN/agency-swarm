@@ -182,9 +182,7 @@ class Agency:
         outer_self = self
 
         class SendMessage(BaseTool):
-            """Send messages to other specialized agents in your agency. The output of this tool is the response from the recipient agent.
-            To respond back to the agent, you must call this tool again, specifying the recipient and message.
-            Remember, user does not have access to the recipient's response."""
+            """Use this tool to facilitate direct, synchronous communication between specialized agents within your agency. When you send a message using this tool, you receive a response exclusively from the designated recipient agent. To continue the dialogue, invoke this tool again with the desired recipient and your follow-up message. Remember, communication here is synchronous; the recipient agent won't perform any tasks post-response. You are responsible for relaying the recipient agent's responses back to the user, as they do not have direct access to these replies. Keep engaging with the tool for continuous interaction until the task is fully resolved."""
             chain_of_thought: str = Field(...,
                                           description="Think step by step to determine the correct recipient and "
                                                       "message.")
