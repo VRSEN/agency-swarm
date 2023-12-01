@@ -11,6 +11,7 @@ from tests.ceo.ceo import Ceo
 from tests.test_agent.test_agent import TestAgent
 from tests.test_agent2.test_agent2 import TestAgent2
 
+set_openai_key("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")
 
 test_agent1 = TestAgent()
 test_agent2 = TestAgent2()
@@ -23,5 +24,5 @@ agency = Agency([
 ], shared_instructions="./manifesto.md")
 
 
-agency.demo_gradio()
+agency.demo_gradio(height=1500)
 

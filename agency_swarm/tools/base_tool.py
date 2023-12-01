@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
+
 from instructor import OpenAISchema
-from termcolor import colored
 
 
 class BaseTool(OpenAISchema, ABC):
