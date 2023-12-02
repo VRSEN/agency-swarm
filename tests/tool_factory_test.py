@@ -21,7 +21,7 @@ class ToolFactoryTest(unittest.TestCase):
     def setUp(self):
         self.client = get_openai_client()
 
-    def test_movie_file_tool(self):
+    def test_move_file_tool(self):
         tool = ToolFactory.from_langchain_tool(MoveFileTool())
         print(json.dumps(tool.openai_schema, indent=4))
         print(tool)
@@ -59,7 +59,7 @@ class ToolFactoryTest(unittest.TestCase):
 
     def test_youtube_search_tool(self):
         # requires pip install youtube_search
-        tool = ToolFactory.from_langchain_tool(YouTubeSearchTool())
+        tool = ToolFactory.from_langchain_tool(YouTubeSearchTool)
 
         self.agent = Agent(
             name="test_agent",

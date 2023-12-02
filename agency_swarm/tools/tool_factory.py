@@ -1,3 +1,4 @@
+import inspect
 from typing import Any, Dict, List, Type
 
 from pydantic import create_model, Field
@@ -19,6 +20,9 @@ class ToolFactory:
             from langchain.tools import format_tool_to_openai_function
         except ImportError:
             raise ImportError("You must install langchain to use this method.")
+
+        if inspect.isclass(tool):
+            tool = tool()
 
         def callback(self):
             tool_input = self.model_dump()
