@@ -11,7 +11,6 @@ from tests.ceo.ceo import Ceo
 from tests.test_agent.test_agent import TestAgent
 from tests.test_agent2.test_agent2 import TestAgent2
 
-
 test_agent1 = TestAgent()
 test_agent2 = TestAgent2()
 ceo = Ceo()
@@ -23,5 +22,5 @@ agency = Agency([
 ], shared_instructions="./manifesto.md")
 
 
-agency.demo_gradio()
+agency.demo_gradio(height=1500)
 
