@@ -66,7 +66,6 @@ class MyCustomTool(BaseTool):
         # Return the result of the tool's operation
         return "Result of MyCustomTool operation"
 ```
-or 
 
 **NEW**: Import in 1 line of code from [Langchain](https://python.langchain.com/docs/integrations/tools)
     
