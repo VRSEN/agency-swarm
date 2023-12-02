@@ -28,14 +28,14 @@ pip install git+https://github.com/VRSEN/agency-swarm.git
 ## Getting Started
 
 
-### 1. **Set Your OpenAI Key**: Begin by defining your OpenAI API key.
+1. **Set Your OpenAI Key**:
 
 ```python
 from agency_swarm import set_openai_key
 set_openai_key("YOUR_API_KEY")
 ```
 
-### 2. **Create Tools**:
+2. **Create Tools**:
 Define your custom tools with [Instructor](https://github.com/jxnl/instructor):
 ```python
 from agency_swarm.tools import BaseTool
@@ -91,7 +91,8 @@ ceo = Agent(name="CEO",
             tools=[MyCustomTool, LangchainTool])
 ```
 
-4. **Define Agency Communication Flows**: Establish how your agents will communicate with each other.
+4. **Define Agency Communication Flows**: 
+Establish how your agents will communicate with each other.
 
 ```python
 from agency_swarm import Agency
@@ -106,7 +107,8 @@ agency = Agency([
 
  In Agency Swarm, communication flows are directional, meaning they are established from left to right in the agency_chart definition. For instance, in the example above, the CEO can initiate a chat with the developer (dev), and the developer can respond in this chat. However, the developer cannot initiate a chat with the CEO. The developer can initiate a chat with the virtual assistant (va) and assign new tasks.
 
-5. **Run Demo**: Run the demo to see your agents in action!
+5. **Run Demo**: 
+Run the demo to see your agents in action!
 
 ```python
 agency.demo_gradio(height=900)
