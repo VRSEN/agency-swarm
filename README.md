@@ -1,15 +1,14 @@
 # Agency Swarm
 
-[![Framework](https://firebasestorage.googleapis.com/v0/b/vrsen-ai/o/public%2Fyoutube%2FFramework.png?alt=media&token=ae76687f-0347-4e0c-8342-4c5d31e3f050)](https://youtu.be/M5Pa0pLgyYU?si=f-cQV8FoiGd98uuk)
+This is a fork of [@VRSEN/agency-swarm](https://github.com/VRSEN/agency-swarm)
+
+Coming from [YouTube video](https://www.youtube.com/watch?v=M5Pa0pLgyYU)
 
 ## Overview
 
 Agency Swarm is an open-source agent orchestration framework designed to automate and streamline AI development processes. Leveraging the power of the OpenAI Assistants API, it enables the creation of a collaborative swarm of agents (Agencies), each with distinct roles and capabilities. This framework aims to replace traditional AI development methodologies with a more dynamic, flexible, and efficient agent-based system.
 
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1qGVyK-vIoxZD0dMrMVqCxCsgL1euMLKj)
-[![Subscribe on YouTube](https://img.shields.io/youtube/channel/subscribers/UCSv4qL8vmoSH7GaPjuqRiCQ
-)](https://youtube.com/@vrsen/)
-[![Follow on Twitter](https://img.shields.io/twitter/follow/__vrsen__.svg?style=social&label=Follow%20%40__vrsen__)](https://twitter.com/__vrsen__)
 
 ## Key Features
 
@@ -22,7 +21,7 @@ Agency Swarm is an open-source agent orchestration framework designed to automat
 ## Installation
 
 ```bash
-pip install git+https://github.com/VRSEN/agency-swarm.git
+pip install git+https://github.com/Chugh3012/agency-swarm.git
 ```
 
 ## Getting Started
@@ -134,8 +133,3 @@ We welcome contributions to Agency Swarm! Please feel free to submit issues, pul
 
 Agency Swarm is open-source and licensed under [MIT](https://opensource.org/licenses/MIT).
 
-
-
-## Need Help?
-
-If you require assistance in creating custom agent swarms or have any specific queries related to Agency Swarm, feel free to reach out through my website: [vrsen.ai](https://vrsen.ai)
