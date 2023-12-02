@@ -97,7 +97,7 @@ class Thread:
         func = next(iter([func for func in funcs if func.__name__ == tool_call.function.name]))
 
         if not func:
-            return f"Error: Function {tool_call.function.name} not found."
+            return f"Error: Function {tool_call.function.name} not found. Available functions: {[func.__name__ for func in funcs]}"
 
         try:
             # init tool
