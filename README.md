@@ -23,17 +23,18 @@ Agency Swarm is an open-source agent orchestration framework designed to automat
 pip install git+https://github.com/VRSEN/agency-swarm.git
 ```
 
-## Setting Up Your First Agency
+## Getting Started
 
 
-1. **Set Your OpenAI Key**: Begin by defining your OpenAI API key.
+### 1. **Set Your OpenAI Key**: Begin by defining your OpenAI API key.
 
 ```python
 from agency_swarm import set_openai_key
 set_openai_key("YOUR_API_KEY")
 ```
 
-2. **Create Tools**: Define your custom tools with [Instructor](https://github.com/jxnl/instructor).
+### 2. **Create Tools**:
+Define your custom tools with [Instructor](https://github.com/jxnl/instructor):
 ```python
 from agency_swarm.tools import BaseTool
 from pydantic import Field
@@ -65,6 +66,17 @@ class MyCustomTool(BaseTool):
         # Return the result of the tool's operation
         return "Result of MyCustomTool operation"
 ```
+or 
+
+**NEW**: Import in 1 line of code from [Langchain](https://python.langchain.com/docs/integrations/tools)
+    
+```python
+from langchain.tools import YouTubeSearchTool
+from agency_swarm.tools import ToolFactory
+
+LangchainTool = ToolFactory.from_langchain_tool(YouTubeSearchTool)
+```
+
 
 3. **Define Agent Roles**: Start by defining the roles of your agents. For example, a CEO agent for managing tasks and a developer agent for executing tasks.
 
@@ -75,7 +87,7 @@ ceo = Agent(name="CEO",
             description="Responsible for client communication, task planning and management.",
             instructions="You must converse with other agents to ensure complete task execution.", # can be a file like ./instructions.md
             files_folder=None,
-            tools=[MyCustomTool])
+            tools=[MyCustomTool, LangchainTool])
 ```
 
 4. **Define Agency Communication Flows**: Establish how your agents will communicate with each other.
