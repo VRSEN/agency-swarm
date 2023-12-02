@@ -23,12 +23,10 @@ Agency Swarm is an open-source agent orchestration framework designed to automat
 pip install git+https://github.com/VRSEN/agency-swarm.git
 ```
 
-## Getting Started
-
-### Setting Up Your First Agency
+## Setting Up Your First Agency
 
 
-1. **Set Your OpenAI Key**: Begin by defining your OpenAI API key. This key is essential for the framework to interact with OpenAI services.
+1. **Set Your OpenAI Key**: Begin by defining your OpenAI API key.
 
 ```python
 from agency_swarm import set_openai_key

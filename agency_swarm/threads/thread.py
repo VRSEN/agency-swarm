@@ -96,6 +96,9 @@ class Thread:
         funcs = self.recipient_agent.functions
         func = next(iter([func for func in funcs if func.__name__ == tool_call.function.name]))
 
+        if not func:
+            return f"Error: Function {tool_call.function.name} not found."
+
         try:
             # init tool
             func = func(**eval(tool_call.function.arguments))

@@ -35,9 +35,30 @@ class Agency:
         self.main_thread = Thread(self.user, self.ceo)
 
     def get_completion(self, message: str, yield_messages=True):
-        return self.main_thread.get_completion(message=message, yield_messages=yield_messages)
+        """
+        Get a completion from the agency.
+
+        :param message: message to send to the main agent (ceo)
+        :param yield_messages: if True, yields messages from the conversation
+        :return: a generator that yields messages from the conversation or the final message if yield_messages is False
+        """
+        gen = self.main_thread.get_completion(message=message, yield_messages=yield_messages)
+
+        if not yield_messages:
+            while True:
+                try:
+                    next(gen)
+                except StopIteration as e:
+                    return e.value
+
+        return gen
 
     def demo_gradio(self, height=600):
+        """
+        Launch a gradio demo for the agency.
+        :param height: height of the gradio interface
+        :return:
+        """
         try:
             import gradio as gr
         except ImportError:
