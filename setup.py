@@ -5,15 +5,15 @@ with open('requirements.txt') as f:
     requirements = f.read().splitlines()
 
 setup(
-    name='agency-swarm',  # Replace with your package's name
-    version='0.1.0',  # Initial version of your package
-    author='VRSEN',  # Replace with your name
-    author_email='arseny9795@gmail.com',  # Replace with your email address
-    description='Create your own agency with an agent swarms.',  # Provide a short description
-    long_description=open('README.md').read(),  # Long description read from the README.md
-    long_description_content_type='text/markdown',  # Content type of the long description
-    url='https://github.com/VRSEN/agency-swarm',  # Replace with the URL of your package's repository
-    packages=find_packages(),  # Automatically find all packages and subpackages
+    name='agency-swarm',
+    version='0.1.0',
+    author='VRSEN',
+    author_email='arseny9795@gmail.com',
+    description='Replace your own agency with an agent swarm.',
+    long_description=open('README.md').read(),
+    long_description_content_type='text/markdown',
+    url='https://github.com/VRSEN/agency-swarm',
+    packages=find_packages(),
     install_requires=requirements,
     classifiers=[
         # Classifiers help users find your project by categorizing it
@@ -26,5 +26,8 @@ setup(
         'Programming Language :: Python :: 3.8',
         'Programming Language :: Python :: 3.9',
     ],
+    entry_points = {
+        'console_scripts': ['agency-swarm=agency_swarm.cli:main'],
+    },
     python_requires='>=3.7',  # Specify the Python version requirements
 )

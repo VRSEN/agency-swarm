@@ -1,9 +1,11 @@
 import os
 
 
-def create_agent_template(path="./", use_txt=False):
-    agent_name = input("Enter agent name: ")
-    agent_description = input("Enter agent description: ")
+def create_agent_template(agent_name=None, agent_description=None, path="./", use_txt=False):
+    if not agent_name:
+        agent_name = input("Enter agent name: ")
+    if not agent_description:
+        agent_description = input("Enter agent description: ")
 
     # create manifesto if it doesn't exist
     agency_manifesto = "agency_manifesto.md" if not use_txt else "agency_manifesto.txt"
@@ -80,4 +82,3 @@ class ExampleTool(BaseTool):
         \"\"\"Enter your code for tool execution here.\"\"\"
         pass
 """
-
