@@ -30,7 +30,22 @@ class Agent():
                  tools: List[Union[Type[BaseTool], Type[Retrieval], Type[CodeInterpreter]]] = None,
                  files_folder: Union[List[str], str] = None,
                  file_ids: List[str] = None, metadata: Dict[str, str] = None, model: str = "gpt-4-1106-preview"):
+        """
+        Initializes an Agent with specified attributes, tools, and OpenAI client.
 
+        Parameters:
+        id (str, optional): Unique identifier for the agent. Defaults to None.
+        name (str, optional): Name of the agent. Defaults to the class name if not provided.
+        description (str, optional): A brief description of the agent's purpose. Defaults to None.
+        instructions (str, optional): Path to a file containing specific instructions for the agent. Defaults to an empty string.
+        tools (List[Union[Type[BaseTool], Type[Retrieval], Type[CodeInterpreter]]], optional): A list of tools (as classes) that the agent can use. Defaults to an empty list.
+        files_folder (Union[List[str], str], optional): Path or list of paths to directories containing files associated with the agent. Defaults to None.
+        file_ids (List[str], optional): List of file IDs for files associated with the agent. Defaults to an empty list.
+        metadata (Dict[str, str], optional): Metadata associated with the agent. Defaults to an empty dictionary.
+        model (str, optional): The model identifier for the OpenAI API. Defaults to "gpt-4-1106-preview".
+
+        This constructor sets up the agent with its unique properties, initializes the OpenAI client, reads instructions if provided, and uploads any associated files.
+        """
         self.id = id
         self.name = name if name else self.__class__.__name__
         self.description = description
@@ -54,6 +69,15 @@ class Agent():
         self._upload_files()
 
     def init_oai(self):
+        """
+        Initializes the OpenAI assistant for the agent.
+
+        This method handles the initialization and potential updates of the agent's OpenAI assistant. It loads the assistant based on a saved ID, updates the assistant if necessary, or creates a new assistant if it doesn't exist. After initialization or update, it saves the assistant's settings.
+
+        Output:
+        self: Returns the agent instance for chaining methods or further processing.
+        """
+
         # check if settings.json exists
         path = self.get_settings_path()
 
@@ -98,6 +122,16 @@ class Agent():
         return self
 
     def _update_assistant(self):
+        """
+        Updates the existing assistant's parameters on the OpenAI server.
+
+        This method updates the assistant's details such as name, description, instructions, tools, file IDs, metadata, and the model. It only updates parameters that have non-empty values. After updating the assistant, it also updates the local settings file to reflect these changes.
+
+        No input parameters are directly passed to this method as it uses the agent's instance attributes.
+
+        No output parameters are returned, but the method updates the assistant's details on the OpenAI server and locally updates the settings file.
+        """
+
         params = {
             "name": self.name,
             "description": self.description,
@@ -115,6 +149,18 @@ class Agent():
         self._update_settings()
 
     def _check_parameters(self, assistant_settings):
+        """
+        Checks if the agent's parameters match with the given assistant settings.
+
+        Parameters:
+        assistant_settings (dict): A dictionary containing the settings of an assistant.
+
+        Returns:
+        bool: True if all the agent's parameters match the assistant settings, False otherwise.
+
+        This method compares the current agent's parameters such as name, description, instructions, tools, file IDs, metadata, and model with the given assistant settings. It uses DeepDiff to compare complex structures like tools and metadata. If any parameter does not match, it returns False; otherwise, it returns True.
+        """
+
         if self.name != assistant_settings['name']:
             return False
         if self.description != assistant_settings['description']:
