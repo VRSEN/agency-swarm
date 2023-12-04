@@ -54,7 +54,16 @@ class Agency:
         Returns:
         Generator or final response: Depending on the 'yield_messages' flag, this method returns either a generator yielding intermediate messages or the final response from the main thread.
         """
-        return self.main_thread.get_completion(message=message, yield_messages=yield_messages)
+        gen = self.main_thread.get_completion(message=message, yield_messages=yield_messages)
+
+        if not yield_messages:
+            while True:
+                try:
+                    next(gen)
+                except StopIteration as e:
+                    return e.value
+
+        return gen
 
     def demo_gradio(self, height=600):
         """
@@ -133,11 +142,11 @@ class Agency:
         Parses the provided agency chart to initialize and organize agents within the agency.
 
         Parameters:
-        agency_chart: A structure representing the hierarchical organization of agents within the agency. 
+        agency_chart: A structure representing the hierarchical organization of agents within the agency.
                     It can contain Agent objects and lists of Agent objects.
 
-        This method iterates through each node in the agency chart. If a node is an Agent, it is set as the CEO if not already assigned. 
-        If a node is a list, it iterates through the agents in the list, adding them to the agency and establishing communication 
+        This method iterates through each node in the agency chart. If a node is an Agent, it is set as the CEO if not already assigned.
+        If a node is a list, it iterates through the agents in the list, adding them to the agency and establishing communication
         threads between them. It raises an exception if the agency chart is invalid or if multiple CEOs are defined.
         """
         for node in agency_chart:
