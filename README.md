@@ -78,6 +78,18 @@ from agency_swarm.tools import ToolFactory
 LangchainTool = ToolFactory.from_langchain_tool(YouTubeSearchTool)
 ```
 
+or 
+
+```python
+from langchain.agents import load_tools
+
+tools = load_tools(
+    ["arxiv", "human"],
+)
+
+tools = ToolFactory.from_langchain_tools(tools)
+```
+
 
 3. **Define Agent Roles**: Start by defining the roles of your agents. For example, a CEO agent for managing tasks and a developer agent for executing tasks.
 
