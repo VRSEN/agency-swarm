@@ -127,7 +127,7 @@ This CLI command simplifies the process of creating a structured environment for
 #### **Command Syntax:**
 
 ```bash
-agency_swarm create-agent-template --name "AgentName" --description "Agent Description" [--path "/path/to/directory"] [--use_txt]
+agency-swarm create-agent-template --name "AgentName" --description "Agent Description" [--path "/path/to/directory"] [--use_txt]
 ```
 
 ### Folder Structure
