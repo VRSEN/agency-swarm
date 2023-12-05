@@ -78,6 +78,18 @@ from agency_swarm.tools import ToolFactory
 LangchainTool = ToolFactory.from_langchain_tool(YouTubeSearchTool)
 ```
 
+or 
+
+```python
+from langchain.agents import load_tools
+
+tools = load_tools(
+    ["arxiv", "human"],
+)
+
+tools = ToolFactory.from_langchain_tools(tools)
+```
+
 
 3. **Define Agent Roles**: Start by defining the roles of your agents. For example, a CEO agent for managing tasks and a developer agent for executing tasks.
 
@@ -119,6 +131,34 @@ or get completion from the agency:
 ```python
 agency.get_completion("Please create a new website for our client.")
 ```
+
+## Creating Agent Templates Locally (CLI)
+
+This CLI command simplifies the process of creating a structured environment for each agent.
+
+#### **Command Syntax:**
+
+```bash
+agency-swarm create-agent-template --name "AgentName" --description "Agent Description" [--path "/path/to/directory"] [--use_txt]
+```
+
+### Folder Structure
+
+When you run the `create-agent-template` command, it creates the following folder structure for your agent:
+
+```
+/your-specified-path/
+│
+├── agency_manifesto.md or .txt # Agency's guiding principles (created if not exists)
+└── agent_name/                 # Directory for the specific agent
+    ├── agent_name.py           # The main agent class file
+    ├── __init__.py             # Initializes the agent folder as a Python package
+    ├── instructions.md or .txt # Instruction document for the agent
+    ├── tools.py                # Tools specific to the agent
+    ├── files/                  # Directory for additional resources
+```
+
+This structure ensures that each agent has its dedicated space with all necessary files to start working on its specific tasks. The `tools.py` can be customized to include tools and functionalities specific to the agent's role.
 
 ## Future Enhancements
 

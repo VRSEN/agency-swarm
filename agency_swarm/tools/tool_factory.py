@@ -10,6 +10,19 @@ from ..util.schema import reference_schema
 class ToolFactory:
 
     @staticmethod
+    def from_langchain_tools(tools: List):
+        """
+        Converts a list of langchain tools into a list of BaseTools.
+        :param tools: A list of langchain tools.
+        :return: A list of BaseTools.
+        """
+        converted_tools = []
+        for tool in tools:
+            converted_tools.append(ToolFactory.from_langchain_tool(tool))
+
+        return converted_tools
+
+    @staticmethod
     def from_langchain_tool(tool):
         """
         Converts a langchain tool into a BaseTool.
