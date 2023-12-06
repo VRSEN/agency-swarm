@@ -47,7 +47,7 @@ class MessageOutput:
 
     def get_formatted_header(self):
         if self.msg_type == "function":
-            text = f"{self.sender_name} ⚡ Executing Function"
+            text = f"{self.sender_name} 🛠️ Executing Function"
             return text
 
         if self.msg_type == "function_output":
