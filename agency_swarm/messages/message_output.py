@@ -33,15 +33,15 @@ class MessageOutput:
         return colors[color_index]
 
     def cprint(self):
+        console.rule()
+
         emoji = self.get_sender_emoji()
 
         header = emoji + self.get_formatted_header()
 
-        console.rule()
-
-        console.print(header)
-
         color = self.hash_names_to_color()
+
+        console.print(header, style=color)
 
         console.print(str(self.content), style=color)
 
