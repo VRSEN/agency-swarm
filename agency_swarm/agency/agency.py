@@ -5,11 +5,14 @@ from enum import Enum
 from typing import List
 
 from pydantic import Field, field_validator
+from rich.console import Console
 
 from agency_swarm.agents import Agent
 from agency_swarm.threads import Thread
 from agency_swarm.tools import BaseTool
 from agency_swarm.user import User
+
+console = Console()
 
 
 class Agency:
@@ -127,6 +130,7 @@ class Agency:
         Outputs the responses from the agency's main thread to the command line.
         """
         while True:
+            console.rule()
             text = input("USER: ")
 
             try:
