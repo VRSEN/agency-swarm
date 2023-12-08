@@ -8,6 +8,7 @@ from deepdiff import DeepDiff
 
 from agency_swarm.tools import BaseTool
 from agency_swarm.tools import Retrieval, CodeInterpreter
+from agency_swarm.tools.async_base_tool import AsyncBaseTool
 from agency_swarm.util.oai import get_openai_client
 
 
