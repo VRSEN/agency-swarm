@@ -77,8 +77,8 @@ def agency_chart():
 
 @pytest.fixture
 def async_agency_chart():
-    return [AsyncAgents.Aria.value,]  # CEO will be the entry point for communication with the user
-           # [AsyncAgents.Aria.value, AsyncAgents.Burt.value]]
+    return [AsyncAgents.Aria.value,  # CEO will be the entry point for communication with the user
+            [AsyncAgents.Aria.value, AsyncAgents.Burt.value]]
 
 
 @pytest.fixture
@@ -88,7 +88,8 @@ def agency(agency_chart, shared_instructions):
 
 @pytest.fixture
 def async_agency(async_agency_chart, shared_instructions):
-    return AsyncAgency(async_agency_chart, shared_instructions)
+    agency = AsyncAgency(async_agency_chart, shared_instructions)
+    return agency
 
 
 
