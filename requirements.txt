@@ -3,3 +3,6 @@ instructor==0.3.4
 deepdiff==6.7.1
 termcolor==2.3.0
 python-dotenv==1.0.0
+pytest~=7.4.3
+setuptools~=68.0.0
+pydantic~=2.5.2

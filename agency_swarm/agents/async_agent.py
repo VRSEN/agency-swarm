@@ -5,16 +5,17 @@ from typing import Dict, Union, Any, Type
 from typing import List
 
 from deepdiff import DeepDiff
+from openai import AsyncOpenAI
+from openai.types.beta import Assistant
 
-from agency_swarm.tools import BaseTool
+from agency_swarm.tools.async_base_tool import AsyncBaseTool as BaseTool, AsyncBaseTool
 from agency_swarm.tools import Retrieval, CodeInterpreter
-from agency_swarm.tools.async_base_tool import AsyncBaseTool
-from agency_swarm.util.oai import get_openai_client
+from agency_swarm.util.async_oai import get_openai_client
 
 
-class Agent():
+class AsyncAgent():
     @property
-    def assistant(self):
+    def assistant(self) -> Assistant:
         if self._assistant is None:
             raise Exception("Assistant is not initialized. Please run init_oai() first.")
         return self._assistant
@@ -45,7 +46,7 @@ class Agent():
         self._assistant: Any = None
         self._shared_instructions = None
 
-        self.client = get_openai_client()
+        self.client: AsyncOpenAI = get_openai_client()
 
         if os.path.isfile(self.instructions):
             self._read_instructions(self.instructions)
@@ -54,16 +55,16 @@ class Agent():
 
         self._upload_files()
 
-    def init_oai(self):
+    async def init_oai(self):
         # check if settings.json exists
         path = self.get_settings_path()
 
         # load assistant from id
         if self.id:
-            self.assistant = self.client.beta.assistants.retrieve(self.id)
+            self.assistant = await self.client.beta.assistants.retrieve(self.id)
             # update assistant if parameters are different
             if not self._check_parameters(self.assistant.model_dump()):
-                self._update_assistant()
+                await self._update_assistant()
             return self
 
         # load assistant from settings
@@ -73,16 +74,16 @@ class Agent():
                 # iterate settings and find the assistant with the same name
                 for assistant_settings in settings:
                     if assistant_settings['name'] == self.name:
-                        self.assistant = self.client.beta.assistants.retrieve(assistant_settings['id'])
+                        self.assistant = await self.client.beta.assistants.retrieve(assistant_settings['id'])
                         self.id = assistant_settings['id']
                         # update assistant if parameters are different
                         if not self._check_parameters(self.assistant.model_dump()):
                             print("Updating assistant... " + self.name)
-                            self._update_assistant()
+                            await self._update_assistant()
                         self._update_settings()
                         return self
         # create assistant if settings.json does not exist or assistant with the same name does not exist
-        self.assistant = self.client.beta.assistants.create(
+        self.assistant = await self.client.beta.assistants.create(
             name=self.name,
             description=self.description,
             instructions=self.instructions,
@@ -91,14 +92,14 @@ class Agent():
             metadata=self.metadata,
             model=self.model
         )
-
+        print (f"\n******************\n*******************\n\tassistant created: {self.assistant}")
         self.id = self.assistant.id
 
         self._save_settings()
 
         return self
 
-    def _update_assistant(self):
+    async def _update_assistant(self):
         params = {
             "name": self.name,
             "description": self.description,
@@ -109,7 +110,7 @@ class Agent():
             "model": self.model
         }
         params = {k: v for k, v in params.items() if v}
-        self.assistant = self.client.beta.assistants.update(
+        self.assistant = await self.client.beta.assistants.update(
             self.id,
             **params,
         )
@@ -164,7 +165,7 @@ class Agent():
 
     def _read_instructions(self, path):
         with open(path, 'r') as f:
-            self.instructions =  f.read()
+            self.instructions = f.read()
 
     def _upload_files(self):
         if isinstance(self.files_folder, str):
@@ -245,7 +246,7 @@ class Agent():
                 if issubclass(t, Retrieval):
                     return
             self.tools.append(tool)
-        elif issubclass(tool, BaseTool):
+        elif issubclass(tool, AsyncBaseTool):
             for t in self.tools:
                 if t.__name__ == tool.__name__:
                     self.tools.remove(t)
@@ -273,7 +274,7 @@ class Agent():
                 tools.append(tool().model_dump())
             elif issubclass(tool, CodeInterpreter):
                 tools.append(tool().model_dump())
-            elif issubclass(tool, BaseTool):
+            elif issubclass(tool, AsyncBaseTool):
                 tools.append({
                     "type": "function",
                     "function": tool.openai_schema
@@ -282,8 +283,8 @@ class Agent():
                 raise Exception("Invalid tool type.")
         return tools
 
-    def delete_assistant(self):
-        self.client.beta.assistants.delete(self.id)
+    async def delete_assistant(self):
+        await self.client.beta.assistants.delete(self.id)
         self._delete_settings()
 
     def _delete_settings(self):
@@ -301,5 +302,4 @@ class Agent():
                 json.dump(settings, f, indent=4)
 
     def __repr__(self):
-        return f"<Agent {self.__class__.__name__} (id={self.id}, name={self.name}, instructions=..., tools={self.tools}>"
-
+        return f"<AsyncAgent {self.__class__.__name__} (id={self.id}, name={self.name}, instructions=..., tools={self.tools}>"

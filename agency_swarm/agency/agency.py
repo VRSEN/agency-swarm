@@ -26,9 +26,9 @@ class Agency:
         else:
             self.shared_instructions = shared_instructions
 
-        self._parse_agency_chart(agency_chart)
+        self._parse_agency_chart(agency_chart) #creates the self.ceo
         self._create_send_message_tools()
-        self._init_agents()
+        self._init_agents() # this is where the is is set to something starting with asst
         self._init_threads()
 
         self.user = User()
@@ -194,6 +194,7 @@ class Agency:
             caller_agent_name: str = Field(default=agent.name,
                                            description="The agent calling this tool. Defaults to your name. Do not change it.")
 
+            @classmethod
             @field_validator('recipient')
             def check_recipient(cls, value):
                 if value.value not in recipient_names:
