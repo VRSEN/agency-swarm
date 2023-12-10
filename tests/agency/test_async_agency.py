@@ -6,7 +6,7 @@ import asyncio
 @pytest.mark.asyncio
 async def test_async_agency(async_agency: AsyncAgency):
     await async_agency.initialize()
-    debate = await async_agency.get_completion("Hello, how can I help you?")
+    debate = await async_agency.get_completion("how to survive nuclear war? use functions to generate answers")
     for msg in debate:
         print(msg.content)
 
