@@ -60,9 +60,6 @@ class AsyncAgency:
         self.main_thread = AsyncThread(self.user, self.ceo)
         self._initialized = True
 
-
-
-
     async def get_completion(self, message: str, yield_messages=True) -> list[MessageOutput]:
         return await self.main_thread.get_completion(message=message)
 
@@ -196,7 +193,6 @@ class AsyncAgency:
             recipient_agents = self.get_agents_by_names(recipient_names)
             agent = self.get_agent_by_name(agent_name)
             agent.add_tool(self._create_send_message_tool(agent, recipient_agents))
-
 
     ASYNCBASETOOL_SUBCLASS = TypeVar('ASYNCBASETOOL_SUBCLASS', bound=AsyncBaseTool)
 

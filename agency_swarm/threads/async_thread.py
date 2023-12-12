@@ -77,7 +77,10 @@ class AsyncThread:
 
             # function execution
             if self.run.status == "requires_action":
-                tool_outputs, message_outputs = await self.process_requires_action()
+                t: Tuple[list[dict], list[(MessageOutput,MessageOutput)]] = await self.process_requires_action()  #
+                tool_outputs = t[0]
+                message_outputs = [function_output_message_output for function_call_message_output, function_output_message_output in t[1]]
+
                 self.run = await self.client.beta.threads.runs.submit_tool_outputs(
                     thread_id=self.thread.id,
                     run_id=self.run.id,
@@ -97,9 +100,9 @@ class AsyncThread:
 
         return result
 
-    async def process_requires_action(self) -> Tuple[list[dict], list[MessageOutput]]:
+    async def process_requires_action(self) -> Tuple[list[dict], list[(MessageOutput,MessageOutput)]]:
         tool_calls: list[RequiredActionFunctionToolCall] = self.run.required_action.submit_tool_outputs.tool_calls
-        data = [({"tool_call_id": tool_call.id},
+        data: list[Tuple[dict[str,str],MessageOutput, MessageOutput]]= [({"tool_call_id": tool_call.id},
                  MessageOutput("function", self.recipient_agent.name, self.agent.name, str(tool_call.function)),
                  MessageOutput("function_output", tool_call.function.name,
                                self.recipient_agent.name, await self._execute_tool(tool_call))
@@ -108,8 +111,7 @@ class AsyncThread:
         tool_outputs: list[dict] = [{**tool_data, "output": str(function_output.content)} for
                                     tool_data, function_call, function_output in data]
 
-        message_outputs: list[MessageOutput] = itertools.chain.from_iterable(
-            [[function_call, function_output] for _, function_call, function_output in data])
+        message_outputs: list[(MessageOutput, MessageOutput)] = [(function_call, function_output) for _, function_call, function_output in data]
 
         # submit tool outputs
         return tool_outputs, message_outputs
@@ -125,7 +127,6 @@ class AsyncThread:
     async def _execute_tool(self, tool_call):
         funcs = self.recipient_agent.functions
         func = next(iter([func for func in funcs if func.__name__ == tool_call.function.name]))
-
         try:
             # init tool
             func = func(**eval(tool_call.function.arguments))
