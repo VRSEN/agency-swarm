@@ -3,7 +3,7 @@ import os
 import uuid
 from enum import Enum
 from typing import List
-
+from typing import Type, TypeVar
 from pydantic import Field, field_validator
 
 from agency_swarm.agents.async_agent import AsyncAgent
@@ -197,7 +197,7 @@ class AsyncAgency:
             agent = self.get_agent_by_name(agent_name)
             agent.add_tool(self._create_send_message_tool(agent, recipient_agents))
 
-    from typing import Type, TypeVar
+
     ASYNCBASETOOL_SUBCLASS = TypeVar('ASYNCBASETOOL_SUBCLASS', bound=AsyncBaseTool)
 
     def _create_send_message_tool(self, agent: AsyncAgent,
