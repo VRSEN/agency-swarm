@@ -65,7 +65,7 @@ class Agency:
 
         return gen
 
-    def demo_gradio(self, height=600):
+    def demo_gradio(self, height=900, share : bool = False):
         """
         Launches a Gradio-based demo interface for the agency chatbot.
 
@@ -115,7 +115,7 @@ class Agency:
             demo.queue()
 
         # Launch the demo
-        demo.launch()
+        return demo.launch(share=share)
 
     def run_demo(self):
         """

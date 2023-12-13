@@ -93,17 +93,28 @@ class Thread:
                 return message
 
     def _execute_tool(self, tool_call):
-        funcs = self.recipient_agent.functions
-        func = next((func for func in funcs if func.__name__ == tool_call.function.name), None)
+        tools = self.recipient_agent.tools
+        tool = next((tool for tool in tools if tool.__class__.__name__ == tool_call.function.name), None)
         
-        if not func:
-            return f"Error: Function {tool_call.function.name} not found. Available functions: {[func.__name__ for func in funcs]}"
+        if not tool:
+            return f"Error: Tool {tool_call.function.name} not found. Available tools: {[tool.__class__.__name__ for tool in tools]}"
 
         try:
-            # init tool
-            func = func(**eval(tool_call.function.arguments))
+            # Zero out all non-private fields
+            for attr in tool.__dict__:
+                if not attr.startswith('_'):
+                    setattr(tool, attr, None)
+
+            # Set fields on the tool instance
+            arguments = eval(tool_call.function.arguments)
+            for attr, value in arguments.items():
+                setattr(tool, attr, value)
+
+            # Validate the tool model
+            tool = type(tool).model_validate(tool)
+
             # get outputs from the tool
-            output = func.run()
+            output = tool.run()
 
             return output
         except Exception as e:
