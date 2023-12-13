@@ -77,14 +77,14 @@ class AsyncThread:
 
             # function execution
             if self.run.status == "requires_action":
-                t: Tuple[list[dict], list[(MessageOutput,MessageOutput)]] = await self.process_requires_action()  #
-                tool_outputs = t[0]
-                message_outputs = [function_output_message_output for function_call_message_output, function_output_message_output in t[1]]
+                tool_outputs, message_outputs = await self.process_requires_action()  #
+
+                print(f"\n\n ********\nasync_thread.py/get_completion \n\ttool_outputs: {tool_outputs}\n\t message_outputs: {[msg.content for msg in message_outputs]} ")
 
                 self.run = await self.client.beta.threads.runs.submit_tool_outputs(
                     thread_id=self.thread.id,
                     run_id=self.run.id,
-                    tool_outputs=tool_outputs
+                    tool_outputs=list(tool_outputs)
                 )
                 result.extend(message_outputs)
             # error
@@ -100,21 +100,38 @@ class AsyncThread:
 
         return result
 
-    async def process_requires_action(self) -> Tuple[list[dict], list[(MessageOutput,MessageOutput)]]:
+    async def process_requires_action(self) -> Tuple[list[dict], list[MessageOutput]]:
         tool_calls: list[RequiredActionFunctionToolCall] = self.run.required_action.submit_tool_outputs.tool_calls
-        data: list[Tuple[dict[str,str],MessageOutput, MessageOutput]]= [({"tool_call_id": tool_call.id},
-                 MessageOutput("function", self.recipient_agent.name, self.agent.name, str(tool_call.function)),
-                 MessageOutput("function_output", tool_call.function.name,
-                               self.recipient_agent.name, await self._execute_tool(tool_call))
-                 ) for tool_call in tool_calls]
+        data: list[Tuple[dict[str, str], MessageOutput, list[MessageOutput]]] = [({"tool_call_id": tool_call.id},
+                                                                                  MessageOutput("function",
+                                                                                                self.recipient_agent.name,
+                                                                                                self.agent.name,
+                                                                                                str(tool_call.function)),
+                                                                                  await self.get_function_output(
+                                                                                      tool_call)
+                                                                                  ) for tool_call in tool_calls]
 
-        tool_outputs: list[dict] = [{**tool_data, "output": str(function_output.content)} for
-                                    tool_data, function_call, function_output in data]
+        tool_outputs: list[dict[str, str]] = [{**tool_data, "output": str(item.content)} for
+                                              tool_data, function_call, function_output in data for item in
+                                              function_output]
+        # [item for sublist in original_list for item in (sublist if isinstance(sublist, list) else [sublist])]
+        message_outputs: list[MessageOutput] = [item for _, function_call, function_output in data for item in
+                                                [function_call, *function_output]]
 
-        message_outputs: list[(MessageOutput, MessageOutput)] = [(function_call, function_output) for _, function_call, function_output in data]
+        # message_outputs: list[MessageOutput] = [item for h,t in _message_outputs for item in [h,*t]]
 
         # submit tool outputs
         return tool_outputs, message_outputs
+
+    async def get_function_output(self, tool_call) -> list[MessageOutput]:
+        output = await self._execute_tool(tool_call)
+        if inspect.isgenerator(output):
+            return [item for item in output if isinstance(item, MessageOutput)]
+        else:
+            return [MessageOutput("function_output",
+                                  tool_call.function.name,
+                                  self.recipient_agent.name,
+                                  output)]
 
     async def wait_for_status_change(self):
         while self.run.status in ['queued', 'in_progress']:
@@ -124,15 +141,16 @@ class AsyncThread:
                 run_id=self.run.id
             )
 
+    def ensure_awaitable(self, func):
+        async def async_func():
+            return func()
+        return async_func
     async def _execute_tool(self, tool_call):
         funcs = self.recipient_agent.functions
-        func = next(iter([func for func in funcs if func.__name__ == tool_call.function.name]))
-        try:
-            # init tool
-            func = func(**eval(tool_call.function.arguments))
-            # get outputs from the tool
-            output = await func.run()
-
-            return output
-        except Exception as e:
-            return "Error: " + str(e)
+        func_calls = [func for func in funcs if func.__name__ == tool_call.function.name]
+        func_calls_with_args  = [func(**eval(tool_call.function.arguments)) for func in func_calls]
+        async_calls = [func.run() if asyncio.iscoroutinefunction(func.run) else self.ensure_awaitable(func.run)() for func in func_calls_with_args]
+        done, pending = await asyncio.wait(async_calls, return_when=asyncio.FIRST_COMPLETED)
+        for task in pending:
+            task.cancel()
+        return list(done)[0].result()

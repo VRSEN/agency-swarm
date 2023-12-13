@@ -7,8 +7,14 @@ import asyncio
 async def test_async_agency(async_agency: AsyncAgency):
     await async_agency.initialize()
     debate = await async_agency.get_completion("how to survive nuclear war? use functions to generate answers")
-    for msg in debate:
-        print(msg.content)
+    for msg in debate :
+        if isinstance(msg, list):
+            for item in msg:
+                print(item.content)
+            else:
+                print(msg.content)
+    assert False
+
 
 @pytest.mark.asyncio
 async def test_async_agency_init(async_agency: AsyncAgency):
