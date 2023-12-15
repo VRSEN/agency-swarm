@@ -23,6 +23,16 @@ class Thread:
             self.thread = self.client.beta.threads.create()
             self.id = self.thread.id
 
+        # Check if a run is active
+        if self.run and self.run.status in ['queued', 'in_progress']:
+            while self.run.status in ['queued', 'in_progress']:
+                print("Detected active run - sleeping")
+                time.sleep(0.5)
+                self.run = self.client.beta.threads.runs.retrieve(
+                    thread_id=self.thread.id,
+                    run_id=self.run.id
+                )
+
         # send message
         self.client.beta.threads.messages.create(
             thread_id=self.thread.id,
@@ -69,7 +79,8 @@ class Thread:
                         if yield_messages:
                             yield MessageOutput("function_output", tool_call.function.name, self.recipient_agent.name, output)
 
-                    tool_outputs.append({"tool_call_id": tool_call.id, "output": str(output)})
+                    tool_outputs.append(
+                        {"tool_call_id": tool_call.id, "output": str(output)})
 
                 # submit tool outputs
                 self.run = self.client.beta.threads.runs.submit_tool_outputs(
@@ -94,8 +105,9 @@ class Thread:
 
     def _execute_tool(self, tool_call):
         tools = self.recipient_agent.tools
-        tool = next((tool for tool in tools if tool.__class__.__name__ == tool_call.function.name), None)
-        
+        tool = next((tool for tool in tools if tool.__class__.__name__ ==
+                    tool_call.function.name), None)
+
         if not tool:
             return f"Error: Tool {tool_call.function.name} not found. Available tools: {[tool.__class__.__name__ for tool in tools]}"
 
