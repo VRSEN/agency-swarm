@@ -94,8 +94,8 @@ class Thread:
 
     def _execute_tool(self, tool_call):
         funcs = self.recipient_agent.functions
-        func = next(iter([func for func in funcs if func.__name__ == tool_call.function.name]))
-
+        func = next((func for func in funcs if func.__name__ == tool_call.function.name), None)
+        
         if not func:
             return f"Error: Function {tool_call.function.name} not found. Available functions: {[func.__name__ for func in funcs]}"
 
