@@ -20,8 +20,11 @@ class Thread:
 
     def get_completion(self, message: str, yield_messages=True):
         if not self.thread:
-            self.thread = self.client.beta.threads.create()
-            self.id = self.thread.id
+            if self.id:
+                self.thread = self.client.beta.threads.retrieve(self.id)
+            else:
+                self.thread = self.client.beta.threads.create()
+                self.id = self.thread.id
 
         # send message
         self.client.beta.threads.messages.create(
