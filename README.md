@@ -126,10 +126,17 @@ Run the demo to see your agents in action!
 agency.demo_gradio(height=900)
 ```
 
-or get completion from the agency:
+Terminal version:
 
 ```python
-agency.get_completion("Please create a new website for our client.")
+agency.run_demo()
+```
+
+6. **Get Completion**:
+Get completion from the agency:
+
+```python
+completion_output = agency.get_completion("Please create a new website for our client.", yield_messages=False)
 ```
 
 ## Creating Agent Templates Locally (CLI)
