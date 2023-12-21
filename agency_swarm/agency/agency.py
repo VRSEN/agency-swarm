@@ -119,6 +119,7 @@ class Agency:
 
         # Launch the demo
         demo.launch()
+        return demo
 
     def run_demo(self):
         """

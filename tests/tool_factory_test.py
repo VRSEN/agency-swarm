@@ -76,6 +76,32 @@ class ToolFactoryTest(unittest.TestCase):
 
         self.assertTrue(message)
 
+    def test_custom_tool(self):
+        schema = {
+            "name": "query_database",
+            "description": "Use this funciton to query the database that provides insights about the interests of different family and household segments and describes various aspects of demographic data. It also contains advertising data, offering insights into various channels and platforms to provide a granular view of advertising performance. Use when you don't already have enough information to answer the user's question based on your previous responses.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Query to the demographic database. Must be clearly stated in natural language.",
+                    },
+                },
+                "required": ["query"],
+            },
+        }
+
+        tool = ToolFactory.from_openai_schema(schema, lambda x: x)
+
+        print(json.dumps(tool.openai_schema, indent=4))
+
+        tool = tool(query="John Doe")
+
+        print(tool.model_dump())
+
+        tool.run()
+
 
 if __name__ == '__main__':
     unittest.main()
