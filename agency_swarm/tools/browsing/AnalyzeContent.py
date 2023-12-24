@@ -9,10 +9,12 @@ from agency_swarm.util import get_openai_client
 
 class AnalyzeContent(BaseTool):
     """
-    This tool allows you to ask a question about the current webpage and get an answer using a vision model. Make sure to read the URL first with ReadURL tool.
+    This tool analyzes the current web page and allows you to ask a question about its contents. Make sure to read 
+    the URL first with ReadURL tool or navigate to the right page with ClickElement tool. Do not use this tool to get 
+    direct links to other pages. It is not intended to be used for navigation.
     """
     question: str = Field(
-        ..., description="Question to ask about the current webpage."
+        ..., description="Question to ask about the contents of the current webpage."
     )
 
     def run(self):
@@ -25,7 +27,7 @@ class AnalyzeContent(BaseTool):
         messages = [
             {
                 "role": "system",
-                "content": "As a web scraping tool, your primary task is to accurately extract and provide information in response to user queries based on webpage screenshots. When a user asks a question, analyze the provided screenshot of the webpage for relevant information. Your goal is to ensure relevant data retrieval from webpages.",
+                "content": "As a web scraping tool, your primary task is to accurately extract and provide information in response to user queries based on webpage screenshots. When a user asks a question, analyze the provided screenshot of the webpage for relevant information. Your goal is to ensure relevant data retrieval from webpages. If some elements are obscured by pop ups, notify the user about how to close them. If there might be additional information on the page regarding the user's question by scrolling up or down, notify the user about it as well.",
             },
             {
                 "role": "user",

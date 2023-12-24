@@ -5,7 +5,7 @@ from pydantic import Field
 from selenium.webdriver.common.by import By
 
 from agency_swarm.tools import BaseTool
-from agency_swarm.tools.browsing.util import get_b64_screenshot, remove_highlight_and_labels
+from agency_swarm.tools.browsing.util import get_b64_screenshot
 from agency_swarm.tools.browsing.util import get_web_driver, set_web_driver
 from agency_swarm.tools.browsing.util.highlights import highlight_elements_with_labels
 from agency_swarm.util import get_openai_client
@@ -13,7 +13,7 @@ from agency_swarm.util import get_openai_client
 
 class ClickElement(BaseTool):
     """
-    This tool clicks on an element on the current web page based on element or task description. Do not use this tool to for input fields or dropdowns.
+    This tool clicks on an element on the current web page based on element or task description. Do not use this tool for input fields or dropdowns.
     """
     description: str = Field(
         ..., description="Description of the element to click on in natural language.",
@@ -122,8 +122,6 @@ DOM structure of the page.""".replace("\n", ""),
 
             if result:
                 break
-
-        wd = remove_highlight_and_labels(wd)
 
         set_web_driver(wd)
 

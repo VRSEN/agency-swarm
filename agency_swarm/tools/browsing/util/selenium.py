@@ -1,3 +1,7 @@
+import json
+import os
+from urllib.parse import urlparse
+
 from .highlights import remove_highlight_and_labels
 
 wd = None
@@ -26,7 +30,6 @@ def get_web_driver():
     global wd
 
     if wd:
-        wd = remove_highlight_and_labels(wd)
         return wd
 
     chrome_options = webdriver.ChromeOptions()
@@ -53,4 +56,6 @@ def get_web_driver():
 
 def set_web_driver(new_wd):
     global wd
+    wd = remove_highlight_and_labels(wd)
     wd = new_wd
+

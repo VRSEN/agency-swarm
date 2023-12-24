@@ -5,7 +5,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.select import Select
 
 from agency_swarm.tools import BaseTool
-from agency_swarm.tools.browsing.util import get_b64_screenshot, remove_highlight_and_labels
+from agency_swarm.tools.browsing.util import get_b64_screenshot
 from agency_swarm.tools.browsing.util import get_web_driver, set_web_driver
 from agency_swarm.tools.browsing.util.highlights import highlight_elements_with_labels
 from agency_swarm.util import get_openai_client
@@ -17,7 +17,7 @@ class SelectDropdown(BaseTool):
     """
 
     description: str = Field(
-        ..., description="Description of which option to select and for whcih dropdown on the page in natural langauge.",
+        ..., description="Description of which option to select and for which dropdown on the page, clearly stated in natural langauge.",
         examples=["Select Germany option in the 'Country' dropdown."]
     )
 
@@ -31,6 +31,10 @@ class SelectDropdown(BaseTool):
         screenshot = get_b64_screenshot(wd)
 
         all_elements = wd.find_elements(By.CSS_SELECTOR, '.highlighted-element')
+
+        if len(all_elements) == 0:
+            set_web_driver(wd)
+            return "This page does not contain any dropdowns. It might be an input element instead. Try using SendKeys function."
 
         all_selector_values = {}
 
@@ -54,9 +58,9 @@ red. Each selector will have a sequence number, ranging from 1 to n, displayed n
 Your task is to analyze the screenshot, identify the selectors based on the user's description, 
 and output the sequence numbers of these fields in JSON format, paired with the desired selector index value. For 
 instance, if the user's task involves selecting the first option in 2 dropdowns from website, your output should be in the 
-format: {"3": "0", "4": "1"}.
+format: {"3": "0", "4": "1"}, where 3 and 4 are sequence values, and 0 and 1 are index values from the available options.
 If no element on the screenshot matches the user’s description, explain to the user what's on the page, 
-and tell him where these elements are most likely to be found. 
+and tell him where these elements are most likely to located. 
 In instances where the label of a clickable element is not visible or discernible 
 in the screenshot, you are equipped to infer its sequence number by analyzing its position within the 
 DOM structure of the page.""".replace("\n", ""),
@@ -125,8 +129,6 @@ DOM structure of the page.""".replace("\n", ""),
 
             if result:
                 break
-
-        wd = remove_highlight_and_labels(wd)
 
         set_web_driver(wd)
 

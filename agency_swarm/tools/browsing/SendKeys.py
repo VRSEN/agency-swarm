@@ -16,11 +16,11 @@ from agency_swarm.util import get_openai_client
 
 class SendKeys(BaseTool):
     """
-    This tool send keys into input fields on the current web page based on the description of that element and what needs to be typed. It then clicks enter on the last element to submit the form. You do not need to tell it to press enter, it will do that automatically.
+    This tool sends keys into input fields on the current webpage based on the description of that element and what needs to be typed. It then clicks "Enter" on the last element to submit the form. You do not need to tell it to press "Enter"; it will do that automatically.
     """
 
     description: str = Field(
-        ..., description="Description of the inputs to send to the web page in natural language.",
+        ..., description="Description of the inputs to send to the web page, clearly stated in natural language.",
         examples=["Type 'hello' into the 'Search' input field.",
                   "Type johndoe@gmail.com into the 'Email' input field, and type 'password123' into the 'Password' input field.",
                   "Select the second option in the 'Country' dropdown."]
@@ -54,9 +54,10 @@ red. Each input field will have a sequence number, ranging from 1 to n, displaye
 Your task is to analyze the screenshot, identify the input fields based on the user's description, 
 and output the sequence numbers of these fields in JSON format, paired with the specified text. For 
 instance, if the user's task involves entering an email and password, your output should be in the 
-format: {"52": "johndoe@gmail.com", "53": "password123"}. The enter key will be pressed on the last element automatically.
-If no element on the screenshot matches the user’s description, explain to the user what's on the page, 
-and tell him where these elements are most likely to be found. 
+format: {"52": "johndoe@gmail.com", "53": "password123"}, where 52 and 52 and sequence numbers of the input fields. 
+The enter key will be pressed on the last element automatically.
+If no element on the screenshot matches the user’s description, explain to the user what's on the page instead, 
+and tell him where these elements are most likely to be located. 
 In instances where the label of a clickable element is not visible or discernible 
 in the screenshot, you are equipped to infer its sequence number by analyzing its position within the 
 DOM structure of the page.""".replace("\n", ""),
@@ -96,7 +97,7 @@ DOM structure of the page.""".replace("\n", ""),
             try:
                 json_text = json.loads(message_text[message_text.find("{"):message_text.find("}") + 1])
             except json.decoder.JSONDecodeError:
-                result = message_text
+                result = message_text + " To further analyze the page, use the AnalyzeContent tool."
                 break
 
             i = 0
@@ -105,9 +106,13 @@ DOM structure of the page.""".replace("\n", ""),
                     key = int(key)
                     element = all_elements[key - 1]
 
-                    element.click()
-                    element.send_keys(Keys.CONTROL + "a")  # Select all text in input
-                    element.send_keys(Keys.DELETE)
+                    try:
+                        element.click()
+                        element.send_keys(Keys.CONTROL + "a")  # Select all text in input
+                        element.send_keys(Keys.DELETE)
+                        element.clear()
+                    except Exception as e:
+                        pass
                     element.send_keys(value)
                     # send enter key to the last element
                     if i == len(json_text) - 1:
@@ -130,8 +135,6 @@ DOM structure of the page.""".replace("\n", ""),
 
             if result:
                 break
-
-        wd = remove_highlight_and_labels(wd)
 
         set_web_driver(wd)
 
