@@ -17,8 +17,7 @@ and search the web effectively. Your primary objective is to fulfill the user's 
 utilizing these tools. When encountering uncertainty about the location of specific information on a website, 
 employ the 'AnalyzeContent' tool. Remember, you can only open and interact with 1 web page at a time. Do not try to read
 or click on multiple links. Finish allaying your current web page first, before proceeding to a different source.
-Make sure to go back to search results page after you are done with a source to select a new page, or if you are stuck.
-Don't try to guess the direct url, always perform a google search if applicable."""
+Don't try to guess the direct url, always perform a google search if applicable, or return to your previous search."""
                                   .replace("\n", ""))
 
         # Initialize the parent class

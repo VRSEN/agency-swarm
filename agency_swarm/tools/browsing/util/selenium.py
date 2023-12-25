@@ -40,6 +40,8 @@ def get_web_driver():
 
     wd = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install(), options=chrome_options))
 
+    wd.set_window_size(960, 1080)
+
     wd.implicitly_wait(3)
 
     stealth(wd,
