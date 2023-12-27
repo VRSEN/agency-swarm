@@ -58,7 +58,7 @@ class Agency:
         Returns:
         Generator or final response: Depending on the 'yield_messages' flag, this method returns either a generator yielding intermediate messages or the final response from the main thread.
         """
-        gen = self.main_thread.get_completion(message=message, yield_messages=yield_messages)
+        gen = self.main_thread.get_completion(message=message, message_files=message_files, yield_messages=yield_messages)
 
         if not yield_messages:
             while True:

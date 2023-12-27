@@ -31,7 +31,7 @@ class Thread:
             thread_id=self.thread.id,
             role="user",
             content=message,
-            message_files=message_files
+            file_ids=message_files,
         )
 
         if yield_messages:
