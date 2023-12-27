@@ -17,19 +17,21 @@ console = Console()
 
 class Agency:
 
-    def __init__(self, agency_chart, shared_instructions=""):
+    def __init__(self, agency_chart, shared_instructions="", shared_files=None):
         """
         Initializes the Agency object, setting up agents, threads, and core functionalities.
 
         Parameters:
         agency_chart: The structure defining the hierarchy and interaction of agents within the agency.
         shared_instructions (str, optional): A path to a file containing shared instructions for all agents. Defaults to an empty string.
+        shared_files (list, optional): A list of folder paths with files containing shared resources for all agents. Defaults to an empty list.
 
         This constructor initializes various components of the Agency, including CEO, agents, threads, and user interactions. It parses the agency chart to set up the organizational structure and initializes the messaging tools, agents, and threads necessary for the operation of the agency. Additionally, it prepares a main thread for user interactions.
         """
         self.ceo = None
         self.agents = []
         self.agents_and_threads = {}
+        self.shared_files = shared_files if shared_files else []
 
         if os.path.isfile(os.path.join(self.get_class_folder_path(), shared_instructions)):
             self._read_instructions(os.path.join(self.get_class_folder_path(), shared_instructions))
@@ -377,6 +379,14 @@ class Agency:
         for agent in self.agents:
             agent.id = None
             agent.add_instructions(self.shared_instructions)
+
+            if self.shared_files:
+                if isinstance(agent.files_folder, str):
+                    agent.files_folder = [agent.files_folder]
+                    agent.files_folder += self.shared_files
+                elif isinstance(agent.files_folder, list):
+                    agent.files_folder += self.shared_files
+
             agent.init_oai()
 
     def _init_threads(self):

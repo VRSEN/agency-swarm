@@ -51,7 +51,7 @@ class Agent():
         self.description = description
         self.instructions = instructions
         self.tools = tools if tools else []
-        self.files_folder = files_folder
+        self.files_folder = files_folder if files_folder else []
         self.file_ids = file_ids if file_ids else []
         self.metadata = metadata if metadata else {}
         self.model = model
@@ -66,8 +66,6 @@ class Agent():
         elif os.path.isfile(os.path.join(self.get_class_folder_path(), self.instructions)):
             self._read_instructions(os.path.join(self.get_class_folder_path(), self.instructions))
 
-        self._upload_files()
-
     def init_oai(self):
         """
         Initializes the OpenAI assistant for the agent.
@@ -77,6 +75,7 @@ class Agent():
         Output:
         self: Returns the agent instance for chaining methods or further processing.
         """
+        self._upload_files()
 
         # check if settings.json exists
         path = self.get_settings_path()
@@ -209,39 +208,50 @@ class Agent():
 
     def _read_instructions(self, path):
         with open(path, 'r') as f:
-            self.instructions =  f.read()
+            self.instructions = f.read()
 
     def _upload_files(self):
-        if isinstance(self.files_folder, str):
-            f_path = self.files_folder
+        files_folders = self.files_folder if isinstance(self.files_folder, list) else [self.files_folder]
 
-            if not os.path.isdir(f_path):
-                f_path = os.path.join(self.get_class_folder_path(), self.files_folder)
+        for files_folder in files_folders:
+            if isinstance(files_folder, str):
+                f_path = files_folder
 
-            if os.path.isdir(f_path):
-                f_paths = os.listdir(f_path)
+                if not os.path.isdir(f_path):
+                    f_path = os.path.join(self.get_class_folder_path(), files_folder)
 
-                f_paths = [f for f in f_paths if not f.startswith(".")]
+                if os.path.isdir(f_path):
+                    f_paths = os.listdir(f_path)
 
-                f_paths = [os.path.join(f_path, f) for f in f_paths]
+                    f_paths = [f for f in f_paths if not f.startswith(".")]
 
-                for f_path in f_paths:
-                    file_id = self._get_id_from_file(f_path)
-                    if file_id:
-                        print("File already uploaded. Skipping... " + os.path.basename(f_path))
-                        self.file_ids.append(file_id)
-                    else:
-                        print("Uploading new file... " + os.path.basename(f_path))
-                        with open(f_path, 'rb') as f:
-                            file_id = self.client.files.create(file=f, purpose="assistants").id
-                            self.file_ids.append(file_id)
-                            self._add_id_to_file(f_path, file_id)
+                    f_paths = [os.path.join(f_path, f) for f in f_paths]
 
-                    if Retrieval not in self.tools:
-                        print("Detected files without Retrieval. Adding Retrieval tool...")
-                        self.add_tool(Retrieval)
+                    for f_path in f_paths:
+                        self.upload_file(f_path)
+                else:
+                    raise Exception("Files folder path is not a directory.")
             else:
-                raise Exception("Files folder path is not a directory.")
+                raise Exception("Files folder path must be a string or list of strings.")
+
+        if Retrieval not in self.tools and CodeInterpreter not in self.tools and self.file_ids:
+            print("Detected files without Retrieval. Adding Retrieval tool...")
+            self.add_tool(Retrieval)
+
+    def upload_file(self, f_path):
+        f_path = f_path.strip()
+        file_id = self._get_id_from_file(f_path)
+        if file_id:
+            print("File already uploaded. Skipping... " + os.path.basename(f_path))
+            self.file_ids.append(file_id)
+        else:
+            print("Uploading new file... " + os.path.basename(f_path))
+            with open(f_path, 'rb') as f:
+                file_id = self.client.files.create(file=f, purpose="assistants").id
+                self.file_ids.append(file_id)
+                self._add_id_to_file(f_path, file_id)
+
+        return file_id
 
     def _add_id_to_file(self, f_path, id):
         """Add file id to file name"""

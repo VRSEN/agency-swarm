@@ -103,6 +103,14 @@ ceo = Agent(name="CEO",
             tools=[MyCustomTool, LangchainTool])
 ```
 
+**NEW**: Browsing Agent
+
+```python
+
+from langchain.agents import BrowsingAgent
+
+
+
 4. **Define Agency Communication Flows**: 
 Establish how your agents will communicate with each other.
 
