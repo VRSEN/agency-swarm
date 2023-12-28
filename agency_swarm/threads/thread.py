@@ -25,6 +25,10 @@ class Thread:
             else:
                 self.thread = self.client.beta.threads.create()
                 self.id = self.thread.id
+            # Determine the sender's name based on the agent type
+            sender_name = "user" if isinstance(self.agent, User) else self.agent.name
+            playground_url = f'https://platform.openai.com/playground?assistant={self.recipient_agent._assistant.id}&mode=assistant&thread={self.thread.id}'
+            print(f'THREAD:[ {sender_name} -> {self.recipient_agent.name} ]: URL {playground_url}')
 
         # send message
         self.client.beta.threads.messages.create(
