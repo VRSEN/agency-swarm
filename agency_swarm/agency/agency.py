@@ -48,18 +48,19 @@ class Agency:
         self.user = User()
         self.main_thread = Thread(self.user, self.ceo)
 
-    def get_completion(self, message: str, yield_messages=True):
+    def get_completion(self, message: str, message_files=None, yield_messages=True):
         """
         Retrieves the completion for a given message from the main thread.
 
         Parameters:
         message (str): The message for which completion is to be retrieved.
+        message_files (list, optional): A list of file ids to be sent as attachments with the message. Defaults to None.
         yield_messages (bool, optional): Flag to determine if intermediate messages should be yielded. Defaults to True.
 
         Returns:
         Generator or final response: Depending on the 'yield_messages' flag, this method returns either a generator yielding intermediate messages or the final response from the main thread.
         """
-        gen = self.main_thread.get_completion(message=message, yield_messages=yield_messages)
+        gen = self.main_thread.get_completion(message=message, message_files=message_files, yield_messages=yield_messages)
 
         if not yield_messages:
             while True:
