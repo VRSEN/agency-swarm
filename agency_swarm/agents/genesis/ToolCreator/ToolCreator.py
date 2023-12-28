@@ -1,5 +1,6 @@
 from agency_swarm import Agent
-from agency_swarm.tools.genesis import CreateManifesto
+from agency_swarm.tools.coding import ChangeDir, ChangeLines, ReadFile, WriteFiles
+from agency_swarm.tools.genesis import TestTool
 
 
 class ToolCreator(Agent):
@@ -10,7 +11,7 @@ class ToolCreator(Agent):
             kwargs['tools'] = []
 
         # Add required tools
-        kwargs['tools'].extend([CreateManifesto])
+        kwargs['tools'].extend([ChangeDir, ChangeLines, ReadFile, WriteFiles, TestTool])
 
         # Set instructions
         if 'instructions' not in kwargs:

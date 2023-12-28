@@ -19,15 +19,17 @@ class CreateManifesto(BaseTool):
     )
 
     def run(self):
+        path = os.path.join(self.agency_folder_path, "manifesto.md")
         # save manifesto to manifesto.md file
-        with open("manifesto.md", "w") as f:
+        with open(path, "w") as f:
             f.write(self.manifesto)
 
-        return "Manifesto has been written to ./manifesto.md file."
+        return f"Manifesto has been written to {path} file."
 
     @field_validator("agency_folder_path", mode='after')
     @classmethod
     def validate_agency_name(cls, v):
-        if not os.path.exists(v):
+        path = os.path.abspath(v)
+        if not os.path.isdir(path):
             raise ValueError(f"Agency folder path {v} does not exist.")
         return v

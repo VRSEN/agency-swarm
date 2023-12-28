@@ -25,4 +25,6 @@ class CreateAgencyFolder(BaseTool):
         with open("__init__.py", "w") as f:
             f.write("")
 
+        os.chdir("..")
+
         return f"Agency folder has been created in {folder_path}."

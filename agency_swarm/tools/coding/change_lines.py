@@ -1,5 +1,5 @@
 import os
-from typing import Literal, Optional
+from typing import Literal, Optional, List
 
 from instructor import OpenAISchema
 from pydantic import Field, model_validator, field_validator
@@ -45,7 +45,7 @@ class ChangeLines(BaseTool):
         ..., description="Path to the file with extension.",
         examples=["./file.txt", "./file.json", "../../file.py"]
     )
-    changes: LineChange = Field(
+    changes: List[LineChange] = Field(
         ..., description="Line changes to be made to the file.",
         examples=[LineChange(line_number=1, new_line="This is a new line").model_dump()]
     )
