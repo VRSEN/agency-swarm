@@ -235,7 +235,8 @@ class Agent():
                         with open(f_path, 'rb') as f:
                             file_id = self.client.files.create(file=f, purpose="assistants").id
                             self.file_ids.append(file_id)
-                            self._add_id_to_file(f_path, file_id)
+                            f.close()
+                        self._add_id_to_file(f_path, file_id)
 
                     if Retrieval not in self.tools:
                         print("Detected files without Retrieval. Adding Retrieval tool...")
