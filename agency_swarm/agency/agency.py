@@ -299,6 +299,7 @@ class Agency:
         """
         Creates a SendMessage tool to enable an agent to send messages to specified recipient agents.
 
+
         Parameters:
         agent (Agent): The agent who will be sending messages.
         recipient_agents (List[Agent]): A list of recipient agents who can receive messages.

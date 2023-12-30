@@ -25,6 +25,10 @@ class CreateAgencyFolder(BaseTool):
         with open("__init__.py", "w") as f:
             f.write("")
 
+        # create agency.py
+        with open("agency.py", "w") as f:
+            f.write("from agency_swarm import Agency\n\n\n")
+
         os.chdir("..")
 
         return f"Agency folder has been created in {folder_path}."
