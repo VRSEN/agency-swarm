@@ -1,26 +1,19 @@
-import base64
-import json
-import os
 import time
-from urllib.parse import urlparse
 
-from pydantic import Field
-from selenium.common import WebDriverException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.expected_conditions import presence_of_element_located, \
     frame_to_be_available_and_switch_to_it
 from selenium.webdriver.support.wait import WebDriverWait
 
 from agency_swarm.tools import BaseTool
-from agency_swarm.tools.browsing.util import get_b64_screenshot, highlight_elements_with_labels, \
-    remove_highlight_and_labels
-from agency_swarm.tools.browsing.util.selenium import get_web_driver, set_web_driver
+from agency_swarm.tools.browsing.util import get_b64_screenshot, remove_highlight_and_labels
+from agency_swarm.tools.browsing.util.selenium import get_web_driver
 from agency_swarm.util import get_openai_client
 
 
-class SolveCaptchaTool(BaseTool):
+class SolveCaptcha(BaseTool):
     """
-    This tool solves capthca on the current webpage.
+    This tool asks a human to solve captcha on the current webpage. Make sure that captcha is visible before running it.
     """
 
     def run(self):
