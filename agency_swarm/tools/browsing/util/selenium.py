@@ -7,6 +7,11 @@ from .highlights import remove_highlight_and_labels
 
 wd = None
 
+selenium_config = {
+    "chrome_profile_path": None,
+    "headless": False,
+}
+
 
 def get_web_driver():
     try:
@@ -33,23 +38,24 @@ def get_web_driver():
     if wd:
         return wd
 
+    global selenium_config
+    chrome_profile_path = selenium_config["chrome_profile_path"]
+    profile_directory = None
+    user_data_dir = None
+    if chrome_profile_path and os.path.exists(chrome_profile_path):
+        profile_directory = os.path.split(chrome_profile_path)[-1].strip("\\").strip("/")
+        user_data_dir = os.path.split(chrome_profile_path)[0].strip("\\").strip("/")
+        print(f"Using Chrome profile: {profile_directory}")
+        print(f"Using Chrome user data dir: {user_data_dir}")
+        print(f"Using Chrome profile path: {chrome_profile_path}")
+
     chrome_options = webdriver.ChromeOptions()
     # Removed headless and other options for debugging purposes
 
-    # Ensure the paths are correct
-    user_data_dir = "/Users/vrsen/Library/Application Support/Google/Chrome Canary"
-    profile_directory = "Profile 5"
-
-    # Verify if the paths exist
-    if not os.path.exists(user_data_dir):
-        print(f"User data directory does not exist: {user_data_dir}")
-    else:
-        print(f"User data directory found: {user_data_dir}")
-
     chrome_driver_path = ChromeDriverManager().install()
-    print(f"ChromeDriver path: {chrome_driver_path}")
 
-    # chrome_options.add_argument('--headless')
+    if selenium_config["headless"]:
+        chrome_options.add_argument('--headless')
     chrome_options.add_argument("--window-size=960,1080")
     chrome_options.add_argument('--no-sandbox')
     chrome_options.add_argument('--disable-dev-shm-usage')
@@ -60,14 +66,16 @@ def get_web_driver():
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
     chrome_options.add_experimental_option('useAutomationExtension', False)
-    chrome_options.add_argument(f"user-data-dir={user_data_dir}")
-    chrome_options.add_argument(f"profile-directory={profile_directory}")
+    if user_data_dir and profile_directory:
+        chrome_options.add_argument(f"user-data-dir={user_data_dir}")
+        chrome_options.add_argument(f"profile-directory={profile_directory}")
 
     try:
-        wd = webdriver.Chrome(service=ChromeService(), options=chrome_options)
+        wd = webdriver.Chrome(service=ChromeService(chrome_driver_path), options=chrome_options)
         print("WebDriver initialized successfully.")
         # Print the actual profile path being used
-        print(f"Profile path in use: {wd.capabilities['chrome']['userDataDir']}")
+        if wd.capabilities['chrome']['userDataDir']:
+            print(f"Profile path in use: {wd.capabilities['chrome']['userDataDir']}")
     except Exception as e:
         print(f"Error initializing WebDriver: {e}")
         raise
@@ -80,7 +88,7 @@ def get_web_driver():
         webgl_vendor="Intel Inc.",
         renderer="Intel Iris OpenGL Engine",
         fix_hairline=True,
-        )
+    )
 
     # wd.set_window_size(960, 1080)
     wd.implicitly_wait(3)
@@ -93,3 +101,7 @@ def set_web_driver(new_wd):
     wd = remove_highlight_and_labels(wd)
     wd = new_wd
 
+
+def set_selenium_config(config):
+    global selenium_config
+    selenium_config = config

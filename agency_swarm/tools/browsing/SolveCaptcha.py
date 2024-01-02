@@ -93,18 +93,11 @@ class SolveCaptcha(BaseTool):
             continuous_task = 'once there are none left' in task_text.lower()
 
             task_text = task_text.replace("Click verify", "Output 0")
-
             task_text = task_text.replace("click skip", "Output 0")
-
             task_text = task_text.replace("once", "if")
-
             task_text = task_text.replace("none left", "none")
-
             task_text = task_text.replace("all", "only")
-
             task_text = task_text.replace("squares", "images")
-
-            print(task_text)
 
             # # save screenshot locally
             # with open("screenshot.jpeg", "wb") as fh:
@@ -112,8 +105,8 @@ class SolveCaptcha(BaseTool):
 
             additional_info = ""
             if len(tiles) > 9:
-                additional_info = ("Keep in mind that images are a part of a bigger image "
-                                   "from left to right and top to bottom. The grid is 4x4. ")
+                additional_info = ("Keep in mind that all images are a part of a bigger image "
+                                   "from left to right, and top to bottom. The grid is 4x4. ")
 
             messages = [
                 {
@@ -130,7 +123,8 @@ class SolveCaptcha(BaseTool):
                         *image_content,
                         {
                             "type": "text",
-                            "text": f"{task_text}. Only output the numbers separated by a comma and nothing else.",
+                            "text": f"{task_text}. Only output numbers separated by commas and nothing else. "
+                                    f"Output 0 if there are none."
                         }
                     ]
                 }]
@@ -145,17 +139,17 @@ class SolveCaptcha(BaseTool):
             message = response.choices[0].message
             message_text = message.content
 
-            print(message_text)
-
             # check if 0 is in the message
             if "0" in message_text and "10" not in message_text:
                 # Find the button by its ID
                 verify_button = wd.find_element(By.ID, "recaptcha-verify-button")
 
+                verify_button_text = verify_button.text
+
                 # Click the button
                 verify_button.click()
 
-                time.sleep(2)
+                time.sleep(1)
 
                 try:
                     if self.verify_checkbox(wd):
@@ -171,14 +165,15 @@ class SolveCaptcha(BaseTool):
                 # Click the tiles based on the provided numbers
                 for number in numbers:
                     tiles[number - 1].click()
-                    print(f"Clicked on tile {number}")
-                    time.sleep(1)
+                    time.sleep(0.5)
 
                 time.sleep(2)
 
                 if not continuous_task:
                     # Find the button by its ID
                     verify_button = wd.find_element(By.ID, "recaptcha-verify-button")
+
+                    verify_button_text = verify_button.text
 
                     # Click the button
                     verify_button.click()
@@ -191,7 +186,8 @@ class SolveCaptcha(BaseTool):
                 else:
                     continue
 
-            attempts += 1
+            if "verify" in verify_button_text.lower():
+                attempts += 1
 
         wd = remove_highlight_and_labels(wd)
 
