@@ -2,9 +2,13 @@ import base64
 import tempfile
 
 
-def get_b64_screenshot(wd):
-    tmpfile = tempfile.NamedTemporaryFile(suffix='.jpg')
-    wd.get_screenshot_as_file(tmpfile.name)
+def get_b64_screenshot(wd, element=None):
+    tmpfile = tempfile.NamedTemporaryFile(suffix='.png')
+
+    if element:
+        element.screenshot(tmpfile.name)
+    else:
+        wd.get_screenshot_as_file(tmpfile.name)
 
     tmpfile.seek(0)
 

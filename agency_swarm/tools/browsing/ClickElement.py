@@ -7,7 +7,7 @@ from selenium.webdriver.common.by import By
 from agency_swarm.tools import BaseTool
 from agency_swarm.tools.browsing.util import get_b64_screenshot
 from agency_swarm.tools.browsing.util import get_web_driver, set_web_driver
-from agency_swarm.tools.browsing.util.highlights import highlight_elements_with_labels
+from agency_swarm.tools.browsing.util.highlights import highlight_elements_with_labels, remove_highlight_and_labels
 from agency_swarm.util import get_openai_client
 
 
@@ -122,6 +122,8 @@ DOM structure of the page.""".replace("\n", ""),
 
             if result:
                 break
+
+        wd = remove_highlight_and_labels(wd)
 
         set_web_driver(wd)
 
