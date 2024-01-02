@@ -19,7 +19,8 @@ def get_openai_client():
             api_key = openai.api_key or os.getenv('OPENAI_API_KEY')
             if api_key is None:
                 raise ValueError("OpenAI API key is not set. Please set it using set_openai_key.")
-            client = instructor.patch(openai.OpenAI(api_key=api_key))
+            client = instructor.patch(openai.OpenAI(api_key=api_key,
+                                                    max_retries=5))
     return client
 
 
