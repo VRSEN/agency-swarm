@@ -4,6 +4,7 @@ import os
 import instructor
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 client_lock = threading.Lock()
@@ -20,6 +21,12 @@ def get_openai_client():
                 raise ValueError("OpenAI API key is not set. Please set it using set_openai_key.")
             client = instructor.patch(openai.OpenAI(api_key=api_key))
     return client
+
+
+def set_openai_client(new_client):
+    global client
+    with client_lock:
+        client = new_client
 
 
 def set_openai_key(key):
