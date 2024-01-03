@@ -1,3 +1,4 @@
+import base64
 import time
 
 from selenium.webdriver.common.by import By
@@ -52,8 +53,10 @@ class SolveCaptcha(BaseTool):
                 (By.XPATH, "//iframe[@title='recaptcha challenge expires in two minutes']"))
         )
 
+        time.sleep(2)
+
         attempts = 0
-        while attempts < 3:
+        while attempts < 5:
             tiles = wd.find_elements(By.CLASS_NAME, "rc-imageselect-tile")
 
             # filter out tiles with rc-imageselect-dynamic-selected class
@@ -65,6 +68,10 @@ class SolveCaptcha(BaseTool):
             for tile in tiles:
                 i += 1
                 screenshot = get_b64_screenshot(wd, tile)
+
+                # save screenshot locally
+                # with open(f"screenshot{i}.png", "wb") as fh:
+                #     fh.write(base64.b64decode(screenshot))
 
                 image_content.append(
                     {
@@ -98,10 +105,6 @@ class SolveCaptcha(BaseTool):
             task_text = task_text.replace("none left", "none")
             task_text = task_text.replace("all", "only")
             task_text = task_text.replace("squares", "images")
-
-            # # save screenshot locally
-            # with open("screenshot.jpeg", "wb") as fh:
-            #     fh.write(base64.b64decode(screenshot))
 
             additional_info = ""
             if len(tiles) > 9:
@@ -191,9 +194,10 @@ class SolveCaptcha(BaseTool):
 
         wd = remove_highlight_and_labels(wd)
 
-        wd.execute_script("document.body.click();")
-
         wd.switch_to.default_content()
+
+        # close iframe
+        wd.execute_script("document.body.click();")
 
         # close captcha window by clicking anywhere on the page
         # wd.execute_script("document.body.click();")
