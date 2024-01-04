@@ -196,12 +196,16 @@ class SolveCaptcha(BaseTool):
 
         wd.switch_to.default_content()
 
-        # close iframe
-        wd.execute_script("document.body.click();")
+        # close captcha
+        try:
+            element = WebDriverWait(wd, 3).until(
+                presence_of_element_located((By.XPATH, "//iframe[@title='reCAPTCHA']"))
+            )
 
-        # close captcha window by clicking anywhere on the page
-        # wd.execute_script("document.body.click();")
-        # wd.execute_script("document.body.click();")
+            wd.execute_script(f"document.elementFromPoint({element.location['x']}, {element.location['y']-10}).click();")
+        except Exception as e:
+            print(e)
+            pass
 
         return "Could not solve captcha."
 
