@@ -170,7 +170,7 @@ class SolveCaptcha(BaseTool):
                     tiles[number - 1].click()
                     time.sleep(0.5)
 
-                time.sleep(2)
+                time.sleep(3)
 
                 if not continuous_task:
                     # Find the button by its ID

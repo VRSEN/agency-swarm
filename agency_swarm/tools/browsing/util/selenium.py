@@ -39,12 +39,12 @@ def get_web_driver():
         return wd
 
     global selenium_config
-    chrome_profile_path = selenium_config["chrome_profile_path"]
+    chrome_profile_path = selenium_config.get("chrome_profile_path", None)
     profile_directory = None
     user_data_dir = None
-    if chrome_profile_path and os.path.exists(chrome_profile_path):
-        profile_directory = os.path.split(chrome_profile_path)[-1].strip("\\").strip("/")
-        user_data_dir = os.path.split(chrome_profile_path)[0].strip("\\").strip("/")
+    if isinstance(chrome_profile_path, str) and os.path.exists(chrome_profile_path):
+        profile_directory = os.path.split(chrome_profile_path)[-1].strip("\\").rstrip("/")
+        user_data_dir = os.path.split(chrome_profile_path)[0].strip("\\").rstrip("/")
         print(f"Using Chrome profile: {profile_directory}")
         print(f"Using Chrome user data dir: {user_data_dir}")
         print(f"Using Chrome profile path: {chrome_profile_path}")
@@ -54,7 +54,7 @@ def get_web_driver():
 
     chrome_driver_path = ChromeDriverManager().install()
 
-    if selenium_config["headless"]:
+    if selenium_config.get("headless", False):
         chrome_options.add_argument('--headless')
     chrome_options.add_argument("--window-size=960,1080")
     chrome_options.add_argument('--no-sandbox')
