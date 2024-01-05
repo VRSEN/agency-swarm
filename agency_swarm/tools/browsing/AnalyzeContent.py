@@ -1,7 +1,7 @@
+import base64
+
 from agency_swarm.tools import BaseTool
 from pydantic import Field
-import tempfile
-import base64
 
 from agency_swarm.tools.browsing.util import get_web_driver, set_web_driver, get_b64_screenshot
 from agency_swarm.util import get_openai_client
@@ -23,6 +23,10 @@ class AnalyzeContent(BaseTool):
         client = get_openai_client()
 
         screenshot = get_b64_screenshot(wd)
+
+        # save screenshot locally
+        with open("screenshot.jpeg", "wb") as fh:
+            fh.write(base64.b64decode(screenshot))
 
         messages = [
             {

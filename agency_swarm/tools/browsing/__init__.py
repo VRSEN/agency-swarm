@@ -5,3 +5,4 @@ from .ClickElement import ClickElement
 from .AnalyzeContent import AnalyzeContent
 from .GoBack import GoBack
 from .SelectDropdown import SelectDropdown
+from .SolveCaptcha import SolveCaptcha

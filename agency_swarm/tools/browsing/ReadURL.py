@@ -4,6 +4,7 @@ import time
 from urllib.parse import urlparse
 
 from pydantic import Field
+from selenium.common import WebDriverException
 
 from agency_swarm.tools import BaseTool
 from agency_swarm.tools.browsing.util.selenium import get_web_driver, set_web_driver
@@ -44,4 +45,5 @@ Remember, this tool only supports opening 1 URL at a time. Previous URL will be 
 
         set_web_driver(wd)
 
-        return "Success. Current URL is: " + wd.current_url + "\n"
+        return "Current URL is: " + wd.current_url + "\n"
+
