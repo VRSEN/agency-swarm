@@ -330,6 +330,9 @@ class Agency:
                                  description="Specify the task required for the recipient agent to complete. Focus on "
                                              "clarifying what the task entails, rather than providing exact "
                                              "instructions.")
+            message_files: List[str] = Field(default=None,
+                                                description="A list of openai file ids to be sent as attachments with the message. Only use this if the agent has uploaded the file and you have the file id.",
+                                             examples=["file-1234", "file-5678"])
             caller_agent_name: str = Field(default=agent.name,
                                            description="The agent calling this tool. Defaults to your name. Do not change it.")
 
@@ -348,7 +351,7 @@ class Agency:
             def run(self):
                 thread = outer_self.agents_and_threads[self.caller_agent_name][self.recipient.value]
 
-                gen = thread.get_completion(message=self.message)
+                gen = thread.get_completion(message=self.message, message_files=self.message_files)
                 try:
                     while True:
                         yield next(gen)
