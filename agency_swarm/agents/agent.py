@@ -322,6 +322,7 @@ class Agent():
         tools = []
         for tool in self.tools:
             if not isinstance(tool, type):
+                print(tool)
                 raise Exception("Tool must not be initialized.")
 
             if issubclass(tool, Retrieval):

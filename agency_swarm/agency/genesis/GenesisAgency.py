@@ -15,6 +15,7 @@ class GenesisAgency(Agency):
             kwargs['agency_chart'] = [
                 genesis_ceo,
                 [genesis_ceo, agent_creator],
+                [genesis_ceo, tool_creator],
                 [agent_creator, tool_creator],
             ]
 
