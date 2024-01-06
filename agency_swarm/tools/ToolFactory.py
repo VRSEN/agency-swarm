@@ -1,6 +1,8 @@
 import inspect
 from typing import Any, Dict, List, Type
 
+import jsonref
+from jsonref import requests
 from pydantic import create_model, Field
 
 from .BaseTool import BaseTool
@@ -158,4 +160,79 @@ class ToolFactory:
 
         return tool
 
+    @staticmethod
+    def from_openapi_schema(schema: str, headers: Dict[str, str] = None):
+        openapi_spec = jsonref.loads(schema)
+        tools = []
 
+        for path, methods in openapi_spec["paths"].items():
+            for method, spec_with_ref in methods.items():
+                def callback(self):
+                    print(self.model_dump())
+                    url = openapi_spec["servers"][0]["url"] + path
+                    parameters = {}
+                    if hasattr(self, "properties"):
+                        parameters = self.properties.get("parameters", {})
+                        url = url.format(**self.model_dump()["properties"])
+                    if method == "get":
+                        return requests.get(url, params=parameters, headers=headers).json()
+                    elif method == "post":
+                        return requests.post(url,
+                                             params=parameters,
+                                             json=self.model_dump().get('requestBody', {}),
+                                             headers=headers
+                                             ).json()
+                    elif method == "put":
+                        return requests.put(url,
+                                            params=parameters,
+                                            json=self.model_dump().get('requestBody', {}),
+                                            headers=headers
+                                            ).json()
+                    elif method == "delete":
+                        return requests.delete(url,
+                                               params=parameters,
+                                               json=self.model_dump().get('requestBody', {}),
+                                               headers=headers
+                                               ).json()
+
+                # 1. Resolve JSON references.
+                spec = jsonref.replace_refs(spec_with_ref)
+
+                # 2. Extract a name for the functions.
+                function_name = spec.get("operationId")
+
+                # 3. Extract a description and parameters.
+                desc = spec.get("description") or spec.get("summary", "")
+
+                schema = {"type": "object", "properties": {}}
+
+                req_body = (
+                    spec.get("requestBody", {})
+                    .get("content", {})
+                    .get("application/json", {})
+                    .get("schema")
+                )
+                if req_body:
+                    schema["properties"]["requestBody"] = req_body
+
+                params = spec.get("parameters", [])
+                if params:
+                    param_properties = {
+                        param["name"]: param["schema"]
+                        for param in params
+                        if "schema" in param
+                    }
+                    schema["properties"]["parameters"] = {
+                        "type": "object",
+                        "properties": param_properties,
+                    }
+
+                function = {
+                    "name": function_name,
+                    "description": desc,
+                    "parameters": schema,
+                }
+
+                tools.append(ToolFactory.from_openai_schema(function, callback))
+
+        return tools

@@ -1,8 +1,10 @@
 from agency_swarm import Agency
+from agency_swarm.agents.browsing import BrowsingAgent
 from agency_swarm.agents.genesis import GenesisCEO, AgentCreator
 import os
 
 from agency_swarm.agents.genesis import ToolCreator
+from agency_swarm.agents.genesis import OpenAPICreator
 
 
 class GenesisAgency(Agency):
@@ -12,11 +14,13 @@ class GenesisAgency(Agency):
             agent_creator = AgentCreator()
             genesis_ceo = GenesisCEO()
             tool_creator = ToolCreator()
+            openapi_creator = OpenAPICreator()
+            browsing_agent = BrowsingAgent()
             kwargs['agency_chart'] = [
                 genesis_ceo,
                 [genesis_ceo, agent_creator],
-                [genesis_ceo, tool_creator],
-                [agent_creator, tool_creator],
+                [agent_creator, browsing_agent],
+                [agent_creator, openapi_creator],
             ]
 
         if 'shared_instructions' not in kwargs:

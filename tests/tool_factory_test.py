@@ -1,3 +1,4 @@
+import os
 import unittest, json
 
 import sys
@@ -101,6 +102,26 @@ class ToolFactoryTest(unittest.TestCase):
         print(tool.model_dump())
 
         tool.run()
+
+    def test_get_weather_openapi(self):
+        with open("./data/schemas/get-weather.json", "r") as f:
+            tools = ToolFactory.from_openapi_schema(f.read())
+
+        print(tools[0].openai_schema)
+
+    def test_test_openapi_schema(self):
+        with open("./data/schemas/test_schema.json", "r") as f:
+            tools = ToolFactory.from_openapi_schema(f.read(), {
+                "Authorization": os.environ.get("TEST_SCHEMA_API_KEY")
+            })
+
+        print(tools[0].openai_schema)
+
+        output = tools[0](requestBody={"text":'test'}).run()
+
+        print(output)
+
+        assert output['output']['transformed']['data'] == 'test complete.'
 
 
 if __name__ == '__main__':
