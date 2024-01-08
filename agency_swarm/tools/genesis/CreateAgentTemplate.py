@@ -33,8 +33,7 @@ class CreateAgentTemplate(BaseTool):
                               instructions=self.instructions,
                               code_interpreter=True if "CodeInterpreter" in self.default_tools else None)
 
-        return (f"Agent template has been created in {self.agent_name} folder. "
-                f"You can now instruct the ToolCreator agent to create tools for this agent.")
+        return f"Agent template has been created in {self.agent_name} folder."
 
     @model_validator(mode="after")
     def validate_tools(self):

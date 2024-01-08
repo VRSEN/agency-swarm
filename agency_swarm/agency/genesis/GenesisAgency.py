@@ -16,6 +16,18 @@ class GenesisAgency(Agency):
             tool_creator = ToolCreator()
             openapi_creator = OpenAPICreator()
             browsing_agent = BrowsingAgent()
+
+            browsing_agent.instructions += ("""
+# BrowsingAgent Primary instructions
+1. Browse the web to find the most relevant API that the requested agent needs in order to perform its role. If you already have an idea of what API to use, you can search google directly for this API documentation.
+2. After finding the right API to use, navigate to its documentation page. Prefer to do this by searching for the API documentation page in google, rather than navigating to the API's website and then finding the documentation page, if possible.
+3. Navigate to the API documentation page, and ensure that it actually contains the necessary API endpoints descriptions. You can do this by using AnalyzeContent tool or exporting a file with ExportFile tool, and then alazying its contents with myfiles_browser tool.
+4. If you have confirmed that the page contains the necessary API documentation, export the page with ExportFile tool, if you have not already done so, and send the file_id back to the user along with a brief description of the API.
+5. If not, continue browsing the web until you find the right API documentation page.
+6. Repeat these steps for each new requested agent.
+""")
+
+
             kwargs['agency_chart'] = [
                 genesis_ceo,
                 [genesis_ceo, agent_creator],

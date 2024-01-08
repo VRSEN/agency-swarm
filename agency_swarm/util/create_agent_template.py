@@ -20,7 +20,7 @@ def create_agent_template(agent_name=None,
                     "our Agency Manifesto:\n\n")
 
     # create folder
-    folder_name = agent_name.lower().replace(" ", "_").strip()
+    folder_name = agent_name #.lower().replace(" ", "_").strip()
     path = os.path.join(path, folder_name) + "/"
     if os.path.isdir(path):
         raise Exception("Folder already exists.")

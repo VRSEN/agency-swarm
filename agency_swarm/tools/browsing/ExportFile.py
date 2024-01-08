@@ -5,7 +5,7 @@ from agency_swarm.tools.browsing.util import get_web_driver
 
 
 class ExportFile(BaseTool):
-    """This tool converts a web page to a PDF and returns its id. You must always communicate the id to the user."""
+    """This tool converts full web page into a file and returns its id. That you can then use to analyze it with myfiles_browser tool."""
 
     def run(self):
         wd = get_web_driver()
@@ -32,4 +32,13 @@ class ExportFile(BaseTool):
 
         file_id = client.files.create(file=pdf_bytes, purpose="assistants").id
 
-        return "Success. File uploaded to OpenAI with id: " + file_id + " Please tell the user to use this id with the SendMessage tool."
+        # update caller agent assistant
+        self.caller_agent.file_ids.append(file_id)
+
+        client.beta.assistants.update(
+            assistant_id=self.caller_agent.id,
+            file_ids=self.caller_agent.file_ids
+        )
+
+        return ("Success. File uploaded to OpenAI with id: " + file_id +
+                " You can use myfiles_browser tool to analyze it.")

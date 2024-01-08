@@ -107,7 +107,7 @@ class ToolFactoryTest(unittest.TestCase):
         with open("./data/schemas/get-weather.json", "r") as f:
             tools = ToolFactory.from_openapi_schema(f.read())
 
-        print(tools[0].openai_schema)
+        print(json.dumps(tools[0].openai_schema, indent=4))
 
     def test_test_openapi_schema(self):
         with open("./data/schemas/test_schema.json", "r") as f:
@@ -115,7 +115,7 @@ class ToolFactoryTest(unittest.TestCase):
                 "Authorization": os.environ.get("TEST_SCHEMA_API_KEY")
             })
 
-        print(tools[0].openai_schema)
+        print(json.dumps(tools[0].openai_schema, indent=4))
 
         output = tools[0](requestBody={"text":'test'}).run()
 

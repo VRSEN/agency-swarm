@@ -5,3 +5,4 @@ termcolor==2.3.0
 python-dotenv==1.0.0
 rich==13.7.0
 jsonref==1.1.0
+openapi-spec-validator==0.7.1

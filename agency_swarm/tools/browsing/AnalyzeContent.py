@@ -9,9 +9,9 @@ from agency_swarm.util import get_openai_client
 
 class AnalyzeContent(BaseTool):
     """
-    This tool analyzes the current web page and allows you to ask a question about its contents. Make sure to read 
+    This tool analyzes the current web browser window content and allows you to ask a question about its contents. Make sure to read
     the URL first with ReadURL tool or navigate to the right page with ClickElement tool. Do not use this tool to get 
-    direct links to other pages. It is not intended to be used for navigation.
+    direct links to other pages. It is not intended to be used for navigation. To analyze the full web page, instead of just the current window, use ExportFile tool.
     """
     question: str = Field(
         ..., description="Question to ask about the contents of the current webpage."
