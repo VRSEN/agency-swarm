@@ -25,8 +25,8 @@ class AnalyzeContent(BaseTool):
         screenshot = get_b64_screenshot(wd)
 
         # save screenshot locally
-        with open("screenshot.jpeg", "wb") as fh:
-            fh.write(base64.b64decode(screenshot))
+        # with open("screenshot.png", "wb") as fh:
+        #     fh.write(base64.b64decode(screenshot))
 
         messages = [
             {
