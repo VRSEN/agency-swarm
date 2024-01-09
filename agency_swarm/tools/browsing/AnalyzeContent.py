@@ -22,7 +22,11 @@ class AnalyzeContent(BaseTool):
 
         client = get_openai_client()
 
-        screenshot = get_b64_screenshot(wd)
+        #screenshot = get_b64_screenshot(wd)
+
+        #Get the screenshot of the current window as a base64 encoded string.
+        screenshot = wd.get_screenshot_as_base64()
+
 
         # save screenshot locally
         # with open("screenshot.png", "wb") as fh:
