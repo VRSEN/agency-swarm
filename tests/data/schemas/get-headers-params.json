@@ -1,0 +1,64 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Get Headers",
+    "description": "Get headers endpoint",
+    "version": "v1.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://{domain}-gntxktyfsq-uc.a.run.app/"
+    }
+  ],
+  "paths": {
+    "/": {
+      "get": {
+        "description": "This is a test function to return all request headers.",
+        "operationId": "PrintHeaders",
+        "parameters": [
+            {
+                "name": "query",
+                "in": "query",
+                "description": "Query test parameter. Should be 'test'",
+                "required": true,
+                "schema": {
+                    "type": "string"
+                },
+                "example": "test"
+            },
+            {
+                "name": "domain",
+                "in": "path",
+                "description": "Domain parameter. Should be 'print-headers'",
+                "required": true,
+                "schema": {
+                    "type": "string"
+                },
+                "example": "print-headers"
+            }
+        ],
+        "requestBody": {},
+        "deprecated": false,
+        "security": [
+          {
+            "apiKey": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "RunReportParams": {
+        "properties": {},
+        "type": "object",
+        "required": []
+      }
+    },
+    "securitySchemes": {
+      "apiKey": {
+        "type": "apiKey"
+      }
+    }
+  }
+}

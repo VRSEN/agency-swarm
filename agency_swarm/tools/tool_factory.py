@@ -1,9 +1,11 @@
 import inspect
 from typing import Any, Dict, List, Type
 
+import jsonref
+from jsonref import requests
 from pydantic import create_model, Field
 
-from .base_tool import BaseTool
+from .BaseTool import BaseTool
 from ..util.schema import reference_schema
 
 
@@ -80,7 +82,8 @@ class ToolFactory:
                     alias = prop
                     prop = prop.lstrip('_')
 
-                json_type = details['type']
+                json_type = details['type'] if 'type' in details else 'any'
+
                 if json_type in type_mapping:
                     field_type = type_mapping[json_type]
                     field_description = details.get('description', '')
@@ -132,6 +135,7 @@ class ToolFactory:
             'array': List,
             'object': dict,
             'null': type(None),
+            'any': Any,
         }
 
         schema = reference_schema(schema)
@@ -158,4 +162,87 @@ class ToolFactory:
 
         return tool
 
+    @staticmethod
+    def from_openapi_schema(schema: str, headers: Dict[str, str] = None):
+        openapi_spec = jsonref.loads(schema)
+        tools = []
+        headers = headers or {}
+        for path, methods in openapi_spec["paths"].items():
+            for method, spec_with_ref in methods.items():
+                def callback(self):
+                    url = openapi_spec["servers"][0]["url"] + path
+                    parameters = self.model_dump().get('parameters', {})
+                    # replace all parameters in url
+                    for param, value in parameters.items():
+                        url = url.replace(f"{{{param}}}", str(value))
+                        parameters[param] = None
+                    url = url.rstrip("/")
+                    parameters = {k: v for k, v in parameters.items() if v is not None}
+                    if method == "get":
+                        return requests.get(url, params=parameters, headers=headers,
+                                            json=self.model_dump().get('requestBody', None)
+                                            ).json()
+                    elif method == "post":
+                        return requests.post(url,
+                                             params=parameters,
+                                             json=self.model_dump().get('requestBody', None),
+                                             headers=headers
+                                             ).json()
+                    elif method == "put":
+                        return requests.put(url,
+                                            params=parameters,
+                                            json=self.model_dump().get('requestBody', None),
+                                            headers=headers
+                                            ).json()
+                    elif method == "delete":
+                        return requests.delete(url,
+                                               params=parameters,
+                                               json=self.model_dump().get('requestBody', None),
+                                               headers=headers
+                                               ).json()
 
+                # 1. Resolve JSON references.
+                spec = jsonref.replace_refs(spec_with_ref)
+
+                # 2. Extract a name for the functions.
+                function_name = spec.get("operationId")
+
+                # 3. Extract a description and parameters.
+                desc = spec.get("description") or spec.get("summary", "")
+
+                schema = {"type": "object", "properties": {}}
+
+                req_body = (
+                    spec.get("requestBody", {})
+                    .get("content", {})
+                    .get("application/json", {})
+                    .get("schema")
+                )
+                if req_body:
+                    schema["properties"]["requestBody"] = req_body
+
+                params = spec.get("parameters", [])
+                if params:
+                    param_properties = {}
+                    for param in params:
+                        param_properties[param["name"]] = param["schema"]
+                        if "description" in param:
+                            param_properties[param["name"]]["description"] = param["description"]
+                        if "required" in param:
+                            param_properties[param["name"]]["required"] = param["required"]
+                        if "example" in param:
+                            param_properties[param["name"]]["example"] = param["example"]
+                    schema["properties"]["parameters"] = {
+                        "type": "object",
+                        "properties": param_properties,
+                    }
+
+                function = {
+                    "name": function_name,
+                    "description": desc,
+                    "parameters": schema,
+                }
+
+                tools.append(ToolFactory.from_openai_schema(function, callback))
+
+        return tools

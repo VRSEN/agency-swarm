@@ -377,7 +377,7 @@ class Agency:
         """
         for agent in self.agents:
             agent.id = None
-            agent.add_instructions(self.shared_instructions)
+            agent.add_shared_instructions(self.shared_instructions)
             agent.init_oai()
 
     def _init_threads(self):

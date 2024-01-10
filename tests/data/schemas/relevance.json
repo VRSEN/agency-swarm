@@ -1,0 +1,57 @@
+{
+  "info": { "title": "Relevance AI Tools", "version": "latest" },
+  "paths": {
+    "/studios/0d0bc745-53da-4c11-9893-bb7c93011a43/trigger_llm_friendly": {
+      "post": {
+        "operationId": "Test_tool",
+        "summary": "Test Tool",
+        "description": "",
+        "security": [{ "AuthorizationHeader": [] }],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/0d0bc745-53da-4c11-9893-bb7c93011a43RequestBodySchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "successful operation",
+            "content": { "application/json": {} }
+          }
+        }
+      }
+    }
+  },
+  "openapi": "3.0.0",
+  "servers": [{ "url": "https://api-bcbe5a.stack.tryrelevance.com/latest" }],
+  "components": {
+    "schemas": {
+      "0d0bc745-53da-4c11-9893-bb7c93011a43RequestBodySchema": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "frontend_metadata": { "required": true },
+            "order": 0,
+            "title": "test_field",
+            "description": "Test field"
+          }
+        },
+        "required": ["text"],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "AuthorizationHeader": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "Authorization",
+        "description": "Authorization credentials. Header authorization should be in the form of: project:api_key"
+      }
+    }
+  },
+  "security": [{ "AuthorizationHeader": ["Authorization"] }]
+}
