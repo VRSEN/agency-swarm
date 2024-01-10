@@ -1,6 +1,4 @@
 import json
-from openapi_spec_validator.validation.exceptions import OpenAPIValidationError
-from openapi_spec_validator import validate
 
 
 def validate_openapi_spec(spec: str):
