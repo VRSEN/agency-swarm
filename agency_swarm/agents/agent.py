@@ -6,9 +6,10 @@ from typing import List
 
 from deepdiff import DeepDiff
 
-from agency_swarm.tools import BaseTool
+from agency_swarm.tools import BaseTool, ToolFactory
 from agency_swarm.tools import Retrieval, CodeInterpreter
 from agency_swarm.util.oai import get_openai_client
+from agency_swarm.util.openapi import validate_openapi_spec
 
 
 class Agent():
@@ -28,7 +29,7 @@ class Agent():
 
     def __init__(self, id: str = None, name: str = None, description: str = None, instructions: str = "",
                  tools: List[Union[Type[BaseTool], Type[Retrieval], Type[CodeInterpreter]]] = None,
-                 files_folder: Union[List[str], str] = None,
+                 files_folder: Union[List[str], str] = None, schemas_folder: Union[List[str], str] = None,
                  file_ids: List[str] = None, metadata: Dict[str, str] = None, model: str = "gpt-4-1106-preview"):
         """
         Initializes an Agent with specified attributes, tools, and OpenAI client.
@@ -40,31 +41,36 @@ class Agent():
         instructions (str, optional): Path to a file containing specific instructions for the agent. Defaults to an empty string.
         tools (List[Union[Type[BaseTool], Type[Retrieval], Type[CodeInterpreter]]], optional): A list of tools (as classes) that the agent can use. Defaults to an empty list.
         files_folder (Union[List[str], str], optional): Path or list of paths to directories containing files associated with the agent. Defaults to None.
+        schemas_folder (Union[List[str], str], optional): Path or list of paths to directories containing OpenAPI schemas associated with the agent. Defaults to None.
         file_ids (List[str], optional): List of file IDs for files associated with the agent. Defaults to an empty list.
         metadata (Dict[str, str], optional): Metadata associated with the agent. Defaults to an empty dictionary.
         model (str, optional): The model identifier for the OpenAI API. Defaults to "gpt-4-1106-preview".
 
         This constructor sets up the agent with its unique properties, initializes the OpenAI client, reads instructions if provided, and uploads any associated files.
         """
+        # public attributes
         self.id = id
         self.name = name if name else self.__class__.__name__
         self.description = description
         self.instructions = instructions
         self.tools = tools[:] if tools is not None else []
         self.files_folder = files_folder if files_folder else []
+        self.schemas_folder = schemas_folder if schemas_folder else []
         self.file_ids = file_ids if file_ids else []
         self.metadata = metadata if metadata else {}
         self.model = model
 
+        # private attributes
         self._assistant: Any = None
         self._shared_instructions = None
 
+        # init methods
         self.client = get_openai_client()
+        self._read_instructions(self.instructions)
+        self._upload_files()
+        self._parse_schemas()
 
-        if os.path.isfile(self.instructions):
-            self._read_instructions(self.instructions)
-        elif os.path.isfile(os.path.join(self.get_class_folder_path(), self.instructions)):
-            self._read_instructions(os.path.join(self.get_class_folder_path(), self.instructions))
+    # --- OpenAI Assistant Methods ---
 
     def init_oai(self):
         """
@@ -146,6 +152,145 @@ class Agent():
         )
         self._update_settings()
 
+    def _upload_files(self):
+        def add_id_to_file(f_path, id):
+            """Add file id to file name"""
+            if os.path.isfile(f_path):
+                file_name, file_ext = os.path.splitext(f_path)
+                f_path_new = file_name + "_" + id + file_ext
+                os.rename(f_path, f_path_new)
+                return f_path_new
+            else:
+                raise Exception("Items in files folder must be files.")
+
+        def get_id_from_file(f_path):
+            """Get file id from file name"""
+            if os.path.isfile(f_path):
+                file_name, file_ext = os.path.splitext(f_path)
+                file_name = os.path.basename(file_name)
+                file_name = file_name.split("_")
+                if len(file_name) > 1:
+                    return file_name[-1] if "file-" in file_name[-1] else None
+                else:
+                    return None
+            else:
+                raise Exception("Items in files folder must be files.")
+
+        files_folders = self.files_folder if isinstance(self.files_folder, list) else [self.files_folder]
+
+        for files_folder in files_folders:
+            if isinstance(files_folder, str):
+                f_path = files_folder
+
+                if not os.path.isdir(f_path):
+                    f_path = os.path.join(self.get_class_folder_path(), files_folder)
+
+                if os.path.isdir(f_path):
+                    f_paths = os.listdir(f_path)
+
+                    f_paths = [f for f in f_paths if not f.startswith(".")]
+
+                    f_paths = [os.path.join(f_path, f) for f in f_paths]
+
+                    # uploading files
+                    for f_path in f_paths:
+                        f_path = f_path.strip()
+                        file_id = get_id_from_file(f_path)
+                        if file_id:
+                            print("File already uploaded. Skipping... " + os.path.basename(f_path))
+                            self.file_ids.append(file_id)
+                        else:
+                            print("Uploading new file... " + os.path.basename(f_path))
+                            with open(f_path, 'rb') as f:
+                                file_id = self.client.files.create(file=f, purpose="assistants").id
+                                self.file_ids.append(file_id)
+                                f.close()
+                            add_id_to_file(f_path, file_id)
+                else:
+                    raise Exception("Files folder path is not a directory.")
+            else:
+                raise Exception("Files folder path must be a string or list of strings.")
+
+        if Retrieval not in self.tools and CodeInterpreter not in self.tools and self.file_ids:
+            print("Detected files without Retrieval. Adding Retrieval tool...")
+            self.add_tool(Retrieval)
+
+    # --- Tool Methods ---
+
+    def add_tool(self, tool):
+        if not isinstance(tool, type):
+            raise Exception("Tool must not be initialized.")
+        if issubclass(tool, Retrieval):
+            # check that tools name is not already in tools
+            for t in self.tools:
+                if issubclass(t, Retrieval):
+                    return
+            self.tools.append(tool)
+        elif issubclass(tool, CodeInterpreter):
+            for t in self.tools:
+                if issubclass(t, Retrieval):
+                    return
+            self.tools.append(tool)
+        elif issubclass(tool, BaseTool):
+            for t in self.tools:
+                if t.__name__ == tool.__name__:
+                    self.tools.remove(t)
+            self.tools.append(tool)
+        else:
+            raise Exception("Invalid tool type.")
+
+    def get_oai_tools(self):
+        tools = []
+        for tool in self.tools:
+            if not isinstance(tool, type):
+                print(tool)
+                raise Exception("Tool must not be initialized.")
+
+            if issubclass(tool, Retrieval):
+                tools.append(tool().model_dump())
+            elif issubclass(tool, CodeInterpreter):
+                tools.append(tool().model_dump())
+            elif issubclass(tool, BaseTool):
+                tools.append({
+                    "type": "function",
+                    "function": tool.openai_schema
+                })
+            else:
+                raise Exception("Invalid tool type.")
+        return tools
+
+    def _parse_schemas(self):
+        schemas_folders = self.schemas_folder if isinstance(self.schemas_folder, list) else [self.schemas_folder]
+
+        for schemas_folder in schemas_folders:
+            if isinstance(schemas_folder, str):
+                f_path = schemas_folder
+
+                if not os.path.isdir(f_path):
+                    f_path = os.path.join(self.get_class_folder_path(), schemas_folder)
+
+                if os.path.isdir(f_path):
+                    f_paths = os.listdir(f_path)
+
+                    f_paths = [f for f in f_paths if not f.startswith(".")]
+
+                    f_paths = [os.path.join(f_path, f) for f in f_paths]
+
+                    for f_path in f_paths:
+                        with open(f_path, 'r') as f:
+                            openapi_spec = f.read()
+                            f.close()
+                        validate_openapi_spec(openapi_spec)
+                        tools = ToolFactory.from_openapi_schema(f_path)
+                        for tool in tools:
+                            self.add_tool(tool)
+                else:
+                    raise Exception("Schemas folder path is not a directory.")
+            else:
+                raise Exception("Schemas folder path must be a string or list of strings.")
+
+    # --- Settings Methods ---
+
     def _check_parameters(self, assistant_settings):
         """
         Checks if the agent's parameters match with the given assistant settings.
@@ -205,110 +350,22 @@ class Agent():
             with open(path, 'w') as f:
                 json.dump(settings, f, indent=4)
 
-    def _read_instructions(self, path):
-        with open(path, 'r') as f:
-            self.instructions = f.read()
-
-    def _upload_files(self):
-        files_folders = self.files_folder if isinstance(self.files_folder, list) else [self.files_folder]
-
-        for files_folder in files_folders:
-            if isinstance(files_folder, str):
-                f_path = files_folder
-
-                if not os.path.isdir(f_path):
-                    f_path = os.path.join(self.get_class_folder_path(), files_folder)
-
-                if os.path.isdir(f_path):
-                    f_paths = os.listdir(f_path)
-
-                    f_paths = [f for f in f_paths if not f.startswith(".")]
-
-                    f_paths = [os.path.join(f_path, f) for f in f_paths]
-
-                    for f_path in f_paths:
-                        self.upload_file(f_path)
-                else:
-                    raise Exception("Files folder path is not a directory.")
-            else:
-                raise Exception("Files folder path must be a string or list of strings.")
-
-        if Retrieval not in self.tools and CodeInterpreter not in self.tools and self.file_ids:
-            print("Detected files without Retrieval. Adding Retrieval tool...")
-            self.add_tool(Retrieval)
-
-    def upload_file(self, f_path):
-        f_path = f_path.strip()
-        file_id = self._get_id_from_file(f_path)
-        if file_id:
-            print("File already uploaded. Skipping... " + os.path.basename(f_path))
-            self.file_ids.append(file_id)
-        else:
-            print("Uploading new file... " + os.path.basename(f_path))
-            with open(f_path, 'rb') as f:
-                file_id = self.client.files.create(file=f, purpose="assistants").id
-                self.file_ids.append(file_id)
-                f.close()
-            self._add_id_to_file(f_path, file_id)
-
-        return file_id
-
-    def _add_id_to_file(self, f_path, id):
-        """Add file id to file name"""
-        if os.path.isfile(f_path):
-            file_name, file_ext = os.path.splitext(f_path)
-            f_path_new = file_name + "_" + id + file_ext
-            os.rename(f_path, f_path_new)
-            return f_path_new
-        else:
-            raise Exception("Items in files folder must be files.")
-
-    def _get_id_from_file(self, f_path):
-        """Get file id from file name"""
-        if os.path.isfile(f_path):
-            file_name, file_ext = os.path.splitext(f_path)
-            file_name = os.path.basename(file_name)
-            file_name = file_name.split("_")
-            if len(file_name) > 1:
-                return file_name[-1] if "file-" in file_name[-1] else None
-            else:
-                return None
-        else:
-            raise Exception("Items in files folder must be files.")
+    # --- Helper Methods ---
 
     def get_settings_path(self):
         return os.path.join("./", 'settings.json')
 
+    def _read_instructions(self, path):
+        if os.path.isfile(self.instructions):
+            with open(self.instructions, 'r') as f:
+                self.instructions = f.read()
+        elif os.path.isfile(os.path.join(self.get_class_folder_path(), self.instructions)):
+            self._read_instructions(os.path.join(self.get_class_folder_path(), self.instructions))
+
     def get_class_folder_path(self):
         return os.path.abspath(os.path.dirname(inspect.getfile(self.__class__)))
 
-    def set_params(self, **params):
-        for k, v in params.items():
-            setattr(self, k, v)
-
-    def add_tool(self, tool):
-        if not isinstance(tool, type):
-            raise Exception("Tool must not be initialized.")
-        if issubclass(tool, Retrieval):
-            # check that tools name is not already in tools
-            for t in self.tools:
-                if issubclass(t, Retrieval):
-                    return
-            self.tools.append(tool)
-        elif issubclass(tool, CodeInterpreter):
-            for t in self.tools:
-                if issubclass(t, Retrieval):
-                    return
-            self.tools.append(tool)
-        elif issubclass(tool, BaseTool):
-            for t in self.tools:
-                if t.__name__ == tool.__name__:
-                    self.tools.remove(t)
-            self.tools.append(tool)
-        else:
-            raise Exception("Invalid tool type.")
-
-    def add_instructions(self, instructions: str):
+    def add_shared_instructions(self, instructions: str):
         if self._shared_instructions is None:
             self._shared_instructions = instructions
         else:
@@ -318,25 +375,7 @@ class Agent():
 
         self.instructions = self._shared_instructions + "\n\n" + self.instructions
 
-    def get_oai_tools(self):
-        tools = []
-        for tool in self.tools:
-            if not isinstance(tool, type):
-                print(tool)
-                raise Exception("Tool must not be initialized.")
-
-            if issubclass(tool, Retrieval):
-                tools.append(tool().model_dump())
-            elif issubclass(tool, CodeInterpreter):
-                tools.append(tool().model_dump())
-            elif issubclass(tool, BaseTool):
-                tools.append({
-                    "type": "function",
-                    "function": tool.openai_schema
-                })
-            else:
-                raise Exception("Invalid tool type.")
-        return tools
+    # --- Cleanup Methods ---
 
     def delete_assistant(self):
         self.client.beta.assistants.delete(self.id)

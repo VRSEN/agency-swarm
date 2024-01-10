@@ -383,7 +383,7 @@ class Agency:
         """
         for agent in self.agents:
             agent.id = None
-            agent.add_instructions(self.shared_instructions)
+            agent.add_shared_instructions(self.shared_instructions)
 
             if self.shared_files:
                 if isinstance(agent.files_folder, str):
