@@ -82,7 +82,8 @@ class ToolFactory:
                     alias = prop
                     prop = prop.lstrip('_')
 
-                json_type = details['type']
+                json_type = details['type'] if 'type' in details else 'any'
+
                 if json_type in type_mapping:
                     field_type = type_mapping[json_type]
                     field_description = details.get('description', '')
@@ -134,6 +135,7 @@ class ToolFactory:
             'array': List,
             'object': dict,
             'null': type(None),
+            'any': Any,
         }
 
         schema = reference_schema(schema)
@@ -164,34 +166,38 @@ class ToolFactory:
     def from_openapi_schema(schema: str, headers: Dict[str, str] = None):
         openapi_spec = jsonref.loads(schema)
         tools = []
-
+        headers = headers or {}
         for path, methods in openapi_spec["paths"].items():
             for method, spec_with_ref in methods.items():
                 def callback(self):
-                    print(self.model_dump())
                     url = openapi_spec["servers"][0]["url"] + path
-                    parameters = {}
-                    if hasattr(self, "properties"):
-                        parameters = self.properties.get("parameters", {})
-                        url = url.format(**self.model_dump()["properties"])
+                    parameters = self.model_dump().get('parameters', {})
+                    # replace all parameters in url
+                    for param, value in parameters.items():
+                        url = url.replace(f"{{{param}}}", str(value))
+                        parameters[param] = None
+                    url = url.rstrip("/")
+                    parameters = {k: v for k, v in parameters.items() if v is not None}
                     if method == "get":
-                        return requests.get(url, params=parameters, headers=headers).json()
+                        return requests.get(url, params=parameters, headers=headers,
+                                            json=self.model_dump().get('requestBody', None)
+                                            ).json()
                     elif method == "post":
                         return requests.post(url,
                                              params=parameters,
-                                             json=self.model_dump().get('requestBody', {}),
+                                             json=self.model_dump().get('requestBody', None),
                                              headers=headers
                                              ).json()
                     elif method == "put":
                         return requests.put(url,
                                             params=parameters,
-                                            json=self.model_dump().get('requestBody', {}),
+                                            json=self.model_dump().get('requestBody', None),
                                             headers=headers
                                             ).json()
                     elif method == "delete":
                         return requests.delete(url,
                                                params=parameters,
-                                               json=self.model_dump().get('requestBody', {}),
+                                               json=self.model_dump().get('requestBody', None),
                                                headers=headers
                                                ).json()
 
@@ -217,11 +223,15 @@ class ToolFactory:
 
                 params = spec.get("parameters", [])
                 if params:
-                    param_properties = {
-                        param["name"]: param["schema"]
-                        for param in params
-                        if "schema" in param
-                    }
+                    param_properties = {}
+                    for param in params:
+                        param_properties[param["name"]] = param["schema"]
+                        if "description" in param:
+                            param_properties[param["name"]]["description"] = param["description"]
+                        if "required" in param:
+                            param_properties[param["name"]]["required"] = param["required"]
+                        if "example" in param:
+                            param_properties[param["name"]]["example"] = param["example"]
                     schema["properties"]["parameters"] = {
                         "type": "object",
                         "properties": param_properties,

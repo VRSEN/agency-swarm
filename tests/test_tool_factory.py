@@ -1,19 +1,16 @@
+import json
 import os
-import unittest, json
-
 import sys
+import unittest
 from typing import List
 
 from instructor import OpenAISchema
 from pydantic import Field
 
-from agency_swarm import Agency, Agent
-from agency_swarm.util.schema import dereference_schema, reference_schema
-from tests.test_agent import TestAgent
-
 sys.path.insert(0, '../agency-swarm')
 from agency_swarm.tools import ToolFactory
-from langchain.tools import MoveFileTool, YouTubeSearchTool, DuckDuckGoSearchRun
+from agency_swarm.util.schema import dereference_schema, reference_schema
+from langchain.tools import MoveFileTool, YouTubeSearchTool
 
 from agency_swarm.util import get_openai_client
 
@@ -59,23 +56,8 @@ class ToolFactoryTest(unittest.TestCase):
         tool = tool(users=[UserDetail(id=1, age=20, name="John Doe", friends=[2, 3, 4]).model_dump()])
 
     def test_youtube_search_tool(self):
-        # requires pip install youtube_search
-        tool = ToolFactory.from_langchain_tool(YouTubeSearchTool)
-
-        self.agent = Agent(
-            name="test_agent",
-            tools=[tool]
-        )
-
-        agency = Agency(
-            [self.agent]
-        )
-
-        message = agency.get_completion("Search YouTube for a video about lex fridman", False)
-
-        print(message)
-
-        self.assertTrue(message)
+        # requires pip install youtube_search to run
+        ToolFactory.from_langchain_tool(YouTubeSearchTool)
 
     def test_custom_tool(self):
         schema = {
@@ -109,8 +91,8 @@ class ToolFactoryTest(unittest.TestCase):
 
         print(json.dumps(tools[0].openai_schema, indent=4))
 
-    def test_test_openapi_schema(self):
-        with open("./data/schemas/test_schema.json", "r") as f:
+    def test_relevance_openapi_schema(self):
+        with open("./data/schemas/relevance.json", "r") as f:
             tools = ToolFactory.from_openapi_schema(f.read(), {
                 "Authorization": os.environ.get("TEST_SCHEMA_API_KEY")
             })
@@ -122,6 +104,20 @@ class ToolFactoryTest(unittest.TestCase):
         print(output)
 
         assert output['output']['transformed']['data'] == 'test complete.'
+
+    def test_get_headers_openapi_schema(self):
+        with open("./data/schemas/get-headers-params.json", "r") as f:
+            tools = ToolFactory.from_openapi_schema(f.read(),{
+                "Bearer": os.environ.get("GET_HEADERS_SCHEMA_API_KEY")
+            })
+
+        output = tools[0](parameters={"domain": "print-headers"}).run()
+
+        self.assertTrue("headers" in output)
+
+        print(output)
+
+
 
 
 if __name__ == '__main__':

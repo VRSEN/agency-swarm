@@ -54,6 +54,7 @@ class Agent():
         self.description = description
         self.instructions = instructions
         self.tools = tools[:] if tools is not None else []
+        self.tools = [tool for tool in self.tools if tool.__name__ != "ExampleTool"]
         self.files_folder = files_folder if files_folder else []
         self.schemas_folder = schemas_folder if schemas_folder else []
         self.file_ids = file_ids if file_ids else []
@@ -66,7 +67,7 @@ class Agent():
 
         # init methods
         self.client = get_openai_client()
-        self._read_instructions(self.instructions)
+        self._read_instructions()
         self._upload_files()
         self._parse_schemas()
 
@@ -280,8 +281,16 @@ class Agent():
                         with open(f_path, 'r') as f:
                             openapi_spec = f.read()
                             f.close()
-                        validate_openapi_spec(openapi_spec)
-                        tools = ToolFactory.from_openapi_schema(f_path)
+                        try:
+                            validate_openapi_spec(openapi_spec)
+                        except Exception as e:
+                            print("Invalid OpenAPI schema: " + os.path.basename(f_path))
+                            raise e
+                        try:
+                            tools = ToolFactory.from_openapi_schema(openapi_spec)
+                        except Exception as e:
+                            print("Error parsing OpenAPI schema: " + os.path.basename(f_path))
+                            raise e
                         for tool in tools:
                             self.add_tool(tool)
                 else:
@@ -355,12 +364,13 @@ class Agent():
     def get_settings_path(self):
         return os.path.join("./", 'settings.json')
 
-    def _read_instructions(self, path):
+    def _read_instructions(self):
         if os.path.isfile(self.instructions):
             with open(self.instructions, 'r') as f:
                 self.instructions = f.read()
         elif os.path.isfile(os.path.join(self.get_class_folder_path(), self.instructions)):
-            self._read_instructions(os.path.join(self.get_class_folder_path(), self.instructions))
+            with open(os.path.join(self.get_class_folder_path(), self.instructions), 'r') as f:
+                self.instructions = f.read()
 
     def get_class_folder_path(self):
         return os.path.abspath(os.path.dirname(inspect.getfile(self.__class__)))
@@ -376,8 +386,16 @@ class Agent():
         self.instructions = self._shared_instructions + "\n\n" + self.instructions
 
     # --- Cleanup Methods ---
+    def delete(self):
+        self._delete_assistant()
+        self._delete_files()
+        self._delete_settings()
 
-    def delete_assistant(self):
+    def _delete_files(self):
+        for file_id in self.file_ids:
+            self.client.files.delete(file_id)
+
+    def _delete_assistant(self):
         self.client.beta.assistants.delete(self.id)
         self._delete_settings()
 

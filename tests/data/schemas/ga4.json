@@ -1,0 +1,189 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Query GA4 Data",
+    "description": "Google Analytics 4 API",
+    "version": "v1.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://query-ga4-data-gntxktyfsq-uc.a.run.app"
+    }
+  ],
+  "paths": {
+    "/": {
+      "post": {
+        "description": "Parameters for querying the Google Analytics 4 API runReport endpoint.",
+        "operationId": "runReport",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunReportParams"
+              }
+            }
+          },
+          "required": true
+        },
+        "deprecated": false,
+        "security": [
+          {
+            "apiKey": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "RunReportParams": {
+        "properties": {
+          "date_ranges": {
+            "description": "List of date ranges to query.",
+            "items": {
+              "$ref": "#/components/schemas/DateRangeSchema"
+            },
+            "title": "Date Ranges",
+            "type": "array"
+          },
+          "metrics": {
+            "description": "List of metric names to query.",
+            "items": {
+              "$ref": "#/components/schemas/MetricSchema"
+            },
+            "title": "Metrics",
+            "type": "array"
+          },
+          "dimensions": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/DimensionSchema"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": [],
+            "description": "List of dimension names to query.",
+            "title": "Dimensions"
+          },
+          "order_bys": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/OrderBySchema"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": [],
+            "description": "List of order bys to query.",
+            "title": "Order Bys"
+          },
+          "limit": {
+            "default": 5,
+            "description": "Limit of the query. Defaults to 5.",
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "required": ["date_ranges", "metrics"],
+        "type": "object"
+      },
+      "DateRangeSchema": {
+        "description": "Represents a date range for the GA4 query.",
+        "properties": {
+          "start_date": {
+            "description": "Start date of the query.",
+            "title": "Start Date",
+            "type": "string"
+          },
+          "end_date": {
+            "description": "End date of the query.",
+            "title": "End Date",
+            "type": "string"
+          }
+        },
+        "required": ["start_date", "end_date"],
+        "title": "DateRangeSchema",
+        "type": "object"
+      },
+      "DimensionSchema": {
+        "description": "Represents a dimension for the GA4 query.",
+        "properties": {
+          "name": {
+            "description": "Name of the dimension.",
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": ["name"],
+        "title": "DimensionSchema",
+        "type": "object"
+      },
+      "MetricSchema": {
+        "description": "Represents a metric for the GA4 query.",
+        "properties": {
+          "name": {
+            "description": "Name of the metric.",
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": ["name"],
+        "title": "MetricSchema",
+        "type": "object"
+      },
+      "OrderBySchema": {
+        "description": "Represents an order by condition for the GA4 query.",
+        "properties": {
+          "dimension_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Dimension name to order by. Can either be a metric or a dimension.",
+            "title": "Dimension Name"
+          },
+          "metric_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Metric name to order by. Can either be a metric or a dimension.",
+            "title": "Metric Name"
+          },
+          "desc": {
+            "default": true,
+            "description": "Whether to order by descending or ascending.",
+            "title": "Desc",
+            "type": "boolean"
+          }
+        },
+        "required": ["dimension_name", "metric_name"],
+        "title": "OrderBySchema",
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "apiKey": {
+        "type": "apiKey"
+      }
+    }
+  }
+}

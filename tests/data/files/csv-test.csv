@@ -1,0 +1,52 @@
+csv-test
+Pivot Table Basics: Sales;;;;;
+Date;Product;Power;Units;Revenue;Secret phrase
+January;Bicycles;Electric;476;751 604,00 UAH;CSV SECRET PHRASE
+January;Bicycles;Manual;302;581 350,00 UAH;
+January;Scooters;Electric;387;427 248,00 UAH;
+January;Scooters;Manual;309;48 513,00 UAH;
+January;Skateboards;Electric;251;135 791,00 UAH;
+February;Bicycles;Electric;354;558 966,00 UAH;
+February;Bicycles;Manual;219;336 165,00 UAH;
+February;Scooters;Electric;312;583 128,00 UAH;
+February;Scooters;Manual;419;396 793,00 UAH;
+February;Skateboards;Electric;315;388 395,00 UAH;
+March;Bicycles;Electric;392;39 200,00 UAH;
+March;Bicycles;Manual;464;892 736,00 UAH;
+March;Scooters;Electric;211;151 498,00 UAH;
+March;Scooters;Manual;293;467 628,00 UAH;
+March;Skateboards;Electric;467;798 570,00 UAH;
+;;;;;
+Pivot Table Basics: Sales Pivot;;;;;
+;Date (Month);January;February;March;Grand Total
+Power;Product;Units (Sum);;;
+Electric;Bicycles;476;354;392;1 222
+;Scooters;387;312;211;910
+;Skateboards;251;315;467;1 033
+Electric Total;;1 114;981;1 070;3 165
+Manual;Bicycles;302;219;464;985
+;Scooters;309;419;293;1 021
+Manual Total;;611;638;757;2 006
+Grand Total;;1 725;1 619;1 827;5 171
+;;;;;
+Pivot Table Practice: Sales;;;;;
+Date;Product;Power;Units;Revenue;
+January;Bicycles;Electric;476;751 604,00 UAH;
+January;Bicycles;Manual;302;581 350,00 UAH;
+January;Scooters;Electric;387;427 248,00 UAH;
+January;Scooters;Manual;309;48 513,00 UAH;
+January;Skateboards;Electric;251;135 791,00 UAH;
+February;Bicycles;Electric;354;558 966,00 UAH;
+February;Bicycles;Manual;219;336 165,00 UAH;
+February;Scooters;Electric;312;583 128,00 UAH;
+February;Scooters;Manual;419;396 793,00 UAH;
+February;Skateboards;Electric;315;388 395,00 UAH;
+March;Bicycles;Electric;392;39 200,00 UAH;
+March;Bicycles;Manual;464;892 736,00 UAH;
+March;Scooters;Electric;211;151 498,00 UAH;
+March;Scooters;Manual;293;467 628,00 UAH;
+March;Skateboards;Electric;467;798 570,00 UAH;
+;;;;;
+Pivot Table Practice: Sales Pivot;;;;;
+;Columns;;;;
+Rows;Values;;;;
