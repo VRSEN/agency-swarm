@@ -1,4 +1,5 @@
 import base64
+import os
 
 from agency_swarm import BaseTool, get_openai_client
 from agency_swarm.tools.browsing.util import get_web_driver
@@ -39,6 +40,9 @@ class ExportFile(BaseTool):
             assistant_id=self.caller_agent.id,
             file_ids=self.caller_agent.file_ids
         )
+
+        # delete file
+        os.remove('page.pdf')
 
         return ("Success. File uploaded to OpenAI with id: " + file_id +
                 " You can use myfiles_browser tool to analyze it.")

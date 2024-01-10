@@ -19,11 +19,14 @@ class BaseTool(OpenAISchema, ABC):
 
         properties = schema.get("parameters", {}).get("properties", {})
         properties.pop("caller_agent", None)
+        properties.pop("caller_agent_name", None)
 
         # If 'caller_agent' is in the required list, remove it
         required = schema.get("parameters", {}).get("required", [])
         if "caller_agent" in required:
             required.remove("caller_agent")
+        if "caller_agent_name" in required:
+            required.remove("caller_agent_name")
 
         return schema
 

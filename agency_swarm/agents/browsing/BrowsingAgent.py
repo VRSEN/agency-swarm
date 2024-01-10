@@ -15,8 +15,12 @@ class BrowsingAgent(Agent):
         kwargs['tools'].extend([Scroll, SendKeys, ClickElement, ReadURL, AnalyzeContent, GoBack, SelectDropdown,
                                 SolveCaptcha, ExportFile, Retrieval])
 
+        if 'description' not in kwargs:
+            kwargs['description'] = "This agent is equipped with specialized tools to navigate and search the web effectively."
+
         # Set instructions
-        kwargs['instructions'] = ("""You are an advanced browsing agent equipped with specialized tools to navigate 
+        if 'instructions' not in kwargs:
+            kwargs['instructions'] = ("""You are an advanced browsing agent equipped with specialized tools to navigate 
 and search the web effectively. Your primary objective is to fulfill the user's requests by efficiently 
 utilizing these tools. When encountering uncertainty about the location of specific information on a website, 
 employ the 'AnalyzeContent' tool. Remember, you can only open and interact with 1 web page at a time. Do not try to read 

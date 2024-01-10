@@ -1,6 +1,7 @@
+import os
 from typing import List
 
-from pydantic import Field, model_validator
+from pydantic import Field, model_validator, field_validator
 
 from agency_swarm import BaseTool
 from agency_swarm.util import create_agent_template
@@ -13,7 +14,7 @@ class CreateAgentTemplate(BaseTool):
     allowed_tools: List = ["CodeInterpreter"]  # , "Retrieval"}
 
     agent_name: str = Field(
-        ..., description="Name of the agent to be created. Cannot include special characters."
+        ..., description="Name of the agent to be created. Cannot include special characters or spaces."
     )
     agent_description: str = Field(
         ..., description="Description of the agent to be created."
@@ -33,6 +34,10 @@ class CreateAgentTemplate(BaseTool):
                               instructions=self.instructions,
                               code_interpreter=True if "CodeInterpreter" in self.default_tools else None)
 
+        # add agent to agency.py
+        with open("agency.py", "a") as f:
+            f.write(f"from .{self.agent_name} import {self.agent_name}\n")
+
         return f"Agent template has been created in {self.agent_name} folder."
 
     @model_validator(mode="after")
@@ -40,3 +45,14 @@ class CreateAgentTemplate(BaseTool):
         for tool in self.default_tools:
             if tool not in self.allowed_tools:
                 raise ValueError(f"Tool {tool} is not allowed. Allowed tools are: {self.allowed_tools}")
+
+    @field_validator("agent_name", mode='after')
+    @classmethod
+    def agent_name_exists(cls, v):
+        if " " in v:
+            raise ValueError("Agent name cannot contain spaces.")
+        if not v.isalnum():
+            raise ValueError("Agent name cannot contain special characters.")
+        if os.path.exists("./" + v):
+            raise ValueError(f"Agent with name {v} already exists.")
+        return v

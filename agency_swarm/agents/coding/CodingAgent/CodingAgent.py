@@ -14,6 +14,9 @@ class CodingAgent(Agent):
         # Add required tools
         kwargs['tools'].extend([ChangeDir, ChangeLines, ReadFile, WriteFiles, CodeInterpreter])
 
+        if 'description' not in kwargs:
+            kwargs['description'] = "This agent is equipped with specialized tools to navigate and execute code in a local environment."
+
         # Set instructions
         if 'instructions' not in kwargs:
             kwargs['instructions'] = "./instructions.md"

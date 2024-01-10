@@ -1,5 +1,5 @@
 from agency_swarm import Agent
-from agency_swarm.tools.genesis import CreateManifesto, CreateAgencyFolder
+from agency_swarm.tools.genesis import CreateManifesto, CreateAgencyFolder, GetAvailableAgents
 
 
 class GenesisCEO(Agent):
@@ -9,7 +9,7 @@ class GenesisCEO(Agent):
         if 'tools' not in kwargs:
             kwargs['tools'] = []
         # Add required tools
-        kwargs['tools'].extend([CreateManifesto, CreateAgencyFolder])
+        kwargs['tools'].extend([CreateManifesto, CreateAgencyFolder, GetAvailableAgents])
 
         # Set instructions
         kwargs['instructions'] = "./instructions.md"

@@ -119,5 +119,6 @@ class Thread:
             return output
         except Exception as e:
             error_message = f"Error: {e}"
-            error_message = error_message.split("For further information visit")[0]
-            return "Error: " + error_message
+            if "For further information visit" in error_message:
+                error_message = error_message.split("For further information visit")[0]
+            return error_message

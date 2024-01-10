@@ -27,7 +27,7 @@ def create_agent_template(agent_name=None,
     os.mkdir(path)
 
     # create agent file
-    class_name = agent_name.title().replace(" ", "").strip()
+    class_name = agent_name.replace(" ", "").strip()
     with open(path + folder_name + ".py", "w") as f:
         f.write(agent_template.format(
             class_name=class_name,
@@ -52,6 +52,7 @@ def create_agent_template(agent_name=None,
 
     # create files folder
     os.mkdir(path + "files")
+    os.mkdir(path + "schemas")
 
     # create tools file
     with open(path + "tools.py", "w") as f:
@@ -76,6 +77,7 @@ class {class_name}(Agent):
             description="{agent_description}",
             instructions="./instructions.{ext}",
             files_folder="./files",
+            schemas_folder="./schemas",
             tools=imported_tool_objects + [{code_interpreter}] 
         )
 """

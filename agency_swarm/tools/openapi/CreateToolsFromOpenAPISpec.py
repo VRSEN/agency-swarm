@@ -9,6 +9,7 @@ from openapi_spec_validator import validate
 import json
 
 from agency_swarm.tools import ToolFactory
+from agency_swarm.util.openapi import validate_openapi_spec
 
 
 class CreateToolsFromOpenAPISpec(BaseTool):
@@ -19,63 +20,58 @@ class CreateToolsFromOpenAPISpec(BaseTool):
         ..., description="Name of the agent for whom the tools are being created. Cannot include special characters."
     )
     openapi_spec: str = Field(
-        ..., description="OpenAPI specification for the tool to be created as a valid JSON string. Only the relevant endpoints should be included. Responses field is not required.")
+        ..., description="OpenAPI specification for the tool to be created as a valid JSON string. Only the relevant "
+                         "endpoints must be included. Responses are not required. Each method should contain "
+                         "an operation id and a description. Must be full OpenAPI 3.1.0 specification.",
+        examples=[
+            '{\n  "openapi": "3.1.0",\n  "info": {\n    "title": "Get weather data",\n    "description": "Retrieves current weather data for a location.",\n    "version": "v1.0.0"\n  },\n  "servers": [\n    {\n      "url": "https://weather.example.com"\n    }\n  ],\n  "paths": {\n    "/location": {\n      "get": {\n        "description": "Get temperature for a specific location",\n        "operationId": "GetCurrentWeather",\n        "parameters": [\n          {\n            "name": "location",\n            "in": "query",\n            "description": "The city and state to retrieve the weather for",\n            "required": true,\n            "schema": {\n              "type": "string"\n            }\n          }\n        ],\n        "deprecated": false\n      }\n    }\n  },\n  "components": {\n    "schemas": {}\n  }\n}'])
 
     def run(self):
         try:
-            tools = ToolFactory.from_openapi_schema(self.openapi_spec)
-        except Exception as e:
-            raise ValueError(f"Error creating tools: {e}")
+            try:
+                tools = ToolFactory.from_openapi_schema(self.openapi_spec)
+            except Exception as e:
+                raise ValueError(f"Error creating tools from OpenAPI Spec: {e}")
 
-        if len(tools) == 0:
-            return "No tools created. Please check the OpenAPI specification."
+            if len(tools) == 0:
+                return "No tools created. Please check the OpenAPI specification."
 
-        tool_names = [tool.name for tool in tools]
+            tool_names = [tool.__name__ for tool in tools]
 
-        # save openapi spec
-        folder_path = "./" + self.agent_name + "/"
-        os.chdir(folder_path)
+            # save openapi spec
+            folder_path = "./" + self.agent_name + "/"
+            os.chdir(folder_path)
 
-        # check if openapi_spec.json exists
-        i = 1
-        while os.path.exists(f"openapi_spec_{i}.json"):
-            i += 1
+            api_name = json.loads(self.openapi_spec)["info"]["title"]
 
-        with open(f"openapi_spec_{i}.json", "w") as f:
-            f.write(self.openapi_spec)
+            api_name = api_name.replace("API", "Api").replace(" ", "")
 
-        with open("tools.py", "r") as f:
-            lines = f.readlines()
+            api_name = ''.join(['_' + i.lower() if i.isupper() else i for i in api_name]).lstrip('_')
 
-        with open("tools.py", "w") as f:
-            f.write("from agency_swarm.tools import ToolFactory")
-            f.write("\n\n")
-            # append reading openapi spec
-            f.write(f"with open('openapi_spec_{i}.json', 'r') as f:")
-            f.write("\n")
-            f.write(f"    spec_{i} = json.load(f)")
-            f.writelines(lines)
+            with open(api_name + ".json", "w") as f:
+                f.write(self.openapi_spec)
 
-        with open("tools.py", "a") as f:
-            f.write("\n\n")
-            f.write(f"tools{i} = ToolFactory.from_openapi_schema(spec_{i})")
-            f.write("\n\n")
+            with open("tools.py", "w") as f:
+                f.write("from agency_swarm.tools import ToolFactory")
+                f.write("\n")
+                f.write("import json")
+                f.write("\n\n")
+                # append reading openapi spec
+                f.write(f"with open('{api_name}.json', 'r') as f:")
+                f.write("\n")
+                f.write(f"    {api_name} = json.load(f)")
+                f.write("\n\n")
+                f.write(f"{api_name}_tools = ToolFactory.from_openapi_schema({api_name})")
 
-        os.chdir("../")
-
-        return f"Tool(s) created: {tool_names}"
-
+            return f"Tool(s) created: {tool_names}"
+        finally:
+            os.chdir("../")
 
     @field_validator("openapi_spec", mode='before')
     @classmethod
     def validate_openapi_spec(cls, v):
         try:
-            spec = json.loads(v)
-            for path, path_item in spec.get('paths', {}).items():
-                for operation in path_item.values():
-                    if 'responses' not in operation:
-                        operation['responses'] = {'default': {'description': 'Default response'}}
-            validate(spec)
+            validate_openapi_spec(v)
         except OpenAPIValidationError as e:
             raise ValueError("Validation error in OpenAPI schema:", e)
         except json.JSONDecodeError as e:
@@ -89,7 +85,7 @@ class CreateToolsFromOpenAPISpec(BaseTool):
         available_agents = [agent for agent in available_agents if os.path.isdir(agent)]
 
         if not v.isalnum():
-            raise ValueError("Agent name must be alphanumeric. Available agent names are: {available_agents}")
+            raise ValueError(f"Agent name must be alphanumeric. Available agent names are: {available_agents}")
 
         if not os.path.exists(f"./{v}"):
             raise ValueError(f"Agent {v} does not exist. Available agents are: {available_agents}")
