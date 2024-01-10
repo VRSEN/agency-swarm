@@ -1,5 +1,6 @@
 import unittest
 import os
+import sys
 
 if __name__ == '__main__':
     # Change the current working directory to 'tests'
@@ -11,4 +12,8 @@ if __name__ == '__main__':
 
     # Create a test runner that will run the test suite
     runner = unittest.TextTestRunner()
-    runner.run(suite)
+    result = runner.run(suite)
+
+    # Exit with a non-zero exit code if tests failed
+    if not result.wasSuccessful():
+        sys.exit(1)
