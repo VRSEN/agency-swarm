@@ -163,7 +163,7 @@ class ToolFactory:
         return tool
 
     @staticmethod
-    def from_openapi_schema(schema: str, headers: Dict[str, str] = None):
+    def from_openapi_schema(schema: str, headers: Dict[str, str] = None, params: Dict[str, Any] = None):
         openapi_spec = jsonref.loads(schema)
         tools = []
         headers = headers or {}
@@ -174,10 +174,12 @@ class ToolFactory:
                     parameters = self.model_dump().get('parameters', {})
                     # replace all parameters in url
                     for param, value in parameters.items():
-                        url = url.replace(f"{{{param}}}", str(value))
-                        parameters[param] = None
+                        if "{" + str(param) + "}" in url:
+                            url = url.replace(f"{{{param}}}", str(value))
+                            parameters[param] = None
                     url = url.rstrip("/")
                     parameters = {k: v for k, v in parameters.items() if v is not None}
+                    parameters = {**parameters, **params} if params else parameters
                     if method == "get":
                         return requests.get(url, params=parameters, headers=headers,
                                             json=self.model_dump().get('requestBody', None)
@@ -221,10 +223,10 @@ class ToolFactory:
                 if req_body:
                     schema["properties"]["requestBody"] = req_body
 
-                params = spec.get("parameters", [])
-                if params:
+                spec_params = spec.get("parameters", [])
+                if spec_params:
                     param_properties = {}
-                    for param in params:
+                    for param in spec_params:
                         param_properties[param["name"]] = param["schema"]
                         if "description" in param:
                             param_properties[param["name"]]["description"] = param["description"]
