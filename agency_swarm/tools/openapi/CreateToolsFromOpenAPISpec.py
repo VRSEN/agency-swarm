@@ -1,11 +1,9 @@
 import os
 
-from openapi_spec_validator.validation.exceptions import OpenAPIValidationError
 from pydantic import Field, field_validator
 
 from agency_swarm import BaseTool
 
-from openapi_spec_validator import validate
 import json
 
 from agency_swarm.tools import ToolFactory
@@ -48,22 +46,10 @@ class CreateToolsFromOpenAPISpec(BaseTool):
 
             api_name = ''.join(['_' + i.lower() if i.isupper() else i for i in api_name]).lstrip('_')
 
-            with open(api_name + ".json", "w") as f:
+            with open("schemas/" + api_name + ".json", "w") as f:
                 f.write(self.openapi_spec)
 
-            with open("tools.py", "w") as f:
-                f.write("from agency_swarm.tools import ToolFactory")
-                f.write("\n")
-                f.write("import json")
-                f.write("\n\n")
-                # append reading openapi spec
-                f.write(f"with open('{api_name}.json', 'r') as f:")
-                f.write("\n")
-                f.write(f"    {api_name} = json.load(f)")
-                f.write("\n\n")
-                f.write(f"{api_name}_tools = ToolFactory.from_openapi_schema({api_name})")
-
-            return f"Tool(s) created: {tool_names}"
+            return "Successfully added OpenAPI Schema to agent."
         finally:
             os.chdir("../")
 
@@ -72,10 +58,10 @@ class CreateToolsFromOpenAPISpec(BaseTool):
     def validate_openapi_spec(cls, v):
         try:
             validate_openapi_spec(v)
-        except OpenAPIValidationError as e:
-            raise ValueError("Validation error in OpenAPI schema:", e)
         except json.JSONDecodeError as e:
             raise ValueError("Invalid JSON format:", e)
+        except Exception as e:
+            raise ValueError("Error validating OpenAPI schema:", e)
         return v
 
     @field_validator("agent_name", mode='before')

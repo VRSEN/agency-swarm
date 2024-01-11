@@ -321,17 +321,18 @@ class Agency:
 
         class SendMessage(BaseTool):
             """Use this tool to facilitate direct, synchronous communication between specialized agents within your agency. When you send a message using this tool, you receive a response exclusively from the designated recipient agent. To continue the dialogue, invoke this tool again with the desired recipient and your follow-up message. Remember, communication here is synchronous; the recipient agent won't perform any tasks post-response. You are responsible for relaying the recipient agent's responses back to the user, as they do not have direct access to these replies. Keep engaging with the tool for continuous interaction until the task is fully resolved."""
-            chain_of_thought: str = Field(...,
-                                          description="Think step by step to determine the correct recipient and "
-                                                      "message. For multi-step tasks, first break it down into smaller"
-                                                      "steps. Then, determine the recipient and message for each step.")
+            instructions: str = Field(...,
+                                          description="Please repeat your instructions step-by-step, including both completed "
+                                                      "and the following next steps that you need to perfrom. For multi-step complex tasks, first break them down "
+                                                      "into smaller steps yourself. Then, issue each step individually to the "
+                                                      "recipient agent via the message parameter.")
             recipient: recipients = Field(..., description=agent_descriptions)
             message: str = Field(...,
                                  description="Specify the task required for the recipient agent to complete. Focus on "
                                              "clarifying what the task entails, rather than providing exact "
                                              "instructions.")
             message_files: List[str] = Field(default=None,
-                                                description="A list of openai file ids to be sent as attachments with the message. Only use this if the agent has uploaded the file and you have the file id.",
+                                                description="A list of file ids to be sent as attachments to the message. Only use this if you have the file id that starts with 'file-'.",
                                              examples=["file-1234", "file-5678"])
             caller_agent_name: str = Field(default=agent.name,
                                            description="The agent calling this tool. Defaults to your name. Do not change it.")

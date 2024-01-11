@@ -13,7 +13,7 @@ class ReadManifesto(BaseTool):
     def run(self):
         # read manifesto from manifesto.md file
         try:
-            with open("manifesto.md", "r") as f:
+            with open("agency_manifesto.md", "r") as f:
                 manifesto = f.read()
         except FileNotFoundError:
             return (f"Manifesto file not found. Please change your current working directory {os.getcwd()} to the "

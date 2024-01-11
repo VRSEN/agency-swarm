@@ -6,13 +6,12 @@ from pydantic import Field, model_validator, field_validator
 from agency_swarm import BaseTool
 from agency_swarm.util import create_agent_template
 
+allowed_tools: List = ["CodeInterpreter"]
 
 class CreateAgentTemplate(BaseTool):
     """
     This tool creates a template folder for a new agent that includes boilerplage code and instructions.
     """
-    allowed_tools: List = ["CodeInterpreter"]  # , "Retrieval"}
-
     agent_name: str = Field(
         ..., description="Name of the agent to be created. Cannot include special characters or spaces."
     )
@@ -24,7 +23,7 @@ class CreateAgentTemplate(BaseTool):
     )
     default_tools: List[str] = Field(
         [], description=f"List of default tools to be included in the agent. Possible values are {allowed_tools}."
-                        f"CodeInterpreter allows the agent to execute python code in a remote environment.",
+                        f"CodeInterpreter allows the agent to execute python code in a remote python environment.",
         example=["CodeInterpreter"],
     )
 
@@ -34,9 +33,13 @@ class CreateAgentTemplate(BaseTool):
                               instructions=self.instructions,
                               code_interpreter=True if "CodeInterpreter" in self.default_tools else None)
 
-        # add agent to agency.py
-        with open("agency.py", "a") as f:
-            f.write(f"from .{self.agent_name} import {self.agent_name}\n")
+        # add agent on second line to agency.py
+        with open("agency.py", "r") as f:
+            lines = f.readlines()
+            lines.insert(1, f"from {self.agent_name} import {self.agent_name}\n")
+
+        with open("agency.py", "w") as f:
+            f.writelines(lines)
 
         return f"Agent template has been created in {self.agent_name} folder."
 

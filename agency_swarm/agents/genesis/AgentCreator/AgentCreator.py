@@ -1,6 +1,6 @@
 from agency_swarm import Agent
 from agency_swarm.tools.coding import ReadFile
-from agency_swarm.tools.genesis import CreateAgentTemplate, ImportAgent
+from agency_swarm.tools.genesis import CreateAgentTemplate, ImportAgent, GetAvailableAgents
 
 
 class AgentCreator(Agent):
@@ -12,6 +12,7 @@ class AgentCreator(Agent):
 
         # Add required tools
         kwargs['tools'].extend([CreateAgentTemplate,
+                                GetAvailableAgents,
                                 ReadFile,
                                 ImportAgent])
 

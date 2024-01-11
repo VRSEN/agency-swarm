@@ -30,6 +30,7 @@ class Agent():
     def __init__(self, id: str = None, name: str = None, description: str = None, instructions: str = "",
                  tools: List[Union[Type[BaseTool], Type[Retrieval], Type[CodeInterpreter]]] = None,
                  files_folder: Union[List[str], str] = None, schemas_folder: Union[List[str], str] = None,
+                 headers: Dict[str, str] = None,
                  file_ids: List[str] = None, metadata: Dict[str, str] = None, model: str = "gpt-4-1106-preview"):
         """
         Initializes an Agent with specified attributes, tools, and OpenAI client.
@@ -42,6 +43,7 @@ class Agent():
         tools (List[Union[Type[BaseTool], Type[Retrieval], Type[CodeInterpreter]]], optional): A list of tools (as classes) that the agent can use. Defaults to an empty list.
         files_folder (Union[List[str], str], optional): Path or list of paths to directories containing files associated with the agent. Defaults to None.
         schemas_folder (Union[List[str], str], optional): Path or list of paths to directories containing OpenAPI schemas associated with the agent. Defaults to None.
+        headers (Dict[str, str], optional): Headers to be used for the openapi requests. Each key must be a full filename from schemas_folder. Defaults to an empty dictionary.
         file_ids (List[str], optional): List of file IDs for files associated with the agent. Defaults to an empty list.
         metadata (Dict[str, str], optional): Metadata associated with the agent. Defaults to an empty dictionary.
         model (str, optional): The model identifier for the OpenAI API. Defaults to "gpt-4-1106-preview".
@@ -57,6 +59,7 @@ class Agent():
         self.tools = [tool for tool in self.tools if tool.__name__ != "ExampleTool"]
         self.files_folder = files_folder if files_folder else []
         self.schemas_folder = schemas_folder if schemas_folder else []
+        self.headers = headers if headers else {}
         self.file_ids = file_ids if file_ids else []
         self.metadata = metadata if metadata else {}
         self.model = model
@@ -287,7 +290,10 @@ class Agent():
                             print("Invalid OpenAPI schema: " + os.path.basename(f_path))
                             raise e
                         try:
-                            tools = ToolFactory.from_openapi_schema(openapi_spec)
+                            headers = None
+                            if os.path.basename(f_path) in self.headers:
+                                headers = self.headers[os.path.basename(f_path)]
+                            tools = ToolFactory.from_openapi_schema(openapi_spec, headers=headers)
                         except Exception as e:
                             print("Error parsing OpenAPI schema: " + os.path.basename(f_path))
                             raise e
