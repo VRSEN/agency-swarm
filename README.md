@@ -165,12 +165,14 @@ When you run the `create-agent-template` command, it creates the following folde
 /your-specified-path/
 │
 ├── agency_manifesto.md or .txt # Agency's guiding principles (created if not exists)
-└── agent_name/                 # Directory for the specific agent
-    ├── agent_name.py           # The main agent class file
+└── AgentName/                  # Directory for the specific agent
+    ├── files/                  # Directory for files that will be uploaded to openai
+    ├── schemas/                # Directory for OpenAPI schemas to be converted into tools
+    ├── AgentName.py            # The main agent class file
     ├── __init__.py             # Initializes the agent folder as a Python package
     ├── instructions.md or .txt # Instruction document for the agent
-    ├── tools.py                # Tools specific to the agent
-    ├── files/                  # Directory for additional resources
+    └── tools.py                # Custom tools specific to the agent
+    
 ```
 
 This structure ensures that each agent has its dedicated space with all necessary files to start working on its specific tasks. The `tools.py` can be customized to include tools and functionalities specific to the agent's role.
