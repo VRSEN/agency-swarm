@@ -36,7 +36,7 @@ class Agent():
         Initializes an Agent with specified attributes, tools, and OpenAI client.
 
         Parameters:
-        id (str, optional): Unique identifier for the agent. Defaults to None.
+        id (str, optional): Loads the assistant from OpenAI assistant ID. Assistant will be created or loaded from settings if ID is not provided. Defaults to None.
         name (str, optional): Name of the agent. Defaults to the class name if not provided.
         description (str, optional): A brief description of the agent's purpose. Defaults to None.
         instructions (str, optional): Path to a file containing specific instructions for the agent. Defaults to an empty string.
@@ -94,6 +94,12 @@ class Agent():
         # load assistant from id
         if self.id:
             self.assistant = self.client.beta.assistants.retrieve(self.id)
+            self.instructions = self.assistant.instructions
+            self.name = self.assistant.name
+            self.description = self.assistant.description
+            self.file_ids = self.assistant.file_ids
+            self.metadata = self.assistant.metadata
+            self.model = self.assistant.model
             # update assistant if parameters are different
             if not self._check_parameters(self.assistant.model_dump()):
                 self._update_assistant()

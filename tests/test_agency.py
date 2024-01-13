@@ -96,7 +96,24 @@ class AgencyTest(unittest.TestCase):
 
         self.check_agent_settings(agent3)
 
-    def test_3_agent_communication(self):
+    def test_3_load_agent_id(self):
+        """it should load existing assistant from id"""
+        from test_agents import TestAgent1
+        agent3 = Agent(id=self.__class__.agent1.id)
+        agent3.tools = self.__class__.agent1.tools
+        agent3 = agent3.init_oai()
+
+        print("agent3", agent3.assistant.model_dump())
+        print("agent1", self.__class__.agent1.assistant.model_dump())
+
+        self.assertTrue(self.__class__.agent1.id == agent3.id)
+
+        # check that assistant settings match
+        self.assertTrue(agent3._check_parameters(self.__class__.agent1.assistant.model_dump()))
+
+        self.check_agent_settings(agent3)
+
+    def test_4_agent_communication(self):
         """it should communicate between agents"""
         print("TestAgent1 tools", self.__class__.agent1.tools)
         message = self.__class__.agency.get_completion("Please tell TestAgent1 to say test to TestAgent2.", yield_messages=False)

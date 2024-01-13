@@ -383,7 +383,8 @@ class Agency:
         There are no output parameters as this method is used for internal initialization purposes within the Agency class.
         """
         for agent in self.agents:
-            agent.id = None
+            if "temp_id" in agent.id:
+                agent.id = None
             agent.add_shared_instructions(self.shared_instructions)
 
             if self.shared_files:
