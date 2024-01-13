@@ -99,8 +99,7 @@ class AgencyTest(unittest.TestCase):
     def test_3_load_agent_id(self):
         """it should load existing assistant from id"""
         from test_agents import TestAgent1
-        agent3 = Agent(id=self.__class__.agent1.id, instructions=self.__class__.agent1.instructions)
-        agent3.add_shared_instructions(self.__class__.agency.shared_instructions)
+        agent3 = Agent(id=self.__class__.agent1.id)
         agent3.tools = self.__class__.agent1.tools
         agent3 = agent3.init_oai()
 
