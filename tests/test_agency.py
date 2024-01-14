@@ -139,7 +139,7 @@ class AgencyTest(unittest.TestCase):
             self.assertTrue(assistant)
             self.assertTrue(agent._check_parameters(assistant.model_dump()))
             if agent.name == "TestAgent1":
-                self.assertTrue(len(assistant.file_ids) == self.num_files)
+                self.assertTrue(len(assistant.file_ids) == self.__class__.num_files)
                 for file_id in assistant.file_ids:
                     self.assertTrue(file_id in agent.file_ids)
                 # check retrieval tools is there
@@ -149,7 +149,7 @@ class AgencyTest(unittest.TestCase):
                 self.assertTrue(assistant.tools[1].type == "function")
                 self.assertTrue(assistant.tools[1].function.name == "SendMessage")
             elif agent.name == "TestAgent2":
-                self.assertTrue(len(assistant.tools) == self.num_schemas)
+                self.assertTrue(len(assistant.tools) == self.__class__.num_schemas)
                 for tool in assistant.tools:
                     self.assertTrue(tool.type == "function")
                     self.assertTrue(tool.function.name in [tool.__name__ for tool in agent.tools])
