@@ -17,21 +17,19 @@ console = Console()
 
 class Agency:
 
-    def __init__(self, agency_chart, shared_instructions="", shared_files=None):
+    def __init__(self, agency_chart, shared_instructions=""):
         """
         Initializes the Agency object, setting up agents, threads, and core functionalities.
 
         Parameters:
         agency_chart: The structure defining the hierarchy and interaction of agents within the agency.
         shared_instructions (str, optional): A path to a file containing shared instructions for all agents. Defaults to an empty string.
-        shared_files (list, optional): A list of folder paths with files containing shared resources for all agents. Defaults to an empty list.
 
         This constructor initializes various components of the Agency, including CEO, agents, threads, and user interactions. It parses the agency chart to set up the organizational structure and initializes the messaging tools, agents, and threads necessary for the operation of the agency. Additionally, it prepares a main thread for user interactions.
         """
         self.ceo = None
         self.agents = []
         self.agents_and_threads = {}
-        self.shared_files = shared_files if shared_files else []
 
         if os.path.isfile(os.path.join(self.get_class_folder_path(), shared_instructions)):
             self._read_instructions(os.path.join(self.get_class_folder_path(), shared_instructions))
@@ -48,19 +46,18 @@ class Agency:
         self.user = User()
         self.main_thread = Thread(self.user, self.ceo)
 
-    def get_completion(self, message: str, message_files=None, yield_messages=True):
+    def get_completion(self, message: str, yield_messages=True):
         """
         Retrieves the completion for a given message from the main thread.
 
         Parameters:
         message (str): The message for which completion is to be retrieved.
-        message_files (list, optional): A list of file ids to be sent as attachments with the message. Defaults to None.
         yield_messages (bool, optional): Flag to determine if intermediate messages should be yielded. Defaults to True.
 
         Returns:
         Generator or final response: Depending on the 'yield_messages' flag, this method returns either a generator yielding intermediate messages or the final response from the main thread.
         """
-        gen = self.main_thread.get_completion(message=message, message_files=message_files, yield_messages=yield_messages)
+        gen = self.main_thread.get_completion(message=message, yield_messages=yield_messages)
 
         if not yield_messages:
             while True:
@@ -122,7 +119,6 @@ class Agency:
 
         # Launch the demo
         demo.launch()
-        return demo
 
     def run_demo(self):
         """
@@ -299,7 +295,6 @@ class Agency:
         """
         Creates a SendMessage tool to enable an agent to send messages to specified recipient agents.
 
-
         Parameters:
         agent (Agent): The agent who will be sending messages.
         recipient_agents (List[Agent]): A list of recipient agents who can receive messages.
@@ -321,19 +316,14 @@ class Agency:
 
         class SendMessage(BaseTool):
             """Use this tool to facilitate direct, synchronous communication between specialized agents within your agency. When you send a message using this tool, you receive a response exclusively from the designated recipient agent. To continue the dialogue, invoke this tool again with the desired recipient and your follow-up message. Remember, communication here is synchronous; the recipient agent won't perform any tasks post-response. You are responsible for relaying the recipient agent's responses back to the user, as they do not have direct access to these replies. Keep engaging with the tool for continuous interaction until the task is fully resolved."""
-            instructions: str = Field(...,
-                                          description="Please repeat your instructions step-by-step, including both completed "
-                                                      "and the following next steps that you need to perfrom. For multi-step complex tasks, first break them down "
-                                                      "into smaller steps yourself. Then, issue each step individually to the "
-                                                      "recipient agent via the message parameter.")
+            chain_of_thought: str = Field(...,
+                                          description="Think step by step to determine the correct recipient and "
+                                                      "message.")
             recipient: recipients = Field(..., description=agent_descriptions)
             message: str = Field(...,
                                  description="Specify the task required for the recipient agent to complete. Focus on "
                                              "clarifying what the task entails, rather than providing exact "
                                              "instructions.")
-            message_files: List[str] = Field(default=None,
-                                                description="A list of file ids to be sent as attachments to the message. Only use this if you have the file id that starts with 'file-'.",
-                                             examples=["file-1234", "file-5678"])
             caller_agent_name: str = Field(default=agent.name,
                                            description="The agent calling this tool. Defaults to your name. Do not change it.")
 
@@ -352,7 +342,7 @@ class Agency:
             def run(self):
                 thread = outer_self.agents_and_threads[self.caller_agent_name][self.recipient.value]
 
-                gen = thread.get_completion(message=self.message, message_files=self.message_files)
+                gen = thread.get_completion(message=self.message)
                 try:
                     while True:
                         yield next(gen)
@@ -383,17 +373,8 @@ class Agency:
         There are no output parameters as this method is used for internal initialization purposes within the Agency class.
         """
         for agent in self.agents:
-            if "temp_id" in agent.id:
-                agent.id = None
-            agent.add_shared_instructions(self.shared_instructions)
-
-            if self.shared_files:
-                if isinstance(agent.files_folder, str):
-                    agent.files_folder = [agent.files_folder]
-                    agent.files_folder += self.shared_files
-                elif isinstance(agent.files_folder, list):
-                    agent.files_folder += self.shared_files
-
+            agent.id = None
+            agent.add_instructions(self.shared_instructions)
             agent.init_oai()
 
     def _init_threads(self):

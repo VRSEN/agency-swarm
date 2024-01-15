@@ -18,24 +18,19 @@ class Thread:
         self.recipient_agent = recipient_agent
         self.client = get_openai_client()
 
-    def get_completion(self, message: str, message_files=None, yield_messages=True):
+    def get_completion(self, message: str, yield_messages=True):
         if not self.thread:
             if self.id:
                 self.thread = self.client.beta.threads.retrieve(self.id)
             else:
                 self.thread = self.client.beta.threads.create()
                 self.id = self.thread.id
-            # Determine the sender's name based on the agent type
-            sender_name = "user" if isinstance(self.agent, User) else self.agent.name
-            playground_url = f'https://platform.openai.com/playground?assistant={self.recipient_agent._assistant.id}&mode=assistant&thread={self.thread.id}'
-            print(f'THREAD:[ {sender_name} -> {self.recipient_agent.name} ]: URL {playground_url}')
 
         # send message
         self.client.beta.threads.messages.create(
             thread_id=self.thread.id,
             role="user",
-            content=message,
-            file_ids=message_files if message_files else [],
+            content=message
         )
 
         if yield_messages:
@@ -62,8 +57,7 @@ class Thread:
                 tool_outputs = []
                 for tool_call in tool_calls:
                     if yield_messages:
-                        yield MessageOutput("function", self.recipient_agent.name, self.agent.name,
-                                            str(tool_call.function))
+                        yield MessageOutput("function", self.recipient_agent.name, self.agent.name, str(tool_call.function))
 
                     output = self._execute_tool(tool_call)
                     if inspect.isgenerator(output):
@@ -76,8 +70,7 @@ class Thread:
                             output = e.value
                     else:
                         if yield_messages:
-                            yield MessageOutput("function_output", tool_call.function.name, self.recipient_agent.name,
-                                                output)
+                            yield MessageOutput("function_output", tool_call.function.name, self.recipient_agent.name, output)
 
                     tool_outputs.append({"tool_call_id": tool_call.id, "output": str(output)})
 
@@ -105,20 +98,16 @@ class Thread:
     def _execute_tool(self, tool_call):
         funcs = self.recipient_agent.functions
         func = next((func for func in funcs if func.__name__ == tool_call.function.name), None)
-
+        
         if not func:
             return f"Error: Function {tool_call.function.name} not found. Available functions: {[func.__name__ for func in funcs]}"
 
         try:
             # init tool
             func = func(**eval(tool_call.function.arguments))
-            func.caller_agent = self.recipient_agent
             # get outputs from the tool
             output = func.run()
 
             return output
         except Exception as e:
-            error_message = f"Error: {e}"
-            if "For further information visit" in error_message:
-                error_message = error_message.split("For further information visit")[0]
-            return error_message
+            return "Error: " + str(e)
