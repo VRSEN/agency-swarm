@@ -68,17 +68,14 @@ class MyCustomTool(BaseTool):
         # Return the result of the tool's operation
         return "Result of MyCustomTool operation"
 ```
+Import in 1 line of code from [Langchain](https://python.langchain.com/docs/integrations/tools):
 
-**NEW**: Import in 1 line of code from [Langchain](https://python.langchain.com/docs/integrations/tools)
-    
 ```python
 from langchain.tools import YouTubeSearchTool
 from agency_swarm.tools import ToolFactory
 
 LangchainTool = ToolFactory.from_langchain_tool(YouTubeSearchTool)
 ```
-
-or 
 
 ```python
 from langchain.agents import load_tools
@@ -90,6 +87,21 @@ tools = load_tools(
 tools = ToolFactory.from_langchain_tools(tools)
 ```
 
+**NEW**: Convert from OpenAPI schemas:
+
+```python
+# using local file
+with open("schemas/your_schema.json") as f:
+    ToolFactory.from_openapi_schema(
+        f.read(),
+    )
+
+# using requests
+ToolFactory.from_openapi_schema(
+    requests.get("https://api.example.com/openapi.json").json(),
+)
+```
+
 
 3. **Define Agent Roles**: Start by defining the roles of your agents. For example, a CEO agent for managing tasks and a developer agent for executing tasks.
 
@@ -99,15 +111,20 @@ from agency_swarm import Agent
 ceo = Agent(name="CEO",
             description="Responsible for client communication, task planning and management.",
             instructions="You must converse with other agents to ensure complete task execution.", # can be a file like ./instructions.md
-            files_folder=None,
+            files_folder="./files", # files to be uploaded to OpenAI
+            schemas_folder="./schemas", # OpenAPI schemas to be converted into tools
             tools=[MyCustomTool, LangchainTool])
 ```
 
-**NEW**: Browsing Agent
+Import from existing agents:
 
 ```python
+from agency_swarm.agents.browsing import BrowsingAgent
 
-from langchain.agents import BrowsingAgent
+browsing_agent = BrowsingAgent()
+
+browsing_agent.instructions += "\n\nYou can add additional instructions here."
+```
 
 
 
@@ -185,7 +202,7 @@ This structure ensures that each agent has its dedicated space with all necessar
 
 ## Contributing
 
-We welcome contributions to Agency Swarm! Please feel free to submit issues, pull requests, and suggestions to our GitHub repository.
+For details on how to contribute you agents and tools to Agency Swarm, please refer to the [Contributing Guide](CONTRIBUTING.md).
 
 ## License
 

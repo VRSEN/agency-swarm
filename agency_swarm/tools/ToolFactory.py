@@ -1,5 +1,5 @@
 import inspect
-from typing import Any, Dict, List, Type
+from typing import Any, Dict, List, Type, Union
 
 import jsonref
 from jsonref import requests
@@ -163,8 +163,12 @@ class ToolFactory:
         return tool
 
     @staticmethod
-    def from_openapi_schema(schema: str, headers: Dict[str, str] = None, params: Dict[str, Any] = None):
-        openapi_spec = jsonref.loads(schema)
+    def from_openapi_schema(schema: Union[str, dict], headers: Dict[str, str] = None, params: Dict[str, Any] = None):
+        if isinstance(schema, dict):
+            openapi_spec = schema
+            openapi_spec = jsonref.JsonRef.replace_refs(openapi_spec)
+        else:
+            openapi_spec = jsonref.loads(schema)
         tools = []
         headers = headers or {}
         for path, methods in openapi_spec["paths"].items():
@@ -227,6 +231,8 @@ class ToolFactory:
                 if spec_params:
                     param_properties = {}
                     for param in spec_params:
+                        if "schema" not in param and "type" in param:
+                            param["schema"] = {"type": param["type"]}
                         param_properties[param["name"]] = param["schema"]
                         if "description" in param:
                             param_properties[param["name"]]["description"] = param["description"]
