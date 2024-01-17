@@ -71,21 +71,67 @@ class Agency:
 
         return gen
 
-    def demo_gradio(self, height=600):
+    def demo_gradio(self, height=600, dark_mode=False):
         """
-        Launches a Gradio-based demo interface for the agency chatbot.
+        Launches a Gradio-based demo interface for the agency chatbot with a dark theme.
 
         Parameters:
         height (int, optional): The height of the chatbot widget in the Gradio interface. Default is 600.
 
-        This method sets up and runs a Gradio interface, allowing users to interact with the agency's chatbot. It includes a text input for the user's messages and a chatbot interface for displaying the conversation. The method handles user input and chatbot responses, updating the interface dynamically.
+        This method sets up and runs a Gradio interface, allowing users to interact with the agency's chatbot. 
+        It includes a text input for the user's messages and a chatbot interface for displaying the conversation. 
+        The method handles user input and chatbot responses, updating the interface dynamically.
         """
         try:
             import gradio as gr
         except ImportError:
             raise Exception("Please install gradio: pip install gradio")
 
-        with gr.Blocks() as demo:
+
+
+
+        # Define the dark theme
+        dark_theme = gr.themes.Default(primary_hue="blue").set(
+            body_background_fill="#121212",  # Dark background
+            body_text_color="#E0E0E0",  # Light text color for readability
+            background_fill_primary="#121212",  # Primary background fill
+            background_fill_secondary="#1A1A1A",  # Secondary background fill
+            border_color_accent="#333333",  # Accent border color
+            border_color_primary="#2C2C2C",  # Primary border color
+            link_text_color="#4B8BFF",  # Link text color
+            link_text_color_active="#4B8BFF",  # Active link text color
+            link_text_color_hover="#679BFF",  # Hover link text color
+            link_text_color_visited="#558EFF",  # Visited link text color
+            body_text_color_subdued="#A9A9A9",  # Subdued text color
+            # Add more customizations as needed
+        )
+
+        # Define additional custom CSS for dark theme
+        dark_theme_css = """
+            .message.user.svelte-1lcyrx4 {
+                border-color: #4a4a4a;
+                background-color: #333333;
+            }
+            input.svelte-1f354aw, textarea.svelte-1f354aw {
+                background: #2a2a2a;
+                color: #ffffff;
+            }
+            .pending.svelte-1gpwetz {
+                background-color: #2a2a2a; /* Dark background for pending message */
+                color: #ffffff; /* Light text color for readability */
+            }
+        """
+
+        # Define the default (light) theme
+        default_theme = gr.themes.Default()
+        default_theme_css = ""
+
+        # Choose the theme based on dark_mode parameter
+        chosen_theme = dark_theme if dark_mode else default_theme
+        chosen_css = dark_theme_css if dark_mode else default_theme_css
+
+        # Set up the Gradio interface with the chosen theme
+        with gr.Blocks(theme=chosen_theme, css=chosen_css) as demo:
             chatbot = gr.Chatbot(height=height)
             msg = gr.Textbox()
 
