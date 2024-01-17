@@ -8,7 +8,7 @@ from pydantic import Field
 
 class BaseTool(OpenAISchema, ABC):
     caller_agent: Optional[Any] = Field(
-        None, description="The agent that called this tool. Please ignore this field."
+        None, description="The agent that called this tool. This field will be removed from schema."
     )
 
     @classmethod

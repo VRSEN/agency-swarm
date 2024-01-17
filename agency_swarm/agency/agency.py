@@ -1,8 +1,9 @@
 import inspect
+import json
 import os
 import uuid
 from enum import Enum
-from typing import List
+from typing import List, TypedDict, Callable, Any, Dict
 
 from pydantic import Field, field_validator
 from rich.console import Console
@@ -15,9 +16,18 @@ from agency_swarm.user import User
 console = Console()
 
 
-class Agency:
+class SettingsCallbacks(TypedDict):
+    load: Callable[[], List[Dict]]
+    save: Callable[[List[Dict]], Any]
 
-    def __init__(self, agency_chart, shared_instructions="", shared_files=None):
+class ThreadsCallbacks(TypedDict):
+    load: Callable[[], Dict]
+    save: Callable[[Dict], Any]
+
+
+class Agency:
+    def __init__(self, agency_chart: List, shared_instructions: str = "", shared_files: List = None,
+                 settings_callbacks: SettingsCallbacks = None, threads_callbacks: ThreadsCallbacks = None):
         """
         Initializes the Agency object, setting up agents, threads, and core functionalities.
 
@@ -25,6 +35,8 @@ class Agency:
         agency_chart: The structure defining the hierarchy and interaction of agents within the agency.
         shared_instructions (str, optional): A path to a file containing shared instructions for all agents. Defaults to an empty string.
         shared_files (list, optional): A list of folder paths with files containing shared resources for all agents. Defaults to an empty list.
+        settings_callbacks (SettingsCallbacks, optional): A dictionary containing functions to load and save settings for the agency. The keys must be "load" and "save". Both values must be defined. Defaults to None.
+        threads_callbacks (ThreadsCallbacks, optional): A dictionary containing functions to load and save threads for the agency. The keys must be "load" and "save". Both values must be defined. Defaults to None.
 
         This constructor initializes various components of the Agency, including CEO, agents, threads, and user interactions. It parses the agency chart to set up the organizational structure and initializes the messaging tools, agents, and threads necessary for the operation of the agency. Additionally, it prepares a main thread for user interactions.
         """
@@ -32,6 +44,8 @@ class Agency:
         self.agents = []
         self.agents_and_threads = {}
         self.shared_files = shared_files if shared_files else []
+        self.settings_callbacks = settings_callbacks
+        self.threads_callbacks = threads_callbacks
 
         if os.path.isfile(os.path.join(self.get_class_folder_path(), shared_instructions)):
             self._read_instructions(os.path.join(self.get_class_folder_path(), shared_instructions))
@@ -48,6 +62,78 @@ class Agency:
         self.user = User()
         self.main_thread = Thread(self.user, self.ceo)
 
+    def _init_agents(self):
+        """
+        Initializes all agents in the agency with unique IDs, shared instructions, and OpenAI models.
+
+        This method iterates through each agent in the agency, assigns a unique ID, adds shared instructions, and initializes the OpenAI models for each agent.
+
+        There are no input parameters.
+
+        There are no output parameters as this method is used for internal initialization purposes within the Agency class.
+        """
+        if self.settings_callbacks:
+            loaded_settings = self.settings_callbacks["load"]()
+            with open(self.agents[0].get_settings_path(), 'w') as f:
+                json.dump(loaded_settings, f, indent=4)
+
+        for agent in self.agents:
+            if "temp_id" in agent.id:
+                agent.id = None
+            agent.add_shared_instructions(self.shared_instructions)
+
+            if self.shared_files:
+                if isinstance(agent.files_folder, str):
+                    agent.files_folder = [agent.files_folder]
+                    agent.files_folder += self.shared_files
+                elif isinstance(agent.files_folder, list):
+                    agent.files_folder += self.shared_files
+
+            agent.init_oai()
+
+        if self.settings_callbacks:
+            with open(self.agents[0].get_settings_path(), 'r') as f:
+                settings = f.read()
+            settings = json.loads(settings)
+            self.settings_callbacks["save"](settings)
+
+    def _init_threads(self):
+        """
+        Initializes threads for communication between agents within the agency.
+
+        This method creates Thread objects for each pair of interacting agents as defined in the agents_and_threads attribute of the Agency. Each thread facilitates communication and task execution between an agent and its designated recipient agent.
+
+        No input parameters.
+
+        Output Parameters:
+        This method does not return any value but updates the agents_and_threads attribute with initialized Thread objects.
+        """
+        # load thread ids
+        loaded_thread_ids = {}
+        if self.threads_callbacks:
+            loaded_thread_ids = self.threads_callbacks["load"]()
+
+        for agent_name, threads in self.agents_and_threads.items():
+            for other_agent, items in threads.items():
+                self.agents_and_threads[agent_name][other_agent] = Thread(self.get_agent_by_name(items["agent"]),
+                                                                          self.get_agent_by_name(
+                                                                              items["recipient_agent"]))
+
+                if agent_name in loaded_thread_ids and other_agent in loaded_thread_ids[agent_name]:
+                    self.agents_and_threads[agent_name][other_agent].id = loaded_thread_ids[agent_name][other_agent]
+                elif self.threads_callbacks:
+                    self.agents_and_threads[agent_name][other_agent].init_thread()
+
+        # save thread ids
+        if self.threads_callbacks:
+            loaded_thread_ids = {}
+            for agent_name, threads in self.agents_and_threads.items():
+                loaded_thread_ids[agent_name] = {}
+                for other_agent, thread in threads.items():
+                    loaded_thread_ids[agent_name][other_agent] = thread.id
+
+            self.threads_callbacks["save"](loaded_thread_ids)
+
     def get_completion(self, message: str, message_files=None, yield_messages=True):
         """
         Retrieves the completion for a given message from the main thread.
@@ -60,7 +146,8 @@ class Agency:
         Returns:
         Generator or final response: Depending on the 'yield_messages' flag, this method returns either a generator yielding intermediate messages or the final response from the main thread.
         """
-        gen = self.main_thread.get_completion(message=message, message_files=message_files, yield_messages=yield_messages)
+        gen = self.main_thread.get_completion(message=message, message_files=message_files,
+                                              yield_messages=yield_messages)
 
         if not yield_messages:
             while True:
@@ -322,17 +409,17 @@ class Agency:
         class SendMessage(BaseTool):
             """Use this tool to facilitate direct, synchronous communication between specialized agents within your agency. When you send a message using this tool, you receive a response exclusively from the designated recipient agent. To continue the dialogue, invoke this tool again with the desired recipient and your follow-up message. Remember, communication here is synchronous; the recipient agent won't perform any tasks post-response. You are responsible for relaying the recipient agent's responses back to the user, as they do not have direct access to these replies. Keep engaging with the tool for continuous interaction until the task is fully resolved."""
             instructions: str = Field(...,
-                                          description="Please repeat your instructions step-by-step, including both completed "
-                                                      "and the following next steps that you need to perfrom. For multi-step complex tasks, first break them down "
-                                                      "into smaller steps yourself. Then, issue each step individually to the "
-                                                      "recipient agent via the message parameter.")
+                                      description="Please repeat your instructions step-by-step, including both completed "
+                                                  "and the following next steps that you need to perfrom. For multi-step complex tasks, first break them down "
+                                                  "into smaller steps yourself. Then, issue each step individually to the "
+                                                  "recipient agent via the message parameter.")
             recipient: recipients = Field(..., description=agent_descriptions)
             message: str = Field(...,
                                  description="Specify the task required for the recipient agent to complete. Focus on "
                                              "clarifying what the task entails, rather than providing exact "
                                              "instructions.")
             message_files: List[str] = Field(default=None,
-                                                description="A list of file ids to be sent as attachments to the message. Only use this if you have the file id that starts with 'file-'.",
+                                             description="A list of file ids to be sent as attachments to the message. Only use this if you have the file id that starts with 'file-'.",
                                              examples=["file-1234", "file-5678"])
             caller_agent_name: str = Field(default=agent.name,
                                            description="The agent calling this tool. Defaults to your name. Do not change it.")
@@ -361,6 +448,8 @@ class Agency:
 
                 return message or ""
 
+        SendMessage.caller_agent = agent
+
         return SendMessage
 
     def get_recipient_names(self):
@@ -371,47 +460,6 @@ class Agency:
         A list of strings, where each string is the name of an agent in the agency.
         """
         return [agent.name for agent in self.agents]
-
-    def _init_agents(self):
-        """
-        Initializes all agents in the agency with unique IDs, shared instructions, and OpenAI models.
-
-        This method iterates through each agent in the agency, assigns a unique ID, adds shared instructions, and initializes the OpenAI models for each agent.
-
-        There are no input parameters.
-
-        There are no output parameters as this method is used for internal initialization purposes within the Agency class.
-        """
-        for agent in self.agents:
-            if "temp_id" in agent.id:
-                agent.id = None
-            agent.add_shared_instructions(self.shared_instructions)
-
-            if self.shared_files:
-                if isinstance(agent.files_folder, str):
-                    agent.files_folder = [agent.files_folder]
-                    agent.files_folder += self.shared_files
-                elif isinstance(agent.files_folder, list):
-                    agent.files_folder += self.shared_files
-
-            agent.init_oai()
-
-    def _init_threads(self):
-        """
-        Initializes threads for communication between agents within the agency.
-
-        This method creates Thread objects for each pair of interacting agents as defined in the agents_and_threads attribute of the Agency. Each thread facilitates communication and task execution between an agent and its designated recipient agent.
-
-        No input parameters.
-
-        Output Parameters:
-        This method does not return any value but updates the agents_and_threads attribute with initialized Thread objects.
-        """
-        for agent_name, threads in self.agents_and_threads.items():
-            for other_agent, items in threads.items():
-                self.agents_and_threads[agent_name][other_agent] = Thread(self.get_agent_by_name(items["agent"]),
-                                                                          self.get_agent_by_name(
-                                                                              items["recipient_agent"]))
 
     def get_class_folder_path(self):
         """

@@ -19,6 +19,13 @@ class AgencyTest(unittest.TestCase):
     num_schemas = None
     num_files = None
 
+    # testing loading agents from db
+    loaded_thread_ids = None
+    loaded_agents_settings = None
+    settings_callbacks = None
+    threads_callbacks = None
+
+
     @classmethod
     def setUpClass(cls):
         cls.num_files = 0
@@ -27,6 +34,28 @@ class AgencyTest(unittest.TestCase):
         cls.agent1 = None
         cls.agent2 = None
         cls.agency = None
+
+        # testing loading agents from db
+        cls.loaded_thread_ids = {}
+        cls.loaded_agents_settings = []
+
+        def save_settings_callback(settings):
+            cls.loaded_agents_settings = settings
+
+        cls.settings_callbacks = {
+            "load": lambda: cls.loaded_agents_settings,
+            "save": save_settings_callback,
+        }
+
+        def save_thread_callback(agents_and_thread_ids):
+            cls.loaded_thread_ids = agents_and_thread_ids
+
+        cls.threads_callbacks = {
+            "load": lambda: cls.loaded_thread_ids,
+            "save": save_thread_callback,
+        }
+
+
         if not os.path.exists("./test_agents"):
             os.mkdir("./test_agents")
         else:
@@ -74,6 +103,8 @@ class AgencyTest(unittest.TestCase):
             [self.__class__.ceo, self.__class__.agent1],
             [self.__class__.agent1, self.__class__.agent2]],
             shared_instructions="This is a shared instruction",
+            settings_callbacks=self.__class__.settings_callbacks,
+            threads_callbacks=self.__class__.threads_callbacks,
         )
 
         self.check_all_agents_settings()
@@ -119,6 +150,51 @@ class AgencyTest(unittest.TestCase):
         message = self.__class__.agency.get_completion("Please tell TestAgent1 to say test to TestAgent2.", yield_messages=False)
 
         self.assertFalse('error' in message.lower())
+
+        for agent_name, threads in self.__class__.agency.agents_and_threads.items():
+            for other_agent_name, thread in threads.items():
+                self.assertTrue(thread.id in self.__class__.loaded_thread_ids[agent_name][other_agent_name])
+
+        for agent in self.__class__.agency.agents:
+            self.assertTrue(agent.id in [settings['id'] for settings in self.__class__.loaded_agents_settings])
+
+    def test_5_load_from_db(self):
+        """it should load agents from db"""
+        os.rename("settings.json", "settings2.json")
+
+        previous_loaded_thread_ids = self.__class__.loaded_thread_ids
+        previous_loaded_agents_settings = self.__class__.loaded_agents_settings
+
+        from test_agents import CEO, TestAgent1, TestAgent2
+        agent1 = TestAgent1()
+        agent2 = TestAgent2()
+        ceo = CEO()
+
+        # check that agents are loaded
+        agency = Agency([
+            ceo,
+            [ceo, agent1],
+            [agent1, agent2]],
+            shared_instructions="This is a shared instruction",
+            settings_callbacks=self.__class__.settings_callbacks,
+            threads_callbacks=self.__class__.threads_callbacks,
+        )
+
+        os.remove("settings.json")
+        os.rename("settings2.json", "settings.json")
+
+        self.check_all_agents_settings()
+
+        # check that threads are the same
+        for agent_name, threads in agency.agents_and_threads.items():
+            for other_agent_name, thread in threads.items():
+                self.assertTrue(thread.id in self.__class__.loaded_thread_ids[agent_name][other_agent_name])
+                self.assertTrue(thread.id in previous_loaded_thread_ids[agent_name][other_agent_name])
+
+        # check that agents are the same
+        for agent in agency.agents:
+            self.assertTrue(agent.id in [settings['id'] for settings in self.__class__.loaded_agents_settings])
+            self.assertTrue(agent.id in [settings['id'] for settings in previous_loaded_agents_settings])
 
     # --- Helper methods ---
 

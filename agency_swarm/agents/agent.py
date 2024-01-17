@@ -120,6 +120,7 @@ class Agent():
                             self._update_assistant()
                         self._update_settings()
                         return self
+
         # create assistant if settings.json does not exist or assistant with the same name does not exist
         self.assistant = self.client.beta.assistants.create(
             name=self.name,
