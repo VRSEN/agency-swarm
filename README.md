@@ -22,7 +22,7 @@ Agency Swarm is an open-source agent orchestration framework designed to automat
 ## Installation
 
 ```bash
-pip install git+https://github.com/VRSEN/agency-swarm.git
+pip install agency-swarm
 ```
 
 ## Getting Started
