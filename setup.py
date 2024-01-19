@@ -9,7 +9,7 @@ setup(
     version='0.1.0',
     author='VRSEN',
     author_email='arseny9795@gmail.com',
-    description='An opensource agent orchestration frameworks built on top of the latest OpenAI Assistants API.',
+    description='An opensource agent orchestration framework built on top of the latest OpenAI Assistants API.',
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
     url='https://github.com/VRSEN/agency-swarm',

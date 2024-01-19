@@ -3,6 +3,30 @@ requires = ["setuptools>=61.0", "setuptools_scm>=8"]
 build-backend = "setuptools.build_meta"
 
 [project]
+name = "agency-swarm"
 dynamic = ["version"]
+authors = [{ name = "VRSEN", email = "arseny9795@gmail.com" }]
+description = "An opensource agent orchestration framework built on top of the latest OpenAI Assistants API."
+readme = "README.md"
+license = { file = "LICENSE" }
+classifiers = [
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Build Tools",
+    "License :: OSI Approved :: MIT License",
+]
+dependencies = [
+    "openai==1.5.0",
+    "instructor==0.4.5",
+    "deepdiff==6.7.1",
+    "termcolor==2.3.0",
+    "python-dotenv==1.0.0",
+    "rich==13.7.0",
+    "jsonref==1.1.0"
+]
+python-requirements = ">=3.7"
+urls = { homepage = "https://github.com/VRSEN/agency-swarm" }
+
+[project.scripts]
+agency-swarm = "agency_swarm.cli:main"
 
 [tool.setuptools_scm]
