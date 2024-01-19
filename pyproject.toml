@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "agency-swarm"
 dynamic = ["version"]
 authors = [{ name = "VRSEN", email = "arseny9795@gmail.com" }]
-description = "An opensource agent orchestration framework built on top of the latest OpenAI Assistants API."
+description = "An opensource agent orchestration frameworks built on top of the latest OpenAI Assistants API."
 readme = "README.md"
 license = { file = "LICENSE" }
 classifiers = [
@@ -23,7 +23,7 @@ dependencies = [
     "rich==13.7.0",
     "jsonref==1.1.0"
 ]
-python-requirements = ">=3.7"
+requires-python = ">=3.7"
 urls = { homepage = "https://github.com/VRSEN/agency-swarm" }
 
 [project.scripts]
