@@ -1,4 +1,4 @@
-# Agency Swarm
+# 🐝 Agency Swarm
 
 [![Framework](https://firebasestorage.googleapis.com/v0/b/vrsen-ai/o/public%2Fyoutube%2FFramework.png?alt=media&token=ae76687f-0347-4e0c-8342-4c5d31e3f050)](https://youtu.be/M5Pa0pLgyYU?si=f-cQV8FoiGd98uuk)
 
@@ -196,9 +196,9 @@ This structure ensures that each agent has its dedicated space with all necessar
 
 ## Future Enhancements
 
-- Asynchronous communication and task handling.
-- Creation of agencies that can autonomously create other agencies.
-- Inter-agency communication for a self-expanding system.
+1. [x] Creation of agencies that can autonomously create other agencies.
+2. [ ] Asynchronous communication and task handling.
+3. [ ] Inter-agency communication for a self-expanding system.
 
 ## Contributing
 
@@ -212,4 +212,4 @@ Agency Swarm is open-source and licensed under [MIT](https://opensource.org/lice
 
 ## Need Help?
 
-If you require assistance in creating custom agent swarms or have any specific queries related to Agency Swarm, feel free to reach out through my website: [vrsen.ai](https://vrsen.ai)
+If you require assistance in creating custom agent swarms or have any specific queries related to Agency Swarm, feel free to reach out through my website: [vrsen.ai](https://vrsen.ai) or schedule a consultation at https://calendly.com/vrsen/ai-project-consultation
