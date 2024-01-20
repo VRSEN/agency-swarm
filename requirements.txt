@@ -5,3 +5,5 @@ termcolor==2.3.0
 python-dotenv==1.0.0
 rich==13.7.0
 jsonref==1.1.0
+webdriver-manager==4.0.1
+selenium-stealth==1.0.6
