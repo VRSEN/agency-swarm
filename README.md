@@ -77,6 +77,8 @@ from agency_swarm.tools import ToolFactory
 LangchainTool = ToolFactory.from_langchain_tool(YouTubeSearchTool)
 ```
 
+or
+
 ```python
 from langchain.agents import load_tools
 
