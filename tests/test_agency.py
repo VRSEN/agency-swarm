@@ -3,6 +3,7 @@ import json
 import os
 import shutil
 import sys
+import time
 import unittest
 
 sys.path.insert(0, '../agency-swarm')
@@ -196,12 +197,50 @@ class AgencyTest(unittest.TestCase):
             self.assertTrue(agent.id in [settings['id'] for settings in self.__class__.loaded_agents_settings])
             self.assertTrue(agent.id in [settings['id'] for settings in previous_loaded_agents_settings])
 
+    def test_6_init_async_agency(self):
+        """it should initialize agency with agents"""
+        # reset loaded thread ids
+        self.__class__.loaded_thread_ids = {}
+
+        self.__class__.agency = Agency([
+            self.__class__.ceo,
+            [self.__class__.ceo, self.__class__.agent1],
+            [self.__class__.agent1, self.__class__.agent2]],
+            shared_instructions="This is a shared instruction",
+            settings_callbacks=self.__class__.settings_callbacks,
+            threads_callbacks=self.__class__.threads_callbacks,
+            async_mode='threading',
+        )
+
+        self.check_all_agents_settings(True)
+
+    def test_7_async_agent_communication(self):
+        """it should communicate between agents asynchronously"""
+        print("TestAgent1 tools", self.__class__.agent1.tools)
+        self.__class__.agency.get_completion("Please tell TestAgent1 to say test to TestAgent2.",
+                                                       yield_messages=False)
+
+        time.sleep(10)
+
+        message = self.__class__.agency.get_completion("Please check status. If the agent responds, say 'success', if the agent does not respond, or if you get a system update say 'error'.",
+                                                       yield_messages=False)
+
+        self.assertFalse('error' in message.lower())
+
+        for agent_name, threads in self.__class__.agency.agents_and_threads.items():
+            for other_agent_name, thread in threads.items():
+                self.assertTrue(thread.id in self.__class__.loaded_thread_ids[agent_name][other_agent_name])
+
+        for agent in self.__class__.agency.agents:
+            self.assertTrue(agent.id in [settings['id'] for settings in self.__class__.loaded_agents_settings])
+
+
     # --- Helper methods ---
 
     def get_class_folder_path(self):
         return os.path.abspath(os.path.dirname(inspect.getfile(self.__class__)))
 
-    def check_agent_settings(self, agent):
+    def check_agent_settings(self, agent, async_mode=False):
         try:
             settings_path = agent.get_settings_path()
             self.assertTrue(os.path.exists(settings_path))
@@ -215,31 +254,38 @@ class AgencyTest(unittest.TestCase):
             self.assertTrue(assistant)
             self.assertTrue(agent._check_parameters(assistant.model_dump()))
             if agent.name == "TestAgent1":
+                num_tools = 2 if not async_mode else 3
                 self.assertTrue(len(assistant.file_ids) == self.__class__.num_files)
                 for file_id in assistant.file_ids:
                     self.assertTrue(file_id in agent.file_ids)
                 # check retrieval tools is there
-                self.assertTrue(len(assistant.tools) == 2)
-                self.assertTrue(len(agent.tools) == 2)
+                self.assertTrue(len(assistant.tools) == num_tools)
+                self.assertTrue(len(agent.tools) == num_tools)
                 self.assertTrue(assistant.tools[0].type == "retrieval")
                 self.assertTrue(assistant.tools[1].type == "function")
                 self.assertTrue(assistant.tools[1].function.name == "SendMessage")
+                if async_mode:
+                    self.assertTrue(assistant.tools[2].type == "function")
+                    self.assertTrue(assistant.tools[2].function.name == "GetResponse")
             elif agent.name == "TestAgent2":
                 self.assertTrue(len(assistant.tools) == self.__class__.num_schemas)
                 for tool in assistant.tools:
                     self.assertTrue(tool.type == "function")
                     self.assertTrue(tool.function.name in [tool.__name__ for tool in agent.tools])
             elif agent.name == "CEO":
+                num_tools = 1 if not async_mode else 2
                 self.assertTrue(len(assistant.file_ids) == 0)
-                self.assertTrue(len(assistant.tools) == 1)
+                self.assertTrue(len(assistant.tools) == num_tools)
+            else:
+                raise Exception("Unknown agent name")
         except Exception as e:
             print("Error checking agent settings ", agent.name)
             raise e
 
-    def check_all_agents_settings(self):
-        self.check_agent_settings(self.__class__.ceo)
-        self.check_agent_settings(self.__class__.agent1)
-        self.check_agent_settings(self.__class__.agent2)
+    def check_all_agents_settings(self, async_mode=False):
+        self.check_agent_settings(self.__class__.ceo, async_mode=async_mode)
+        self.check_agent_settings(self.__class__.agent1, async_mode=async_mode)
+        self.check_agent_settings(self.__class__.agent2, async_mode=async_mode)
 
     @classmethod
     def tearDownClass(cls):
