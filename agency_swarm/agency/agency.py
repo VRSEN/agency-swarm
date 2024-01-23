@@ -73,79 +73,6 @@ class Agency:
         self.user = User()
         self.main_thread = Thread(self.user, self.ceo)
 
-    def _init_agents(self):
-        """
-        Initializes all agents in the agency with unique IDs, shared instructions, and OpenAI models.
-
-        This method iterates through each agent in the agency, assigns a unique ID, adds shared instructions, and initializes the OpenAI models for each agent.
-
-        There are no input parameters.
-
-        There are no output parameters as this method is used for internal initialization purposes within the Agency class.
-        """
-        if self.settings_callbacks:
-            loaded_settings = self.settings_callbacks["load"]()
-            with open(self.agents[0].get_settings_path(), 'w') as f:
-                json.dump(loaded_settings, f, indent=4)
-
-        for agent in self.agents:
-            if "temp_id" in agent.id:
-                agent.id = None
-            agent.add_shared_instructions(self.shared_instructions)
-
-            if self.shared_files:
-                if isinstance(agent.files_folder, str):
-                    agent.files_folder = [agent.files_folder]
-                    agent.files_folder += self.shared_files
-                elif isinstance(agent.files_folder, list):
-                    agent.files_folder += self.shared_files
-
-            agent.init_oai()
-
-        if self.settings_callbacks:
-            with open(self.agents[0].get_settings_path(), 'r') as f:
-                settings = f.read()
-            settings = json.loads(settings)
-            self.settings_callbacks["save"](settings)
-
-    def _init_threads(self):
-        """
-        Initializes threads for communication between agents within the agency.
-
-        This method creates Thread objects for each pair of interacting agents as defined in the agents_and_threads attribute of the Agency. Each thread facilitates communication and task execution between an agent and its designated recipient agent.
-
-        No input parameters.
-
-        Output Parameters:
-        This method does not return any value but updates the agents_and_threads attribute with initialized Thread objects.
-        """
-        # load thread ids
-        loaded_thread_ids = {}
-        if self.threads_callbacks:
-            loaded_thread_ids = self.threads_callbacks["load"]()
-
-        for agent_name, threads in self.agents_and_threads.items():
-            for other_agent, items in threads.items():
-                self.agents_and_threads[agent_name][other_agent] = self.ThreadType(
-                    self.get_agent_by_name(items["agent"]),
-                    self.get_agent_by_name(
-                        items["recipient_agent"]))
-
-                if agent_name in loaded_thread_ids and other_agent in loaded_thread_ids[agent_name]:
-                    self.agents_and_threads[agent_name][other_agent].id = loaded_thread_ids[agent_name][other_agent]
-                elif self.threads_callbacks:
-                    self.agents_and_threads[agent_name][other_agent].init_thread()
-
-        # save thread ids
-        if self.threads_callbacks:
-            loaded_thread_ids = {}
-            for agent_name, threads in self.agents_and_threads.items():
-                loaded_thread_ids[agent_name] = {}
-                for other_agent, thread in threads.items():
-                    loaded_thread_ids[agent_name][other_agent] = thread.id
-
-            self.threads_callbacks["save"](loaded_thread_ids)
-
     def get_completion(self, message: str, message_files=None, yield_messages=True):
         """
         Retrieves the completion for a given message from the main thread.
@@ -244,6 +171,92 @@ class Agency:
             except StopIteration as e:
                 pass
 
+    def get_openapi_schema(self, url: str):
+        """Returns the OpenAPI schema for the agency from the CEO agent, that you can use to integrate with custom gpts.
+
+        Parameters:
+            url (str): Your server url where the api will be hosted.
+        """
+
+        return self.ceo.get_openapi_schema(url)
+
+
+    def plot_agency_chart(self):
+        pass
+
+    def _init_agents(self):
+        """
+        Initializes all agents in the agency with unique IDs, shared instructions, and OpenAI models.
+
+        This method iterates through each agent in the agency, assigns a unique ID, adds shared instructions, and initializes the OpenAI models for each agent.
+
+        There are no input parameters.
+
+        There are no output parameters as this method is used for internal initialization purposes within the Agency class.
+        """
+        if self.settings_callbacks:
+            loaded_settings = self.settings_callbacks["load"]()
+            with open(self.agents[0].get_settings_path(), 'w') as f:
+                json.dump(loaded_settings, f, indent=4)
+
+        for agent in self.agents:
+            if "temp_id" in agent.id:
+                agent.id = None
+            agent.add_shared_instructions(self.shared_instructions)
+
+            if self.shared_files:
+                if isinstance(agent.files_folder, str):
+                    agent.files_folder = [agent.files_folder]
+                    agent.files_folder += self.shared_files
+                elif isinstance(agent.files_folder, list):
+                    agent.files_folder += self.shared_files
+
+            agent.init_oai()
+
+        if self.settings_callbacks:
+            with open(self.agents[0].get_settings_path(), 'r') as f:
+                settings = f.read()
+            settings = json.loads(settings)
+            self.settings_callbacks["save"](settings)
+
+    def _init_threads(self):
+        """
+        Initializes threads for communication between agents within the agency.
+
+        This method creates Thread objects for each pair of interacting agents as defined in the agents_and_threads attribute of the Agency. Each thread facilitates communication and task execution between an agent and its designated recipient agent.
+
+        No input parameters.
+
+        Output Parameters:
+        This method does not return any value but updates the agents_and_threads attribute with initialized Thread objects.
+        """
+        # load thread ids
+        loaded_thread_ids = {}
+        if self.threads_callbacks:
+            loaded_thread_ids = self.threads_callbacks["load"]()
+
+        for agent_name, threads in self.agents_and_threads.items():
+            for other_agent, items in threads.items():
+                self.agents_and_threads[agent_name][other_agent] = self.ThreadType(
+                    self.get_agent_by_name(items["agent"]),
+                    self.get_agent_by_name(
+                        items["recipient_agent"]))
+
+                if agent_name in loaded_thread_ids and other_agent in loaded_thread_ids[agent_name]:
+                    self.agents_and_threads[agent_name][other_agent].id = loaded_thread_ids[agent_name][other_agent]
+                elif self.threads_callbacks:
+                    self.agents_and_threads[agent_name][other_agent].init_thread()
+
+        # save thread ids
+        if self.threads_callbacks:
+            loaded_thread_ids = {}
+            for agent_name, threads in self.agents_and_threads.items():
+                loaded_thread_ids[agent_name] = {}
+                for other_agent, thread in threads.items():
+                    loaded_thread_ids[agent_name][other_agent] = thread.id
+
+            self.threads_callbacks["save"](loaded_thread_ids)
+
     def _parse_agency_chart(self, agency_chart):
         """
         Parses the provided agency chart to initialize and organize agents within the agency.
@@ -311,57 +324,6 @@ class Agency:
         else:
             return self.get_agent_ids().index(agent.id)
 
-    def get_agent_by_name(self, agent_name):
-        """
-        Retrieves an agent from the agency based on the agent's name.
-
-        Parameters:
-        agent_name (str): The name of the agent to be retrieved.
-
-        Returns:
-        Agent: The agent object with the specified name.
-
-        Raises:
-        Exception: If no agent with the given name is found in the agency.
-        """
-        for agent in self.agents:
-            if agent.name == agent_name:
-                return agent
-        raise Exception(f"Agent {agent_name} not found.")
-
-    def get_agents_by_names(self, agent_names):
-        """
-        Retrieves a list of agent objects based on their names.
-
-        Parameters:
-        agent_names: A list of strings representing the names of the agents to be retrieved.
-
-        Returns:
-        A list of Agent objects corresponding to the given names.
-        """
-        return [self.get_agent_by_name(agent_name) for agent_name in agent_names]
-
-    def get_agent_ids(self):
-        """
-        Retrieves the IDs of all agents currently in the agency.
-
-        Returns:
-        List[str]: A list containing the unique IDs of all agents.
-        """
-        return [agent.id for agent in self.agents]
-
-    def get_agent_names(self):
-        """
-        Retrieves the names of all agents in the agency.
-
-        Parameters:
-        None
-
-        Returns:
-        List[str]: A list of names of all agents currently part of the agency.
-        """
-        return [agent.name for agent in self.agents]
-
     def _read_instructions(self, path):
         """
         Reads shared instructions from a specified file and stores them in the agency.
@@ -374,9 +336,6 @@ class Agency:
         path = path
         with open(path, 'r') as f:
             self.shared_instructions = f.read()
-
-    def plot_agency_chart(self):
-        pass
 
     def _create_special_tools(self):
         """
@@ -483,7 +442,8 @@ class Agency:
 
         class GetResponse(BaseTool):
             """This tool allows you to check the status of a task or get a response from a specified recipient agent, if the task has been completed. You must always use 'SendMessage' tool first."""
-            recipient: recipients = Field(..., description=f"Recipient agent that you want to check the status of. Valid recipients are: {recipient_names}")
+            recipient: recipients = Field(...,
+                                          description=f"Recipient agent that you want to check the status of. Valid recipients are: {recipient_names}")
             caller_agent_name: str = Field(default=agent.name,
                                            description="The agent calling this tool. Defaults to your name. Do not change it.")
 
@@ -507,6 +467,57 @@ class Agency:
         GetResponse.caller_agent = agent
 
         return GetResponse
+
+    def get_agent_by_name(self, agent_name):
+        """
+        Retrieves an agent from the agency based on the agent's name.
+
+        Parameters:
+        agent_name (str): The name of the agent to be retrieved.
+
+        Returns:
+        Agent: The agent object with the specified name.
+
+        Raises:
+        Exception: If no agent with the given name is found in the agency.
+        """
+        for agent in self.agents:
+            if agent.name == agent_name:
+                return agent
+        raise Exception(f"Agent {agent_name} not found.")
+
+    def get_agents_by_names(self, agent_names):
+        """
+        Retrieves a list of agent objects based on their names.
+
+        Parameters:
+        agent_names: A list of strings representing the names of the agents to be retrieved.
+
+        Returns:
+        A list of Agent objects corresponding to the given names.
+        """
+        return [self.get_agent_by_name(agent_name) for agent_name in agent_names]
+
+    def get_agent_ids(self):
+        """
+        Retrieves the IDs of all agents currently in the agency.
+
+        Returns:
+        List[str]: A list containing the unique IDs of all agents.
+        """
+        return [agent.id for agent in self.agents]
+
+    def get_agent_names(self):
+        """
+        Retrieves the names of all agents in the agency.
+
+        Parameters:
+        None
+
+        Returns:
+        List[str]: A list of names of all agents currently part of the agency.
+        """
+        return [agent.name for agent in self.agents]
 
     def get_recipient_names(self):
         """

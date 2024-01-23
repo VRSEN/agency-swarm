@@ -1,10 +1,9 @@
-from agency_swarm.threads import Thread
 import threading
 from typing import Literal
+
 from agency_swarm.agents import Agent
-from agency_swarm.messages import MessageOutput
+from agency_swarm.threads import Thread
 from agency_swarm.user import User
-from agency_swarm.util.oai import get_openai_client
 
 
 class ThreadAsync(Thread):
