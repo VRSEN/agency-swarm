@@ -70,7 +70,7 @@ class Thread:
                         yield MessageOutput("function", self.recipient_agent.name, self.agent.name,
                                             str(tool_call.function))
 
-                    output = self._execute_tool(tool_call)
+                    output = self.execute_tool(tool_call)
                     if inspect.isgenerator(output):
                         try:
                             while True:

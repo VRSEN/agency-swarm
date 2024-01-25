@@ -370,7 +370,8 @@ class Agent():
                             {
                                 "apiKey": []
                             }
-                        ]
+                        ],
+                        "x-openai-isConsequential": False,
                     }
                 }
 
