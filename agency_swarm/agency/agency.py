@@ -29,7 +29,7 @@ class ThreadsCallbacks(TypedDict):
 class Agency:
     ThreadType = Thread
     send_message_tool_description = """Use this tool for synchronous communication with other agents within your agency. For ongoing dialogue, resend messages to specific agents. Communication is synchronous, without post-response tasks. Relay agent responses to the user, who lacks direct access. Continue using the tool for continuous interaction until task completion."""
-    send_message_tool_description_async = """Use this tool for asynchronous communication with other agents within your agency. Initiate tasks by messaging, and check status and responses with the 'GetResponse' tool. Relay responses to the user, who instructs on status checks. Continue until task completion."""
+    send_message_tool_description_async = """Use this tool for asynchronous communication with other agents within your agency. Initiate tasks by messaging, and check status and responses later with the 'GetResponse' tool. Relay responses to the user, who instructs on status checks. Continue until task completion."""
 
     def __init__(self, agency_chart: List, shared_instructions: str = "", shared_files: List = None,
                  async_mode: Literal['threading'] = None,

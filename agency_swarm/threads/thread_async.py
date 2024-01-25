@@ -42,7 +42,7 @@ class ThreadAsync(Thread):
 
         self.pythread.start()
 
-        return "System Notification: 'Task has started. Please notify the user that they can tell you to check the status later. You can do this with the 'GetResponse' tool, but don't mention this tool to the user. "
+        return "System Notification: 'Task has started. Please notify the user that they can tell you to check the status later. You can do this with the 'GetResponse' tool, after you have been instructed to do so. Don't mention the tool itself to the user. "
 
     def check_status(self, run=None):
         if not run:
