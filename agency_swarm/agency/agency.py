@@ -28,8 +28,8 @@ class ThreadsCallbacks(TypedDict):
 
 class Agency:
     ThreadType = Thread
-    send_message_tool_description = """Use this tool for synchronous communication with agents within your agency. Send messages and receive direct responses from designated agents. For ongoing dialogue, resend messages to specific agents. Communication is synchronous, without post-response tasks. Relay agent responses to the user, who lacks direct access. Continue using the tool for continuous interaction until task completion."""
-    send_message_tool_description_async = """Use this tool for asynchronous communication with other agents within your agency. Initiate tasks by messaging, and check status and responses with 'GetResponse' tool. Relay responses to the user, who instructs on status checks. Continue until task completion."""
+    send_message_tool_description = """Use this tool for synchronous communication with other agents within your agency. For ongoing dialogue, resend messages to specific agents. Communication is synchronous, without post-response tasks. Relay agent responses to the user, who lacks direct access. Continue using the tool for continuous interaction until task completion."""
+    send_message_tool_description_async = """Use this tool for asynchronous communication with other agents within your agency. Initiate tasks by messaging, and check status and responses with the 'GetResponse' tool. Relay responses to the user, who instructs on status checks. Continue until task completion."""
 
     def __init__(self, agency_chart: List, shared_instructions: str = "", shared_files: List = None,
                  async_mode: Literal['threading'] = None,
@@ -179,7 +179,6 @@ class Agency:
         """
 
         return self.ceo.get_openapi_schema(url)
-
 
     def plot_agency_chart(self):
         pass
@@ -382,16 +381,17 @@ class Agency:
         class SendMessage(BaseTool):
             instructions: str = Field(...,
                                       description="Please repeat your instructions step-by-step, including both completed "
-                                                  "and the following next steps that you need to perfrom. For multi-step complex tasks, first break them down "
+                                                  "and the following next steps that you need to perfrom. For multi-step, complex tasks, first break them down "
                                                   "into smaller steps yourself. Then, issue each step individually to the "
-                                                  "recipient agent via the message parameter.")
+                                                  "recipient agent via the message parameter. Each identified step should be "
+                                                  "sent in separate message.")
             recipient: recipients = Field(..., description=agent_descriptions)
             message: str = Field(...,
                                  description="Specify the task required for the recipient agent to complete. Focus on "
                                              "clarifying what the task entails, rather than providing exact "
                                              "instructions.")
             message_files: List[str] = Field(default=None,
-                                             description="A list of file ids to be sent as attachments to the message. Only use this if you have the file id that starts with 'file-'.",
+                                             description="A list of file ids to be sent as attachments to this message. Only use this if you have the file id that starts with 'file-'.",
                                              examples=["file-1234", "file-5678"])
             caller_agent_name: str = Field(default=agent.name,
                                            description="The agent calling this tool. Defaults to your name. Do not change it.")
@@ -441,7 +441,7 @@ class Agency:
         outer_self = self
 
         class GetResponse(BaseTool):
-            """This tool allows you to check the status of a task or get a response from a specified recipient agent, if the task has been completed. You must always use 'SendMessage' tool first."""
+            """This tool allows you to check the status of a task or get a response from a specified recipient agent, if the task has been completed. You must always use 'SendMessage' tool with the designated agent first."""
             recipient: recipients = Field(...,
                                           description=f"Recipient agent that you want to check the status of. Valid recipients are: {recipient_names}")
             caller_agent_name: str = Field(default=agent.name,
