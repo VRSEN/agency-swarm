@@ -107,7 +107,7 @@ class Thread:
 
                 return message
 
-    def _execute_tool(self, tool_call):
+    def execute_tool(self, tool_call):
         funcs = self.recipient_agent.functions
         func = next((func for func in funcs if func.__name__ == tool_call.function.name), None)
 
