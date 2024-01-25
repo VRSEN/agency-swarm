@@ -352,17 +352,15 @@ class Agent():
                     defs = openai_schema['parameters']['$defs']
                     del openai_schema['parameters']['$defs']
 
-                schema['paths']["/" + tool.__name__] = {
+                schema['paths']["/" + openai_schema['name']] = {
                     "post": {
                         "description": openai_schema['description'],
-                        "operationId": tool.__name__,
+                        "operationId": openai_schema['name'],
                         "parameters": [],
                         "requestBody": {
                             "content": {
                                 "application/json": {
-                                    "schema": {
-                                        "$ref": "#/components/schemas/" + tool.__name__
-                                    }
+                                    "schema": openai_schema['parameters']
                                 }
                             },
                             "required": True,
@@ -377,10 +375,13 @@ class Agent():
                 }
 
                 if defs:
-                    schema['components']['schemas'][tool.__name__] = openai_schema['parameters'],
-                    schema['components']['schemas'].update(defs)
+                    schema['components']['schemas'].update(**defs)
 
-        return json.dumps(schema, indent=2).replace("#/$defs/", "#/components/schemas/")
+                print(openai_schema)
+
+        schema = json.dumps(schema, indent=2).replace("#/$defs/", "#/components/schemas/")
+
+        return schema
 
     # --- Settings Methods ---
 

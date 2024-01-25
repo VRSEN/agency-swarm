@@ -28,8 +28,8 @@ class ThreadsCallbacks(TypedDict):
 
 class Agency:
     ThreadType = Thread
-    send_message_tool_description = """Use this tool to facilitate direct, synchronous communication between specialized agents within your agency. When you send a message using this tool, you receive a response exclusively from the designated recipient agent. To continue the dialogue, invoke this tool again with the desired recipient and your follow-up message. Remember, communication here is synchronous; the recipient agent won't perform any tasks post-response. You are responsible for relaying the recipient agent's responses back to the user, as they do not have direct access to these replies. Keep engaging with the tool for continuous interaction until the task is fully resolved."""
-    send_message_tool_description_async = """Use this tool to facilitate direct, asynchronous communication between specialized agents within your agency. When you send a message using this tool, you initiate the task with the recepient agent. To check the status of the task and recieve a response, please invoke the 'GetResponse' tool with the same recipient agent. You are responsible for relaying the recipient agent's responses back to the user, as they do not have direct access to these replies. Remember that you can't check the status yourself later, user needs to tell you when to do so. Keep engaging with this tool until the task is fully resolved."""
+    send_message_tool_description = """Use this tool for synchronous communication with agents within your agency. Send messages and receive direct responses from designated agents. For ongoing dialogue, resend messages to specific agents. Communication is synchronous, without post-response tasks. Relay agent responses to the user, who lacks direct access. Continue using the tool for continuous interaction until task completion."""
+    send_message_tool_description_async = """Use this tool for asynchronous communication with other agents within your agency. Initiate tasks by messaging, and check status and responses with 'GetResponse' tool. Relay responses to the user, who instructs on status checks. Continue until task completion."""
 
     def __init__(self, agency_chart: List, shared_instructions: str = "", shared_files: List = None,
                  async_mode: Literal['threading'] = None,
@@ -171,7 +171,7 @@ class Agency:
             except StopIteration as e:
                 pass
 
-    def get_openapi_schema(self, url: str):
+    def get_customgpt_schema(self, url: str):
         """Returns the OpenAPI schema for the agency from the CEO agent, that you can use to integrate with custom gpts.
 
         Parameters:
