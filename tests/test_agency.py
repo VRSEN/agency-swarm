@@ -222,7 +222,7 @@ class AgencyTest(unittest.TestCase):
 
         time.sleep(10)
 
-        message = self.__class__.agency.get_completion("Please check status. If the agent responds, say 'success', if the agent does not respond, or if you get a system update say 'error'.",
+        message = self.__class__.agency.get_completion("Please check response. If the you get TestAgent1's response, say 'success', if the agent does not respond, or if you get a system notification instead say 'error'.",
                                                        yield_messages=False)
 
         self.assertFalse('error' in message.lower())

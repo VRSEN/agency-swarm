@@ -19,7 +19,7 @@ class ThreadAsync(Thread):
             try:
                 next(gen)
             except StopIteration as e:
-                self.response = f"""{self.recipient_agent.name} Response: '{e.value}'"""
+                self.response = f"""{self.recipient_agent.name}'s Response: '{e.value}'"""
                 break
 
         return
@@ -63,7 +63,7 @@ class ThreadAsync(Thread):
             order="desc",
         )
 
-        return f"""{self.recipient_agent.name} Response: '{messages.data[0].content[0].text.value}'"""
+        return f"""{self.recipient_agent.name}'s Response: '{messages.data[0].content[0].text.value}'"""
 
     def get_last_run(self):
         if not self.thread:
