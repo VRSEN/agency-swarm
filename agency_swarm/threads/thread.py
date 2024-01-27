@@ -10,12 +10,12 @@ from agency_swarm.util.oai import get_openai_client
 
 class Thread:
     id: str = None
-    thread = None
     run = None
 
-    def __init__(self, agent: Literal[Agent, User], recipient_agent: Agent):
+    def __init__(self, agent: Literal[Agent, User], recipient_agent: Agent, thread = None):
         self.agent = agent
         self.recipient_agent = recipient_agent
+        self.thread = thread
 
         self.client = get_openai_client()
 
