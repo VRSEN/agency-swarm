@@ -16,19 +16,24 @@ class Thread:
     def __init__(self, agent: Literal[Agent, User], recipient_agent: Agent):
         self.agent = agent
         self.recipient_agent = recipient_agent
+
         self.client = get_openai_client()
+
+    def init_thread(self):
+        if self.id:
+            self.thread = self.client.beta.threads.retrieve(self.id)
+        else:
+            self.thread = self.client.beta.threads.create()
+            self.id = self.thread.id
 
     def get_completion(self, message: str, message_files=None, yield_messages=True):
         if not self.thread:
-            if self.id:
-                self.thread = self.client.beta.threads.retrieve(self.id)
-            else:
-                self.thread = self.client.beta.threads.create()
-                self.id = self.thread.id
-            # Determine the sender's name based on the agent type
-            sender_name = "user" if isinstance(self.agent, User) else self.agent.name
-            playground_url = f'https://platform.openai.com/playground?assistant={self.recipient_agent._assistant.id}&mode=assistant&thread={self.thread.id}'
-            print(f'THREAD:[ {sender_name} -> {self.recipient_agent.name} ]: URL {playground_url}')
+            self.init_thread()
+
+        # Determine the sender's name based on the agent type
+        sender_name = "user" if isinstance(self.agent, User) else self.agent.name
+        playground_url = f'https://platform.openai.com/playground?assistant={self.recipient_agent._assistant.id}&mode=assistant&thread={self.thread.id}'
+        print(f'THREAD:[ {sender_name} -> {self.recipient_agent.name} ]: URL {playground_url}')
 
         # send message
         self.client.beta.threads.messages.create(
@@ -65,7 +70,7 @@ class Thread:
                         yield MessageOutput("function", self.recipient_agent.name, self.agent.name,
                                             str(tool_call.function))
 
-                    output = self._execute_tool(tool_call)
+                    output = self.execute_tool(tool_call)
                     if inspect.isgenerator(output):
                         try:
                             while True:
@@ -102,7 +107,7 @@ class Thread:
 
                 return message
 
-    def _execute_tool(self, tool_call):
+    def execute_tool(self, tool_call):
         funcs = self.recipient_agent.functions
         func = next((func for func in funcs if func.__name__ == tool_call.function.name), None)
 

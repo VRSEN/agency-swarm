@@ -120,6 +120,7 @@ class Agent():
                             self._update_assistant()
                         self._update_settings()
                         return self
+
         # create assistant if settings.json does not exist or assistant with the same name does not exist
         self.assistant = self.client.beta.assistants.create(
             name=self.name,
@@ -314,6 +315,74 @@ class Agent():
                     raise Exception("Schemas folder path is not a directory.")
             else:
                 raise Exception("Schemas folder path must be a string or list of strings.")
+
+    def get_openapi_schema(self, url):
+        """Get openapi schema that contains all tools from the agent as different api paths. Make sure to call this after agency has been initialized."""
+        if self.assistant is None:
+            raise Exception("Assistant is not initialized. Please initialize the agency first, before using this method")
+
+        schema = {
+            "openapi": "3.1.0",
+            "info": {
+                "title": self.name,
+                "description": self.description if self.description else "",
+                "version": "v1.0.0"
+            },
+            "servers": [
+                {
+                    "url": url,
+                }
+            ],
+            "paths": {},
+            "components": {
+                "schemas": {},
+                "securitySchemes": {
+                    "apiKey": {
+                        "type": "apiKey"
+                    }
+                }
+            },
+        }
+
+        for tool in self.tools:
+            if issubclass(tool, BaseTool):
+                openai_schema = tool.openai_schema
+                defs = {}
+                if '$defs' in openai_schema['parameters']:
+                    defs = openai_schema['parameters']['$defs']
+                    del openai_schema['parameters']['$defs']
+
+                schema['paths']["/" + openai_schema['name']] = {
+                    "post": {
+                        "description": openai_schema['description'],
+                        "operationId": openai_schema['name'],
+                        "parameters": [],
+                        "requestBody": {
+                            "content": {
+                                "application/json": {
+                                    "schema": openai_schema['parameters']
+                                }
+                            },
+                            "required": True,
+                        },
+                        "deprecated": False,
+                        "security": [
+                            {
+                                "apiKey": []
+                            }
+                        ],
+                        "x-openai-isConsequential": False,
+                    }
+                }
+
+                if defs:
+                    schema['components']['schemas'].update(**defs)
+
+                print(openai_schema)
+
+        schema = json.dumps(schema, indent=2).replace("#/$defs/", "#/components/schemas/")
+
+        return schema
 
     # --- Settings Methods ---
 
