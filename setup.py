@@ -6,7 +6,7 @@ with open('requirements.txt') as f:
 
 setup(
     name='agency-swarm',
-    version='0.1.0',
+    version='0.1.1',
     author='VRSEN',
     author_email='arseny9795@gmail.com',
     description='An opensource agent orchestration framework built on top of the latest OpenAI Assistants API.',
