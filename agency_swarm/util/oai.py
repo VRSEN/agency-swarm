@@ -34,3 +34,6 @@ def set_openai_key(key):
     if not key:
         raise ValueError("Invalid API key. The API key cannot be empty.")
     openai.api_key = key
+    global client
+    with client_lock:
+        client = None
