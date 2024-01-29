@@ -97,13 +97,13 @@ class Agency:
 
         return gen
 
-    def demo_gradio(self, height=600):
+    def demo_gradio(self, height=600, dark_mode=True):
         """
         Launches a Gradio-based demo interface for the agency chatbot.
 
         Parameters:
         height (int, optional): The height of the chatbot widget in the Gradio interface. Default is 600.
-
+        dark_mode (bool, optional): Flag to determine if the interface should be displayed in dark mode. Default is True.
         This method sets up and runs a Gradio interface, allowing users to interact with the agency's chatbot. It includes a text input for the user's messages and a chatbot interface for displaying the conversation. The method handles user input and chatbot responses, updating the interface dynamically.
         """
         try:
@@ -111,7 +111,19 @@ class Agency:
         except ImportError:
             raise Exception("Please install gradio: pip install gradio")
 
-        with gr.Blocks() as demo:
+        js = """function () {
+          gradioURL = window.location.href
+          if (!gradioURL.endsWith('?__theme={theme}')) {
+            window.location.replace(gradioURL + '?__theme={theme}');
+          }
+        }"""
+
+        if dark_mode:
+            js = js.replace("{theme}", "dark")
+        else:
+            js = js.replace("{theme}", "light")
+
+        with gr.Blocks(js=js) as demo:
             chatbot = gr.Chatbot(height=height)
             msg = gr.Textbox()
 
