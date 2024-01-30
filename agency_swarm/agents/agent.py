@@ -1,7 +1,6 @@
 import inspect
 import json
 import os
-from pathlib import Path
 from typing import Dict, Union, Any, Type
 from typing import List
 
@@ -198,6 +197,7 @@ class Agent():
 
                 if not os.path.isdir(f_path):
                     f_path = os.path.join(self.get_class_folder_path(), files_folder)
+                    f_path = os.path.normpath(f_path)
 
                 if os.path.isdir(f_path):
                     f_paths = os.listdir(f_path)
@@ -221,7 +221,7 @@ class Agent():
                                 f.close()
                             add_id_to_file(f_path, file_id)
                 else:
-                    raise Exception("Files folder path is not a directory.")
+                    raise Exception("Files folder path is not a directory.", f_path)
             else:
                 raise Exception("Files folder path must be a string or list of strings.")
 
@@ -282,6 +282,7 @@ class Agent():
 
                 if not os.path.isdir(f_path):
                     f_path = os.path.join(self.get_class_folder_path(), schemas_folder)
+                    f_path = os.path.normpath(f_path)
 
                 if os.path.isdir(f_path):
                     f_paths = os.listdir(f_path)
@@ -452,16 +453,23 @@ class Agent():
         return os.path.join("./", 'settings.json')
 
     def _read_instructions(self):
+        class_path = os.path.normpath(os.path.join(self.get_class_folder_path(), self.instructions))
         if os.path.isfile(self.instructions):
             with open(self.instructions, 'r') as f:
                 self.instructions = f.read()
-        elif os.path.isfile(os.path.join(self.get_class_folder_path(), self.instructions)):
-            with open(os.path.join(self.get_class_folder_path(), self.instructions), 'r') as f:
+        elif os.path.isfile(class_path):
+            with open(class_path, 'r') as f:
+                print("Reading instructions from class path: " + class_path)
                 self.instructions = f.read()
 
     def get_class_folder_path(self):
-        return str(Path(__file__).parent.resolve())
-        # return os.path.abspath(os.path.dirname(inspect.getfile(self.__class__)))
+        try:
+            # First, try to use the __file__ attribute of the module
+            return os.path.abspath(os.path.dirname(self.__module__.__file__))
+        except AttributeError:
+            # If that fails, fall back to inspect
+            class_file = inspect.getfile(self.__class__)
+            return os.path.abspath(os.path.realpath(os.path.dirname(class_file)))
 
     def add_shared_instructions(self, instructions: str):
         if self._shared_instructions is None:
