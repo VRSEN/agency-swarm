@@ -459,7 +459,6 @@ class Agent():
                 self.instructions = f.read()
         elif os.path.isfile(class_path):
             with open(class_path, 'r') as f:
-                print("Reading instructions from class path: " + class_path)
                 self.instructions = f.read()
 
     def get_class_folder_path(self):
