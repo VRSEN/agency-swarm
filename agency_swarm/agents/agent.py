@@ -1,6 +1,7 @@
 import inspect
 import json
 import os
+from pathlib import Path
 from typing import Dict, Union, Any, Type
 from typing import List
 
@@ -459,7 +460,8 @@ class Agent():
                 self.instructions = f.read()
 
     def get_class_folder_path(self):
-        return os.path.abspath(os.path.dirname(inspect.getfile(self.__class__)))
+        return str(Path(__file__).parent.resolve())
+        # return os.path.abspath(os.path.dirname(inspect.getfile(self.__class__)))
 
     def add_shared_instructions(self, instructions: str):
         if self._shared_instructions is None:
