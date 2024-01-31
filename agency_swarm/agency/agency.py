@@ -1,6 +1,7 @@
 import inspect
 import json
 import os
+import shutil
 import uuid
 from enum import Enum
 from typing import List, TypedDict, Callable, Any, Dict, Literal
@@ -132,9 +133,37 @@ class Agency:
         else:
             js = js.replace("{theme}", "light")
 
+        message_files = []
+
         with gr.Blocks(js=js) as demo:
             chatbot = gr.Chatbot(height=height)
             msg = gr.Textbox()
+            file_upload = gr.Files(label="Upload File", type="filepath")
+
+            def handle_file_upload(file_list):
+                nonlocal message_files
+                message_files = []
+                if file_list:
+                    try:
+                        for file_obj in file_list:
+                            # copy file to current directory
+                            # path = "./" + os.path.basename(file_obj)
+                            # shutil.copyfile(file_obj.name, path)
+                            # print(f"Uploading file: {path}")
+                            with open(file_obj.name, 'rb') as f:
+                                # Upload the file to OpenAI
+                                file = self.main_thread.client.files.create(
+                                    file=f,
+                                    purpose="assistants"
+                                )
+                            message_files.append(file.id)
+                            print(f"Uploaded file ID: {file.id}")
+                        return message_files
+                    except Exception as e:
+                        print(f"Error: {e}")
+                        return str(e)
+
+                return "No files uploaded"
 
             def user(user_message, history):
                 # Append the user message with a placeholder for bot response
@@ -142,8 +171,10 @@ class Agency:
                 return "", history + [[user_message, None]]
 
             def bot(history):
+                nonlocal message_files
+                print("Message files: ", message_files)
                 # Replace this with your actual chatbot logic
-                gen = self.get_completion(message=history[-1][0])
+                gen = self.get_completion(message=history[-1][0], message_files=message_files)
 
                 try:
                     # Yield each message from the generator
@@ -157,9 +188,11 @@ class Agency:
                         yield history
                 except StopIteration:
                     # Handle the end of the conversation if necessary
+                    message_files = []
                     pass
 
             # Chain the events
+            file_upload.change(handle_file_upload, file_upload)
             msg.submit(user, [msg, chatbot], [msg, chatbot], queue=False).then(
                 bot, chatbot, chatbot
             )
