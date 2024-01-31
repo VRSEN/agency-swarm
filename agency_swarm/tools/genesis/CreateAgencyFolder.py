@@ -1,13 +1,16 @@
-from pydantic import Field
+import shutil
+
+from pydantic import Field, field_validator
 
 from agency_swarm import BaseTool
 
 import os
 
+current_agency_name = None
 
 class CreateAgencyFolder(BaseTool):
     """
-    This tool creates an agency folder.
+    This tool creates or modifies an agency folder. You can use it again with the same agency_name to modify a previously created agency, if the user wants to change the agency chart or the manifesto.
     """
     agency_name: str = Field(
         ..., description="Name of the agency to be created.",
@@ -24,6 +27,15 @@ class CreateAgencyFolder(BaseTool):
 
     def run(self):
         folder_path = "./" + self.agency_name + "/"
+
+        global current_agency_name
+        if current_agency_name is not None:
+            if os.getcwd().strip("/").strip("\\").endswith(current_agency_name):
+                os.chdir("..")
+                shutil.rmtree(current_agency_name)
+
+        current_agency_name = self.agency_name
+
         # create folder
         os.mkdir(folder_path)
 
@@ -31,7 +43,7 @@ class CreateAgencyFolder(BaseTool):
 
         # check that agency chart is valid
         if not self.agency_chart.startswith("[") or not self.agency_chart.endswith("]"):
-            raise ValueError("Agency chart must be a list of lists.")
+            raise ValueError("Agency chart must be a list of lists, except for the first agents.")
 
         # add new lines after every comma, except for those inside second brackets
         # must transform from "[ceo, [ceo, dev], [ceo, va], [dev, va] ]"
@@ -55,5 +67,22 @@ class CreateAgencyFolder(BaseTool):
             f.write(self.manifesto)
 
         return f"Agency folder has been created in {folder_path}."
+
+    @field_validator('agency_name', mode='after')
+    @classmethod
+    def check_agency_name(cls, v):
+        global current_agency_name
+
+        if os.path.exists("./" + v):
+                raise ValueError("Agency with this name already exists.")
+
+        if current_agency_name is not None:
+            if current_agency_name != v:
+                raise ValueError("You can only create 1 agency at a time. Please tell the user to restart the system if he wants to create a new agency or use the same agency_name to modify an exisiting agency.")
+
+            if not os.getcwd().strip("/").endswith(current_agency_name):
+                raise ValueError("Please tell the user to restart the system if he wants to create a new agency.")
+
+        return v
 
 
