@@ -97,13 +97,14 @@ class Agency:
 
         return gen
 
-    def demo_gradio(self, height=600, dark_mode=True):
+    def demo_gradio(self, height=600, dark_mode=True, share=False):
         """
         Launches a Gradio-based demo interface for the agency chatbot.
 
         Parameters:
         height (int, optional): The height of the chatbot widget in the Gradio interface. Default is 600.
         dark_mode (bool, optional): Flag to determine if the interface should be displayed in dark mode. Default is True.
+        share (bool, optional): Flag to determine if the interface should be shared publicly. Default is False.
         This method sets up and runs a Gradio interface, allowing users to interact with the agency's chatbot. It includes a text input for the user's messages and a chatbot interface for displaying the conversation. The method handles user input and chatbot responses, updating the interface dynamically.
         """
         try:
@@ -159,7 +160,7 @@ class Agency:
             demo.queue()
 
         # Launch the demo
-        demo.launch()
+        demo.launch(share=share)
         return demo
 
     def run_demo(self):
