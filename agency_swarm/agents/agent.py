@@ -465,13 +465,16 @@ class Agent():
         return self.settings_path
 
     def _read_instructions(self):
-        class_path = os.path.normpath(os.path.join(self.get_class_folder_path(), self.instructions))
+        class_instructions_path = os.path.normpath(os.path.join(self.get_class_folder_path(), self.instructions))
         if os.path.isfile(self.instructions):
             with open(self.instructions, 'r') as f:
                 self.instructions = f.read()
-        elif os.path.isfile(class_path):
-            with open(class_path, 'r') as f:
+        elif os.path.isfile(class_instructions_path):
+            with open(class_instructions_path, 'r') as f:
                 self.instructions = f.read()
+        elif "./instructions.md" in self.instructions or "./instructions.txt" in self.instructions:
+            raise Exception("Instructions file not found.")
+
 
     def get_class_folder_path(self):
         try:
