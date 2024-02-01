@@ -161,7 +161,7 @@ class AgencyTest(unittest.TestCase):
 
     def test_5_load_from_db(self):
         """it should load agents from db"""
-        os.rename("settings.json", "settings2.json")
+        # os.rename("settings.json", "settings2.json")
 
         previous_loaded_thread_ids = self.__class__.loaded_thread_ids
         previous_loaded_agents_settings = self.__class__.loaded_agents_settings
@@ -177,9 +177,13 @@ class AgencyTest(unittest.TestCase):
             [ceo, agent1],
             [agent1, agent2]],
             shared_instructions="This is a shared instruction",
+            settings_path="./settings2.json",
             settings_callbacks=self.__class__.settings_callbacks,
             threads_callbacks=self.__class__.threads_callbacks,
         )
+
+        # check that settings are the same
+        self.assertTrue(len(agency.agents) == len(self.__class__.agency.agents))
 
         os.remove("settings.json")
         os.rename("settings2.json", "settings.json")
@@ -222,7 +226,7 @@ class AgencyTest(unittest.TestCase):
 
         time.sleep(10)
 
-        message = self.__class__.agency.get_completion("Please check response. If the you get TestAgent1's response, say 'success', if the agent does not respond, or if you get a system notification instead say 'error'.",
+        message = self.__class__.agency.get_completion("Please check response. If the you get TestAgent1's Response like that the message was sent to TestAgent2 or that the process was initiated, say 'success'. If you don't get TestAgent1's Response, or if you get a System Notification instead, or an error, say 'error'.",
                                                        yield_messages=False)
 
         self.assertFalse('error' in message.lower())

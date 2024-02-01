@@ -28,21 +28,28 @@ class ThreadsCallbacks(TypedDict):
 
 class Agency:
     ThreadType = Thread
-    send_message_tool_description = """Use this tool for synchronous communication with other agents within your agency. For ongoing dialogue, resend messages to specific agents. Communication is synchronous, without post-response tasks. Relay agent responses to the user, who lacks direct access. Continue using the tool for continuous interaction until task completion."""
+    send_message_tool_description = """Use this tool to facilitate direct, synchronous communication between specialized agents within your agency. When you send a message using this tool, you receive a response exclusively from the designated recipient agent. To continue the dialogue, invoke this tool again with the desired recipient agent and your follow-up message. Remember, communication here is synchronous; the recipient agent won't perform any tasks post-response. You are responsible for relaying the recipient agent's responses back to the user, as the user does not have direct access to these replies. Keep engaging with the tool for continuous interaction until the task is fully resolved."""
     send_message_tool_description_async = """Use this tool for asynchronous communication with other agents within your agency. Initiate tasks by messaging, and check status and responses later with the 'GetResponse' tool. Relay responses to the user, who instructs on status checks. Continue until task completion."""
 
-    def __init__(self, agency_chart: List, shared_instructions: str = "", shared_files: List = None,
+    def __init__(self,
+                 agency_chart: List,
+                 shared_instructions: str = "",
+                 shared_files: List = None,
                  async_mode: Literal['threading'] = None,
-                 settings_callbacks: SettingsCallbacks = None, threads_callbacks: ThreadsCallbacks = None):
+                 settings_path: str = "./settings.json",
+                 settings_callbacks: SettingsCallbacks = None,
+                 threads_callbacks: ThreadsCallbacks = None):
         """
         Initializes the Agency object, setting up agents, threads, and core functionalities.
 
         Parameters:
-        agency_chart: The structure defining the hierarchy and interaction of agents within the agency.
-        shared_instructions (str, optional): A path to a file containing shared instructions for all agents. Defaults to an empty string.
-        shared_files (list, optional): A list of folder paths with files containing shared resources for all agents. Defaults to an empty list.
-        settings_callbacks (SettingsCallbacks, optional): A dictionary containing functions to load and save settings for the agency. The keys must be "load" and "save". Both values must be defined. Defaults to None.
-        threads_callbacks (ThreadsCallbacks, optional): A dictionary containing functions to load and save threads for the agency. The keys must be "load" and "save". Both values must be defined. Defaults to None.
+            agency_chart: The structure defining the hierarchy and interaction of agents within the agency.
+            shared_instructions (str, optional): A path to a file containing shared instructions for all agents. Defaults to an empty string.
+            shared_files (list, optional): A list of folder paths with files containing shared resources for all agents. Defaults to an empty list.
+            async_mode (str, optional): The mode for asynchronous message processing. Defaults to None.
+            settings_path (str, optional): The path to the settings file for the agency. Must be json. If file does not exist, it will be created. Defaults to None.
+            settings_callbacks (SettingsCallbacks, optional): A dictionary containing functions to load and save settings for the agency. The keys must be "load" and "save". Both values must be defined. Defaults to None.
+            threads_callbacks (ThreadsCallbacks, optional): A dictionary containing functions to load and save threads for the agency. The keys must be "load" and "save". Both values must be defined. Defaults to None.
 
         This constructor initializes various components of the Agency, including CEO, agents, threads, and user interactions. It parses the agency chart to set up the organizational structure and initializes the messaging tools, agents, and threads necessary for the operation of the agency. Additionally, it prepares a main thread for user interactions.
         """
@@ -55,6 +62,7 @@ class Agency:
         self.agents = []
         self.agents_and_threads = {}
         self.shared_files = shared_files if shared_files else []
+        self.settings_path = settings_path
         self.settings_callbacks = settings_callbacks
         self.threads_callbacks = threads_callbacks
 
@@ -78,12 +86,12 @@ class Agency:
         Retrieves the completion for a given message from the main thread.
 
         Parameters:
-        message (str): The message for which completion is to be retrieved.
-        message_files (list, optional): A list of file ids to be sent as attachments with the message. Defaults to None.
-        yield_messages (bool, optional): Flag to determine if intermediate messages should be yielded. Defaults to True.
+            message (str): The message for which completion is to be retrieved.
+            message_files (list, optional): A list of file ids to be sent as attachments with the message. Defaults to None.
+            yield_messages (bool, optional): Flag to determine if intermediate messages should be yielded. Defaults to True.
 
         Returns:
-        Generator or final response: Depending on the 'yield_messages' flag, this method returns either a generator yielding intermediate messages or the final response from the main thread.
+            Generator or final response: Depending on the 'yield_messages' flag, this method returns either a generator yielding intermediate messages or the final response from the main thread.
         """
         gen = self.main_thread.get_completion(message=message, message_files=message_files,
                                               yield_messages=yield_messages)
@@ -102,8 +110,9 @@ class Agency:
         Launches a Gradio-based demo interface for the agency chatbot.
 
         Parameters:
-        height (int, optional): The height of the chatbot widget in the Gradio interface. Default is 600.
-        dark_mode (bool, optional): Flag to determine if the interface should be displayed in dark mode. Default is True.
+            height (int, optional): The height of the chatbot widget in the Gradio interface. Default is 600.
+            dark_mode (bool, optional): Flag to determine if the interface should be displayed in dark mode. Default is True.
+
         This method sets up and runs a Gradio interface, allowing users to interact with the agency's chatbot. It includes a text input for the user's messages and a chatbot interface for displaying the conversation. The method handles user input and chatbot responses, updating the interface dynamically.
         """
         try:
@@ -169,7 +178,7 @@ class Agency:
         This function continuously prompts the user for input and displays responses from the agency's main thread. It leverages the generator pattern for asynchronous message processing.
 
         Output:
-        Outputs the responses from the agency's main thread to the command line.
+            Outputs the responses from the agency's main thread to the command line.
         """
         while True:
             console.rule()
@@ -207,13 +216,15 @@ class Agency:
         """
         if self.settings_callbacks:
             loaded_settings = self.settings_callbacks["load"]()
-            with open(self.agents[0].get_settings_path(), 'w') as f:
+            with open(self.settings_path, 'w') as f:
                 json.dump(loaded_settings, f, indent=4)
 
         for agent in self.agents:
             if "temp_id" in agent.id:
                 agent.id = None
+
             agent.add_shared_instructions(self.shared_instructions)
+            agent.settings_path = self.settings_path
 
             if self.shared_files:
                 if isinstance(agent.files_folder, str):
@@ -239,7 +250,7 @@ class Agency:
         No input parameters.
 
         Output Parameters:
-        This method does not return any value but updates the agents_and_threads attribute with initialized Thread objects.
+            This method does not return any value but updates the agents_and_threads attribute with initialized Thread objects.
         """
         # load thread ids
         loaded_thread_ids = {}
@@ -273,7 +284,7 @@ class Agency:
         Parses the provided agency chart to initialize and organize agents within the agency.
 
         Parameters:
-        agency_chart: A structure representing the hierarchical organization of agents within the agency.
+            agency_chart: A structure representing the hierarchical organization of agents within the agency.
                     It can contain Agent objects and lists of Agent objects.
 
         This method iterates through each node in the agency chart. If a node is an Agent, it is set as the CEO if not already assigned.
@@ -317,10 +328,10 @@ class Agency:
         Adds an agent to the agency, assigning a temporary ID if necessary.
 
         Parameters:
-        agent (Agent): The agent to be added to the agency.
+            agent (Agent): The agent to be added to the agency.
 
         Returns:
-        int: The index of the added agent within the agency's agents list.
+            int: The index of the added agent within the agency's agents list.
 
         This method adds an agent to the agency's list of agents. If the agent does not have an ID, it assigns a temporary unique ID. It checks for uniqueness of the agent's name before addition. The method returns the index of the agent in the agency's agents list, which is used for referencing the agent within the agency.
         """
@@ -340,7 +351,7 @@ class Agency:
         Reads shared instructions from a specified file and stores them in the agency.
 
         Parameters:
-        path (str): The file path from which to read the shared instructions.
+            path (str): The file path from which to read the shared instructions.
 
         This method opens the file located at the given path, reads its contents, and stores these contents in the 'shared_instructions' attribute of the agency. This is used to provide common guidelines or instructions to all agents within the agency.
         """
@@ -372,11 +383,11 @@ class Agency:
 
 
         Parameters:
-        agent (Agent): The agent who will be sending messages.
-        recipient_agents (List[Agent]): A list of recipient agents who can receive messages.
+            agent (Agent): The agent who will be sending messages.
+            recipient_agents (List[Agent]): A list of recipient agents who can receive messages.
 
         Returns:
-        SendMessage: A SendMessage tool class that is dynamically created and configured for the given agent and its recipient agents. This tool allows the agent to send messages to the specified recipients, facilitating inter-agent communication within the agency.
+            SendMessage: A SendMessage tool class that is dynamically created and configured for the given agent and its recipient agents. This tool allows the agent to send messages to the specified recipients, facilitating inter-agent communication within the agency.
         """
         recipient_names = [agent.name for agent in recipient_agents]
         recipients = Enum("recipient", {name: name for name in recipient_names})
@@ -485,13 +496,13 @@ class Agency:
         Retrieves an agent from the agency based on the agent's name.
 
         Parameters:
-        agent_name (str): The name of the agent to be retrieved.
+            agent_name (str): The name of the agent to be retrieved.
 
         Returns:
-        Agent: The agent object with the specified name.
+            Agent: The agent object with the specified name.
 
         Raises:
-        Exception: If no agent with the given name is found in the agency.
+            Exception: If no agent with the given name is found in the agency.
         """
         for agent in self.agents:
             if agent.name == agent_name:
@@ -503,10 +514,10 @@ class Agency:
         Retrieves a list of agent objects based on their names.
 
         Parameters:
-        agent_names: A list of strings representing the names of the agents to be retrieved.
+            agent_names: A list of strings representing the names of the agents to be retrieved.
 
         Returns:
-        A list of Agent objects corresponding to the given names.
+            A list of Agent objects corresponding to the given names.
         """
         return [self.get_agent_by_name(agent_name) for agent_name in agent_names]
 
@@ -515,7 +526,7 @@ class Agency:
         Retrieves the IDs of all agents currently in the agency.
 
         Returns:
-        List[str]: A list containing the unique IDs of all agents.
+            List[str]: A list containing the unique IDs of all agents.
         """
         return [agent.id for agent in self.agents]
 
@@ -523,11 +534,8 @@ class Agency:
         """
         Retrieves the names of all agents in the agency.
 
-        Parameters:
-        None
-
         Returns:
-        List[str]: A list of names of all agents currently part of the agency.
+            List[str]: A list of names of all agents currently part of the agency.
         """
         return [agent.name for agent in self.agents]
 
@@ -536,7 +544,7 @@ class Agency:
         Retrieves the names of all agents in the agency.
 
         Returns:
-        A list of strings, where each string is the name of an agent in the agency.
+            A list of strings, where each string is the name of an agent in the agency.
         """
         return [agent.name for agent in self.agents]
 
@@ -545,6 +553,6 @@ class Agency:
         Retrieves the absolute path of the directory containing the class file.
 
         Returns:
-        str: The absolute path of the directory where the class file is located.
+            str: The absolute path of the directory where the class file is located.
         """
         return os.path.abspath(os.path.dirname(inspect.getfile(self.__class__)))
