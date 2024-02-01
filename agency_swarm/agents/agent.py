@@ -31,7 +31,7 @@ class Agent():
                  tools: List[Union[Type[BaseTool], Type[Retrieval], Type[CodeInterpreter]]] = None,
                  files_folder: Union[List[str], str] = None, schemas_folder: Union[List[str], str] = None,
                  api_headers: Dict[str, Dict[str, str]] = None, api_params: Dict[str, Dict[str, str]] = None,
-                 file_ids: List[str] = None, metadata: Dict[str, str] = None, model: str = "gpt-4-1106-preview"):
+                 file_ids: List[str] = None, metadata: Dict[str, str] = None, model: str = "gpt-4-turbo-preview"):
         """
         Initializes an Agent with specified attributes, tools, and OpenAI client.
 
