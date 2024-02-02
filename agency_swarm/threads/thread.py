@@ -26,14 +26,17 @@ class Thread:
             self.thread = self.client.beta.threads.create()
             self.id = self.thread.id
 
-    def get_completion(self, message: str, message_files=None, yield_messages=True):
+    def get_completion(self, message: str, message_files=None, yield_messages=True, recipient_agent=None):
         if not self.thread:
             self.init_thread()
 
+        if not recipient_agent:
+            recipient_agent = self.recipient_agent
+
         # Determine the sender's name based on the agent type
         sender_name = "user" if isinstance(self.agent, User) else self.agent.name
-        playground_url = f'https://platform.openai.com/playground?assistant={self.recipient_agent._assistant.id}&mode=assistant&thread={self.thread.id}'
-        print(f'THREAD:[ {sender_name} -> {self.recipient_agent.name} ]: URL {playground_url}')
+        playground_url = f'https://platform.openai.com/playground?assistant={recipient_agent.assistant.id}&mode=assistant&thread={self.thread.id}'
+        print(f'THREAD:[ {sender_name} -> {recipient_agent.name} ]: URL {playground_url}')
 
         # send message
         self.client.beta.threads.messages.create(
@@ -44,12 +47,12 @@ class Thread:
         )
 
         if yield_messages:
-            yield MessageOutput("text", self.agent.name, self.recipient_agent.name, message)
+            yield MessageOutput("text", self.agent.name, recipient_agent.name, message)
 
         # create run
         self.run = self.client.beta.threads.runs.create(
             thread_id=self.thread.id,
-            assistant_id=self.recipient_agent.id,
+            assistant_id=recipient_agent.id,
         )
 
         while True:
@@ -67,10 +70,10 @@ class Thread:
                 tool_outputs = []
                 for tool_call in tool_calls:
                     if yield_messages:
-                        yield MessageOutput("function", self.recipient_agent.name, self.agent.name,
+                        yield MessageOutput("function", recipient_agent.name, self.agent.name,
                                             str(tool_call.function))
 
-                    output = self.execute_tool(tool_call)
+                    output = self.execute_tool(tool_call, recipient_agent)
                     if inspect.isgenerator(output):
                         try:
                             while True:
@@ -81,7 +84,7 @@ class Thread:
                             output = e.value
                     else:
                         if yield_messages:
-                            yield MessageOutput("function_output", tool_call.function.name, self.recipient_agent.name,
+                            yield MessageOutput("function_output", tool_call.function.name, recipient_agent.name,
                                                 output)
 
                     tool_outputs.append({"tool_call_id": tool_call.id, "output": str(output)})
@@ -103,12 +106,15 @@ class Thread:
                 message = messages.data[0].content[0].text.value
 
                 if yield_messages:
-                    yield MessageOutput("text", self.recipient_agent.name, self.agent.name, message)
+                    yield MessageOutput("text", recipient_agent.name, self.agent.name, message)
 
                 return message
 
-    def execute_tool(self, tool_call):
-        funcs = self.recipient_agent.functions
+    def execute_tool(self, tool_call, recipient_agent=None):
+        if not recipient_agent:
+            recipient_agent = self.recipient_agent
+
+        funcs = recipient_agent.functions
         func = next((func for func in funcs if func.__name__ == tool_call.function.name), None)
 
         if not func:
@@ -117,7 +123,7 @@ class Thread:
         try:
             # init tool
             func = func(**eval(tool_call.function.arguments))
-            func.caller_agent = self.recipient_agent
+            func.caller_agent = recipient_agent
             # get outputs from the tool
             output = func.run()
 

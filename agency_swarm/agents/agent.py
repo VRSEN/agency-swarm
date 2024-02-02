@@ -486,6 +486,9 @@ class Agent():
             return os.path.abspath(os.path.realpath(os.path.dirname(class_file)))
 
     def add_shared_instructions(self, instructions: str):
+        if not instructions:
+            return
+
         if self._shared_instructions is None:
             self._shared_instructions = instructions
         else:

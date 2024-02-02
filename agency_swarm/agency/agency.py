@@ -62,6 +62,7 @@ class Agency:
         self.ceo = None
         self.agents = []
         self.agents_and_threads = {}
+        self.main_recipients = []
         self.shared_files = shared_files if shared_files else []
         self.settings_path = settings_path
         self.settings_callbacks = settings_callbacks
@@ -82,7 +83,7 @@ class Agency:
         self.user = User()
         self.main_thread = Thread(self.user, self.ceo)
 
-    def get_completion(self, message: str, message_files=None, yield_messages=True):
+    def get_completion(self, message: str, message_files=None, yield_messages=True, recipient_agent=None):
         """
         Retrieves the completion for a given message from the main thread.
 
@@ -90,12 +91,13 @@ class Agency:
             message (str): The message for which completion is to be retrieved.
             message_files (list, optional): A list of file ids to be sent as attachments with the message. Defaults to None.
             yield_messages (bool, optional): Flag to determine if intermediate messages should be yielded. Defaults to True.
+            recipient_agent (Agent, optional): The agent to which the message should be sent. Defaults to the first agent in the agency chart.
 
         Returns:
             Generator or final response: Depending on the 'yield_messages' flag, this method returns either a generator yielding intermediate messages or the final response from the main thread.
         """
         gen = self.main_thread.get_completion(message=message, message_files=message_files,
-                                              yield_messages=yield_messages)
+                                              yield_messages=yield_messages, recipient_agent=recipient_agent)
 
         if not yield_messages:
             while True:
@@ -133,32 +135,44 @@ class Agency:
         else:
             js = js.replace("{theme}", "light")
 
-        message_files = []
+        message_file_ids = []
+        message_file_names = None
+        recipient_agents = [agent.name for agent in self.main_recipients]
+        recipient_agent = self.main_recipients[0]
 
         with gr.Blocks(js=js) as demo:
             chatbot = gr.Chatbot(height=height)
-            msg = gr.Textbox()
-            file_upload = gr.Files(label="Upload File", type="filepath")
+            with gr.Row():
+                with gr.Column(scale=9):
+                    dropdown = gr.Dropdown(label="Recipient Agent", choices=recipient_agents,
+                                           value=recipient_agent.name)
+                    msg = gr.Textbox(label="Your Message", lines=4)
+                with gr.Column(scale=1):
+                    file_upload = gr.Files(label="Files", type="filepath")
+            button = gr.Button(value="Send", variant="primary")
+
+            def handle_dropdown_change(selected_option):
+                nonlocal recipient_agent
+                recipient_agent = self.get_agent_by_name(selected_option)
 
             def handle_file_upload(file_list):
-                nonlocal message_files
-                message_files = []
+                nonlocal message_file_ids
+                nonlocal message_file_names
+                message_file_ids = []
+                message_file_names = []
                 if file_list:
                     try:
                         for file_obj in file_list:
-                            # copy file to current directory
-                            # path = "./" + os.path.basename(file_obj)
-                            # shutil.copyfile(file_obj.name, path)
-                            # print(f"Uploading file: {path}")
                             with open(file_obj.name, 'rb') as f:
                                 # Upload the file to OpenAI
                                 file = self.main_thread.client.files.create(
                                     file=f,
                                     purpose="assistants"
                                 )
-                            message_files.append(file.id)
+                            message_file_ids.append(file.id)
+                            message_file_names.append(file.filename)
                             print(f"Uploaded file ID: {file.id}")
-                        return message_files
+                        return message_file_ids
                     except Exception as e:
                         print(f"Error: {e}")
                         return str(e)
@@ -166,16 +180,32 @@ class Agency:
                 return "No files uploaded"
 
             def user(user_message, history):
+                if history is None:
+                    history = []
+
+                original_user_message = user_message
+
                 # Append the user message with a placeholder for bot response
-                user_message = "👤 User: " + user_message.strip()
-                return "", history + [[user_message, None]]
+                if recipient_agent:
+                    user_message = f"👤 User 🗣️ @{recipient_agent.name}:\n" + user_message.strip()
+                else:
+                    user_message = f"👤 User:" + user_message.strip()
 
-            def bot(history):
-                nonlocal message_files
-                print("Message files: ", message_files)
+                nonlocal message_file_names
+                if message_file_names:
+                    user_message += "\n\n📎 Files:\n" + "\n".join(message_file_names)
+
+                return original_user_message, history + [[user_message, None]]
+
+            def bot(original_message, history):
+                nonlocal message_file_ids
+                nonlocal message_file_names
+                nonlocal recipient_agent
+                print("Message files: ", message_file_ids)
                 # Replace this with your actual chatbot logic
-                gen = self.get_completion(message=history[-1][0], message_files=message_files)
-
+                gen = self.get_completion(message=original_message, message_files=message_file_ids, recipient_agent=recipient_agent)
+                message_file_ids = []
+                message_file_names = []
                 try:
                     # Yield each message from the generator
                     for bot_message in gen:
@@ -185,16 +215,23 @@ class Agency:
                         message = bot_message.get_sender_emoji() + " " + bot_message.get_formatted_content()
 
                         history.append((None, message))
-                        yield history
+                        yield "", history
                 except StopIteration:
                     # Handle the end of the conversation if necessary
-                    message_files = []
+
                     pass
 
-            # Chain the events
+            button.click(
+                user,
+                inputs=[msg, chatbot],
+                outputs=[msg, chatbot]
+            ).then(
+                bot, [msg, chatbot], [msg, chatbot]
+            )
+            dropdown.change(handle_dropdown_change, dropdown)
             file_upload.change(handle_file_upload, file_upload)
             msg.submit(user, [msg, chatbot], [msg, chatbot], queue=False).then(
-                bot, chatbot, chatbot
+                bot, [msg, chatbot], [msg, chatbot]
             )
 
             # Enable queuing for streaming intermediate outputs
@@ -324,12 +361,20 @@ class Agency:
         If a node is a list, it iterates through the agents in the list, adding them to the agency and establishing communication
         threads between them. It raises an exception if the agency chart is invalid or if multiple CEOs are defined.
         """
+        if not isinstance(agency_chart, list):
+            raise Exception("Invalid agency chart.")
+
+        if len(agency_chart) == 0:
+            raise Exception("Agency chart cannot be empty.")
+
         for node in agency_chart:
             if isinstance(node, Agent):
-                if self.ceo:
-                    raise Exception("Only 1 ceo is supported for now.")
-                self.ceo = node
-                self._add_agent(self.ceo)
+                if not self.ceo:
+                    self.ceo = node
+                    self._add_agent(self.ceo)
+                else:
+                    self._add_agent(node)
+                self._add_main_recipient(node)
 
             elif isinstance(node, list):
                 for i, agent in enumerate(node):
@@ -352,7 +397,6 @@ class Agency:
                                 "agent": agent.name,
                                 "recipient_agent": other_agent.name,
                             }
-
             else:
                 raise Exception("Invalid agency chart.")
 
@@ -378,6 +422,20 @@ class Agency:
             return len(self.agents) - 1
         else:
             return self.get_agent_ids().index(agent.id)
+
+    def _add_main_recipient(self, agent):
+        """
+        Adds an agent to the agency's list of main recipients.
+
+        Parameters:
+            agent (Agent): The agent to be added to the agency's list of main recipients.
+
+        This method adds an agent to the agency's list of main recipients. These are agents that can be directly contacted by the user.
+        """
+        main_recipient_ids = [agent.id for agent in self.main_recipients]
+
+        if agent.id not in main_recipient_ids:
+            self.main_recipients.append(agent)
 
     def _read_instructions(self, path):
         """
