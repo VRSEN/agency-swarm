@@ -18,8 +18,8 @@ def create_agent_template(agent_name=None,
     if not os.path.isfile(os.path.join(path, agency_manifesto)):
         with open(os.path.join(path, agency_manifesto), "w") as f:
             f.write("As a member of our Agency, please find below the guiding principles and values that constitute "
-                    "our Agency Manifesto:\n\n") \
- \
+                    "our Agency Manifesto:\n\n")
+
     class_name = agent_name.replace(" ", "").strip()
     folder_name = agent_name  # .lower().replace(" ", "_").strip()
 
