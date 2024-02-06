@@ -1,8 +1,8 @@
 from agency_swarm import Agent
 from agency_swarm.tools import Retrieval
-from agency_swarm.tools.browsing import Scroll, SendKeys, ClickElement, ReadURL, AnalyzeContent, GoBack, SelectDropdown, \
+from .tools import Scroll, SendKeys, ClickElement, ReadURL, AnalyzeContent, GoBack, SelectDropdown, \
     SolveCaptcha, ExportFile
-from agency_swarm.tools.browsing.util.selenium import set_selenium_config
+from .tools.util.selenium import set_selenium_config
 
 
 class BrowsingAgent(Agent):

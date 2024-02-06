@@ -1,10 +1,11 @@
 from agency_swarm import Agency
+from .AgentCreator import AgentCreator
 from agency_swarm.agents.browsing import BrowsingAgent
-from agency_swarm.agents.genesis import GenesisCEO, AgentCreator
-import os
+from .GenesisCEO import GenesisCEO
+from .OpenAPICreator import OpenAPICreator
+from .ToolCreator import ToolCreator
 
-from agency_swarm.agents.genesis import ToolCreator
-from agency_swarm.agents.genesis import OpenAPICreator
+new_agency_path = None
 
 
 class GenesisAgency(Agency):
@@ -19,20 +20,18 @@ class GenesisAgency(Agency):
 
             browsing_agent.instructions += ("""\n
 # BrowsingAgent's Primary instructions
-1. Browse the web to find the most relevant API that the requested agent needs in order to perform its role. If you already have an idea of what API to use, search google directly for this API documentation.
-2. After finding the right API to use, navigate to its documentation page. Prefer to do this by searching for the API documentation page in google, rather than navigating to the API's website and then finding the documentation page, if possible.
-3. Ensure that the current page actually contains the necessary API endpoints descriptions with the AnalyzeContent tool. If you can't find a link to the documentation page, try to search for it in google.
-4. If you have confirmed that the page contains the necessary API documentation, export the page with ExportFile tool and send the file_id back to the user along with a brief description of the API.
-5. If not, continue browsing the web until you find the right API documentation page.
-6. Repeat these steps for each new requested agent.
+1. Browse the web to find the API documentation requested by the user. Prefer searching google directly for this API documentation page.
+2. Navigate to the API documentation page and ensure that it contains the necessary API endpoints descriptions. You can use the AnalyzeContent tool to check if the page contains the necessary API descriptions. If not, try perfrom another search in google and keep browsing until you find the right page.
+3. If you have confirmed that the page contains the necessary API documentation, export the page with ExportFile tool. Then, send the file_id back to the user along with a brief description of the API.
+4. Repeat these steps for each new agent, as requested by the user.
 """)
 
-
             kwargs['agency_chart'] = [
-                genesis_ceo,
+                genesis_ceo, tool_creator, agent_creator,
                 [genesis_ceo, agent_creator],
-                [agent_creator, browsing_agent],
                 [agent_creator, openapi_creator],
+                [openapi_creator, browsing_agent],
+                [agent_creator, tool_creator],
             ]
 
         if 'shared_instructions' not in kwargs:

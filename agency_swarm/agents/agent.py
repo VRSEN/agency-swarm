@@ -34,6 +34,7 @@ class Agent():
             description: str = None,
             instructions: str = "",
             tools: List[Union[Type[BaseTool], Type[Retrieval], Type[CodeInterpreter]]] = None,
+            tools_folder: str = None,
             files_folder: Union[List[str], str] = None,
             schemas_folder: Union[List[str], str] = None,
             api_headers: Dict[str, Dict[str, str]] = None,
@@ -51,6 +52,7 @@ class Agent():
             description (str, optional): A brief description of the agent's purpose. Defaults to None.
             instructions (str, optional): Path to a file containing specific instructions for the agent. Defaults to an empty string.
             tools (List[Union[Type[BaseTool], Type[Retrieval], Type[CodeInterpreter]]], optional): A list of tools (as classes) that the agent can use. Defaults to an empty list.
+            tools_folder (str, optional): Path to a directory containing tools associated with the agent. Each tool must be defined in a separate file. Defaults to None.
             files_folder (Union[List[str], str], optional): Path or list of paths to directories containing files associated with the agent. Defaults to None.
             schemas_folder (Union[List[str], str], optional): Path or list of paths to directories containing OpenAPI schemas associated with the agent. Defaults to None.
             api_headers (Dict[str,Dict[str, str]], optional): Headers to be used for the openapi requests. Each key must be a full filename from schemas_folder. Defaults to an empty dictionary.
@@ -68,6 +70,7 @@ class Agent():
         self.instructions = instructions
         self.tools = tools[:] if tools is not None else []
         self.tools = [tool for tool in self.tools if tool.__name__ != "ExampleTool"]
+        self.tools_folder = tools_folder
         self.files_folder = files_folder if files_folder else []
         self.schemas_folder = schemas_folder if schemas_folder else []
         self.api_headers = api_headers if api_headers else {}
@@ -87,6 +90,7 @@ class Agent():
         self._read_instructions()
         self._upload_files()
         self._parse_schemas()
+        self._parse_tools_folder()
 
     # --- OpenAI Assistant Methods ---
 
@@ -258,6 +262,8 @@ class Agent():
                     return
             self.tools.append(tool)
         elif issubclass(tool, BaseTool):
+            if tool.__name__ == "ExampleTool":
+                return
             for t in self.tools:
                 if t.__name__ == tool.__name__:
                     self.tools.remove(t)
@@ -329,6 +335,31 @@ class Agent():
                     raise Exception("Schemas folder path is not a directory.")
             else:
                 raise Exception("Schemas folder path must be a string or list of strings.")
+
+    def _parse_tools_folder(self):
+        if not self.tools_folder:
+            return
+        if not os.path.isdir(self.tools_folder):
+            self.tools_folder = os.path.join(self.get_class_folder_path(), self.tools_folder)
+            self.tools_folder = os.path.normpath(self.tools_folder)
+        if os.path.isdir(self.tools_folder):
+            f_paths = os.listdir(self.tools_folder)
+            f_paths = [f for f in f_paths if not f.startswith(".") or f.startswith("__")]
+            f_paths = [os.path.join(self.tools_folder, f) for f in f_paths]
+            for f_path in f_paths:
+                if not f_path.endswith(".py"):
+                    continue
+                if os.path.isfile(f_path):
+                    try:
+                        tool = ToolFactory.from_file(f_path)
+                        self.add_tool(tool)
+                    except Exception as e:
+                        print("Error parsing tool: " + os.path.basename(f_path))
+                        raise e
+                else:
+                    raise Exception("Items in tools folder must be files: " + f_path)
+        else:
+            raise Exception("Tools folder path is not a directory.")
 
     def get_openapi_schema(self, url):
         """Get openapi schema that contains all tools from the agent as different api paths. Make sure to call this after agency has been initialized."""

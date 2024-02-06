@@ -252,12 +252,27 @@ class Agency:
         """
         while True:
             console.rule()
-            text = input("USER: ")
+            text = input("👤 USER: ")
+
+            if text.lower() == "exit":
+                break
+
+            recipient_agent = None
+            if "@" in text:
+                recipient_agent = text.split("@")[1].split(" ")[0]
+                text = text.replace(f"@{recipient_agent}", "").strip()
+                try:
+                    recipient_agent = self.get_agent_by_name(recipient_agent)
+                except Exception as e:
+                    print(e)
+                    continue
 
             try:
-                gen = self.main_thread.get_completion(message=text)
+                gen = self.main_thread.get_completion(message=text, recipient_agent=recipient_agent)
                 while True:
                     message = next(gen)
+                    if message.sender_name.lower() == "user":
+                        continue
                     message.cprint()
             except StopIteration as e:
                 pass
@@ -507,8 +522,6 @@ class Agency:
             message_files: List[str] = Field(default=None,
                                              description="A list of file ids to be sent as attachments to this message. Only use this if you have the file id that starts with 'file-'.",
                                              examples=["file-1234", "file-5678"])
-            caller_agent_name: str = Field(default=agent.name,
-                                           description="The agent calling this tool. Defaults to your name. Do not change it.")
 
             @field_validator('recipient')
             def check_recipient(cls, value):
@@ -516,14 +529,8 @@ class Agency:
                     raise ValueError(f"Recipient {value} is not valid. Valid recipients are: {recipient_names}")
                 return value
 
-            @field_validator('caller_agent_name')
-            def check_caller_agent_name(cls, value):
-                if value != agent.name:
-                    raise ValueError(f"Caller agent name must be {agent.name}.")
-                return value
-
             def run(self):
-                thread = outer_self.agents_and_threads[self.caller_agent_name][self.recipient.value]
+                thread = outer_self.agents_and_threads[self.caller_agent.name][self.recipient.value]
 
                 if not outer_self.async_mode:
                     gen = thread.get_completion(message=self.message, message_files=self.message_files)
@@ -558,8 +565,6 @@ class Agency:
             """This tool allows you to check the status of a task or get a response from a specified recipient agent, if the task has been completed. You must always use 'SendMessage' tool with the designated agent first."""
             recipient: recipients = Field(...,
                                           description=f"Recipient agent that you want to check the status of. Valid recipients are: {recipient_names}")
-            caller_agent_name: str = Field(default=agent.name,
-                                           description="The agent calling this tool. Defaults to your name. Do not change it.")
 
             @field_validator('recipient')
             def check_recipient(cls, value):
@@ -567,14 +572,8 @@ class Agency:
                     raise ValueError(f"Recipient {value} is not valid. Valid recipients are: {recipient_names}")
                 return value
 
-            @field_validator('caller_agent_name')
-            def check_caller_agent_name(cls, value):
-                if value != agent.name:
-                    raise ValueError(f"Caller agent name must be {agent.name}.")
-                return value
-
             def run(self):
-                thread = outer_self.agents_and_threads[self.caller_agent_name][self.recipient.value]
+                thread = outer_self.agents_and_threads[self.caller_agent.name][self.recipient.value]
 
                 return thread.check_status()
 

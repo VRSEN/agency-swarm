@@ -63,22 +63,20 @@ def create_agent_template(agent_name=None,
     # create files folder
     os.mkdir(path + "files")
     os.mkdir(path + "schemas")
+    os.mkdir(path + "tools")
 
     # create tools file
-    with open(path + "tools.py", "w") as f:
-        f.write(tools_template)
+    with open(path + "tools/" + "ExampleTool.py", "w") as f:
+        f.write(example_tool_template)
+
+    with open(path + "tools/" + "__init__.py", "w") as f:
+        f.write("")
 
     print("Agent folder created successfully.")
     print(f"Import it with: from {folder_name} import {class_name}")
 
 
-agent_template = """
-before_names = dir()
-from .tools import *
-current_names = dir()
-imported_tool_objects = [globals()[name] for name in current_names if name not in before_names and isinstance(globals()[name], type) and issubclass(globals()[name], BaseTool)]
-imported_tool_objects = [tool for tool in imported_tool_objects if tool.__name__ != "BaseTool"]
-from agency_swarm.agents import Agent
+agent_template = """from agency_swarm.agents import Agent
 {code_interpreter_import}
 
 class {class_name}(Agent):
@@ -89,11 +87,12 @@ class {class_name}(Agent):
             instructions="./instructions.{ext}",
             files_folder="./files",
             schemas_folder="./schemas",
-            tools=imported_tool_objects + [{code_interpreter}] 
+            tools=[{code_interpreter}],
+            tools_folder="./tools"
         )
 """
 
-tools_template = """from agency_swarm.tools import BaseTool
+example_tool_template = """from agency_swarm.tools import BaseTool
 from pydantic import Field
 
 

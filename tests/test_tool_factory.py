@@ -117,6 +117,15 @@ class ToolFactoryTest(unittest.TestCase):
 
         print(output)
 
+    def test_import_from_file(self):
+        tool = ToolFactory.from_file("./data/tools/ExampleTool1.py")
+
+        print(tool)
+
+        self.assertTrue(tool.__name__ == "ExampleTool1")
+
+        self.assertTrue(tool(content='test').run() == "Tool output")
+
 
 
 

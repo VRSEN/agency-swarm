@@ -2,6 +2,8 @@ import inspect
 import time
 from typing import Literal
 
+from openai import BadRequestError
+
 from agency_swarm.agents import Agent
 from agency_swarm.messages import MessageOutput
 from agency_swarm.user import User
@@ -56,13 +58,7 @@ class Thread:
         )
 
         while True:
-            # wait until run completes
-            while self.run.status in ['queued', 'in_progress']:
-                time.sleep(0.5)
-                self.run = self.client.beta.threads.runs.retrieve(
-                    thread_id=self.thread.id,
-                    run_id=self.run.id
-                )
+            self.await_run_completion()
 
             # function execution
             if self.run.status == "requires_action":
@@ -90,11 +86,28 @@ class Thread:
                     tool_outputs.append({"tool_call_id": tool_call.id, "output": str(output)})
 
                 # submit tool outputs
-                self.run = self.client.beta.threads.runs.submit_tool_outputs(
-                    thread_id=self.thread.id,
-                    run_id=self.run.id,
-                    tool_outputs=tool_outputs
-                )
+                try:
+                    self.run = self.client.beta.threads.runs.submit_tool_outputs(
+                        thread_id=self.thread.id,
+                        run_id=self.run.id,
+                        tool_outputs=tool_outputs
+                    )
+                except BadRequestError as e:
+                    if 'Runs in status "expired"' in e.message:
+                        self.run = self.client.beta.threads.runs.create(
+                            thread_id=self.thread.id,
+                            assistant_id=recipient_agent.id,
+                        )
+
+                        self.await_run_completion()
+
+                        self.run = self.client.beta.threads.runs.submit_tool_outputs(
+                            thread_id=self.thread.id,
+                            run_id=self.run.id,
+                            tool_outputs=tool_outputs
+                        )
+                    else:
+                        raise e
             # error
             elif self.run.status == "failed":
                 raise Exception("Run Failed. Error: ", self.run.last_error)
@@ -109,6 +122,14 @@ class Thread:
                     yield MessageOutput("text", recipient_agent.name, self.agent.name, message)
 
                 return message
+
+    def await_run_completion(self):
+        while self.run.status in ['queued', 'in_progress', "cancelling"]:
+            time.sleep(0.5)
+            self.run = self.client.beta.threads.runs.retrieve(
+                thread_id=self.thread.id,
+                run_id=self.run.id
+            )
 
     def execute_tool(self, tool_call, recipient_agent=None):
         if not recipient_agent:
