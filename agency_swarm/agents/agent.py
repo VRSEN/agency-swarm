@@ -52,7 +52,7 @@ class Agent():
             description (str, optional): A brief description of the agent's purpose. Defaults to None.
             instructions (str, optional): Path to a file containing specific instructions for the agent. Defaults to an empty string.
             tools (List[Union[Type[BaseTool], Type[Retrieval], Type[CodeInterpreter]]], optional): A list of tools (as classes) that the agent can use. Defaults to an empty list.
-            tools_folder (str, optional): Path to a directory containing tools associated with the agent. Each tool must be defined in a separate file. Defaults to None.
+            tools_folder (str, optional): Path to a directory containing tools associated with the agent. Each tool must be defined in a separate file. File must be named as the class name of the tool. Defaults to None.
             files_folder (Union[List[str], str], optional): Path or list of paths to directories containing files associated with the agent. Defaults to None.
             schemas_folder (Union[List[str], str], optional): Path or list of paths to directories containing OpenAPI schemas associated with the agent. Defaults to None.
             api_headers (Dict[str,Dict[str, str]], optional): Headers to be used for the openapi requests. Each key must be a full filename from schemas_folder. Defaults to an empty dictionary.
@@ -344,7 +344,7 @@ class Agent():
             self.tools_folder = os.path.normpath(self.tools_folder)
         if os.path.isdir(self.tools_folder):
             f_paths = os.listdir(self.tools_folder)
-            f_paths = [f for f in f_paths if not f.startswith(".") or f.startswith("__")]
+            f_paths = [f for f in f_paths if not f.startswith(".") and not f.startswith("__")]
             f_paths = [os.path.join(self.tools_folder, f) for f in f_paths]
             for f_path in f_paths:
                 if not f_path.endswith(".py"):

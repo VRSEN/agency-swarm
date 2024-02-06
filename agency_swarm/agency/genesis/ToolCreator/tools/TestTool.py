@@ -52,7 +52,7 @@ class TestTool(BaseTool):
         if not os.path.isfile(tool_path):
             available_tools = os.listdir(os.path.join(self.shared_state.get("agency_path"), self.shared_state.get("agent_name")))
             available_tools = [tool for tool in available_tools if tool.endswith(".py")]
-            available_tools = [tool for tool in available_tools if not tool.startswith("__") or tool.startswith(".")]
+            available_tools = [tool for tool in available_tools if not tool.startswith("__") and not tool.startswith(".")]
             available_tools = [tool.replace(".py", "") for tool in available_tools]
             available_tools = ", ".join(available_tools)
             raise ValueError(f"Tool {self.tool_name} not found. Available tools are: {available_tools}")
