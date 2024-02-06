@@ -40,7 +40,8 @@ class CreateAgentTemplate(BaseTool):
         create_agent_template(self.agent_name,
                               self.agent_description,
                               instructions=self.instructions,
-                              code_interpreter=True if "CodeInterpreter" in self.default_tools else None)
+                              code_interpreter=True if "CodeInterpreter" in self.default_tools else None,
+                              include_example_tool=False)
 
         # add agent on second line to agency.py
         with open("agency.py", "r") as f:

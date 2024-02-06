@@ -6,7 +6,8 @@ def create_agent_template(agent_name=None,
                           path="./",
                           instructions=None,
                           code_interpreter=False,
-                          use_txt=False):
+                          use_txt=False,
+                          include_example_tool=True):
     if not agent_name:
         agent_name = input("Enter agent name: ")
     if not agent_description:
@@ -17,10 +18,10 @@ def create_agent_template(agent_name=None,
     if not os.path.isfile(os.path.join(path, agency_manifesto)):
         with open(os.path.join(path, agency_manifesto), "w") as f:
             f.write("As a member of our Agency, please find below the guiding principles and values that constitute "
-                    "our Agency Manifesto:\n\n")\
-
+                    "our Agency Manifesto:\n\n") \
+ \
     class_name = agent_name.replace(" ", "").strip()
-    folder_name = agent_name # .lower().replace(" ", "_").strip()
+    folder_name = agent_name  # .lower().replace(" ", "_").strip()
 
     # create or append to init file
     global_init_path = os.path.join(path, "__init__.py")
@@ -65,12 +66,12 @@ def create_agent_template(agent_name=None,
     os.mkdir(path + "schemas")
     os.mkdir(path + "tools")
 
-    # create tools file
-    with open(path + "tools/" + "ExampleTool.py", "w") as f:
-        f.write(example_tool_template)
-
     with open(path + "tools/" + "__init__.py", "w") as f:
         f.write("")
+
+    if include_example_tool:
+        with open(path + "tools/" + "ExampleTool.py", "w") as f:
+            f.write(example_tool_template)
 
     print("Agent folder created successfully.")
     print(f"Import it with: from {folder_name} import {class_name}")
