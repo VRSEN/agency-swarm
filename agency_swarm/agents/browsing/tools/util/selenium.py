@@ -10,6 +10,7 @@ wd = None
 selenium_config = {
     "chrome_profile_path": None,
     "headless": False,
+    "full_page_screenshot": False,
 }
 
 
@@ -56,7 +57,10 @@ def get_web_driver():
 
     if selenium_config.get("headless", False):
         chrome_options.add_argument('--headless')
-    chrome_options.add_argument("--window-size=960,1080")
+    if selenium_config.get("full_page_screenshot", False):
+        chrome_options.add_argument("--start-maximized")
+    else:
+        chrome_options.add_argument("--window-size=960,1080")
     chrome_options.add_argument('--no-sandbox')
     chrome_options.add_argument('--disable-dev-shm-usage')
     chrome_options.add_argument("--disable-extensions")
