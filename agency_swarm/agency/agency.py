@@ -108,7 +108,7 @@ class Agency:
 
         return gen
 
-    def demo_gradio(self, height=600, dark_mode=True):
+    def demo_gradio(self, height=450, dark_mode=True):
         """
         Launches a Gradio-based demo interface for the agency chatbot.
 
