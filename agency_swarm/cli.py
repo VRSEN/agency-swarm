@@ -1,4 +1,6 @@
 import argparse
+import os
+
 from agency_swarm.util import create_agent_template
 
 
@@ -18,12 +20,21 @@ def main():
 
     # genesis-agency
     genesis_parser = subparsers.add_parser('genesis', help='Start genesis agency.')
+    genesis_parser.add_argument('--openai_key', default=None, type=str, help='OpenAI API key.')
 
     args = parser.parse_args()
 
     if args.command == "create-agent-template":
         create_agent_template(args.name, args.description, args.path, args.use_txt)
     elif args.command == "genesis":
+        if not os.getenv('OPENAI_API_KEY') and not args.openai_key:
+            print("OpenAI API key not set. "
+                  "Please set it with --openai_key argument or by setting OPENAI_API_KEY environment variable.")
+
+        if args.openai_key:
+            from agency_swarm import set_openai_key
+            set_openai_key(args.openai_key)
+
         from agency_swarm.agency.genesis import GenesisAgency
         agency = GenesisAgency()
         agency.run_demo()
