@@ -14,8 +14,8 @@ class CreateAgencyFolder(BaseTool):
     This tool creates or modifies an agency folder. You can use it again with the same agency_name to modify a previously created agency, if the user wants to change the agency chart or the manifesto.
     """
     agency_name: str = Field(
-        ..., description="Name of the agency to be created.",
-        examples=["AgencyName"]
+        ..., description="Name of the agency to be created. Must not contain spaces or special characters.",
+        examples=["agency-name", "my-agency", "example-agency"]
     )
     agency_chart: str = Field(
         ..., description="Agency chart to be passed into the Agency class.",

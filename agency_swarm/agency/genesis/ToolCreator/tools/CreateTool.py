@@ -31,7 +31,7 @@ class CreateTool(BaseTool):
 
         os.chdir(self.shared_state.get("default_folder"))
 
-        return f"Tool {self.tool_name} has been created successfully. You can now test it with TestTool."
+        return f"Tool {self.tool_name} has been created successfully for {self.shared_state.get('agent_name')} agent. You can now test it with TestTool function."
 
 
 

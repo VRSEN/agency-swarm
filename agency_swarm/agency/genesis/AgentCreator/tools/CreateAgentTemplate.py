@@ -9,9 +9,10 @@ from agency_swarm.util import create_agent_template
 
 allowed_tools: List = ["CodeInterpreter"]
 
+
 class CreateAgentTemplate(BaseTool):
     """
-    This tool creates a template folder for a new agent that includes boilerplage code and instructions.
+    This tool creates a template folder for a new agent. Always use this tool first, before creating tools or APIs for the agent.
     """
     agent_name: str = Field(
         ..., description="Name of the agent to be created. Cannot include special characters or spaces."
@@ -20,7 +21,9 @@ class CreateAgentTemplate(BaseTool):
         ..., description="Description of the agent to be created."
     )
     instructions: str = Field(
-        ..., description="Instructions for the agent to be created in markdown format."
+        ..., description="Instructions for the agent to be created in markdown format. "
+                         "Instructions should include a specific step by step process that this agent must perform in order to execute its role."
+                         "They should also be aligned with other agents' instructions in the same agency to ensure effective collaboration."
     )
     default_tools: List[str] = Field(
         [], description=f"List of default tools to be included in the agent. Possible values are {allowed_tools}."
