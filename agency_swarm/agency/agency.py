@@ -1,6 +1,7 @@
 import inspect
 import json
 import os
+import readline
 import shutil
 import uuid
 from enum import Enum
@@ -63,6 +64,7 @@ class Agency:
         self.agents = []
         self.agents_and_threads = {}
         self.main_recipients = []
+        self.recipient_agents = None
         self.shared_files = shared_files if shared_files else []
         self.settings_path = settings_path
         self.settings_callbacks = settings_callbacks
@@ -241,15 +243,30 @@ class Agency:
         demo.launch()
         return demo
 
+    def recipient_agent_completer(self, text, state):
+        """
+        Autocomplete completer for recipient agent names.
+        """
+        options = [agent for agent in self.recipient_agents if agent.lower().startswith(text.lower())]
+        if state < len(options):
+            return options[state]
+        else:
+            return None
+
+    def setup_autocomplete(self):
+        """
+        Sets up readline with the completer function.
+        """
+        self.recipient_agents = [agent.name for agent in self.main_recipients]  # Cache recipient agents for autocomplete
+        readline.set_completer(self.recipient_agent_completer)
+        readline.parse_and_bind('tab: complete')
+
     def run_demo(self):
         """
-        Runs a demonstration of the agency's capabilities in an interactive command line interface.
-
-        This function continuously prompts the user for input and displays responses from the agency's main thread. It leverages the generator pattern for asynchronous message processing.
-
-        Output:
-            Outputs the responses from the agency's main thread to the command line.
+        Enhanced run_demo with autocomplete for recipient agent names.
         """
+        self.setup_autocomplete()  # Prepare readline for autocomplete
+
         while True:
             console.rule()
             text = input("👤 USER: ")
@@ -262,9 +279,10 @@ class Agency:
                 recipient_agent = text.split("@")[1].split(" ")[0]
                 text = text.replace(f"@{recipient_agent}", "").strip()
                 try:
+                    recipient_agent = [agent for agent in self.recipient_agents if agent.lower() == recipient_agent.lower()][0]
                     recipient_agent = self.get_agent_by_name(recipient_agent)
                 except Exception as e:
-                    print(e)
+                    print(f"Recipient agent {recipient_agent} not found.")
                     continue
 
             try:
