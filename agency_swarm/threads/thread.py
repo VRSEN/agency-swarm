@@ -57,6 +57,7 @@ class Thread:
             assistant_id=recipient_agent.id,
         )
 
+        run_failed = False
         while True:
             self.await_run_completion()
 
@@ -94,12 +95,26 @@ class Thread:
                     )
                 except BadRequestError as e:
                     if 'Runs in status "expired"' in e.message:
+                        self.client.beta.threads.messages.create(
+                            thread_id=self.thread.id,
+                            role="user",
+                            content="Please repeat the exact same function calls again."
+                        )
+
                         self.run = self.client.beta.threads.runs.create(
                             thread_id=self.thread.id,
                             assistant_id=recipient_agent.id,
                         )
 
                         self.await_run_completion()
+
+                        if self.run.status != "requires_action":
+                            raise Exception("Run Failed. Error: ", self.run.last_error)
+
+                        # change tool call ids
+                        tool_calls = self.run.required_action.submit_tool_outputs.tool_calls
+                        for i, tool_call in enumerate(tool_calls):
+                            tool_outputs[i]["tool_call_id"] = tool_call.id
 
                         self.run = self.client.beta.threads.runs.submit_tool_outputs(
                             thread_id=self.thread.id,
@@ -110,7 +125,15 @@ class Thread:
                         raise e
             # error
             elif self.run.status == "failed":
-                raise Exception("Run Failed. Error: ", self.run.last_error)
+                # retry run 1 time
+                if not run_failed and "something went wrong" in self.run.last_error:
+                    self.run = self.client.beta.threads.runs.create(
+                        thread_id=self.thread.id,
+                        assistant_id=recipient_agent.id,
+                    )
+                    run_failed = True
+                else:
+                    raise Exception("Run Failed. Error: ", self.run.last_error)
             # return assistant message
             else:
                 messages = self.client.beta.threads.messages.list(
