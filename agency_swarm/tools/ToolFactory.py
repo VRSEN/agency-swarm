@@ -1,4 +1,7 @@
+import importlib.util
 import inspect
+import os
+import sys
 from typing import Any, Dict, List, Type, Union
 
 import jsonref
@@ -254,3 +257,27 @@ class ToolFactory:
                 tools.append(ToolFactory.from_openai_schema(function, callback))
 
         return tools
+
+    @staticmethod
+    def from_file(file_path: str):
+        """Dynamically imports a class from a Python file, ensuring BaseTool itself is not imported."""
+        # Extract class name from file path (assuming class name matches file name without .py extension)
+        class_name = os.path.basename(file_path)
+        if class_name.endswith('.py'):
+            class_name = class_name[:-3]  # Remove .py extension
+
+        # Load the module from the given file path
+        spec = importlib.util.spec_from_file_location(class_name, file_path)
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[class_name] = module
+        spec.loader.exec_module(module)
+
+        # Dynamically access the class based on the extracted class name
+        if hasattr(module, class_name):
+            tool = getattr(module, class_name)
+        else:
+            raise AttributeError(f"The class {class_name} was not found in {file_path}")
+
+        return tool
+
+

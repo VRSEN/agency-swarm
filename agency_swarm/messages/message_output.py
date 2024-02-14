@@ -1,5 +1,6 @@
 from typing import Literal
 import hashlib
+from rich.markdown import Markdown
 from rich.console import Console
 
 from agency_swarm.util.oai import get_openai_client
@@ -27,7 +28,7 @@ class MessageOutput:
         hash_obj = hashlib.md5(encoded_str)
         hash_int = int(hash_obj.hexdigest(), 16)
         colors = [
-            'green', 'yellow', 'blue', 'magenta', 'cyan', 'white',
+            'green', 'yellow', 'blue', 'magenta', 'cyan', 'bright_white',
         ]
         color_index = hash_int % len(colors)
         return colors[color_index]
@@ -37,13 +38,15 @@ class MessageOutput:
 
         emoji = self.get_sender_emoji()
 
-        header = emoji + self.get_formatted_header()
+        header = emoji + " " + self.get_formatted_header()
 
-        color = self.hash_names_to_color()
+        # color = self.hash_names_to_color()
 
-        console.print(header, style=color)
+        console.print(header)
 
-        console.print(str(self.content), style=color)
+        md = Markdown(self.content)
+
+        console.print(md)
 
     def get_formatted_header(self):
         if self.msg_type == "function":
@@ -51,7 +54,7 @@ class MessageOutput:
             return text
 
         if self.msg_type == "function_output":
-            text = f"{self.sender_name} ⚙️Function Output"
+            text = f"{self.sender_name} ⚙️ Function Output"
             return text
 
         text = f"{self.sender_name} 🗣️ @{self.receiver_name}"
