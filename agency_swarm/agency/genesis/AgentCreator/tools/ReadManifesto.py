@@ -15,4 +15,6 @@ class ReadManifesto(BaseTool):
 
         os.chdir(self.shared_state.get("default_folder"))
 
+        self.shared_state.set("manifesto_read", True)
+
         return manifesto

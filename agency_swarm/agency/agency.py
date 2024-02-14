@@ -531,7 +531,9 @@ class Agency:
                                                   "and the following next steps that you need to perfrom. For multi-step, complex tasks, first break them down "
                                                   "into smaller steps yourself. Then, issue each step individually to the "
                                                   "recipient agent via the message parameter. Each identified step should be "
-                                                  "sent in separate message.")
+                                                  "sent in separate message. Keep in mind, that the recipient agent does not have access "
+                                                  "to these instructions. You must include recipient agent-specific instructions "
+                                                  "in the message parameter.")
             recipient: recipients = Field(..., description=agent_descriptions)
             message: str = Field(...,
                                  description="Specify the task required for the recipient agent to complete. Focus on "

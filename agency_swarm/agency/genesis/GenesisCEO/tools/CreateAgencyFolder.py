@@ -15,7 +15,7 @@ class CreateAgencyFolder(BaseTool):
     """
     agency_name: str = Field(
         ..., description="Name of the agency to be created. Must not contain spaces or special characters.",
-        examples=["agency-name", "my-agency", "example-agency"]
+        examples=["AgencyName", "MyAgency", "ExampleAgency"]
     )
     agency_chart: str = Field(
         ..., description="Agency chart to be passed into the Agency class.",

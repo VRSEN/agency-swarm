@@ -12,6 +12,8 @@ class AgentCreator(Agent):
         if 'tools' not in kwargs:
             kwargs['tools'] = []
 
+        kwargs['description'] = "This agent is responsible for creating new agents for the agency."
+
         # Add required tools
         kwargs['tools'].extend([CreateAgentTemplate,
                                 # GetAvailableAgents,

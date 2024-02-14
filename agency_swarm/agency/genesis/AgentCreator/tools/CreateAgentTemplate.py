@@ -32,6 +32,9 @@ class CreateAgentTemplate(BaseTool):
     )
 
     def run(self):
+        if not self.shared_state.get("manifesto_read"):
+            raise ValueError("Please read the manifesto first with the ReadManifesto tool.")
+
         self.shared_state.set("agent_name", self.agent_name)
 
         os.chdir(self.shared_state.get("agency_path"))
@@ -64,5 +67,5 @@ class CreateAgentTemplate(BaseTool):
     @model_validator(mode="after")
     def validate_tools(self):
         for tool in self.default_tools:
-            if tool not in self.allowed_tools:
-                raise ValueError(f"Tool {tool} is not allowed. Allowed tools are: {self.allowed_tools}")
+            if tool not in allowed_tools:
+                raise ValueError(f"Tool {tool} is not allowed. Allowed tools are: {allowed_tools}")

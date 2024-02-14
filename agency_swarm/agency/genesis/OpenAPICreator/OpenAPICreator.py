@@ -9,6 +9,9 @@ class OpenAPICreator(Agent):
         # Initialize tools in kwargs if not present
         if 'tools' not in kwargs:
             kwargs['tools'] = []
+
+        kwargs['description'] = "This agent is responsible for creating new tools from an OpenAPI specifications."
+
         # Add required tools
         kwargs['tools'].extend([Retrieval, CreateToolsFromOpenAPISpec])
 

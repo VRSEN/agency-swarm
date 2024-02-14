@@ -9,6 +9,9 @@ class GenesisCEO(Agent):
         # Initialize tools in kwargs if not present
         if 'tools' not in kwargs:
             kwargs['tools'] = []
+
+        kwargs['description'] = "Acts as the overseer and communicator across the agency, ensuring alignment with the agency's goals."
+
         # Add required tools
         kwargs['tools'].extend([CreateAgencyFolder, FinalizeAgency])
 

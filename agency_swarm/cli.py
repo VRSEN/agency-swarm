@@ -1,8 +1,6 @@
 import argparse
 import os
 
-from agency_swarm.util import create_agent_template
-
 
 def main():
     parser = argparse.ArgumentParser(description='Create agent template.')
@@ -25,6 +23,7 @@ def main():
     args = parser.parse_args()
 
     if args.command == "create-agent-template":
+        from agency_swarm.util import create_agent_template
         create_agent_template(args.name, args.description, args.path, args.use_txt)
     elif args.command == "genesis":
         if not os.getenv('OPENAI_API_KEY') and not args.openai_key:
