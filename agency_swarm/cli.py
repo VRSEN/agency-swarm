@@ -30,6 +30,7 @@ def main():
         if not os.getenv('OPENAI_API_KEY') and not args.openai_key:
             print("OpenAI API key not set. "
                   "Please set it with --openai_key argument or by setting OPENAI_API_KEY environment variable.")
+            return
 
         if args.openai_key:
             from agency_swarm import set_openai_key
