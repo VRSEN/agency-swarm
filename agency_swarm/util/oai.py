@@ -20,6 +20,7 @@ def get_openai_client():
             if api_key is None:
                 raise ValueError("OpenAI API key is not set. Please set it using set_openai_key.")
             client = instructor.patch(openai.OpenAI(api_key=api_key,
+                                                    timeout=5,
                                                     max_retries=5))
     return client
 
@@ -27,7 +28,7 @@ def get_openai_client():
 def set_openai_client(new_client):
     global client
     with client_lock:
-        client = new_client
+        client = instructor.patch(new_client)
 
 
 def set_openai_key(key):

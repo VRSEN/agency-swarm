@@ -88,7 +88,13 @@ class Agent():
         # init methods
         self.client = get_openai_client()
         self._read_instructions()
+
+        # upload files
+        prev_timeout = self.client.timeout
+        self.client.timeout = 120 if prev_timeout < 120 else prev_timeout # default timeout is too low for file large file uploads
         self._upload_files()
+        self.client.timeout = prev_timeout
+
         self._parse_schemas()
         self._parse_tools_folder()
 
