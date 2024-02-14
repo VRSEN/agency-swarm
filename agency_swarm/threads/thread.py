@@ -98,7 +98,7 @@ class Thread:
                         self.client.beta.threads.messages.create(
                             thread_id=self.thread.id,
                             role="user",
-                            content="Please repeat the exact same function calls again."
+                            content="Please repeat the exact same function calls again in the same order."
                         )
 
                         self.run = self.client.beta.threads.runs.create(
