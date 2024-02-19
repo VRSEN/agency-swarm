@@ -19,6 +19,7 @@ def main():
     # genesis-agency
     genesis_parser = subparsers.add_parser('genesis', help='Start genesis agency.')
     genesis_parser.add_argument('--openai_key', default=None, type=str, help='OpenAI API key.')
+    genesis_parser.add_argument('--with_browsing', default=False, type=bool, help='Enable browsing agent.')
 
     args = parser.parse_args()
 
@@ -36,7 +37,7 @@ def main():
             set_openai_key(args.openai_key)
 
         from agency_swarm.agency.genesis import GenesisAgency
-        agency = GenesisAgency()
+        agency = GenesisAgency(with_browsing=args.with_browsing)
         agency.run_demo()
 
 

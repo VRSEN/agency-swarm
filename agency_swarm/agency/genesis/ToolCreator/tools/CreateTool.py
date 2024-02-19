@@ -24,6 +24,9 @@ class CreateTool(BaseTool):
                          "as well as the primary tool class that extends BaseTool. Name of this class must match tool_name.",
         examples=[example_tool_template]
     )
+    agency_name: str = Field(
+        None, description="Name of the agency to create the tool for. Defaults to the agency currently being created."
+    )
 
     def run(self):
         os.chdir(self.shared_state.get("agency_path"))
@@ -39,8 +42,13 @@ class CreateTool(BaseTool):
 
     @model_validator(mode="after")
     def validate_agent_name(self):
-        if not self.shared_state.get("agency_path"):
-            raise ValueError("Please tell the user that he must create agency first.")
+        if not self.shared_state.get("agency_path") and not self.agency_name:
+            available_agencies = os.listdir("./")
+            # filter out non-directories
+            available_agencies = [agency for agency in available_agencies if os.path.isdir(agency)]
+            raise ValueError(f"Please specify an agency. Available agencies are: {available_agencies}")
+        elif not self.shared_state.get("agency_path") and self.agency_name:
+            self.shared_state.set("agency_path", os.path.join("./", self.agency_name))
 
         agent_path = os.path.join(self.shared_state.get("agency_path"), self.agent_name)
         if not os.path.exists(agent_path):
