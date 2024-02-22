@@ -195,8 +195,6 @@ class Agent():
                 f_path_new = file_name + "_" + id + file_ext
                 os.rename(f_path, f_path_new)
                 return f_path_new
-            else:
-                raise Exception("Items in files folder must be files.")
 
         def get_id_from_file(f_path):
             """Get file id from file name"""
@@ -208,8 +206,6 @@ class Agent():
                     return file_name[-1] if "file-" in file_name[-1] else None
                 else:
                     return None
-            else:
-                raise Exception("Items in files folder must be files.")
 
         files_folders = self.files_folder if isinstance(self.files_folder, list) else [self.files_folder]
 
@@ -243,9 +239,9 @@ class Agent():
                                 f.close()
                             add_id_to_file(f_path, file_id)
                 else:
-                    raise Exception("Files folder path is not a directory.", f_path)
+                    print("Files folder path is not a directory. Skipping... ", f_path)
             else:
-                raise Exception("Files folder path must be a string or list of strings.")
+                print("Files folder path must be a string or list of strings. Skipping... ", files_folder)
 
         if Retrieval not in self.tools and CodeInterpreter not in self.tools and self.file_ids:
             print("Detected files without Retrieval. Adding Retrieval tool...")
@@ -338,9 +334,9 @@ class Agent():
                         for tool in tools:
                             self.add_tool(tool)
                 else:
-                    raise Exception("Schemas folder path is not a directory.")
+                    print("Schemas folder path is not a directory. Skipping... ", f_path)
             else:
-                raise Exception("Schemas folder path must be a string or list of strings.")
+                print("Schemas folder path must be a string or list of strings. Skipping... ", schemas_folder)
 
     def _parse_tools_folder(self):
         if not self.tools_folder:
@@ -360,12 +356,11 @@ class Agent():
                         tool = ToolFactory.from_file(f_path)
                         self.add_tool(tool)
                     except Exception as e:
-                        print("Error parsing tool: " + os.path.basename(f_path))
-                        raise e
+                        print("Error parsing tool. Skipping... " + os.path.basename(f_path))
                 else:
-                    raise Exception("Items in tools folder must be files: " + f_path)
+                    print("Items in tools folder must be files. Skipping... ", f_path)
         else:
-            raise Exception("Tools folder path is not a directory.")
+            print("Tools folder path is not a directory. Skipping... ", self.tools_folder)
 
     def get_openapi_schema(self, url):
         """Get openapi schema that contains all tools from the agent as different api paths. Make sure to call this after agency has been initialized."""
