@@ -19,7 +19,8 @@ def main():
     # genesis-agency
     genesis_parser = subparsers.add_parser('genesis', help='Start genesis agency.')
     genesis_parser.add_argument('--openai_key', default=None, type=str, help='OpenAI API key.')
-    genesis_parser.add_argument('--with_browsing', default=False, type=bool, help='Enable browsing agent.')
+    genesis_parser.add_argument('--with_browsing', default=False, type=bool, action='store_true',
+                                help='Enable browsing agent.')
 
     args = parser.parse_args()
 
