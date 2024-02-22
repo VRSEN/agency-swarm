@@ -226,7 +226,7 @@ class AgencyTest(unittest.TestCase):
 
         time.sleep(10)
 
-        message = self.__class__.agency.get_completion("Please check response. If the GetResponse function output includes TestAgent1's Response (for example, that the message was sent to Test Agent 2, the process or the task has started, etc.), say 'success'. If the function output does not include TestAgent1's Response, or if you get a System Notification, or an error instead, say 'error'.",
+        message = self.__class__.agency.get_completion("Please check response. If the GetResponse function output includes `TestAgent1's Response` (for example, that the message was sent to Test Agent 2, the process or the task has started, initiated, etc.), say 'success'. If the function output does not include `TestAgent1's Response`, or if you get a System Notification, or an error instead, say 'error'.",
                                                        yield_messages=False)
 
         self.assertFalse('error' in message.lower())
