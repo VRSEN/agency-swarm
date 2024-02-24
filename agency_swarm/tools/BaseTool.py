@@ -48,65 +48,6 @@ class BaseTool(OpenAISchema, ABC):
 
         return schema
 
-    @classmethod
-    def openapi_schema(cls, url):
-        openai_schema = cls.openai_schema
-        defs = {}
-        if '$defs' in openai_schema['parameters']:
-            defs = openai_schema['parameters']['$defs']
-            del openai_schema['parameters']['$defs']
-
-        schema = {
-            "openapi": "3.1.0",
-            "info": {
-                "title": openai_schema['name'],
-                "description": openai_schema['description'],
-                "version": "v1.0.0"
-            },
-            "servers": [
-                {
-                    "url": url,
-                }
-            ],
-            "paths": {},
-            "components": {
-                "schemas": {},
-                "securitySchemes": {
-                    "apiKey": {
-                        "type": "apiKey"
-                    }
-                }
-            },
-        }
-
-        schema['paths']["/" + openai_schema['name']] = {
-            "post": {
-                "description": openai_schema['description'],
-                "operationId": openai_schema['name'],
-                "parameters": [],
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": openai_schema['parameters']
-                        }
-                    },
-                    "required": True,
-                },
-                "deprecated": False,
-                "security": [
-                    {
-                        "apiKey": []
-                    }
-                ],
-                "x-openai-isConsequential": False,
-            }
-        }
-
-        if defs:
-            schema['components']['schemas'].update(**defs)
-
-        return schema
-
     @abstractmethod
     def run(self, **kwargs):
         pass

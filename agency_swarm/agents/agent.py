@@ -367,68 +367,7 @@ class Agent():
         if self.assistant is None:
             raise Exception("Assistant is not initialized. Please initialize the agency first, before using this method")
 
-        schema = {
-            "openapi": "3.1.0",
-            "info": {
-                "title": self.name,
-                "description": self.description if self.description else "",
-                "version": "v1.0.0"
-            },
-            "servers": [
-                {
-                    "url": url,
-                }
-            ],
-            "paths": {},
-            "components": {
-                "schemas": {},
-                "securitySchemes": {
-                    "apiKey": {
-                        "type": "apiKey"
-                    }
-                }
-            },
-        }
-
-        for tool in self.tools:
-            if issubclass(tool, BaseTool):
-                openai_schema = tool.openai_schema
-                defs = {}
-                if '$defs' in openai_schema['parameters']:
-                    defs = openai_schema['parameters']['$defs']
-                    del openai_schema['parameters']['$defs']
-
-                schema['paths']["/" + openai_schema['name']] = {
-                    "post": {
-                        "description": openai_schema['description'],
-                        "operationId": openai_schema['name'],
-                        "parameters": [],
-                        "requestBody": {
-                            "content": {
-                                "application/json": {
-                                    "schema": openai_schema['parameters']
-                                }
-                            },
-                            "required": True,
-                        },
-                        "deprecated": False,
-                        "security": [
-                            {
-                                "apiKey": []
-                            }
-                        ],
-                        "x-openai-isConsequential": False,
-                    }
-                }
-
-                if defs:
-                    schema['components']['schemas'].update(**defs)
-
-                print(openai_schema)
-
-        schema = json.dumps(schema, indent=2).replace("#/$defs/", "#/components/schemas/")
-
-        return schema
+        return ToolFactory.get_openapi_schema(self.tools, url)
 
     # --- Settings Methods ---
 
