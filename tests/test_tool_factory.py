@@ -126,6 +126,14 @@ class ToolFactoryTest(unittest.TestCase):
 
         self.assertTrue(tool(content='test').run() == "Tool output")
 
+    def test_openapi_schema(self):
+        with open("./data/schemas/get-headers-params.json", "r") as f:
+            tools = ToolFactory.from_openapi_schema(f.read())
+
+        schema = ToolFactory.get_openapi_schema(tools, "123")
+
+        self.assertTrue(schema)
+
 
 
 

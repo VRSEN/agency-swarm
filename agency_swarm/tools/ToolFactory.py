@@ -1,5 +1,6 @@
 import importlib.util
 import inspect
+import json
 import os
 import sys
 from typing import Any, Dict, List, Type, Union
@@ -280,4 +281,69 @@ class ToolFactory:
 
         return tool
 
+    @staticmethod
+    def get_openapi_schema(tools: List[Type[BaseTool]], url: str, title="Agent Tools",
+                           description="A collection of tools."):
+        """
+        Generates an OpenAPI schema from a list of BaseTools.
 
+            :param tools: BaseTools to generate the schema from.
+            :param url: The base URL for the schema.
+            :param title: The title of the schema.
+            :param description: The description of the schema.
+
+        :return: A JSON string representing the OpenAPI schema with all the tools combined as separate endpoints.
+        """
+        schema = {
+            "openapi": "3.1.0",
+            "info": {
+                "title": title,
+                "description": description,
+                "version": "v1.0.0"
+            },
+            "servers": [
+                {
+                    "url": url,
+                }
+            ],
+            "paths": {},
+            "components": {
+                "schemas": {},
+                "securitySchemes": {
+                    "apiKey": {
+                        "type": "apiKey"
+                    }
+                }
+            },
+        }
+
+        for tool in tools:
+            if not issubclass(tool, BaseTool):
+                continue
+
+            openai_schema = tool.openai_schema
+            defs = {}
+            if '$defs' in openai_schema['parameters']:
+                defs = openai_schema['parameters']['$defs']
+                del openai_schema['parameters']['$defs']
+
+            schema['paths']["/" + openai_schema['name']] = {
+                "post": {
+                    "description": openai_schema['description'],
+                    "operationId": openai_schema['name'],
+                    "parameters": [],
+                    "requestBody": {
+                        "content": {
+                            "application/json": {
+                                "schema": openai_schema['parameters']
+                            }
+                        }
+                    }
+                }
+            }
+
+            schema['components']['schemas'].update(defs)
+
+        schema = json.dumps(schema, indent=2).replace("#/$defs/", "#/components/schemas/")
+
+        return schema
