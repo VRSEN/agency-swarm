@@ -43,6 +43,12 @@ In AutoGen, the next speaker is determined with an extra call to the model that 
 
 CrewAI introduces a concept of "process" [[3]](https://docs.crewai.com/core-concepts/Processes/) into agent communication, which provides some control over the communication flow. However, the biggest problem with CrewAI is that it is built on top of Langchain, which was created long before any function-calling models were released. This means that there is no type checking or error correction, so any action that your agent takes (which is the most important part of the system) could cause the whole system to go down if the model hallucinates. The sole advantage of CrewAI is its compatibility with open-source models.
 
+## Need help?
+
+If you need quick help with Agency Swarm, feel free to ask in the [Discord server](https://discord.gg/cw2xBaWfFM).
+
+If you are running a business, and you would like to employ Agency Swarm in your operations, you can contact me directly by filling a form at [vrsen.ai](https://vrsen.ai). 
+
 ---
 
 ## License

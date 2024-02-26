@@ -6,9 +6,9 @@ The only difference is that you must extend the `BaseTool` class and implement t
 
 ---
 
-## Converting [Answering Questions with Validated Citations Example](https://jxnl.github.io/instructor/examples/exact_citations/) from Instructor
+## Example: Converting [Answering Questions with Validated Citations Example](https://jxnl.github.io/instructor/examples/exact_citations/) from Instructor 
 
-This is an example of how to convert an extremely useful tool from instructor for RAG applications. It allows your agents to not only answer questions based on context, but also to provide the exact citations for the answers. This way you can be sure that the information is always accurate and reliable.
+This is an example of how to convert an extremely useful tool for RAG applications from instructor. It allows your agents to not only answer questions based on context, but also to provide the exact citations for the answers. This way your users can be sure that the information is always accurate and reliable.
 
 
 ### Original Instructor library implementation
@@ -56,9 +56,9 @@ class QuestionAnswer(BaseModel):
 
 To allow your agents to retrieve the context themselves, we must split `QuestionAnswer` into two separate tools: `QueryDatabase` and `AnswerQuestion`. We must also retrieve context from `shared_state`, as the context is not passed into the prompt beforehand, and `FieldValidationInfo` is not available in the `validate_sources` method.
 
-#### The `QueryDatabase` tool
+#### The `QueryDatabase` tool will:
 
-1. Check if the context is already retrieved. If it is, raise an error. (This means that the agent retrieved the context twice, without answering the question in between, which is not allowed.)
+1. Check if the context is already retrieved in `shared_state`. If it is, raise an error. (This means that the agent retrieved the context twice, without answering the question in between, which is most likely a hallucination.)
 2. Retrieve the context and save it to the `shared_state`.
 3. Return the context to the agent, so it can be used to answer the question.
 
@@ -85,7 +85,7 @@ class QueryDatabase(BaseTool):
 !!! note "Shared State"
     `shared_state` is a state that is shared between all tools, across all agents. It allows you to control the execution flow, share data, and provide instructions to the agents based on certain conditions or actions performed by other agents. 
 
-#### The `AnswerQuestion` tool
+#### The `AnswerQuestion` tool will:
 
 1. Check if the context is already retrieved. If it is not, raise an error. (This means that the agent is trying to answer the question without retrieving the context first.)
 2. Use the context from the `shared_state` to answer the question with a list of facts.
@@ -146,14 +146,15 @@ class Fact(BaseTool):
 ### Conclusion
 
 !!! note "Agent-Based vs LLM applications"
-    The difference between Agent-Based 2.0 applications and standard 1.0 LLM applications is that agents have autonomy and decision-making capabilities. Instead of hardcoding your execution flow with each prompt to the model, you must provide agents with the tools and instructions necessary to perform the tasks themselves.
+    The difference between Agent-Based 2.0 applications and standard 1.0 LLM applications is that agents have autonomy and decision-making capabilities. Instead of hardcoding your execution flow with each subsequent prompt to the model, you must provide agents with the tools and instructions necessary to perform the tasks themselves.
 
 To implement tools with Instructor in Agency Swarm, generally, you must:
 
 1. Extend the `BaseTool` class.
-2. Implement the `run` method with your execution logic inside.
-3. Use the `shared_state` to control the execution flow, share data between tools, and provide instructions to the agents based on certain conditions or actions performed by other agents.
-4. Split the tools into separate tools, if needed, to allow the agents to perform certain actions themselves, such as retrieving the context.
+2. Add fields with types and clear descriptions, plus the tool description itself.
+3. Implement the `run` method with your execution logic inside.
+4. Add validators and checks based on various conditions. 
+5. Split tools into smaller tools to give your agents more control, as needed.
 
 
 ---
@@ -199,6 +200,8 @@ tools = ToolFactory.from_openapi_schema(
     requests.get("https://api.example.com/openapi.json").json(),
 )
 ```
+
+---
 
 ## PRO Tips
 
