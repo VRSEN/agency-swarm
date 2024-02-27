@@ -4,6 +4,9 @@ Each agent or tool you add to Agency Swarm will automatically be available for i
 
 This document provides guidelines for contributing new agents and tools to the framework.
 
+!!! warning "Will be updated soon"
+    The way we contribute agents and tools will be updated soon to load source files directly from the repository, rather than import them into the framework. This will allow you to have full control over all your agents and tools.
+
 ### Folder Structure for Tools
 Tools should be added in the agency_swarm/tools/{category}/ directory like below.
 Each tool should be in its specific category folder like coding, browsing, investing etc.

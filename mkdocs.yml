@@ -41,9 +41,10 @@ nav:
   - Introduction: "index.md"
   - Quick Start: "quick_start.md"
   - Advanced Usage:
-    - Advanced Tools: "tools.md"
-    - Agents: "agents.md"
-    - Agencies: "agencies.md"
+    - Advanced Tools: "advanced-usage/tools.md"
+    - Agents: "advanced-usage/agents.md"
+    - Agencies: "advanced-usage/agencies.md"
+    - Azure OpenAI: "advanced-usage/azure-openai.md"
   - Deployment to Production: "deployment.md"
   - Contributing: "contributing.md"
   - Examples: "examples.md"

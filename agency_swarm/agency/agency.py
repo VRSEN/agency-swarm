@@ -5,7 +5,7 @@ import readline
 import shutil
 import uuid
 from enum import Enum
-from typing import List, TypedDict, Callable, Any, Dict, Literal
+from typing import List, TypedDict, Callable, Any, Dict, Literal, Union
 
 from pydantic import Field, field_validator
 from rich.console import Console
@@ -36,7 +36,7 @@ class Agency:
     def __init__(self,
                  agency_chart: List,
                  shared_instructions: str = "",
-                 shared_files: List = None,
+                 shared_files: Union[str, List[str]] = None,
                  async_mode: Literal['threading'] = None,
                  settings_path: str = "./settings.json",
                  settings_callbacks: SettingsCallbacks = None,
@@ -47,7 +47,7 @@ class Agency:
         Parameters:
             agency_chart: The structure defining the hierarchy and interaction of agents within the agency.
             shared_instructions (str, optional): A path to a file containing shared instructions for all agents. Defaults to an empty string.
-            shared_files (list, optional): A list of folder paths with files containing shared resources for all agents. Defaults to an empty list.
+            shared_files (Union[str, List[str]], optional): A path to a folder or a list of folders containing shared files for all agents. Defaults to None.
             async_mode (str, optional): The mode for asynchronous message processing. Defaults to None.
             settings_path (str, optional): The path to the settings file for the agency. Must be json. If file does not exist, it will be created. Defaults to None.
             settings_callbacks (SettingsCallbacks, optional): A dictionary containing functions to load and save settings for the agency. The keys must be "load" and "save". Both values must be defined. Defaults to None.

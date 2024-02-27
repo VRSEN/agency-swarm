@@ -90,7 +90,7 @@ agent = AgentName()
 For the most complex and requested use cases, we will be creating premade agents that you can import and reuse in your own projects. 
 
 !!! warning "Will be deprecated in future versions."
-    We are planning to deprecate agent imports in future versions, as this takes away the flexibility of the framework. Instead, we are planning to add a functionality to download agent source files locally from github, which will allow you to modify the inner logic as you see fit.
+    We are planning to deprecate agent imports in future versions, as this takes away the flexibility of the framework. Instead, we are planning to add a functionality to download agent source files locally from github, which will allow you to modify the inner logic and tools as you see fit.
 
 ```py
 from agency_swarm.agents.browsing import BrowsingAgent
