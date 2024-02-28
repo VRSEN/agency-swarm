@@ -46,12 +46,15 @@ nav:
     - Agencies: "advanced-usage/agencies.md"
     - Azure OpenAI: "advanced-usage/azure-openai.md"
   - Deployment to Production: "deployment.md"
+  - API Reference: "api.md"
   - Contributing: "contributing.md"
   - Examples: "examples.md"
 plugins:
   - mkdocs-jupyter:
       ignore_h1_titles: true
       execute: false
+  - search
+  - mkdocstrings
 markdown_extensions:
   - admonition
   - pymdownx.highlight:

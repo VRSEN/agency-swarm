@@ -70,8 +70,8 @@ class Agency:
         self.settings_callbacks = settings_callbacks
         self.threads_callbacks = threads_callbacks
 
-        if os.path.isfile(os.path.join(self.get_class_folder_path(), shared_instructions)):
-            self._read_instructions(os.path.join(self.get_class_folder_path(), shared_instructions))
+        if os.path.isfile(os.path.join(self._get_class_folder_path(), shared_instructions)):
+            self._read_instructions(os.path.join(self._get_class_folder_path(), shared_instructions))
         elif os.path.isfile(shared_instructions):
             self._read_instructions(shared_instructions)
         else:
@@ -155,7 +155,7 @@ class Agency:
 
             def handle_dropdown_change(selected_option):
                 nonlocal recipient_agent
-                recipient_agent = self.get_agent_by_name(selected_option)
+                recipient_agent = self._get_agent_by_name(selected_option)
 
             def handle_file_upload(file_list):
                 nonlocal message_file_ids
@@ -243,7 +243,7 @@ class Agency:
         demo.launch(share=share)
         return demo
 
-    def recipient_agent_completer(self, text, state):
+    def _recipient_agent_completer(self, text, state):
         """
         Autocomplete completer for recipient agent names.
         """
@@ -253,19 +253,19 @@ class Agency:
         else:
             return None
 
-    def setup_autocomplete(self):
+    def _setup_autocomplete(self):
         """
         Sets up readline with the completer function.
         """
         self.recipient_agents = [agent.name for agent in self.main_recipients]  # Cache recipient agents for autocomplete
-        readline.set_completer(self.recipient_agent_completer)
+        readline.set_completer(self._recipient_agent_completer)
         readline.parse_and_bind('tab: complete')
 
     def run_demo(self):
         """
-        Enhanced run_demo with autocomplete for recipient agent names.
+        Executes agency in the terminal with autocomplete for recipient agent names.
         """
-        self.setup_autocomplete()  # Prepare readline for autocomplete
+        self._setup_autocomplete()  # Prepare readline for autocomplete
 
         while True:
             console.rule()
@@ -280,7 +280,7 @@ class Agency:
                 text = text.replace(f"@{recipient_agent}", "").strip()
                 try:
                     recipient_agent = [agent for agent in self.recipient_agents if agent.lower() == recipient_agent.lower()][0]
-                    recipient_agent = self.get_agent_by_name(recipient_agent)
+                    recipient_agent = self._get_agent_by_name(recipient_agent)
                 except Exception as e:
                     print(f"Recipient agent {recipient_agent} not found.")
                     continue
@@ -363,8 +363,8 @@ class Agency:
         for agent_name, threads in self.agents_and_threads.items():
             for other_agent, items in threads.items():
                 self.agents_and_threads[agent_name][other_agent] = self.ThreadType(
-                    self.get_agent_by_name(items["agent"]),
-                    self.get_agent_by_name(
+                    self._get_agent_by_name(items["agent"]),
+                    self._get_agent_by_name(
                         items["recipient_agent"]))
 
                 if agent_name in loaded_thread_ids and other_agent in loaded_thread_ids[agent_name]:
@@ -448,13 +448,13 @@ class Agency:
         if not agent.id:
             # assign temp id
             agent.id = "temp_id_" + str(uuid.uuid4())
-        if agent.id not in self.get_agent_ids():
-            if agent.name in self.get_agent_names():
+        if agent.id not in self._get_agent_ids():
+            if agent.name in self._get_agent_names():
                 raise Exception("Agent names must be unique.")
             self.agents.append(agent)
             return len(self.agents) - 1
         else:
-            return self.get_agent_ids().index(agent.id)
+            return self._get_agent_ids().index(agent.id)
 
     def _add_main_recipient(self, agent):
         """
@@ -495,8 +495,8 @@ class Agency:
         """
         for agent_name, threads in self.agents_and_threads.items():
             recipient_names = list(threads.keys())
-            recipient_agents = self.get_agents_by_names(recipient_names)
-            agent = self.get_agent_by_name(agent_name)
+            recipient_agents = self._get_agents_by_names(recipient_names)
+            agent = self._get_agent_by_name(agent_name)
             agent.add_tool(self._create_send_message_tool(agent, recipient_agents))
             if self.async_mode:
                 agent.add_tool(self._create_get_response_tool(agent, recipient_agents))
@@ -601,7 +601,7 @@ class Agency:
 
         return GetResponse
 
-    def get_agent_by_name(self, agent_name):
+    def _get_agent_by_name(self, agent_name):
         """
         Retrieves an agent from the agency based on the agent's name.
 
@@ -619,7 +619,7 @@ class Agency:
                 return agent
         raise Exception(f"Agent {agent_name} not found.")
 
-    def get_agents_by_names(self, agent_names):
+    def _get_agents_by_names(self, agent_names):
         """
         Retrieves a list of agent objects based on their names.
 
@@ -629,9 +629,9 @@ class Agency:
         Returns:
             A list of Agent objects corresponding to the given names.
         """
-        return [self.get_agent_by_name(agent_name) for agent_name in agent_names]
+        return [self._get_agent_by_name(agent_name) for agent_name in agent_names]
 
-    def get_agent_ids(self):
+    def _get_agent_ids(self):
         """
         Retrieves the IDs of all agents currently in the agency.
 
@@ -640,7 +640,7 @@ class Agency:
         """
         return [agent.id for agent in self.agents]
 
-    def get_agent_names(self):
+    def _get_agent_names(self):
         """
         Retrieves the names of all agents in the agency.
 
@@ -649,16 +649,7 @@ class Agency:
         """
         return [agent.name for agent in self.agents]
 
-    def get_recipient_names(self):
-        """
-        Retrieves the names of all agents in the agency.
-
-        Returns:
-            A list of strings, where each string is the name of an agent in the agency.
-        """
-        return [agent.name for agent in self.agents]
-
-    def get_class_folder_path(self):
+    def _get_class_folder_path(self):
         """
         Retrieves the absolute path of the directory containing the class file.
 
