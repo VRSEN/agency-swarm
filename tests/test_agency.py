@@ -6,6 +6,8 @@ import sys
 import time
 import unittest
 
+from agency_swarm.tools import CodeInterpreter
+
 sys.path.insert(0, '../agency-swarm')
 from agency_swarm.util import create_agent_template
 
@@ -95,6 +97,7 @@ class AgencyTest(unittest.TestCase):
         from test_agents import CEO, TestAgent1, TestAgent2
         cls.ceo = CEO()
         cls.agent1 = TestAgent1()
+        cls.agent1.add_tool(CodeInterpreter)
         cls.agent2 = TestAgent2()
 
     def test_1_init_agency(self):
