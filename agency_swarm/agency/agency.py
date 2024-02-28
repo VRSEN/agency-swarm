@@ -61,9 +61,11 @@ class Agency:
             self.ThreadType = ThreadAsync
 
         self.ceo = None
+        self.user = User()
         self.agents = []
         self.agents_and_threads = {}
         self.main_recipients = []
+        self.main_thread = None
         self.recipient_agents = None
         self.shared_files = shared_files if shared_files else []
         self.settings_path = settings_path
@@ -82,8 +84,6 @@ class Agency:
         self._init_agents()
         self._init_threads()
 
-        self.user = User()
-        self.main_thread = Thread(self.user, self.ceo)
 
     def get_completion(self, message: str, message_files=None, yield_messages=True, recipient_agent=None):
         """
@@ -355,10 +355,16 @@ class Agency:
         Output Parameters:
             This method does not return any value but updates the agents_and_threads attribute with initialized Thread objects.
         """
+        self.main_thread = Thread(self.user, self.ceo)
+
         # load thread ids
         loaded_thread_ids = {}
         if self.threads_callbacks:
             loaded_thread_ids = self.threads_callbacks["load"]()
+            if "main_thread" in loaded_thread_ids:
+                self.main_thread.id = loaded_thread_ids["main_thread"]
+            else:
+                self.main_thread.init_thread()
 
         for agent_name, threads in self.agents_and_threads.items():
             for other_agent, items in threads.items():
@@ -379,6 +385,8 @@ class Agency:
                 loaded_thread_ids[agent_name] = {}
                 for other_agent, thread in threads.items():
                     loaded_thread_ids[agent_name][other_agent] = thread.id
+
+            loaded_thread_ids["main_thread"] = self.main_thread.id
 
             self.threads_callbacks["save"](loaded_thread_ids)
 
