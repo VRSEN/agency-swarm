@@ -1,0 +1,75 @@
+site_name: Agency Swarm
+site_author: Arsenii Shatokhin
+site_description: A an open source agent orchestration framework based on the latest OpenAI Assistants API.
+theme:
+  features:
+    - search.suggest
+    - search.highlight
+    - search.share
+    - navigation.expand
+    - navigation.footer
+    - navigation.indexes
+    - navigation.instant
+    - navigation.instant.prefetch
+    - navigation.instant.progress
+    - navigation.prune
+#    - navigation.sections
+    - navigation.tabs
+    # - navigation.tabs.sticky
+    - navigation.top
+    - navigation.tracking
+    - content.code.select
+    - content.code.copy
+  name: material
+  palette:
+    # Palette toggle for light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: black
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    # Palette toggle for dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: amber
+      accent: yellow
+      toggle:
+        icon: material/brightness-4
+        name: Switch to system preference
+nav:
+  - Introduction: "index.md"
+  - Quick Start: "quick_start.md"
+  - Advanced Usage:
+    - Advanced Tools: "advanced-usage/tools.md"
+    - Agents: "advanced-usage/agents.md"
+    - Agencies: "advanced-usage/agencies.md"
+    - Azure OpenAI: "advanced-usage/azure-openai.md"
+  - Deployment to Production: "deployment.md"
+  - API Reference: "api.md"
+  - Contributing: "contributing.md"
+  - Examples: "examples.md"
+plugins:
+  - mkdocs-jupyter:
+      ignore_h1_titles: true
+      execute: false
+  - search
+  - mkdocstrings
+markdown_extensions:
+  - admonition
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+extra:
+  generator: false
+  social:
+    - icon: fontawesome/brands/mastodon
+      link: https://www.vrsen.ai/
+    - icon: fontawesome/brands/github
+      link: https://github.com/VRSEN/agency-swarm
+    - icon: fontawesome/brands/x-twitter
+      link: https://twitter.com/__vrsen__

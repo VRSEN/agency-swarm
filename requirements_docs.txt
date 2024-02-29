@@ -1,0 +1,4 @@
+mkdocs-material
+mkdocs-jupyter
+mkdocstrings[python]
+mistune==3.0.2

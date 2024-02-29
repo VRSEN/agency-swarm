@@ -5,7 +5,7 @@ import readline
 import shutil
 import uuid
 from enum import Enum
-from typing import List, TypedDict, Callable, Any, Dict, Literal
+from typing import List, TypedDict, Callable, Any, Dict, Literal, Union
 
 from pydantic import Field, field_validator
 from rich.console import Console
@@ -36,7 +36,7 @@ class Agency:
     def __init__(self,
                  agency_chart: List,
                  shared_instructions: str = "",
-                 shared_files: List = None,
+                 shared_files: Union[str, List[str]] = None,
                  async_mode: Literal['threading'] = None,
                  settings_path: str = "./settings.json",
                  settings_callbacks: SettingsCallbacks = None,
@@ -47,7 +47,7 @@ class Agency:
         Parameters:
             agency_chart: The structure defining the hierarchy and interaction of agents within the agency.
             shared_instructions (str, optional): A path to a file containing shared instructions for all agents. Defaults to an empty string.
-            shared_files (list, optional): A list of folder paths with files containing shared resources for all agents. Defaults to an empty list.
+            shared_files (Union[str, List[str]], optional): A path to a folder or a list of folders containing shared files for all agents. Defaults to None.
             async_mode (str, optional): The mode for asynchronous message processing. Defaults to None.
             settings_path (str, optional): The path to the settings file for the agency. Must be json. If file does not exist, it will be created. Defaults to None.
             settings_callbacks (SettingsCallbacks, optional): A dictionary containing functions to load and save settings for the agency. The keys must be "load" and "save". Both values must be defined. Defaults to None.
@@ -61,17 +61,19 @@ class Agency:
             self.ThreadType = ThreadAsync
 
         self.ceo = None
+        self.user = User()
         self.agents = []
         self.agents_and_threads = {}
         self.main_recipients = []
+        self.main_thread = None
         self.recipient_agents = None
         self.shared_files = shared_files if shared_files else []
         self.settings_path = settings_path
         self.settings_callbacks = settings_callbacks
         self.threads_callbacks = threads_callbacks
 
-        if os.path.isfile(os.path.join(self.get_class_folder_path(), shared_instructions)):
-            self._read_instructions(os.path.join(self.get_class_folder_path(), shared_instructions))
+        if os.path.isfile(os.path.join(self._get_class_folder_path(), shared_instructions)):
+            self._read_instructions(os.path.join(self._get_class_folder_path(), shared_instructions))
         elif os.path.isfile(shared_instructions):
             self._read_instructions(shared_instructions)
         else:
@@ -82,8 +84,6 @@ class Agency:
         self._init_agents()
         self._init_threads()
 
-        self.user = User()
-        self.main_thread = Thread(self.user, self.ceo)
 
     def get_completion(self, message: str, message_files=None, yield_messages=True, recipient_agent=None):
         """
@@ -155,7 +155,7 @@ class Agency:
 
             def handle_dropdown_change(selected_option):
                 nonlocal recipient_agent
-                recipient_agent = self.get_agent_by_name(selected_option)
+                recipient_agent = self._get_agent_by_name(selected_option)
 
             def handle_file_upload(file_list):
                 nonlocal message_file_ids
@@ -243,7 +243,7 @@ class Agency:
         demo.launch(share=share)
         return demo
 
-    def recipient_agent_completer(self, text, state):
+    def _recipient_agent_completer(self, text, state):
         """
         Autocomplete completer for recipient agent names.
         """
@@ -253,19 +253,19 @@ class Agency:
         else:
             return None
 
-    def setup_autocomplete(self):
+    def _setup_autocomplete(self):
         """
         Sets up readline with the completer function.
         """
         self.recipient_agents = [agent.name for agent in self.main_recipients]  # Cache recipient agents for autocomplete
-        readline.set_completer(self.recipient_agent_completer)
+        readline.set_completer(self._recipient_agent_completer)
         readline.parse_and_bind('tab: complete')
 
     def run_demo(self):
         """
-        Enhanced run_demo with autocomplete for recipient agent names.
+        Executes agency in the terminal with autocomplete for recipient agent names.
         """
-        self.setup_autocomplete()  # Prepare readline for autocomplete
+        self._setup_autocomplete()  # Prepare readline for autocomplete
 
         while True:
             console.rule()
@@ -280,7 +280,7 @@ class Agency:
                 text = text.replace(f"@{recipient_agent}", "").strip()
                 try:
                     recipient_agent = [agent for agent in self.recipient_agents if agent.lower() == recipient_agent.lower()][0]
-                    recipient_agent = self.get_agent_by_name(recipient_agent)
+                    recipient_agent = self._get_agent_by_name(recipient_agent)
                 except Exception as e:
                     print(f"Recipient agent {recipient_agent} not found.")
                     continue
@@ -355,16 +355,22 @@ class Agency:
         Output Parameters:
             This method does not return any value but updates the agents_and_threads attribute with initialized Thread objects.
         """
+        self.main_thread = Thread(self.user, self.ceo)
+
         # load thread ids
         loaded_thread_ids = {}
         if self.threads_callbacks:
             loaded_thread_ids = self.threads_callbacks["load"]()
+            if "main_thread" in loaded_thread_ids:
+                self.main_thread.id = loaded_thread_ids["main_thread"]
+            else:
+                self.main_thread.init_thread()
 
         for agent_name, threads in self.agents_and_threads.items():
             for other_agent, items in threads.items():
                 self.agents_and_threads[agent_name][other_agent] = self.ThreadType(
-                    self.get_agent_by_name(items["agent"]),
-                    self.get_agent_by_name(
+                    self._get_agent_by_name(items["agent"]),
+                    self._get_agent_by_name(
                         items["recipient_agent"]))
 
                 if agent_name in loaded_thread_ids and other_agent in loaded_thread_ids[agent_name]:
@@ -379,6 +385,8 @@ class Agency:
                 loaded_thread_ids[agent_name] = {}
                 for other_agent, thread in threads.items():
                     loaded_thread_ids[agent_name][other_agent] = thread.id
+
+            loaded_thread_ids["main_thread"] = self.main_thread.id
 
             self.threads_callbacks["save"](loaded_thread_ids)
 
@@ -448,13 +456,13 @@ class Agency:
         if not agent.id:
             # assign temp id
             agent.id = "temp_id_" + str(uuid.uuid4())
-        if agent.id not in self.get_agent_ids():
-            if agent.name in self.get_agent_names():
+        if agent.id not in self._get_agent_ids():
+            if agent.name in self._get_agent_names():
                 raise Exception("Agent names must be unique.")
             self.agents.append(agent)
             return len(self.agents) - 1
         else:
-            return self.get_agent_ids().index(agent.id)
+            return self._get_agent_ids().index(agent.id)
 
     def _add_main_recipient(self, agent):
         """
@@ -495,8 +503,8 @@ class Agency:
         """
         for agent_name, threads in self.agents_and_threads.items():
             recipient_names = list(threads.keys())
-            recipient_agents = self.get_agents_by_names(recipient_names)
-            agent = self.get_agent_by_name(agent_name)
+            recipient_agents = self._get_agents_by_names(recipient_names)
+            agent = self._get_agent_by_name(agent_name)
             agent.add_tool(self._create_send_message_tool(agent, recipient_agents))
             if self.async_mode:
                 agent.add_tool(self._create_get_response_tool(agent, recipient_agents))
@@ -601,7 +609,7 @@ class Agency:
 
         return GetResponse
 
-    def get_agent_by_name(self, agent_name):
+    def _get_agent_by_name(self, agent_name):
         """
         Retrieves an agent from the agency based on the agent's name.
 
@@ -619,7 +627,7 @@ class Agency:
                 return agent
         raise Exception(f"Agent {agent_name} not found.")
 
-    def get_agents_by_names(self, agent_names):
+    def _get_agents_by_names(self, agent_names):
         """
         Retrieves a list of agent objects based on their names.
 
@@ -629,9 +637,9 @@ class Agency:
         Returns:
             A list of Agent objects corresponding to the given names.
         """
-        return [self.get_agent_by_name(agent_name) for agent_name in agent_names]
+        return [self._get_agent_by_name(agent_name) for agent_name in agent_names]
 
-    def get_agent_ids(self):
+    def _get_agent_ids(self):
         """
         Retrieves the IDs of all agents currently in the agency.
 
@@ -640,7 +648,7 @@ class Agency:
         """
         return [agent.id for agent in self.agents]
 
-    def get_agent_names(self):
+    def _get_agent_names(self):
         """
         Retrieves the names of all agents in the agency.
 
@@ -649,16 +657,7 @@ class Agency:
         """
         return [agent.name for agent in self.agents]
 
-    def get_recipient_names(self):
-        """
-        Retrieves the names of all agents in the agency.
-
-        Returns:
-            A list of strings, where each string is the name of an agent in the agency.
-        """
-        return [agent.name for agent in self.agents]
-
-    def get_class_folder_path(self):
+    def _get_class_folder_path(self):
         """
         Retrieves the absolute path of the directory containing the class file.
 

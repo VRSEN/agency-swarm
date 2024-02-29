@@ -4,21 +4,24 @@
 
 ## Overview
 
-Agency Swarm is an open-source agent orchestration framework designed to automate and streamline AI development processes. Leveraging the power of the OpenAI Assistants API, it enables the creation of a collaborative swarm of agents (Agencies), each with distinct roles and capabilities. This framework aims to replace traditional AI development methodologies with a more dynamic, flexible, and efficient agent-based system.
+Agency Swarm started as a desire and effort of Arsenii Shatokhin (aka VRSEN) to fully automate his AI Agency with AI. By building this framework, we aim to simplify the agent creation process and enable anyone to create collaborative swarm of agents (Agencies), each with distinct roles and capabilities. By thinking about automation in terms of real world entities, such as agencies and specialized agent roles, we make it a lot more intuitive for both the agents and the users.
 
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1qGVyK-vIoxZD0dMrMVqCxCsgL1euMLKj)
 [![Subscribe on YouTube](https://img.shields.io/youtube/channel/subscribers/UCSv4qL8vmoSH7GaPjuqRiCQ
 )](https://youtube.com/@vrsen/)
 [![Follow on Twitter](https://img.shields.io/twitter/follow/__vrsen__.svg?style=social&label=Follow%20%40__vrsen__)](https://twitter.com/__vrsen__)
 [![Join our Discord!](https://img.shields.io/discord/1200037936352202802?label=Discord)](https://discord.gg/cw2xBaWfFM)
+[![VRSEN AI](https://img.shields.io/website?label=vrsen.ai&up_message=website&url=https%3A%2F%2Fvrsen.ai)](https://vrsen.ai)
 
-## Key Features
+### Key Features
 
 - **Customizable Agent Roles**: Define roles like CEO, virtual assistant, developer, etc., and customize their functionalities with [Assistants API](https://platform.openai.com/docs/assistants/overview).
 - **Full Control Over Prompts**: Avoid conflicts and restrictions of pre-defined prompts, allowing full customization.
 - **Tool Creation**: Tools within Agency Swarm are created using [Instructor](https://github.com/jxnl/instructor), which provides a convenient interface and automatic type validation. 
 - **Efficient Communication**: Agents communicate through a specially designed "send message" tool based on their own descriptions.
 - **State Management**: Agency Swarm efficiently manages the state of your assistants on OpenAI, maintaining it in a special `settings.json` file.
+- **Deployable in Production**: Agency Swarm is designed to be reliable and easily deployable in production environments.
+
 
 ## Installation
 
@@ -38,127 +41,115 @@ set_openai_key("YOUR_API_KEY")
 
 2. **Create Tools**:
 Define your custom tools with [Instructor](https://github.com/jxnl/instructor):
-```python
-from agency_swarm.tools import BaseTool
-from pydantic import Field
-
-class MyCustomTool(BaseTool):
-    """
-    A brief description of what the custom tool does. 
-    The docstring should clearly explain the tool's purpose and functionality.
-    """
-
-    # Define the fields with descriptions using Pydantic Field
-    example_field: str = Field(
-        ..., description="Description of the example field, explaining its purpose and usage."
-    )
-
-    # Additional fields as required
-    # ...
-
-    def run(self):
+    ```python
+    from agency_swarm.tools import BaseTool
+    from pydantic import Field
+    
+    class MyCustomTool(BaseTool):
         """
-        The implementation of the run method, where the tool's main functionality is executed.
-        This method should utilize the fields defined above to perform its task.
-        Doc string description is not required for this method.
+        A brief description of what the custom tool does. 
+        The docstring should clearly explain the tool's purpose and functionality.
         """
-
-        # Your custom tool logic goes here
-        do_something(self.example_field)
-
-        # Return the result of the tool's operation
-        return "Result of MyCustomTool operation"
-```
-Import in 1 line of code from [Langchain](https://python.langchain.com/docs/integrations/tools):
-
-```python
-from langchain.tools import YouTubeSearchTool
-from agency_swarm.tools import ToolFactory
-
-LangchainTool = ToolFactory.from_langchain_tool(YouTubeSearchTool)
-```
-
-or
-
-```python
-from langchain.agents import load_tools
-
-tools = load_tools(
-    ["arxiv", "human"],
-)
-
-tools = ToolFactory.from_langchain_tools(tools)
-```
-
-**NEW**: Convert from OpenAPI schemas:
-
-```python
-# using local file
-with open("schemas/your_schema.json") as f:
+    
+        # Define the fields with descriptions using Pydantic Field
+        example_field: str = Field(
+            ..., description="Description of the example field, explaining its purpose and usage."
+        )
+    
+        # Additional fields as required
+        # ...
+    
+        def run(self):
+            """
+            The implementation of the run method, where the tool's main functionality is executed.
+            This method should utilize the fields defined above to perform its task.
+            Doc string description is not required for this method.
+            """
+    
+            # Your custom tool logic goes here
+            do_something(self.example_field)
+    
+            # Return the result of the tool's operation
+            return "Result of MyCustomTool operation"
+    ```
+    
+    or convert from OpenAPI schemas:
+    
+    ```python
+    # using local file
+    with open("schemas/your_schema.json") as f:
+        ToolFactory.from_openapi_schema(
+            f.read(),
+        )
+    
+    # using requests
     ToolFactory.from_openapi_schema(
-        f.read(),
+        requests.get("https://api.example.com/openapi.json").json(),
     )
-
-# using requests
-ToolFactory.from_openapi_schema(
-    requests.get("https://api.example.com/openapi.json").json(),
-)
-```
+    ```
 
 
 3. **Define Agent Roles**: Start by defining the roles of your agents. For example, a CEO agent for managing tasks and a developer agent for executing tasks.
 
-```python
-from agency_swarm import Agent
+    ```python
+    from agency_swarm import Agent
+    
+    ceo = Agent(name="CEO",
+                description="Responsible for client communication, task planning and management.",
+                instructions="You must converse with other agents to ensure complete task execution.", # can be a file like ./instructions.md
+                files_folder="./files", # files to be uploaded to OpenAI
+                schemas_folder="./schemas", # OpenAPI schemas to be converted into tools
+                tools=[MyCustomTool, LangchainTool])
+    ```
 
-ceo = Agent(name="CEO",
-            description="Responsible for client communication, task planning and management.",
-            instructions="You must converse with other agents to ensure complete task execution.", # can be a file like ./instructions.md
-            files_folder="./files", # files to be uploaded to OpenAI
-            schemas_folder="./schemas", # OpenAPI schemas to be converted into tools
-            tools=[MyCustomTool, LangchainTool])
-```
-
-Import from existing agents:
-
-```python
-from agency_swarm.agents.browsing import BrowsingAgent
-
-browsing_agent = BrowsingAgent()
-
-browsing_agent.instructions += "\n\nYou can add additional instructions here."
-```
+    Import from existing agents (will be deprecated in future versions):
+    
+    ```python
+    from agency_swarm.agents.browsing import BrowsingAgent
+    
+    browsing_agent = BrowsingAgent()
+    
+    browsing_agent.instructions += "\n\nYou can add additional instructions here."
+    ```
 
 
 
 4. **Define Agency Communication Flows**: 
 Establish how your agents will communicate with each other.
 
-```python
-from agency_swarm import Agency
+    ```python
+    from agency_swarm import Agency
+    
+    agency = Agency([
+        ceo,  # CEO will be the entry point for communication with the user
+        [ceo, dev],  # CEO can initiate communication with Developer
+        [ceo, va],   # CEO can initiate communication with Virtual Assistant
+        [dev, va]    # Developer can initiate communication with Virtual Assistant
+    ], shared_instructions='agency_manifesto.md') # shared instructions for all agents
+    ```
 
-agency = Agency([
-    ceo,  # CEO will be the entry point for communication with the user
-    [ceo, dev],  # CEO can initiate communication with Developer
-    [ceo, va],   # CEO can initiate communication with Virtual Assistant
-    [dev, va]    # Developer can initiate communication with Virtual Assistant
-], shared_instructions='agency_manifesto.md') # shared instructions for all agents
-```
-
- In Agency Swarm, communication flows are directional, meaning they are established from left to right in the agency_chart definition. For instance, in the example above, the CEO can initiate a chat with the developer (dev), and the developer can respond in this chat. However, the developer cannot initiate a chat with the CEO. The developer can initiate a chat with the virtual assistant (va) and assign new tasks.
+     In Agency Swarm, communication flows are directional, meaning they are established from left to right in the agency_chart definition. For instance, in the example above, the CEO can initiate a chat with the developer (dev), and the developer can respond in this chat. However, the developer cannot initiate a chat with the CEO. The developer can initiate a chat with the virtual assistant (va) and assign new tasks.
 
 5. **Run Demo**: 
 Run the demo to see your agents in action!
+    
+    Web interface:
 
-```python
-agency.demo_gradio(height=900)
-```
-
-Terminal version:
-
-```python
-agency.run_demo()
-```
+    ```python
+    agency.demo_gradio(height=900)
+    ```
+    
+    Terminal version:
+    
+    ```python
+    agency.run_demo()
+    ```
+    
+    Backend version:
+    
+    ```python
+    completion_output = agency.get_completion("Please create a new website for our client.", yield_messages=False)
+    ```
 
 6. **Get Completion**:
 Get completion from the agency:
@@ -178,6 +169,11 @@ The `genesis` command starts the genesis agency in your terminal to help you cre
 ```bash
 agency-swarm genesis [--openai_key "YOUR_API_KEY"]
 ```
+
+Make sure to include:
+- Your mission and goals.
+- The agents you want to involve and their communication flows.
+- Which tools or APIs each agent should have access to, if any.
 
 ## Creating Agent Templates Locally
 
@@ -228,4 +224,4 @@ Agency Swarm is open-source and licensed under [MIT](https://opensource.org/lice
 
 ## Need Help?
 
-If you require assistance in creating custom agent swarms or have any specific queries related to Agency Swarm, feel free to reach out through my website: [vrsen.ai](https://vrsen.ai) or schedule a consultation at https://calendly.com/vrsen/ai-project-consultation
+If you require assistance in creating custom agents for your business, feel free to reach out through my website: [vrsen.ai](https://vrsen.ai) or schedule a consultation at https://calendly.com/vrsen/ai-project-consultation
