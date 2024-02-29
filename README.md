@@ -34,10 +34,10 @@ pip install agency-swarm
 
 1. **Set Your OpenAI Key**:
 
-```python
-from agency_swarm import set_openai_key
-set_openai_key("YOUR_API_KEY")
-```
+    ```python
+    from agency_swarm import set_openai_key
+    set_openai_key("YOUR_API_KEY")
+    ```
 
 2. **Create Tools**:
 Define your custom tools with [Instructor](https://github.com/jxnl/instructor):
@@ -150,13 +150,6 @@ Run the demo to see your agents in action!
     ```python
     completion_output = agency.get_completion("Please create a new website for our client.", yield_messages=False)
     ```
-
-6. **Get Completion**:
-Get completion from the agency:
-
-```python
-completion_output = agency.get_completion("Please create a new website for our client.", yield_messages=False)
-```
 
 # CLI
 
