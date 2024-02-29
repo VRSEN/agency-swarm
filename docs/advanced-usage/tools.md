@@ -145,9 +145,6 @@ class Fact(BaseTool):
 
 ### Conclusion
 
-!!! note "Agent-Based vs LLM applications"
-    The difference between Agent-Based 2.0 applications and standard 1.0 LLM applications is that agents have autonomy and decision-making capabilities. Instead of hardcoding your execution flow with each subsequent prompt to the model, you must provide agents with the tools and instructions necessary to perform the tasks themselves.
-
 To implement tools with Instructor in Agency Swarm, generally, you must:
 
 1. Extend the `BaseTool` class.
