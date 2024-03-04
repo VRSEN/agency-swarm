@@ -95,7 +95,7 @@ class QueryDatabase(BaseTool):
 ```python
 class AnswerQuestion(BaseTool):
     answer: str = Field(..., description="The answer to the question, based on context.")
-    sources: List[str] = Field(..., description="The sources of the answer")
+    sources: List[Fact] = Field(..., description="The sources of the answer")
     
     def run(self):
         # Remove the context after question is answered

@@ -15,7 +15,7 @@ Here are the primary benefits of using an Agency, instead of an individual agent
 
 ## Communication Flows
 
-Unlike all other frameworks, communication flows in Agency Swarm are **not hierarchical**. Instead, they are **directional**, like in real-world organizations. This means that they are established from left to right inside the `agency_chart`. So, in the example below, the CEO can initiate communication and send tasks to the Developer and the Virtual Assistant, and they can respond in to him in the same thread, but the Developer or the VA cannot initiate a conversation and assign tasks to the CEO.
+Unlike all other frameworks, communication flows in Agency Swarm are **not hierarchical** or **sequential**. Instead, they are **uniform**. You can define them however you want. But keep in mind that they are established from left to right inside the `agency_chart`. So, in the example below, the CEO can initiate communication and send tasks to the Developer and the Virtual Assistant, and they can respond in to him in the same thread, but the Developer or the VA cannot initiate a conversation and assign tasks to the CEO. You can add as many levels of communication as you want.
 
 ```python
 from agency_swarm import Agency
