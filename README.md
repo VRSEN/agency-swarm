@@ -77,6 +77,7 @@ Define your custom tools with [Instructor](https://github.com/jxnl/instructor):
     or convert from OpenAPI schemas:
     
     ```python
+    from agency_swarm.tools import ToolFactory
     # using local file
     with open("schemas/your_schema.json") as f:
         ToolFactory.from_openapi_schema(
