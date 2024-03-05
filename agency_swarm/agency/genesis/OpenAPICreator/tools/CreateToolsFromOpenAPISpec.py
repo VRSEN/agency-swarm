@@ -6,6 +6,7 @@ from agency_swarm import BaseTool
 
 import json
 
+from agency_swarm.agency.genesis.util import check_agency_path, check_agent_path
 from agency_swarm.tools import ToolFactory
 from agency_swarm.util.openapi import validate_openapi_spec
 
@@ -24,6 +25,9 @@ class CreateToolsFromOpenAPISpec(BaseTool):
                          "It must be a full valid OpenAPI 3.1.0 specification.",
         examples=[
             '{\n  "openapi": "3.1.0",\n  "info": {\n    "title": "Get weather data",\n    "description": "Retrieves current weather data for a location.",\n    "version": "v1.0.0"\n  },\n  "servers": [\n    {\n      "url": "https://weather.example.com"\n    }\n  ],\n  "paths": {\n    "/location": {\n      "get": {\n        "description": "Get temperature for a specific location",\n        "operationId": "GetCurrentWeather",\n        "parameters": [\n          {\n            "name": "location",\n            "in": "query",\n            "description": "The city and state to retrieve the weather for",\n            "required": true,\n            "schema": {\n              "type": "string"\n            }\n          }\n        ],\n        "deprecated": false\n      }\n    }\n  },\n  "components": {\n    "schemas": {}\n  }\n}'])
+    agency_name: str = Field(
+        None, description="Name of the agency to create the tool for. Defaults to the agency currently being created."
+    )
 
     def run(self):
         os.chdir(self.shared_state.get("agency_path"))
@@ -71,13 +75,7 @@ class CreateToolsFromOpenAPISpec(BaseTool):
 
     @model_validator(mode="after")
     def validate_agent_name(self):
-        if not self.shared_state.get("agency_path"):
-            raise ValueError("Please tell the user that he must create agency first.")
+        check_agency_path(self)
 
-        agent_path = os.path.join(self.shared_state.get("agency_path"), self.agent_name)
-        if not os.path.exists(agent_path):
-            available_agents = os.listdir(self.shared_state.get("agency_path"))
-            available_agents = [agent for agent in available_agents if
-                                os.path.isdir(os.path.join(self.shared_state.get("agency_path"), agent))]
-            raise ValueError(f"Agent {self.agent_name} not found. Available agents are: {available_agents}")
+        check_agent_path(self)
 

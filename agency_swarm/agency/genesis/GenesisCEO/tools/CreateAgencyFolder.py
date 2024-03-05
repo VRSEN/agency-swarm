@@ -23,8 +23,8 @@ class CreateAgencyFolder(BaseTool):
     )
     manifesto: str = Field(
         ..., description="Manifesto for the agency, describing its goals and additional context shared by all agents "
-                         "in markdown format. It must include a brief description of each agent, its purpose and "
-                         "whether it needs to utilize any tools or APIs.",
+                         "in markdown format. It must include information about the working environment, the mission "
+                         "and the goals of the agency.",
     )
 
     def run(self):

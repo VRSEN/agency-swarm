@@ -9,7 +9,7 @@ class ToolCreator(Agent):
         if 'tools' not in kwargs:
             kwargs['tools'] = []
 
-        kwargs['description'] = "This agent is responsible for creating new tools for the agency."
+        kwargs['description'] = "This agent is responsible for creating new tools for the agency using python code."
 
         # Add required tools
         kwargs['tools'].extend([CreateTool, TestTool])
