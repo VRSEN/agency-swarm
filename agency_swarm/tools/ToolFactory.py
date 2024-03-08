@@ -365,6 +365,7 @@ class ToolFactory:
                 "post": {
                     "description": openai_schema['description'],
                     "operationId": openai_schema['name'],
+                    "x-openai-isConsequential": False,
                     "parameters": [],
                     "requestBody": {
                         "content": {
@@ -372,7 +373,7 @@ class ToolFactory:
                                 "schema": openai_schema['parameters']
                             }
                         }
-                    }
+                    },
                 }
             }
 
