@@ -7,13 +7,21 @@ import uuid
 from enum import Enum
 from typing import List, TypedDict, Callable, Any, Dict, Literal, Union
 
+from openai.types.beta import AssistantStreamEvent
+from openai.types.beta.threads import Message
+from openai.types.beta.threads.runs import RunStep
 from pydantic import Field, field_validator
 from rich.console import Console
 
 from agency_swarm.agents import Agent
+from agency_swarm.messages import MessageOutput
+from agency_swarm.messages.message_output import MessageOutputLive
 from agency_swarm.threads import Thread
 from agency_swarm.tools import BaseTool
 from agency_swarm.user import User
+
+from agency_swarm.lib.streaming import AgencyEventHandler
+from typing_extensions import override
 
 console = Console()
 
@@ -109,6 +117,28 @@ class Agency:
                     return e.value
 
         return gen
+
+    def get_completion_stream(self, message: str, event_handler: type(AgencyEventHandler), message_files=None, recipient_agent=None):
+        """
+        Generates a stream of completions for a given message from the main thread.
+
+        Parameters:
+            message (str): The message for which completion is to be retrieved.
+            event_handler (type(AgencyEventHandler)): The event handler class to handle the completion stream. https://github.com/openai/openai-python/blob/main/helpers.md
+            message_files (list, optional): A list of file ids to be sent as attachments with the message. Defaults to None.
+            yield_messages (bool, optional): Flag to determine if intermediate messages should be yielded. Defaults to True.
+            recipient_agent (Agent, optional): The agent to which the message should be sent. Defaults to the first agent in the agency chart.
+        Returns:
+            Final response: Final response from the main thread.
+        """
+        gen = self.main_thread.get_completion_stream(message=message, event_handler=event_handler,
+                                                     message_files=message_files, recipient_agent=recipient_agent)
+
+        while True:
+            try:
+                next(gen)
+            except StopIteration as e:
+                return e.value
 
     def demo_gradio(self, height=450, dark_mode=True, share=False):
         """
@@ -265,6 +295,45 @@ class Agency:
         """
         Executes agency in the terminal with autocomplete for recipient agent names.
         """
+        class TermEventHandler(AgencyEventHandler):
+            @override
+            def on_message_created(self, message: Message) -> None:
+                if message.role == "user":
+                    self.message_output = MessageOutputLive("text", self.agent_name, self.recipient_agent_name,
+                                                        "")
+                else:
+                    self.message_output = MessageOutputLive("text", self.recipient_agent_name, self.agent_name, "")
+
+            @override
+            def on_text_delta(self, delta, snapshot):
+                self.message_output.cprint_update(snapshot.value)
+            @override
+            def on_tool_call_created(self, tool_call):
+                self.message_output = MessageOutputLive("function", self.recipient_agent_name, self.agent_name,
+                                                        str(tool_call.function))
+
+            @override
+            def on_tool_call_delta(self, delta, snapshot):
+                self.message_output.cprint_update(str(snapshot.function))
+
+            @override
+            def on_run_step_done(self, run_step: RunStep) -> None:
+                if run_step.type == "tool_calls":
+                    for tool_call in run_step.step_details.tool_calls:
+                        if tool_call.function.name == "SendMessage":
+                            continue
+
+                        self.message_output = None
+                        self.message_output = MessageOutputLive("function_output", tool_call.function.name,
+                                                                self.recipient_agent_name, tool_call.function.output)
+                        self.message_output.cprint_update(tool_call.function.output)
+
+                    self.message_output = None
+
+            @override
+            def on_end(self):
+                self.message_output = None
+
         self._setup_autocomplete()  # Prepare readline for autocomplete
 
         while True:
@@ -285,15 +354,7 @@ class Agency:
                     print(f"Recipient agent {recipient_agent} not found.")
                     continue
 
-            try:
-                gen = self.main_thread.get_completion(message=text, recipient_agent=recipient_agent)
-                while True:
-                    message = next(gen)
-                    if message.sender_name.lower() == "user":
-                        continue
-                    message.cprint()
-            except StopIteration as e:
-                pass
+            self.get_completion_stream(message=text, event_handler=TermEventHandler, recipient_agent=recipient_agent)
 
     def get_customgpt_schema(self, url: str):
         """Returns the OpenAPI schema for the agency from the CEO agent, that you can use to integrate with custom gpts.
@@ -430,7 +491,8 @@ class Agency:
                     if agent.name not in self.agents_and_threads.keys():
                         self.agents_and_threads[agent.name] = {}
 
-                    for other_agent in node:
+                    if i < len(node) - 1:
+                        other_agent = node[i+1]
                         if other_agent.name == agent.name:
                             continue
                         if other_agent.name not in self.agents_and_threads[agent.name].keys():
@@ -504,6 +566,8 @@ class Agency:
         for agent_name, threads in self.agents_and_threads.items():
             recipient_names = list(threads.keys())
             recipient_agents = self._get_agents_by_names(recipient_names)
+            if len(recipient_agents) == 0:
+                continue
             agent = self._get_agent_by_name(agent_name)
             agent.add_tool(self._create_send_message_tool(agent, recipient_agents))
             if self.async_mode:
@@ -561,14 +625,16 @@ class Agency:
                 thread = outer_self.agents_and_threads[self.caller_agent.name][self.recipient.value]
 
                 if not outer_self.async_mode:
-                    gen = thread.get_completion(message=self.message, message_files=self.message_files)
+                    gen = thread.get_completion(message=self.message, message_files=self.message_files,
+                                                event_handler=self.event_handler)
                     try:
                         while True:
                             yield next(gen)
                     except StopIteration as e:
                         message = e.value
                 else:
-                    message = thread.get_completion_async(message=self.message, message_files=self.message_files)
+                    message = thread.get_completion(message=self.message, message_files=self.message_files,
+                                                    event_handler=self.event_handler)
 
                 return message or ""
 
