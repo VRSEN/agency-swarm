@@ -1,17 +1,14 @@
-import copy
 import inspect
 import time
 from typing import Literal
 
 from openai import BadRequestError
-from openai.types.beta.threads.runs import ToolCall
 
+from agency_swarm.util.streaming import AgencyEventHandler
 from agency_swarm.agents import Agent
 from agency_swarm.messages import MessageOutput
 from agency_swarm.user import User
 from agency_swarm.util.oai import get_openai_client
-from agency_swarm.lib.streaming import AgencyEventHandler
-from typing_extensions import override
 
 
 class Thread:

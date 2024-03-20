@@ -1,9 +1,6 @@
 import sys
 import unittest
 
-from agency_swarm.lib.streaming import AgencyEventHandler
-from typing_extensions import override
-
 from agency_swarm import Agent, BaseTool
 from agency_swarm.agency.agency import Agency
 

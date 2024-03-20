@@ -39,7 +39,7 @@ The only difference is that you must extend the `AgencyEventHandler` class, whic
 
 ```python
 from typing_extensions import override
-from agency_swarm.lib.streaming import AgencyEventHandler
+from agency_swarm import AgencyEventHandler
 
 class EventHandler(AgencyEventHandler):
     @override

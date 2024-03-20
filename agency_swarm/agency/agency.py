@@ -3,17 +3,16 @@ import json
 import os
 import queue
 import readline
-import shutil
 import threading
 import uuid
 from enum import Enum
 from typing import List, TypedDict, Callable, Any, Dict, Literal, Union
 
-from openai.types.beta import AssistantStreamEvent
 from openai.types.beta.threads import Message
 from openai.types.beta.threads.runs import RunStep
 from pydantic import Field, field_validator
 from rich.console import Console
+from typing_extensions import override
 
 from agency_swarm.agents import Agent
 from agency_swarm.messages import MessageOutput
@@ -22,8 +21,7 @@ from agency_swarm.threads import Thread
 from agency_swarm.tools import BaseTool
 from agency_swarm.user import User
 
-from agency_swarm.lib.streaming import AgencyEventHandler
-from typing_extensions import override
+from agency_swarm.util.streaming import AgencyEventHandler
 
 console = Console()
 
@@ -155,6 +153,7 @@ class Agency:
             share (bool, optional): Flag to determine if the interface should be shared publicly. Default is False.
         This method sets up and runs a Gradio interface, allowing users to interact with the agency's chatbot. It includes a text input for the user's messages and a chatbot interface for displaying the conversation. The method handles user input and chatbot responses, updating the interface dynamically.
         """
+
         try:
             import gradio as gr
         except ImportError:
@@ -363,7 +362,7 @@ class Agency:
         """
         Executes agency in the terminal with autocomplete for recipient agent names.
         """
-
+        from agency_swarm import AgencyEventHandler
         class TermEventHandler(AgencyEventHandler):
             message_output = None
 
