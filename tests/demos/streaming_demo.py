@@ -16,11 +16,10 @@ class StreamingTest(unittest.TestCase):
             def run(self):
                 return "Test Successful"
 
-
-        self.ceo = Agent(name="ceo", instructions="You are a CEO of an agency made for testing purposes.")
-        self.test_agent1 = Agent(name="test_agent1", tools=[TestTool])
-        self.test_agent2 = Agent(name="test_agent2")
-
+        self.ceo = Agent(name="ceo", instructions="You are a CEO of an agency made for testing purposes.",
+                         model='gpt-3.5-turbo')
+        self.test_agent1 = Agent(name="test_agent1", tools=[TestTool], model='gpt-3.5-turbo')
+        self.test_agent2 = Agent(name="test_agent2", model='gpt-3.5-turbo')
 
         self.agency = Agency([
             self.ceo,
@@ -29,7 +28,7 @@ class StreamingTest(unittest.TestCase):
         ])
 
     def test_demo(self):
-        self.agency.demo_gradio()
+        self.agency.run_demo()
 
 
 if __name__ == '__main__':
