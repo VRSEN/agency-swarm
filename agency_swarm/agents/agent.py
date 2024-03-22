@@ -90,10 +90,14 @@ class Agent():
         self._read_instructions()
 
         # upload files
-        prev_timeout = self.client.timeout
-        self.client.timeout = 120 if prev_timeout < 120 else prev_timeout # default timeout is too low for file large file uploads
+        prev_timeout = None
+        if isinstance(self.client.timeout, int) or isinstance(self.client.timeout, float):
+            # default timeout is too low for file large file uploads
+            prev_timeout = self.client.timeout
+            self.client.timeout = 120 if prev_timeout < 120 else prev_timeout
         self._upload_files()
-        self.client.timeout = prev_timeout
+        if prev_timeout:
+            self.client.timeout = prev_timeout
 
         self._parse_schemas()
         self._parse_tools_folder()
