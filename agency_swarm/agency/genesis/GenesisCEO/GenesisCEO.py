@@ -1,6 +1,7 @@
 from agency_swarm import Agent
 from .tools.CreateAgencyFolder import CreateAgencyFolder
 from .tools.FinalizeAgency import FinalizeAgency
+from .tools.ReadRequirements import ReadRequirements
 
 
 class GenesisCEO(Agent):
@@ -13,7 +14,7 @@ class GenesisCEO(Agent):
         kwargs['description'] = "Acts as the overseer and communicator across the agency, ensuring alignment with the agency's goals."
 
         # Add required tools
-        kwargs['tools'].extend([CreateAgencyFolder, FinalizeAgency])
+        kwargs['tools'].extend([CreateAgencyFolder, FinalizeAgency, ReadRequirements])
 
         # Set instructions
         kwargs['instructions'] = "./instructions.md"
