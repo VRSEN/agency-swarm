@@ -1,5 +1,5 @@
-openai==1.14.0
-instructor==0.6.2
+openai==1.14.2
+instructor==0.6.7
 deepdiff==6.7.1
 termcolor==2.3.0
 python-dotenv==1.0.0
