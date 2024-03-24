@@ -2,7 +2,6 @@ import inspect
 import json
 import os
 import queue
-import readline
 import threading
 import uuid
 from enum import Enum
@@ -74,7 +73,7 @@ class Agency:
         self.agents_and_threads = {}
         self.main_recipients = []
         self.main_thread = None
-        self.recipient_agents = None
+        self.recipient_agents = None # for autocomplete
         self.shared_files = shared_files if shared_files else []
         self.settings_path = settings_path
         self.settings_callbacks = settings_callbacks
@@ -356,10 +355,24 @@ class Agency:
         """
         Sets up readline with the completer function.
         """
-        self.recipient_agents = [agent.name for agent in
-                                 self.main_recipients]  # Cache recipient agents for autocomplete
-        readline.set_completer(self._recipient_agent_completer)
-        readline.parse_and_bind('tab: complete')
+        try:
+            import readline
+        except ImportError:
+            # Attempt to import pyreadline for Windows compatibility
+            try:
+                import pyreadline as readline
+            except ImportError:
+                print("Module 'readline' not found. Autocomplete will not work. If you are using Windows, try installing 'pyreadline'.")
+                return
+
+        if not readline:
+            return
+
+        try:
+            readline.set_completer(self._recipient_agent_completer)
+            readline.parse_and_bind('tab: complete')
+        except Exception as e:
+            print(f"Error setting up autocomplete for agents in terminal: {e}")
 
     def run_demo(self):
         """
@@ -415,6 +428,8 @@ class Agency:
             @override
             def on_end(self):
                 self.message_output = None
+
+        self.recipient_agents = [str(agent.name) for agent in self.main_recipients]
 
         self._setup_autocomplete()  # Prepare readline for autocomplete
 
