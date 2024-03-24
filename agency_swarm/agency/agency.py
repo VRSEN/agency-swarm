@@ -133,6 +133,9 @@ class Agency:
         if self.async_mode:
             raise Exception("Streaming is not supported in async mode.")
 
+        if not inspect.isclass(event_handler):
+            raise Exception("Event handler must not be an instance.")
+
         gen = self.main_thread.get_completion_stream(message=message, event_handler=event_handler,
                                                      message_files=message_files, recipient_agent=recipient_agent)
 

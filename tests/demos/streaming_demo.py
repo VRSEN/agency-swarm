@@ -25,7 +25,7 @@ class StreamingTest(unittest.TestCase):
         ])
 
     def test_demo(self):
-        self.agency.run_demo()
+        self.agency.demo_gradio()
 
 
 if __name__ == '__main__':
