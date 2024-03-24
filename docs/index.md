@@ -8,7 +8,7 @@ An open source agent orchestration framework built on top of the latest [OpenAI 
 )](https://youtube.com/@vrsen/)
 [![Follow on Twitter](https://img.shields.io/twitter/follow/__vrsen__.svg?style=social&label=Follow%20%40__vrsen__)](https://twitter.com/__vrsen__)
 [![Join our Discord!](https://img.shields.io/discord/1200037936352202802?label=Discord)](https://discord.gg/cw2xBaWfFM)
-[![VRSEN AI](https://img.shields.io/website?label=vrsen.ai&up_message=website&url=https%3A%2F%2Fvrsen.ai)](https://vrsen.ai)
+[![Agents-as-a-Service](https://img.shields.io/website?label=Agents-as-a-Service&up_message=For%20Business&url=https%3A%2F%2Fvrsen.ai)](https://agents.vrsen.ai)
 
 
 ## What is Agency Swarm?
@@ -47,7 +47,7 @@ CrewAI introduces a concept of "process" [[3]](https://docs.crewai.com/core-conc
 
 If you need quick help with Agency Swarm, feel free to ask in the [Discord server](https://discord.gg/cw2xBaWfFM).
 
-If you are running a business, and you would like to employ Agency Swarm in your operations, you can contact me directly by filling a form at [vrsen.ai](https://vrsen.ai). 
+If you need help creating custom agent swarms for your business, check out our [Agents-as-a-Service](https://agents.vrsen.ai/) subscription, or schedule a consultation with me at https://calendly.com/vrsen/ai-project-consultation
 
 ---
 

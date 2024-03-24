@@ -12,7 +12,7 @@ Agency Swarm started as a desire and effort of Arsenii Shatokhin (aka VRSEN) to 
 )](https://youtube.com/@vrsen/)
 [![Follow on Twitter](https://img.shields.io/twitter/follow/__vrsen__.svg?style=social&label=Follow%20%40__vrsen__)](https://twitter.com/__vrsen__)
 [![Join our Discord!](https://img.shields.io/discord/1200037936352202802?label=Discord)](https://discord.gg/cw2xBaWfFM)
-[![VRSEN AI](https://img.shields.io/website?label=vrsen.ai&up_message=website&url=https%3A%2F%2Fvrsen.ai)](https://vrsen.ai)
+[![Agents-as-a-Service](https://img.shields.io/website?label=Agents-as-a-Service&up_message=For%20Business&url=https%3A%2F%2Fvrsen.ai)](https://agents.vrsen.ai)
 
 ### Key Features
 
@@ -219,4 +219,4 @@ Agency Swarm is open-source and licensed under [MIT](https://opensource.org/lice
 
 ## Need Help?
 
-If you require assistance in creating custom agents for your business, feel free to reach out through my website: [vrsen.ai](https://vrsen.ai) or schedule a consultation at https://calendly.com/vrsen/ai-project-consultation
+If you need help creating custom agent swarms for your business, check out our [Agents-as-a-Service](https://agents.vrsen.ai/) subscription, or schedule a consultation with me at https://calendly.com/vrsen/ai-project-consultation
