@@ -116,7 +116,9 @@ class AgencyTest(unittest.TestCase):
 
         cls.TestTool = TestTool
 
-        from test_agents import CEO, TestAgent1, TestAgent2
+        from test_agents.CEO import CEO
+        from test_agents.TestAgent1 import TestAgent1
+        from test_agents.TestAgent2 import TestAgent2
         cls.ceo = CEO()
         cls.agent1 = TestAgent1()
         cls.agent1.add_tool(Retrieval)
@@ -138,7 +140,7 @@ class AgencyTest(unittest.TestCase):
 
     def test_2_load_agent(self):
         """it should load existing assistant from settings"""
-        from test_agents import TestAgent1
+        from test_agents.TestAgent1 import TestAgent1
         agent3 = TestAgent1()
         agent3.add_shared_instructions(self.__class__.agency.shared_instructions)
         agent3.tools = self.__class__.agent1.tools
@@ -229,7 +231,9 @@ class AgencyTest(unittest.TestCase):
         previous_loaded_thread_ids = self.__class__.loaded_thread_ids
         previous_loaded_agents_settings = self.__class__.loaded_agents_settings
 
-        from test_agents import CEO, TestAgent1, TestAgent2
+        from test_agents.CEO import CEO
+        from test_agents.TestAgent1 import TestAgent1
+        from test_agents.TestAgent2 import TestAgent2
         agent1 = TestAgent1()
         agent1.add_tool(Retrieval)
         agent2 = TestAgent2()
