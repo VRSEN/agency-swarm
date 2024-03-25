@@ -13,24 +13,8 @@ def create_agent_template(agent_name=None,
     if not agent_description:
         agent_description = input("Enter agent description: ")
 
-    # create manifesto if it doesn't exist
-    agency_manifesto = "agency_manifesto.md" if not use_txt else "agency_manifesto.txt"
-    if not os.path.isfile(os.path.join(path, agency_manifesto)):
-        with open(os.path.join(path, agency_manifesto), "w") as f:
-            f.write("As a member of our Agency, please find below the guiding principles and values that constitute "
-                    "our Agency Manifesto:\n\n")
-
     class_name = agent_name.replace(" ", "").strip()
     folder_name = agent_name  # .lower().replace(" ", "_").strip()
-
-    # create or append to init file
-    global_init_path = os.path.join(path, "__init__.py")
-    if not os.path.isfile(global_init_path):
-        with open(global_init_path, "w") as f:
-            f.write(f"from .{folder_name} import {class_name}")
-    else:
-        with open(global_init_path, "a") as f:
-            f.write(f"\nfrom .{folder_name} import {class_name}")
 
     # create folder
     path = os.path.join(path, folder_name) + "/"
@@ -58,16 +42,15 @@ def create_agent_template(agent_name=None,
         if instructions:
             f.write(instructions)
         else:
-            f.write(
-                "Below are the specific instructions tailored for you to effectively carry out your assigned role:\n\n")
+            f.write(f"# {agent_name} Instructions\n\n")
 
     # create files folder
     os.mkdir(path + "files")
     os.mkdir(path + "schemas")
     os.mkdir(path + "tools")
 
-    with open(path + "tools/" + "__init__.py", "w") as f:
-        f.write("")
+    # with open(path + "tools/" + "__init__.py", "w") as f:
+    #     f.write("")
 
     if include_example_tool:
         with open(path + "tools/" + "ExampleTool.py", "w") as f:

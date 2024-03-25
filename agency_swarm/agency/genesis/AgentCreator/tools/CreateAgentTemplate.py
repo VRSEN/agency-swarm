@@ -69,6 +69,18 @@ class CreateAgentTemplate(BaseTool):
                               code_interpreter=True if "CodeInterpreter" in self.default_tools else None,
                               include_example_tool=False)
 
+        # # create or append to init file
+        path = self.shared_state.get("agency_path")
+        folder_name = self.agent_name.lower().replace(" ", "_")
+        class_name = self.agent_name.replace(" ", "").strip()
+        global_init_path = os.path.join(path, "__init__.py")
+        if not os.path.isfile(global_init_path):
+            with open(global_init_path, "w") as f:
+                f.write(f"from .{folder_name} import {class_name}")
+        else:
+            with open(global_init_path, "a") as f:
+                f.write(f"\nfrom .{folder_name} import {class_name}")
+
         # add agent on second line to agency.py
         with open("agency.py", "r") as f:
             lines = f.readlines()

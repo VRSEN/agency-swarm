@@ -14,8 +14,6 @@ class ListDir(BaseTool):
     )
 
     def run(self):
-        import os
-
         tree = []
         def list_directory_tree(path, indent=''):
             """Recursively list the contents of a directory in a tree-like format."""
@@ -23,6 +21,11 @@ class ListDir(BaseTool):
                 raise ValueError(f"The path {path} is not a valid directory")
 
             items = os.listdir(path)
+            # exclude common hidden files and directories
+            exclude = ['.git', '.idea', '__pycache__', 'node_modules',
+                       '.DS_Store', '.vscode', '.next', 'dist', 'build', 'out']
+            items = [item for item in items if item not in exclude]
+
             for i, item in enumerate(items):
                 item_path = os.path.join(path, item)
                 if i < len(items) - 1:

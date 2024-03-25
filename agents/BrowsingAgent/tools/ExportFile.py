@@ -37,5 +37,7 @@ class ExportFile(BaseTool):
             file_ids=self.caller_agent.file_ids
         )
 
+        self.shared_state.set("file_id", file_id)
+
         return ("Success. File exported with id: " + file_id +
                 " You can now use myfiles_browser tool to analyze the contents of this webpage.")
