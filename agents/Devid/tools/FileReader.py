@@ -1,12 +1,9 @@
+from agency_swarm.tools import BaseTool
 from pydantic import Field
 
-from agency_swarm import BaseTool
 
-
-class ReadFile(BaseTool):
-    """
-    This tool reads a file and returns the contents along with line numbers on the left.
-    """
+class FileReader(BaseTool):
+    """This tool reads a file and returns the contents along with line numbers on the left."""
     file_path: str = Field(
         ..., description="Path to the file to read with extension.",
         examples=["./file.txt", "./file.json", "../../file.py"]
