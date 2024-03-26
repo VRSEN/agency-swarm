@@ -11,9 +11,18 @@ class FinalizeAgency(BaseTool):
     """
     This tool finalizes the agency structure and it's imports. Please make sure to use at only at the very end, after all agents have been created.
     """
+    agency_path: str = Field(
+        None, description="Path to the agency folder. Defaults to the agency currently being created."
+    )
 
     def run(self):
-        os.chdir(self.shared_state.get("agency_path"))
+        agency_path = None
+        if self.shared_state.get("agency_path"):
+            os.chdir(self.shared_state.get("agency_path"))
+            agency_path = self.shared_state.get("agency_path")
+        else:
+            os.chdir(self.agency_path)
+            agency_path = self.agency_path
 
         client = get_openai_client()
 
@@ -37,12 +46,12 @@ class FinalizeAgency(BaseTool):
             f.write(message)
             f.close()
 
-        return "Successfully finalized agency structure. You can now instruct the user to run the agency.py file."
+        return f"Successfully finalized {agency_path} structure. You can now instruct the user to run the agency.py file."
 
     @model_validator(mode="after")
     def validate_agency_path(self):
-        if not self.shared_state.get("agency_path"):
-            raise ValueError("Agency path not found. Please use CreateAgencyFolder tool to create the agency folder first.")
+        if not self.shared_state.get("agency_path") and not self.agency_path:
+            raise ValueError("Agency path not found. Please specify the agency_path. Ask user for clarification if needed.")
 
 
 SYSTEM_PROMPT = """"Please read the file provided by the user and fix all the imports and indentation accordingly. 

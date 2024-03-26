@@ -19,12 +19,12 @@ class CreateAgencyFolder(BaseTool):
     )
     agency_chart: str = Field(
         ..., description="Agency chart to be passed into the Agency class.",
-        examples=["[ceo, [ceo, dev], [ceo, va], [dev, va] ]"]
+        examples=["[ceo, [ceo, dev], [ceo, va], [dev, va]]"]
     )
     manifesto: str = Field(
         ..., description="Manifesto for the agency, describing its goals and additional context shared by all agents "
                          "in markdown format. It must include information about the working environment, the mission "
-                         "and the goals of the agency.",
+                         "and the goals of the agency. Do not add descriptions of the agents themselves or the agency structure.",
     )
 
     def run(self):
