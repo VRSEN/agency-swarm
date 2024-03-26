@@ -7,3 +7,4 @@ from .GoBack import GoBack
 from .SelectDropdown import SelectDropdown
 from .SolveCaptcha import SolveCaptcha
 from .ExportFile import ExportFile
+from .WebPageSummarizer import WebPageSummarizer

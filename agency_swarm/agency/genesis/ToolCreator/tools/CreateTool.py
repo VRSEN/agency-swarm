@@ -6,7 +6,7 @@ from agency_swarm.tools import BaseTool
 from pydantic import Field, model_validator
 import importlib
 
-from agency_swarm.util.create_agent_template import example_tool_template
+from agency_swarm.util.cli.create_agent_template import example_tool_template
 
 
 class CreateTool(BaseTool):

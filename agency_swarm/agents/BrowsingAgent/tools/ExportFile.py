@@ -1,7 +1,7 @@
 import base64
 import os
 
-from agency_swarm import BaseTool, get_openai_client
+from agency_swarm.tools import BaseTool
 from .util import get_web_driver
 
 
@@ -10,7 +10,7 @@ class ExportFile(BaseTool):
 
     def run(self):
         wd = get_web_driver()
-
+        from agency_swarm import get_openai_client
         client = get_openai_client()
 
         # Define the parameters for the PDF

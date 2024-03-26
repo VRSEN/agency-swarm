@@ -1,8 +1,7 @@
 from selenium.webdriver.common.by import By
 
-from agency_swarm import get_openai_client
 from agency_swarm.tools import BaseTool
-from util import get_web_driver, set_web_driver
+from .util import get_web_driver, set_web_driver
 
 
 class WebPageSummarizer(BaseTool):
@@ -11,6 +10,8 @@ class WebPageSummarizer(BaseTool):
     """
 
     def run(self):
+        from agency_swarm import get_openai_client
+
         wd = get_web_driver()
         client = get_openai_client()
 
