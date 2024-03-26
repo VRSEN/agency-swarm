@@ -1,13 +1,15 @@
 import argparse
 import os
 
+from agency_swarm.util.cli import list_available_agents
+
 from dotenv import load_dotenv
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Create agent template.')
+    parser = argparse.ArgumentParser(description='Agency Swarm CLI.')
 
-    subparsers = parser.add_subparsers(dest='command', help='Create agent template.')
+    subparsers = parser.add_subparsers(dest='command', help='Utility commands to simplify the agent creation process.')
     subparsers.required = True
 
     # create-agent-template
@@ -23,6 +25,12 @@ def main():
     genesis_parser.add_argument('--openai_key', default=None, type=str, help='OpenAI API key.')
     genesis_parser.add_argument('--with_browsing', default=False, action='store_true',
                                 help='Enable browsing agent.')
+
+    # import-agent
+    import_parser = subparsers.add_parser('import-agent', help='Import pre-made agent by name to a local directory.')
+    available_agents = list_available_agents()
+    import_parser.add_argument('--name', type=str, required=True, choices=available_agents, help='Name of the agent to import.')
+    import_parser.add_argument('--destination', type=str, default="./", help='Destination path to copy the agent files.')
 
     args = parser.parse_args()
 
@@ -43,6 +51,9 @@ def main():
         from agency_swarm.agency.genesis import GenesisAgency
         agency = GenesisAgency(with_browsing=args.with_browsing)
         agency.run_demo()
+    elif args.command == "import-agent":
+        from agency_swarm.util import import_agent
+        import_agent(args.name, args.destination)
 
 
 if __name__ == "__main__":
