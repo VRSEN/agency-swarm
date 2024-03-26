@@ -15,11 +15,7 @@ class AgentCreator(Agent):
         kwargs['description'] = "This agent is responsible for creating new agents for the agency."
 
         # Add required tools
-        kwargs['tools'].extend([CreateAgentTemplate,
-                                # GetAvailableAgents,
-                                ReadManifesto,
-                                # ImportAgent
-                                ])
+        kwargs['tools_folder'] = "./tools"
 
         # Set instructions
         if 'instructions' not in kwargs:
