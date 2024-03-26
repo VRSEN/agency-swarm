@@ -273,6 +273,9 @@ class Agency:
                             if tool_call.function.name == "SendMessage":
                                 continue
 
+                            self.message_output = None
+                            chatbot_queue.put("[new_message]")
+
                             self.message_output = MessageOutput("function_output", tool_call.function.name,
                                                                 self.recipient_agent_name,
                                                                 tool_call.function.output)
@@ -301,7 +304,7 @@ class Agency:
                 new_message = True
                 while True:
                     try:
-                        bot_message = chatbot_queue.get(block=True, timeout=10)
+                        bot_message = chatbot_queue.get(block=True)
 
                         if bot_message == "[end]":
                             completion_thread.join()
@@ -362,7 +365,7 @@ class Agency:
             try:
                 import pyreadline as readline
             except ImportError:
-                print("Module 'readline' not found. Autocomplete will not work. If you are using Windows, try installing 'pyreadline'.")
+                print("Module 'readline' not found. Autocomplete will not work. If you are using Windows, try installing 'pyreadline3'.")
                 return
 
         if not readline:
@@ -372,7 +375,7 @@ class Agency:
             readline.set_completer(self._recipient_agent_completer)
             readline.parse_and_bind('tab: complete')
         except Exception as e:
-            print(f"Error setting up autocomplete for agents in terminal: {e}")
+            print(f"Error setting up autocomplete for agents in terminal: {e}. Autocomplete will not work.")
 
     def run_demo(self):
         """
