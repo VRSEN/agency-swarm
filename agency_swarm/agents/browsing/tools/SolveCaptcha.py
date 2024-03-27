@@ -133,7 +133,7 @@ class SolveCaptcha(BaseTool):
                 }]
 
             response = client.chat.completions.create(
-                model="gpt-4-vision-preview",
+                model="ggpt-3.5-turbo",
                 messages=messages,
                 max_tokens=1024,
                 temperature=0.0,

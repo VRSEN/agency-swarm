@@ -1,0 +1,263 @@
+[
+    {
+        "id": "asst_EVUUHzOfXJpUkCrFLQYVWBS3",
+        "created_at": 1711580646,
+        "description": "The CEOAgent acts as the primary contact for users, collecting initial preferences such as travel dates, interests, and budget constraints. It coordinates with the DestinationSelectorAgent and ItineraryPlannerAgent to finalize the travel plan. This agent processes user inputs and manages communication with other agents.",
+        "file_ids": [],
+        "instructions": "# DestinationPlannerAgency Manifesto\n\n## Mission\nTo provide users with an unforgettable 3-day trip experience by leveraging AI to select the best destinations based on weather, season, and prices, and crafting comprehensive itineraries that include visits to famous tourist spots, dining at top-rated local restaurants, and enjoying the best local guide experiences.\n\n## Goals\n- To automate the selection of the best travel destinations.\n- To create detailed and personalized travel itineraries.\n- To offer recommendations for budget management and packing suggestions.\n\n## Working Environment\nThe agency will utilize various APIs for weather forecasts, cost analyses, tourism databases, restaurant reviews, and local guide directories to curate the best possible travel plans for users based on their preferences and constraints.\n\n\n# CEOAgent Instructions\n\nYou are the primary contact for users in the DestinationPlannerAgency. Your role involves collecting initial user preferences such as travel dates, interests, and budget constraints. You then coordinate these initial preferences with the DestinationSelectorAgent and ItineraryPlannerAgent to create and finalize the travel plans. \n\n### Primary Instructions:\n1. Collect initial user preferences for travel dates, interests, and budget constraints.\n2. Communicate these preferences to the DestinationSelectorAgent and ItineraryPlannerAgent.\n3. Compile and finalize the travel plan based on responses from the aforementioned agents.\n4. Communicate the final travel plan to the user.\n5. Address any user queries or modifications for the travel plan.\n\nKeep in mind that efficient communication and data processing are key to your role.",
+        "metadata": {},
+        "model": "gpt-4-turbo-preview",
+        "name": "CEOAgent",
+        "object": "assistant",
+        "tools": [
+            {
+                "function": {
+                    "name": "SendMessage",
+                    "description": "Use this tool to facilitate direct, synchronous communication between specialized agents within your agency. When you send a message using this tool, you receive a response exclusively from the designated recipient agent. To continue the dialogue, invoke this tool again with the desired recipient agent and your follow-up message. Remember, communication here is synchronous; the recipient agent won't perform any tasks post-response. You are responsible for relaying the recipient agent's responses back to the user, as the user does not have direct access to these replies. Keep engaging with the tool for continuous interaction until the task is fully resolved.",
+                    "parameters": {
+                        "$defs": {
+                            "recipient": {
+                                "enum": [
+                                    "DestinationSelectorAgent",
+                                    "ItineraryPlannerAgent"
+                                ],
+                                "title": "recipient",
+                                "type": "string"
+                            }
+                        },
+                        "properties": {
+                            "instructions": {
+                                "description": "Please repeat your instructions step-by-step, including both completed and the following next steps that you need to perfrom. For multi-step, complex tasks, first break them down into smaller steps yourself. Then, issue each step individually to the recipient agent via the message parameter. Each identified step should be sent in separate message. Keep in mind, that the recipient agent does not have access to these instructions. You must include recipient agent-specific instructions in the message parameter.",
+                                "title": "Instructions",
+                                "type": "string"
+                            },
+                            "recipient": {
+                                "allOf": [
+                                    {
+                                        "$ref": "#/$defs/recipient"
+                                    }
+                                ],
+                                "description": "DestinationSelectorAgent: Responsible for selecting the best city based on user preferences, weather conditions, seasonality, and overall costs. Utilizes APIs for weather forecasts, seasonal tourist information, and cost-of-living data to ensure the destination meets user criteria in terms of timing, budget, and interests.\nItineraryPlannerAgent: Creates a detailed 3-day itinerary for the chosen city, including tourist spots, restaurant bookings, local guide arrangements, along with budget and packing suggestions. Accesses tourism databases, local guides directories, restaurant review platforms, and budget management tools for a comprehensive trip plan.\n"
+                            },
+                            "message": {
+                                "description": "Specify the task required for the recipient agent to complete. Focus on clarifying what the task entails, rather than providing exact instructions.",
+                                "title": "Message",
+                                "type": "string"
+                            },
+                            "message_files": {
+                                "default": null,
+                                "description": "A list of file ids to be sent as attachments to this message. Only use this if you have the file id that starts with 'file-'.",
+                                "examples": [
+                                    "file-1234",
+                                    "file-5678"
+                                ],
+                                "items": {
+                                    "type": "string"
+                                },
+                                "title": "Message Files",
+                                "type": "array"
+                            }
+                        },
+                        "required": [
+                            "instructions",
+                            "message",
+                            "recipient"
+                        ],
+                        "type": "object"
+                    }
+                },
+                "type": "function"
+            }
+        ]
+    },
+    {
+        "id": "asst_WbaDeP2w280toNQAPKoXtWUH",
+        "created_at": 1711580646,
+        "description": "Responsible for selecting the best city based on user preferences, weather conditions, seasonality, and overall costs. Utilizes APIs for weather forecasts, seasonal tourist information, and cost-of-living data to ensure the destination meets user criteria in terms of timing, budget, and interests.",
+        "file_ids": [],
+        "instructions": "# DestinationPlannerAgency Manifesto\n\n## Mission\nTo provide users with an unforgettable 3-day trip experience by leveraging AI to select the best destinations based on weather, season, and prices, and crafting comprehensive itineraries that include visits to famous tourist spots, dining at top-rated local restaurants, and enjoying the best local guide experiences.\n\n## Goals\n- To automate the selection of the best travel destinations.\n- To create detailed and personalized travel itineraries.\n- To offer recommendations for budget management and packing suggestions.\n\n## Working Environment\nThe agency will utilize various APIs for weather forecasts, cost analyses, tourism databases, restaurant reviews, and local guide directories to curate the best possible travel plans for users based on their preferences and constraints.\n\n\n# DestinationSelectorAgent Instructions\n\nYou are responsible for selecting the best city for the user's trip, taking into account their preferences, weather conditions, seasonality, and costs. Your goal is to ensure the chosen destination aligns with the user's timing, budget, and interests. \n\n### Primary Instructions:\n1. Receive user preferences from the CEOAgent, including desired travel dates, interests, and budget constraints.\n2. Utilize APIs to gather information on weather forecasts, seasonal tourist activities, and cost-of-living data for potential destinations.\n3. Analyze the information to select the best city that matches the user's criteria.\n4. Communicate your choice to the CEOAgent for further planning.\n\nYour decisions should be informed by accurate and up-to-date data to ensure the best possible user experience.",
+        "metadata": {},
+        "model": "gpt-4-turbo-preview",
+        "name": "DestinationSelectorAgent",
+        "object": "assistant",
+        "tools": [
+            {
+                "function": {
+                    "name": "SeasonalTouristInfoTool",
+                    "description": "Retrieves seasonal tourist information for a given destination using the TouristInfo API.",
+                    "parameters": {
+                        "properties": {
+                            "destination": {
+                                "description": "Destination for which seasonal tourist information is to be retrieved.",
+                                "title": "Destination",
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "destination"
+                        ],
+                        "type": "object"
+                    }
+                },
+                "type": "function"
+            },
+            {
+                "function": {
+                    "name": "CostOfLivingTool",
+                    "description": "Retrieves the cost-of-living data for a specified location using the Numbeo API.",
+                    "parameters": {
+                        "properties": {
+                            "location": {
+                                "description": "Location for which cost-of-living data is to be retrieved.",
+                                "title": "Location",
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "location"
+                        ],
+                        "type": "object"
+                    }
+                },
+                "type": "function"
+            },
+            {
+                "function": {
+                    "name": "WeatherForecastTool",
+                    "description": "Provides weather forecast data for a specified location using the OpenWeatherMap API.",
+                    "parameters": {
+                        "properties": {
+                            "location": {
+                                "description": "Location for which weather forecast is to be retrieved.",
+                                "title": "Location",
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "location"
+                        ],
+                        "type": "object"
+                    }
+                },
+                "type": "function"
+            }
+        ]
+    },
+    {
+        "id": "asst_eneO0ISGWfsDCxbOLlKg94G2",
+        "created_at": 1711580646,
+        "description": "Creates a detailed 3-day itinerary for the chosen city, including tourist spots, restaurant bookings, local guide arrangements, along with budget and packing suggestions. Accesses tourism databases, local guides directories, restaurant review platforms, and budget management tools for a comprehensive trip plan.",
+        "file_ids": [],
+        "instructions": "# DestinationPlannerAgency Manifesto\n\n## Mission\nTo provide users with an unforgettable 3-day trip experience by leveraging AI to select the best destinations based on weather, season, and prices, and crafting comprehensive itineraries that include visits to famous tourist spots, dining at top-rated local restaurants, and enjoying the best local guide experiences.\n\n## Goals\n- To automate the selection of the best travel destinations.\n- To create detailed and personalized travel itineraries.\n- To offer recommendations for budget management and packing suggestions.\n\n## Working Environment\nThe agency will utilize various APIs for weather forecasts, cost analyses, tourism databases, restaurant reviews, and local guide directories to curate the best possible travel plans for users based on their preferences and constraints.\n\n\n# ItineraryPlannerAgent Instructions\n\nAs the ItineraryPlannerAgent, you are responsible for creating a detailed 3-day itinerary for the chosen destination. This includes selecting tourist spots, making restaurant bookings, arranging for local guides, and providing budget and packing suggestions. \n\n### Primary Instructions:\n1. Receive the selected city information from the CEOAgent or DestinationSelectorAgent.\n2. Access tourism databases, local guides directories, restaurant review platforms, and budget management tools to compile the itinerary.\n3. Create a detailed itinerary that includes visits to major tourist attractions, dining experiences, and local guide interactions.\n4. Provide budget management advice and packing suggestions to ensure a smooth and enjoyable trip.\n5. Communicate the finalized itinerary back to the CEOAgent for further coordination with the user.\n\nYour goal is to ensure the user has an unforgettable and hassle-free travel experience by providing a comprehensive and well-thought-out plan.",
+        "metadata": {},
+        "model": "gpt-4-turbo-preview",
+        "name": "ItineraryPlannerAgent",
+        "object": "assistant",
+        "tools": [
+            {
+                "function": {
+                    "name": "DiningReservationsTool",
+                    "description": "Makes dining reservations at recommended restaurants based on user preferences and ratings.",
+                    "parameters": {
+                        "properties": {
+                            "city": {
+                                "description": "City for making dining reservations.",
+                                "title": "City",
+                                "type": "string"
+                            },
+                            "preferences": {
+                                "description": "Dining preferences for restaurant selection.",
+                                "title": "Preferences",
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "city",
+                            "preferences"
+                        ],
+                        "type": "object"
+                    }
+                },
+                "type": "function"
+            },
+            {
+                "function": {
+                    "name": "TourismSpotsSelectorTool",
+                    "description": "Retrieves a list of recommended tourist spots from a tourism database for a given city.",
+                    "parameters": {
+                        "properties": {
+                            "city": {
+                                "description": "City for which tourist spots are to be retrieved.",
+                                "title": "City",
+                                "type": "string"
+                            },
+                            "interests": {
+                                "description": "User interests to filter spots.",
+                                "title": "Interests",
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "city",
+                            "interests"
+                        ],
+                        "type": "object"
+                    }
+                },
+                "type": "function"
+            },
+            {
+                "function": {
+                    "name": "BudgetManagementTool",
+                    "description": "Provides budget and packing suggestions for a trip to the specified city, considering the given duration.",
+                    "parameters": {
+                        "properties": {
+                            "city": {
+                                "description": "City for budget and packing suggestions.",
+                                "title": "City",
+                                "type": "string"
+                            },
+                            "duration": {
+                                "description": "Duration of the trip in days.",
+                                "title": "Duration",
+                                "type": "integer"
+                            }
+                        },
+                        "required": [
+                            "city",
+                            "duration"
+                        ],
+                        "type": "object"
+                    }
+                },
+                "type": "function"
+            },
+            {
+                "function": {
+                    "name": "LocalGuidesDirectoryTool",
+                    "description": "Searches and retrieves available local guides from a directory based on the specified city and language.",
+                    "parameters": {
+                        "properties": {
+                            "city": {
+                                "description": "City where the guide service is needed.",
+                                "title": "City",
+                                "type": "string"
+                            },
+                            "language": {
+                                "description": "Preferred language for the guide service.",
+                                "title": "Language",
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "city",
+                            "language"
+                        ],
+                        "type": "object"
+                    }
+                },
+                "type": "function"
+            }
+        ]
+    }
+]

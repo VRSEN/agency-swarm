@@ -73,7 +73,7 @@ DOM structure of the page.""".replace("\n", ""),
         error_count = 0
         while True:
             response = client.chat.completions.create(
-                model="gpt-4-vision-preview",
+                model="gpt-3.5-turbo",
                 messages=messages,
                 max_tokens=1024,
             )
