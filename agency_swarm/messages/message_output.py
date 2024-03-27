@@ -48,14 +48,14 @@ class MessageOutput:
 
     def get_formatted_header(self):
         if self.msg_type == "function":
-            text = f"{self.sender_name} 🛠️ Executing Function"
+            text = f"{self.sender_emoji} {self.sender_name} 🛠️ Executing Function"
             return text
 
         if self.msg_type == "function_output":
             text = f"{self.sender_name} ⚙️ Function Output"
             return text
 
-        text = f"{self.sender_name} 🗣️ @{self.receiver_name}"
+        text = f"{self.sender_emoji} {self.sender_name} 🗣️ @{self.receiver_name}"
 
         return text
 
@@ -119,7 +119,7 @@ class MessageOutputLive(MessageOutput):
         """
         self.content = snapshot  # Update content with the latest snapshot
 
-        header_text = self.sender_emoji + " " + self.formatted_header
+        header_text = self.formatted_header
         md_content = Markdown(self.content)
 
         # Creating a group of renderables for the live display

@@ -73,7 +73,7 @@ class Agency:
         self.agents_and_threads = {}
         self.main_recipients = []
         self.main_thread = None
-        self.recipient_agents = None # for autocomplete
+        self.recipient_agents = None  # for autocomplete
         self.shared_files = shared_files if shared_files else []
         self.settings_path = settings_path
         self.settings_callbacks = settings_callbacks
@@ -264,7 +264,23 @@ class Agency:
 
                 @override
                 def on_tool_call_done(self, snapshot):
+                    self.message_output = None
+
                     chatbot_queue.put(str(snapshot.function))
+
+                    if snapshot.function.name == "SendMessage":
+                        try:
+                            args = eval(snapshot.function.arguments)
+                            recipient = args["recipient"]
+                            self.message_output = MessageOutput("text", self.recipient_agent_name, recipient,
+                                                                    args["message"])
+
+                            chatbot_queue.put("[new_message]")
+                            chatbot_queue.put(self.message_output.get_formatted_content())
+                        except Exception as e:
+                            pass
+
+                    self.message_output = None
 
                 @override
                 def on_run_step_done(self, run_step: RunStep) -> None:
@@ -282,6 +298,7 @@ class Agency:
 
                             chatbot_queue.put(self.message_output.get_formatted_header() + "\n")
                             chatbot_queue.put(tool_call.function.output)
+
                 @override
                 @classmethod
                 def on_all_streams_end(cls):
@@ -412,6 +429,19 @@ class Agency:
 
             @override
             def on_tool_call_done(self, snapshot):
+                self.message_output = None
+
+                if snapshot.function.name == "SendMessage":
+                    try:
+                        args = eval(snapshot.function.arguments)
+                        recipient = args["recipient"]
+                        self.message_output = MessageOutputLive("text", self.recipient_agent_name, recipient,
+                                                                "")
+
+                        self.message_output.cprint_update(args["message"])
+                    except Exception as e:
+                        pass
+
                 self.message_output = None
 
             @override
