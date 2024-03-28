@@ -1,6 +1,5 @@
 import os
-from importlib import resources  # Use `importlib_resources` for Python < 3.7
-
+from importlib import resources
 def list_available_agents(package='agency_swarm.agents'):
     """
     Lists available agents within the specified package directory.

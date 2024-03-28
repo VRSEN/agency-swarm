@@ -35,5 +35,5 @@ class CommandExecutor(BaseTool):
         }
 
 if __name__ == "__main__":
-    tool = ExecuteTerminalCommand(command="ls -l")
+    tool = CommandExecutor(command="ls -l")
     print(tool.run())

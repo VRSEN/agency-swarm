@@ -26,6 +26,6 @@ class FileWriter(BaseTool):
 
             with open(self.file_path, 'w') as file:
                 file.write(self.content)
-            return f'Successfully wrote to file: {self.file_path}. Please make sure to build the app next to ensure that there are no errors.'
+            return f'Successfully wrote to file: {self.file_path}. '
         except Exception as e:
             return f'Error writing to file: {e}'

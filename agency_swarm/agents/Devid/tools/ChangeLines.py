@@ -12,7 +12,7 @@ class LineChange(OpenAISchema):
     Line changes to be made.
     """
     chain_of_thought: str = Field(
-        ..., description="Please think step-by-step about the required changes to the file in order to construct a fully functioning and correct program.",
+        ..., description="Please think step-by-step about the required changes to the file in order to construct a fully functioning and correct program according to requirements.",
         exclude=True,
     )
     line_number: int = Field(

@@ -1,7 +1,7 @@
 import argparse
 import os
 
-from agency_swarm.util.cli import list_available_agents
+from agency_swarm.util.helpers import list_available_agents
 
 
 def main():

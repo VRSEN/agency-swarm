@@ -1,3 +1,4 @@
+import httpx
 import openai
 import threading
 import os
@@ -20,7 +21,7 @@ def get_openai_client():
             if api_key is None:
                 raise ValueError("OpenAI API key is not set. Please set it using set_openai_key.")
             client = instructor.patch(openai.OpenAI(api_key=api_key,
-                                                    timeout=10,
+                                                    timeout=httpx.Timeout(60.0, read=10, write=15.0, connect=5.0),
                                                     max_retries=5))
     return client
 

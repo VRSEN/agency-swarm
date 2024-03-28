@@ -90,14 +90,7 @@ class Agent():
         self._read_instructions()
 
         # upload files
-        prev_timeout = None
-        if isinstance(self.client.timeout, int) or isinstance(self.client.timeout, float):
-            # default timeout is too low for file large file uploads
-            prev_timeout = self.client.timeout
-            self.client.timeout = 120 if prev_timeout < 120 else prev_timeout
         self._upload_files()
-        if prev_timeout:
-            self.client.timeout = prev_timeout
 
         self._parse_schemas()
         self._parse_tools_folder()
@@ -238,7 +231,9 @@ class Agent():
                         else:
                             print("Uploading new file... " + os.path.basename(f_path))
                             with open(f_path, 'rb') as f:
-                                file_id = self.client.files.create(file=f, purpose="assistants").id
+                                file_id = self.client.with_options(
+                                    timeout=80 * 1000,
+                                ).files.create(file=f, purpose="assistants").id
                                 self.file_ids.append(file_id)
                                 f.close()
                             add_id_to_file(f_path, file_id)
@@ -360,7 +355,7 @@ class Agent():
                         tool = ToolFactory.from_file(f_path)
                         self.add_tool(tool)
                     except Exception as e:
-                        print("Error parsing tool. Skipping... " + os.path.basename(f_path))
+                        print(f"Error parsing tool: {e} Skipping... " + os.path.basename(f_path))
                 else:
                     print("Items in tools folder must be files. Skipping... ", f_path)
         else:
