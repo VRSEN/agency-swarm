@@ -12,9 +12,11 @@ class ThreadAsync(Thread):
         self.pythread = None
         self.response = None
 
-    def worker(self, message: str, message_files=None):
-        gen = super().get_completion(message=message, message_files=message_files,
-                                  yield_messages=False) # yielding is not supported in async mode
+    def worker(self, message: str, message_files=None, additional_instructions: str = None):
+        gen = super().get_completion(message=message,
+                                     message_files=message_files,
+                                     yield_messages=False,  # yielding is not supported in async mode
+                                     additional_instructions=additional_instructions)
         while True:
             try:
                 next(gen)
@@ -24,7 +26,7 @@ class ThreadAsync(Thread):
 
         return
 
-    def get_completion_async(self, message: str, message_files=None):
+    def get_completion_async(self, message: str, message_files=None, additional_instructions: str = None):
         if self.pythread and self.pythread.is_alive():
             return "System Notification: 'Agent is busy, so your message was not received. Please always use 'GetResponse' tool to check for status first, before using 'SendMessage' tool again for the same agent.'"
         elif self.pythread and not self.pythread.is_alive():
@@ -38,7 +40,7 @@ class ThreadAsync(Thread):
             return "System Notification: 'Agent is busy, so your message was not received. Please always use 'GetResponse' tool to check for status first, before using 'SendMessage' tool again for the same agent.'"
 
         self.pythread = threading.Thread(target=self.worker,
-                                         args=(message, message_files))
+                                         args=(message, message_files, additional_instructions))
 
         self.pythread.start()
 

@@ -207,8 +207,11 @@ class AgencyTest(unittest.TestCase):
                     nonlocal test_tool_used
                     test_tool_used = True
 
-        message = self.__class__.agency.get_completion_stream("Please tell TestAgent1 to tell TestAgent 2 to use test tool.",
-                                                              event_handler=EventHandler)
+        message = self.__class__.agency.get_completion_stream(
+            "Please tell TestAgent1 to tell TestAgent 2 to use test tool.",
+            event_handler=EventHandler,
+            additional_instructions="Your message to TestAgent1 should be exactly as follows: "
+                                    "'Please tell TestAgent2 to use test tool.'",)
 
         # self.assertFalse('error' in message.lower())
 

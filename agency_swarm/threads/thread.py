@@ -30,11 +30,13 @@ class Thread:
             self.thread = self.client.beta.threads.create()
             self.id = self.thread.id
 
-    def get_completion_stream(self, message: str, event_handler: type(AgencyEventHandler), message_files=None, recipient_agent=None):
-        return self.get_completion(message, message_files, False, recipient_agent, event_handler)
+    def get_completion_stream(self, message: str, event_handler: type(AgencyEventHandler), message_files=None, recipient_agent=None,
+                              additional_instructions: str = None):
+        return self.get_completion(message, message_files, False, recipient_agent, additional_instructions,
+                                   event_handler)
 
     def get_completion(self, message: str, message_files=None, yield_messages=True, recipient_agent=None,
-                       event_handler: type(AgencyEventHandler) = None):
+                       additional_instructions: str = None, event_handler: type(AgencyEventHandler) = None):
         if not self.thread:
             self.init_thread()
 
@@ -62,7 +64,7 @@ class Thread:
         if yield_messages:
             yield MessageOutput("text", self.agent.name, recipient_agent.name, message)
 
-        self._create_run(recipient_agent, event_handler)
+        self._create_run(recipient_agent, additional_instructions, event_handler)
 
         run_failed = False
         while True:
@@ -107,7 +109,7 @@ class Thread:
                             content="Please repeat the exact same function calls again in the same order."
                         )
 
-                        self._create_run(recipient_agent, event_handler)
+                        self._create_run(recipient_agent, additional_instructions, event_handler)
 
                         self._run_until_done()
 
@@ -126,7 +128,7 @@ class Thread:
             elif self.run.status == "failed":
                 # retry run 1 time
                 if not run_failed and "something went wrong" in self.run.last_error:
-                    self._create_run(recipient_agent, event_handler)
+                    self._create_run(recipient_agent, additional_instructions, event_handler)
                     run_failed = True
                 else:
                     raise Exception("Run Failed. Error: ", self.run.last_error)
@@ -142,12 +144,13 @@ class Thread:
 
                 return message
 
-    def _create_run(self, recipient_agent, event_handler):
+    def _create_run(self, recipient_agent, additional_instructions, event_handler):
         if event_handler:
             with self.client.beta.threads.runs.create_and_stream(
                 thread_id=self.thread.id,
                 event_handler=event_handler(),
-                assistant_id=recipient_agent.id
+                assistant_id=recipient_agent.id,
+                additional_instructions=additional_instructions,
             ) as stream:
                 stream.until_done()
                 self.run = stream.get_final_run()
@@ -155,6 +158,7 @@ class Thread:
             self.run = self.client.beta.threads.runs.create(
                 thread_id=self.thread.id,
                 assistant_id=recipient_agent.id,
+                additional_instructions=additional_instructions,
             )
 
     def _run_until_done(self):

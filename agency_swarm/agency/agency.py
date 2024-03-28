@@ -37,7 +37,7 @@ class ThreadsCallbacks(TypedDict):
 
 class Agency:
     ThreadType = Thread
-    send_message_tool_description = """Use this tool to facilitate direct, synchronous communication between specialized agents within your agency. When you send a message using this tool, you receive a response exclusively from the designated recipient agent. To continue the dialogue, invoke this tool again with the desired recipient agent and your follow-up message. Remember, communication here is synchronous; the recipient agent won't perform any tasks post-response. You are responsible for relaying the recipient agent's responses back to the user, as the user does not have direct access to these replies. Keep engaging with the tool for continuous interaction until the task is fully resolved."""
+    send_message_tool_description = """Use this tool to facilitate direct, synchronous communication between specialized agents within your agency. When you send a message using this tool, you receive a response exclusively from the designated recipient agent. To continue the dialogue, invoke this tool again with the desired recipient agent and your follow-up message. Remember, communication here is synchronous; the recipient agent won't perform any tasks post-response. You are responsible for relaying the recipient agent's responses back to the user, as the user does not have direct access to these replies. Keep engaging with the tool for continuous interaction until the task is fully resolved. Do not send messages to more than one agent at a time."""
     send_message_tool_description_async = """Use this tool for asynchronous communication with other agents within your agency. Initiate tasks by messaging, and check status and responses later with the 'GetResponse' tool. Relay responses to the user, who instructs on status checks. Continue until task completion."""
 
     def __init__(self,
@@ -91,7 +91,8 @@ class Agency:
         self._init_agents()
         self._init_threads()
 
-    def get_completion(self, message: str, message_files=None, yield_messages=True, recipient_agent=None):
+    def get_completion(self, message: str, message_files=None, yield_messages=True, recipient_agent=None,
+                       additional_instructions=None):
         """
         Retrieves the completion for a given message from the main thread.
 
@@ -100,12 +101,13 @@ class Agency:
             message_files (list, optional): A list of file ids to be sent as attachments with the message. Defaults to None.
             yield_messages (bool, optional): Flag to determine if intermediate messages should be yielded. Defaults to True.
             recipient_agent (Agent, optional): The agent to which the message should be sent. Defaults to the first agent in the agency chart.
-
+            additional_instructions (str, optional): Additional instructions to be sent with the message. Defaults to None.
         Returns:
             Generator or final response: Depending on the 'yield_messages' flag, this method returns either a generator yielding intermediate messages or the final response from the main thread.
         """
         gen = self.main_thread.get_completion(message=message, message_files=message_files,
-                                              yield_messages=yield_messages, recipient_agent=recipient_agent)
+                                              yield_messages=yield_messages, recipient_agent=recipient_agent,
+                                              additional_instructions=additional_instructions)
 
         if not yield_messages:
             while True:
@@ -117,7 +119,7 @@ class Agency:
         return gen
 
     def get_completion_stream(self, message: str, event_handler: type(AgencyEventHandler), message_files=None,
-                              recipient_agent=None):
+                              recipient_agent=None, additional_instructions: str = None):
         """
         Generates a stream of completions for a given message from the main thread.
 
@@ -126,6 +128,7 @@ class Agency:
             event_handler (type(AgencyEventHandler)): The event handler class to handle the completion stream. https://github.com/openai/openai-python/blob/main/helpers.md
             message_files (list, optional): A list of file ids to be sent as attachments with the message. Defaults to None.
             recipient_agent (Agent, optional): The agent to which the message should be sent. Defaults to the first agent in the agency chart.
+            additional_instructions (str, optional): Additional instructions to be sent with the message. Defaults to None.
         Returns:
             Final response: Final response from the main thread.
         """
@@ -136,7 +139,8 @@ class Agency:
             raise Exception("Event handler must not be an instance.")
 
         gen = self.main_thread.get_completion_stream(message=message, event_handler=event_handler,
-                                                     message_files=message_files, recipient_agent=recipient_agent)
+                                                     message_files=message_files, recipient_agent=recipient_agent,
+                                                     additional_instructions=additional_instructions)
 
         while True:
             try:
@@ -312,7 +316,8 @@ class Agency:
                 print("Message files: ", message_file_ids)
                 # Replace this with your actual chatbot logic
 
-                completion_thread = threading.Thread(target=self.get_completion_stream, args=(original_message, GradioEventHandler, message_file_ids, recipient_agent))
+                completion_thread = threading.Thread(target=self.get_completion_stream, args=(
+                original_message, GradioEventHandler, message_file_ids, recipient_agent))
                 completion_thread.start()
 
                 message_file_ids = []
@@ -382,7 +387,8 @@ class Agency:
             try:
                 import pyreadline as readline
             except ImportError:
-                print("Module 'readline' not found. Autocomplete will not work. If you are using Windows, try installing 'pyreadline3'.")
+                print(
+                    "Module 'readline' not found. Autocomplete will not work. If you are using Windows, try installing 'pyreadline3'.")
                 return
 
         if not readline:
@@ -479,7 +485,7 @@ class Agency:
                 text = text.replace(f"@{recipient_agent}", "").strip()
                 try:
                     recipient_agent = \
-                    [agent for agent in self.recipient_agents if agent.lower() == recipient_agent.lower()][0]
+                        [agent for agent in self.recipient_agents if agent.lower() == recipient_agent.lower()][0]
                     recipient_agent = self._get_agent_by_name(recipient_agent)
                 except Exception as e:
                     print(f"Recipient agent {recipient_agent} not found.")
@@ -729,14 +735,14 @@ class Agency:
         outer_self = self
 
         class SendMessage(BaseTool):
-            instructions: str = Field(...,
-                                      description="Please repeat your instructions step-by-step, including both completed "
+            my_primary_instructions: str = Field(...,
+                                      description="Please repeat your primary instructions step-by-step, including both completed "
                                                   "and the following next steps that you need to perfrom. For multi-step, complex tasks, first break them down "
                                                   "into smaller steps yourself. Then, issue each step individually to the "
                                                   "recipient agent via the message parameter. Each identified step should be "
                                                   "sent in separate message. Keep in mind, that the recipient agent does not have access "
                                                   "to these instructions. You must include recipient agent-specific instructions "
-                                                  "in the message parameter.")
+                                                  "in the message or additional_instructions parameters.")
             recipient: recipients = Field(..., description=agent_descriptions)
             message: str = Field(...,
                                  description="Specify the task required for the recipient agent to complete. Focus on "
@@ -745,6 +751,8 @@ class Agency:
             message_files: List[str] = Field(default=None,
                                              description="A list of file ids to be sent as attachments to this message. Only use this if you have the file id that starts with 'file-'.",
                                              examples=["file-1234", "file-5678"])
+            additional_instructions: str = Field(default=None,
+                                                 description="Any additional instructions or clarifications that you would like to provide to the recipient agent.")
 
             @field_validator('recipient')
             def check_recipient(cls, value):
@@ -756,15 +764,19 @@ class Agency:
                 thread = outer_self.agents_and_threads[self.caller_agent.name][self.recipient.value]
 
                 if not outer_self.async_mode:
-                    gen = thread.get_completion(message=self.message, message_files=self.message_files,
-                                                event_handler=self.event_handler)
+                    gen = thread.get_completion(message=self.message,
+                                                message_files=self.message_files,
+                                                event_handler=self.event_handler,
+                                                additional_instructions=self.additional_instructions)
                     try:
                         while True:
                             yield next(gen)
                     except StopIteration as e:
                         message = e.value
                 else:
-                    message = thread.get_completion_async(message=self.message, message_files=self.message_files)
+                    message = thread.get_completion_async(message=self.message,
+                                                          message_files=self.message_files,
+                                                          additional_instructions=self.additional_instructions)
 
                 return message or ""
 

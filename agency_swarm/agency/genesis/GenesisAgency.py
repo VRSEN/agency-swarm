@@ -4,9 +4,7 @@ from .AgentCreator import AgentCreator
 from .GenesisCEO import GenesisCEO
 from .OpenAPICreator import OpenAPICreator
 from .ToolCreator import ToolCreator
-
-new_agency_path = None
-
+from agency_swarm.util.helpers import get_available_agent_descriptions
 
 class GenesisAgency(Agency):
     def __init__(self, with_browsing=True, **kwargs):
@@ -14,6 +12,17 @@ class GenesisAgency(Agency):
         if 'agency_chart' not in kwargs:
             agent_creator = AgentCreator()
             genesis_ceo = GenesisCEO()
+
+            agent_descriptions = get_available_agent_descriptions()
+
+            genesis_ceo.instructions += (
+                "\nAdditionally, there are several pre-built agents available in the agency swarm framework that you can use out of the box.\n"
+                + agent_descriptions + "\n"
+                "If any of the available agents match the requirements for one of the agents in the agency, you can add this agent in the agency chart.\n"
+                "Then, instruct the agent creator to simply import the agent.\n"
+                "If possible, prefer to use this method instead of instructing AgentCreator to create a new agent from scratch.\n"
+            )
+
             tool_creator = ToolCreator()
             openapi_creator = OpenAPICreator()
             kwargs['agency_chart'] = [
@@ -25,7 +34,7 @@ class GenesisAgency(Agency):
             ]
 
             if with_browsing:
-                from agency_swarm.agents.browsing import BrowsingAgent
+                from agency_swarm.agents.BrowsingAgent import BrowsingAgent
                 browsing_agent = BrowsingAgent()
 
                 browsing_agent.instructions += ("""\n

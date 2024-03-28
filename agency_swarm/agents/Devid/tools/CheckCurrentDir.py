@@ -3,7 +3,7 @@ from agency_swarm import BaseTool
 
 class CheckCurrentDir(BaseTool):
     """
-    This tool checks the current directory.
+    This tool checks the current directory path.
     """
 
     def run(self):

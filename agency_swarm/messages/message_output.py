@@ -5,7 +5,6 @@ from rich.console import Console, Group
 from rich.live import Live
 
 console = Console()
-live_display = Live()
 
 class MessageOutput:
     def __init__(self, msg_type: Literal["function", "function_output", "text", "system"], sender_name: str,
@@ -104,7 +103,7 @@ class MessageOutputLive(MessageOutput):
                  receiver_name: str, content):
         super().__init__(msg_type, sender_name, receiver_name, content)
         # Initialize Live display if not already done
-        self.live_display = Live()
+        self.live_display = Live(vertical_overflow="visible")
         self.live_display.start()
 
         console.rule()
