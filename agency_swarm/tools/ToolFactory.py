@@ -3,6 +3,7 @@ import inspect
 import json
 import os
 import sys
+from importlib import import_module
 from typing import Any, Dict, List, Type, Union
 
 import jsonref
@@ -285,33 +286,32 @@ class ToolFactory:
 
     @staticmethod
     def from_file(file_path: str) -> Type[BaseTool]:
-        """Dynamically imports a BaseTool from a Python file. The file must be named the same as the class.
+        """Dynamically imports a BaseTool class from a Python file within a package structure.
 
         Parameters:
             file_path: The file path to the Python file containing the BaseTool class.
 
         Returns:
-            The BaseTool class from the given file path.
-
+            The imported BaseTool class.
         """
-        # Extract class name from file path (assuming class name matches file name without .py extension)
-        class_name = os.path.basename(file_path)
-        if class_name.endswith('.py'):
-            class_name = class_name[:-3]  # Remove .py extension
+        file_path = os.path.relpath(file_path)
+        # Normalize the file path to be absolute and extract components
+        directory, file_name = os.path.split(file_path)
+        import_path = os.path.splitext(file_path)[0].replace(os.sep, ".")
+        class_name = os.path.splitext(file_name)[0]
 
-        # Load the module from the given file path
-        spec = importlib.util.spec_from_file_location(class_name, file_path)
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[class_name] = module
-        spec.loader.exec_module(module)
+        exec_globals = globals()
+        exec(f"from {import_path} import {class_name}", exec_globals)
 
-        # Dynamically access the class based on the extracted class name
-        if hasattr(module, class_name):
-            tool = getattr(module, class_name)
-        else:
-            raise AttributeError(f"The class {class_name} was not found in {file_path}")
+        imported_class = exec_globals.get(class_name)
+        if not imported_class:
+            raise ImportError(f"Could not import {class_name} from {import_path}")
 
-        return tool
+        # Check if the imported class is a subclass of BaseTool
+        if not issubclass(imported_class, BaseTool):
+            raise TypeError(f"Class {class_name} must be a subclass of BaseTool")
+
+        return imported_class
 
     @staticmethod
     def get_openapi_schema(tools: List[Type[BaseTool]], url: str, title="Agent Tools",

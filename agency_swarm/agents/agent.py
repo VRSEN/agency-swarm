@@ -238,7 +238,7 @@ class Agent():
                                 f.close()
                             add_id_to_file(f_path, file_id)
                 else:
-                    print("Files folder path is not a directory. Skipping... ", f_path)
+                    print(f"Files folder '{f_path}' is not a directory. Skipping...", )
             else:
                 print("Files folder path must be a string or list of strings. Skipping... ", files_folder)
 
@@ -340,9 +340,11 @@ class Agent():
     def _parse_tools_folder(self):
         if not self.tools_folder:
             return
+
         if not os.path.isdir(self.tools_folder):
             self.tools_folder = os.path.join(self.get_class_folder_path(), self.tools_folder)
             self.tools_folder = os.path.normpath(self.tools_folder)
+
         if os.path.isdir(self.tools_folder):
             f_paths = os.listdir(self.tools_folder)
             f_paths = [f for f in f_paths if not f.startswith(".") and not f.startswith("__")]
@@ -355,7 +357,7 @@ class Agent():
                         tool = ToolFactory.from_file(f_path)
                         self.add_tool(tool)
                     except Exception as e:
-                        print(f"Error parsing tool file {os.path.basename(f_path)}: {e} Skipping...")
+                        print(f"Error parsing tool file {os.path.basename(f_path)}: {e}. Skipping...")
                 else:
                     print("Items in tools folder must be files. Skipping... ", f_path)
         else:
