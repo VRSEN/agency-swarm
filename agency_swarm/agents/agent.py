@@ -355,7 +355,7 @@ class Agent():
                         tool = ToolFactory.from_file(f_path)
                         self.add_tool(tool)
                     except Exception as e:
-                        print(f"Error parsing tool: {e} Skipping... " + os.path.basename(f_path))
+                        print(f"Error parsing tool file {os.path.basename(f_path)}: {e} Skipping...")
                 else:
                     print("Items in tools folder must be files. Skipping... ", f_path)
         else:
