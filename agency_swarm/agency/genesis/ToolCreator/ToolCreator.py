@@ -1,24 +1,12 @@
 from agency_swarm import Agent
-from .tools.TestTool import TestTool
-from .tools.CreateTool import CreateTool
 
 
 class ToolCreator(Agent):
-    def __init__(self, **kwargs):
-        # Initialize tools in kwargs if not present
-        if 'tools' not in kwargs:
-            kwargs['tools'] = []
-
-        kwargs['description'] = "This agent is responsible for creating new tools for the agency using python code."
-
-        # Add required tools
-        kwargs['tools'].extend([CreateTool, TestTool])
-
-        # Set instructions
-        if 'instructions' not in kwargs:
-            kwargs['instructions'] = "./instructions.md"
-
-        # Initialize the parent class
-        super().__init__(**kwargs)
+    def __init__(self):
+        super().__init__(
+            description="This agent is responsible for creating new tools for the agency using python code.",
+            tools_folder="./tools",
+            instructions="./instructions.md",
+        )
 
 
