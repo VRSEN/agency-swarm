@@ -24,6 +24,7 @@ class BaseTool(OpenAISchema, ABC):
     shared_state: ClassVar[SharedState] = SharedState()
     caller_agent: Any = None
     event_handler: Any = None
+    one_call_at_a_time: bool = False
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -40,6 +41,7 @@ class BaseTool(OpenAISchema, ABC):
         properties.pop("caller_agent", None)
         properties.pop("shared_state", None)
         properties.pop("event_handler", None)
+        properties.pop("one_call_at_a_time", None)
 
         required = schema.get("parameters", {}).get("required", [])
         if "caller_agent" in required:
@@ -48,6 +50,8 @@ class BaseTool(OpenAISchema, ABC):
             required.remove("shared_state")
         if "event_handler" in required:
             required.remove("event_handler")
+        if "one_call_at_a_time" in required:
+            required.remove("one_call_at_a_time")
 
         return schema
 

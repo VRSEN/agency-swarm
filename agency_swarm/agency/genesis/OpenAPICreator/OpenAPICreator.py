@@ -1,10 +1,11 @@
 from agency_swarm import Agent
+from .tools.CreateToolsFromOpenAPISpec import CreateToolsFromOpenAPISpec
 
 
 class OpenAPICreator(Agent):
     def __init__(self):
         super().__init__(
             description="This agent is responsible for creating new tools from an OpenAPI specifications.",
-            tools_folder="./tools",
-            instructions="./instructions.md"
+            instructions="./instructions.md",
+            tools=[CreateToolsFromOpenAPISpec]
         )

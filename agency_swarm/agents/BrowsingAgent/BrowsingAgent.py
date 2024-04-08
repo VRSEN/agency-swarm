@@ -1,6 +1,7 @@
 from agency_swarm.agents import Agent
 from .tools.util.selenium import set_selenium_config
 from agency_swarm.tools.oai import Retrieval
+from typing_extensions import override
 
 
 class BrowsingAgent(Agent):
@@ -17,3 +18,7 @@ class BrowsingAgent(Agent):
 
         if selenium_config is not None:
             set_selenium_config(selenium_config)
+
+    @override
+    def response_validator(self, message):
+        return message

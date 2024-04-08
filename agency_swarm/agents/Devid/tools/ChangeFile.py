@@ -11,10 +11,6 @@ class LineChange(OpenAISchema):
     """
     Line changes to be made.
     """
-    chain_of_thought: str = Field(
-        ..., description="Please think step-by-step about the required changes to the file in order to construct a fully functioning and correct program according to requirements.",
-        exclude=True,
-    )
     line_number: int = Field(
         ..., description="Line number to change.",
         examples=[1, 2, 3]
@@ -39,10 +35,14 @@ class LineChange(OpenAISchema):
         return self
 
 
-class ChangeLines(BaseTool):
+class ChangeFile(BaseTool):
     """
     This tool changes specified lines in a file. Returns the new file contents with line numbers at the start of each line.
     """
+    chain_of_thought: str = Field(
+        ..., description="Please think step-by-step about the required changes to the file in order to construct a fully functioning and correct program according to the requirements.",
+        exclude=True,
+    )
     file_path: str = Field(
         ..., description="Path to the file with extension.",
         examples=["./file.txt", "./file.json", "../../file.py"]

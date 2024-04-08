@@ -27,6 +27,19 @@ class Agent():
     def functions(self):
         return [tool for tool in self.tools if issubclass(tool, BaseTool)]
 
+    def response_validator(self, message: str) -> str:
+        """
+        Validates the response from the agent. If the response is invalid, it must raise an exception with instructions
+        for the caller agent on how to proceed.
+
+        Parameters:
+            message (str): The response from the agent.
+
+        Returns:
+            str: The validated response.
+        """
+        return message
+
     def __init__(
             self,
             id: str = None,
@@ -41,7 +54,8 @@ class Agent():
             api_params: Dict[str, Dict[str, str]] = None,
             file_ids: List[str] = None,
             metadata: Dict[str, str] = None,
-            model: str = "gpt-4-turbo-preview"
+            model: str = "gpt-4-turbo-preview",
+            validation_attempts: int = 1,
     ):
         """
         Initializes an Agent with specified attributes, tools, and OpenAI client.
@@ -60,6 +74,7 @@ class Agent():
             file_ids (List[str], optional): List of file IDs for files associated with the agent. Defaults to an empty list.
             metadata (Dict[str, str], optional): Metadata associated with the agent. Defaults to an empty dictionary.
             model (str, optional): The model identifier for the OpenAI API. Defaults to "gpt-4-turbo-preview".
+            validation_attempts (int, optional): Number of attempts to validate the response with response_validator function. Defaults to 1.
 
         This constructor sets up the agent with its unique properties, initializes the OpenAI client, reads instructions if provided, and uploads any associated files.
         """
@@ -78,6 +93,7 @@ class Agent():
         self.file_ids = file_ids if file_ids else []
         self.metadata = metadata if metadata else {}
         self.model = model
+        self.validation_attempts = validation_attempts
 
         self.settings_path = './settings.json'
 

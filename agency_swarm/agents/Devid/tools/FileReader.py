@@ -1,5 +1,5 @@
 from agency_swarm.tools import BaseTool
-from pydantic import Field
+from pydantic import Field, field_validator
 
 
 class FileReader(BaseTool):
@@ -16,3 +16,12 @@ class FileReader(BaseTool):
 
         # return file contents
         return "\n".join([f"{i + 1}. {line}" for i, line in enumerate(file_contents)])
+
+    @field_validator("file_path", mode="after")
+    @classmethod
+    def validate_file_path(cls, v):
+        if "file-" in v:
+            raise ValueError("You tried to access an openai file with a wrong file reader tool. "
+                             "Please use the `myfiles_browser` tool to access openai files instead."
+                             "This tool is only for reading local files.")
+        return v

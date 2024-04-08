@@ -74,6 +74,9 @@ class {class_name}(Agent):
             tools=[{code_interpreter}],
             tools_folder="./tools"
         )
+        
+    def response_validator(self, message):
+        return message
 """
 
 example_tool_template = """from agency_swarm.tools import BaseTool

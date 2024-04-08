@@ -2,6 +2,7 @@ from agency_swarm.tools import BaseTool
 from pydantic import Field
 import subprocess
 import shlex
+from dotenv import load_dotenv, find_dotenv
 
 class CommandExecutor(BaseTool):
     """
@@ -22,17 +23,19 @@ class CommandExecutor(BaseTool):
             A dictionary containing the standard output (stdout), standard error (stderr),
             and the exit code of the command.
         """
+        load_dotenv(find_dotenv() or None)
         # Ensure the command is safely split for subprocess
         command_parts = shlex.split(self.command)
 
         # Execute the command and capture the output
         result = subprocess.run(command_parts, capture_output=True, text=True)
 
-        return {
-            "stdout": result.stdout,
-            "stderr": result.stderr,
-            "exit_code": result.returncode
-        }
+        # check if the command failed
+        if result.returncode != 0 or result.stderr:
+            return (f"stdout: {result.stdout}\nstderr: {result.stderr}\nexit code: {result.returncode}\n\n"
+                    f"Please add error handling and continue debugging until the command runs successfully.")
+
+        return f"stdout: {result.stdout}\nstderr: {result.stderr}\nexit code: {result.returncode}"
 
 if __name__ == "__main__":
     tool = CommandExecutor(command="ls -l")

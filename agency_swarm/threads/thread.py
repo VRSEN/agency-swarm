@@ -1,4 +1,5 @@
 import inspect
+import json
 import time
 from typing import Literal
 
@@ -30,7 +31,8 @@ class Thread:
             self.thread = self.client.beta.threads.create()
             self.id = self.thread.id
 
-    def get_completion_stream(self, message: str, event_handler: type(AgencyEventHandler), message_files=None, recipient_agent=None,
+    def get_completion_stream(self, message: str, event_handler: type(AgencyEventHandler), message_files=None,
+                              recipient_agent=None,
                               additional_instructions: str = None):
         return self.get_completion(message, message_files, False, recipient_agent, additional_instructions,
                                    event_handler)
@@ -66,7 +68,9 @@ class Thread:
 
         self._create_run(recipient_agent, additional_instructions, event_handler)
 
-        run_failed = False
+        error_attempts = 0
+        validation_attempts = 0
+        full_message = ""
         while True:
             self._run_until_done()
 
@@ -74,12 +78,13 @@ class Thread:
             if self.run.status == "requires_action":
                 tool_calls = self.run.required_action.submit_tool_outputs.tool_calls
                 tool_outputs = []
+                tool_names = []
                 for tool_call in tool_calls:
                     if yield_messages:
                         yield MessageOutput("function", recipient_agent.name, self.agent.name,
                                             str(tool_call.function))
 
-                    output = self.execute_tool(tool_call, recipient_agent, event_handler)
+                    output = self.execute_tool(tool_call, recipient_agent, event_handler, tool_names)
                     if inspect.isgenerator(output):
                         try:
                             while True:
@@ -97,6 +102,7 @@ class Thread:
                                                 output)
 
                     tool_outputs.append({"tool_call_id": tool_call.id, "output": str(output)})
+                    tool_names.append(tool_call.function.name)
 
                 # submit tool outputs
                 try:
@@ -126,31 +132,66 @@ class Thread:
                         raise e
             # error
             elif self.run.status == "failed":
-                # retry run 1 time
-                if not run_failed and "something went wrong" in self.run.last_error:
+                full_message += self._get_last_message_text() + "\n"
+                # retry run 2 times
+                if error_attempts < 1 and "something went wrong" in self.run.last_error.message.lower():
+                    time.sleep(1)
                     self._create_run(recipient_agent, additional_instructions, event_handler)
-                    run_failed = True
+                    error_attempts += 1
+                elif 1 <= error_attempts < 5 and "something went wrong" in self.run.last_error.message.lower():
+                    self.client.beta.threads.messages.create(
+                        thread_id=self.thread.id,
+                        role="user",
+                        content="Continue."
+                    )
+                    self._create_run(recipient_agent, additional_instructions, event_handler)
+                    error_attempts += 1
                 else:
-                    raise Exception("Run Failed. Error: ", self.run.last_error)
+                    raise Exception("OpenAI Run Failed. Error: ", self.run.last_error.message)
             # return assistant message
             else:
-                messages = self.client.beta.threads.messages.list(
-                    thread_id=self.id
-                )
-                message = messages.data[0].content[0].text.value
+                full_message += self._get_last_message_text()
 
                 if yield_messages:
-                    yield MessageOutput("text", recipient_agent.name, self.agent.name, message)
+                    yield MessageOutput("text", recipient_agent.name, self.agent.name, full_message)
 
-                return message
+                if recipient_agent.response_validator:
+                    try:
+                        if isinstance(recipient_agent, Agent):
+                            recipient_agent.response_validator(message=full_message)
+                    except Exception as e:
+                        full_message = ""
+                        if validation_attempts < recipient_agent.validation_attempts:
+                            message = self.client.beta.threads.messages.create(
+                                thread_id=self.thread.id,
+                                role="user",
+                                content=str(e),
+                            )
+
+                            if yield_messages:
+                                yield MessageOutput("text", self.agent.name, recipient_agent.name,
+                                                    message.content[0].text.value)
+
+                            if event_handler:
+                                handler = event_handler()
+                                handler.on_message_created(message)
+                                handler.on_message_done(message)
+
+                            validation_attempts += 1
+
+                            self._create_run(recipient_agent, additional_instructions, event_handler)
+
+                            continue
+
+                return full_message
 
     def _create_run(self, recipient_agent, additional_instructions, event_handler):
         if event_handler:
             with self.client.beta.threads.runs.create_and_stream(
-                thread_id=self.thread.id,
-                event_handler=event_handler(),
-                assistant_id=recipient_agent.id,
-                additional_instructions=additional_instructions,
+                    thread_id=self.thread.id,
+                    event_handler=event_handler(),
+                    assistant_id=recipient_agent.id,
+                    additional_instructions=additional_instructions,
             ) as stream:
                 stream.until_done()
                 self.run = stream.get_final_run()
@@ -186,7 +227,18 @@ class Thread:
                 stream.until_done()
                 self.run = stream.get_final_run()
 
-    def execute_tool(self, tool_call, recipient_agent=None, event_handler=None):
+    def _get_last_message_text(self):
+        messages = self.client.beta.threads.messages.list(
+            thread_id=self.id,
+            limit=1
+        )
+
+        if len(messages.data) == 0 or len(messages.data[0].content) == 0:
+            return ""
+
+        return messages.data[0].content[0].text.value
+
+    def execute_tool(self, tool_call, recipient_agent=None, event_handler=None, tool_names=[]):
         if not recipient_agent:
             recipient_agent = self.recipient_agent
 
@@ -198,7 +250,13 @@ class Thread:
 
         try:
             # init tool
-            func = func(**eval(tool_call.function.arguments))
+            args = tool_call.function.arguments
+            args = json.loads(args) if args else {}
+            func = func(**args)
+            for tool_name in tool_names:
+                if tool_name == tool_call.function.name and (
+                        hasattr(func, "one_call_at_a_time") and func.one_call_at_a_time):
+                    return f"Error: Function {tool_call.function.name} is already called. You can only call this function once at a time. Please wait for the previous call to finish before calling it again."
             func.caller_agent = recipient_agent
             func.event_handler = event_handler
             # get outputs from the tool

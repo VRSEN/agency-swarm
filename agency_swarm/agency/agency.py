@@ -9,7 +9,7 @@ from typing import List, TypedDict, Callable, Any, Dict, Literal, Union
 
 from openai.types.beta.threads import Message
 from openai.types.beta.threads.runs import RunStep
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from rich.console import Console
 from typing_extensions import override
 
@@ -37,7 +37,7 @@ class ThreadsCallbacks(TypedDict):
 
 class Agency:
     ThreadType = Thread
-    send_message_tool_description = """Use this tool to facilitate direct, synchronous communication between specialized agents within your agency. When you send a message using this tool, you receive a response exclusively from the designated recipient agent. To continue the dialogue, invoke this tool again with the desired recipient agent and your follow-up message. Remember, communication here is synchronous; the recipient agent won't perform any tasks post-response. You are responsible for relaying the recipient agent's responses back to the user, as the user does not have direct access to these replies. Keep engaging with the tool for continuous interaction until the task is fully resolved. Do not send messages to more than one agent at a time."""
+    send_message_tool_description = """Use this tool to facilitate direct, synchronous communication between specialized agents within your agency. When you send a message using this tool, you receive a response exclusively from the designated recipient agent. To continue the dialogue, invoke this tool again with the desired recipient agent and your follow-up message. Remember, communication here is synchronous; the recipient agent won't perform any tasks post-response. You are responsible for relaying the recipient agent's responses back to the user, as the user does not have direct access to these replies. Keep engaging with the tool for continuous interaction until the task is fully resolved. Do not send more than 1 message at a time."""
     send_message_tool_description_async = """Use this tool for asynchronous communication with other agents within your agency. Initiate tasks by messaging, and check status and responses later with the 'GetResponse' tool. Relay responses to the user, who instructs on status checks. Continue until task completion."""
 
     def __init__(self,
@@ -247,12 +247,14 @@ class Agency:
                 def on_message_created(self, message: Message) -> None:
                     if message.role == "user":
                         self.message_output = MessageOutput("text", self.agent_name, self.recipient_agent_name,
-                                                            "")
-                    else:
-                        self.message_output = MessageOutput("text", self.recipient_agent_name, self.agent_name, "")
-                        chatbot_queue.put("[new_message]")
+                                                            message.content[0].text.value)
 
-                    chatbot_queue.put(self.message_output.get_formatted_header() + "\n")
+                    else:
+                        self.message_output = MessageOutput("text", self.recipient_agent_name, self.agent_name,
+                                                            "")
+
+                    chatbot_queue.put("[new_message]")
+                    chatbot_queue.put(self.message_output.get_formatted_content())
 
                 @override
                 def on_text_delta(self, delta, snapshot):
@@ -260,15 +262,20 @@ class Agency:
 
                 @override
                 def on_tool_call_created(self, tool_call):
-                    chatbot_queue.put("[new_message]")
-                    self.message_output = MessageOutput("function", self.recipient_agent_name, self.agent_name,
-                                                        str(tool_call.function))
-
-                    chatbot_queue.put(self.message_output.get_formatted_header() + "\n")
+                    # TODO: add support for code interpreter and retirieval tools
+                    if tool_call.type == "function":
+                        chatbot_queue.put("[new_message]")
+                        self.message_output = MessageOutput("function", self.recipient_agent_name, self.agent_name,
+                                                            str(tool_call.function))
+                        chatbot_queue.put(self.message_output.get_formatted_header() + "\n")
 
                 @override
                 def on_tool_call_done(self, snapshot):
                     self.message_output = None
+
+                    # TODO: add support for code interpreter and retirieval tools
+                    if snapshot.type != "function":
+                        return
 
                     chatbot_queue.put(str(snapshot.function))
 
@@ -290,6 +297,9 @@ class Agency:
                 def on_run_step_done(self, run_step: RunStep) -> None:
                     if run_step.type == "tool_calls":
                         for tool_call in run_step.step_details.tool_calls:
+                            if tool_call.type != "function":
+                                continue
+
                             if tool_call.function.name == "SendMessage":
                                 continue
 
@@ -413,6 +423,7 @@ class Agency:
                 if message.role == "user":
                     self.message_output = MessageOutputLive("text", self.agent_name, self.recipient_agent_name,
                                                             "")
+                    self.message_output.cprint_update(message.content[0].text.value)
                 else:
                     self.message_output = MessageOutputLive("text", self.recipient_agent_name, self.agent_name, "")
 
@@ -426,7 +437,10 @@ class Agency:
 
             @override
             def on_tool_call_created(self, tool_call):
-                self.message_output = MessageOutputLive("function", self.recipient_agent_name, self.agent_name,
+                # TODO: add support for code interpreter and retirieval tools
+
+                if tool_call.type == "function":
+                    self.message_output = MessageOutputLive("function", self.recipient_agent_name, self.agent_name,
                                                         str(tool_call.function))
 
             @override
@@ -436,6 +450,10 @@ class Agency:
             @override
             def on_tool_call_done(self, snapshot):
                 self.message_output = None
+
+                # TODO: add support for code interpreter and retrieval tools
+                if snapshot.type != "function":
+                    return
 
                 if snapshot.function.name == "SendMessage":
                     try:
@@ -454,6 +472,9 @@ class Agency:
             def on_run_step_done(self, run_step: RunStep) -> None:
                 if run_step.type == "tool_calls":
                     for tool_call in run_step.step_details.tool_calls:
+                        if tool_call.type != "function":
+                            continue
+
                         if tool_call.function.name == "SendMessage":
                             continue
 
@@ -753,6 +774,13 @@ class Agency:
                                              examples=["file-1234", "file-5678"])
             additional_instructions: str = Field(default=None,
                                                  description="Any additional instructions or clarifications that you would like to provide to the recipient agent.")
+            one_call_at_a_time: bool = True
+
+            @model_validator(mode='after')
+            def validate_files(self):
+                if "file-" in self.message or (self.additional_instructions and "file-" in self.additional_instructions):
+                    if not self.message_files:
+                        raise ValueError("You must include file ids in message_files parameter.")
 
             @field_validator('recipient')
             def check_recipient(cls, value):
