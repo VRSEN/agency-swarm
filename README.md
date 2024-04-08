@@ -104,15 +104,13 @@ Define your custom tools with [Instructor](https://github.com/jxnl/instructor):
                 tools=[MyCustomTool, LangchainTool])
     ```
 
-    Import from existing agents (will be deprecated in future versions):
-    
-    ```python
-    from agency_swarm.agents.browsing import BrowsingAgent
-    
-    browsing_agent = BrowsingAgent()
-    
-    browsing_agent.instructions += "\n\nYou can add additional instructions here."
-    ```
+    Import from existing agents:
+
+   ```bash
+   agency-swarm import-agent --name "Devid" --destination "./"
+   ```
+   
+   This will import Devid (Software Developer) Agent locally, including all source code files, so you have full control over your system. Currently, available agents are: `Devid`, `BrowsingAgent`.
 
 
 
@@ -121,6 +119,12 @@ Establish how your agents will communicate with each other.
 
     ```python
     from agency_swarm import Agency
+    # if importing from local files
+    from Developer import Developer
+    from VirtualAssistant import VirtualAssistant
+   
+    dev = Developer()
+    va = VirtualAssistant()
     
     agency = Agency([
         ceo,  # CEO will be the entry point for communication with the user
@@ -169,6 +173,18 @@ Make sure to include:
 - Your mission and goals.
 - The agents you want to involve and their communication flows.
 - Which tools or APIs each agent should have access to, if any.
+
+## Importing Existing Agents
+
+This CLI command allows you to import existing agents from local files into your agency.
+
+#### **Command Syntax:**
+
+```bash
+agency-swarm import-agent --name "AgentName" --destination "/path/to/directory"
+```
+
+To check available agents, simply run this command without any arguments.
 
 ## Creating Agent Templates Locally
 
