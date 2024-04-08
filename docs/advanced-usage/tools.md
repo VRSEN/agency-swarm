@@ -246,3 +246,13 @@ tools = ToolFactory.from_openapi_schema(
             else:
                 return "Success. The action has been taken."
     ```
+4. Consider `one_call_at_a_time` class attribute to prevent multiple instances of the same tool from running at the same time. This is useful when you want your agents to see the results of the previous action before proceeding with the next one.
+
+    ```python
+    class Action1(BaseTool):
+        input: str = Field(...)
+        one_call_at_a_time: bool = True
+   
+        def run(self):
+            # your code here
+    ```

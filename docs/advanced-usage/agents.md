@@ -75,6 +75,13 @@ class AgentName(Agent):
             schemas_folder="./schemas",
             tools_folder="./tools"
         )
+
+    def response_validator(self, message: str) -> str:
+        """This function is used to validate the response before sending it to the user or another agent."""
+        if "bad word" in message:
+            return "Please don't use bad words."
+        
+        return message
 ```
 
 To initialize the agent, you can simply import the agent and instantiate it:
@@ -87,13 +94,10 @@ agent = AgentName()
 
 ### Importing existing agents
 
-For the most complex and requested use cases, we will be creating premade agents that you can import and reuse in your own projects. 
+For the most complex and requested use cases, we will be creating premade agents that you can import and reuse in your own projects. To import an existing agent, you can run the following CLI command:
 
-!!! warning "Will be deprecated in future versions."
-    We are planning to deprecate agent imports in future versions, as this takes away the flexibility of the framework. Instead, we are planning to add a functionality to download agent source files locally from github, which will allow you to modify the inner logic and tools as you see fit.
-
-```py
-from agency_swarm.agents.browsing import BrowsingAgent
-browsing_agent = BrowsingAgent()
-browsing_agent.instructions += "\n\nYou can add additional instructions here."
+```bash
+agency-swarm import-agent --name "AgentName" --destination "/path/to/directory"
 ```
+
+This will copy all your agent source files locally. You can then import the agent as shown above. To check available agents, simply run this command without any arguments.
