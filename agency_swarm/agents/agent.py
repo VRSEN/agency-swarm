@@ -5,6 +5,7 @@ from typing import Dict, Union, Any, Type
 from typing import List
 
 from deepdiff import DeepDiff
+from openai import NotFoundError
 
 from agency_swarm.tools import BaseTool, ToolFactory
 from agency_swarm.tools import Retrieval, CodeInterpreter
@@ -147,14 +148,17 @@ class Agent():
                 # iterate settings and find the assistant with the same name
                 for assistant_settings in settings:
                     if assistant_settings['name'] == self.name:
-                        self.assistant = self.client.beta.assistants.retrieve(assistant_settings['id'])
-                        self.id = assistant_settings['id']
-                        # update assistant if parameters are different
-                        if not self._check_parameters(self.assistant.model_dump()):
-                            print("Updating assistant... " + self.name)
-                            self._update_assistant()
-                        self._update_settings()
-                        return self
+                        try:
+                            self.assistant = self.client.beta.assistants.retrieve(assistant_settings['id'])
+                            self.id = assistant_settings['id']
+                            # update assistant if parameters are different
+                            if not self._check_parameters(self.assistant.model_dump()):
+                                print("Updating assistant... " + self.name)
+                                self._update_assistant()
+                            self._update_settings()
+                            return self
+                        except NotFoundError:
+                            continue
 
         # create assistant if settings.json does not exist or assistant with the same name does not exist
         self.assistant = self.client.beta.assistants.create(
