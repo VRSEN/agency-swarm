@@ -1,0 +1,110 @@
+[
+    {
+        "id": "asst_4G4cKNjDeOwtLliGJ8y5EjCF",
+        "created_at": 1709831064,
+        "description": "Responsible for client communication, task planning and management.",
+        "file_ids": [],
+        "instructions": "You must converse with other agents to ensure complete task execution.",
+        "metadata": {},
+        "model": "gpt-3.5-turbo-16k",
+        "name": "CEO",
+        "object": "assistant",
+        "tools": [
+            {
+                "function": {
+                    "name": "SendMessage",
+                    "description": "Use this tool for asynchronous communication with other agents within your agency. Initiate tasks by messaging, and check status and responses later with the 'GetResponse' tool. Relay responses to the user, who instructs on status checks. Continue until task completion.",
+                    "parameters": {
+                        "$defs": {
+                            "recipient": {
+                                "const": "Test Agent",
+                                "title": "recipient"
+                            }
+                        },
+                        "properties": {
+                            "instructions": {
+                                "description": "Please repeat your instructions step-by-step, including both completed and the following next steps that you need to perfrom. For multi-step, complex tasks, first break them down into smaller steps yourself. Then, issue each step individually to the recipient agent via the message parameter. Each identified step should be sent in separate message. Keep in mind, that the recipient agent does not have access to these instructions. You must include recipient agent-specific instructions in the message parameter.",
+                                "title": "Instructions",
+                                "type": "string"
+                            },
+                            "recipient": {
+                                "allOf": [
+                                    {
+                                        "$ref": "#/$defs/recipient"
+                                    }
+                                ],
+                                "description": "Test Agent: Test agent\n"
+                            },
+                            "message": {
+                                "description": "Specify the task required for the recipient agent to complete. Focus on clarifying what the task entails, rather than providing exact instructions.",
+                                "title": "Message",
+                                "type": "string"
+                            },
+                            "message_files": {
+                                "default": null,
+                                "description": "A list of file ids to be sent as attachments to this message. Only use this if you have the file id that starts with 'file-'.",
+                                "examples": [
+                                    "file-1234",
+                                    "file-5678"
+                                ],
+                                "items": {
+                                    "type": "string"
+                                },
+                                "title": "Message Files",
+                                "type": "array"
+                            }
+                        },
+                        "required": [
+                            "instructions",
+                            "message",
+                            "recipient"
+                        ],
+                        "type": "object"
+                    }
+                },
+                "type": "function"
+            },
+            {
+                "function": {
+                    "name": "GetResponse",
+                    "description": "This tool allows you to check the status of a task or get a response from a specified recipient agent, if the task has been completed. You must always use 'SendMessage' tool with the designated agent first.",
+                    "parameters": {
+                        "$defs": {
+                            "recipient": {
+                                "const": "Test Agent",
+                                "title": "recipient"
+                            }
+                        },
+                        "properties": {
+                            "recipient": {
+                                "allOf": [
+                                    {
+                                        "$ref": "#/$defs/recipient"
+                                    }
+                                ],
+                                "description": "Recipient agent that you want to check the status of. Valid recipients are: ['Test Agent']"
+                            }
+                        },
+                        "required": [
+                            "recipient"
+                        ],
+                        "type": "object"
+                    }
+                },
+                "type": "function"
+            }
+        ]
+    },
+    {
+        "id": "asst_B7XTUvuINl0iQEEk4HhePvEW",
+        "created_at": 1709831064,
+        "description": "Test agent",
+        "file_ids": [],
+        "instructions": "Please always respond with 'test complete'",
+        "metadata": {},
+        "model": "gpt-3.5-turbo-16k",
+        "name": "Test Agent",
+        "object": "assistant",
+        "tools": []
+    }
+]
