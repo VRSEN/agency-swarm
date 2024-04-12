@@ -80,16 +80,15 @@ Define your custom tools with [Instructor](https://github.com/jxnl/instructor):
     from agency_swarm.tools import ToolFactory
     # using local file
     with open("schemas/your_schema.json") as f:
-        ToolFactory.from_openapi_schema(
+        tools = ToolFactory.from_openapi_schema(
             f.read(),
         )
     
     # using requests
-    ToolFactory.from_openapi_schema(
+    tools = ToolFactory.from_openapi_schema(
         requests.get("https://api.example.com/openapi.json").json(),
     )
     ```
-
 
 3. **Define Agent Roles**: Start by defining the roles of your agents. For example, a CEO agent for managing tasks and a developer agent for executing tasks.
 
@@ -101,7 +100,7 @@ Define your custom tools with [Instructor](https://github.com/jxnl/instructor):
                 instructions="You must converse with other agents to ensure complete task execution.", # can be a file like ./instructions.md
                 files_folder="./files", # files to be uploaded to OpenAI
                 schemas_folder="./schemas", # OpenAPI schemas to be converted into tools
-                tools=[MyCustomTool, LangchainTool])
+                tools=[MyCustomTool])
     ```
 
     Import from existing agents:
