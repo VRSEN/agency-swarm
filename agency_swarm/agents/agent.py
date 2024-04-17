@@ -55,7 +55,7 @@ class Agent():
             api_params: Dict[str, Dict[str, str]] = None,
             file_ids: List[str] = None,
             metadata: Dict[str, str] = None,
-            model: str = "gpt-4-turbo-preview",
+            model: str = "gpt-4-turbo",
             validation_attempts: int = 1,
     ):
         """
