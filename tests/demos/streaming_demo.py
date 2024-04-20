@@ -1,4 +1,5 @@
 import sys
+import time
 import unittest
 
 from agency_swarm import Agent, BaseTool
@@ -11,6 +12,8 @@ class StreamingTest(unittest.TestCase):
     def setUp(self):
         class TestTool(BaseTool):
             def run(self):
+                time.sleep(10)
+                print('done')
                 return "Test Successful"
 
         self.ceo = Agent(name="ceo", instructions="You are a CEO of an agency made for testing purposes.",

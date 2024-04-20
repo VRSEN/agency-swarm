@@ -1,4 +1,4 @@
-openai==1.14.2
+openai==1.23.1
 instructor==0.6.7
 deepdiff==6.7.1
 termcolor==2.3.0

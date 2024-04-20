@@ -1,9 +1,12 @@
 import inspect
 import json
 import time
-from typing import Literal
+from typing import Literal, List, Optional
 
 from openai import BadRequestError
+from openai.types.beta import AssistantToolChoice
+from openai.types.beta.threads.message import Attachment
+from openai.types.beta.threads.run import TruncationStrategy
 
 from agency_swarm.util.streaming import AgencyEventHandler
 from agency_swarm.agents import Agent
@@ -31,14 +34,28 @@ class Thread:
             self.thread = self.client.beta.threads.create()
             self.id = self.thread.id
 
-    def get_completion_stream(self, message: str, event_handler: type(AgencyEventHandler), message_files=None,
+    def get_completion_stream(self,
+                              message: str,
+                              event_handler: type(AgencyEventHandler),
+                              attachments: Optional[List[Attachment]] = None,
                               recipient_agent=None,
-                              additional_instructions: str = None):
-        return self.get_completion(message, message_files, False, recipient_agent, additional_instructions,
-                                   event_handler)
+                              additional_instructions: str = None,
+                              tool_choice: AssistantToolChoice = None):
 
-    def get_completion(self, message: str, message_files=None, yield_messages=True, recipient_agent=None,
-                       additional_instructions: str = None, event_handler: type(AgencyEventHandler) = None):
+        return self.get_completion(message,
+                                   attachments,
+                                   recipient_agent,
+                                   additional_instructions,
+                                   event_handler,
+                                   tool_choice)
+
+    def get_completion(self, message: str,
+                       attachments: Optional[List[Attachment]] = None,
+                       recipient_agent=None,
+                       additional_instructions: str = None,
+                       event_handler: type(AgencyEventHandler) = None,
+                       tool_choice: AssistantToolChoice = None,
+                       ):
         if not self.thread:
             self.init_thread()
 
@@ -46,7 +63,6 @@ class Thread:
             recipient_agent = self.recipient_agent
 
         if event_handler:
-            yield_messages = False
             event_handler.agent_name = self.agent.name
             event_handler.recipient_agent_name = recipient_agent.name
 
@@ -60,13 +76,10 @@ class Thread:
             thread_id=self.thread.id,
             role="user",
             content=message,
-            file_ids=message_files if message_files else [],
+            attachments=attachments
         )
 
-        if yield_messages:
-            yield MessageOutput("text", self.agent.name, recipient_agent.name, message)
-
-        self._create_run(recipient_agent, additional_instructions, event_handler)
+        self._create_run(recipient_agent, additional_instructions, event_handler, tool_choice)
 
         error_attempts = 0
         validation_attempts = 0
@@ -80,26 +93,16 @@ class Thread:
                 tool_outputs = []
                 tool_names = []
                 for tool_call in tool_calls:
-                    if yield_messages:
-                        yield MessageOutput("function", recipient_agent.name, self.agent.name,
-                                            str(tool_call.function))
-
                     output = self.execute_tool(tool_call, recipient_agent, event_handler, tool_names)
                     if inspect.isgenerator(output):
                         try:
                             while True:
                                 item = next(output)
-                                if isinstance(item, MessageOutput) and yield_messages:
-                                    yield item
                         except StopIteration as e:
                             output = e.value
-                            if event_handler:
-                                event_handler.agent_name = self.agent.name
-                                event_handler.recipient_agent_name = recipient_agent.name
-                    else:
-                        if yield_messages:
-                            yield MessageOutput("function_output", tool_call.function.name, recipient_agent.name,
-                                                output)
+                    if event_handler:
+                        event_handler.agent_name = self.agent.name
+                        event_handler.recipient_agent_name = recipient_agent.name
 
                     tool_outputs.append({"tool_call_id": tool_call.id, "output": str(output)})
                     tool_names.append(tool_call.function.name)
@@ -115,7 +118,7 @@ class Thread:
                             content="Please repeat the exact same function calls again in the same order."
                         )
 
-                        self._create_run(recipient_agent, additional_instructions, event_handler)
+                        self._create_run(recipient_agent, additional_instructions, event_handler, tool_choice)
 
                         self._run_until_done()
 
@@ -136,7 +139,7 @@ class Thread:
                 # retry run 2 times
                 if error_attempts < 1 and "something went wrong" in self.run.last_error.message.lower():
                     time.sleep(1)
-                    self._create_run(recipient_agent, additional_instructions, event_handler)
+                    self._create_run(recipient_agent, additional_instructions, event_handler, tool_choice)
                     error_attempts += 1
                 elif 1 <= error_attempts < 5 and "something went wrong" in self.run.last_error.message.lower():
                     self.client.beta.threads.messages.create(
@@ -144,16 +147,13 @@ class Thread:
                         role="user",
                         content="Continue."
                     )
-                    self._create_run(recipient_agent, additional_instructions, event_handler)
+                    self._create_run(recipient_agent, additional_instructions, event_handler, tool_choice)
                     error_attempts += 1
                 else:
                     raise Exception("OpenAI Run Failed. Error: ", self.run.last_error.message)
             # return assistant message
             else:
                 full_message += self._get_last_message_text()
-
-                if yield_messages:
-                    yield MessageOutput("text", recipient_agent.name, self.agent.name, full_message)
 
                 if recipient_agent.response_validator:
                     try:
@@ -168,10 +168,6 @@ class Thread:
                                 content=str(e),
                             )
 
-                            if yield_messages:
-                                yield MessageOutput("text", self.agent.name, recipient_agent.name,
-                                                    message.content[0].text.value)
-
                             if event_handler:
                                 handler = event_handler()
                                 handler.on_message_created(message)
@@ -185,13 +181,17 @@ class Thread:
 
                 return full_message
 
-    def _create_run(self, recipient_agent, additional_instructions, event_handler):
+    def _create_run(self, recipient_agent, additional_instructions, event_handler, tool_choice):
         if event_handler:
             with self.client.beta.threads.runs.create_and_stream(
                     thread_id=self.thread.id,
                     event_handler=event_handler(),
                     assistant_id=recipient_agent.id,
                     additional_instructions=additional_instructions,
+                    tool_choice=tool_choice,
+                    max_prompt_tokens=recipient_agent.max_prompt_tokens,
+                    max_completion_tokens=recipient_agent.max_completion_tokens,
+                    truncation_strategy=recipient_agent.truncation_strategy,
             ) as stream:
                 stream.until_done()
                 self.run = stream.get_final_run()
@@ -200,6 +200,10 @@ class Thread:
                 thread_id=self.thread.id,
                 assistant_id=recipient_agent.id,
                 additional_instructions=additional_instructions,
+                tool_choice=tool_choice,
+                max_prompt_tokens=recipient_agent.max_prompt_tokens,
+                max_completion_tokens=recipient_agent.max_completion_tokens,
+                truncation_strategy=recipient_agent.truncation_strategy,
             )
 
     def _run_until_done(self):

@@ -8,7 +8,7 @@ import unittest
 
 from openai.types.beta.threads.runs import ToolCall
 
-from agency_swarm.tools import CodeInterpreter, Retrieval
+from agency_swarm.tools import CodeInterpreter, FileSearch
 
 sys.path.insert(0, '../agency-swarm')
 from agency_swarm.util import create_agent_template
@@ -121,7 +121,7 @@ class AgencyTest(unittest.TestCase):
         from test_agents.TestAgent2 import TestAgent2
         cls.ceo = CEO()
         cls.agent1 = TestAgent1()
-        cls.agent1.add_tool(Retrieval)
+        cls.agent1.add_tool(FileSearch)
         cls.agent2 = TestAgent2()
         cls.agent2.add_tool(cls.TestTool)
 
@@ -176,7 +176,7 @@ class AgencyTest(unittest.TestCase):
     def test_4_agent_communication(self):
         """it should communicate between agents"""
         print("TestAgent1 tools", self.__class__.agent1.tools)
-        message = self.__class__.agency.get_completion("Please tell TestAgent1 to say test to TestAgent2.", yield_messages=False)
+        message = self.__class__.agency.get_completion("Please tell TestAgent1 to say test to TestAgent2.")
 
         self.assertFalse('error' in message.lower())
 
@@ -211,7 +211,8 @@ class AgencyTest(unittest.TestCase):
             "Please tell TestAgent1 to tell TestAgent 2 to use test tool.",
             event_handler=EventHandler,
             additional_instructions="Your message to TestAgent1 should be exactly as follows: "
-                                    "'Please tell TestAgent2 to use test tool.'",)
+                                    "'Please tell TestAgent2 to use test tool.'",
+            tool_choice={"type": "function", "function": {"name": "SendMessage"}})
 
         # self.assertFalse('error' in message.lower())
 
@@ -238,7 +239,7 @@ class AgencyTest(unittest.TestCase):
         from test_agents.TestAgent1 import TestAgent1
         from test_agents.TestAgent2 import TestAgent2
         agent1 = TestAgent1()
-        agent1.add_tool(Retrieval)
+        agent1.add_tool(FileSearch)
         agent2 = TestAgent2()
         agent2.add_tool(self.__class__.TestTool)
 
@@ -294,13 +295,11 @@ class AgencyTest(unittest.TestCase):
     def test_8_async_agent_communication(self):
         """it should communicate between agents asynchronously"""
         print("TestAgent1 tools", self.__class__.agent1.tools)
-        self.__class__.agency.get_completion("Please tell TestAgent1 to say test to TestAgent2.",
-                                                       yield_messages=False)
+        self.__class__.agency.get_completion("Please tell TestAgent1 to say test to TestAgent2.")
 
         time.sleep(10)
 
-        message = self.__class__.agency.get_completion("Please check response. If the GetResponse function output includes `TestAgent1's Response` (for example, that the message was sent to Test Agent 2, the process or the task has started, initiated, etc.), say 'success'. If the function output does not include `TestAgent1's Response`, or if you get a System Notification, or an error instead, say 'error'.",
-                                                       yield_messages=False)
+        message = self.__class__.agency.get_completion("Please check response. If the GetResponse function output includes `TestAgent1's Response` (for example, that the message was sent to Test Agent 2, the process or the task has started, initiated, etc.), say 'success'. If the function output does not include `TestAgent1's Response`, or if you get a System Notification, or an error instead, say 'error'.")
 
         self.assertFalse('error' in message.lower())
 
@@ -332,15 +331,24 @@ class AgencyTest(unittest.TestCase):
             self.assertTrue(agent._check_parameters(assistant.model_dump()))
             if agent.name == "TestAgent1":
                 num_tools = 3 if not async_mode else 4
-                self.assertTrue(len(assistant.file_ids) == self.__class__.num_files)
-                for file_id in assistant.file_ids:
-                    self.assertTrue(file_id in agent.file_ids)
+
+                self.assertTrue(len(assistant.tool_resources.model_dump()['code_interpreter']['file_ids']) == 3)
+                self.assertTrue(len(assistant.tool_resources.model_dump()['file_search']['vector_store_ids']) == 1)
+
+                vector_store_id = assistant.tool_resources.model_dump()['file_search']['vector_store_ids'][0]
+                vector_store_files = agent.client.beta.vector_stores.files.list(
+                    vector_store_id=vector_store_id
+                )
+
+                file_ids = [file.id for file in vector_store_files.data]
+
+                self.assertTrue(len(file_ids) == 5)
                 # check retrieval tools is there
                 print("assistant tools", assistant.tools)
                 self.assertTrue(len(assistant.tools) == num_tools)
                 self.assertTrue(len(agent.tools) == num_tools)
                 self.assertTrue(assistant.tools[0].type == "code_interpreter")
-                self.assertTrue(assistant.tools[1].type == "retrieval")
+                self.assertTrue(assistant.tools[1].type == "file_search")
                 self.assertTrue(assistant.tools[2].type == "function")
                 self.assertTrue(assistant.tools[2].function.name == "SendMessage")
                 if async_mode:
@@ -353,7 +361,8 @@ class AgencyTest(unittest.TestCase):
                     self.assertTrue(tool.function.name in [tool.__name__ for tool in agent.tools])
             elif agent.name == "CEO":
                 num_tools = 1 if not async_mode else 2
-                self.assertTrue(len(assistant.file_ids) == 0)
+                self.assertFalse(assistant.tool_resources.code_interpreter)
+                self.assertFalse(assistant.tool_resources.file_search)
                 self.assertTrue(len(assistant.tools) == num_tools)
             else:
                 pass

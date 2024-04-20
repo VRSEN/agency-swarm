@@ -72,7 +72,8 @@ class {class_name}(Agent):
             files_folder="./files",
             schemas_folder="./schemas",
             tools=[{code_interpreter}],
-            tools_folder="./tools"
+            tools_folder="./tools",
+            max_prompt_tokens=25000,
         )
         
     def response_validator(self, message):
