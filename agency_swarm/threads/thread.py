@@ -8,6 +8,7 @@ from openai.types.beta import AssistantToolChoice
 from openai.types.beta.threads.message import Attachment
 from openai.types.beta.threads.run import TruncationStrategy
 
+from agency_swarm.tools import FileSearch, CodeInterpreter
 from agency_swarm.util.streaming import AgencyEventHandler
 from agency_swarm.agents import Agent
 from agency_swarm.messages import MessageOutput
@@ -37,25 +38,47 @@ class Thread:
     def get_completion_stream(self,
                               message: str,
                               event_handler: type(AgencyEventHandler),
+                              message_files: List[str] = None,
                               attachments: Optional[List[Attachment]] = None,
                               recipient_agent=None,
                               additional_instructions: str = None,
                               tool_choice: AssistantToolChoice = None):
 
         return self.get_completion(message,
+                                   message_files,
                                    attachments,
                                    recipient_agent,
                                    additional_instructions,
                                    event_handler,
-                                   tool_choice)
+                                   tool_choice,
+                                   yield_messages=False)
 
-    def get_completion(self, message: str,
-                       attachments: Optional[List[Attachment]] = None,
+    def get_completion(self,
+                       message: str,
+                       message_files: List[str] = None,
+                       attachments: Optional[List[dict]] = None,
                        recipient_agent=None,
                        additional_instructions: str = None,
                        event_handler: type(AgencyEventHandler) = None,
                        tool_choice: AssistantToolChoice = None,
+                       yield_messages: bool = False
                        ):
+        if yield_messages:
+            # warn that it is deprecated
+            print("Warning: yield_messages is deprecated. Use get_completion_stream instead.")
+
+        if message_files:
+            recipient_tools = []
+
+            if FileSearch in self.recipient_agent.tools:
+                recipient_tools.append({"type": "file_search"})
+            if CodeInterpreter in self.recipient_agent.tools:
+                recipient_tools.append({"type": "code_interpreter"})
+
+            for file_id in message_files:
+                attachments.append({"file_id": file_id,
+                                    "tools": recipient_tools or [{"type": "file_search"}]})
+
         if not self.thread:
             self.init_thread()
 
@@ -175,7 +198,7 @@ class Thread:
 
                             validation_attempts += 1
 
-                            self._create_run(recipient_agent, additional_instructions, event_handler)
+                            self._create_run(recipient_agent, additional_instructions, event_handler, tool_choice)
 
                             continue
 
@@ -183,7 +206,7 @@ class Thread:
 
     def _create_run(self, recipient_agent, additional_instructions, event_handler, tool_choice):
         if event_handler:
-            with self.client.beta.threads.runs.create_and_stream(
+            with self.client.beta.threads.runs.stream(
                     thread_id=self.thread.id,
                     event_handler=event_handler(),
                     assistant_id=recipient_agent.id,
@@ -196,7 +219,7 @@ class Thread:
                 stream.until_done()
                 self.run = stream.get_final_run()
         else:
-            self.run = self.client.beta.threads.runs.create(
+            self.run = self.client.beta.threads.runs.create_and_poll(
                 thread_id=self.thread.id,
                 assistant_id=recipient_agent.id,
                 additional_instructions=additional_instructions,
@@ -216,7 +239,7 @@ class Thread:
 
     def _submit_tool_outputs(self, tool_outputs, event_handler):
         if not event_handler:
-            self.run = self.client.beta.threads.runs.submit_tool_outputs(
+            self.run = self.client.beta.threads.runs.submit_tool_outputs_and_poll(
                 thread_id=self.thread.id,
                 run_id=self.run.id,
                 tool_outputs=tool_outputs

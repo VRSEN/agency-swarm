@@ -9,9 +9,8 @@ from deepdiff import DeepDiff
 from openai import NotFoundError
 from openai.types.beta import AssistantResponseFormat
 from openai.types.beta.assistant import ToolResources
-from openai.types.beta.threads.run import TruncationStrategy
 
-from agency_swarm.tools import BaseTool, ToolFactory
+from agency_swarm.tools import BaseTool, ToolFactory, Retrieval
 from agency_swarm.tools import FileSearch, CodeInterpreter
 from agency_swarm.util.oai import get_openai_client
 from agency_swarm.util.openapi import validate_openapi_spec
@@ -51,9 +50,9 @@ class Agent():
             name: str = None,
             description: str = None,
             instructions: str = "",
-            tools: List[Union[Type[BaseTool], Type[FileSearch], Type[CodeInterpreter]]] = None,
+            tools: List[Union[Type[BaseTool], Type[FileSearch], Type[CodeInterpreter], type[Retrieval]]] = None,
             tool_resources: ToolResources = None,
-            temperature: float = 0.2,
+            temperature: float = 0.3,
             top_p: float = 1.0,
             response_format: AssistantResponseFormat = "auto",
             tools_folder: str = None,
@@ -66,7 +65,7 @@ class Agent():
             validation_attempts: int = 1,
             max_prompt_tokens: int = None,
             max_completion_tokens: int = None,
-            truncation_strategy: TruncationStrategy = None,
+            truncation_strategy: dict = None,
     ):
         """
         Initializes an Agent with specified attributes, tools, and OpenAI client.
@@ -176,7 +175,8 @@ class Agent():
                         try:
                             self.assistant = self.client.beta.assistants.retrieve(assistant_settings['id'])
                             self.id = assistant_settings['id']
-                            self.tool_resources = self.assistant.tool_resources.model_dump()
+                            if self.assistant.tool_resources:
+                                self.tool_resources = self.assistant.tool_resources.model_dump()
                             # update assistant if parameters are different
                             if not self._check_parameters(self.assistant.model_dump()):
                                 print("Updating assistant... " + self.name)
@@ -200,7 +200,8 @@ class Agent():
             response_format=self.response_format,
         )
 
-        self.tool_resources = self.assistant.tool_resources.model_dump()
+        if self.assistant.tool_resources:
+            self.tool_resources = self.assistant.tool_resources.model_dump()
 
         self.id = self.assistant.id
 
@@ -326,6 +327,7 @@ class Agent():
 
     # --- Tool Methods ---
 
+    # TODO: fix 2 methods below
     def add_tool(self, tool):
         if not isinstance(tool, type):
             raise Exception("Tool must not be initialized.")
@@ -337,7 +339,12 @@ class Agent():
             self.tools.append(tool)
         elif issubclass(tool, CodeInterpreter):
             for t in self.tools:
-                if issubclass(t, FileSearch):
+                if issubclass(t, CodeInterpreter):
+                    return
+            self.tools.append(tool)
+        elif issubclass(tool, Retrieval):
+            for t in self.tools:
+                if issubclass(t, Retrieval):
                     return
             self.tools.append(tool)
         elif issubclass(tool, BaseTool):
@@ -360,6 +367,8 @@ class Agent():
             if issubclass(tool, FileSearch):
                 tools.append(tool().model_dump())
             elif issubclass(tool, CodeInterpreter):
+                tools.append(tool().model_dump())
+            elif issubclass(tool, Retrieval):
                 tools.append(tool().model_dump())
             elif issubclass(tool, BaseTool):
                 tools.append({

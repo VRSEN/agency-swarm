@@ -31,7 +31,7 @@ class FileWriter(BaseTool):
         description="The comprehensive requirements explaning how the file should be written or modified. This should be a detailed description of what the file should contain, inlcuding example inputs, desired behaviour and ideal outputs. It must not contain any code or implementation details."
     )
     details: str = Field(
-        ..., description="Additional details like error messages, or class, function, and variable names from other files that this file depends on."
+        None, description="Additional details like error messages, or class, function, and variable names from other files that this file depends on."
     )
     documentation: Optional[str] = Field(
         None, description="Relevant documentation extracted with the myfiles_browser tool. You must pass all the relevant code from the documentaion, as this tool does not have access to those files."
@@ -102,7 +102,7 @@ class FileWriter(BaseTool):
         while n < 3:
             resp = client.chat.completions.create(
                 messages=messages,
-                model="gpt-4-turbo-preview",
+                model="gpt-4-turbo",
                 temperature=0,
             )
 
@@ -189,8 +189,8 @@ class FileWriter(BaseTool):
 
         llm_validator(
             statement="Check if the code is bug-free. Code should be considered in isolation, with the understanding that it is part of a larger, fully developed program that strictly adheres to these standards of completeness and correctness. All files, elements, components, functions, or modules referenced within this snippet are assumed to exist in other parts of the project and are also devoid of any errors, ensuring a cohesive and error-free integration across the entire software solution. Certain placeholders may be present.",
-                      openai_client=client,
-                      model="gpt-4-turbo-preview",
+                      client=client,
+                      model="gpt-4-turbo",
                       temperature=0,
                       allow_override=False
                       )(v)
@@ -235,10 +235,8 @@ class FileWriter(BaseTool):
 
 if __name__ == "__main__":
     tool = FileWriter(
-        chain_of_thought="Step 1: Import the necessary libraries. \n\n Step 2: Define the function that takes a list of integers as input and returns the sum of all the integers in the list. \n\n Step 3: Write the function that takes a list of integers as input and returns the sum of all the integers in the list. \n\n Step 4: Write the code to test the function. \n\n Step 5: Save the file.",
-        language="python",
-        file_path="my_file.py",
-        requirements="The file should contain a function that takes a list of integers as input and returns the sum of all the integers in the list.",
-        dependencies="import numpy as np"
+        requirements="Write a program that takes a list of integers as input and returns the sum of all the integers in the list.",
+        mode="write",
+        file_path="test.py",
     )
     print(tool.run())

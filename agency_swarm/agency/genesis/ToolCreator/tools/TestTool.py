@@ -43,21 +43,23 @@ class TestTool(BaseTool):
         if not output:
             raise ValueError(f"Tool {self.tool_name} did not return any output.")
 
-        return "Successfully initialized and ran tool. Output: " + output
+        return f"Successfully initialized and ran tool. Output: '{output}'"
 
     @model_validator(mode="after")
     def validate_tool_name(self):
         if not self.shared_state.get("agency_path"):
             raise ValueError("Please tell the user that he must create agency first with GenesisCEO.")
 
-        tool_path = os.path.join(self.shared_state.get("agency_path"), self.shared_state.get("agent_name"))
+        agent_name = self.agent_name or self.shared_state.get("agent_name")
+
+        tool_path = os.path.join(self.shared_state.get("agency_path"), agent_name)
         tool_path = os.path.join(str(tool_path), "tools")
         tool_path = os.path.join(tool_path, self.tool_name + ".py")
 
+
         # check if tools.py file exists
         if not os.path.isfile(tool_path):
-            available_tools = os.listdir(
-                os.path.join(self.shared_state.get("agency_path"), self.shared_state.get("agent_name")))
+            available_tools = os.listdir(os.path.join(self.shared_state.get("agency_path"), agent_name))
             available_tools = [tool for tool in available_tools if tool.endswith(".py")]
             available_tools = [tool for tool in available_tools if
                                not tool.startswith("__") and not tool.startswith(".")]
@@ -73,3 +75,9 @@ class TestTool(BaseTool):
             raise ValueError(f"Agent {self.agent_name} not found. Available agents are: {available_agents}")
 
         return True
+
+if __name__ == "__main__":
+    TestTool.shared_state.data = {"agency_path": "/Users/vrsen/Projects/agency-swarm/agency-swarm/TestAgency",
+                              "default_folder": "/Users/vrsen/Projects/agency-swarm/agency-swarm/TestAgency"}
+    test_tool = TestTool(agent_name="TestAgent", tool_name="PrintTestTool", arguments="{}", chain_of_thought="")
+    print(test_tool.run())

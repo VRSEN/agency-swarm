@@ -8,6 +8,8 @@ from agency_swarm.util.helpers import get_available_agent_descriptions
 
 class GenesisAgency(Agency):
     def __init__(self, with_browsing=True, **kwargs):
+        if "max_prompt_tokens" not in kwargs:
+            kwargs["max_prompt_tokens"] = 25000
 
         if 'agency_chart' not in kwargs:
             agent_creator = AgentCreator()

@@ -301,6 +301,9 @@ class ToolFactory:
         class_name = os.path.splitext(file_name)[0]
 
         exec_globals = globals()
+
+        sys.path.append(os.getcwd())
+
         exec(f"from {import_path} import {class_name}", exec_globals)
 
         imported_class = exec_globals.get(class_name)

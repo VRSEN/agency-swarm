@@ -50,6 +50,10 @@ class Agency:
                  settings_path: str = "./settings.json",
                  settings_callbacks: SettingsCallbacks = None,
                  threads_callbacks: ThreadsCallbacks = None,
+                 temperature: float = 0.5,
+                 max_prompt_tokens: int = None,
+                 max_completion_tokens: int = None,
+                 truncation_strategy: dict = None,
                  ):
         """
         Initializes the Agency object, setting up agents, threads, and core functionalities.
@@ -62,6 +66,10 @@ class Agency:
             settings_path (str, optional): The path to the settings file for the agency. Must be json. If file does not exist, it will be created. Defaults to None.
             settings_callbacks (SettingsCallbacks, optional): A dictionary containing functions to load and save settings for the agency. The keys must be "load" and "save". Both values must be defined. Defaults to None.
             threads_callbacks (ThreadsCallbacks, optional): A dictionary containing functions to load and save threads for the agency. The keys must be "load" and "save". Both values must be defined. Defaults to None.
+            temperature (float, optional): The temperature value to use for the agents. Agent specific values will override this. Defaults to 0.5.
+            max_prompt_tokens (int, optional): The maximum number of tokens allowed in the prompt for each agent. Agent specific values will override this. Defaults to None.
+            max_completion_tokens (int, optional): The maximum number of tokens allowed in the completion for each agent. Agent specific values will override this. Defaults to None.
+            truncation_strategy (dict, optional): The truncation strategy to use for the completion for each agent. Agent specific values will override this. Defaults to None.
 
         This constructor initializes various components of the Agency, including CEO, agents, threads, and user interactions. It parses the agency chart to set up the organizational structure and initializes the messaging tools, agents, and threads necessary for the operation of the agency. Additionally, it prepares a main thread for user interactions.
         """
@@ -81,6 +89,10 @@ class Agency:
         self.settings_path = settings_path
         self.settings_callbacks = settings_callbacks
         self.threads_callbacks = threads_callbacks
+        self.temperature = temperature
+        self.max_prompt_tokens = max_prompt_tokens
+        self.max_completion_tokens = max_completion_tokens
+        self.truncation_strategy = truncation_strategy
 
         if os.path.isfile(os.path.join(self._get_class_folder_path(), shared_instructions)):
             self._read_instructions(os.path.join(self._get_class_folder_path(), shared_instructions))
@@ -95,23 +107,32 @@ class Agency:
         self._init_threads()
 
     def get_completion(self, message: str,
-                       attachments: Optional[List[Attachment]] = None,
+                       message_files=None,
+                       yield_messages=False,
                        recipient_agent=None,
                        additional_instructions=None,
-                       tool_choice: AssistantToolChoice = None):
+                       attachments: List[dict] = None,
+                       tool_choice: dict = None,
+                       ):
         """
         Retrieves the completion for a given message from the main thread.
 
         Parameters:
             message (str): The message for which completion is to be retrieved.
-            attachments (List[Attachment], optional): A list of attachments to be sent with the message. Defaults to None.
+            message_files (list, optional): A list of file ids to be sent as attachments with the message. Defaults to None.
             yield_messages (bool, optional): Flag to determine if intermediate messages should be yielded. Defaults to True.
             recipient_agent (Agent, optional): The agent to which the message should be sent. Defaults to the first agent in the agency chart.
             additional_instructions (str, optional): Additional instructions to be sent with the message. Defaults to None.
+            attachments (List[dict], optional): A list of attachments to be sent with the message. Defaults to None.
+
         Returns:
             Generator or final response: Depending on the 'yield_messages' flag, this method returns either a generator yielding intermediate messages or the final response from the main thread.
         """
+        if yield_messages:
+            print("Warning: yield_messages parameter is deprecated. Use streaming instead.")
+
         return self.main_thread.get_completion(message=message,
+                                               message_files=message_files,
                                                attachments=attachments,
                                                recipient_agent=recipient_agent,
                                                additional_instructions=additional_instructions,
@@ -120,19 +141,21 @@ class Agency:
     def get_completion_stream(self,
                               message: str,
                               event_handler: type(AgencyEventHandler),
-                              attachments: Optional[List[Attachment]] = None,
+                              message_files=None,
                               recipient_agent=None,
                               additional_instructions: str = None,
-                              tool_choice: AssistantToolChoice = None):
+                              attachments: List[dict] = None,
+                              tool_choice: dict = None):
         """
         Generates a stream of completions for a given message from the main thread.
 
         Parameters:
             message (str): The message for which completion is to be retrieved.
             event_handler (type(AgencyEventHandler)): The event handler class to handle the completion stream. https://github.com/openai/openai-python/blob/main/helpers.md
-            attachments (List[Attachment], optional): A list of attachments to be sent with the message. Defaults to None.
+            message_files (list, optional): A list of file ids to be sent as attachments with the message. Tools will be deteremined automaticlly with this parameter. To choose tools yourself use attachments param. Defaults to None.
             recipient_agent (Agent, optional): The agent to which the message should be sent. Defaults to the first agent in the agency chart.
             additional_instructions (str, optional): Additional instructions to be sent with the message. Defaults to None.
+            attachments (List[Attachment], optional): A list of attachments to be sent with the message. Defaults to None.
         Returns:
             Final response: Final response from the main thread.
         """
@@ -143,6 +166,7 @@ class Agency:
             raise Exception("Event handler must not be an instance.")
 
         return self.main_thread.get_completion_stream(message=message,
+                                                      message_files=message_files,
                                                       event_handler=event_handler,
                                                       attachments=attachments,
                                                       recipient_agent=recipient_agent,
@@ -550,11 +574,23 @@ class Agency:
             agent.settings_path = self.settings_path
 
             if self.shared_files:
+                if isinstance(self.shared_files, str):
+                    self.shared_files = [self.shared_files]
+
                 if isinstance(agent.files_folder, str):
                     agent.files_folder = [agent.files_folder]
                     agent.files_folder += self.shared_files
                 elif isinstance(agent.files_folder, list):
                     agent.files_folder += self.shared_files
+
+            if self.temperature and agent.temperature is None:
+                agent.temperature = self.temperature
+            if self.max_prompt_tokens and not agent.max_prompt_tokens:
+                agent.max_prompt_tokens = self.max_prompt_tokens
+            if self.max_completion_tokens and not agent.max_completion_tokens:
+                agent.max_completion_tokens = self.max_completion_tokens
+            if self.truncation_strategy and not agent.truncation_strategy:
+                agent.truncation_strategy = self.truncation_strategy
 
             agent.init_oai()
 
@@ -793,28 +829,14 @@ class Agency:
             def run(self):
                 thread = outer_self.agents_and_threads[self.caller_agent.name][self.recipient.value]
 
-                recipient_tools = []
-
-                if FileSearch in thread.recipient_agent.tools:
-                    recipient_tools.append({"type": "file_search"})
-                if CodeInterpreter in thread.recipient_agent.tools:
-                    recipient_tools.append({"type": "code_interpreter"})
-
-                attachments = []
-
-                if self.message_files:
-                    for file_id in self.message_files:
-                        attachments.append({"file_id": file_id,
-                                            "tools": recipient_tools or {"type": "file_search"}})
-
                 if not outer_self.async_mode:
                     message = thread.get_completion(message=self.message,
-                                                    attachments=attachments,
+                                                    message_files=self.message_files,
                                                     event_handler=self.event_handler,
                                                     additional_instructions=self.additional_instructions)
                 else:
                     message = thread.get_completion_async(message=self.message,
-                                                          attachments=attachments,
+                                                          message_files=self.message_files,
                                                           additional_instructions=self.additional_instructions)
 
                 return message or ""

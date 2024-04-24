@@ -11,6 +11,7 @@ class GenesisCEO(Agent):
                         "agency's goals.",
             instructions="./instructions.md",
             tools=[CreateAgencyFolder, FinalizeAgency, ReadRequirements],
+            temperature=0.3,
         )
 
 
