@@ -1,5 +1,5 @@
 import threading
-from typing import Literal
+from typing import Literal, Optional, List
 
 from openai.types.beta import AssistantToolChoice
 
@@ -14,10 +14,18 @@ class ThreadAsync(Thread):
         self.pythread = None
         self.response = None
 
-    def worker(self, message: str, attachments=None, additional_instructions: str = None,
-               tool_choice: AssistantToolChoice = None):
+    def worker(self,
+               message: str,
+               message_files: List[str] = None,
+               attachments: Optional[List[dict]] = None,
+               recipient_agent=None,
+               additional_instructions: str = None,
+               tool_choice: AssistantToolChoice = None
+               ):
         output = super().get_completion(message=message,
+                                        message_files=message_files,
                                         attachments=attachments,
+                                        recipient_agent=recipient_agent,
                                         additional_instructions=additional_instructions,
                                         tool_choice=tool_choice)
 
@@ -25,8 +33,14 @@ class ThreadAsync(Thread):
 
         return
 
-    def get_completion_async(self, message: str, attachments=None, additional_instructions: str = None,
-                             tool_choice: AssistantToolChoice = None):
+    def get_completion_async(self,
+                             message: str,
+                             message_files: List[str] = None,
+                             attachments: Optional[List[dict]] = None,
+                             recipient_agent=None,
+                             additional_instructions: str = None,
+                             tool_choice: AssistantToolChoice = None,
+                             ):
         if self.pythread and self.pythread.is_alive():
             return "System Notification: 'Agent is busy, so your message was not received. Please always use 'GetResponse' tool to check for status first, before using 'SendMessage' tool again for the same agent.'"
         elif self.pythread and not self.pythread.is_alive():
@@ -40,7 +54,7 @@ class ThreadAsync(Thread):
             return "System Notification: 'Agent is busy, so your message was not received. Please always use 'GetResponse' tool to check for status first, before using 'SendMessage' tool again for the same agent.'"
 
         self.pythread = threading.Thread(target=self.worker,
-                                         args=(message, attachments, additional_instructions, tool_choice))
+                                         args=(message, message_files, attachments, recipient_agent, additional_instructions, tool_choice))
 
         self.pythread.start()
 
