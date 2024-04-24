@@ -13,7 +13,7 @@ from agency_swarm.tools import CodeInterpreter, FileSearch
 sys.path.insert(0, '../agency-swarm')
 from agency_swarm.util import create_agent_template
 
-from agency_swarm import set_openai_key, Agent, Agency, AgencyEventHandler
+from agency_swarm import set_openai_key, Agent, Agency, AgencyEventHandler, get_openai_client
 from typing_extensions import override
 from agency_swarm.tools import BaseTool
 
@@ -26,6 +26,7 @@ class AgencyTest(unittest.TestCase):
     ceo = None
     num_schemas = None
     num_files = None
+    client = None
 
     # testing loading agents from db
     loaded_thread_ids = None
@@ -42,6 +43,7 @@ class AgencyTest(unittest.TestCase):
         cls.agent1 = None
         cls.agent2 = None
         cls.agency = None
+        cls.client = get_openai_client()
 
         # testing loading agents from db
         cls.loaded_thread_ids = {}
@@ -119,11 +121,29 @@ class AgencyTest(unittest.TestCase):
         from test_agents.CEO import CEO
         from test_agents.TestAgent1 import TestAgent1
         from test_agents.TestAgent2 import TestAgent2
-        cls.ceo = CEO()
         cls.agent1 = TestAgent1()
         cls.agent1.add_tool(FileSearch)
+        cls.agent1.truncation_strategy = {
+            "type": "last_messages",
+            "last_messages": 10
+        }
+
         cls.agent2 = TestAgent2()
         cls.agent2.add_tool(cls.TestTool)
+
+        cls.ceo = CEO()
+        cls.ceo.examples = [
+            {
+                "role": "user",
+                "content": "Hi!"
+            },
+            {
+                "role": "assistant",
+                "content": "Hi! I am the CEO. I am here to help you with your tasks. Please tell me what you need help with."
+            }
+        ]
+
+        cls.ceo.max_completion_tokens = 100
 
     def test_1_init_agency(self):
         """it should initialize agency with agents"""
@@ -186,6 +206,33 @@ class AgencyTest(unittest.TestCase):
 
         for agent in self.__class__.agency.agents:
             self.assertTrue(agent.id in [settings['id'] for settings in self.__class__.loaded_agents_settings])
+
+        # assistants v2 checks
+        main_thread = self.__class__.agency.main_thread
+        main_thread_id = main_thread.id
+
+        thread_messages = self.__class__.client.beta.threads.messages.list(main_thread_id, limit=100, order="asc")
+
+        self.assertTrue(len(thread_messages.data) == 4)
+
+        self.assertTrue(thread_messages.data[0].content[0].text.value == "Hi!")
+
+        run = main_thread.run
+        self.assertTrue(run.max_prompt_tokens == self.__class__.ceo.max_prompt_tokens)
+        self.assertTrue(run.max_completion_tokens == self.__class__.ceo.max_completion_tokens)
+
+        agent1_thread = self.__class__.agency.agents_and_threads[self.__class__.ceo.name][self.__class__.agent1.name]
+
+        agent1_thread_id = agent1_thread.id
+
+        agent1_thread_messages = self.__class__.client.beta.threads.messages.list(agent1_thread_id, limit=100)
+
+        self.assertTrue(len(agent1_thread_messages.data) == 2)
+
+        agent1_run = agent1_thread.run
+
+        self.assertTrue(agent1_run.truncation_strategy.type == "last_messages")
+        self.assertTrue(agent1_run.truncation_strategy.last_messages == 10)
 
     def test_5_agent_communication_stream(self):
         """it should communicate between agents using streaming"""

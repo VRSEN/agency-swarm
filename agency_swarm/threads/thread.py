@@ -35,6 +35,13 @@ class Thread:
             self.thread = self.client.beta.threads.create()
             self.id = self.thread.id
 
+            if self.recipient_agent.examples:
+                for example in self.recipient_agent.examples:
+                    self.client.beta.threads.messages.create(
+                        thread_id=self.id,
+                        **example,
+                    )
+
     def get_completion_stream(self,
                               message: str,
                               event_handler: type(AgencyEventHandler),

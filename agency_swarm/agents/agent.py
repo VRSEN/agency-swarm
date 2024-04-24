@@ -2,18 +2,24 @@ import copy
 import inspect
 import json
 import os
-from typing import Dict, Union, Any, Type, Literal
+from typing import Dict, Union, Any, Type, Literal, TypedDict, Optional
 from typing import List
 
 from deepdiff import DeepDiff
 from openai import NotFoundError
-from openai.types.beta import AssistantResponseFormat
 from openai.types.beta.assistant import ToolResources
 
 from agency_swarm.tools import BaseTool, ToolFactory, Retrieval
 from agency_swarm.tools import FileSearch, CodeInterpreter
 from agency_swarm.util.oai import get_openai_client
 from agency_swarm.util.openapi import validate_openapi_spec
+
+
+class ExampleMessage(TypedDict):
+    role: Literal["user", "assistant"]
+    content: str
+    attachments: Optional[List[dict]]
+    metadata: Optional[Dict[str, str]]
 
 
 class Agent():
@@ -54,7 +60,7 @@ class Agent():
             tool_resources: ToolResources = None,
             temperature: float = 0.3,
             top_p: float = 1.0,
-            response_format: AssistantResponseFormat = "auto",
+            response_format: str | dict = "auto",
             tools_folder: str = None,
             files_folder: Union[List[str], str] = None,
             schemas_folder: Union[List[str], str] = None,
@@ -66,6 +72,7 @@ class Agent():
             max_prompt_tokens: int = None,
             max_completion_tokens: int = None,
             truncation_strategy: dict = None,
+            examples: List[ExampleMessage] = None,
     ):
         """
         Initializes an Agent with specified attributes, tools, and OpenAI client.
@@ -91,6 +98,7 @@ class Agent():
             max_prompt_tokens (int, optional): Maximum number of tokens allowed in the prompt. Defaults to None.
             max_completion_tokens (int, optional): Maximum number of tokens allowed in the completion. Defaults to None.
             truncation_strategy (TruncationStrategy, optional): Truncation strategy for the OpenAI API. Defaults to None.
+            examples (List[Message], optional): A list of example messages for the agent. Defaults to None.
 
         This constructor sets up the agent with its unique properties, initializes the OpenAI client, reads instructions if provided, and uploads any associated files.
         """
@@ -116,6 +124,7 @@ class Agent():
         self.max_prompt_tokens = max_prompt_tokens
         self.max_completion_tokens = max_completion_tokens
         self.truncation_strategy = truncation_strategy
+        self.examples = examples
 
         self.settings_path = './settings.json'
 
@@ -635,17 +644,21 @@ class Agent():
         if not self.tool_resources:
             return
 
-        code_interpreter_file_ids = []
+        file_ids = []
         if self.tool_resources.get('code_interpreter'):
-            code_interpreter_file_ids = self.tool_resources['code_interpreter'].get('file_ids', [])
-        for file_id in code_interpreter_file_ids:
-            self.client.files.delete(file_id)
+            file_ids = self.tool_resources['code_interpreter'].get('file_ids', [])
 
-        file_search_vector_store_ids = []
         if self.tool_resources.get('file_search'):
             file_search_vector_store_ids = self.tool_resources['file_search'].get('vector_store_ids', [])
-        for vector_store_id in file_search_vector_store_ids:
-            self.client.beta.vector_stores.delete(vector_store_id)
+            for vector_store_id in file_search_vector_store_ids:
+                files = self.client.beta.vector_stores.files.list(vector_store_id=vector_store_id, limit=100)
+                for file in files:
+                    file_ids.append(file.id)
+
+                self.client.beta.vector_stores.delete(vector_store_id)
+
+        for file_id in file_ids:
+            self.client.files.delete(file_id)
 
     def _delete_assistant(self):
         self.client.beta.assistants.delete(self.id)

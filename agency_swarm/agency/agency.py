@@ -50,7 +50,7 @@ class Agency:
                  settings_path: str = "./settings.json",
                  settings_callbacks: SettingsCallbacks = None,
                  threads_callbacks: ThreadsCallbacks = None,
-                 temperature: float = 0.5,
+                 temperature: float = None,
                  max_prompt_tokens: int = None,
                  max_completion_tokens: int = None,
                  truncation_strategy: dict = None,
