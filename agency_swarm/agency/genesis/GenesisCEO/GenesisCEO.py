@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from agency_swarm import Agent
 from .tools.CreateAgencyFolder import CreateAgencyFolder
 from .tools.FinalizeAgency import FinalizeAgency
@@ -11,7 +13,7 @@ class GenesisCEO(Agent):
                         "agency's goals.",
             instructions="./instructions.md",
             tools=[CreateAgencyFolder, FinalizeAgency, ReadRequirements],
-            temperature=0.3,
+            temperature=0.4,
         )
 
 

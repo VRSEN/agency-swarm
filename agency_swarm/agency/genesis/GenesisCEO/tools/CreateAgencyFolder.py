@@ -60,10 +60,7 @@ class CreateAgencyFolder(BaseTool):
 
         # create agency.py
         with open("agency.py", "w") as f:
-            f.write("from agency_swarm import Agency\n\n\n")
-            f.write(f"agency = Agency({agency_chart},\nshared_instructions='./agency_manifesto.md')\n\n")
-            f.write("if __name__ == '__main__':\n")
-            f.write("    agency.demo_gradio()\n")
+            f.write(agency_py.format(agency_chart=agency_chart))
 
         # write manifesto
         path = os.path.join("agency_manifesto.md")
@@ -75,3 +72,15 @@ class CreateAgencyFolder(BaseTool):
         return f"Agency folder has been created. You can now tell AgentCreator to create agents for {self.agency_name}.\n"
 
 
+agency_py = """from agency_swarm import Agency
+
+
+agency = Agency({agency_chart},
+                shared_instructions='./agency_manifesto.md', # shared instructions for all agents
+                max_prompt_tokens=25000, # default tokens in conversation for all agents
+                temperature=0.3, # default temperature for all agents
+                )
+                
+if __name__ == '__main__':
+    agency.demo_gradio()
+"""

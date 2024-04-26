@@ -2,7 +2,7 @@ import os
 import shutil
 from typing import List
 
-from pydantic import Field, model_validator, field_validator
+from pydantic import Field, model_validator
 
 from agency_swarm import BaseTool
 from agency_swarm.agency.genesis.util import check_agency_path
@@ -73,12 +73,11 @@ class CreateAgentTemplate(BaseTool):
         path = self.shared_state.get("agency_path")
         folder_name = self.agent_name.lower().replace(" ", "_")
         class_name = self.agent_name.replace(" ", "").strip()
-        global_init_path = os.path.join(path, "__init__.py")
-        if not os.path.isfile(global_init_path):
-            with open(global_init_path, "w") as f:
+        if not os.path.isfile("__init__.py"):
+            with open("__init__.py", "w") as f:
                 f.write(f"from .{folder_name} import {class_name}")
         else:
-            with open(global_init_path, "a") as f:
+            with open("__init__.py", "a") as f:
                 f.write(f"\nfrom .{folder_name} import {class_name}")
 
         # add agent on second line to agency.py

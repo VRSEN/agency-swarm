@@ -1,9 +1,10 @@
 import os
 from typing import Optional
 
-from agency_swarm.tools import BaseTool, ToolFactory
 from pydantic import Field, model_validator
-import importlib
+
+from agency_swarm.agency.genesis.util import check_agency_path
+from agency_swarm.tools import BaseTool, ToolFactory
 
 
 class TestTool(BaseTool):
@@ -18,11 +19,17 @@ class TestTool(BaseTool):
     )
     tool_name: str = Field(..., description="Name of the tool to be run.")
     arguments: Optional[str] = Field(...,
-                                     description="Arguments to be passed to the tool for testing. "
-                                                 "Must be in serialized json format.")
+                                     description="Arguments to be passed to the tool for testing "
+                                                 "in serialized JSON format.")
+    agency_name: str = Field(
+        None, description="Name of the agency to create the tool for. Defaults to the agency currently being created."
+    )
 
     def run(self):
-        os.chdir(self.shared_state.get("agency_path"))
+        if self.agency_name:
+            os.chdir("./" + self.agency_name)
+        else:
+            os.chdir(self.shared_state.get("agency_path"))
         os.chdir(self.agent_name)
 
         # import tool by self.tool_name from local tools.py file
@@ -34,7 +41,10 @@ class TestTool(BaseTool):
             os.chdir(self.shared_state.get("default_folder"))
 
         try:
-            output = tool(**eval(self.arguments)).run()
+            if not self.arguments:
+                output = tool().run()
+            else:
+                output = tool(**eval(self.arguments)).run()
         except Exception as e:
             raise ValueError(f"Error running tool {self.tool_name}: {e}")
         finally:
@@ -47,8 +57,10 @@ class TestTool(BaseTool):
 
     @model_validator(mode="after")
     def validate_tool_name(self):
-        if not self.shared_state.get("agency_path"):
-            raise ValueError("Please tell the user that he must create agency first with GenesisCEO.")
+        check_agency_path(self)
+
+        if not self.agent_name and not self.shared_state.get("agent_name"):
+            raise ValueError("Please provide agent name.")
 
         agent_name = self.agent_name or self.shared_state.get("agent_name")
 
@@ -75,6 +87,7 @@ class TestTool(BaseTool):
             raise ValueError(f"Agent {self.agent_name} not found. Available agents are: {available_agents}")
 
         return True
+
 
 if __name__ == "__main__":
     TestTool.shared_state.data = {"agency_path": "/Users/vrsen/Projects/agency-swarm/agency-swarm/TestAgency",

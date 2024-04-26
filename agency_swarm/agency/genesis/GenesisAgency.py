@@ -14,24 +14,11 @@ class GenesisAgency(Agency):
         if 'agency_chart' not in kwargs:
             agent_creator = AgentCreator()
             genesis_ceo = GenesisCEO()
-
-            agent_descriptions = get_available_agent_descriptions()
-
-            genesis_ceo.instructions += (
-                "\nAdditionally, there are several pre-built agents available in the agency swarm framework that you can use out of the box.\n"
-                + agent_descriptions + "\n"
-                "If any of the available agents match the requirements for one of the agents in the agency, you can add this agent in the agency chart.\n"
-                "Then, instruct the agent creator to simply import the agent.\n"
-                "If possible, prefer to use this method instead of instructing AgentCreator to create a new agent from scratch.\n"
-            )
-
             tool_creator = ToolCreator()
             openapi_creator = OpenAPICreator()
             kwargs['agency_chart'] = [
                 genesis_ceo, tool_creator, agent_creator,
                 [genesis_ceo, agent_creator],
-                # [agent_creator, openapi_creator],
-                # [openapi_creator, browsing_agent],
                 [agent_creator, tool_creator],
             ]
 

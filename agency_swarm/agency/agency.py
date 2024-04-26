@@ -525,6 +525,9 @@ class Agency:
             console.rule()
             text = input("👤 USER: ")
 
+            if not text:
+                continue
+
             if text.lower() == "exit":
                 break
 
