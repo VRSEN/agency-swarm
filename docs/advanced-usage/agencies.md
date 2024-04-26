@@ -109,6 +109,14 @@ If you would like to use a different file path for the settings, other than defa
 agency = Agency([ceo], settings_path='my_settings.json') 
 ```
 
+### Temperture and Max Token Controls
+
+You can also specify parameters like `temperature`, `top_p`, `max_completion_tokens`,  `max_prompt_tokens` and `truncation_strategy`, parameters for the entire agency. These parameters will be used as default values for all agents in the agency, however, you can still override them for individual agents by specifying them in the agent's constructor.
+
+```python
+agency = Agency([ceo], temperature=0.3, max_prompt_tokens=25000) 
+```
+
 ## Running the Agency
 
 When it comes to running the agency, you have 3 options:
@@ -126,7 +134,11 @@ agency.demo_gradio(height=700)
 ### Get completion from the agency
 
 ```python
-response = agency.get_completion("I want you to build me a website", yield_messages=False)
+response = agency.get_completion("I want you to build me a website", 
+                                 additional_instructions="This is an additional instruction for the task.",
+                                 tool_choice={"type": "function", "function": {"name": "SendMessage"}},
+                                 attachments=[],
+                                 )
 print(response)
 ```
 
@@ -137,3 +149,11 @@ agency.run_demo()
 ```
 
 To talk to one of the top level agents when running the agency from your terminal, you can use **mentions feature**, similar to how you would use it inside ChatGPT. Simply mention the agent name in the message like `@Developer I want you to build me a website`. The message will then be sent to the Developer agent, instead of the CEO. You can also use tab to autocomplete the agent name after the `@` symbol.
+
+## Deleting the Agency
+
+If you would like to delete the agency and all its agents with all associated files and vector stores, you can use the `delete` method.
+
+```python
+agency.delete()
+```

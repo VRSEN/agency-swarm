@@ -23,7 +23,10 @@ from agency_swarm import Agent
 agent = Agent(name="My Agent",
               description="This is a description of my agent.",
               instructions="These are the instructions for my agent.",
-              tools=["ToolClass1", "ToolClass1"])
+              tools=[ToolClass1, ToolClass2],
+              temperature=0.3,
+              max_prompt_tokens=25000
+            )
 ```
 
 ### Create agent template locally using CLI
@@ -73,13 +76,16 @@ class AgentName(Agent):
             instructions="./instructions.md",
             files_folder="./files",
             schemas_folder="./schemas",
-            tools_folder="./tools"
+            tools_folder="./tools",
+            temperature=0.3,
+            max_prompt_tokens=25000,
+            examples=[]
         )
 
     def response_validator(self, message: str) -> str:
         """This function is used to validate the response before sending it to the user or another agent."""
         if "bad word" in message:
-            return "Please don't use bad words."
+            raise ValueError("Please don't use bad words.")
         
         return message
 ```
@@ -90,6 +96,35 @@ To initialize the agent, you can simply import the agent and instantiate it:
 from AgentName import AgentName
 
 agent = AgentName()
+```
+
+### Few-Shot Examples
+
+You can now also provide **few-shot** examples for each agent. These examples help the agent to understand how to respond. The format for examples follows [message object format on OpenAI](https://platform.openai.com/docs/api-reference/messages/createMessage):
+
+```python
+examples=[
+    {
+        "role": "user",
+        "content": "Hi!",
+        "attachments": [],
+        "metadata": {},
+    },
+    {
+        "role": "assistant",
+        "content": "Hi! I am the CEO. I am here to help you with your tasks. Please tell me what you need help with.",
+        "attachments": [],
+        "metadata": {},
+    }
+]
+
+agent.examples = examples
+```
+
+or you can also provide them when initializing the agent in init method:
+
+```python
+agent = Agent(examples=examples)
 ```
 
 ### Importing existing agents
