@@ -33,19 +33,9 @@ class ExportFile(BaseTool):
 
         file_id = client.files.create(file=open("exported_file.pdf", "rb"), purpose="assistants",).id
 
-        # update caller agent assistant
-        self.caller_agent.file_ids.append(file_id)
-
-        client.beta.assistants.update(
-            assistant_id=self.caller_agent.id,
-            file_ids=self.caller_agent.file_ids
-        )
-
         self.shared_state.set("file_id", file_id)
 
-        return ("Success. File exported with id: `" + file_id +
-                "` You can now use myfiles_browser tool to analyze the contents of this webpage " +
-                "or send this file id back to the user.")
+        return "Success. File exported with id: `" + file_id + "` You can now send this file id back to the user."
 
 
 if __name__ == "__main__":
