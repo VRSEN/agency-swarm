@@ -357,12 +357,11 @@ class AgencyTest(unittest.TestCase):
         # reset loaded thread ids
         self.__class__.loaded_thread_ids = {}
 
-        self.__class__.agent1.instructions = "Your task is to say 'success'"
+        self.__class__.agent1.instructions = "Your task is to say 'success' and nothing else."
 
         self.__class__.agency = Agency([
             self.__class__.ceo,
-            [self.__class__.ceo, self.__class__.agent1],
-            [self.__class__.agent1, self.__class__.agent2]],
+            [self.__class__.ceo, self.__class__.agent1]],
             shared_instructions="This is a shared instruction",
             settings_callbacks=self.__class__.settings_callbacks,
             threads_callbacks=self.__class__.threads_callbacks,
