@@ -357,6 +357,8 @@ class AgencyTest(unittest.TestCase):
         # reset loaded thread ids
         self.__class__.loaded_thread_ids = {}
 
+        self.__class__.agent1.instructions = "Your task is to say 'success'"
+
         self.__class__.agency = Agency([
             self.__class__.ceo,
             [self.__class__.ceo, self.__class__.agent1],
