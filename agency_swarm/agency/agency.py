@@ -110,10 +110,10 @@ class Agency:
         self._init_threads()
 
     def get_completion(self, message: str,
-                       message_files=None,
-                       yield_messages=False,
-                       recipient_agent=None,
-                       additional_instructions=None,
+                       message_files: List[str] = None,
+                       yield_messages: bool = False,
+                       recipient_agent: Agent = None,
+                       additional_instructions: str = None,
                        attachments: List[dict] = None,
                        tool_choice: dict = None,
                        ):
@@ -127,6 +127,7 @@ class Agency:
             recipient_agent (Agent, optional): The agent to which the message should be sent. Defaults to the first agent in the agency chart.
             additional_instructions (str, optional): Additional instructions to be sent with the message. Defaults to None.
             attachments (List[dict], optional): A list of attachments to be sent with the message, following openai format. Defaults to None.
+            tool_choice (dict, optional): The tool choice for the recipient agent to use. Defaults to None.
 
         Returns:
             Generator or final response: Depending on the 'yield_messages' flag, this method returns either a generator yielding intermediate messages or the final response from the main thread.
@@ -144,11 +145,12 @@ class Agency:
     def get_completion_stream(self,
                               message: str,
                               event_handler: type(AgencyEventHandler),
-                              message_files=None,
-                              recipient_agent=None,
+                              message_files: List[str] = None,
+                              recipient_agent: Agent = None,
                               additional_instructions: str = None,
                               attachments: List[dict] = None,
-                              tool_choice: dict = None):
+                              tool_choice: dict = None
+                              ):
         """
         Generates a stream of completions for a given message from the main thread.
 
@@ -159,6 +161,8 @@ class Agency:
             recipient_agent (Agent, optional): The agent to which the message should be sent. Defaults to the first agent in the agency chart.
             additional_instructions (str, optional): Additional instructions to be sent with the message. Defaults to None.
             attachments (List[dict], optional): A list of attachments to be sent with the message, following openai format. Defaults to None.
+            tool_choice (dict, optional): The tool choice for the recipient agent to use. Defaults to None.
+
         Returns:
             Final response: Final response from the main thread.
         """
@@ -815,8 +819,8 @@ class Agency:
                                              "clarifying what the task entails, rather than providing exact "
                                              "instructions.")
             message_files: Optional[List[str]] = Field(default=None,
-                                             description="A list of file ids to be sent as attachments to this message. Only use this if you have the file id that starts with 'file-'.",
-                                             examples=["file-1234", "file-5678"])
+                                                       description="A list of file ids to be sent as attachments to this message. Only use this if you have the file id that starts with 'file-'.",
+                                                       examples=["file-1234", "file-5678"])
             additional_instructions: str = Field(default=None,
                                                  description="Any additional instructions or clarifications that you would like to provide to the recipient agent.")
             one_call_at_a_time: bool = True

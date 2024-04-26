@@ -357,12 +357,11 @@ class AgencyTest(unittest.TestCase):
         # reset loaded thread ids
         self.__class__.loaded_thread_ids = {}
 
-        self.__class__.agent1.instructions = "Your task is to say 'success' and nothing else."
-
         self.__class__.agency = Agency([
             self.__class__.ceo,
-            [self.__class__.ceo, self.__class__.agent1]],
-            shared_instructions="This is a shared instruction",
+            [self.__class__.ceo, self.__class__.agent1],
+            [self.__class__.agent1, self.__class__.agent2]],
+            shared_instructions="",
             settings_callbacks=self.__class__.settings_callbacks,
             threads_callbacks=self.__class__.threads_callbacks,
             async_mode='threading',
@@ -374,14 +373,16 @@ class AgencyTest(unittest.TestCase):
     def test_8_async_agent_communication(self):
         """it should communicate between agents asynchronously"""
         print("TestAgent1 tools", self.__class__.agent1.tools)
-        self.__class__.agency.get_completion("Please tell TestAgent1 hello.",
-                                             tool_choice={"type": "function", "function": {"name": "SendMessage"}})
+        self.__class__.agency.get_completion("Please tell TestAgent2 hello.",
+                                             tool_choice={"type": "function", "function": {"name": "SendMessage"}},
+                                             recipient_agent=self.__class__.agent1)
 
         time.sleep(10)
 
         message = self.__class__.agency.get_completion(
-            "Please check response. If output includes `TestAgent1's Response`, say 'success'. If the function output does not include `TestAgent1's Response`, or if you get a System Notification, or an error instead, say 'error'.",
-            tool_choice={"type": "function", "function": {"name": "GetResponse"}})
+            "Please check response. If output includes `TestAgent2's Response`, say 'success'. If the function output does not include `TestAgent2's Response`, or if you get a System Notification, or an error instead, say 'error'.",
+            tool_choice={"type": "function", "function": {"name": "GetResponse"}},
+            recipient_agent=self.__class__.agent1)
 
         if 'error' in message.lower():
             print(self.__class__.agency.get_completion("Explain why you said error."))
