@@ -100,7 +100,10 @@ Define your custom tools with [Instructor](https://github.com/jxnl/instructor):
                 instructions="You must converse with other agents to ensure complete task execution.", # can be a file like ./instructions.md
                 files_folder="./files", # files to be uploaded to OpenAI
                 schemas_folder="./schemas", # OpenAPI schemas to be converted into tools
-                tools=[MyCustomTool])
+                tools=[MyCustomTool], 
+                temperature=0.5, # temperature for the agent
+                max_prompt_tokens=25000, # max tokens in conversation history
+                )
     ```
 
     Import from existing agents:
@@ -126,11 +129,15 @@ Establish how your agents will communicate with each other.
     va = VirtualAssistant()
     
     agency = Agency([
-        ceo,  # CEO will be the entry point for communication with the user
-        [ceo, dev],  # CEO can initiate communication with Developer
-        [ceo, va],   # CEO can initiate communication with Virtual Assistant
-        [dev, va]    # Developer can initiate communication with Virtual Assistant
-    ], shared_instructions='agency_manifesto.md') # shared instructions for all agents
+           ceo,  # CEO will be the entry point for communication with the user
+           [ceo, dev],  # CEO can initiate communication with Developer
+           [ceo, va],   # CEO can initiate communication with Virtual Assistant
+           [dev, va]    # Developer can initiate communication with Virtual Assistant
+         ], 
+         shared_instructions='agency_manifesto.md', #shared instructions for all agents
+         temperature=0.5, # default temperature for all agents
+         max_prompt_tokens=25000 # default max tokens in conversation history
+    )
     ```
 
      In Agency Swarm, communication flows are directional, meaning they are established from left to right in the agency_chart definition. For instance, in the example above, the CEO can initiate a chat with the developer (dev), and the developer can respond in this chat. However, the developer cannot initiate a chat with the CEO. The developer can initiate a chat with the virtual assistant (va) and assign new tasks.
@@ -153,7 +160,7 @@ Run the demo to see your agents in action!
     Backend version:
     
     ```python
-    completion_output = agency.get_completion("Please create a new website for our client.", yield_messages=False)
+    completion_output = agency.get_completion("Please create a new website for our client.")
     ```
 
 # CLI
