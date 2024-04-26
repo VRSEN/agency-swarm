@@ -190,7 +190,6 @@ class Thread:
                         if isinstance(recipient_agent, Agent):
                             recipient_agent.response_validator(message=full_message)
                     except Exception as e:
-                        full_message = ""
                         if validation_attempts < recipient_agent.validation_attempts:
                             message = self.client.beta.threads.messages.create(
                                 thread_id=self.thread.id,

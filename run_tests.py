@@ -3,6 +3,8 @@ import os
 import sys
 
 if __name__ == '__main__':
+    os.environ["DEBUG_MODE"] = "True"
+
     # Change the current working directory to 'tests'
     os.chdir('tests')
 

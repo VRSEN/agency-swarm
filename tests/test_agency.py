@@ -17,6 +17,7 @@ from agency_swarm import set_openai_key, Agent, Agency, AgencyEventHandler, get_
 from typing_extensions import override
 from agency_swarm.tools import BaseTool
 
+os.environ["DEBUG_MODE"] = "True"
 
 class AgencyTest(unittest.TestCase):
     TestTool = None
@@ -33,7 +34,6 @@ class AgencyTest(unittest.TestCase):
     loaded_agents_settings = None
     settings_callbacks = None
     threads_callbacks = None
-
 
     @classmethod
     def setUpClass(cls):
@@ -65,7 +65,6 @@ class AgencyTest(unittest.TestCase):
             "save": save_thread_callback,
         }
 
-
         if not os.path.exists("./test_agents"):
             os.mkdir("./test_agents")
         else:
@@ -80,14 +79,17 @@ class AgencyTest(unittest.TestCase):
         create_agent_template("CEO", "CEO Test Agent", path="./test_agents",
                               instructions="Your task is to tell TestAgent1 to say test to another test agent. If the "
                                            "agent, does not respond or something goes wrong please say 'error' and "
-                                           "nothing else. Otherwise say 'success' and nothing else.")
+                                           "nothing else. Otherwise say 'success' and nothing else.",
+                              include_example_tool=True)
         create_agent_template("TestAgent1", "Test Agent 1", path="./test_agents",
                               instructions="Your task is to say test to another test agent using SendMessage tool. "
                                            "If the agent, does not "
                                            "respond or something goes wrong please say 'error' and nothing else. "
-                                            "Otherwise say 'success' and nothing else.", code_interpreter=True)
+                                           "Otherwise say 'success' and nothing else.", code_interpreter=True,
+                              include_example_tool=False)
         create_agent_template("TestAgent2", "Test Agent 2", path="./test_agents",
-                              instructions="Please respond to the user that test was a success.")
+                              instructions="After using TestTool, please respond to the user that test was a success in JSON format. You can use the following format: {'test': 'success'}.",
+                              include_example_tool=False)
 
         sys.path.insert(0, './test_agents')
 
@@ -131,6 +133,10 @@ class AgencyTest(unittest.TestCase):
         cls.agent2 = TestAgent2()
         cls.agent2.add_tool(cls.TestTool)
 
+        cls.agent2.response_format = {
+            "type": "json_object",
+        }
+
         cls.ceo = CEO()
         cls.ceo.examples = [
             {
@@ -139,7 +145,7 @@ class AgencyTest(unittest.TestCase):
             },
             {
                 "role": "assistant",
-                "content": "Hi! I am the CEO. I am here to help you with your tasks. Please tell me what you need help with."
+                "content": "Hi! I am the CEO. I am here to help you with your testing. Please tell me who to send message to."
             }
         ]
 
@@ -154,6 +160,7 @@ class AgencyTest(unittest.TestCase):
             shared_instructions="This is a shared instruction",
             settings_callbacks=self.__class__.settings_callbacks,
             threads_callbacks=self.__class__.threads_callbacks,
+            temperature=0,
         )
 
         self.check_all_agents_settings()
@@ -164,6 +171,7 @@ class AgencyTest(unittest.TestCase):
         agent3 = TestAgent1()
         agent3.add_shared_instructions(self.__class__.agency.shared_instructions)
         agent3.tools = self.__class__.agent1.tools
+        agent3.top_p = self.__class__.agency.top_p
         agent3 = agent3.init_oai()
 
         print("agent3", agent3.assistant.model_dump())
@@ -196,7 +204,8 @@ class AgencyTest(unittest.TestCase):
     def test_4_agent_communication(self):
         """it should communicate between agents"""
         print("TestAgent1 tools", self.__class__.agent1.tools)
-        message = self.__class__.agency.get_completion("Please tell TestAgent1 to say test to TestAgent2.")
+        message = self.__class__.agency.get_completion("Please tell TestAgent1 to say test to TestAgent2.",
+                                                       tool_choice={"type": "function", "function": {"name": "SendMessage"}})
 
         self.assertFalse('error' in message.lower())
 
@@ -220,6 +229,7 @@ class AgencyTest(unittest.TestCase):
         run = main_thread.run
         self.assertTrue(run.max_prompt_tokens == self.__class__.ceo.max_prompt_tokens)
         self.assertTrue(run.max_completion_tokens == self.__class__.ceo.max_completion_tokens)
+        self.assertTrue(run.tool_choice.type == "function")
 
         agent1_thread = self.__class__.agency.agents_and_threads[self.__class__.ceo.name][self.__class__.agent1.name]
 
@@ -233,6 +243,15 @@ class AgencyTest(unittest.TestCase):
 
         self.assertTrue(agent1_run.truncation_strategy.type == "last_messages")
         self.assertTrue(agent1_run.truncation_strategy.last_messages == 10)
+
+        agent2_thread = self.__class__.agency.agents_and_threads[self.__class__.agent1.name][self.__class__.agent2.name]
+
+        agent2_message = agent2_thread._get_last_message_text()
+
+        try:
+            json.loads(agent2_message)
+        except json.JSONDecodeError as e:
+            self.assertTrue(False)
 
     def test_5_agent_communication_stream(self):
         """it should communicate between agents using streaming"""
@@ -287,8 +306,18 @@ class AgencyTest(unittest.TestCase):
         from test_agents.TestAgent2 import TestAgent2
         agent1 = TestAgent1()
         agent1.add_tool(FileSearch)
+
+        agent1.truncation_strategy = {
+            "type": "last_messages",
+            "last_messages": 10
+        }
+
         agent2 = TestAgent2()
         agent2.add_tool(self.__class__.TestTool)
+
+        agent2.response_format = {
+            "type": "json_object",
+        }
 
         ceo = CEO()
 
@@ -301,6 +330,7 @@ class AgencyTest(unittest.TestCase):
             settings_path="./settings2.json",
             settings_callbacks=self.__class__.settings_callbacks,
             threads_callbacks=self.__class__.threads_callbacks,
+            temperature=0,
         )
 
         # check that settings are the same
@@ -335,6 +365,7 @@ class AgencyTest(unittest.TestCase):
             settings_callbacks=self.__class__.settings_callbacks,
             threads_callbacks=self.__class__.threads_callbacks,
             async_mode='threading',
+            temperature=0,
         )
 
         self.check_all_agents_settings(True)
@@ -342,13 +373,18 @@ class AgencyTest(unittest.TestCase):
     def test_8_async_agent_communication(self):
         """it should communicate between agents asynchronously"""
         print("TestAgent1 tools", self.__class__.agent1.tools)
-        self.__class__.agency.get_completion("Please tell TestAgent1 to say test to TestAgent2.")
+        self.__class__.agency.get_completion("Please tell TestAgent1 hello.",
+                                             tool_choice={"type": "function", "function": {"name": "SendMessage"}})
 
         time.sleep(10)
 
-        message = self.__class__.agency.get_completion("Please check response. If the GetResponse function output includes `TestAgent1's Response` (for example, that the message was sent to Test Agent 2, the process or the task has started, initiated, etc.), say 'success'. If the function output does not include `TestAgent1's Response`, or if you get a System Notification, or an error instead, say 'error'.")
+        message = self.__class__.agency.get_completion(
+            "Please check response. If output includes `TestAgent1's Response`, say 'success'. If the function output does not include `TestAgent1's Response`, or if you get a System Notification, or an error instead, say 'error'.",
+            tool_choice={"type": "function", "function": {"name": "GetResponse"}})
 
-        self.assertFalse('error' in message.lower())
+        if 'error' in message.lower():
+            print(self.__class__.agency.get_completion("Explain why you said error."))
+            self.assertFalse('error' in message.lower())
 
         for agent_name, threads in self.__class__.agency.agents_and_threads.items():
             for other_agent_name, thread in threads.items():
@@ -356,7 +392,6 @@ class AgencyTest(unittest.TestCase):
 
         for agent in self.__class__.agency.agents:
             self.assertTrue(agent.id in [settings['id'] for settings in self.__class__.loaded_agents_settings])
-
 
     # --- Helper methods ---
 
@@ -391,7 +426,6 @@ class AgencyTest(unittest.TestCase):
 
                 self.assertTrue(len(file_ids) == 5)
                 # check retrieval tools is there
-                print("assistant tools", assistant.tools)
                 self.assertTrue(len(assistant.tools) == num_tools)
                 self.assertTrue(len(agent.tools) == num_tools)
                 self.assertTrue(assistant.tools[0].type == "code_interpreter")
@@ -426,9 +460,7 @@ class AgencyTest(unittest.TestCase):
     def tearDownClass(cls):
         shutil.rmtree("./test_agents")
         os.remove("./settings.json")
-        cls.ceo.delete()
-        cls.agent1.delete()
-        cls.agent2.delete()
+        cls.agency.delete()
 
 
 if __name__ == '__main__':

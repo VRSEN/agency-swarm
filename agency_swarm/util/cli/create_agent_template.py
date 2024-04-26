@@ -73,6 +73,7 @@ class {class_name}(Agent):
             schemas_folder="./schemas",
             tools=[{code_interpreter}],
             tools_folder="./tools",
+            temperature=0.3,
             max_prompt_tokens=25000,
         )
         
@@ -87,7 +88,7 @@ import os
 account_id = "MY_ACCOUNT_ID"
 api_key = os.getenv("MY_API_KEY") # or access_token = os.getenv("MY_ACCESS_TOKEN")
 
-class MyCustomTool(BaseTool):
+class ExampleTool(BaseTool):
     \"\"\"
     A brief description of what the custom tool does.
     The docstring should clearly explain the tool's purpose and functionality.
@@ -109,5 +110,5 @@ class MyCustomTool(BaseTool):
         # do_something(self.example_field, api_key, account_id)
 
         # Return the result of the tool's operation as a string
-        return "Result of MyCustomTool operation"
+        return "Result of ExampleTool operation"
 """

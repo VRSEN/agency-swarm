@@ -58,14 +58,15 @@ class Agent():
             instructions: str = "",
             tools: List[Union[Type[BaseTool], Type[FileSearch], Type[CodeInterpreter], type[Retrieval]]] = None,
             tool_resources: ToolResources = None,
-            temperature: float = 0.3,
-            top_p: float = 1.0,
+            temperature: float = None,
+            top_p: float = None,
             response_format: str | dict = "auto",
             tools_folder: str = None,
             files_folder: Union[List[str], str] = None,
             schemas_folder: Union[List[str], str] = None,
             api_headers: Dict[str, Dict[str, str]] = None,
             api_params: Dict[str, Dict[str, str]] = None,
+            file_ids: List[str] = None,
             metadata: Dict[str, str] = None,
             model: str = "gpt-4-turbo",
             validation_attempts: int = 1,
@@ -84,9 +85,9 @@ class Agent():
             instructions (str, optional): Path to a file containing specific instructions for the agent. Defaults to an empty string.
             tools (List[Union[Type[BaseTool], Type[Retrieval], Type[CodeInterpreter]]], optional): A list of tools (as classes) that the agent can use. Defaults to an empty list.
             tool_resources (ToolResources, optional): A set of resources that are used by the assistant's tools. The resources are specific to the type of tool. For example, the code_interpreter tool requires a list of file IDs, while the file_search tool requires a list of vector store IDs. Defaults to None.
-            temperature (float, optional): The temperature parameter for the OpenAI API. Defaults to 0.1.
-            top_p (float, optional): The top_p parameter for the OpenAI API. Defaults to 1.0.
-            response_format (AssistantResponseFormat, optional): The response format for the OpenAI API. Defaults to None.
+            temperature (float, optional): The temperature parameter for the OpenAI API. Defaults to None.
+            top_p (float, optional): The top_p parameter for the OpenAI API. Defaults to None.
+            response_format (Dict, optional): The response format for the OpenAI API. Defaults to None.
             tools_folder (str, optional): Path to a directory containing tools associated with the agent. Each tool must be defined in a separate file. File must be named as the class name of the tool. Defaults to None.
             files_folder (Union[List[str], str], optional): Path or list of paths to directories containing files associated with the agent. Defaults to None.
             schemas_folder (Union[List[str], str], optional): Path or list of paths to directories containing OpenAPI schemas associated with the agent. Defaults to None.
@@ -98,7 +99,7 @@ class Agent():
             max_prompt_tokens (int, optional): Maximum number of tokens allowed in the prompt. Defaults to None.
             max_completion_tokens (int, optional): Maximum number of tokens allowed in the completion. Defaults to None.
             truncation_strategy (TruncationStrategy, optional): Truncation strategy for the OpenAI API. Defaults to None.
-            examples (List[Message], optional): A list of example messages for the agent. Defaults to None.
+            examples (List[Dict], optional): A list of example messages for the agent. Defaults to None.
 
         This constructor sets up the agent with its unique properties, initializes the OpenAI client, reads instructions if provided, and uploads any associated files.
         """
@@ -138,6 +139,9 @@ class Agent():
 
         # upload files
         self._upload_files()
+        if file_ids:
+            print("Warning: 'file_ids' parameter is deprecated. Please use 'tool_resources' parameter instead.")
+            self.add_file_ids(file_ids, "file_search")
 
         self._parse_schemas()
         self._parse_tools_folder()
@@ -166,6 +170,9 @@ class Agent():
             self.temperature = self.assistant.temperature
             self.top_p = self.assistant.top_p
             self.response_format = self.assistant.response_format
+            if not isinstance(self.response_format, str):
+                self.response_format = self.response_format.model_dump()
+            self.tool_resources = self.assistant.tool_resources.model_dump()
             self.metadata = self.assistant.metadata
             self.model = self.assistant.model
             self.tool_resources = self.assistant.tool_resources.model_dump()
@@ -358,6 +365,7 @@ class Agent():
             self.tools.append(tool)
         elif issubclass(tool, BaseTool):
             if tool.__name__ == "ExampleTool":
+                print("Skipping importing ExampleTool...")
                 return
             for t in self.tools:
                 if t.__name__ == tool.__name__:
@@ -481,7 +489,6 @@ class Agent():
 
         This method compares the current agent's parameters such as name, description, instructions, tools, file IDs, metadata, and model with the given assistant settings. It uses DeepDiff to compare complex structures like tools and metadata. If any parameter does not match, it returns False; otherwise, it returns True.
         """
-
         if self.name != assistant_settings['name']:
             return False
 
@@ -506,9 +513,6 @@ class Agent():
             tool_resources_settings['file_search'].pop('vector_stores', None)
         tool_resources_diff = DeepDiff(tool_resources_settings, assistant_settings['tool_resources'], ignore_order=True)
         if tool_resources_diff != {}:
-            print(tool_resources_diff)
-            print(assistant_settings['tool_resources'])
-            print(tool_resources_settings)
             return False
 
         metadata_diff = DeepDiff(self.metadata, assistant_settings['metadata'], ignore_order=True)
@@ -520,7 +524,6 @@ class Agent():
 
         response_format_diff = DeepDiff(self.response_format, assistant_settings['response_format'], ignore_order=True)
         if response_format_diff != {}:
-            print(response_format_diff)
             return False
 
         return True
