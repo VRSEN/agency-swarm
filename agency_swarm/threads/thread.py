@@ -208,6 +208,9 @@ class Thread:
 
                             continue
 
+                if event_handler:
+                    event_handler.on_all_streams_end()
+
                 return full_message
 
     def _create_run(self, recipient_agent, additional_instructions, event_handler, tool_choice):

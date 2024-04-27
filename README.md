@@ -27,7 +27,7 @@ Agency Swarm started as a desire and effort of Arsenii Shatokhin (aka VRSEN) to 
 ## Installation
 
 ```bash
-pip install agency-swarm
+pip install -U agency-swarm
 ```
 
 ## Getting Started
