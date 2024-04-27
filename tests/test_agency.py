@@ -259,6 +259,7 @@ class AgencyTest(unittest.TestCase):
 
         test_tool_used = False
         test_agent2_used = False
+        num_on_all_streams_end_calls = 0
 
         class EventHandler(AgencyEventHandler):
             @override
@@ -273,6 +274,12 @@ class AgencyTest(unittest.TestCase):
                     nonlocal test_tool_used
                     test_tool_used = True
 
+            @override
+            @classmethod
+            def on_all_streams_end(cls):
+                nonlocal num_on_all_streams_end_calls
+                num_on_all_streams_end_calls += 1
+
         message = self.__class__.agency.get_completion_stream(
             "Please tell TestAgent1 to tell TestAgent 2 to use test tool.",
             event_handler=EventHandler,
@@ -284,6 +291,7 @@ class AgencyTest(unittest.TestCase):
 
         self.assertTrue(test_tool_used)
         self.assertTrue(test_agent2_used)
+        self.assertTrue(num_on_all_streams_end_calls == 1)
 
         self.assertTrue(self.__class__.TestTool.shared_state.get("test_tool_used"))
 

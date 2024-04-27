@@ -172,7 +172,7 @@ class Agency:
         if not inspect.isclass(event_handler):
             raise Exception("Event handler must not be an instance.")
 
-        return self.main_thread.get_completion_stream(message=message,
+        res = self.main_thread.get_completion_stream(message=message,
                                                       message_files=message_files,
                                                       event_handler=event_handler,
                                                       attachments=attachments,
@@ -180,6 +180,10 @@ class Agency:
                                                       additional_instructions=additional_instructions,
                                                       tool_choice=tool_choice
                                                       )
+
+        event_handler.on_all_streams_end()
+
+        return res
 
     def demo_gradio(self, height=450, dark_mode=True, **kwargs):
         """
