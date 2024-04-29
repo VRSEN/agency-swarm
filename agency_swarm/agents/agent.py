@@ -618,7 +618,7 @@ class Agent():
         try:
             # First, try to use the __file__ attribute of the module
             return os.path.abspath(os.path.dirname(self.__module__.__file__))
-        except AttributeError:
+        except AttributeError or OSError or TypeError:
             # If that fails, fall back to inspect
             try:
                 class_file = inspect.getfile(self.__class__)
