@@ -618,11 +618,11 @@ class Agent():
         try:
             # First, try to use the __file__ attribute of the module
             return os.path.abspath(os.path.dirname(self.__module__.__file__))
-        except AttributeError or OSError or TypeError:
+        except (TypeError, OSError, AttributeError) as e:
             # If that fails, fall back to inspect
             try:
                 class_file = inspect.getfile(self.__class__)
-            except TypeError or OSError or AttributeError:
+            except (TypeError, OSError, AttributeError) as e:
                 return "./"
             return os.path.abspath(os.path.realpath(os.path.dirname(class_file)))
 
