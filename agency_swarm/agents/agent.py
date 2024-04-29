@@ -620,7 +620,10 @@ class Agent():
             return os.path.abspath(os.path.dirname(self.__module__.__file__))
         except AttributeError:
             # If that fails, fall back to inspect
-            class_file = inspect.getfile(self.__class__)
+            try:
+                class_file = inspect.getfile(self.__class__)
+            except TypeError or OSError or AttributeError:
+                return "./"
             return os.path.abspath(os.path.realpath(os.path.dirname(class_file)))
 
     def add_shared_instructions(self, instructions: str):
