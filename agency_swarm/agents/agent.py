@@ -60,7 +60,7 @@ class Agent():
             tool_resources: ToolResources = None,
             temperature: float = None,
             top_p: float = None,
-            response_format: Union[str | dict] = "auto",
+            response_format: Union[str, dict] = "auto",
             tools_folder: str = None,
             files_folder: Union[List[str], str] = None,
             schemas_folder: Union[List[str], str] = None,
