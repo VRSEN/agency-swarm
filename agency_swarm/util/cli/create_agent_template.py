@@ -14,16 +14,15 @@ def create_agent_template(agent_name=None,
         agent_description = input("Enter agent description: ")
 
     class_name = agent_name.replace(" ", "").strip()
-    folder_name = agent_name  # .lower().replace(" ", "_").strip()
 
     # create folder
-    path = os.path.join(path, folder_name) + "/"
+    path = os.path.join(path, class_name) + "/"
     if os.path.isdir(path):
         raise Exception("Folder already exists.")
     os.mkdir(path)
 
     # create agent file
-    with open(path + folder_name + ".py", "w") as f:
+    with open(path + class_name + ".py", "w") as f:
         f.write(agent_template.format(
             class_name=class_name,
             agent_name=agent_name,
@@ -34,7 +33,7 @@ def create_agent_template(agent_name=None,
         ))
 
     with open(path + "__init__.py", "w") as f:
-        f.write(f"from .{folder_name} import {class_name}")
+        f.write(f"from .{class_name} import {class_name}")
 
     # create instructions file
     instructions_path = "instructions.md" if not use_txt else "instructions.txt"
@@ -57,7 +56,7 @@ def create_agent_template(agent_name=None,
             f.write(example_tool_template)
 
     print("Agent folder created successfully.")
-    print(f"Import it with: from {folder_name} import {class_name}")
+    print(f"Import it with: from {class_name} import {class_name}")
 
 
 agent_template = """from agency_swarm.agents import Agent

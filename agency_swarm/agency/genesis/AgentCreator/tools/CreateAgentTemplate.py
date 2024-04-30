@@ -71,19 +71,18 @@ class CreateAgentTemplate(BaseTool):
 
         # # create or append to init file
         path = self.shared_state.get("agency_path")
-        folder_name = self.agent_name.lower().replace(" ", "_")
         class_name = self.agent_name.replace(" ", "").strip()
         if not os.path.isfile("__init__.py"):
             with open("__init__.py", "w") as f:
-                f.write(f"from .{folder_name} import {class_name}")
+                f.write(f"from .{class_name} import {class_name}")
         else:
             with open("__init__.py", "a") as f:
-                f.write(f"\nfrom .{folder_name} import {class_name}")
+                f.write(f"\nfrom .{class_name} import {class_name}")
 
         # add agent on second line to agency.py
         with open("agency.py", "r") as f:
             lines = f.readlines()
-            lines.insert(1, f"from {self.agent_name} import {self.agent_name}\n")
+            lines.insert(1, f"from {class_name} import {class_name}\n")
 
         with open("agency.py", "w") as f:
             f.writelines(lines)
