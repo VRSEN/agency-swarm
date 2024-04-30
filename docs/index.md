@@ -37,7 +37,11 @@ Unlike other frameworks, Agency Swarm:
 
 ### **AutoGen** vs Agency Swarm
 
-In AutoGen, the next speaker is determined with an extra call to the model that emulates "role play" between the agents. [[1]](https://microsoft.github.https://microsoft.github.io/autogen/blog/2023/12/29/AgentDescriptionsio/autogen/blog/2023/12/29/AgentDescriptions) Not only this is very inefficient, but it also makes the system less controllable and less customizable, because you cannot control which agent can communicate with which other agent. In Agency Swarm, on the other hand, the communication is handled through the special `SendMessage` tool. [[2]](https://github.com/VRSEN/agency-swarm/blob/81ff3ad5d854729bcfa755f19480d681efa8e72b/agency_swarm/agency/agency.py#L528) Your agents will determine who to communicate with based on their own descriptions. The caller agent will the receive the response as the function output, which makes it a lot more natural for your agents to understand the communication flow.
+In AutoGen, by default, the next speaker is determined with an extra call to the model that emulates "role play" between the agents. [[1]](https://microsoft.github.https://microsoft.github.io/autogen/blog/2023/12/29/AgentDescriptionsio/autogen/blog/2023/12/29/AgentDescriptions) Not only this is very inefficient, but it also makes the system less controllable and less customizable, because you cannot control which agent can communicate with which other agent. 
+
+Recently, autogen has added support for [determining the next speaker based on certain hardcoded conditions](https://microsoft.github.io/autogen/docs/notebooks/agentchat_groupchat_customized/). While this does make your system more customizable, it completely undermines the main benefit of agentic systems - adaptability. In my opinion, **you should only determine the boundaries for your agents, not the conditions themselves, as you are unlikely to account for every single condition in the real world.** ([#113](https://github.com/VRSEN/agency-swarm/issues/113))
+
+In Agency Swarm, on the other hand, the communication is handled through the special `SendMessage` tool. [[2]](https://github.com/VRSEN/agency-swarm/blob/81ff3ad5d854729bcfa755f19480d681efa8e72b/agency_swarm/agency/agency.py#L528) Your agents will determine who to communicate with by themselves based on their own descriptions. All you have to do is set the boundaries for their communication inside the agency chart.
 
 ### **CrewAI** vs Agency Swarm
 
