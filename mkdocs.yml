@@ -25,7 +25,8 @@ theme:
     # Palette toggle for light mode
     - media: "(prefers-color-scheme: light)"
       scheme: default
-      primary: black
+      primary: amber
+      accent: yellow
       toggle:
         icon: material/brightness-7
         name: Switch to dark mode
@@ -45,6 +46,7 @@ nav:
     - Agents: "advanced-usage/agents.md"
     - Agencies: "advanced-usage/agencies.md"
     - Azure OpenAI: "advanced-usage/azure-openai.md"
+    - Open Source Models: "advanced-usage/open-source-models.md"
   - Deployment to Production: "deployment.md"
   - API Reference: "api.md"
   - Contributing: "contributing.md"
@@ -68,7 +70,7 @@ extra:
   generator: false
   social:
     - icon: fontawesome/brands/mastodon
-      link: https://www.vrsen.ai/
+      link: https://agents.vrsen.ai/
     - icon: fontawesome/brands/github
       link: https://github.com/VRSEN/agency-swarm
     - icon: fontawesome/brands/x-twitter
