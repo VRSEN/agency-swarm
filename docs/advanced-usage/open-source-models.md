@@ -12,27 +12,32 @@ While OpenAI is generally recommended, there are situations where you might pref
 
 ## Using Open Source Models
 
-To integrate open-source models with my framework, install the previous version of agency-swarm as most projects are not yet compatible with streaming and Assistants V2.
+To integrate open-source models with this framework, install the previous version of agency-swarm as most projects are not yet compatible with streaming and Assistants V2.
 
 ```bash
 pip install agency-swarm==0.1.7
 ```
 
-Next, switch out the OpenAI client and modify the model name for each agent as shown below:
+Next, switch out the OpenAI client:
 
 ```python
 import openai
-from agency_swarm import set_openai_client, Agent
+from agency_swarm import set_openai_client
 
-client = openai.OpenAI(api_key="your_api_key", base_url="http://127.0.0.1:8000/")
+client = openai.OpenAI(api_key="whatever", base_url="http://127.0.0.1:8000/")
+
 set_openai_client(client)
-
-ceo = Agent(name="ceo", description="I am the CEO", model='ollama/llama3')
-
-
 ```
 
-To utilize your agency in gradio, apply a specific non-streaming demo method from the [agency-swarm-lab](https://github.com/VRSEN/agency-swarm-lab) repository:
+and the model parameter:
+
+```python
+from agency_swarm import Agent
+
+ceo = Agent(name="ceo", description="I am the CEO", model='ollama/llama3')
+```
+
+To utilize your agency in gradio, apply a specific non-streaming `demo_gradio` method from the [agency-swarm-lab](https://github.com/VRSEN/agency-swarm-lab) repository:
 
 ```python
 from agency_swarm import Agency
@@ -48,6 +53,12 @@ For backend integrations, simply use:
 ```python
 agency.get_completion("I am the CEO")
 ```
+
+## Limitations
+
+- **Function calling is not supported by most open-source models**: This limitation prevents the agent from communicating with other agents in the agency. So, it must be positioned at the end of the agency chart and cannot utilize any tools.
+- **RAG is typically limited**: Most open-source assistants API implementations have restricted Retrieval-Augmented Generation capabilities. It is recommended to develop a custom tool with your own vector database.
+- **CodeInterpreter is not supported**: The Code Interpreter feature is still under development for all open-source assistants API implementations.
 
 ## Future Plans
 
