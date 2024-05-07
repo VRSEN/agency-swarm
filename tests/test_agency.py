@@ -6,6 +6,7 @@ import sys
 import time
 import unittest
 
+from openai.types.beta.threads import Text
 from openai.types.beta.threads.runs import ToolCall
 
 from agency_swarm.tools import CodeInterpreter, FileSearch
@@ -387,10 +388,36 @@ class AgencyTest(unittest.TestCase):
 
         time.sleep(10)
 
-        message = self.__class__.agency.get_completion(
+        num_on_all_streams_end_calls = 0
+        delta_value = ""
+        full_text = ""
+
+        class EventHandler(AgencyEventHandler):
+            @override
+            def on_text_delta(self, delta, snapshot):
+                nonlocal delta_value
+                delta_value += delta.value
+
+            @override
+            def on_text_done(self, text: Text) -> None:
+                nonlocal full_text
+                full_text += text.value
+
+            @override
+            @classmethod
+            def on_all_streams_end(cls):
+                nonlocal num_on_all_streams_end_calls
+                num_on_all_streams_end_calls += 1
+
+        message = self.__class__.agency.get_completion_stream(
             "Please check response. If output includes `TestAgent2's Response`, say 'success'. If the function output does not include `TestAgent2's Response`, or if you get a System Notification, or an error instead, say 'error'.",
             tool_choice={"type": "function", "function": {"name": "GetResponse"}},
-            recipient_agent=self.__class__.agent1)
+            recipient_agent=self.__class__.agent1,
+            event_handler=EventHandler)
+
+        self.assertTrue(num_on_all_streams_end_calls == 1)
+
+        self.assertTrue(delta_value == full_text == message)
 
         if 'error' in message.lower():
             print(self.__class__.agency.get_completion("Explain why you said error."))

@@ -166,9 +166,6 @@ class Agency:
         Returns:
             Final response: Final response from the main thread.
         """
-        if self.async_mode:
-            raise Exception("Streaming is not supported in async mode.")
-
         if not inspect.isclass(event_handler):
             raise Exception("Event handler must not be an instance.")
 
