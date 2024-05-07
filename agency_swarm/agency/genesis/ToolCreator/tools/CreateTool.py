@@ -95,7 +95,7 @@ class AnotherTool(BaseTool):
 
 This is useful to pass information between tools or agents or to verify the state of the system.  
 
-Remember, you must output the resulting python tool code as a whole, so the user can just copy and paste it into his program. Each tool code snippet must be ready to use. It must not contain any placeholders or hypothetical examples."""
+Remember, you must output the resulting python tool code as a whole in a code block, so the user can just copy and paste it into his program. Each tool code snippet must be ready to use. It must not contain any placeholders or hypothetical examples."""
 
 history = [
             {
@@ -161,14 +161,15 @@ class CreateTool(BaseTool):
 
         messages = history.copy()
 
-        # use the last 5 messages
-        messages = messages[-5:]
+        # use the last 6 messages
+        messages = messages[-6:]
 
         # add system message upfront
         messages.insert(0, history[0])
 
         n = 0
-        error_message = ""
+        code = ""
+        content = ""
         while n < 3:
             resp = client.chat.completions.create(
                 messages=messages,
@@ -195,34 +196,22 @@ class CreateTool(BaseTool):
                         "content": content
                     }
                 )
-
                 break
             else:
                 messages.append(
                     {
                         "role": "user",
-                        "content": f"Error: Could not find the code block in the response. Please try again."
+                        "content": f"Error: Could not find the python code block in the response. Please try again."
                     }
                 )
 
             n += 1
 
         if n == 3 or not code:
-            history.append(
-                {
-                    "role": "assistant",
-                    "content": content
-                }
-            )
-            history.append(
-                {
-                    "role": "user",
-                    "content": error_message
-                }
-            )
+            # remove last message from history
+            history.pop()
             os.chdir(self.shared_state.get("default_folder"))
-            return "Error: Could not generate a valid file: " + error_message
-
+            return "Error: Could not generate a valid file."
         try:
             with open("./tools/" + self.tool_name + ".py", "w") as file:
                 file.write(code)
