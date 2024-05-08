@@ -74,12 +74,16 @@ class Thread:
             # warn that it is deprecated
             print("Warning: yield_messages is deprecated. Use get_completion_stream instead.")
 
+        if not recipient_agent:
+            recipient_agent = self.recipient_agent
+
         if message_files:
             recipient_tools = []
+            attachments = []
 
-            if FileSearch in self.recipient_agent.tools:
+            if FileSearch in recipient_agent.tools:
                 recipient_tools.append({"type": "file_search"})
-            if CodeInterpreter in self.recipient_agent.tools:
+            if CodeInterpreter in recipient_agent.tools:
                 recipient_tools.append({"type": "code_interpreter"})
 
             for file_id in message_files:
@@ -88,9 +92,6 @@ class Thread:
 
         if not self.thread:
             self.init_thread()
-
-        if not recipient_agent:
-            recipient_agent = self.recipient_agent
 
         if event_handler:
             event_handler.agent_name = self.agent.name
