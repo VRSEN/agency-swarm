@@ -37,7 +37,7 @@ from agency_swarm import Agent
 ceo = Agent(name="ceo", description="I am the CEO", model='ollama/llama3')
 ```
 
-To utilize your agency in gradio, apply a specific non-streaming `demo_gradio` method from the [agency-swarm-lab](https://github.com/VRSEN/agency-swarm-lab) repository:
+To utilize your agency in gradio, apply a specific non-streaming `demo_gradio` method from the [agency-swarm-lab](https://github.com/VRSEN/agency-swarm-lab/blob/main/OpenSourceSwarm/demo_gradio.py) repository:
 
 ```python
 from agency_swarm import Agency
