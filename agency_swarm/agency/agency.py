@@ -349,7 +349,7 @@ class Agency:
                 @override
                 @classmethod
                 def on_all_streams_end(cls):
-                    self.message_output = None
+                    cls.message_output = None
                     chatbot_queue.put("[end]")
 
             def bot(original_message, history):

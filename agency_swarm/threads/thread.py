@@ -77,9 +77,11 @@ class Thread:
         if not recipient_agent:
             recipient_agent = self.recipient_agent
 
+        if not attachments:
+            attachments = []
+
         if message_files:
             recipient_tools = []
-            attachments = []
 
             if FileSearch in recipient_agent.tools:
                 recipient_tools.append({"type": "file_search"})
