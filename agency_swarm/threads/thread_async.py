@@ -22,14 +22,19 @@ class ThreadAsync(Thread):
                additional_instructions: str = None,
                tool_choice: AssistantToolChoice = None
                ):
-        output = super().get_completion(message=message,
+        gen = super().get_completion(message=message,
                                         message_files=message_files,
                                         attachments=attachments,
                                         recipient_agent=recipient_agent,
                                         additional_instructions=additional_instructions,
                                         tool_choice=tool_choice)
 
-        self.response = f"""{self.recipient_agent.name}'s Response: '{output}'"""
+        while True:
+            try:
+                next(gen)
+            except StopIteration as e:
+                self.response = f"""{self.recipient_agent.name}'s Response: '{e.value}'"""
+                break
 
         return
 

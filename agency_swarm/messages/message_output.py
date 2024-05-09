@@ -5,7 +5,6 @@ from rich.console import Console, Group
 from rich.live import Live
 
 console = Console()
-live_display = Live()
 
 class MessageOutput:
     def __init__(self, msg_type: Literal["function", "function_output", "text", "system"], sender_name: str,
@@ -110,8 +109,9 @@ class MessageOutputLive(MessageOutput):
         console.rule()
 
     def __del__(self):
-        self.live_display.stop()
-        self.live_display = None
+        if self.live_display:
+            self.live_display.stop()
+            self.live_display = None
 
     def cprint_update(self, snapshot):
         """

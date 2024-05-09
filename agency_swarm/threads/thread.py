@@ -112,6 +112,9 @@ class Thread:
             attachments=attachments
         )
 
+        if yield_messages:
+            yield MessageOutput("text", self.agent.name, recipient_agent.name, message)
+
         self._create_run(recipient_agent, additional_instructions, event_handler, tool_choice)
 
         error_attempts = 0
@@ -126,13 +129,23 @@ class Thread:
                 tool_outputs = []
                 tool_names = []
                 for tool_call in tool_calls:
+                    if yield_messages:
+                        yield MessageOutput("function", recipient_agent.name, self.agent.name,
+                                            str(tool_call.function))
+
                     output = self.execute_tool(tool_call, recipient_agent, event_handler, tool_names)
                     if inspect.isgenerator(output):
                         try:
                             while True:
                                 item = next(output)
+                                if isinstance(item, MessageOutput) and yield_messages:
+                                    yield item
                         except StopIteration as e:
                             output = e.value
+                    else:
+                        if yield_messages:
+                            yield MessageOutput("function_output", tool_call.function.name, recipient_agent.name,
+                                                output)
                     if event_handler:
                         event_handler.agent_name = self.agent.name
                         event_handler.recipient_agent_name = recipient_agent.name
@@ -199,6 +212,9 @@ class Thread:
             else:
                 full_message += self._get_last_message_text()
 
+                if yield_messages:
+                    yield MessageOutput("text", recipient_agent.name, self.agent.name, full_message)
+
                 if recipient_agent.response_validator:
                     try:
                         if isinstance(recipient_agent, Agent):
@@ -210,6 +226,10 @@ class Thread:
                                 role="user",
                                 content=str(e),
                             )
+
+                            if yield_messages:
+                                yield MessageOutput("text", self.agent.name, recipient_agent.name,
+                                                    message.content[0].text.value)
 
                             if event_handler:
                                 handler = event_handler()

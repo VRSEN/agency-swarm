@@ -133,14 +133,25 @@ class Agency:
             Generator or final response: Depending on the 'yield_messages' flag, this method returns either a generator yielding intermediate messages or the final response from the main thread.
         """
         if yield_messages:
-            print("Warning: yield_messages parameter is deprecated. Use streaming instead.")
+            print("Warning: yield_messages parameter will be deprecated soon. Use streaming instead.")
 
-        return self.main_thread.get_completion(message=message,
+        res = self.main_thread.get_completion(message=message,
                                                message_files=message_files,
                                                attachments=attachments,
                                                recipient_agent=recipient_agent,
                                                additional_instructions=additional_instructions,
-                                               tool_choice=tool_choice)
+                                               tool_choice=tool_choice,
+                                               yield_messages=yield_messages)
+
+        if not yield_messages:
+            while True:
+                try:
+                    next(res)
+                except StopIteration as e:
+                    return e.value
+
+        return res
+
 
     def get_completion_stream(self,
                               message: str,
@@ -178,9 +189,12 @@ class Agency:
                                                       tool_choice=tool_choice
                                                       )
 
-        event_handler.on_all_streams_end()
-
-        return res
+        while True:
+            try:
+                next(res)
+            except StopIteration as e:
+                event_handler.on_all_streams_end()
+                return e.value
 
     def demo_gradio(self, height=450, dark_mode=True, **kwargs):
         """
