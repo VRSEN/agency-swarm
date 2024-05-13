@@ -132,9 +132,6 @@ class Agency:
         Returns:
             Generator or final response: Depending on the 'yield_messages' flag, this method returns either a generator yielding intermediate messages or the final response from the main thread.
         """
-        if yield_messages:
-            print("Warning: yield_messages parameter will be deprecated soon. Use streaming instead.")
-
         res = self.main_thread.get_completion(message=message,
                                                message_files=message_files,
                                                attachments=attachments,
