@@ -164,6 +164,9 @@ class Agent():
         # load assistant from id
         if self.id:
             self.assistant = self.client.beta.assistants.retrieve(self.id)
+            # update assistant if parameters are different
+            if not self._check_parameters(self.assistant.model_dump()):
+                self._update_assistant()
             self.instructions = self.assistant.instructions
             self.name = self.assistant.name
             self.description = self.assistant.description
@@ -176,9 +179,6 @@ class Agent():
             self.metadata = self.assistant.metadata
             self.model = self.assistant.model
             self.tool_resources = self.assistant.tool_resources.model_dump()
-            # update assistant if parameters are different
-            if not self._check_parameters(self.assistant.model_dump()):
-                self._update_assistant()
             return self
 
         # load assistant from settings
@@ -191,12 +191,12 @@ class Agent():
                         try:
                             self.assistant = self.client.beta.assistants.retrieve(assistant_settings['id'])
                             self.id = assistant_settings['id']
-                            if self.assistant.tool_resources:
-                                self.tool_resources = self.assistant.tool_resources.model_dump()
                             # update assistant if parameters are different
                             if not self._check_parameters(self.assistant.model_dump()):
                                 print("Updating assistant... " + self.name)
                                 self._update_assistant()
+                            if self.assistant.tool_resources:
+                                self.tool_resources = self.assistant.tool_resources.model_dump()
                             self._update_settings()
                             return self
                         except NotFoundError:
