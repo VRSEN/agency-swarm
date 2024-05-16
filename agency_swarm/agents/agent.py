@@ -37,7 +37,7 @@ class Agent():
     def functions(self):
         return [tool for tool in self.tools if issubclass(tool, BaseTool)]
 
-    def response_validator(self, message: str) -> str:
+    def response_validator(self, message: str | list) -> str:
         """
         Validates the response from the agent. If the response is invalid, it must raise an exception with instructions
         for the caller agent on how to proceed.

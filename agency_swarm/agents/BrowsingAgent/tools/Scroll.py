@@ -30,7 +30,7 @@ class Scroll(BaseTool):
                 result = "Reached the top of the page. Cannot scroll up any further.\n"
             else:
                 wd.execute_script(f"window.scrollBy(0, -{height});")
-                result = "Scrolled up by 1 screen height. Make sure to use the AnalyzePage tool to analyze the page after scrolling."
+                result = "Scrolled up by 1 screen height. Make sure to otuput '[send screenshot]' command to analyze the page after scrolling."
 
         elif self.direction == "down":
             if current_scroll_position + wd.get_window_size()['height'] >= total_scroll_height:
@@ -38,7 +38,7 @@ class Scroll(BaseTool):
                 result = "Reached the bottom of the page. Cannot scroll down any further.\n"
             else:
                 wd.execute_script(f"window.scrollBy(0, {height});")
-                result = "Scrolled down by 1 screen height. Make sure to use the AnalyzePage tool to analyze the page after scrolling."
+                result = "Scrolled down by 1 screen height. Make sure to otuput '[send screenshot]' command to analyze the page after scrolling."
 
         set_web_driver(wd)
 

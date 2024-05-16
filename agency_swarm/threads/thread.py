@@ -101,7 +101,7 @@ class Thread:
 
         # Determine the sender's name based on the agent type
         sender_name = "user" if isinstance(self.agent, User) else self.agent.name
-        playground_url = f'https://platform.openai.com/playground?assistant={recipient_agent.assistant.id}&mode=assistant&thread={self.thread.id}'
+        playground_url = f'https://platform.openai.com/playground/assistants?assistant={recipient_agent.assistant.id}&mode=assistant&thread={self.thread.id}'
         print(f'THREAD:[ {sender_name} -> {recipient_agent.name} ]: URL {playground_url}')
 
         # send message
@@ -210,7 +210,8 @@ class Thread:
                     raise Exception("OpenAI Run Failed. Error: ", self.run.last_error.message)
             # return assistant message
             else:
-                full_message += self._get_last_message_text()
+                last_message = self._get_last_message_text()
+                full_message += last_message + "\n"
 
                 if yield_messages:
                     yield MessageOutput("text", recipient_agent.name, self.agent.name, full_message)
@@ -218,13 +219,24 @@ class Thread:
                 if recipient_agent.response_validator:
                     try:
                         if isinstance(recipient_agent, Agent):
-                            recipient_agent.response_validator(message=full_message)
+                            recipient_agent.response_validator(message=last_message)
                     except Exception as e:
                         if validation_attempts < recipient_agent.validation_attempts:
+                            try:
+                                evaluated_content = eval(str(e))
+                                if isinstance(evaluated_content, list):
+                                    content = evaluated_content
+                                    print("Content is a list")
+                                else:
+                                    content = str(e)
+                            except:
+                                content = str(e)
+                            
+
                             message = self.client.beta.threads.messages.create(
                                 thread_id=self.thread.id,
                                 role="user",
-                                content=str(e),
+                                content=content,
                             )
 
                             if yield_messages:

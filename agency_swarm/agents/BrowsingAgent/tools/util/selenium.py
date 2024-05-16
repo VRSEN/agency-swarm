@@ -1,9 +1,4 @@
-import json
 import os
-import time
-from urllib.parse import urlparse
-
-from .highlights import remove_highlight_and_labels
 
 wd = None
 
@@ -77,6 +72,7 @@ def get_web_driver():
     chrome_options.add_argument("--disable-popup-blocking")
     chrome_options.add_argument("--ignore-certificate-errors")
     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+    chrome_options.add_argument("--force-device-scale-factor=1.5")
 
     chrome_options.add_argument("--disable-web-security")
     chrome_options.add_argument("--allow-running-insecure-content")
@@ -114,7 +110,6 @@ def get_web_driver():
 
 def set_web_driver(new_wd):
     global wd
-    wd = remove_highlight_and_labels(wd)
     wd = new_wd
 
 
