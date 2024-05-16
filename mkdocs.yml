@@ -1,6 +1,7 @@
 site_name: Agency Swarm
 site_author: Arsenii Shatokhin
 site_description: A an open source agent orchestration framework based on the latest OpenAI Assistants API.
+site_url: https://vrsen.github.io/agency-swarm/
 theme:
   features:
     - search.suggest
