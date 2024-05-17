@@ -2,8 +2,6 @@ import json
 import re
 
 from agency_swarm.agents import Agent
-from .tools.util import get_b64_screenshot, highlight_elements_with_labels, remove_highlight_and_labels
-from .tools.util.selenium import get_web_driver, set_selenium_config, set_web_driver
 from agency_swarm.tools.oai import FileSearch
 from typing_extensions import override
 import base64
@@ -13,6 +11,7 @@ class BrowsingAgent(Agent):
     SCREENSHOT_FILE_NAME = "screenshot.jpg"
 
     def __init__(self, selenium_config=None, **kwargs):
+        from .tools.util.selenium import set_selenium_config
         super().__init__(
             name="BrowsingAgent",
             description="This agent is designed to navigate and search web effectively.",
@@ -34,6 +33,11 @@ class BrowsingAgent(Agent):
 
     @override
     def response_validator(self, message):
+        from .tools.util.selenium import get_web_driver, set_web_driver
+        from .tools.util import highlight_elements_with_labels, remove_highlight_and_labels
+        from selenium.webdriver.common.by import By
+        from selenium.webdriver.support.select import Select
+
         # Filter out everything in square brackets
         filtered_message = re.sub(r'\[.*?\]', '', message).strip()
         
@@ -43,14 +47,12 @@ class BrowsingAgent(Agent):
         self.prev_message = filtered_message
 
         if "[send screenshot]" in message.lower():
-            from selenium.webdriver.common.by import By
             wd = get_web_driver()
             remove_highlight_and_labels(wd)
             self.take_screenshot()
             response_text = "Here is the screenshot of the current web page:"
 
         elif '[highlight clickable elements]' in message.lower():
-            from selenium.webdriver.common.by import By
             wd = get_web_driver()
             highlight_elements_with_labels(wd, 'a, button, div[onclick], div[role="button"], div[tabindex], '
                                                'span[onclick], span[role="button"], span[tabindex]')
@@ -75,7 +77,6 @@ class BrowsingAgent(Agent):
                              "Please make sure to analyze the screenshot to find the clickable element you need to click on.")
 
         elif '[highlight text fields]' in message.lower():
-            from selenium.webdriver.common.by import By
             wd = get_web_driver()
             highlight_elements_with_labels(wd, 'input, textarea')
 
@@ -96,8 +97,6 @@ class BrowsingAgent(Agent):
                              "Please make sure to analyze the screenshot to find the text field you need to fill.")
 
         elif '[highlight dropdowns]' in message.lower():
-            from selenium.webdriver.common.by import By
-            from selenium.webdriver.support.select import Select
             wd = get_web_driver()
             highlight_elements_with_labels(wd, 'select')
 
@@ -133,6 +132,8 @@ class BrowsingAgent(Agent):
         raise ValueError(content)
 
     def take_screenshot(self):
+        from .tools.util.selenium import get_web_driver
+        from .tools.util import get_b64_screenshot
         wd = get_web_driver()
         screenshot = get_b64_screenshot(wd)
         screenshot_data = base64.b64decode(screenshot)
