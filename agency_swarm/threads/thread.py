@@ -192,7 +192,7 @@ class Thread:
                         raise e
             # error
             elif self.run.status == "failed":
-                full_message += self._get_last_message_text() + "\n"
+                full_message += self._get_last_message_text()
                 # retry run 2 times
                 if error_attempts < 1 and "something went wrong" in self.run.last_error.message.lower():
                     time.sleep(1)
@@ -211,7 +211,7 @@ class Thread:
             # return assistant message
             else:
                 last_message = self._get_last_message_text()
-                full_message += last_message + "\n"
+                full_message += last_message
 
                 if yield_messages:
                     yield MessageOutput("text", recipient_agent.name, self.agent.name, full_message)
