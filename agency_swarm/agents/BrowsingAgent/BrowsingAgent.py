@@ -1,14 +1,11 @@
 import json
 import re
 
-from selenium.webdriver.common.by import By
-
 from agency_swarm.agents import Agent
 from .tools.util import get_b64_screenshot, highlight_elements_with_labels, remove_highlight_and_labels
 from .tools.util.selenium import get_web_driver, set_selenium_config, set_web_driver
 from agency_swarm.tools.oai import FileSearch
 from typing_extensions import override
-from selenium.webdriver.support.select import Select
 import base64
 
 
@@ -46,12 +43,14 @@ class BrowsingAgent(Agent):
         self.prev_message = filtered_message
 
         if "[send screenshot]" in message.lower():
+            from selenium.webdriver.common.by import By
             wd = get_web_driver()
             remove_highlight_and_labels(wd)
             self.take_screenshot()
             response_text = "Here is the screenshot of the current web page:"
 
         elif '[highlight clickable elements]' in message.lower():
+            from selenium.webdriver.common.by import By
             wd = get_web_driver()
             highlight_elements_with_labels(wd, 'a, button, div[onclick], div[role="button"], div[tabindex], '
                                                'span[onclick], span[role="button"], span[tabindex]')
@@ -76,6 +75,7 @@ class BrowsingAgent(Agent):
                              "Please make sure to analyze the screenshot to find the clickable element you need to click on.")
 
         elif '[highlight text fields]' in message.lower():
+            from selenium.webdriver.common.by import By
             wd = get_web_driver()
             highlight_elements_with_labels(wd, 'input, textarea')
 
@@ -96,6 +96,8 @@ class BrowsingAgent(Agent):
                              "Please make sure to analyze the screenshot to find the text field you need to fill.")
 
         elif '[highlight dropdowns]' in message.lower():
+            from selenium.webdriver.common.by import By
+            from selenium.webdriver.support.select import Select
             wd = get_web_driver()
             highlight_elements_with_labels(wd, 'select')
 
