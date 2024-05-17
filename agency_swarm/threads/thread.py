@@ -1,7 +1,7 @@
 import inspect
 import json
 import time
-from typing import Literal, List, Optional
+from typing import List, Optional, Union
 
 from openai import BadRequestError
 from openai.types.beta import AssistantToolChoice
@@ -22,7 +22,7 @@ class Thread:
     run = None
     stream = None
 
-    def __init__(self, agent: Literal[Agent, User], recipient_agent: Agent):
+    def __init__(self, agent: Union[Agent, User], recipient_agent: Agent):
         self.agent = agent
         self.recipient_agent = recipient_agent
 
@@ -226,12 +226,10 @@ class Thread:
                                 evaluated_content = eval(str(e))
                                 if isinstance(evaluated_content, list):
                                     content = evaluated_content
-                                    print("Content is a list")
                                 else:
                                     content = str(e)
-                            except:
+                            except Exception as eval_exception:
                                 content = str(e)
-                            
 
                             message = self.client.beta.threads.messages.create(
                                 thread_id=self.thread.id,
@@ -240,8 +238,10 @@ class Thread:
                             )
 
                             if yield_messages:
-                                yield MessageOutput("text", self.agent.name, recipient_agent.name,
-                                                    message.content[0].text.value)
+                                for content in message.content:
+                                    if hasattr(content, 'text') and hasattr(content.text, 'value'):
+                                        yield MessageOutput("text", self.agent.name, recipient_agent.name, content.text.value)
+                                        break
 
                             if event_handler:
                                 handler = event_handler()
@@ -309,6 +309,7 @@ class Thread:
                 self.run = stream.get_final_run()
 
     def _get_last_message_text(self):
+        time.sleep(1)  # Add a short delay to ensure the message is available
         messages = self.client.beta.threads.messages.list(
             thread_id=self.id,
             limit=1
@@ -317,7 +318,8 @@ class Thread:
         if len(messages.data) == 0 or len(messages.data[0].content) == 0:
             return ""
 
-        return messages.data[0].content[0].text.value
+        last_message = messages.data[0].content[0].text.value
+        return last_message
 
     def execute_tool(self, tool_call, recipient_agent=None, event_handler=None, tool_names=[]):
         if not recipient_agent:

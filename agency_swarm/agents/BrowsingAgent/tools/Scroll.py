@@ -19,6 +19,13 @@ class Scroll(BaseTool):
 
         height = wd.get_window_size()['height']
 
+        # Get the zoom level
+        zoom_level = wd.execute_script("return document.body.style.zoom || '1';")
+        zoom_level = float(zoom_level.strip('%')) / 100 if '%' in zoom_level else float(zoom_level)
+
+        # Adjust height by zoom level
+        adjusted_height = height / zoom_level
+
         current_scroll_position = wd.execute_script("return window.pageYOffset;")
         total_scroll_height = wd.execute_script("return document.body.scrollHeight;")
 
@@ -29,21 +36,18 @@ class Scroll(BaseTool):
                 # Reached the top of the page
                 result = "Reached the top of the page. Cannot scroll up any further.\n"
             else:
-                wd.execute_script(f"window.scrollBy(0, -{height});")
-                result = "Scrolled up by 1 screen height. Make sure to otuput '[send screenshot]' command to analyze the page after scrolling."
+                wd.execute_script(f"window.scrollBy(0, -{adjusted_height});")
+                result = "Scrolled up by 1 screen height. Make sure to output '[send screenshot]' command to analyze the page after scrolling."
 
         elif self.direction == "down":
-            if current_scroll_position + wd.get_window_size()['height'] >= total_scroll_height:
+            if current_scroll_position + adjusted_height >= total_scroll_height:
                 # Reached the bottom of the page
                 result = "Reached the bottom of the page. Cannot scroll down any further.\n"
             else:
-                wd.execute_script(f"window.scrollBy(0, {height});")
-                result = "Scrolled down by 1 screen height. Make sure to otuput '[send screenshot]' command to analyze the page after scrolling."
+                wd.execute_script(f"window.scrollBy(0, {adjusted_height});")
+                result = "Scrolled down by 1 screen height. Make sure to output '[send screenshot]' command to analyze the page after scrolling."
 
         set_web_driver(wd)
 
         return result
-
-
-
 

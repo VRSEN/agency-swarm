@@ -265,6 +265,9 @@ class Agency:
                 return "No files uploaded"
 
             def user(user_message, history):
+                if not user_message.strip():
+                    return user_message, history
+
                 if history is None:
                     history = []
 
@@ -377,6 +380,9 @@ class Agency:
                     chatbot_queue.put("[end]")
 
             def bot(original_message, history):
+                if not original_message:
+                    return "", history
+
                 nonlocal message_file_ids
                 nonlocal message_file_names
                 nonlocal recipient_agent

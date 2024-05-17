@@ -1,4 +1,5 @@
-from pydantic import Field
+from typing import Dict
+from pydantic import Field, model_validator
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.select import Select
 
@@ -14,17 +15,26 @@ class SelectDropdown(BaseTool):
     Before using this tool make sure to highlight dropdown elements on the page by outputting '[highlight dropdowns]' message.
     """
 
-    key_value_pairs: dict = Field(
-        title="Key-Value Pairs",
+    key_value_pairs: Dict[str, str] = Field(...,
         description="A dictionary where the key is the sequence number of the dropdown element and the value is the index of the option to select.",
-        examples=[{"1": 0, "2": 1}]
+        examples=[{"1": 0, "2": 1}, {"3": 2}]
     )
+
+    @model_validator(mode='before')
+    @classmethod
+    def check_key_value_pairs(cls, data):
+        if not data.get('key_value_pairs'):
+            raise ValueError(
+                "key_value_pairs is required. Example format: "
+                "key_value_pairs={'1': 0, '2': 1}"
+            )
+        return data
 
     def run(self):
         wd = get_web_driver()
 
         if 'select' not in self.shared_state.get("elements_highlighted", ""):
-            raise ValueError("Please highlight dropdown elements on the page first by outputting '[highlight dropdowns]' message.")
+            raise ValueError("Please highlight dropdown elements on the page first by outputting '[highlight dropdowns]' message. You must output just the message without calling the tool first, so the user can respond with the screenshot.")
 
         all_elements = wd.find_elements(By.CSS_SELECTOR, '.highlighted-element')
 

@@ -31,21 +31,9 @@ Note: This tool only supports opening one URL at a time. The previous URL will b
 
         time.sleep(2)
 
-        # remove all popups
-        js_script = """
-        var popUpSelectors = ['modal', 'popup', 'overlay', 'dialog']; // Add more selectors that are commonly used for pop-ups
-        popUpSelectors.forEach(function(selector) {
-            var elements = document.querySelectorAll(selector);
-            elements.forEach(function(element) {
-                // You can choose to hide or remove; here we're removing the element
-                element.parentNode.removeChild(element);
-            });
-        });
-        """
-
-        wd.execute_script(js_script)
-
         set_web_driver(wd)
+
+        self.shared_state.set("elements_highlighted", "")
 
         return "Current URL is: " + wd.current_url + "\n" + "Please output '[send screenshot]' next to analyze the current web page or '[highlight clickable elements]' for further navigation."
 

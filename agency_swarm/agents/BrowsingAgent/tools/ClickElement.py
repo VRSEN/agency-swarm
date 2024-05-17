@@ -15,7 +15,7 @@ class ClickElement(BaseTool):
     Before using this tool make sure to highlight clickable elements on the page by outputting '[highlight clickable elements]' message.
     """
     element_number: int = Field(
-        title="Element Number",
+        ...,
         description="The number of the element to click on. The element numbers are displayed on the page after highlighting elements.",
     )
 
@@ -23,7 +23,7 @@ class ClickElement(BaseTool):
         wd = get_web_driver()
 
         if 'button' not in self.shared_state.get("elements_highlighted", ""):
-            raise ValueError("Please highlight clickable elements on the page first by outputting '[highlight clickable elements]' message. Current elements highlighted are: " + self.shared_state.get("elements_highlighted", ""))
+            raise ValueError("Please highlight clickable elements on the page first by outputting '[highlight clickable elements]' message. You must output just the message without calling the tool first, so the user can respond with the screenshot.")
 
         all_elements = wd.find_elements(By.CSS_SELECTOR, '.highlighted-element')
 
@@ -50,6 +50,11 @@ class ClickElement(BaseTool):
 
         wd = remove_highlight_and_labels(wd)
 
+        wd.execute_script("document.body.style.zoom='1.5'")
+
         set_web_driver(wd)
+
+        from agency_swarm.util import shared_state
+        shared_state.set("elements_highlighted", "")
 
         return result

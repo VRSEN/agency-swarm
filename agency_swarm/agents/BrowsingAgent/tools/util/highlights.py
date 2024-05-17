@@ -139,7 +139,4 @@ def remove_highlight_and_labels(driver):
 
     driver.execute_script(script)
 
-    from agency_swarm.util import shared_state
-    shared_state.set("elements_highlighted", "")
-
     return driver
