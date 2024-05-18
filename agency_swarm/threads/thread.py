@@ -1,7 +1,7 @@
 import inspect
 import json
 import time
-from typing import Literal, List, Optional
+from typing import List, Optional, Union
 
 from openai import BadRequestError
 from openai.types.beta import AssistantToolChoice
@@ -22,7 +22,7 @@ class Thread:
     run = None
     stream = None
 
-    def __init__(self, agent: Literal[Agent, User], recipient_agent: Agent):
+    def __init__(self, agent: Union[Agent, User], recipient_agent: Agent):
         self.agent = agent
         self.recipient_agent = recipient_agent
 
@@ -101,7 +101,7 @@ class Thread:
 
         # Determine the sender's name based on the agent type
         sender_name = "user" if isinstance(self.agent, User) else self.agent.name
-        playground_url = f'https://platform.openai.com/playground?assistant={recipient_agent.assistant.id}&mode=assistant&thread={self.thread.id}'
+        playground_url = f'https://platform.openai.com/playground/assistants?assistant={recipient_agent.assistant.id}&mode=assistant&thread={self.thread.id}'
         print(f'THREAD:[ {sender_name} -> {recipient_agent.name} ]: URL {playground_url}')
 
         # send message
@@ -192,7 +192,7 @@ class Thread:
                         raise e
             # error
             elif self.run.status == "failed":
-                full_message += self._get_last_message_text() + "\n"
+                full_message += self._get_last_message_text()
                 # retry run 2 times
                 if error_attempts < 1 and "something went wrong" in self.run.last_error.message.lower():
                     time.sleep(1)
@@ -211,7 +211,8 @@ class Thread:
             # return assistant message
             else:
                 message_obj = self._get_last_assistant_message()
-                full_message += message_obj.content[0].text.value
+                last_message = message_obj.content[0].text.value
+                full_message += last_message
 
                 if yield_messages:
                     yield MessageOutput("text", recipient_agent.name, self.agent.name, full_message, message_obj)
@@ -219,18 +220,30 @@ class Thread:
                 if recipient_agent.response_validator:
                     try:
                         if isinstance(recipient_agent, Agent):
-                            recipient_agent.response_validator(message=full_message)
+                            recipient_agent.response_validator(message=last_message)
                     except Exception as e:
                         if validation_attempts < recipient_agent.validation_attempts:
+                            try:
+                                evaluated_content = eval(str(e))
+                                if isinstance(evaluated_content, list):
+                                    content = evaluated_content
+                                else:
+                                    content = str(e)
+                            except Exception as eval_exception:
+                                content = str(e)
+
                             message_obj = self.client.beta.threads.messages.create(
                                 thread_id=self.thread.id,
                                 role="user",
-                                content=str(e),
+                                content=content,
                             )
 
                             if yield_messages:
-                                yield MessageOutput("text", self.agent.name, recipient_agent.name,
-                                                    message_obj.content[0].text.value, message_obj)
+                                for content in message_obj.content:
+                                    if hasattr(content, 'text') and hasattr(content.text, 'value'):
+                                        yield MessageOutput("text", self.agent.name, recipient_agent.name,
+                                                            content.text.value, message_obj)
+                                        break
 
                             if event_handler:
                                 handler = event_handler()

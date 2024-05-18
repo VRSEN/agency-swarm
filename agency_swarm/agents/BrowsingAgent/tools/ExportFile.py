@@ -6,7 +6,7 @@ from .util import get_web_driver
 
 
 class ExportFile(BaseTool):
-    """This tool converts the current full web page into a file and returns its file_id. You can then analyze this file using the myfiles_browser tool."""
+    """This tool converts the current full web page into a file and returns its file_id. You can then send this file id back to the user for further processing."""
 
     def run(self):
         wd = get_web_driver()

@@ -17,8 +17,8 @@ class WebPageSummarizer(BaseTool):
 
         content = wd.find_element(By.TAG_NAME, "body").text
 
-        # only use the first 3000 words
-        content = " ".join(content.split()[:3000])
+        # only use the first 10000 characters
+        content = " ".join(content.split()[:10000])
 
         completion = client.chat.completions.create(
             model="gpt-3.5-turbo",

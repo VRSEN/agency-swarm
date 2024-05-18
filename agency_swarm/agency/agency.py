@@ -7,9 +7,7 @@ import uuid
 from enum import Enum
 from typing import List, TypedDict, Callable, Any, Dict, Literal, Union, Optional
 
-from openai.types.beta import AssistantToolChoice
 from openai.types.beta.threads import Message
-from openai.types.beta.threads.message import Attachment
 from openai.types.beta.threads.runs import RunStep
 from pydantic import Field, field_validator, model_validator
 from rich.console import Console
@@ -267,6 +265,9 @@ class Agency:
                 return "No files uploaded"
 
             def user(user_message, history):
+                if not user_message.strip():
+                    return user_message, history
+
                 if history is None:
                     history = []
 
@@ -289,9 +290,24 @@ class Agency:
 
                 @override
                 def on_message_created(self, message: Message) -> None:
+
                     if message.role == "user":
+                        full_content = ""
+                        for content in message.content:
+                            if content.type == "image_file":
+                                full_content += f"🖼️ Image File: {content.image_file.file_id}\n"
+                                continue
+
+                            if content.type == "image_url":
+                                full_content += f"\n{content.image_url.url}\n"
+                                continue
+
+                            if content.type == "text":
+                                full_content += content.text.value + "\n"
+
+
                         self.message_output = MessageOutput("text", self.agent_name, self.recipient_agent_name,
-                                                            message.content[0].text.value)
+                                                            full_content)
 
                     else:
                         self.message_output = MessageOutput("text", self.recipient_agent_name, self.agent_name,
@@ -364,6 +380,9 @@ class Agency:
                     chatbot_queue.put("[end]")
 
             def bot(original_message, history):
+                if not original_message:
+                    return "", history
+
                 nonlocal message_file_ids
                 nonlocal message_file_names
                 nonlocal recipient_agent

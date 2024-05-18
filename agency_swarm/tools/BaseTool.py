@@ -4,24 +4,12 @@ from typing import Optional, Any, ClassVar
 from instructor import OpenAISchema
 
 from pydantic import Field
-
-class SharedState:
-    def __init__(self):
-        self.data = {}
-
-    def set(self, key, value):
-        if not isinstance(key, str):
-            raise ValueError("Key must be a string")
-        self.data[key] = value
-
-    def get(self, key, default=None):
-        if not isinstance(key, str):
-            raise ValueError("Key must be a string")
-        return self.data.get(key, default)
+from agency_swarm.util import shared_state
+from agency_swarm.util.shared_state import SharedState
 
 
 class BaseTool(OpenAISchema, ABC):
-    shared_state: ClassVar[SharedState] = SharedState()
+    shared_state: ClassVar[SharedState] = shared_state
     caller_agent: Any = None
     event_handler: Any = None
     one_call_at_a_time: bool = False

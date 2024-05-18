@@ -283,7 +283,6 @@ class ToolFactory:
                 tools.append(ToolFactory.from_openai_schema(function, callback))
 
         return tools
-
     @staticmethod
     def from_file(file_path: str) -> Type[BaseTool]:
         """Dynamically imports a BaseTool class from a Python file within a package structure.
@@ -301,10 +300,18 @@ class ToolFactory:
         class_name = os.path.splitext(file_name)[0]
 
         exec_globals = globals()
+        
+        # importing from agency_swarm package
+        if "agency_swarm" in import_path:
+            import_path = import_path.lstrip(".")
+            exec(f"from {import_path} import {class_name}", exec_globals)
+        # importing from current working directory
+        else:
+            current_working_directory = os.getcwd()
+            sys.path.append(current_working_directory)
+            exec(f"from {import_path} import {class_name}", exec_globals)
 
-        sys.path.append(os.getcwd())
-
-        exec(f"from {import_path} import {class_name}", exec_globals)
+        
 
         imported_class = exec_globals.get(class_name)
         if not imported_class:
