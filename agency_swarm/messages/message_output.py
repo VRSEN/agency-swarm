@@ -8,11 +8,21 @@ console = Console()
 
 class MessageOutput:
     def __init__(self, msg_type: Literal["function", "function_output", "text", "system"], sender_name: str,
-                 receiver_name: str, content):
+                 receiver_name: str, content, obj=None):
+        """Initialize a message object with sender, receiver, content and type.
+
+        Args:
+            msg_type (Literal["function", "function_output", "text", "system"]): Type of message.
+            sender_name (str): Name of the sender.
+            receiver_name (str): Name of the receiver.
+            content: Content of the message.
+            obj: Optional OpenAI object that is causing the message.
+        """
         self.msg_type = msg_type
         self.sender_name = str(sender_name)
         self.receiver_name = str(receiver_name)
         self.content = str(content)
+        self.obj = obj
 
     def hash_names_to_color(self):
         if self.msg_type == "function" or self.msg_type == "function_output":

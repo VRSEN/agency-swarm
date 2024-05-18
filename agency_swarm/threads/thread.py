@@ -105,7 +105,7 @@ class Thread:
         print(f'THREAD:[ {sender_name} -> {recipient_agent.name} ]: URL {playground_url}')
 
         # send message
-        self.client.beta.threads.messages.create(
+        message_obj = self.client.beta.threads.messages.create(
             thread_id=self.thread.id,
             role="user",
             content=message,
@@ -113,7 +113,7 @@ class Thread:
         )
 
         if yield_messages:
-            yield MessageOutput("text", self.agent.name, recipient_agent.name, message)
+            yield MessageOutput("text", self.agent.name, recipient_agent.name, message, message_obj)
 
         self._create_run(recipient_agent, additional_instructions, event_handler, tool_choice)
 
@@ -131,7 +131,7 @@ class Thread:
                 for tool_call in tool_calls:
                     if yield_messages:
                         yield MessageOutput("function", recipient_agent.name, self.agent.name,
-                                            str(tool_call.function))
+                                            str(tool_call.function), tool_call)
 
                     output = self.execute_tool(tool_call, recipient_agent, event_handler, tool_names)
                     if inspect.isgenerator(output):
@@ -145,7 +145,7 @@ class Thread:
                     else:
                         if yield_messages:
                             yield MessageOutput("function_output", tool_call.function.name, recipient_agent.name,
-                                                output)
+                                                output, tool_call)
                     if event_handler:
                         event_handler.agent_name = self.agent.name
                         event_handler.recipient_agent_name = recipient_agent.name
@@ -210,10 +210,11 @@ class Thread:
                     raise Exception("OpenAI Run Failed. Error: ", self.run.last_error.message)
             # return assistant message
             else:
-                full_message += self._get_last_message_text()
+                message_obj = self._get_last_assistant_message()
+                full_message += message_obj.content[0].text.value
 
                 if yield_messages:
-                    yield MessageOutput("text", recipient_agent.name, self.agent.name, full_message)
+                    yield MessageOutput("text", recipient_agent.name, self.agent.name, full_message, message_obj)
 
                 if recipient_agent.response_validator:
                     try:
@@ -221,7 +222,7 @@ class Thread:
                             recipient_agent.response_validator(message=full_message)
                     except Exception as e:
                         if validation_attempts < recipient_agent.validation_attempts:
-                            message = self.client.beta.threads.messages.create(
+                            message_obj = self.client.beta.threads.messages.create(
                                 thread_id=self.thread.id,
                                 role="user",
                                 content=str(e),
@@ -229,7 +230,7 @@ class Thread:
 
                             if yield_messages:
                                 yield MessageOutput("text", self.agent.name, recipient_agent.name,
-                                                    message.content[0].text.value)
+                                                    message_obj.content[0].text.value, message_obj)
 
                             if event_handler:
                                 handler = event_handler()
@@ -306,6 +307,22 @@ class Thread:
             return ""
 
         return messages.data[0].content[0].text.value
+
+    def _get_last_assistant_message(self):
+        messages = self.client.beta.threads.messages.list(
+            thread_id=self.id,
+            limit=1
+        )
+
+        if len(messages.data) == 0 or len(messages.data[0].content) == 0:
+            raise Exception("No messages found in the thread")
+
+        message = messages.data[0]
+
+        if message.role == "assistant":
+            return message
+
+        raise Exception("No assistant message found in the thread")
 
     def execute_tool(self, tool_call, recipient_agent=None, event_handler=None, tool_names=[]):
         if not recipient_agent:
