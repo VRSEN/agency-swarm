@@ -660,7 +660,7 @@ class Agency:
         loaded_thread_ids = {}
         if self.threads_callbacks:
             loaded_thread_ids = self.threads_callbacks["load"]()
-            if "main_thread" in loaded_thread_ids:
+            if "main_thread" in loaded_thread_ids and loaded_thread_ids["main_thread"]:
                 self.main_thread.id = loaded_thread_ids["main_thread"]
             else:
                 self.main_thread.init_thread()
