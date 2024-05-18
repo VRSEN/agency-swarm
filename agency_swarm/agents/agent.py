@@ -164,21 +164,27 @@ class Agent():
         # load assistant from id
         if self.id:
             self.assistant = self.client.beta.assistants.retrieve(self.id)
-            self.instructions = self.assistant.instructions
-            self.name = self.assistant.name
-            self.description = self.assistant.description
-            self.temperature = self.assistant.temperature
-            self.top_p = self.assistant.top_p
-            self.response_format = self.assistant.response_format
+
+            # Assign attributes to self if they are None
+            self.instructions = self.instructions or self.assistant.instructions
+            self.name = self.name if self.name != self.__class__.__name__ else self.assistant.name
+            self.description = self.description or self.assistant.description
+            self.temperature = self.temperature or self.assistant.temperature
+            self.top_p = self.top_p or self.assistant.top_p
+            self.response_format = self.response_format or self.assistant.response_format
             if not isinstance(self.response_format, str):
-                self.response_format = self.response_format.model_dump()
-            self.tool_resources = self.assistant.tool_resources.model_dump()
-            self.metadata = self.assistant.metadata
-            self.model = self.assistant.model
-            self.tool_resources = self.assistant.tool_resources.model_dump()
+                self.response_format = self.response_format or self.response_format.model_dump()
+            else:
+                self.response_format = self.response_format or self.assistant.response_format
+            self.tool_resources = self.tool_resources or self.assistant.tool_resources.model_dump()
+            self.metadata = self.metadata or self.assistant.metadata
+            self.model = self.model or self.assistant.model
+            self.tool_resources = self.tool_resources or self.assistant.tool_resources.model_dump()
+
             # update assistant if parameters are different
             if not self._check_parameters(self.assistant.model_dump()):
                 self._update_assistant()
+
             return self
 
         # load assistant from settings
@@ -191,12 +197,15 @@ class Agent():
                         try:
                             self.assistant = self.client.beta.assistants.retrieve(assistant_settings['id'])
                             self.id = assistant_settings['id']
-                            if self.assistant.tool_resources:
-                                self.tool_resources = self.assistant.tool_resources.model_dump()
+
                             # update assistant if parameters are different
                             if not self._check_parameters(self.assistant.model_dump()):
                                 print("Updating assistant... " + self.name)
                                 self._update_assistant()
+
+                            if self.assistant.tool_resources:
+                                self.tool_resources = self.assistant.tool_resources.model_dump()
+
                             self._update_settings()
                             return self
                         except NotFoundError:
@@ -235,13 +244,16 @@ class Agent():
 
         No output parameters are returned, but the method updates the assistant's details on the OpenAI server and locally updates the settings file.
         """
+        tool_resources = copy.deepcopy(self.tool_resources)
+        if tool_resources and tool_resources.get('file_search'):
+            tool_resources['file_search'].pop('vector_stores', None)
 
         params = {
             "name": self.name,
             "description": self.description,
             "instructions": self.instructions,
             "tools": self.get_oai_tools(),
-            "tool_resources": self.tool_resources,
+            "tool_resources": tool_resources,
             "temperature": self.temperature,
             "top_p": self.top_p,
             "response_format": self.response_format,
