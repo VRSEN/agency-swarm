@@ -269,6 +269,8 @@ class ToolFactory:
                             param_properties[param["name"]]["required"] = param["required"]
                         if "example" in param:
                             param_properties[param["name"]]["example"] = param["example"]
+                        if "examples" in param:
+                            param_properties[param["name"]]["examples"] = param["examples"]
                     schema["properties"]["parameters"] = {
                         "type": "object",
                         "properties": param_properties,
