@@ -14,9 +14,6 @@ class BaseTool(OpenAISchema, ABC):
     event_handler: Any = None
     one_call_at_a_time: bool = False
 
-    class Config:
-        exclude = {"caller_agent", "shared_state", "event_handler", "one_call_at_a_time"}
-
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         # # Exclude 'run' method from Pydantic model fields
@@ -45,6 +42,10 @@ class BaseTool(OpenAISchema, ABC):
             required.remove("one_call_at_a_time")
 
         return schema
+
+    def model_dump(self, **kwargs):
+        return super().model_dump(exclude={"caller_agent", "shared_state", "event_handler", "one_call_at_a_time"},
+                                  **kwargs)
 
     @abstractmethod
     def run(self, **kwargs):
