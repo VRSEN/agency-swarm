@@ -247,8 +247,8 @@ class Thread:
 
                             if event_handler:
                                 handler = event_handler()
-                                handler.on_message_created(message)
-                                handler.on_message_done(message)
+                                handler.on_message_created(message_obj)
+                                handler.on_message_done(message_obj)
 
                             validation_attempts += 1
 
