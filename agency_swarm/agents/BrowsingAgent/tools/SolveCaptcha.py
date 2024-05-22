@@ -31,7 +31,15 @@ class SolveCaptcha(BaseTool):
         except Exception as e:
             return "Could not find captcha checkbox"
 
-        element.click()
+        try:
+            # Scroll the element into view
+            wd.execute_script("arguments[0].scrollIntoView(true);", element)
+            time.sleep(1)  # Give some time for the scrolling to complete
+
+            # Click the element using JavaScript
+            wd.execute_script("arguments[0].click();", element)
+        except Exception as e:
+            return f"Could not click captcha checkbox: {str(e)}"
 
         try:
             # Now check if the reCAPTCHA is checked
@@ -69,10 +77,6 @@ class SolveCaptcha(BaseTool):
                 i += 1
                 screenshot = get_b64_screenshot(wd, tile)
 
-                # save screenshot locally
-                # with open(f"screenshot{i}.png", "wb") as fh:
-                #     fh.write(base64.b64decode(screenshot))
-
                 image_content.append(
                     {
                         "type": "text",
@@ -84,7 +88,7 @@ class SolveCaptcha(BaseTool):
                         "type": "image_url",
                         "image_url":
                             {
-                                "url": f"data:image/png;base64,{screenshot}",
+                                "url": f"data:image/jpeg;base64,{screenshot}",
                                 "detail": "high",
                             }
                     },
@@ -133,7 +137,7 @@ class SolveCaptcha(BaseTool):
                 }]
 
             response = client.chat.completions.create(
-                model="gpt-4-vision-preview",
+                model="gpt-4o",
                 messages=messages,
                 max_tokens=1024,
                 temperature=0.0,
@@ -150,7 +154,7 @@ class SolveCaptcha(BaseTool):
                 verify_button_text = verify_button.text
 
                 # Click the button
-                verify_button.click()
+                wd.execute_script("arguments[0].click();", verify_button)
 
                 time.sleep(1)
 
@@ -161,13 +165,12 @@ class SolveCaptcha(BaseTool):
                     print('Not checked')
                     pass
 
-
             else:
                 numbers = [int(s.strip()) for s in message_text.split(",") if s.strip().isdigit()]
 
                 # Click the tiles based on the provided numbers
                 for number in numbers:
-                    tiles[number - 1].click()
+                    wd.execute_script("arguments[0].click();", tiles[number - 1])
                     time.sleep(0.5)
 
                 time.sleep(3)
@@ -179,7 +182,7 @@ class SolveCaptcha(BaseTool):
                     verify_button_text = verify_button.text
 
                     # Click the button
-                    verify_button.click()
+                    wd.execute_script("arguments[0].click();", verify_button)
 
                     try:
                         if self.verify_checkbox(wd):
@@ -232,5 +235,4 @@ class SolveCaptcha(BaseTool):
             )
 
         return False
-
 

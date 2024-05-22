@@ -97,16 +97,17 @@ def get_web_driver():
         print(f"Error initializing WebDriver: {e}")
         raise e
 
-    stealth(
-        wd,
-        languages=["en-US", "en"],
-        vendor="Google Inc.",
-        platform="Win32",
-        webgl_vendor="Intel Inc.",
-        renderer="Intel Iris OpenGL Engine",
-        fix_hairline=True,
-    )
-    print("Stealth mode configured.")
+    if not selenium_config.get("chrome_profile_path", None):
+        stealth(
+            wd,
+            languages=["en-US", "en"],
+            vendor="Google Inc.",
+            platform="Win32",
+            webgl_vendor="Intel Inc.",
+            renderer="Intel Iris OpenGL Engine",
+            fix_hairline=True,
+        )
+        print("Stealth mode configured.")
 
     wd.implicitly_wait(3)
     print("Implicit wait set to 3 seconds.")
