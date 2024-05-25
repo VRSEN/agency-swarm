@@ -13,6 +13,7 @@ from agency_swarm.tools import BaseTool, ToolFactory, Retrieval
 from agency_swarm.tools import FileSearch, CodeInterpreter
 from agency_swarm.util.oai import get_openai_client
 from agency_swarm.util.openapi import validate_openapi_spec
+from agency_swarm.util.shared_state import SharedState
 
 
 class ExampleMessage(TypedDict):
@@ -36,6 +37,17 @@ class Agent():
     @property
     def functions(self):
         return [tool for tool in self.tools if issubclass(tool, BaseTool)]
+
+    @property
+    def shared_state(self):
+        return self.shared_state
+    
+    @shared_state.setter
+    def shared_state(self, value):
+        self.shared_state = value
+        for tool in self.tools:
+            if issubclass(tool, BaseTool):
+                tool.shared_state = value
 
     def response_validator(self, message: str | list) -> str:
         """

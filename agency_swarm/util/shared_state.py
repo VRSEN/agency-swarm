@@ -15,6 +15,3 @@ class SharedState:
     def print_data(self):
         for key, value in self.data.items():
             print(f"{key}: {value}")
-
-
-shared_state = SharedState()

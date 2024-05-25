@@ -4,19 +4,20 @@ from typing import Optional, Any, ClassVar
 from instructor import OpenAISchema
 
 from pydantic import Field
-from agency_swarm.util import shared_state
 from agency_swarm.util.shared_state import SharedState
 
 
 class BaseTool(OpenAISchema, ABC):
-    shared_state: ClassVar[SharedState] = shared_state
+    shared_state: ClassVar[SharedState] = None
     caller_agent: Any = None
     event_handler: Any = None
     one_call_at_a_time: bool = False
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        # # Exclude 'run' method from Pydantic model fields
+        if not self.shared_state:
+            raise ValueError(f"shared_state is not set in {self.__class__.__name__}")     
+        # Exclude 'run' method from Pydantic model fields
         # self.model_fields.pop("run", None)
 
     @classmethod

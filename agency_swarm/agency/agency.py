@@ -19,6 +19,7 @@ from agency_swarm.messages.message_output import MessageOutputLive
 from agency_swarm.threads import Thread
 from agency_swarm.tools import BaseTool, FileSearch, CodeInterpreter
 from agency_swarm.user import User
+from agency_swarm.util.shared_state import SharedState
 
 from agency_swarm.util.streaming import AgencyEventHandler
 
@@ -101,6 +102,8 @@ class Agency:
             self._read_instructions(shared_instructions)
         else:
             self.shared_instructions = shared_instructions
+
+        self.shared_state = SharedState()
 
         self._parse_agency_chart(agency_chart)
         self._create_special_tools()
@@ -634,6 +637,9 @@ class Agency:
                 agent.max_completion_tokens = self.max_completion_tokens
             if self.truncation_strategy is not None and agent.truncation_strategy is None:
                 agent.truncation_strategy = self.truncation_strategy
+            
+            if not agent.shared_state:
+                agent.shared_state = self.shared_state
 
             agent.init_oai()
 
