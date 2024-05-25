@@ -15,7 +15,6 @@ from agency_swarm.util.oai import get_openai_client
 from agency_swarm.util.openapi import validate_openapi_spec
 from agency_swarm.util.shared_state import SharedState
 
-
 class ExampleMessage(TypedDict):
     role: Literal["user", "assistant"]
     content: str
@@ -24,9 +23,11 @@ class ExampleMessage(TypedDict):
 
 
 class Agent():
+    _shared_state: SharedState = None
+    
     @property
     def assistant(self):
-        if self._assistant is None:
+        if not hasattr(self, '_assistant') or self._assistant is None:
             raise Exception("Assistant is not initialized. Please run init_oai() first.")
         return self._assistant
 
@@ -37,14 +38,14 @@ class Agent():
     @property
     def functions(self):
         return [tool for tool in self.tools if issubclass(tool, BaseTool)]
-
+    
     @property
     def shared_state(self):
-        return self.shared_state
-    
+        return self._shared_state
+
     @shared_state.setter
     def shared_state(self, value):
-        self.shared_state = value
+        self._shared_state = value
         for tool in self.tools:
             if issubclass(tool, BaseTool):
                 tool.shared_state = value

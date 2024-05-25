@@ -14,9 +14,7 @@ class BaseTool(OpenAISchema, ABC):
     one_call_at_a_time: bool = False
 
     def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        if not self.shared_state:
-            raise ValueError(f"shared_state is not set in {self.__class__.__name__}")     
+        super().__init__(**kwargs)   
         # Exclude 'run' method from Pydantic model fields
         # self.model_fields.pop("run", None)
 
