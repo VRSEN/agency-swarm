@@ -54,7 +54,6 @@ class ClickElement(BaseTool):
 
         set_web_driver(wd)
 
-        from agency_swarm.util import shared_state
-        shared_state.set("elements_highlighted", "")
+        self.shared_state.set("elements_highlighted", "")
 
         return result

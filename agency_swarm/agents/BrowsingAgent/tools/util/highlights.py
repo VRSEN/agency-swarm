@@ -104,9 +104,6 @@ def highlight_elements_with_labels(driver, selector):
 
     driver.execute_script(script)
 
-    from agency_swarm.util import shared_state
-    shared_state.set("elements_highlighted", selector)
-
     return driver
 
 

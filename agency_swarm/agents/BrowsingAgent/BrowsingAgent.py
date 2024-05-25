@@ -56,6 +56,8 @@ class BrowsingAgent(Agent):
             wd = get_web_driver()
             highlight_elements_with_labels(wd, 'a, button, div[onclick], div[role="button"], div[tabindex], '
                                                'span[onclick], span[role="button"], span[tabindex]')
+            self.shared_state.set("elements_highlighted", 'a, button, div[onclick], div[role="button"], div[tabindex], '
+                                               'span[onclick], span[role="button"], span[tabindex]')
 
             self.take_screenshot()
 
@@ -79,6 +81,7 @@ class BrowsingAgent(Agent):
         elif '[highlight text fields]' in message.lower():
             wd = get_web_driver()
             highlight_elements_with_labels(wd, 'input, textarea')
+            self.shared_state.set("elements_highlighted", "input, textarea")
 
             self.take_screenshot()
 
@@ -99,6 +102,7 @@ class BrowsingAgent(Agent):
         elif '[highlight dropdowns]' in message.lower():
             wd = get_web_driver()
             highlight_elements_with_labels(wd, 'select')
+            self.shared_state.set("elements_highlighted", "select")
 
             self.take_screenshot()
 
