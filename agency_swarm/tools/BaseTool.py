@@ -13,11 +13,6 @@ class BaseTool(OpenAISchema, ABC):
     event_handler: Any = None
     one_call_at_a_time: bool = False
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)   
-        # Exclude 'run' method from Pydantic model fields
-        # self.model_fields.pop("run", None)
-
     @classmethod
     @property
     def openai_schema(cls):
