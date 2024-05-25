@@ -165,3 +165,16 @@ tests/test_files/lorem_ipsum_file-ZTGySImlnQ7EyHDOlw1COhpM.txt
 tests/agency_manifesto.md
 tests/agency_manifesto.txt
 tests/settings.json
+test_agents/__init__.py
+test_agents/CEO/__init__.py
+test_agents/CEO/CEO.py
+test_agents/CEO/instructions.md
+test_agents/CEO/tools/ExampleTool.py
+test_agents/TestAgent1/__init__.py
+test_agents/TestAgent1/instructions.md
+test_agents/TestAgent1/TestAgent1.py
+test_agents/TestAgent2/__init__.py
+test_agents/TestAgent2/instructions.md
+test_agents/TestAgent2/TestAgent2.py
+settings.json
+.DS_Store

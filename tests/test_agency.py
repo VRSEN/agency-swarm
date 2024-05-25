@@ -419,6 +419,9 @@ class AgencyTest(unittest.TestCase):
 
         self.assertTrue(delta_value == full_text == message)
 
+        self.assertTrue(EventHandler.agent_name == self.__class__.agent1.name)
+        self.assertTrue(EventHandler.recipient_agent_name == self.__class__.agent2.name)
+
         if 'error' in message.lower():
             print(self.__class__.agency.get_completion("Explain why you said error."))
             self.assertFalse('error' in message.lower())

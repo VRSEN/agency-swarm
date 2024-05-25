@@ -96,8 +96,8 @@ class Thread:
             self.init_thread()
 
         if event_handler:
-            event_handler.agent_name = self.agent.name
-            event_handler.recipient_agent_name = recipient_agent.name
+            event_handler.agent = self.agent
+            event_handler.recipient_agent = recipient_agent.name
 
         # Determine the sender's name based on the agent type
         sender_name = "user" if isinstance(self.agent, User) else self.agent.name
@@ -147,8 +147,8 @@ class Thread:
                             yield MessageOutput("function_output", tool_call.function.name, recipient_agent.name,
                                                 output, tool_call)
                     if event_handler:
-                        event_handler.agent_name = self.agent.name
-                        event_handler.recipient_agent_name = recipient_agent.name
+                        event_handler.agent = self.agent
+                        event_handler.recipient_agent = recipient_agent
 
                     tool_outputs.append({"tool_call_id": tool_call.id, "output": str(output)})
                     tool_names.append(tool_call.function.name)
