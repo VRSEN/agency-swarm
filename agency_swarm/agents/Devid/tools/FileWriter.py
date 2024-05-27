@@ -102,7 +102,7 @@ class FileWriter(BaseTool):
         while n < 3:
             resp = client.chat.completions.create(
                 messages=messages,
-                model="gpt-4-turbo",
+                model="gpt-4o",
                 temperature=0,
             )
 
@@ -190,7 +190,7 @@ class FileWriter(BaseTool):
         llm_validator(
             statement="Check if the code is bug-free. Code should be considered in isolation, with the understanding that it is part of a larger, fully developed program that strictly adheres to these standards of completeness and correctness. All files, elements, components, functions, or modules referenced within this snippet are assumed to exist in other parts of the project and are also devoid of any errors, ensuring a cohesive and error-free integration across the entire software solution. Certain placeholders may be present.",
                       client=client,
-                      model="gpt-4-turbo",
+                      model="gpt-4o",
                       temperature=0,
                       allow_override=False
                       )(v)
