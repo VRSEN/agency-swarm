@@ -3,6 +3,7 @@ import json
 import os
 import queue
 import threading
+import time
 import uuid
 from enum import Enum
 from typing import List, TypedDict, Callable, Any, Dict, Literal, Union, Optional
@@ -19,6 +20,7 @@ from agency_swarm.messages.message_output import MessageOutputLive
 from agency_swarm.threads import Thread
 from agency_swarm.tools import BaseTool, FileSearch, CodeInterpreter
 from agency_swarm.user import User
+from agency_swarm.util.files import determine_file_type
 from agency_swarm.util.shared_state import SharedState
 
 from agency_swarm.util.streaming import AgencyEventHandler
@@ -222,8 +224,10 @@ class Agency:
         else:
             js = js.replace("{theme}", "light")
 
-        message_file_ids = []
+        attachments = []
+        images = []
         message_file_names = None
+        uploading_files = False
         recipient_agents = [agent.name for agent in self.main_recipients]
         recipient_agent = self.main_recipients[0]
 
@@ -236,7 +240,7 @@ class Agency:
                                            value=recipient_agent.name)
                     msg = gr.Textbox(label="Your Message", lines=4)
                 with gr.Column(scale=1):
-                    file_upload = gr.Files(label="Files", type="filepath")
+                    file_upload = gr.Files(label="OpenAI Files", type="filepath")
             button = gr.Button(value="Send", variant="primary")
 
             def handle_dropdown_change(selected_option):
@@ -244,9 +248,12 @@ class Agency:
                 recipient_agent = self._get_agent_by_name(selected_option)
 
             def handle_file_upload(file_list):
-                nonlocal message_file_ids
+                nonlocal attachments
                 nonlocal message_file_names
-                message_file_ids = []
+                nonlocal uploading_files
+                nonlocal images
+                uploading_files = True
+                attachments = []
                 message_file_names = []
                 if file_list:
                     try:
@@ -257,19 +264,46 @@ class Agency:
                                     file=f,
                                     purpose="assistants"
                                 )
-                            message_file_ids.append(file.id)
+                            
+                            file_type = determine_file_type(file_obj.name)
+
+                            if file_type == "assistants.code_interpreter":
+                                attachments.append({
+                                    "file_id": file.id,
+                                    "tools": [{"type": "code_interpreter"}]
+                                })
+                            elif file_type == "vision":
+                                images.append({
+                                    "type": "image_file",
+                                    "image_file": {"file_id": file.id}
+                                })
+                            else:
+                                attachments.append({
+                                    "file_id": file.id,
+                                    "tools": [{"type": "file_search"}]
+                                })
+                            
                             message_file_names.append(file.filename)
                             print(f"Uploaded file ID: {file.id}")
-                        return message_file_ids
+                        return attachments
                     except Exception as e:
                         print(f"Error: {e}")
                         return str(e)
+                    finally:
+                        uploading_files = False
 
+                uploading_files = False
                 return "No files uploaded"
 
             def user(user_message, history):
                 if not user_message.strip():
                     return user_message, history
+                
+                nonlocal message_file_names
+                nonlocal uploading_files
+                nonlocal images
+                nonlocal attachments
+                nonlocal recipient_agent
 
                 if history is None:
                     history = []
@@ -386,18 +420,38 @@ class Agency:
                 if not original_message:
                     return "", history
 
-                nonlocal message_file_ids
+                nonlocal attachments
                 nonlocal message_file_names
                 nonlocal recipient_agent
-                print("Message files: ", message_file_ids)
-                # Replace this with your actual chatbot logic
+                nonlocal images
+                nonlocal uploading_files
+
+                if uploading_files:
+                    history.append([None, "Uploading files... Please wait."])
+                    yield "", history
+                    return "", history
+
+                print("Message files: ", attachments)
+                print("Images: ", images)
+                
+                if images and len(images) > 0:
+                    original_message = [
+                        {
+                            "type": "text",
+                            "text": original_message,
+                        },
+                        *images
+                    ]
+
 
                 completion_thread = threading.Thread(target=self.get_completion_stream, args=(
-                    original_message, GradioEventHandler, message_file_ids, recipient_agent))
+                    original_message, GradioEventHandler, [], recipient_agent, "", attachments, None))
                 completion_thread.start()
 
-                message_file_ids = []
+                attachments = []
                 message_file_names = []
+                images = []
+                uploading_files = False
 
                 new_message = True
                 while True:

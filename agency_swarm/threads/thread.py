@@ -61,7 +61,7 @@ class Thread:
                                    yield_messages=False)
 
     def get_completion(self,
-                       message: str,
+                       message: str | List[dict],
                        message_files: List[str] = None,
                        attachments: Optional[List[dict]] = None,
                        recipient_agent=None,
