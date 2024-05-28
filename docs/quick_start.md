@@ -3,7 +3,7 @@
 When it comes to getting started with Agency Swarm, you have two options:
 
 1. **Start from Scratch**: This is the best option if you want to get a feel for the framework and understand how it works. You can start by creating your own agents and tools, and then use them to create your own agencies.
-2. **Use Genesis Swarm**: This is the best option if you want to get started quickly and don't want to spend time creating your own agents and tools. You can use the Genesis Agency to create your agent templates and tools, and then fine tune them to your needs.
+2. **Use Genesis Swarm**: This is the best option if you want to get started quickly and don't want to spend time creating your own agents and tools. You can use the Genesis Agency to create your agent templates and tools, and then fine-tune them to your needs.
 3. **Create agent templates with CLI**: This is the best option if you want to create a structured environment for each agent and tool. See [Advanced Agents](advanced-usage/agents.md) for more information.
 
 ### Installation
@@ -125,16 +125,16 @@ All tools must extend the `BaseTool` class and implement the `run` method.
     - The agents you want to involve and their communication flows.
     - Which tools or APIs each agent should have access to, if any.
 
-3. **Fine Tune**: After Genesis has created your agents for you, you will see all the agent folders in the same directory where you ran the `genesis` command. You can then fine tune the agents and tools as per your requirements. To do so, follow these steps:  
+3. **Fine Tune**: After Genesis has created your agents for you, you will see all the agent folders in the same directory where you ran the `genesis` command. You can then fine-tune the agents and tools as per your requirements. To do so, follow these steps:  
 
 
       1. **Adjust Tools**: Modify the tools in the `tools` directories of each agent as per your requirements.
       2. **Adjust Instructions**: Modify the agents in the `agents` directories as per your requirements.
-      3. **Run Agency**: Run the `agency.py` file, send your tasks and see how they perfrom.
+      3. **Run Agency**: Run the `agency.py` file, send your tasks and see how they perform.
       4. **Repeat**: Repeat the process until your agents are performing as expected.
 
     !!! note "Agent Development is an Iterative Process"
-        Right now, all agent development is iterative. You will need to constantly monitor and adust your system until it works as expected. In the future, this will become less of a problem, as larger and smarter models are released.
+        Right now, all agent development is iterative. You will need to constantly monitor and adjust your system until it works as expected. In the future, this will become less of a problem, as larger and smarter models are released.
 
 ## Next Steps
 
