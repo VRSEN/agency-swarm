@@ -15,7 +15,7 @@ from .util import format_file_deps
 history = [
             {
                 "role": "system",
-                "content": "As a top-tier software engineer focused on developing programs incrementally, you are entrusted with the creation or modification of files based on user requirements. It's imperative to operate under the assumption that all necessary dependencies are pre-installed and accessible, and the file in question will be deployed in an appropriate environment. Furthermore, it is presumed that all other modules or files upon which this file relies are accurate and error-free. Your output should be encapsulated within a code block, without specifying the programming language. Prior to embarking on the coding process, you must outine a methodical, step-by-step plan to precisely fulfill the requirements—no more, no less. It is crucial to ensure that the final code block is a complete file, without any truncation. This file should embody a flawless, fully operational program, inclusive of all requisite imports and functions, devoid of any placeholders, unless specified otherwise by the user."
+                "content": "As a top-tier software engineer focused on developing programs incrementally, you are entrusted with the creation or modification of files based on user requirements. It's imperative to operate under the assumption that all necessary dependencies are pre-installed and accessible, and the file in question will be deployed in an appropriate environment. Furthermore, it is presumed that all other modules or files upon which this file relies are accurate and error-free. Your output should be encapsulated within a code block, without specifying the programming language. Prior to embarking on the coding process, you must outline a methodical, step-by-step plan to precisely fulfill the requirements — no more, no less. It is crucial to ensure that the final code block is a complete file, without any truncation. This file should embody a flawless, fully operational program, inclusive of all requisite imports and functions, devoid of any placeholders, unless specified otherwise by the user."
             },
         ]
 
@@ -28,13 +28,13 @@ class FileWriter(BaseTool):
     )
     requirements: str = Field(
         ...,
-        description="The comprehensive requirements explaning how the file should be written or modified. This should be a detailed description of what the file should contain, inlcuding example inputs, desired behaviour and ideal outputs. It must not contain any code or implementation details."
+        description="The comprehensive requirements explaining how the file should be written or modified. This should be a detailed description of what the file should contain, including example inputs, desired behaviour and ideal outputs. It must not contain any code or implementation details."
     )
     details: str = Field(
         None, description="Additional details like error messages, or class, function, and variable names from other files that this file depends on."
     )
     documentation: Optional[str] = Field(
-        None, description="Relevant documentation extracted with the myfiles_browser tool. You must pass all the relevant code from the documentaion, as this tool does not have access to those files."
+        None, description="Relevant documentation extracted with the myfiles_browser tool. You must pass all the relevant code from the documentation, as this tool does not have access to those files."
     )
     mode: Literal["write", "modify"] = Field(
         ..., description="The mode of operation for the tool. 'write' is used to create a new file or overwrite an existing one. 'modify' is used to modify an existing file."
@@ -218,7 +218,7 @@ class FileWriter(BaseTool):
     @classmethod
     def validate_details(cls, v):
         if len(v) == 0:
-            raise ValueError("Details are required. Remember this tool does not have access to other files. Please provide additional details like relevant documentation, error messages, or class, function, and variable names from other files that this file depends on.")
+            raise ValueError("Details are required. Remember: this tool does not have access to other files. Please provide additional details like relevant documentation, error messages, or class, function, and variable names from other files that this file depends on.")
         return v
 
     @field_validator("documentation", mode="after")
