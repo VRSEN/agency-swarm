@@ -22,6 +22,7 @@ from agency_swarm.tools import BaseTool, FileSearch, CodeInterpreter
 from agency_swarm.user import User
 from agency_swarm.util.files import determine_file_type
 from agency_swarm.util.shared_state import SharedState
+from openai.types.beta.threads.runs.tool_call import ToolCall
 
 from agency_swarm.util.streaming import AgencyEventHandler
 
@@ -258,21 +259,18 @@ class Agency:
                 if file_list:
                     try:
                         for file_obj in file_list:
+                            file_type = determine_file_type(file_obj.name)
+                            purpose = "assistants" if file_type != "vision" else "vision"
+                            tools = [{"type": "code_interpreter"}] if file_type == "assistants.code_interpreter" else [{"type": "file_search"}]
+
                             with open(file_obj.name, 'rb') as f:
                                 # Upload the file to OpenAI
                                 file = self.main_thread.client.files.create(
                                     file=f,
-                                    purpose="assistants"
+                                    purpose=purpose
                                 )
-                            
-                            file_type = determine_file_type(file_obj.name)
 
-                            if file_type == "assistants.code_interpreter":
-                                attachments.append({
-                                    "file_id": file.id,
-                                    "tools": [{"type": "code_interpreter"}]
-                                })
-                            elif file_type == "vision":
+                            if file_type == "vision":
                                 images.append({
                                     "type": "image_file",
                                     "image_file": {"file_id": file.id}
@@ -280,9 +278,9 @@ class Agency:
                             else:
                                 attachments.append({
                                     "file_id": file.id,
-                                    "tools": [{"type": "file_search"}]
+                                    "tools": tools
                                 })
-                            
+
                             message_file_names.append(file.filename)
                             print(f"Uploaded file ID: {file.id}")
                         return attachments
@@ -358,7 +356,10 @@ class Agency:
                     chatbot_queue.put(delta.value)
 
                 @override
-                def on_tool_call_created(self, tool_call):
+                def on_tool_call_created(self, tool_call: ToolCall):
+                    if isinstance(tool_call, dict):
+                        tool_call = ToolCall(**tool_call)
+
                     # TODO: add support for code interpreter and retirieval tools
                     if tool_call.type == "function":
                         chatbot_queue.put("[new_message]")
@@ -367,7 +368,10 @@ class Agency:
                         chatbot_queue.put(self.message_output.get_formatted_header() + "\n")
 
                 @override
-                def on_tool_call_done(self, snapshot):
+                def on_tool_call_done(self, snapshot: ToolCall):
+                    if isinstance(snapshot, dict):
+                        snapshot = ToolCall(**snapshot)
+                        
                     self.message_output = None
 
                     # TODO: add support for code interpreter and retirieval tools

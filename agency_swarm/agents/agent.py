@@ -194,9 +194,22 @@ class Agent():
             self.model = self.model or self.assistant.model
             self.tool_resources = self.tool_resources or self.assistant.tool_resources.model_dump()
 
-            # update assistant if parameters are different
-            if not self._check_parameters(self.assistant.model_dump()):
-                self._update_assistant()
+            for tool in self.assistant.tools:
+                if tool.type == "function":
+                    # function tools must be added manually
+                    continue
+                elif tool.type == "file_search":
+                    self.add_tool(FileSearch)
+                elif tool.type == "code_interpreter":
+                    self.add_tool(CodeInterpreter)
+                elif tool.type == "retrieval":
+                    self.add_tool(Retrieval)
+                else:
+                    raise Exception("Invalid tool type.")
+
+            # # update assistant if parameters are different
+            # if not self._check_parameters(self.assistant.model_dump()):
+            #     self._update_assistant()
 
             return self
 
@@ -213,7 +226,7 @@ class Agent():
 
                             # update assistant if parameters are different
                             if not self._check_parameters(self.assistant.model_dump()):
-                                print("Updating assistant... " + self.name)
+                                print("Updating agent... " + self.name)
                                 self._update_assistant()
 
                             if self.assistant.tool_resources:
