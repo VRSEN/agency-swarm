@@ -6,16 +6,16 @@ An `Agency` is a collection of Agents that can communicate with one another.
 
 Here are the primary benefits of using an Agency, instead of an individual agent:
 
-1. **Less halluconations**: When agents are part of an agency, they can supervise one another and recover from mistakes or unexpected circumstances.
-2. **More complex tasks**: The more agents you add, the longer the seqeunce of actions they can perfrom before retuning the result back to the user.
+1. **Fewer hallucinations**: When agents are part of an agency, they can supervise one another and recover from mistakes or unexpected circumstances.
+2. **More complex tasks**: The more agents you add, the longer the sequence of actions they can perform before returning the result back to the user.
 3. **Scalability**: As the complexity of your integration increases, you can keep adding more and more agents. 
 
     !!! tip
-        It is recommended to start from as few agents as possible, fine tune them until they are working as expected, and only then add new agents to the agency. If you add too many agents at first, it will be difficult to debug and understand what is going on.
+        It is recommended to start with as few agents as possible, fine-tune them until they are working as expected, and only then add new agents to the agency. If you add too many agents at first, it will be difficult to debug and understand what is going on.
 
 ## Communication Flows
 
-Unlike all other frameworks, communication flows in Agency Swarm are **not hierarchical** or **sequential**. Instead, they are **uniform**. You can define them however you want. But keep in mind that they are established from left to right inside the `agency_chart`. So, in the example below, the CEO can initiate communication and send tasks to the Developer and the Virtual Assistant, and they can respond in to him in the same thread, but the Developer or the VA cannot initiate a conversation and assign tasks to the CEO. You can add as many levels of communication as you want.
+Unlike all other frameworks, communication flows in Agency Swarm are **not hierarchical** or **sequential**. Instead, they are **uniform**. You can define them however you want. But keep in mind that they are established from left to right inside the `agency_chart`. So, in the example below, the CEO can initiate communication and send tasks to the Developer and the Virtual Assistant, and they can respond back to him in the same thread, but the Developer or the VA cannot initiate a conversation and assign tasks to the CEO. You can add as many levels of communication as you want.
 
 ```python
 from agency_swarm import Agency
@@ -28,7 +28,7 @@ agency = Agency([
 ])
 ```
 
-All agents added inside the top level list of `agency_chart` without being part of a second list, can talk to the user.
+All agents added inside the top-level list of `agency_chart` without being part of a second list, can talk to the user.
 
 ## Streaming Responses
 
@@ -109,7 +109,7 @@ If you would like to use a different file path for the settings, other than defa
 agency = Agency([ceo], settings_path='my_settings.json') 
 ```
 
-### Temperture and Max Token Controls
+### Temperature and Max Token Controls
 
 You can also specify parameters like `temperature`, `top_p`, `max_completion_tokens`,  `max_prompt_tokens` and `truncation_strategy`, parameters for the entire agency. These parameters will be used as default values for all agents in the agency, however, you can still override them for individual agents by specifying them in the agent's constructor.
 
@@ -148,7 +148,7 @@ print(response)
 agency.run_demo()
 ```
 
-To talk to one of the top level agents when running the agency from your terminal, you can use **mentions feature**, similar to how you would use it inside ChatGPT. Simply mention the agent name in the message like `@Developer I want you to build me a website`. The message will then be sent to the Developer agent, instead of the CEO. You can also use tab to autocomplete the agent name after the `@` symbol.
+To talk to one of the top-level agents when running the agency from your terminal, you can use **mentions feature**, similar to how you would use it inside ChatGPT. Simply mention the agent name in the message like `@Developer I want you to build me a website`. The message will then be sent to the Developer agent, instead of the CEO. You can also use tab to autocomplete the agent name after the `@` symbol.
 
 ## Deleting the Agency
 
