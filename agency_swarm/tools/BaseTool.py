@@ -37,9 +37,12 @@ class BaseTool(OpenAISchema, ABC):
 
         return schema
 
-    def model_dump(self, **kwargs):
-        return super().model_dump(exclude={"caller_agent", "shared_state", "event_handler", "one_call_at_a_time"},
-                                  **kwargs)
+    def model_dump(self, exclude=None, **kwargs):
+        if exclude is None:
+            exclude = {"caller_agent", "shared_state", "event_handler", "one_call_at_a_time"}
+        else:
+            exclude.update({"caller_agent", "shared_state", "event_handler", "one_call_at_a_time"})
+        return super().model_dump(exclude=exclude, **kwargs)
 
     @abstractmethod
     def run(self, **kwargs):

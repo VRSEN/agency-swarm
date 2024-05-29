@@ -3,6 +3,7 @@ import importlib.util
 import inspect
 import json
 import os
+from pathlib import Path
 import sys
 from importlib import import_module
 from typing import Any, Dict, List, Type, Union
@@ -14,6 +15,10 @@ from pydantic import create_model, Field
 
 from .BaseTool import BaseTool
 from ..util.schema import dereference_schema, reference_schema
+
+from datamodel_code_generator import DataModelType, PythonVersion
+from datamodel_code_generator.model import get_data_model_types
+from datamodel_code_generator.parser.jsonschema import JsonSchemaParser
 
 
 class ToolFactory:
@@ -83,189 +88,40 @@ class ToolFactory:
         Returns:
             A BaseTool.
         """
-        def resolve_ref(ref: str, defs: Dict[str, Any]) -> Any:
-            key = ref.split('/')[-1]
-            if key in defs:
-                print(f"Resolving ref '{ref}' to model '{key}'")
-                return defs[key]
-            else:
-                raise ValueError(f"Reference '{ref}' not found in definitions")
+        data_model_types = get_data_model_types(
+            DataModelType.PydanticV2BaseModel,
+            target_python_version=PythonVersion.PY_37
+        )
 
-        def create_fields(schema: Dict[str, Any], type_mapping: Dict[str, Type[Any]], required_fields: List[str], defs: Dict[str, Any], title=None) -> Dict[str, Any]:
-            fields = {}
+        parser = JsonSchemaParser(
+            json.dumps(schema['parameters']),
+            data_model_type=data_model_types.data_model,
+            data_model_root_type=data_model_types.root_model,
+            data_model_field_type=data_model_types.field_model,
+            data_type_manager_type=data_model_types.data_type_manager,
+            dump_resolve_reference_action=data_model_types.dump_resolve_reference_action,
+            use_schema_description=True,
+            validation=False,
+            class_name='Model',
+            # custom_template_dir=Path('/Users/vrsen/Projects/agency-swarm/agency-swarm/agency_swarm/tools/data_schema_templates')
+        )
 
-            if 'enum' in schema:
-                enum_name = schema.get('title', 'Enum')
-                enum_values = schema['enum']
-                enum_type = Enum(enum_name, {value: value for value in enum_values})
-                fields[title] = (enum_type, Field(default=None, description=schema.get('description', ''), title=title))
-                return fields
-            
-            for prop, details in schema.items():
-                alias = None
-                if prop.startswith('_'):
-                    alias = prop
-                    prop = prop.lstrip('_')
-                
-                if 'type' in details:
-                    json_type = details['type']
-                elif 'anyOf' in details:
-                    json_type = 'anyOf'
-                else:
-                    json_type = 'any'
-                print(f"Creating field '{prop}' of type '{json_type}'")
+        result = parser.parse()
 
-                if json_type in type_mapping:
-                    field_type = type_mapping[json_type]
-                    field_description = details.get('description', '')
-                    print('Field description: ', field_description)
-                    is_required = prop in required_fields
-                    field_default = ... if is_required else None
-                    if 'default' in details and details['default'] in type_mapping:
-                        field_default = details['default']
+        # # Execute the result to extract the model
+        exec_globals = {}
+        exec(result, exec_globals)
+        model = exec_globals.get('Model')
 
-                    if json_type == 'array':
-                        items_schema = details.get('items', {})
-                        if 'type' in items_schema:
-                            item_type = type_mapping[items_schema['type']]
-                            if items_schema['type'] == 'object':
-                                nested_properties = items_schema.get('properties', {})
-                                nested_required = items_schema.get('required', [])
-                                nested_model_name = items_schema.get('title', prop)
-                                nested_fields = create_fields(nested_properties, type_mapping, nested_required, defs)
-                                nested_model = create_model(nested_model_name, **nested_fields)
-                                field_type = List[nested_model]
-                                print(f"Field '{prop}' is an array of '{items_schema['type']}'")
-                            else:
-                                field_type = List[item_type]    
-                                print(f"Field '{prop}' is an array of '{items_schema['type']}'")
-                        elif 'properties' in items_schema:
-                            nested_properties = items_schema['properties']
-                            nested_required = items_schema.get('required', [])
-                            nested_model_name = items_schema.get('title', prop)
-                            nested_fields = create_fields(nested_properties, type_mapping, nested_required, defs)
-                            nested_model = create_model(nested_model_name, **nested_fields)
-                            field_type = List[nested_model]
-                            print(f"Field '{prop}' is an array of nested objects '{nested_model_name}'")
-                        elif '$ref' in items_schema:
-                            ref_model = resolve_ref(items_schema['$ref'], defs)
-                            field_type = List[ref_model]
-                            print(f"Field '{prop}' is an array of references '{items_schema['$ref']}'")
-                        else:
-                            raise ValueError("Array items must have a 'type', 'properties', or '$ref'")
-                    elif json_type == 'object':
-                        if 'properties' in details:
-                            nested_properties = details['properties']
-                            nested_required = details.get('required', [])
-                            nested_model_name = details.get('title', prop)
-                            nested_fields = create_fields(nested_properties, type_mapping, nested_required, defs)
-                            field_type = create_model(nested_model_name, **nested_fields)
-                            print(f"Field '{prop}' is a nested object '{nested_model_name}'")
-                        elif '$ref' in details:
-                            ref_model = resolve_ref(details['$ref'], defs)
-                            field_type = ref_model
-                            print(f"Field '{prop}' is a reference '{details['$ref']}'")
-                        else:
-                            raise ValueError("Object must have 'properties' or '$ref'")
-
-                    fields[prop] = (field_type, Field(default=field_default, description=field_description, alias=alias, title=title))
-                    print('Field created: ', fields[prop])
-                elif 'anyOf' in details:
-                    field_types = []
-                    for item in details['anyOf']:
-                        if 'items' in item:
-                            item = item['items']
-                            nested_properties = item.get('properties', {})
-                            nested_required = item.get('required', [])
-                            nested_model_name = item.get('title', prop)
-                            nested_fields = create_fields(nested_properties, type_mapping, nested_required, defs)
-                            nested_model = create_model(nested_model_name, **nested_fields)
-                            field_types.append(nested_model)
-                        elif 'type' in item:
-                            field_types.append(type_mapping[item['type']])
-                    field_type = Union[tuple(field_types)]  # type: ignore
-                    field_description = details.get('description', '')
-                    is_required = prop in required_fields
-                    field_default = ... if is_required else None
-                    if 'default' in details and details['default'] in type_mapping:
-                        field_default = details['default']
-                    fields[prop] = (field_type, Field(default=field_default, description=field_description, alias=alias, title=title))
-                    print(f"Field '{prop}' is an anyOf of '{field_types}'")
-                elif 'allOf' in details:
-                    field_types = []
-                    for item in details['allOf']:
-                        if 'items' in item:
-                            item = item['items']
-                            nested_properties = item.get('properties', {})
-                            nested_required = item.get('required', [])
-                            nested_model_name = item.get('title', prop)
-                            nested_fields = create_fields(nested_properties, type_mapping, nested_required, defs)
-                            nested_model = create_model(nested_model_name, **nested_fields)
-                            field_types.append(nested_model)
-                        elif 'type' in item:
-                            field_types.append(type_mapping[item['type']])
-                    field_type = typing.All[tuple(field_types)]
-                    field_description = details.get('description', '')
-                    is_required = prop in required_fields
-                    field_default = ... if is_required else None
-                    if 'default' in details and details['default'] in type_mapping:
-                        field_default = details['default']
-                    fields[prop] = (field_type, Field(default=field_default, description=field_description, alias=alias, title=title))
-                    print(f"Field '{prop}' is an allOf of '{field_types}'")
-                else:
-                    raise ValueError(f"Unsupported type '{json_type}' for property '{prop}'")
-
-            return fields
-
-        type_mapping = {
-            'string': str,
-            'integer': int,
-            'number': float,
-            'boolean': bool,
-            'array': List,
-            'object': dict,
-            'null': type(None),
-            'any': Any,
-            "enum": Enum,
-        }
-
-        name = schema['name']
-        description = schema['description']
-        properties = schema['parameters']['properties']
-        required_fields = schema['parameters'].get('required', [])
-
-        schema = dereference_schema(schema)
-
-        print("Schema dereferenced: ", json.dumps(schema, indent=4))
+        if not model:
+            raise ValueError(f"Could not extract model from schema {schema['name']}")
         
-        defs = {k: create_model(k, **create_fields(v.get('properties', v), type_mapping, v.get('required', []), {}, v.get('title', k))) for k, v in schema['parameters'].get('$defs', {}).items()}
-        type_mapping.update(defs)
-
-        print("Definitions created: ", defs)
-
-        print("Creating fields for parameters...")
-        fields = create_fields(properties, type_mapping, required_fields, defs)
-        print("Fields created: ", fields)
-
-        # Create the Pydantic model using the new method
-        print("Creating the final model using final method...")
-        model = create_model(name, __config__=type('Config', (), {'arbitrary_types_allowed': True}), **fields)
-        print("Model created: ", model)
-
-        # Create a new tool class dynamically
-        tool_class = type(name, (BaseTool, model), {
-            "__doc__": description,
+        tool = type(schema['name'], (BaseTool, model), {
+            "__doc__": schema.get('description', ""),
             "run": callback,
         })
 
-        print("Tool created: ", tool_class)
-        print("Tool annotations: ", tool_class.__annotations__)
-        print("Tool fields: ", tool_class.__fields__)
-        
-        # Check where the empty dictionary {} is coming from
-        print("GeneratedTool requestBody attributes: ", getattr(tool_class, 'requestBody', {}))
-
-        return tool_class
+        return tool
 
     @staticmethod
     def from_openapi_schema(schema: Union[str, dict], headers: Dict[str, str] = None, params: Dict[str, Any] = None) \
@@ -347,21 +203,24 @@ class ToolFactory:
                 spec_params = spec.get("parameters", [])
                 if spec_params:
                     param_properties = {}
+                    required_params = []
                     for param in spec_params:
                         if "schema" not in param and "type" in param:
                             param["schema"] = {"type": param["type"]}
                         param_properties[param["name"]] = param["schema"]
                         if "description" in param:
                             param_properties[param["name"]]["description"] = param["description"]
-                        if "required" in param:
-                            param_properties[param["name"]]["required"] = param["required"]
+                        if "required" in param and param["required"]:
+                            required_params.append(param["name"])
                         if "example" in param:
                             param_properties[param["name"]]["example"] = param["example"]
                         if "examples" in param:
                             param_properties[param["name"]]["examples"] = param["examples"]
+                    
                     schema["properties"]["parameters"] = {
                         "type": "object",
                         "properties": param_properties,
+                        "required": required_params
                     }
 
                 function = {

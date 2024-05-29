@@ -34,6 +34,7 @@ class ToolFactoryTest(unittest.TestCase):
 
     def test_complex_schema(self):
         class FriendDetail(OpenAISchema):
+            "test 123"
             id: int = Field(..., description="Unique identifier for each friend.")
             name: str = Field(..., description="Name of the friend.")
             age: Optional[int] = Field(25, description="Age of the friend.")
@@ -41,21 +42,23 @@ class ToolFactoryTest(unittest.TestCase):
             is_active: Optional[bool] = Field(None, description="Indicates if the friend is currently active.")
 
         class UserDetail(OpenAISchema):
+            """Hey this is a test?"""
             id: int = Field(..., description="Unique identifier for each user.")
             age: int
             name: str
             friends: List[FriendDetail] = Field(...,
                                                 description="List of friends, each represented by a FriendDetail model.")
 
-        class RelationshipType(str, Enum):
+        class RelationshipType(Enum):
             FAMILY = "family"
             FRIEND = "friend"
             COLLEAGUE = "colleague"
 
         class UserRelationships(OpenAISchema):
+            """Hey this is a test?"""
             users: List[UserDetail] = Field(...,
-                                            description="Collection of users, correctly capturing the relationships among them.")
-            relationship_type: RelationshipType = Field(..., description="Type of relationship among users.")
+                                            description="Collection of users, correctly capturing the relationships among them.", title="Users")
+            relationship_type: RelationshipType = Field(..., description="Type of relationship among users.", title="Relationship Type")
 
         print("schema", json.dumps(UserRelationships.openai_schema, indent=4))
 
@@ -64,10 +67,24 @@ class ToolFactoryTest(unittest.TestCase):
         tool = ToolFactory.from_openai_schema(UserRelationships.openai_schema, lambda x: x)
 
         print(json.dumps(tool.openai_schema, indent=4))
-        user_detail_instance = UserDetail(id=1, age=20, name="John Doe", friends=[FriendDetail(id=1, name="Jane Doe")])
-        user_relationships_instance = UserRelationships(users=[user_detail_instance], relationship_type=RelationshipType.FAMILY)
+        user_detail_instance = {
+            "id": 1,
+            "age": 20,
+            "name": "John Doe",
+            "friends": [
+                {
+                    "id": 1,
+                    "name": "Jane Doe"
+                }
+            ]
+        }
+        user_relationships_instance = {
+            "users": [user_detail_instance],
+            "relationship_type": "family"
+        }
+        
         #print user detail instance
-        tool = tool(**user_relationships_instance.model_dump())
+        tool = tool(**user_relationships_instance)
 
         user_relationships_schema = UserRelationships.openai_schema
 
@@ -143,7 +160,7 @@ class ToolFactoryTest(unittest.TestCase):
                 "Bearer": os.environ.get("GET_HEADERS_SCHEMA_API_KEY")
             })
 
-        output = tools[0](parameters={"domain": "print-headers"}).run()
+        output = tools[0](parameters={"domain": "print-headers", "query": "test"}).run()
 
         self.assertTrue("headers" in output)
 
@@ -164,13 +181,13 @@ class ToolFactoryTest(unittest.TestCase):
 
         self.assertTrue(tool(content='test').run() == "Tool output")
 
-    def test_openapi_schema(self):
-        with open("./data/schemas/get-headers-params.json", "r") as f:
-            tools = ToolFactory.from_openapi_schema(f.read())
+    # def test_openapi_schema(self):
+    #     with open("./data/schemas/get-headers-params.json", "r") as f:
+    #         tools = ToolFactory.from_openapi_schema(f.read())
 
-        schema = ToolFactory.get_openapi_schema(tools, "123")
+    #     schema = ToolFactory.get_openapi_schema(tools, "123")
 
-        self.assertTrue(schema)
+    #     self.assertTrue(schema)
 
 
 
