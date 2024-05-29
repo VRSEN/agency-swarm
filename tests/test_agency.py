@@ -282,10 +282,10 @@ class AgencyTest(unittest.TestCase):
                 num_on_all_streams_end_calls += 1
 
         message = self.__class__.agency.get_completion_stream(
-            "Please tell TestAgent1 to tell TestAgent 2 to use test tool.",
+            "Please tell TestAgent1 to tell TestAgent2 to use TestTool.",
             event_handler=EventHandler,
-            additional_instructions="Your message to TestAgent1 should be exactly as follows: "
-                                    "'Please tell TestAgent2 to use test tool.'",
+            additional_instructions="\n\n**Your message to TestAgent1 should be exactly as follows:** "
+                                    "'Please tell TestAgent2 to use TestTool.'",
             tool_choice={"type": "function", "function": {"name": "SendMessage"}})
 
         # self.assertFalse('error' in message.lower())
