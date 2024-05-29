@@ -366,6 +366,11 @@ class AgencyTest(unittest.TestCase):
         # reset loaded thread ids
         self.__class__.loaded_thread_ids = {}
 
+        # Set ids for all agents to None
+        self.__class__.ceo.id = None
+        self.__class__.agent1.id = None
+        self.__class__.agent2.id = None
+
         self.__class__.agency = Agency([
             self.__class__.ceo,
             [self.__class__.ceo, self.__class__.agent1],
