@@ -195,17 +195,9 @@ class Agent():
             self.tool_resources = self.tool_resources or self.assistant.tool_resources.model_dump()
 
             for tool in self.assistant.tools:
-                if tool.type == "function":
-                    # function tools must be added manually
-                    continue
-                elif tool.type == "file_search":
-                    self.add_tool(FileSearch)
-                elif tool.type == "code_interpreter":
-                    self.add_tool(CodeInterpreter)
-                elif tool.type == "retrieval":
-                    self.add_tool(Retrieval)
-                else:
-                    raise Exception("Invalid tool type.")
+                # update assistants created with v1
+                if tool.type == "retrieval":
+                    self.client.beta.assistants.update(self.id, tools=self.get_oai_tools())
 
             # # update assistant if parameters are different
             # if not self._check_parameters(self.assistant.model_dump()):

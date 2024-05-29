@@ -22,7 +22,8 @@ from agency_swarm.tools import BaseTool, FileSearch, CodeInterpreter
 from agency_swarm.user import User
 from agency_swarm.util.files import determine_file_type
 from agency_swarm.util.shared_state import SharedState
-from openai.types.beta.threads.runs.tool_call import ToolCall
+from openai.types.beta.threads.runs.tool_call import ToolCall, FunctionToolCall, CodeInterpreterToolCall, FileSearchToolCall
+
 
 from agency_swarm.util.streaming import AgencyEventHandler
 
@@ -358,7 +359,17 @@ class Agency:
                 @override
                 def on_tool_call_created(self, tool_call: ToolCall):
                     if isinstance(tool_call, dict):
-                        tool_call = ToolCall(**tool_call)
+                        if "type" not in tool_call:
+                            tool_call["type"] = "function"
+                        
+                        if tool_call["type"] == "function":
+                            tool_call = FunctionToolCall(**tool_call)
+                        elif tool_call["type"] == "code_interpreter":
+                            tool_call = CodeInterpreterToolCall(**tool_call)
+                        elif tool_call["type"] == "file_search" or tool_call["type"] == "retrieval":
+                            tool_call = FileSearchToolCall(**tool_call)
+                        else:
+                            raise ValueError("Invalid tool call type: " + tool_call["type"])
 
                     # TODO: add support for code interpreter and retirieval tools
                     if tool_call.type == "function":
@@ -370,7 +381,17 @@ class Agency:
                 @override
                 def on_tool_call_done(self, snapshot: ToolCall):
                     if isinstance(snapshot, dict):
-                        snapshot = ToolCall(**snapshot)
+                        if "type" not in snapshot:
+                            snapshot["type"] = "function"
+                        
+                        if snapshot["type"] == "function":
+                            snapshot = FunctionToolCall(**snapshot)
+                        elif snapshot["type"] == "code_interpreter":
+                            snapshot = CodeInterpreterToolCall(**snapshot)
+                        elif snapshot["type"] == "file_search":
+                            snapshot = FileSearchToolCall(**snapshot)
+                        else:
+                            raise ValueError("Invalid tool call type: " + snapshot["type"])
                         
                     self.message_output = None
 
@@ -561,6 +582,19 @@ class Agency:
 
             @override
             def on_tool_call_created(self, tool_call):
+                if isinstance(tool_call, dict):
+                    if "type" not in tool_call:
+                        tool_call["type"] = "function"
+                    
+                    if tool_call["type"] == "function":
+                        tool_call = FunctionToolCall(**tool_call)
+                    elif tool_call["type"] == "code_interpreter":
+                        tool_call = CodeInterpreterToolCall(**tool_call)
+                    elif tool_call["type"] == "file_search" or tool_call["type"] == "retrieval":
+                        tool_call = FileSearchToolCall(**tool_call)
+                    else:
+                        raise ValueError("Invalid tool call type: " + tool_call["type"])
+
                 # TODO: add support for code interpreter and retirieval tools
 
                 if tool_call.type == "function":
@@ -569,6 +603,19 @@ class Agency:
 
             @override
             def on_tool_call_delta(self, delta, snapshot):
+                if isinstance(snapshot, dict):
+                    if "type" not in snapshot:
+                        snapshot["type"] = "function"
+                    
+                    if snapshot["type"] == "function":
+                        snapshot = FunctionToolCall(**snapshot)
+                    elif snapshot["type"] == "code_interpreter":
+                        snapshot = CodeInterpreterToolCall(**snapshot)
+                    elif snapshot["type"] == "file_search":
+                        snapshot = FileSearchToolCall(**snapshot)
+                    else:
+                        raise ValueError("Invalid tool call type: " + snapshot["type"])
+                    
                 self.message_output.cprint_update(str(snapshot.function))
 
             @override
