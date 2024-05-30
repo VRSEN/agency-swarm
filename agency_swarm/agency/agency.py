@@ -70,11 +70,11 @@ class Agency:
             settings_path (str, optional): The path to the settings file for the agency. Must be json. If file does not exist, it will be created. Defaults to None.
             settings_callbacks (SettingsCallbacks, optional): A dictionary containing functions to load and save settings for the agency. The keys must be "load" and "save". Both values must be defined. Defaults to None.
             threads_callbacks (ThreadsCallbacks, optional): A dictionary containing functions to load and save threads for the agency. The keys must be "load" and "save". Both values must be defined. Defaults to None.
-            temperature (float, optional): The temperature value to use for the agents. Agent specific values will override this. Defaults to 0.3.
-            top_p (float, optional): The top_p value to use for the agents. Agent specific values will override this. Defaults to None.
-            max_prompt_tokens (int, optional): The maximum number of tokens allowed in the prompt for each agent. Agent specific values will override this. Defaults to None.
-            max_completion_tokens (int, optional): The maximum number of tokens allowed in the completion for each agent. Agent specific values will override this. Defaults to None.
-            truncation_strategy (dict, optional): The truncation strategy to use for the completion for each agent. Agent specific values will override this. Defaults to None.
+            temperature (float, optional): The temperature value to use for the agents. Agent-specific values will override this. Defaults to 0.3.
+            top_p (float, optional): The top_p value to use for the agents. Agent-specific values will override this. Defaults to None.
+            max_prompt_tokens (int, optional): The maximum number of tokens allowed in the prompt for each agent. Agent-specific values will override this. Defaults to None.
+            max_completion_tokens (int, optional): The maximum number of tokens allowed in the completion for each agent. Agent-specific values will override this. Defaults to None.
+            truncation_strategy (dict, optional): The truncation strategy to use for the completion for each agent. Agent-specific values will override this. Defaults to None.
 
         This constructor initializes various components of the Agency, including CEO, agents, threads, and user interactions. It parses the agency chart to set up the organizational structure and initializes the messaging tools, agents, and threads necessary for the operation of the agency. Additionally, it prepares a main thread for user interactions.
         """
@@ -371,7 +371,7 @@ class Agency:
                         else:
                             raise ValueError("Invalid tool call type: " + tool_call["type"])
 
-                    # TODO: add support for code interpreter and retirieval tools
+                    # TODO: add support for code interpreter and retrieval tools
                     if tool_call.type == "function":
                         chatbot_queue.put("[new_message]")
                         self.message_output = MessageOutput("function", self.recipient_agent_name, self.agent_name,
@@ -395,7 +395,7 @@ class Agency:
                         
                     self.message_output = None
 
-                    # TODO: add support for code interpreter and retirieval tools
+                    # TODO: add support for code interpreter and retrieval tools
                     if snapshot.type != "function":
                         return
 
@@ -949,7 +949,7 @@ class Agency:
         class SendMessage(BaseTool):
             my_primary_instructions: str = Field(...,
                                                  description="Please repeat your primary instructions step-by-step, including both completed "
-                                                             "and the following next steps that you need to perfrom. For multi-step, complex tasks, first break them down "
+                                                             "and the following next steps that you need to perform. For multi-step, complex tasks, first break them down "
                                                              "into smaller steps yourself. Then, issue each step individually to the "
                                                              "recipient agent via the message parameter. Each identified step should be "
                                                              "sent in separate message. Keep in mind, that the recipient agent does not have access "
