@@ -29,7 +29,7 @@ class GenesisAgency(Agency):
                 browsing_agent.instructions += ("""\n
 # BrowsingAgent's Primary instructions
 1. Browse the web to find the API documentation requested by the user. Prefer searching google directly for this API documentation page.
-2. Navigate to the API documentation page and ensure that it contains the necessary API endpoints descriptions. You can use the AnalyzeContent tool to check if the page contains the necessary API descriptions. If not, try perfrom another search in google and keep browsing until you find the right page.
+2. Navigate to the API documentation page and ensure that it contains the necessary API endpoints descriptions. You can use the AnalyzeContent tool to check if the page contains the necessary API descriptions. If not, try perform another search in google and keep browsing until you find the right page.
 3. If you have confirmed that the page contains the necessary API documentation, export the page with ExportFile tool. Then, send the file_id back to the user along with a brief description of the API.
 4. Repeat these steps for each new agent, as requested by the user.
                 """)
