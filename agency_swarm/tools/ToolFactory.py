@@ -229,8 +229,6 @@ class ToolFactory:
                     "parameters": schema,
                 }
 
-                print("before function ", json.dumps(function, indent=4))
-
                 tools.append(ToolFactory.from_openai_schema(function, callback))
 
         return tools
