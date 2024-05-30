@@ -304,6 +304,26 @@ class Agency:
                 nonlocal attachments
                 nonlocal recipient_agent
 
+                # Check if attachments contain file search or code interpreter types
+                def check_and_add_tools_in_attachments(attachments, recipient_agent):
+                    for attachment in attachments:
+                        for tool in attachment.get("tools", []):
+                            if tool["type"] == "file_search":
+                                if not any(isinstance(t, FileSearch) for t in recipient_agent.tools):
+                                    # Add FileSearch tool if it does not exist
+                                    recipient_agent.tools.append(FileSearch)
+                                    recipient_agent.client.beta.assistants.update(recipient_agent.id, tools=recipient_agent.get_oai_tools())
+                                    print("Added FileSearch tool to recipient agent to analyze the file.")
+                            elif tool["type"] == "code_interpreter":
+                                if not any(isinstance(t, CodeInterpreter) for t in recipient_agent.tools):
+                                    # Add CodeInterpreter tool if it does not exist
+                                    recipient_agent.tools.append(CodeInterpreter)
+                                    recipient_agent.client.beta.assistants.update(recipient_agent.id, tools=recipient_agent.get_oai_tools())
+                                    print("Added CodeInterpreter tool to recipient agent to analyze the file.")
+                    return None
+
+                check_and_add_tools_in_attachments(attachments, recipient_agent)
+
                 if history is None:
                     history = []
 
