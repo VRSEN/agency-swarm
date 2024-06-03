@@ -182,7 +182,7 @@ class Agent():
             self.instructions = self.instructions or self.assistant.instructions
             self.name = self.name if self.name != self.__class__.__name__ else self.assistant.name
             self.description = self.description or self.assistant.description
-            self.temperature = self.temperature or self.assistant.temperature
+            self.temperature = self.assistant.temperature if self.temperature is None else self.temperature
             self.top_p = self.top_p or self.assistant.top_p
             self.response_format = self.response_format or self.assistant.response_format
             if not isinstance(self.response_format, str):
