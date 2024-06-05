@@ -22,6 +22,7 @@ from agency_swarm.tools import BaseTool, FileSearch, CodeInterpreter
 from agency_swarm.user import User
 from agency_swarm.util.files import determine_file_type
 from agency_swarm.util.helpers import extract_zip, extract_tar, git_clone
+from agency_swarm.util.helpers.file_upload_helpers import is_file_extension_supported
 from agency_swarm.util.shared_state import SharedState
 from openai.types.beta.threads.runs.tool_call import ToolCall, FunctionToolCall, CodeInterpreterToolCall, \
     FileSearchToolCall
@@ -273,35 +274,36 @@ class Agency:
                     print(f"Found {', '.join(extracted_files)}")
 
                     for file in extracted_files:
-                        file_type = determine_file_type(file)
-                        purpose = "assistants" if file_type != "vision" else "vision"
-                        tools = [{
-                            "type": "code_interpreter"}] if file_type == "assistants.code_interpreter" else [
-                            {"type": "file_search"}]
+                        if is_file_extension_supported(file):
+                            file_type = determine_file_type(file)
+                            purpose = "assistants" if file_type != "vision" else "vision"
+                            tools = [{
+                                "type": "code_interpreter"}] if file_type == "assistants.code_interpreter" else [
+                                {"type": "file_search"}]
 
-                        with open(file, 'rb') as f:
-                            try:
-                                # Upload the file to OpenAI
-                                uploaded_file = self.main_thread.client.files.create(
-                                    file=f,
-                                    purpose=purpose
-                                )
+                            with open(file, 'rb') as f:
+                                try:
+                                    # Upload the file to OpenAI
+                                    uploaded_file = self.main_thread.client.files.create(
+                                        file=f,
+                                        purpose=purpose
+                                    )
 
-                                if file_type == "vision":
-                                    images.append({
-                                        "type": "image_file",
-                                        "image_file": {"file_id": uploaded_file.id}
-                                    })
-                                else:
-                                    attachments.append({
-                                        "file_id": uploaded_file.id,
-                                        "tools": tools
-                                    })
+                                    if file_type == "vision":
+                                        images.append({
+                                            "type": "image_file",
+                                            "image_file": {"file_id": uploaded_file.id}
+                                        })
+                                    else:
+                                        attachments.append({
+                                            "file_id": uploaded_file.id,
+                                            "tools": tools
+                                        })
 
-                                message_file_names.append(uploaded_file.filename)
-                                print(f"Uploaded file ID: {uploaded_file.id}: {uploaded_file.filename}")
-                            except Exception as e:
-                                print(f"Uploading error: {e}")
+                                    message_file_names.append(uploaded_file.filename)
+                                    print(f"Uploaded file ID: {uploaded_file.id}: {uploaded_file.filename}")
+                                except Exception as e:
+                                    print(f"Uploading error: {e}")
                     return attachments
                 except Exception as e:
                     print(f"Error: {e}")
@@ -334,35 +336,36 @@ class Agency:
                             print(f"Found {', '.join(extracted_files)}")
 
                         for file in extracted_files:
-                            file_type = determine_file_type(file)
-                            purpose = "assistants" if file_type != "vision" else "vision"
-                            tools = [{
-                                "type": "code_interpreter"}] if file_type == "assistants.code_interpreter" else [
-                                {"type": "file_search"}]
+                            if is_file_extension_supported(file):
+                                file_type = determine_file_type(file)
+                                purpose = "assistants" if file_type != "vision" else "vision"
+                                tools = [{
+                                    "type": "code_interpreter"}] if file_type == "assistants.code_interpreter" else [
+                                    {"type": "file_search"}]
 
-                            with open(file, 'rb') as f:
-                                try:
-                                    # Upload the file to OpenAI
-                                    uploaded_file = self.main_thread.client.files.create(
-                                        file=f,
-                                        purpose=purpose
-                                    )
+                                with open(file, 'rb') as f:
+                                    try:
+                                        # Upload the file to OpenAI
+                                        uploaded_file = self.main_thread.client.files.create(
+                                            file=f,
+                                            purpose=purpose
+                                        )
 
-                                    if file_type == "vision":
-                                        images.append({
-                                            "type": "image_file",
-                                            "image_file": {"file_id": uploaded_file.id}
-                                        })
-                                    else:
-                                        attachments.append({
-                                            "file_id": uploaded_file.id,
-                                            "tools": tools
-                                        })
+                                        if file_type == "vision":
+                                            images.append({
+                                                "type": "image_file",
+                                                "image_file": {"file_id": uploaded_file.id}
+                                            })
+                                        else:
+                                            attachments.append({
+                                                "file_id": uploaded_file.id,
+                                                "tools": tools
+                                            })
 
-                                    message_file_names.append(uploaded_file.filename)
-                                    print(f"Uploaded file ID: {uploaded_file.id}: {uploaded_file.filename}")
-                                except Exception as e:
-                                    print(f"Uploading error: {e}")
+                                        message_file_names.append(uploaded_file.filename)
+                                        print(f"Uploaded file ID: {uploaded_file.id}: {uploaded_file.filename}")
+                                    except Exception as e:
+                                        print(f"Uploading error: {e}")
                         return attachments
                     except Exception as e:
                         print(f"Error: {e}")

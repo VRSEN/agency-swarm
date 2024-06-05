@@ -74,9 +74,7 @@ def extract_zip(file_path: str) -> List[str]:
         for root, dirs, files in os.walk(temp_dir):
             dirs[:] = [d for d in dirs if d not in excluded_folders]
             for file in files:
-                sanitized_file_name = sanitize_file_name(os.path.join(root, file))
-                if is_file_extension_supported(sanitized_file_name):
-                    extracted_files.append(sanitized_file_name)
+                extracted_files.append(sanitize_file_name(os.path.join(root, file)))
     return extracted_files
 
 
@@ -94,9 +92,7 @@ def git_clone(repo_url: str) -> List[str]:
         for root, dirs, files in os.walk(temp_dir):
             dirs[:] = [d for d in dirs if d not in excluded_folders]
             for file in files:
-                sanitized_file_name = sanitize_file_name(os.path.join(root, file))
-                if is_file_extension_supported(sanitized_file_name):
-                    cloned_files.append(sanitized_file_name)
+                cloned_files.append(sanitize_file_name(os.path.join(root, file)))
     except Exception as e:
         print(f"Error cloning repository: {e}")
     finally:
@@ -121,7 +117,5 @@ def extract_tar(file_path: str) -> List[str]:
         for root, dirs, files in os.walk(temp_dir):
             dirs[:] = [d for d in dirs if d not in excluded_folders]
             for file in files:
-                sanitized_file_name = sanitize_file_name(os.path.join(root, file))
-                if is_file_extension_supported(sanitized_file_name):
-                    extracted_files.append(sanitized_file_name)
+                extracted_files.append(sanitize_file_name(os.path.join(root, file)))
     return extracted_files
