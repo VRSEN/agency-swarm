@@ -23,9 +23,6 @@ supported_extensions = [
     # Image Files
     ".jpg", ".jpeg", ".png", ".gif", ".bmp",
 
-    # Compressed Files
-    ".zip", ".rar",
-
     # Code Files
     ".py", ".java", ".js", ".html", ".css", ".cpp", ".c", ".rb", ".php",
 
