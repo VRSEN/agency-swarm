@@ -54,19 +54,20 @@ def is_file_extension_supported(file_path: str) -> bool:
     return False
 
 
-def extract_zip(file_path: str) -> List[str]:
+def extract_zip(file_path: str, to_folder: str) -> List[str]:
     """
     Extracts files from a zip archive.
 
     Parameters:
         file_path (str): The path to the zip file.
+        to_folder (str): Path where should be files extracted
 
     Returns:
         List[str]: A list of paths to the extracted files.
     """
     extracted_files = []
     with zipfile.ZipFile(file_path, 'r') as zip_ref:
-        temp_dir = tempfile.mkdtemp()
+        temp_dir = tempfile.mkdtemp('zip', 'extracted', to_folder)
         zip_ref.extractall(temp_dir)
         for root, dirs, files in os.walk(temp_dir):
             dirs[:] = [d for d in dirs if d not in excluded_folders]
@@ -75,15 +76,16 @@ def extract_zip(file_path: str) -> List[str]:
     return extracted_files
 
 
-def git_clone(repo_url: str) -> List[str]:
+def git_clone(repo_url: str, to_folder: str) -> List[str]:
     """
     Clones a Git repository to a specified directory.
 
     Parameters:
         repo_url (str): The URL of the repository to clone.
+        to_folder (str): Path where should be git cloned into.
     """
     cloned_files = []
-    temp_dir = tempfile.mkdtemp()
+    temp_dir = tempfile.mkdtemp('git', 'cloned', to_folder)
     try:
         Repo.clone_from(repo_url, temp_dir)
         for root, dirs, files in os.walk(temp_dir):
@@ -97,7 +99,7 @@ def git_clone(repo_url: str) -> List[str]:
     return cloned_files
 
 
-def extract_tar(file_path: str) -> List[str]:
+def extract_tar(file_path: str, to_folder: str) -> List[str]:
     """
     Extracts files from a tar.gz archive.
 
@@ -109,7 +111,7 @@ def extract_tar(file_path: str) -> List[str]:
     """
     extracted_files = []
     with tarfile.open(file_path, 'r:gz') as tar_ref:
-        temp_dir = tempfile.mkdtemp()
+        temp_dir = tempfile.mkdtemp('tar', 'extracted', to_folder)
         tar_ref.extractall(temp_dir)
         for root, dirs, files in os.walk(temp_dir):
             dirs[:] = [d for d in dirs if d not in excluded_folders]

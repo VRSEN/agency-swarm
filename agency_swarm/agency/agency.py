@@ -233,7 +233,14 @@ class Agency:
         uploading_files = False
         cloning_files = False
         recipient_agents = [agent.name for agent in self.main_recipients]
-        recipient_agent = self.main_recipients[0]
+        recipient_agent: Agent = self.main_recipients[0]
+
+        if isinstance(recipient_agent.files_folder, list):
+            to_folder = recipient_agent.files_folder[0]
+        else:
+            to_folder = recipient_agent.files_folder
+
+        os.makedirs(to_folder, exist_ok=True)
 
         with gr.Blocks(js=js) as demo:
             chatbot_queue = queue.Queue()
@@ -263,11 +270,11 @@ class Agency:
 
                 try:
                     extracted_files = []
-                    for file_path in git_clone(repo_url):
+                    for file_path in git_clone(repo_url, to_folder):
                         if file_path.endswith('.zip'):
-                            extracted_files.extend(extract_zip(file_path))
+                            extracted_files.extend(extract_zip(file_path, to_folder))
                         elif file_path.endswith('.tar.gz'):
-                            extracted_files.extend(extract_tar(file_path))
+                            extracted_files.extend(extract_tar(file_path, to_folder))
                         else:
                             extracted_files.append(file_path)
 
@@ -327,9 +334,9 @@ class Agency:
                             file_path = file_obj.name
 
                             if file_path.endswith('.zip'):
-                                extracted_files.extend(extract_zip(file_path))
+                                extracted_files.extend(extract_zip(file_path, to_folder))
                             elif file_path.endswith('.tar.gz'):
-                                extracted_files.extend(extract_tar(file_path))
+                                extracted_files.extend(extract_tar(file_path, to_folder))
                             else:
                                 extracted_files.append(file_path)
 
