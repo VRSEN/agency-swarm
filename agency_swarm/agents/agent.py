@@ -349,7 +349,6 @@ class Agent():
                                 file_id = self.client.with_options(
                                     timeout=80 * 1000,
                                 ).files.create(file=f, purpose="assistants").id
-                                f.close()
                             add_id_to_file(f_path, file_id)
 
                         if file_ext in code_interpreter_file_extensions:
@@ -447,7 +446,6 @@ class Agent():
                     for f_path in f_paths:
                         with open(f_path, 'r') as f:
                             openapi_spec = f.read()
-                            f.close()
                         try:
                             validate_openapi_spec(openapi_spec)
                         except Exception as e:
