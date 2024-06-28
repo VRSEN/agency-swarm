@@ -161,7 +161,7 @@ class Thread:
                         self.client.beta.threads.messages.create(
                             thread_id=self.thread.id,
                             role="user",
-                            content="Please repeat the exact same tool calls in the same order with the same arguments."
+                            content="Previous request timed out. Please repeat the exact same tool calls in the same order with the same arguments."
                         )
 
                         self._create_run(recipient_agent, additional_instructions, event_handler, 'required',
@@ -182,9 +182,10 @@ class Thread:
                                                      "output": "Error: openai run timed out. You can try again one more time."})
                         else:
                             for i, tool_name in enumerate(tool_names):
-                                for tool_call in tool_calls:
+                                for tool_call in tool_calls[:]:
                                     if tool_call.function.name == tool_name:
                                         tool_outputs[i]["tool_call_id"] = tool_call.id
+                                        tool_calls.remove(tool_call)
                                         break
 
                         self._submit_tool_outputs(tool_outputs, event_handler)
