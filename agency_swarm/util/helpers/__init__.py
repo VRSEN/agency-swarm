@@ -1,2 +1,5 @@
 from .get_available_agent_descriptions import get_available_agent_descriptions
 from .list_available_agents import list_available_agents
+from .file_upload_helpers import extract_tar
+from .file_upload_helpers import extract_zip
+from .file_upload_helpers import git_clone
