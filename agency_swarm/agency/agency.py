@@ -1007,6 +1007,7 @@ class Agency:
                     message = thread.get_completion(message=self.message,
                                                     message_files=self.message_files,
                                                     event_handler=self.event_handler,
+                                                    yield_messages=not self.event_handler,
                                                     additional_instructions=self.additional_instructions)
                 else:
                     message = thread.get_completion_async(message=self.message,

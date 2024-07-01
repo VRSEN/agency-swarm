@@ -70,10 +70,6 @@ class Thread:
                        tool_choice: AssistantToolChoice = None,
                        yield_messages: bool = False
                        ):
-        if yield_messages:
-            # warn that it is deprecated
-            print("Warning: yield_messages is deprecated. Use get_completion_stream instead.")
-
         if not recipient_agent:
             recipient_agent = self.recipient_agent
 
@@ -134,6 +130,7 @@ class Thread:
                                             str(tool_call.function), tool_call)
 
                     output = self.execute_tool(tool_call, recipient_agent, event_handler, tool_names)
+
                     if inspect.isgenerator(output):
                         try:
                             while True:
@@ -146,6 +143,7 @@ class Thread:
                         if yield_messages:
                             yield MessageOutput("function_output", tool_call.function.name, recipient_agent.name,
                                                 output, tool_call)
+                        
                     if event_handler:
                         event_handler.set_agent(self.agent)
                         event_handler.set_recipient_agent(recipient_agent)
