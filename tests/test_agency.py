@@ -130,6 +130,7 @@ class AgencyTest(unittest.TestCase):
             "type": "last_messages",
             "last_messages": 10
         }
+        cls.agent1.file_search = {'max_num_results': 50}
 
         cls.agent2 = TestAgent2()
         cls.agent2.add_tool(cls.TestTool)
@@ -173,6 +174,7 @@ class AgencyTest(unittest.TestCase):
         agent3.add_shared_instructions(self.__class__.agency.shared_instructions)
         agent3.tools = self.__class__.agent1.tools
         agent3.top_p = self.__class__.agency.top_p
+        agent3.file_search = self.__class__.agent1.file_search
         agent3 = agent3.init_oai()
 
         print("agent3", agent3.assistant.model_dump())
@@ -190,6 +192,7 @@ class AgencyTest(unittest.TestCase):
         from test_agents import TestAgent1
         agent3 = Agent(id=self.__class__.agent1.id)
         agent3.tools = self.__class__.agent1.tools
+        agent3.file_search = self.__class__.agent1.file_search
         agent3 = agent3.init_oai()
 
         print("agent3", agent3.assistant.model_dump())
@@ -321,6 +324,8 @@ class AgencyTest(unittest.TestCase):
             "last_messages": 10
         }
 
+        agent1.file_search = {'max_num_results': 50}
+
         agent2 = TestAgent2()
         agent2.add_tool(self.__class__.TestTool)
 
@@ -370,6 +375,8 @@ class AgencyTest(unittest.TestCase):
         self.__class__.ceo.id = None
         self.__class__.agent1.id = None
         self.__class__.agent2.id = None
+
+        self.__class__.agent1.file_search = None
 
         self.__class__.agency = Agency([
             self.__class__.ceo,
@@ -475,6 +482,8 @@ class AgencyTest(unittest.TestCase):
                 self.assertTrue(len(agent.tools) == num_tools)
                 self.assertTrue(assistant.tools[0].type == "code_interpreter")
                 self.assertTrue(assistant.tools[1].type == "file_search")
+                if not async_mode:
+                    self.assertTrue(assistant.tools[1].file_search['max_num_results'] == 50)  # Updated line
                 self.assertTrue(assistant.tools[2].type == "function")
                 self.assertTrue(assistant.tools[2].function.name == "SendMessage")
                 if async_mode:

@@ -11,6 +11,7 @@ from openai.types.beta.assistant import ToolResources
 
 from agency_swarm.tools import BaseTool, ToolFactory, Retrieval
 from agency_swarm.tools import FileSearch, CodeInterpreter
+from agency_swarm.tools.oai.FileSearch import FileSearchConfig
 from agency_swarm.util.oai import get_openai_client
 from agency_swarm.util.openapi import validate_openapi_spec
 from agency_swarm.util.shared_state import SharedState
@@ -87,6 +88,7 @@ class Agent():
             max_completion_tokens: int = None,
             truncation_strategy: dict = None,
             examples: List[ExampleMessage] = None,
+            file_search: FileSearchConfig = None,
     ):
         """
         Initializes an Agent with specified attributes, tools, and OpenAI client.
@@ -113,6 +115,7 @@ class Agent():
             max_completion_tokens (int, optional): Maximum number of tokens allowed in the completion. Defaults to None.
             truncation_strategy (TruncationStrategy, optional): Truncation strategy for the OpenAI API. Defaults to None.
             examples (List[Dict], optional): A list of example messages for the agent. Defaults to None.
+            file_search (FileSearchConfig, optional): A dictionary containing the file search tool configuration. Defaults to None.
 
         This constructor sets up the agent with its unique properties, initializes the OpenAI client, reads instructions if provided, and uploads any associated files.
         """
@@ -139,6 +142,7 @@ class Agent():
         self.max_completion_tokens = max_completion_tokens
         self.truncation_strategy = truncation_strategy
         self.examples = examples
+        self.file_search = file_search
 
         self.settings_path = './settings.json'
 
@@ -412,7 +416,7 @@ class Agent():
                 raise Exception("Tool must not be initialized.")
 
             if issubclass(tool, FileSearch):
-                tools.append(tool().model_dump())
+                tools.append(tool(file_search=self.file_search).model_dump(exclude_none=True))
             elif issubclass(tool, CodeInterpreter):
                 tools.append(tool().model_dump())
             elif issubclass(tool, Retrieval):
