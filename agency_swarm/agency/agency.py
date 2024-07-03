@@ -58,6 +58,7 @@ class Agency:
                  max_prompt_tokens: int = None,
                  max_completion_tokens: int = None,
                  truncation_strategy: dict = None,
+                 async_tool_calls: bool = False,
                  ):
         """
         Initializes the Agency object, setting up agents, threads, and core functionalities.
@@ -75,6 +76,7 @@ class Agency:
             max_prompt_tokens (int, optional): The maximum number of tokens allowed in the prompt for each agent. Agent-specific values will override this. Defaults to None.
             max_completion_tokens (int, optional): The maximum number of tokens allowed in the completion for each agent. Agent-specific values will override this. Defaults to None.
             truncation_strategy (dict, optional): The truncation strategy to use for the completion for each agent. Agent-specific values will override this. Defaults to None.
+            async_tool_calls (bool, optional): Whether to enable asynchronous tool call executions. Defaults to False.
 
         This constructor initializes various components of the Agency, including CEO, agents, threads, and user interactions. It parses the agency chart to set up the organizational structure and initializes the messaging tools, agents, and threads necessary for the operation of the agency. Additionally, it prepares a main thread for user interactions.
         """
@@ -99,6 +101,8 @@ class Agency:
         self.max_prompt_tokens = max_prompt_tokens
         self.max_completion_tokens = max_completion_tokens
         self.truncation_strategy = truncation_strategy
+        self.async_tool_calls = async_tool_calls
+        self.ThreadType.async_tool_calls = self.async_tool_calls
 
         if os.path.isfile(os.path.join(self._get_class_folder_path(), shared_instructions)):
             self._read_instructions(os.path.join(self._get_class_folder_path(), shared_instructions))
@@ -121,7 +125,7 @@ class Agency:
                        additional_instructions: str = None,
                        attachments: List[dict] = None,
                        tool_choice: dict = None,
-                       ):
+                       parallel_tool_calls: bool = True):
         """
         Retrieves the completion for a given message from the main thread.
 
@@ -133,6 +137,7 @@ class Agency:
             additional_instructions (str, optional): Additional instructions to be sent with the message. Defaults to None.
             attachments (List[dict], optional): A list of attachments to be sent with the message, following openai format. Defaults to None.
             tool_choice (dict, optional): The tool choice for the recipient agent to use. Defaults to None.
+            parallel_tool_calls (bool, optional): Whether to enable parallel function calling during tool use. Defaults to True.
 
         Returns:
             Generator or final response: Depending on the 'yield_messages' flag, this method returns either a generator yielding intermediate messages or the final response from the main thread.
@@ -143,7 +148,8 @@ class Agency:
                                                recipient_agent=recipient_agent,
                                                additional_instructions=additional_instructions,
                                                tool_choice=tool_choice,
-                                               yield_messages=yield_messages)
+                                               yield_messages=yield_messages,
+                                               parallel_tool_calls=parallel_tool_calls)
 
         if not yield_messages:
             while True:
@@ -162,8 +168,8 @@ class Agency:
                               recipient_agent: Agent = None,
                               additional_instructions: str = None,
                               attachments: List[dict] = None,
-                              tool_choice: dict = None
-                              ):
+                              tool_choice: dict = None,
+                              parallel_tool_calls: bool = True):
         """
         Generates a stream of completions for a given message from the main thread.
 
@@ -175,6 +181,7 @@ class Agency:
             additional_instructions (str, optional): Additional instructions to be sent with the message. Defaults to None.
             attachments (List[dict], optional): A list of attachments to be sent with the message, following openai format. Defaults to None.
             tool_choice (dict, optional): The tool choice for the recipient agent to use. Defaults to None.
+            parallel_tool_calls (bool, optional): Whether to enable parallel function calling during tool use. Defaults to True.
 
         Returns:
             Final response: Final response from the main thread.
@@ -188,8 +195,8 @@ class Agency:
                                                       attachments=attachments,
                                                       recipient_agent=recipient_agent,
                                                       additional_instructions=additional_instructions,
-                                                      tool_choice=tool_choice
-                                                      )
+                                                      tool_choice=tool_choice,
+                                                      parallel_tool_calls=parallel_tool_calls)
 
         while True:
             try:
@@ -1008,7 +1015,8 @@ class Agency:
                                                     message_files=self.message_files,
                                                     event_handler=self.event_handler,
                                                     yield_messages=not self.event_handler,
-                                                    additional_instructions=self.additional_instructions)
+                                                    additional_instructions=self.additional_instructions,
+                                                    )
                 else:
                     message = thread.get_completion_async(message=self.message,
                                                           message_files=self.message_files,

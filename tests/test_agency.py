@@ -130,7 +130,7 @@ class AgencyTest(unittest.TestCase):
             "type": "last_messages",
             "last_messages": 10
         }
-        cls.agent1.file_search = {'max_num_results': 50}
+        cls.agent1.file_search = {'max_num_results': 49}
 
         cls.agent2 = TestAgent2()
         cls.agent2.add_tool(cls.TestTool)
@@ -324,7 +324,7 @@ class AgencyTest(unittest.TestCase):
             "last_messages": 10
         }
 
-        agent1.file_search = {'max_num_results': 50}
+        agent1.file_search = {'max_num_results': 49}
 
         agent2 = TestAgent2()
         agent2.add_tool(self.__class__.TestTool)
@@ -458,11 +458,11 @@ class AgencyTest(unittest.TestCase):
                 settings = json.load(f)
                 for assistant_settings in settings:
                     if assistant_settings['id'] == agent.id:
-                        self.assertTrue(agent._check_parameters(assistant_settings))
+                        self.assertTrue(agent._check_parameters(assistant_settings, debug=True))
 
             assistant = agent.assistant
             self.assertTrue(assistant)
-            self.assertTrue(agent._check_parameters(assistant.model_dump()))
+            self.assertTrue(agent._check_parameters(assistant.model_dump(), debug=True))
             if agent.name == "TestAgent1":
                 num_tools = 3 if not async_mode else 4
 
@@ -483,7 +483,7 @@ class AgencyTest(unittest.TestCase):
                 self.assertTrue(assistant.tools[0].type == "code_interpreter")
                 self.assertTrue(assistant.tools[1].type == "file_search")
                 if not async_mode:
-                    self.assertTrue(assistant.tools[1].file_search['max_num_results'] == 50)  # Updated line
+                    self.assertTrue(assistant.tools[1].file_search.max_num_results == 49)  # Updated line
                 self.assertTrue(assistant.tools[2].type == "function")
                 self.assertTrue(assistant.tools[2].function.name == "SendMessage")
                 if async_mode:

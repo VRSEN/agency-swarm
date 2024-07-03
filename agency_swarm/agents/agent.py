@@ -89,6 +89,7 @@ class Agent():
             truncation_strategy: dict = None,
             examples: List[ExampleMessage] = None,
             file_search: FileSearchConfig = None,
+            parallel_tool_calls: bool = True,
     ):
         """
         Initializes an Agent with specified attributes, tools, and OpenAI client.
@@ -116,6 +117,7 @@ class Agent():
             truncation_strategy (TruncationStrategy, optional): Truncation strategy for the OpenAI API. Defaults to None.
             examples (List[Dict], optional): A list of example messages for the agent. Defaults to None.
             file_search (FileSearchConfig, optional): A dictionary containing the file search tool configuration. Defaults to None.
+            parallel_tool_calls (bool, optional): Whether to enable parallel function calling during tool use. Defaults to True.
 
         This constructor sets up the agent with its unique properties, initializes the OpenAI client, reads instructions if provided, and uploads any associated files.
         """
@@ -143,6 +145,7 @@ class Agent():
         self.truncation_strategy = truncation_strategy
         self.examples = examples
         self.file_search = file_search
+        self.parallel_tool_calls = parallel_tool_calls
 
         self.settings_path = './settings.json'
 
@@ -511,12 +514,13 @@ class Agent():
 
     # --- Settings Methods ---
 
-    def _check_parameters(self, assistant_settings):
+    def _check_parameters(self, assistant_settings, debug=False):
         """
         Checks if the agent's parameters match with the given assistant settings.
 
         Parameters:
             assistant_settings (dict): A dictionary containing the settings of an assistant.
+            debug (bool): If True, prints debug statements. Default is False.
 
         Returns:
             bool: True if all the agent's parameters match the assistant settings, False otherwise.
@@ -524,22 +528,34 @@ class Agent():
         This method compares the current agent's parameters such as name, description, instructions, tools, file IDs, metadata, and model with the given assistant settings. It uses DeepDiff to compare complex structures like tools and metadata. If any parameter does not match, it returns False; otherwise, it returns True.
         """
         if self.name != assistant_settings['name']:
+            if debug:
+                print(f"Name mismatch: {self.name} != {assistant_settings['name']}")
             return False
 
         if self.description != assistant_settings['description']:
+            if debug:
+                print(f"Description mismatch: {self.description} != {assistant_settings['description']}")
             return False
 
         if self.instructions != assistant_settings['instructions']:
+            if debug:
+                print(f"Instructions mismatch: {self.instructions} != {assistant_settings['instructions']}")
             return False
 
         tools_diff = DeepDiff(self.get_oai_tools(), assistant_settings['tools'], ignore_order=True)
         if tools_diff != {}:
+            if debug:
+                print(f"Tools mismatch: {tools_diff}")
             return False
 
         if self.temperature != assistant_settings['temperature']:
+            if debug:
+                print(f"Temperature mismatch: {self.temperature} != {assistant_settings['temperature']}")
             return False
 
         if self.top_p != assistant_settings['top_p']:
+            if debug:
+                print(f"Top_p mismatch: {self.top_p} != {assistant_settings['top_p']}")
             return False
 
         tool_resources_settings = copy.deepcopy(self.tool_resources)
@@ -547,17 +563,25 @@ class Agent():
             tool_resources_settings['file_search'].pop('vector_stores', None)
         tool_resources_diff = DeepDiff(tool_resources_settings, assistant_settings['tool_resources'], ignore_order=True)
         if tool_resources_diff != {}:
+            if debug:
+                print(f"Tool resources mismatch: {tool_resources_diff}")
             return False
 
         metadata_diff = DeepDiff(self.metadata, assistant_settings['metadata'], ignore_order=True)
         if metadata_diff != {}:
+            if debug:
+                print(f"Metadata mismatch: {metadata_diff}")
             return False
 
         if self.model != assistant_settings['model']:
+            if debug:
+                print(f"Model mismatch: {self.model} != {assistant_settings['model']}")
             return False
 
         response_format_diff = DeepDiff(self.response_format, assistant_settings['response_format'], ignore_order=True)
         if response_format_diff != {}:
+            if debug:
+                print(f"Response format mismatch: {response_format_diff}")
             return False
 
         return True
