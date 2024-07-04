@@ -54,8 +54,7 @@ class Thread:
                               attachments: Optional[List[Attachment]] = None,
                               recipient_agent=None,
                               additional_instructions: str = None,
-                              tool_choice: AssistantToolChoice = None,
-                              parallel_tool_calls: bool = True):
+                              tool_choice: AssistantToolChoice = None):
 
         return self.get_completion(message,
                                    message_files,
@@ -64,8 +63,7 @@ class Thread:
                                    additional_instructions,
                                    event_handler,
                                    tool_choice,
-                                   yield_messages=False,
-                                   parallel_tool_calls=parallel_tool_calls)
+                                   yield_messages=False)
 
     def get_completion(self,
                        message: str | List[dict],
@@ -75,12 +73,11 @@ class Thread:
                        additional_instructions: str = None,
                        event_handler: type(AgencyEventHandler) = None,
                        tool_choice: AssistantToolChoice = None,
-                       yield_messages: bool = False,
-                       parallel_tool_calls: bool = True
+                       yield_messages: bool = False
                        ):
         if not recipient_agent:
             recipient_agent = self.recipient_agent
-
+        
         if not attachments:
             attachments = []
 
@@ -119,7 +116,7 @@ class Thread:
         if yield_messages:
             yield MessageOutput("text", self.agent.name, recipient_agent.name, message, message_obj)
 
-        self._create_run(recipient_agent, additional_instructions, event_handler, tool_choice, parallel_tool_calls=parallel_tool_calls)
+        self._create_run(recipient_agent, additional_instructions, event_handler, tool_choice)
 
         error_attempts = 0
         validation_attempts = 0
@@ -187,7 +184,7 @@ class Thread:
                             content="Previous request timed out. Please repeat the exact same tool calls in the same order with the same arguments."
                         )
 
-                        self._create_run(recipient_agent, additional_instructions, event_handler, 'required', temperature=0, parallel_tool_calls=parallel_tool_calls)
+                        self._create_run(recipient_agent, additional_instructions, event_handler, 'required', temperature=0)
                         self._run_until_done()
 
                         if self.run.status != "requires_action":
@@ -217,7 +214,7 @@ class Thread:
                 # retry run 2 times
                 if error_attempts < 1 and "something went wrong" in self.run.last_error.message.lower():
                     time.sleep(1)
-                    self._create_run(recipient_agent, additional_instructions, event_handler, tool_choice, parallel_tool_calls=parallel_tool_calls)
+                    self._create_run(recipient_agent, additional_instructions, event_handler, tool_choice)
                     error_attempts += 1
                 elif 1 <= error_attempts < 5 and "something went wrong" in self.run.last_error.message.lower():
                     self.client.beta.threads.messages.create(
@@ -225,7 +222,7 @@ class Thread:
                         role="user",
                         content="Continue."
                     )
-                    self._create_run(recipient_agent, additional_instructions, event_handler, tool_choice, parallel_tool_calls=parallel_tool_calls)
+                    self._create_run(recipient_agent, additional_instructions, event_handler, tool_choice)
                     error_attempts += 1
                 else:
                     raise Exception("OpenAI Run Failed. Error: ", self.run.last_error.message)
@@ -273,13 +270,13 @@ class Thread:
 
                             validation_attempts += 1
 
-                            self._create_run(recipient_agent, additional_instructions, event_handler, tool_choice, parallel_tool_calls=parallel_tool_calls)
+                            self._create_run(recipient_agent, additional_instructions, event_handler, tool_choice)
 
                             continue
 
                 return full_message
 
-    def _create_run(self, recipient_agent, additional_instructions, event_handler, tool_choice, temperature=None, parallel_tool_calls=True):
+    def _create_run(self, recipient_agent, additional_instructions, event_handler, tool_choice, temperature=None):
         if event_handler:
             with self.client.beta.threads.runs.stream(
                     thread_id=self.thread.id,
@@ -291,12 +288,12 @@ class Thread:
                     max_completion_tokens=recipient_agent.max_completion_tokens,
                     truncation_strategy=recipient_agent.truncation_strategy,
                     temperature=temperature,
-                    extra_body={"parallel_tool_calls": parallel_tool_calls},
+                    extra_body={"parallel_tool_calls": recipient_agent.parallel_tool_calls},
             ) as stream:
                 stream.until_done()
                 self.run = stream.get_final_run()
         else:
-            self.run = self.client.beta.threads.runs.create_and_poll(
+            self.run = self.client.beta.threads.runs.create(
                 thread_id=self.thread.id,
                 assistant_id=recipient_agent.id,
                 additional_instructions=additional_instructions,
@@ -305,7 +302,12 @@ class Thread:
                 max_completion_tokens=recipient_agent.max_completion_tokens,
                 truncation_strategy=recipient_agent.truncation_strategy,
                 temperature=temperature,
-                extra_query={"parallel_tool_calls": parallel_tool_calls},
+                parallel_tool_calls=recipient_agent.parallel_tool_calls
+            )
+            self.run = self.client.beta.threads.runs.poll(
+                thread_id=self.thread.id,
+                run_id=self.run.id,
+                # poll_interval_ms=500,
             )
 
     def _run_until_done(self):

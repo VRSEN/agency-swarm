@@ -126,8 +126,7 @@ class Agency:
                        recipient_agent: Agent = None,
                        additional_instructions: str = None,
                        attachments: List[dict] = None,
-                       tool_choice: dict = None,
-                       parallel_tool_calls: bool = True):
+                       tool_choice: dict = None):
         """
         Retrieves the completion for a given message from the main thread.
 
@@ -150,8 +149,7 @@ class Agency:
                                                recipient_agent=recipient_agent,
                                                additional_instructions=additional_instructions,
                                                tool_choice=tool_choice,
-                                               yield_messages=yield_messages,
-                                               parallel_tool_calls=parallel_tool_calls)
+                                               yield_messages=yield_messages)
 
         if not yield_messages:
             while True:
@@ -170,8 +168,7 @@ class Agency:
                               recipient_agent: Agent = None,
                               additional_instructions: str = None,
                               attachments: List[dict] = None,
-                              tool_choice: dict = None,
-                              parallel_tool_calls: bool = True):
+                              tool_choice: dict = None):
         """
         Generates a stream of completions for a given message from the main thread.
 
@@ -197,8 +194,7 @@ class Agency:
                                                       attachments=attachments,
                                                       recipient_agent=recipient_agent,
                                                       additional_instructions=additional_instructions,
-                                                      tool_choice=tool_choice,
-                                                      parallel_tool_calls=parallel_tool_calls)
+                                                      tool_choice=tool_choice)
 
         while True:
             try:

@@ -208,10 +208,11 @@ class AgencyTest(unittest.TestCase):
     def test_4_agent_communication(self):
         """it should communicate between agents"""
         print("TestAgent1 tools", self.__class__.agent1.tools)
+        self.__class__.agent1.parallel_tool_calls = False
         message = self.__class__.agency.get_completion("Please tell TestAgent1 to say test to TestAgent2.",
                                                        tool_choice={"type": "function", "function": {"name": "SendMessage"}})
 
-        self.assertFalse('error' in message.lower())
+        self.assertFalse('error' in message.lower(), f"Error found in message: {message}")
 
         for agent_name, threads in self.__class__.agency.agents_and_threads.items():
             for other_agent_name, thread in threads.items():
@@ -247,6 +248,7 @@ class AgencyTest(unittest.TestCase):
 
         self.assertTrue(agent1_run.truncation_strategy.type == "last_messages")
         self.assertTrue(agent1_run.truncation_strategy.last_messages == 10)
+        self.assertFalse(agent1_run.parallel_tool_calls)
 
         agent2_thread = self.__class__.agency.agents_and_threads[self.__class__.agent1.name][self.__class__.agent2.name]
 
@@ -298,6 +300,9 @@ class AgencyTest(unittest.TestCase):
         self.assertTrue(num_on_all_streams_end_calls == 1)
 
         self.assertTrue(self.__class__.TestTool.shared_state.get("test_tool_used"))
+
+        agent1_thread = self.__class__.agency.agents_and_threads[self.__class__.ceo.name][self.__class__.agent1.name]
+        self.assertFalse(agent1_thread.run.parallel_tool_calls)
 
         for agent_name, threads in self.__class__.agency.agents_and_threads.items():
             for other_agent_name, thread in threads.items():
