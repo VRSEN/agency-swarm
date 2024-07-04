@@ -76,15 +76,10 @@ class Agency:
             max_prompt_tokens (int, optional): The maximum number of tokens allowed in the prompt for each agent. Agent-specific values will override this. Defaults to None.
             max_completion_tokens (int, optional): The maximum number of tokens allowed in the completion for each agent. Agent-specific values will override this. Defaults to None.
             truncation_strategy (dict, optional): The truncation strategy to use for the completion for each agent. Agent-specific values will override this. Defaults to None.
-            async_tool_calls (bool, optional): Whether to enable asynchronous tool call executions. Defaults to False.
+            async_tool_calls (bool, optional): Whether to enable asynchronous tool call executions. SendMessage tool will be executed synchronously. To enable asynchronous agent communication use async_mode. Defaults to False.
 
         This constructor initializes various components of the Agency, including CEO, agents, threads, and user interactions. It parses the agency chart to set up the organizational structure and initializes the messaging tools, agents, and threads necessary for the operation of the agency. Additionally, it prepares a main thread for user interactions.
         """
-        self.async_mode = async_mode
-        if self.async_mode == "threading":
-            from agency_swarm.threads.thread_async import ThreadAsync
-            self.ThreadType = ThreadAsync
-
         self.ceo = None
         self.user = User()
         self.agents = []
@@ -93,6 +88,7 @@ class Agency:
         self.main_thread = None
         self.recipient_agents = None  # for autocomplete
         self.shared_files = shared_files if shared_files else []
+        self.async_mode = async_mode
         self.settings_path = settings_path
         self.settings_callbacks = settings_callbacks
         self.threads_callbacks = threads_callbacks
@@ -102,7 +98,13 @@ class Agency:
         self.max_completion_tokens = max_completion_tokens
         self.truncation_strategy = truncation_strategy
         self.async_tool_calls = async_tool_calls
-        self.ThreadType.async_tool_calls = self.async_tool_calls
+        
+        Thread.async_tool_calls = self.async_tool_calls
+
+        if self.async_mode == "threading":
+            from agency_swarm.threads.thread_async import ThreadAsync
+            self.ThreadType = ThreadAsync
+
 
         if os.path.isfile(os.path.join(self._get_class_folder_path(), shared_instructions)):
             self._read_instructions(os.path.join(self._get_class_folder_path(), shared_instructions))

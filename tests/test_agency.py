@@ -376,7 +376,7 @@ class AgencyTest(unittest.TestCase):
         self.__class__.agent1.id = None
         self.__class__.agent2.id = None
 
-        self.__class__.agent1.file_search = None
+        self.__class__.agent1.file_search = {'max_num_results': 49}
 
         self.__class__.agency = Agency([
             self.__class__.ceo,
@@ -444,6 +444,39 @@ class AgencyTest(unittest.TestCase):
 
         for agent in self.__class__.agency.agents:
             self.assertTrue(agent.id in [settings['id'] for settings in self.__class__.loaded_agents_settings])
+
+    def test_9_async_tool_calls(self):
+        """it should execute tools asynchronously"""
+        class PrintTool(BaseTool):
+            def run(self, **kwargs):
+                time.sleep(2)  # Simulate a delay
+                return "Printed successfully."
+
+        class AnotherPrintTool(BaseTool):
+            def run(self, **kwargs):
+                time.sleep(2)  # Simulate a delay
+                return "Another print successful."
+
+        ceo = Agent(name="CEO", tools=[PrintTool, AnotherPrintTool])
+
+        agency = Agency(
+            [ceo],
+            async_tool_calls=True,
+            temperature=0
+        )
+
+        self.assertTrue(agency.main_thread.async_tool_calls)
+
+        result = None
+        try:
+            generator = agency.get_completion("Use 2 print tools together. Output the results exactly as they are from each tool and nothing else.", yield_messages=True)
+            while True:
+                next(generator)
+        except StopIteration as e:
+            result = e.value
+
+            self.assertIn("printed successfully", result.lower())
+            self.assertIn("another print successful", result.lower())
 
     # --- Helper methods ---
 

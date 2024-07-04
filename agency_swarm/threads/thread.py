@@ -20,6 +20,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 class Thread:
     async_tool_calls: bool = False
+    max_workers: int = 4
 
     def __init__(self, agent: Union[Agent, User], recipient_agent: Agent):
         self.agent = agent
@@ -132,32 +133,49 @@ class Thread:
                 tool_outputs = []
                 tool_names = []
 
+                def handle_output(tool_call, output):
+                    if inspect.isgenerator(output):
+                        try:
+                            while True:
+                                item = next(output)
+                                if isinstance(item, MessageOutput) and yield_messages:
+                                    yield item
+                        except StopIteration as e:
+                            output = e.value
+                    else:
+                        if yield_messages:
+                            yield MessageOutput("function_output", tool_call.function.name, recipient_agent.name, output, tool_call)
+                    tool_outputs.append({"tool_call_id": tool_call.id, "output": output})
+                    tool_names.append(tool_call.function.name)
+
                 if len(tool_calls) > 1 and self.async_tool_calls:
-                    max_workers = min(4, os.cpu_count() or 1)  # Use at most 4 workers or the number of CPUs available
+                    max_workers = min(self.max_workers, os.cpu_count() or 1)  # Use at most 4 workers or the number of CPUs available
                     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                        futures = {executor.submit(self.execute_tool, tool_call, recipient_agent, event_handler, tool_names, yield_messages): tool_call for tool_call in tool_calls}
+                        futures = {}
+                        for tool_call in tool_calls:
+                            if tool_call.function.name != "SendMessage":
+                                if yield_messages:
+                                    yield MessageOutput("function", recipient_agent.name, self.agent.name, str(tool_call.function), tool_call)
+                                futures[executor.submit(self.execute_tool, tool_call, recipient_agent, event_handler, tool_names)] = tool_call
+
                         for future in as_completed(futures):
-                            result = future.result()
-                            if inspect.isgenerator(result):
-                                try:
-                                    while True:
-                                        next(result)
-                                except StopIteration as e:
-                                    result = e.value
-                            tool_outputs.append(result)
-                            tool_name = next(tool_call.function.name for tool_call in tool_calls if tool_call.id == result['tool_call_id'])
-                            tool_names.append(tool_name)
+                            tool_call = futures[future]
+                            output = future.result()
+                            yield from handle_output(tool_call, output)
+
+                    # Execute SendMessage tool calls synchronously
+                    for tool_call in tool_calls:
+                        if tool_call.function.name == "SendMessage":
+                            if yield_messages:
+                                yield MessageOutput("function", recipient_agent.name, self.agent.name, str(tool_call.function), tool_call)
+                            output = self.execute_tool(tool_call, recipient_agent, event_handler, tool_names)
+                            yield from handle_output(tool_call, output)
                 else:
                     for tool_call in tool_calls:
-                        result = self.execute_tool(tool_call, recipient_agent, event_handler, tool_names, yield_messages)
-                        if inspect.isgenerator(result):
-                            try: 
-                                while True:
-                                    next(result)
-                            except StopIteration as e:
-                                result = e.value
-                        tool_outputs.append(result)
-                        tool_names.append(tool_call.function.name)
+                        if yield_messages:
+                            yield MessageOutput("function", recipient_agent.name, self.agent.name, str(tool_call.function), tool_call)
+                        output = self.execute_tool(tool_call, recipient_agent, event_handler, tool_names)
+                        yield from handle_output(tool_call, output)
                 # submit tool outputs
                 try:
                     self._submit_tool_outputs(tool_outputs, event_handler)
@@ -342,7 +360,7 @@ class Thread:
 
         raise Exception("No assistant message found in the thread")
 
-    def execute_tool(self, tool_call, recipient_agent=None, event_handler=None, tool_names=[], yield_messages=False):
+    def execute_tool(self, tool_call, recipient_agent=None, event_handler=None, tool_names=[]):
         if not recipient_agent:
             recipient_agent = self.recipient_agent
 
@@ -358,38 +376,17 @@ class Thread:
             args = json.loads(args) if args else {}
             func = func(**args)
             for tool_name in tool_names:
-                if tool_name == tool_call.function.name and (hasattr(func, "one_call_at_a_time") and func.one_call_at_a_time):
-                    return {
-                        "tool_call_id": tool_call.id,
-                        "output": f"Error: Function {tool_call.function.name} is already called. You can only call this function once at a time. Please wait for the previous call to finish before calling it again."
-                    }
+                if tool_name == tool_call.function.name and (
+                        hasattr(func, "one_call_at_a_time") and func.one_call_at_a_time):
+                    return f"Error: Function {tool_call.function.name} is already called. You can only call this function once at a time. Please wait for the previous call to finish before calling it again."
             func.caller_agent = recipient_agent
             func.event_handler = event_handler
             # get outputs from the tool
             output = func.run()
 
-            if yield_messages:
-                yield MessageOutput("function", recipient_agent.name, self.agent.name, str(tool_call.function), tool_call)
-
-            if inspect.isgenerator(output):
-                try:
-                    while True:
-                        item = next(output)
-                        if isinstance(item, MessageOutput) and yield_messages:
-                            yield item
-                except StopIteration as e:
-                    output = e.value
-            else:
-                if yield_messages:
-                    yield MessageOutput("function_output", tool_call.function.name, recipient_agent.name, output, tool_call)
-
-            if event_handler:
-                event_handler.set_agent(self.agent)
-                event_handler.set_recipient_agent(recipient_agent)
-
-            return {"tool_call_id": tool_call.id, "output": str(output)}
+            return output
         except Exception as e:
             error_message = f"Error: {e}"
             if "For further information visit" in error_message:
                 error_message = error_message.split("For further information visit")[0]
-            return {"tool_call_id": tool_call.id, "output": error_message}
+            return error_message

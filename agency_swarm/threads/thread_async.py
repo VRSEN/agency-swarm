@@ -1,5 +1,5 @@
 import threading
-from typing import Literal, Optional, List
+from typing import Union, Optional, List
 
 from openai.types.beta import AssistantToolChoice
 
@@ -9,10 +9,13 @@ from agency_swarm.user import User
 
 
 class ThreadAsync(Thread):
-    def __init__(self, agent: Literal[Agent, User], recipient_agent: Agent):
+    async_tool_calls = False
+
+    def __init__(self, agent: Union[Agent, User], recipient_agent: Agent):
         super().__init__(agent, recipient_agent)
         self.pythread = None
         self.response = None
+        self.async_tool_calls = False # disable async tools calls for asynch communication agents
 
     def worker(self,
                message: str,
@@ -22,7 +25,8 @@ class ThreadAsync(Thread):
                additional_instructions: str = None,
                tool_choice: AssistantToolChoice = None
                ):
-        gen = super().get_completion(message=message,
+        self.async_tool_calls = False  # Ensure async_tool_calls is False before calling get_completion
+        gen = self.get_completion(message=message,
                                         message_files=message_files,
                                         attachments=attachments,
                                         recipient_agent=recipient_agent,
