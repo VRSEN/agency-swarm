@@ -143,7 +143,7 @@ class Thread:
                         if yield_messages:
                             yield MessageOutput("function_output", tool_call.function.name, recipient_agent.name,
                                                 output, tool_call)
-                        
+
                     if event_handler:
                         event_handler.set_agent(self.agent)
                         event_handler.set_recipient_agent(recipient_agent)
@@ -197,13 +197,43 @@ class Thread:
                     time.sleep(1)
                     self._create_run(recipient_agent, additional_instructions, event_handler, tool_choice)
                     error_attempts += 1
-                elif 1 <= error_attempts < 5 and "something went wrong" in self.run.last_error.message.lower():
+                if (
+                    error_attempts < 1
+                    and "rate limit reached" in self.run.last_error.message.lower()
+                ):
+                    time.sleep(60)
+                    self._create_run(
+                        recipient_agent,
+                        additional_instructions,
+                        event_handler,
+                        tool_choice,
+                    )
+                    error_attempts += 1
+                elif (
+                    1 <= error_attempts < 10
+                    and "something went wrong" in self.run.last_error.message.lower()
+                ):
                     self.client.beta.threads.messages.create(
                         thread_id=self.thread.id,
                         role="user",
                         content="Continue."
                     )
                     self._create_run(recipient_agent, additional_instructions, event_handler, tool_choice)
+                    error_attempts += 1
+                elif (
+                    1 <= error_attempts < 10
+                    and "rate limit reached" in self.run.last_error.message.lower()
+                ):
+                    time.sleep(60)
+                    self.client.beta.threads.messages.create(
+                        thread_id=self.thread.id, role="user", content="Continue."
+                    )
+                    self._create_run(
+                        recipient_agent,
+                        additional_instructions,
+                        event_handler,
+                        tool_choice,
+                    )
                     error_attempts += 1
                 else:
                     raise Exception("OpenAI Run Failed. Error: ", self.run.last_error.message)
