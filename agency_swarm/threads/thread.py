@@ -226,6 +226,8 @@ class Thread:
                     error_attempts += 1
                 else:
                     raise Exception("OpenAI Run Failed. Error: ", self.run.last_error.message)
+            elif self.run.status == "incomplete":
+                raise Exception("OpenAI Run Incomplete. Error: ", self.run.incomplete_details)
             # return assistant message
             else:
                 message_obj = self._get_last_assistant_message()
