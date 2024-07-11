@@ -159,24 +159,25 @@ class ToolFactory:
                     url = url.rstrip("/")
                     parameters = {k: v for k, v in parameters.items() if v is not None}
                     parameters = {**parameters, **params} if params else parameters
+                    headers = {k: v for k, v in headers.items() if v is not None}
                     async with httpx.AsyncClient(timeout=90) as client:  # Set custom read timeout to 10 seconds
                         if method == "get":
-                            response = await client.get(url, params=parameters, headers=headers or {})
+                            response = await client.get(url, params=parameters, headers=headers)
                         elif method == "post":
                             response = await client.post(url,
                                                          params=parameters,
                                                          json=self.model_dump().get('requestBody', None),
-                                                         headers=headers or {})
+                                                         headers=headers)
                         elif method == "put":
                             response = await client.put(url,
                                                         params=parameters,
                                                         json=self.model_dump().get('requestBody', None),
-                                                        headers=headers or {})
+                                                        headers=headers)
                         elif method == "delete":
                             response = await client.delete(url,
                                                            params=parameters,
                                                            json=self.model_dump().get('requestBody', None),
-                                                           headers=headers or {})
+                                                           headers=headers)
                         return response.json()
 
                 # 1. Resolve JSON references.
