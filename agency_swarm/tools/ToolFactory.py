@@ -20,7 +20,7 @@ from datamodel_code_generator import DataModelType, PythonVersion
 from datamodel_code_generator.model import get_data_model_types
 from datamodel_code_generator.parser.jsonschema import JsonSchemaParser
 
-import aiohttp
+import httpx
 import asyncio
 
 class ToolFactory:
@@ -159,29 +159,25 @@ class ToolFactory:
                     url = url.rstrip("/")
                     parameters = {k: v for k, v in parameters.items() if v is not None}
                     parameters = {**parameters, **params} if params else parameters
-                    async with aiohttp.ClientSession() as session:
+                    async with httpx.AsyncClient(timeout=90) as client:  # Set custom read timeout to 10 seconds
                         if method == "get":
-                            async with session.get(url, params=parameters, headers=headers,
-                                                   json=self.model_dump().get('requestBody', None)) as response:
-                                return await response.json()
+                            response = await client.get(url, params=parameters, headers=headers)
                         elif method == "post":
-                            async with session.post(url,
-                                                    params=parameters,
-                                                    json=self.model_dump().get('requestBody', None),
-                                                    headers=headers) as response:
-                                return await response.json()
+                            response = await client.post(url,
+                                                         params=parameters,
+                                                         json=self.model_dump().get('requestBody', None),
+                                                         headers=headers)
                         elif method == "put":
-                            async with session.put(url,
-                                                   params=parameters,
-                                                   json=self.model_dump().get('requestBody', None),
-                                                   headers=headers) as response:
-                                return await response.json()
+                            response = await client.put(url,
+                                                        params=parameters,
+                                                        json=self.model_dump().get('requestBody', None),
+                                                        headers=headers)
                         elif method == "delete":
-                            async with session.delete(url,
-                                                      params=parameters,
-                                                      json=self.model_dump().get('requestBody', None),
-                                                      headers=headers) as response:
-                                return await response.json()
+                            response = await client.delete(url,
+                                                           params=parameters,
+                                                           json=self.model_dump().get('requestBody', None),
+                                                           headers=headers)
+                        return response.json()
 
                 # 1. Resolve JSON references.
                 spec = jsonref.replace_refs(spec_with_ref)
@@ -345,4 +341,3 @@ class ToolFactory:
         schema = json.dumps(schema, indent=2).replace("#/$defs/", "#/components/schemas/")
 
         return schema
-
