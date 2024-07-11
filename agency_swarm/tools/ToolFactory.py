@@ -146,6 +146,7 @@ class ToolFactory:
             openapi_spec = jsonref.loads(schema)
         tools = []
         headers = headers or {}
+        headers = {k: v for k, v in headers.items() if v is not None}
         for path, methods in openapi_spec["paths"].items():
             for method, spec_with_ref in methods.items():
                 async def callback(self):
@@ -159,7 +160,6 @@ class ToolFactory:
                     url = url.rstrip("/")
                     parameters = {k: v for k, v in parameters.items() if v is not None}
                     parameters = {**parameters, **params} if params else parameters
-                    headers = {k: v for k, v in headers.items() if v is not None}
                     async with httpx.AsyncClient(timeout=90) as client:  # Set custom read timeout to 10 seconds
                         if method == "get":
                             response = await client.get(url, params=parameters, headers=headers)
