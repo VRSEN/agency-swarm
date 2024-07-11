@@ -161,22 +161,22 @@ class ToolFactory:
                     parameters = {**parameters, **params} if params else parameters
                     async with httpx.AsyncClient(timeout=90) as client:  # Set custom read timeout to 10 seconds
                         if method == "get":
-                            response = await client.get(url, params=parameters, headers=headers)
+                            response = await client.get(url, params=parameters, headers=headers or {})
                         elif method == "post":
                             response = await client.post(url,
                                                          params=parameters,
                                                          json=self.model_dump().get('requestBody', None),
-                                                         headers=headers)
+                                                         headers=headers or {})
                         elif method == "put":
                             response = await client.put(url,
                                                         params=parameters,
                                                         json=self.model_dump().get('requestBody', None),
-                                                        headers=headers)
+                                                        headers=headers or {})
                         elif method == "delete":
                             response = await client.delete(url,
                                                            params=parameters,
                                                            json=self.model_dump().get('requestBody', None),
-                                                           headers=headers)
+                                                           headers=headers or {})
                         return response.json()
 
                 # 1. Resolve JSON references.
