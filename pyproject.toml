@@ -22,7 +22,8 @@ dependencies = [
     "termcolor==2.4.0",
     "python-dotenv==1.0.1",
     "rich==13.7.1",
-    "jsonref==1.1.0"
+    "jsonref==1.1.0",
+    "aiohttp==3.9.5"
 ]
 requires-python = ">=3.7"
 urls = { homepage = "https://github.com/VRSEN/agency-swarm" }

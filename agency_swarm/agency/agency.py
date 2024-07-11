@@ -49,7 +49,7 @@ class Agency:
                  agency_chart: List,
                  shared_instructions: str = "",
                  shared_files: Union[str, List[str]] = None,
-                 async_mode: Literal['threading'] = None,
+                 async_mode: Literal['threading', "tools_threading"] = None,
                  settings_path: str = "./settings.json",
                  settings_callbacks: SettingsCallbacks = None,
                  threads_callbacks: ThreadsCallbacks = None,
@@ -58,7 +58,6 @@ class Agency:
                  max_prompt_tokens: int = None,
                  max_completion_tokens: int = None,
                  truncation_strategy: dict = None,
-                 async_tool_calls: bool = False,
                  ):
         """
         Initializes the Agency object, setting up agents, threads, and core functionalities.
@@ -67,7 +66,7 @@ class Agency:
             agency_chart: The structure defining the hierarchy and interaction of agents within the agency.
             shared_instructions (str, optional): A path to a file containing shared instructions for all agents. Defaults to an empty string.
             shared_files (Union[str, List[str]], optional): A path to a folder or a list of folders containing shared files for all agents. Defaults to None.
-            async_mode (str, optional): The mode for asynchronous message processing. Defaults to None.
+            async_mode (str, optional): Specifies the mode for asynchronous processing. In "threading" mode, all sub-agents run in separate threads. In "tools_threading" mode, all tools run in separate threads, but agents do not. Defaults to None.
             settings_path (str, optional): The path to the settings file for the agency. Must be json. If file does not exist, it will be created. Defaults to None.
             settings_callbacks (SettingsCallbacks, optional): A dictionary containing functions to load and save settings for the agency. The keys must be "load" and "save". Both values must be defined. Defaults to None.
             threads_callbacks (ThreadsCallbacks, optional): A dictionary containing functions to load and save threads for the agency. The keys must be "load" and "save". Both values must be defined. Defaults to None.
@@ -76,7 +75,6 @@ class Agency:
             max_prompt_tokens (int, optional): The maximum number of tokens allowed in the prompt for each agent. Agent-specific values will override this. Defaults to None.
             max_completion_tokens (int, optional): The maximum number of tokens allowed in the completion for each agent. Agent-specific values will override this. Defaults to None.
             truncation_strategy (dict, optional): The truncation strategy to use for the completion for each agent. Agent-specific values will override this. Defaults to None.
-            async_tool_calls (bool, optional): Whether to enable asynchronous tool call executions. SendMessage tool will be executed synchronously. To enable asynchronous agent communication use async_mode. Defaults to False.
 
         This constructor initializes various components of the Agency, including CEO, agents, threads, and user interactions. It parses the agency chart to set up the organizational structure and initializes the messaging tools, agents, and threads necessary for the operation of the agency. Additionally, it prepares a main thread for user interactions.
         """
@@ -97,14 +95,16 @@ class Agency:
         self.max_prompt_tokens = max_prompt_tokens
         self.max_completion_tokens = max_completion_tokens
         self.truncation_strategy = truncation_strategy
-        self.async_tool_calls = async_tool_calls
-        
-        Thread.async_tool_calls = self.async_tool_calls
 
         if self.async_mode == "threading":
             from agency_swarm.threads.thread_async import ThreadAsync
             self.ThreadType = ThreadAsync
-
+        elif self.async_mode == "tools_threading":
+            Thread.async_mode = "threading"
+        elif self.async_mode is None:
+            pass
+        else:
+            raise Exception("Please select async_mode = 'threading' or 'tools_threading'.")
 
         if os.path.isfile(os.path.join(self._get_class_folder_path(), shared_instructions)):
             self._read_instructions(os.path.join(self._get_class_folder_path(), shared_instructions))

@@ -20,6 +20,8 @@ from datamodel_code_generator import DataModelType, PythonVersion
 from datamodel_code_generator.model import get_data_model_types
 from datamodel_code_generator.parser.jsonschema import JsonSchemaParser
 
+import aiohttp
+import asyncio
 
 class ToolFactory:
 
@@ -146,7 +148,7 @@ class ToolFactory:
         headers = headers or {}
         for path, methods in openapi_spec["paths"].items():
             for method, spec_with_ref in methods.items():
-                def callback(self):
+                async def callback(self):
                     url = openapi_spec["servers"][0]["url"] + path
                     parameters = self.model_dump().get('parameters', {})
                     # replace all parameters in url
@@ -157,28 +159,29 @@ class ToolFactory:
                     url = url.rstrip("/")
                     parameters = {k: v for k, v in parameters.items() if v is not None}
                     parameters = {**parameters, **params} if params else parameters
-                    if method == "get":
-                        return requests.get(url, params=parameters, headers=headers,
-                                            json=self.model_dump().get('requestBody', None)
-                                            ).json()
-                    elif method == "post":
-                        return requests.post(url,
-                                             params=parameters,
-                                             json=self.model_dump().get('requestBody', None),
-                                             headers=headers
-                                             ).json()
-                    elif method == "put":
-                        return requests.put(url,
-                                            params=parameters,
-                                            json=self.model_dump().get('requestBody', None),
-                                            headers=headers
-                                            ).json()
-                    elif method == "delete":
-                        return requests.delete(url,
-                                               params=parameters,
-                                               json=self.model_dump().get('requestBody', None),
-                                               headers=headers
-                                               ).json()
+                    async with aiohttp.ClientSession() as session:
+                        if method == "get":
+                            async with session.get(url, params=parameters, headers=headers,
+                                                   json=self.model_dump().get('requestBody', None)) as response:
+                                return await response.json()
+                        elif method == "post":
+                            async with session.post(url,
+                                                    params=parameters,
+                                                    json=self.model_dump().get('requestBody', None),
+                                                    headers=headers) as response:
+                                return await response.json()
+                        elif method == "put":
+                            async with session.put(url,
+                                                   params=parameters,
+                                                   json=self.model_dump().get('requestBody', None),
+                                                   headers=headers) as response:
+                                return await response.json()
+                        elif method == "delete":
+                            async with session.delete(url,
+                                                      params=parameters,
+                                                      json=self.model_dump().get('requestBody', None),
+                                                      headers=headers) as response:
+                                return await response.json()
 
                 # 1. Resolve JSON references.
                 spec = jsonref.replace_refs(spec_with_ref)
@@ -342,3 +345,4 @@ class ToolFactory:
         schema = json.dumps(schema, indent=2).replace("#/$defs/", "#/components/schemas/")
 
         return schema
+

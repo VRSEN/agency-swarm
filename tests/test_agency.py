@@ -16,7 +16,7 @@ from agency_swarm.util import create_agent_template
 
 from agency_swarm import set_openai_key, Agent, Agency, AgencyEventHandler, get_openai_client
 from typing_extensions import override
-from agency_swarm.tools import BaseTool
+from agency_swarm.tools import BaseTool, ToolFactory
 
 os.environ["DEBUG_MODE"] = "True"
 
@@ -440,8 +440,7 @@ class AgencyTest(unittest.TestCase):
         self.assertTrue(EventHandler.recipient_agent_name == "TestAgent1")
 
         if 'error' in message.lower():
-            print(self.__class__.agency.get_completion("Explain why you said error."))
-            self.assertFalse('error' in message.lower())
+            self.assertFalse('error' in message.lower(), self.__class__.agency.main_thread.thread_url)
 
         for agent_name, threads in self.__class__.agency.agents_and_threads.items():
             for other_agent_name, thread in threads.items():
@@ -461,27 +460,35 @@ class AgencyTest(unittest.TestCase):
             def run(self, **kwargs):
                 time.sleep(2)  # Simulate a delay
                 return "Another print successful."
-
+            
         ceo = Agent(name="CEO", tools=[PrintTool, AnotherPrintTool])
 
         agency = Agency(
             [ceo],
-            async_tool_calls=True,
+            async_mode='tools_threading',
             temperature=0
         )
 
-        self.assertTrue(agency.main_thread.async_tool_calls)
+        self.assertTrue(agency.main_thread.async_mode == 'threading')
 
-        result = None
-        try:
-            generator = agency.get_completion("Use 2 print tools together. Output the results exactly as they are from each tool and nothing else.", yield_messages=True)
-            while True:
-                next(generator)
-        except StopIteration as e:
-            result = e.value
+        result = agency.get_completion("Use 2 print tools together at the same time and output the results exectly as they are. ", yield_messages=False)
 
-            self.assertIn("printed successfully", result.lower())
-            self.assertIn("another print successful", result.lower())
+        self.assertIn("printed successfully", result.lower(), agency.main_thread.thread_url)
+        self.assertIn("another print successful", result.lower(), agency.main_thread.thread_url)
+
+    def test_10_concurrent_API_calls(self):
+        """it should execute API calls concurrently with asyncio"""
+        tools = []
+        with open("./data/schemas/get-headers-params.json", "r") as f:
+            tools = ToolFactory.from_openapi_schema(f.read(), {})
+
+        ceo = Agent(name="CEO", tools=tools, instructions="You are an agent that tests concurrent API calls.")
+
+        agency = Agency([ceo], temperature=0)
+
+        result = agency.get_completion("Please call PrintHeaders tool TWICE at the same time in a single message. If any of the function outputs do not contains headers, please say 'error'.")
+
+        self.assertTrue(result.lower().count('error') == 0, agency.main_thread.thread_url)
 
     # --- Helper methods ---
 
@@ -552,7 +559,8 @@ class AgencyTest(unittest.TestCase):
     def tearDownClass(cls):
         shutil.rmtree("./test_agents")
         os.remove("./settings.json")
-        cls.agency.delete()
+        if cls.agency:
+            cls.agency.delete()
 
 
 if __name__ == '__main__':

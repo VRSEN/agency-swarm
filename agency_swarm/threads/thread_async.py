@@ -9,13 +9,11 @@ from agency_swarm.user import User
 
 
 class ThreadAsync(Thread):
-    async_tool_calls = False
-
     def __init__(self, agent: Union[Agent, User], recipient_agent: Agent):
         super().__init__(agent, recipient_agent)
         self.pythread = None
         self.response = None
-        self.async_tool_calls = False # disable async tools calls for asynch communication agents
+        self.async_mode = False 
 
     def worker(self,
                message: str,
@@ -25,13 +23,14 @@ class ThreadAsync(Thread):
                additional_instructions: str = None,
                tool_choice: AssistantToolChoice = None
                ):
-        self.async_tool_calls = False  # Ensure async_tool_calls is False before calling get_completion
+        self.async_mode = False 
+
         gen = self.get_completion(message=message,
-                                        message_files=message_files,
-                                        attachments=attachments,
-                                        recipient_agent=recipient_agent,
-                                        additional_instructions=additional_instructions,
-                                        tool_choice=tool_choice)
+                                    message_files=message_files,
+                                    attachments=attachments,
+                                    recipient_agent=recipient_agent,
+                                    additional_instructions=additional_instructions,
+                                    tool_choice=tool_choice)
 
         while True:
             try:

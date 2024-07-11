@@ -1,3 +1,4 @@
+import asyncio
 from enum import Enum
 import json
 import os
@@ -148,7 +149,11 @@ class ToolFactoryTest(unittest.TestCase):
 
         print(json.dumps(tools[0].openai_schema, indent=4))
 
-        output = tools[0](requestBody={"text":'test'}).run()
+        async def gather_output():
+            output = await tools[0](requestBody={"text": 'test'}).run()
+            return output
+
+        output = asyncio.run(gather_output())
 
         print(output)
 
@@ -160,7 +165,11 @@ class ToolFactoryTest(unittest.TestCase):
                 "Bearer": os.environ.get("GET_HEADERS_SCHEMA_API_KEY")
             })
 
-        output = tools[0](parameters={"domain": "print-headers", "query": "test"}).run()
+        async def gather_output():
+            output = await tools[0](parameters={"domain": "print-headers", "query": "test"}).run()
+            return output
+
+        output = asyncio.run(gather_output())
 
         self.assertTrue("headers" in output)
 
