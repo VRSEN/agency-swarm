@@ -469,7 +469,7 @@ class AgencyTest(unittest.TestCase):
             temperature=0
         )
 
-        self.assertTrue(agency.main_thread.async_mode == 'threading')
+        self.assertTrue(agency.main_thread.async_mode == 'tools_threading')
 
         result = agency.get_completion("Use 2 print tools together at the same time and output the results exectly as they are. ", yield_messages=False)
 
