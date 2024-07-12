@@ -198,6 +198,9 @@ tools = ToolFactory.from_openapi_schema(
 )
 ```
 
+!!! note
+    Schemas folder automatically converts any OpenAPI schemas into BaseTools. This means that your agents will type check all the API parameters **before** calling the API, which significantly reduces any chances of errors.
+
 ---
 
 ## PRO Tips
