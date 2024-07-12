@@ -239,12 +239,12 @@ class Thread:
                 full_message += last_message
 
                 if yield_messages:
-                    yield MessageOutput("text", recipient_agent.name, self.agent.name, full_message, message_obj)
+                    yield MessageOutput("text", recipient_agent.name, self.agent.name, last_message, message_obj)
 
                 if recipient_agent.response_validator:
                     try:
                         if isinstance(recipient_agent, Agent):
-                            recipient_agent.response_validator(message=last_message)
+                            last_message = recipient_agent.response_validator(message=last_message)
                     except Exception as e:
                         if validation_attempts < recipient_agent.validation_attempts:
                             try:
@@ -280,7 +280,7 @@ class Thread:
 
                             continue
 
-                return full_message
+                return last_message
 
     def _create_run(self, recipient_agent, additional_instructions, event_handler, tool_choice, temperature=None):
         if event_handler:
