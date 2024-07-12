@@ -100,7 +100,7 @@ class Agency:
             from agency_swarm.threads.thread_async import ThreadAsync
             self.ThreadType = ThreadAsync
         elif self.async_mode == "tools_threading":
-            Thread.async_mode = "threading"
+            Thread.async_mode = self.async_mode
         elif self.async_mode is None:
             pass
         else:

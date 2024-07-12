@@ -151,15 +151,14 @@ class Thread:
                     tool_outputs.append({"tool_call_id": tool_call.id, "output": output})
                     tool_names.append(tool_call.function.name)
 
-                if len(async_tool_calls) > 0 and self.async_mode == "threading":
+                if len(async_tool_calls) > 0 and self.async_mode == "tools_threading":
                     max_workers = min(self.max_workers, os.cpu_count() or 1)  # Use at most 4 workers or the number of CPUs available
                     with ThreadPoolExecutor(max_workers=max_workers) as executor:
                         futures = {}
                         for tool_call in async_tool_calls:
-                            if tool_call.function.name != "SendMessage":
-                                if yield_messages:
-                                    yield MessageOutput("function", recipient_agent.name, self.agent.name, str(tool_call.function), tool_call)
-                                futures[executor.submit(self.execute_tool, tool_call, recipient_agent, event_handler, tool_names)] = tool_call
+                            if yield_messages:
+                                yield MessageOutput("function", recipient_agent.name, self.agent.name, str(tool_call.function), tool_call)
+                            futures[executor.submit(self.execute_tool, tool_call, recipient_agent, event_handler, tool_names)] = tool_call
 
                         for future in as_completed(futures):
                             tool_call = futures[future]
