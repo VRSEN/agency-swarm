@@ -944,7 +944,7 @@ class Agency:
                 continue
             agent = self._get_agent_by_name(agent_name)
             agent.add_tool(self._create_send_message_tool(agent, recipient_agents))
-            if self.async_mode:
+            if self.async_mode == 'threading':
                 agent.add_tool(self._create_get_response_tool(agent, recipient_agents))
 
     def _create_send_message_tool(self, agent: Agent, recipient_agents: List[Agent]):
@@ -1008,7 +1008,7 @@ class Agency:
             def run(self):
                 thread = outer_self.agents_and_threads[self.caller_agent.name][self.recipient.value]
 
-                if not outer_self.async_mode:
+                if not outer_self.async_mode == 'threading':
                     message = thread.get_completion(message=self.message,
                                                     message_files=self.message_files,
                                                     event_handler=self.event_handler,
@@ -1023,7 +1023,7 @@ class Agency:
                 return message or ""
 
         SendMessage.caller_agent = agent
-        if self.async_mode:
+        if self.async_mode == 'threading':
             SendMessage.__doc__ = self.send_message_tool_description_async
         else:
             SendMessage.__doc__ = self.send_message_tool_description
