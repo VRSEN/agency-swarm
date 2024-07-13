@@ -205,6 +205,21 @@ class Thread:
                     )
                     self._create_run(recipient_agent, additional_instructions, event_handler, tool_choice)
                     error_attempts += 1
+                elif error_attempts < 1 and "rate limit reached" in self.run.last_error.message.lower():
+                    print("Rate limit reached. Waiting for 30 seconds.")
+                    time.sleep(30)
+                    self._create_run(recipient_agent, additional_instructions, event_handler, tool_choice)
+                    error_attempts += 1
+                elif 1 <= error_attempts < 5 and "rate limit reached" in self.run.last_error.message.lower():
+                    print("Rate limit reached. Waiting for 30 seconds.")
+                    time.sleep(30)
+                    self.client.beta.threads.messages.create(
+                        thread_id=self.thread.id,
+                        role="user",
+                        content="Continue."
+                    )
+                    self._create_run(recipient_agent, additional_instructions, event_handler, tool_choice)
+                    error_attempts += 1
                 else:
                     raise Exception("OpenAI Run Failed. Error: ", self.run.last_error.message)
             # return assistant message
