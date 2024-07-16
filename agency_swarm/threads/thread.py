@@ -188,6 +188,11 @@ class Thread:
                 for tool_output in tool_outputs:
                     if not isinstance(tool_output["output"], str):
                         tool_output["output"] = str(tool_output["output"])
+
+                # send message tools can change this in other threads
+                if event_handler:
+                    event_handler.set_agent(self.agent)
+                    event_handler.set_recipient_agent(recipient_agent)
                     
                 # submit tool outputs
                 try:
