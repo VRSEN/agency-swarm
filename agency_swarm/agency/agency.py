@@ -990,7 +990,6 @@ class Agency:
                                                        examples=["file-1234", "file-5678"])
             additional_instructions: str = Field(default=None,
                                                  description="Any additional instructions or clarifications that you would like to provide to the recipient agent.")
-            one_call_at_a_time: bool = True
 
             @model_validator(mode='after')
             def validate_files(self):
@@ -1028,6 +1027,7 @@ class Agency:
             SendMessage.one_call_at_a_time = False
         else:
             SendMessage.__doc__ = self.send_message_tool_description
+            SendMessage.one_call_at_a_time = True
 
         return SendMessage
 
