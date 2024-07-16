@@ -131,8 +131,7 @@ class Thread:
             # function execution
             if self.run.status == "requires_action":
                 tool_calls = self.run.required_action.submit_tool_outputs.tool_calls
-                tool_outputs = []
-                tool_names = []
+                tool_outputs_and_names = [] # list of tuples (name, tool_output)
                 sync_tool_calls = [tool_call for tool_call in tool_calls if tool_call.function.name == "SendMessage"]
                 async_tool_calls = [tool_call for tool_call in tool_calls if tool_call.function.name != "SendMessage"]
 
@@ -148,8 +147,10 @@ class Thread:
                     else:
                         if yield_messages:
                             yield MessageOutput("function_output", tool_call.function.name, recipient_agent.name, output, tool_call)
-                    tool_outputs.append({"tool_call_id": tool_call.id, "output": output})
-                    tool_names.append(tool_call.function.name)
+
+                    for tool_output in tool_outputs_and_names:
+                        if tool_output[1]["tool_call_id"] == tool_call.id:
+                            tool_output[1]["output"] = output
 
                 if len(async_tool_calls) > 0 and self.async_mode == "tools_threading":
                     max_workers = min(self.max_workers, os.cpu_count() or 1)  # Use at most 4 workers or the number of CPUs available
@@ -158,7 +159,8 @@ class Thread:
                         for tool_call in async_tool_calls:
                             if yield_messages:
                                 yield MessageOutput("function", recipient_agent.name, self.agent.name, str(tool_call.function), tool_call)
-                            futures[executor.submit(self.execute_tool, tool_call, recipient_agent, event_handler, tool_names)] = tool_call
+                            futures[executor.submit(self.execute_tool, tool_call, recipient_agent, event_handler, tool_outputs_and_names)] = tool_call
+                            tool_outputs_and_names.append((tool_call.function.name, {"tool_call_id": tool_call.id}))
 
                         for future in as_completed(futures):
                             tool_call = futures[future]
@@ -171,11 +173,21 @@ class Thread:
                 for tool_call in sync_tool_calls:
                     if yield_messages:
                         yield MessageOutput("function", recipient_agent.name, self.agent.name, str(tool_call.function), tool_call)
-                    output = self.execute_tool(tool_call, recipient_agent, event_handler, tool_names)
+                    output = self.execute_tool(tool_call, recipient_agent, event_handler, tool_outputs_and_names)
+                    tool_outputs_and_names.append((tool_call.function.name, {"tool_call_id": tool_call.id, "output": output}))
                     yield from handle_output(tool_call, output)
+                
+                # split names and outputs
+                tool_outputs = [tool_output for _, tool_output in tool_outputs_and_names]
+                tool_names = [name for name, _ in tool_outputs_and_names]
 
                 # await coroutines
                 tool_outputs = self._execute_async_tool_calls_outputs(tool_outputs)
+
+                # convert all tool outputs to strings
+                for tool_output in tool_outputs:
+                    if not isinstance(tool_output["output"], str):
+                        tool_output["output"] = str(tool_output["output"])
                     
                 # submit tool outputs
                 try:
@@ -368,7 +380,7 @@ class Thread:
 
         raise Exception("No assistant message found in the thread")   
 
-    def execute_tool(self, tool_call, recipient_agent=None, event_handler=None, tool_names=[]):
+    def execute_tool(self, tool_call, recipient_agent=None, event_handler=None, tool_outputs_and_names={}):
         if not recipient_agent:
             recipient_agent = self.recipient_agent
 
@@ -383,10 +395,11 @@ class Thread:
             args = tool_call.function.arguments
             args = json.loads(args) if args else {}
             func = func(**args)
-            for tool_name in tool_names:
+            for tool_name in [name for name, _ in tool_outputs_and_names]:
                 if tool_name == tool_call.function.name and (
                         hasattr(func, "one_call_at_a_time") and func.one_call_at_a_time):
                     return f"Error: Function {tool_call.function.name} is already called. You can only call this function once at a time. Please wait for the previous call to finish before calling it again."
+            
             func.caller_agent = recipient_agent
             func.event_handler = event_handler
 
@@ -417,10 +430,6 @@ class Thread:
             
             for tool_output, result in zip(async_tool_calls, results):
                 tool_output["output"] = str(result)
-        
-        for tool_output in tool_outputs:
-            if not isinstance(tool_output["output"], str):
-                tool_output["output"] = str(tool_output["output"])
         
         return tool_outputs
 
