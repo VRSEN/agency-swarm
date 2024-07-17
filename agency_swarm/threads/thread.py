@@ -261,7 +261,8 @@ class Thread:
                 if recipient_agent.response_validator:
                     try:
                         if isinstance(recipient_agent, Agent):
-                            last_message = recipient_agent.response_validator(message=last_message)
+                            # TODO: allow users to modify the last message from response validator and replace it on OpenAI
+                            recipient_agent.response_validator(message=last_message)
                     except Exception as e:
                         if validation_attempts < recipient_agent.validation_attempts:
                             try:
