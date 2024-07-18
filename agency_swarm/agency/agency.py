@@ -540,7 +540,7 @@ class Agency:
             )
 
             # Enable queuing for streaming intermediate outputs
-            demo.queue()
+            demo.queue(default_concurrency_limit=10)
 
         # Launch the demo
         demo.launch(**kwargs)
