@@ -126,7 +126,8 @@ class Agency:
                        recipient_agent: Agent = None,
                        additional_instructions: str = None,
                        attachments: List[dict] = None,
-                       tool_choice: dict = None):
+                       tool_choice: dict = None,
+                       verbose: bool = False):
         """
         Retrieves the completion for a given message from the main thread.
 
@@ -139,22 +140,27 @@ class Agency:
             attachments (List[dict], optional): A list of attachments to be sent with the message, following openai format. Defaults to None.
             tool_choice (dict, optional): The tool choice for the recipient agent to use. Defaults to None.
             parallel_tool_calls (bool, optional): Whether to enable parallel function calling during tool use. Defaults to True.
+            verbose (bool, optional): Whether to print the intermediary messages in console. Defaults to False.
 
         Returns:
             Generator or final response: Depending on the 'yield_messages' flag, this method returns either a generator yielding intermediate messages or the final response from the main thread.
         """
+        if verbose and yield_messages:
+            raise Exception("Verbose mode is not compatible with yield_messages=True")
+        
         res = self.main_thread.get_completion(message=message,
                                                message_files=message_files,
                                                attachments=attachments,
                                                recipient_agent=recipient_agent,
                                                additional_instructions=additional_instructions,
                                                tool_choice=tool_choice,
-                                               yield_messages=yield_messages)
-
-        if not yield_messages:
+                                               yield_messages=yield_messages or verbose)
+        if not yield_messages or verbose:
             while True:
                 try:
-                    next(res)
+                    message = next(res)
+                    if verbose:
+                        message.cprint()
                 except StopIteration as e:
                     return e.value
 

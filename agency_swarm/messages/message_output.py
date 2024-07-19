@@ -44,7 +44,7 @@ class MessageOutput:
     def cprint(self):
         console.rule()
 
-        header_text = self.sender_emoji + " " + self.formatted_header
+        header_text = self.formatted_header
         md_content = Markdown(self.content)
 
         render_group = Group(header_text, md_content)
