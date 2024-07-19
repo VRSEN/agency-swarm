@@ -8,7 +8,7 @@ from typing import List, Optional, Union
 from openai import BadRequestError
 from openai.types.beta import AssistantToolChoice
 from openai.types.beta.threads.message import Attachment
-from openai.types.beta.threads.run import TruncationStrategy
+from openai.types.beta.threads.run import TruncationStrategy, Run
 
 from agency_swarm.tools import FileSearch, CodeInterpreter
 from agency_swarm.util.streaming import AgencyEventHandler
@@ -18,7 +18,6 @@ from agency_swarm.user import User
 from agency_swarm.util.oai import get_openai_client
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
-
 class Thread:
     async_mode: str = None
     max_workers: int = 4
@@ -35,8 +34,14 @@ class Thread:
 
         self.id = None
         self.thread = None
-        self.run = None
+        self.run: Run = None
         self.stream = None
+
+        self.usage: dict = {
+            "completion_tokens": 0,
+            "prompt_tokens": 0,
+            "total_tokens": 0
+        }
 
     def init_thread(self):
         if self.id:
@@ -59,7 +64,8 @@ class Thread:
                               attachments: Optional[List[Attachment]] = None,
                               recipient_agent=None,
                               additional_instructions: str = None,
-                              tool_choice: AssistantToolChoice = None):
+                              tool_choice: AssistantToolChoice = None,
+                              include_details: bool = False):
 
         return self.get_completion(message,
                                    message_files,
@@ -68,7 +74,8 @@ class Thread:
                                    additional_instructions,
                                    event_handler,
                                    tool_choice,
-                                   yield_messages=False)
+                                   yield_messages=False,
+                                   include_details=include_details)
 
     def get_completion(self,
                        message: str | List[dict],
@@ -78,8 +85,8 @@ class Thread:
                        additional_instructions: str = None,
                        event_handler: type(AgencyEventHandler) = None,
                        tool_choice: AssistantToolChoice = None,
-                       yield_messages: bool = False
-                       ):
+                       yield_messages: bool = False,
+                       include_details: bool = False):
         if not recipient_agent:
             recipient_agent = self.recipient_agent
         
@@ -297,7 +304,10 @@ class Thread:
                             self._create_run(recipient_agent, additional_instructions, event_handler, tool_choice)
 
                             continue
-
+                
+                if include_details:
+                    return last_message, self.usage
+                
                 return last_message
 
     def _create_run(self, recipient_agent, additional_instructions, event_handler, tool_choice, temperature=None):
@@ -341,6 +351,7 @@ class Thread:
                 thread_id=self.thread.id,
                 run_id=self.run.id
             )
+        self._add_usage_data()
 
     def _submit_tool_outputs(self, tool_outputs, event_handler):
         if not event_handler:
@@ -438,13 +449,13 @@ class Thread:
                 tool_output["output"] = str(result)
         
         return tool_outputs
+    
+    def _add_usage_data(self):
+        usage = self.run.usage
 
+        if not usage:
+            return
 
-
-
-
-
-
-
-
-
+        self.usage["completion_tokens"] += usage.completion_tokens
+        self.usage["prompt_tokens"] += usage.prompt_tokens
+        self.usage["total_tokens"] += usage.total_tokens

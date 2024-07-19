@@ -45,6 +45,29 @@ class Agency:
     send_message_tool_description = """Use this tool to facilitate direct, synchronous communication between specialized agents within your agency. When you send a message using this tool, you receive a response exclusively from the designated recipient agent. To continue the dialogue, invoke this tool again with the desired recipient agent and your follow-up message. Remember, communication here is synchronous; the recipient agent won't perform any tasks post-response. You are responsible for relaying the recipient agent's responses back to the user, as the user does not have direct access to these replies. Keep engaging with the tool for continuous interaction until the task is fully resolved. Do not send more than 1 message at a time."""
     send_message_tool_description_async = """Use this tool for asynchronous communication with other agents within your agency. Initiate tasks by messaging, and check status and responses later with the 'GetResponse' tool. Relay responses to the user, who instructs on status checks. Continue until task completion."""
 
+    @property
+    def usage(self):
+        # TODO: calculate usage based on models and price
+        total_usage = {
+            "completion_tokens": 0,
+            "prompt_tokens": 0,
+            "total_tokens": 0
+        }
+
+        for agent in self.agents_and_threads.values():
+            if agent == self.main_thread:
+                total_usage['completion_tokens'] = self.main_thread.usage['completion_tokens']
+                total_usage['prompt_tokens'] = self.main_thread.usage['prompt_tokens']
+                total_usage['total_tokens'] = self.main_thread.usage['total_tokens']
+                continue
+
+            for thread in agent.values():
+                total_usage["completion_tokens"] += thread.usage["completion_tokens"]
+                total_usage["prompt_tokens"] += thread.usage["prompt_tokens"]
+                total_usage["total_tokens"] += thread.usage["total_tokens"]
+
+        return total_usage
+    
     def __init__(self,
                  agency_chart: List,
                  shared_instructions: str = "",

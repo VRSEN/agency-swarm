@@ -259,6 +259,26 @@ class AgencyTest(unittest.TestCase):
         except json.JSONDecodeError as e:
             self.assertTrue(False)
 
+        # test usage
+        print("Agency usage:", self.__class__.agency.usage)
+        print("Main thread usage:", main_thread.usage)
+        print("Agent1 thread usage:", agent1_thread.usage)
+        print("Agent2 thread usage:", agent2_thread.usage)
+
+        self.assertTrue(self.__class__.agency.usage["completion_tokens"] > 0)
+        self.assertTrue(self.__class__.agency.usage["prompt_tokens"] > 0)
+        self.assertTrue(self.__class__.agency.usage["total_tokens"] > 0)
+
+        combined_usage = {
+            "completion_tokens": main_thread.usage["completion_tokens"] + agent1_thread.usage["completion_tokens"] + agent2_thread.usage["completion_tokens"],
+            "prompt_tokens": main_thread.usage["prompt_tokens"] + agent1_thread.usage["prompt_tokens"] + agent2_thread.usage["prompt_tokens"],
+            "total_tokens": main_thread.usage["total_tokens"] + agent1_thread.usage["total_tokens"] + agent2_thread.usage["total_tokens"]
+        }
+
+        self.assertEqual(self.__class__.agency.usage["completion_tokens"], combined_usage["completion_tokens"])
+        self.assertEqual(self.__class__.agency.usage["prompt_tokens"], combined_usage["prompt_tokens"])
+        self.assertEqual(self.__class__.agency.usage["total_tokens"], combined_usage["total_tokens"])
+
     def test_5_agent_communication_stream(self):
         """it should communicate between agents using streaming"""
         print("TestAgent1 tools", self.__class__.agent1.tools)
