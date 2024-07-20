@@ -1,6 +1,6 @@
 # 🐝 Agency Swarm
 
-[![Framework](https://firebasestorage.googleapis.com/v0/b/vrsen-ai/o/public%2Fyoutube%2FFramework.png?alt=media&token=ae76687f-0347-4e0c-8342-4c5d31e3f050)](https://youtu.be/M5Pa0pLgyYU?si=f-cQV8FoiGd98uuk)
+![Framework](https://firebasestorage.googleapis.com/v0/b/vrsen-ai/o/public%2Fgithub%2Fagency-swarm-logo-white.png?alt=media&token=76d8615d-1211-426a-bd4f-b9098cbfbc43)
 
 ## Overview
 
