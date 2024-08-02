@@ -19,6 +19,8 @@ from agency_swarm.util.oai import get_openai_client
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+import re
+
 class Thread:
     async_mode: str = None
     max_workers: int = 4
@@ -110,10 +112,9 @@ class Thread:
         print(f'THREAD:[ {sender_name} -> {recipient_agent.name} ]: URL {self.thread_url}')
 
         # send message
-        message_obj = self.client.beta.threads.messages.create(
-            thread_id=self.thread.id,
+        message_obj = self.create_message(
+            message=message,
             role="user",
-            content=message,
             attachments=attachments
         )
 
@@ -199,10 +200,9 @@ class Thread:
                     self._submit_tool_outputs(tool_outputs, event_handler)
                 except BadRequestError as e:
                     if 'Runs in status "expired"' in e.message:
-                        self.client.beta.threads.messages.create(
-                            thread_id=self.thread.id,
-                            role="user",
-                            content="Previous request timed out. Please repeat the exact same tool calls in the exact same order with the same arguments."
+                        self.create_message(
+                            message="Previous request timed out. Please repeat the exact same tool calls in the exact same order with the same arguments.",
+                            role="user"
                         )
 
                         self._create_run(recipient_agent, additional_instructions, event_handler, 'required', temperature=0)
@@ -238,10 +238,9 @@ class Thread:
                     self._create_run(recipient_agent, additional_instructions, event_handler, tool_choice)
                     error_attempts += 1
                 elif 1 <= error_attempts < 5 and "something went wrong" in self.run.last_error.message.lower():
-                    self.client.beta.threads.messages.create(
-                        thread_id=self.thread.id,
-                        role="user",
-                        content="Continue."
+                    self.create_message(
+                        message="Continue.",
+                        role="user"
                     )
                     self._create_run(recipient_agent, additional_instructions, event_handler, tool_choice)
                     error_attempts += 1
@@ -274,10 +273,9 @@ class Thread:
                             except Exception as eval_exception:
                                 content = str(e)
 
-                            message_obj = self.client.beta.threads.messages.create(
-                                thread_id=self.thread.id,
-                                role="user",
-                                content=content,
+                            message_obj = self.create_message(
+                                message=content,
+                                role="user"
                             )
 
                             if yield_messages:
@@ -385,6 +383,33 @@ class Thread:
             return message
 
         raise Exception("No assistant message found in the thread")   
+
+    def create_message(self, message: str, role: str = "user"):
+        try:
+            return self.client.beta.threads.messages.create(
+                thread_id=self.id,
+                role=role,
+                content=message
+            )
+        except BadRequestError as e:
+            regex = re.compile(
+                r"Can't add messages to thread_([a-zA-Z0-9]+) while a run run_([a-zA-Z0-9]+) is active\."
+            )
+            match = regex.search(str(e))
+            
+            if match:
+                thread_id, run_id = match.groups()
+                self.client.beta.threads.runs.cancel(
+                    thread_id=f"thread_{thread_id}",
+                    run_id=f"run_{run_id}"
+                )
+                return self.client.beta.threads.messages.create(
+                    thread_id=self.id,
+                    role=role,
+                    content=message
+                )
+            else:
+                raise Exception("Please start a new chat.") from e
 
     def execute_tool(self, tool_call, recipient_agent=None, event_handler=None, tool_outputs_and_names={}):
         if not recipient_agent:
