@@ -133,7 +133,7 @@ class Thread:
         validation_attempts = 0
         full_message = ""
         while True:
-            self._run_until_done()
+            self._run_until_done(recipient_agent)
 
             # function execution
             if self.run.status == "requires_action":
@@ -213,7 +213,7 @@ class Thread:
                         )
 
                         self._create_run(recipient_agent, additional_instructions, event_handler, 'required', temperature=0)
-                        self._run_until_done()
+                        self._run_until_done(recipient_agent)
 
                         if self.run.status != "requires_action":
                             raise Exception("Run Failed. Error: ", self.run.last_error or self.run.incomplete_details)
@@ -344,14 +344,15 @@ class Thread:
                 # poll_interval_ms=500,
             )
 
-    def _run_until_done(self):
+    def _run_until_done(self, recipient_agent):
         while self.run.status in ['queued', 'in_progress', "cancelling"]:
             time.sleep(0.5)
             self.run = self.client.beta.threads.runs.retrieve(
                 thread_id=self.thread.id,
                 run_id=self.run.id
             )
-        self._add_usage_data()
+
+        self._add_usage_data(recipient_agent)
 
     def _submit_tool_outputs(self, tool_outputs, event_handler):
         if not event_handler:
@@ -450,12 +451,12 @@ class Thread:
         
         return tool_outputs
     
-    def _add_usage_data(self):
+    def _add_usage_data(self, recipient_agent):
         usage = self.run.usage
 
         if not usage:
             return
 
-        self.usage["completion_tokens"] += usage.completion_tokens
-        self.usage["prompt_tokens"] += usage.prompt_tokens
-        self.usage["total_tokens"] += usage.total_tokens
+        recipient_agent.usage["completion_tokens"] += usage.completion_tokens
+        recipient_agent.usage["prompt_tokens"] += usage.prompt_tokens
+        recipient_agent.usage["total_tokens"] += usage.total_tokens

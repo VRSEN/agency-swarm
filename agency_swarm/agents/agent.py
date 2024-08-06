@@ -12,6 +12,7 @@ from openai.types.beta.assistant import ToolResources
 from agency_swarm.tools import BaseTool, ToolFactory, Retrieval
 from agency_swarm.tools import FileSearch, CodeInterpreter
 from agency_swarm.tools.oai.FileSearch import FileSearchConfig
+from agency_swarm.util.helpers import get_costs
 from agency_swarm.util.oai import get_openai_client
 from agency_swarm.util.openapi import validate_openapi_spec
 from agency_swarm.util.shared_state import SharedState
@@ -50,6 +51,10 @@ class Agent():
         for tool in self.tools:
             if issubclass(tool, BaseTool):
                 tool.shared_state = value
+
+    @property
+    def cost(self):
+        return get_costs(self.model, self.usage)["total_cost"]
 
     def response_validator(self, message: str | list) -> str:
         """
@@ -165,6 +170,12 @@ class Agent():
 
         self._parse_schemas()
         self._parse_tools_folder()
+
+        self.usage = {
+            "completion_tokens": 0,
+            "prompt_tokens": 0,
+            "total_tokens": 0
+        }
 
     # --- OpenAI Assistant Methods ---
 

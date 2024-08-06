@@ -47,26 +47,26 @@ class Agency:
 
     @property
     def usage(self):
-        # TODO: calculate usage based on models and price
         total_usage = {
             "completion_tokens": 0,
             "prompt_tokens": 0,
             "total_tokens": 0
         }
 
-        for agent in self.agents_and_threads.values():
-            if agent == self.main_thread:
-                total_usage['completion_tokens'] = self.main_thread.usage['completion_tokens']
-                total_usage['prompt_tokens'] = self.main_thread.usage['prompt_tokens']
-                total_usage['total_tokens'] = self.main_thread.usage['total_tokens']
-                continue
-
-            for thread in agent.values():
-                total_usage["completion_tokens"] += thread.usage["completion_tokens"]
-                total_usage["prompt_tokens"] += thread.usage["prompt_tokens"]
-                total_usage["total_tokens"] += thread.usage["total_tokens"]
+        for agent in self.agents:
+            total_usage["completion_tokens"] += agent.usage["completion_tokens"]
+            total_usage["prompt_tokens"] += agent.usage["prompt_tokens"]
+            total_usage["total_tokens"] += agent.usage["total_tokens"]
 
         return total_usage
+    
+    @property
+    def cost(self):
+        total_cost = 0
+        for agent in self.agents:
+            total_cost += agent.cost
+        
+        return total_cost
     
     def __init__(self,
                  agency_chart: List,
