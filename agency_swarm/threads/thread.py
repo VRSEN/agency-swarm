@@ -384,12 +384,13 @@ class Thread:
 
         raise Exception("No assistant message found in the thread")   
 
-    def create_message(self, message: str, role: str = "user"):
+    def create_message(self, message: str, role: str = "user", attachments: List[dict] = None):
         try:
             return self.client.beta.threads.messages.create(
                 thread_id=self.id,
                 role=role,
-                content=message
+                content=message,
+                attachments=attachments
             )
         except BadRequestError as e:
             regex = re.compile(
@@ -406,7 +407,8 @@ class Thread:
                 return self.client.beta.threads.messages.create(
                     thread_id=self.id,
                     role=role,
-                    content=message
+                    content=message,
+                    attachments=attachments
                 )
             else:
                 raise Exception("Please start a new chat.") from e
