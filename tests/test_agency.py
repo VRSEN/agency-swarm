@@ -19,6 +19,8 @@ from agency_swarm import set_openai_key, Agent, Agency, AgencyEventHandler, get_
 from typing_extensions import override
 from agency_swarm.tools import BaseTool, ToolFactory
 
+from pydantic import BaseModel
+
 os.environ["DEBUG_MODE"] = "True"
 
 class AgencyTest(unittest.TestCase):
@@ -494,6 +496,30 @@ class AgencyTest(unittest.TestCase):
         result = agency.get_completion("Please call PrintHeaders tool TWICE at the same time in a single message. If any of the function outputs do not contains headers, please say 'error'.")
 
         self.assertTrue(result.lower().count('error') == 0, agency.main_thread.thread_url)
+
+    def test_11_structured_outputs(self):
+        class MathReasoning(BaseModel):
+            class Step(BaseModel):
+                explanation: str
+                output: str
+
+            steps: list[Step]
+            final_answer: str
+
+        math_tutor_prompt = '''
+            You are a helpful math tutor. You will be provided with a math problem,
+            and your goal will be to output a step by step solution, along with a final answer.
+            For each step, just provide the output as an equation use the explanation field to detail the reasoning.
+        '''
+
+        agent = Agent(name="MathTutor", response_format=MathReasoning, instructions=math_tutor_prompt)
+
+        agency = Agency([agent], temperature=0)
+
+        result = agency.get_completion("how can I solve 8x + 7 = -23")
+
+        # check if result is a MathReasoning object
+        self.assertTrue(MathReasoning.model_validate_json(result))
 
     # --- Helper methods ---
 

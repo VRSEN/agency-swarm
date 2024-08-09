@@ -15,6 +15,9 @@ from agency_swarm.tools.oai.FileSearch import FileSearchConfig
 from agency_swarm.util.oai import get_openai_client
 from agency_swarm.util.openapi import validate_openapi_spec
 from agency_swarm.util.shared_state import SharedState
+from pydantic import BaseModel
+from openai import pydantic_function_tool
+from openai.lib._parsing._completions import type_to_response_format_param
 
 class ExampleMessage(TypedDict):
     role: Literal["user", "assistant"]
@@ -74,7 +77,7 @@ class Agent():
             tool_resources: ToolResources = None,
             temperature: float = None,
             top_p: float = None,
-            response_format: Union[str, dict] = "auto",
+            response_format: Union[str, dict, type] = "auto",
             tools_folder: str = None,
             files_folder: Union[List[str], str] = None,
             schemas_folder: Union[List[str], str] = None,
@@ -132,6 +135,9 @@ class Agent():
         self.temperature = temperature
         self.top_p = top_p
         self.response_format = response_format
+        # use structured outputs if response_format is a BaseModel
+        if isinstance(self.response_format, type):
+            self.response_format = type_to_response_format_param(self.response_format)
         self.tools_folder = tools_folder
         self.files_folder = files_folder if files_folder else []
         self.schemas_folder = schemas_folder if schemas_folder else []
