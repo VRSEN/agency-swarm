@@ -82,7 +82,7 @@ class Agent():
             api_params: Dict[str, Dict[str, str]] = None,
             file_ids: List[str] = None,
             metadata: Dict[str, str] = None,
-            model: str = "gpt-4o",
+            model: str = "gpt-4o-2024-08-06",
             validation_attempts: int = 1,
             max_prompt_tokens: int = None,
             max_completion_tokens: int = None,
@@ -546,6 +546,8 @@ class Agent():
         if tools_diff != {}:
             if debug:
                 print(f"Tools mismatch: {tools_diff}")
+                print("local tools: ", self.get_oai_tools())
+                print("assistant tools: ", assistant_settings['tools'])
             return False
 
         if self.temperature != assistant_settings['temperature']:

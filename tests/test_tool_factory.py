@@ -103,7 +103,10 @@ class ToolFactoryTest(unittest.TestCase):
 
         print("tool schema", json.dumps(tool.openai_schema, indent=4))
 
-        assert cleaned_schema == tool.openai_schema
+        tool_schema = tool.openai_schema
+        tool_schema.pop("strict", None)
+
+        assert cleaned_schema == tool_schema
 
     def test_youtube_search_tool(self):
         # requires pip install youtube_search to run
@@ -123,9 +126,14 @@ class ToolFactoryTest(unittest.TestCase):
                 },
                 "required": ["query"],
             },
+            "strict": False
         }
 
         tool = ToolFactory.from_openai_schema(schema, lambda x: x)
+
+        schema['strict'] = True
+
+        tool2 = ToolFactory.from_openai_schema(schema, lambda x: x)
 
         print(json.dumps(tool.openai_schema, indent=4))
 
@@ -133,11 +141,17 @@ class ToolFactoryTest(unittest.TestCase):
 
         print(tool.model_dump())
 
+        self.assertFalse(tool.openai_schema["strict"])
+
         tool.run()
+
+        self.assertTrue(tool2.openai_schema["strict"])
 
     def test_get_weather_openapi(self):
         with open("./data/schemas/get-weather.json", "r") as f:
             tools = ToolFactory.from_openapi_schema(f.read())
+
+        self.assertFalse(tools[0].openai_schema.get("strict", False))
 
         print(json.dumps(tools[0].openai_schema, indent=4))
 

@@ -12,6 +12,9 @@ class BaseTool(OpenAISchema, ABC):
     caller_agent: Any = None
     event_handler: Any = None
     one_call_at_a_time: bool = False
+    
+    class ToolConfig:
+        strict: bool = False
 
     @classmethod
     @property
@@ -24,6 +27,10 @@ class BaseTool(OpenAISchema, ABC):
         properties.pop("shared_state", None)
         properties.pop("event_handler", None)
         properties.pop("one_call_at_a_time", None)
+
+        schema["strict"] = cls.ToolConfig.strict
+        if cls.ToolConfig.strict:
+            schema["parameters"]["additionalProperties"] = False
 
         required = schema.get("parameters", {}).get("required", [])
         if "caller_agent" in required:

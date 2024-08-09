@@ -1,13 +1,9 @@
-from enum import Enum
-import importlib.util
 import inspect
 import json
 import os
-from pathlib import Path
 import sys
 from importlib import import_module
 from typing import Any, Dict, List, Type, Union
-import typing
 
 import jsonref
 from jsonref import requests
@@ -21,7 +17,6 @@ from datamodel_code_generator.model import get_data_model_types
 from datamodel_code_generator.parser.jsonschema import JsonSchemaParser
 
 import httpx
-import asyncio
 
 class ToolFactory:
 
@@ -118,15 +113,20 @@ class ToolFactory:
         if not model:
             raise ValueError(f"Could not extract model from schema {schema['name']}")
         
+        class ToolConfig:
+            strict: bool = schema.get("strict", False)
+        
         tool = type(schema['name'], (BaseTool, model), {
             "__doc__": schema.get('description', ""),
             "run": callback,
         })
 
+        tool.ToolConfig = ToolConfig
+
         return tool
 
     @staticmethod
-    def from_openapi_schema(schema: Union[str, dict], headers: Dict[str, str] = None, params: Dict[str, Any] = None) \
+    def from_openapi_schema(schema: Union[str, dict], headers: Dict[str, str] = None, params: Dict[str, Any] = None, strict: bool = False) \
             -> List[Type[BaseTool]]:
         """
         Converts an OpenAPI schema into a list of BaseTools.
@@ -135,7 +135,7 @@ class ToolFactory:
             schema: The OpenAPI schema to convert.
             headers: The headers to use for requests.
             params: The parameters to use for requests.
-
+            strict: Whether to use strict OpenAI mode.
         Returns:
             A list of BaseTools.
         """
@@ -227,6 +227,7 @@ class ToolFactory:
                     "name": function_name,
                     "description": desc,
                     "parameters": schema,
+                    "strict": strict
                 }
 
                 tools.append(ToolFactory.from_openai_schema(function, callback))

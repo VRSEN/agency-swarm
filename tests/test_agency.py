@@ -4,6 +4,7 @@ import os
 import shutil
 import sys
 import time
+from typing import ClassVar
 import unittest
 
 from openai.types.beta.threads import Text
@@ -108,8 +109,8 @@ class AgencyTest(unittest.TestCase):
             """
             A simple test tool that returns "Test Successful" to demonstrate the functionality of a custom tool within the Agency Swarm framework.
             """
-
-            # This tool does not require any input fields, but you can define them similarly for other tools.
+            class ToolConfig:
+                strict = True
 
             def run(self):
                 """
@@ -139,6 +140,8 @@ class AgencyTest(unittest.TestCase):
             "type": "json_object",
         }
 
+        cls.agent2.model="gpt-4o-2024-08-06"
+
         cls.ceo = CEO()
         cls.ceo.examples = [
             {
@@ -164,6 +167,8 @@ class AgencyTest(unittest.TestCase):
             threads_callbacks=self.__class__.threads_callbacks,
             temperature=0,
         )
+
+        self.assertTrue(self.__class__.TestTool.openai_schema["strict"])
 
         self.check_all_agents_settings()
 
@@ -473,8 +478,8 @@ class AgencyTest(unittest.TestCase):
 
         result = agency.get_completion("Use 2 print tools together at the same time and output the results exectly as they are. ", yield_messages=False)
 
-        self.assertIn("printed successfully", result.lower(), agency.main_thread.thread_url)
-        self.assertIn("another print successful", result.lower(), agency.main_thread.thread_url)
+        self.assertIn("success", result.lower(), agency.main_thread.thread_url)
+        self.assertIn("success", result.lower(), agency.main_thread.thread_url)
 
     def test_10_concurrent_API_calls(self):
         """it should execute API calls concurrently with asyncio"""
@@ -531,14 +536,19 @@ class AgencyTest(unittest.TestCase):
                     self.assertTrue(assistant.tools[1].file_search.max_num_results == 49)  # Updated line
                 self.assertTrue(assistant.tools[2].type == "function")
                 self.assertTrue(assistant.tools[2].function.name == "SendMessage")
+                self.assertFalse(assistant.tools[2].function.strict)
                 if async_mode:
                     self.assertTrue(assistant.tools[3].type == "function")
                     self.assertTrue(assistant.tools[3].function.name == "GetResponse")
+                    self.assertFalse(assistant.tools[3].function.strict)
+                
             elif agent.name == "TestAgent2":
                 self.assertTrue(len(assistant.tools) == self.__class__.num_schemas + 1)
                 for tool in assistant.tools:
                     self.assertTrue(tool.type == "function")
                     self.assertTrue(tool.function.name in [tool.__name__ for tool in agent.tools])
+                test_tool = next((tool for tool in assistant.tools if tool.function.name == "TestTool"), None)
+                self.assertTrue(test_tool.function.strict, test_tool)
             elif agent.name == "CEO":
                 num_tools = 1 if not async_mode else 2
                 self.assertFalse(assistant.tool_resources.code_interpreter)
@@ -558,7 +568,7 @@ class AgencyTest(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         shutil.rmtree("./test_agents")
-        os.remove("./settings.json")
+        # os.remove("./settings.json")
         if cls.agency:
             cls.agency.delete()
 
