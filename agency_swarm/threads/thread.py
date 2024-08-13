@@ -404,6 +404,11 @@ class Thread:
                     thread_id=f"thread_{thread_id}",
                     run_id=f"run_{run_id}"
                 )
+                self.run = self.client.beta.threads.runs.poll(
+                    thread_id=self.id,
+                    run_id=self.run.id,
+                    poll_interval_ms=500,
+                )
                 return self.client.beta.threads.messages.create(
                     thread_id=self.id,
                     role=role,
