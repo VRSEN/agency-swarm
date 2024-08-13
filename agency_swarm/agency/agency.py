@@ -3,14 +3,20 @@ import json
 import os
 import queue
 import threading
-import time
 import uuid
 from enum import Enum
-from typing import List, TypedDict, Callable, Any, Dict, Literal, Union, Optional
+from typing import Any, Callable, Dict, List, Literal, Optional, Type, TypeVar, TypedDict, Union
 
+from openai.lib._parsing._completions import type_to_response_format_param
 from openai.types.beta.threads import Message
 from openai.types.beta.threads.runs import RunStep
-from pydantic import Field, field_validator, model_validator
+from openai.types.beta.threads.runs.tool_call import (
+    CodeInterpreterToolCall,
+    FileSearchToolCall,
+    FunctionToolCall,
+    ToolCall,
+)
+from pydantic import BaseModel, Field, field_validator, model_validator
 from rich.console import Console
 from typing_extensions import override
 
@@ -18,17 +24,16 @@ from agency_swarm.agents import Agent
 from agency_swarm.messages import MessageOutput
 from agency_swarm.messages.message_output import MessageOutputLive
 from agency_swarm.threads import Thread
-from agency_swarm.tools import BaseTool, FileSearch, CodeInterpreter
+from agency_swarm.tools import BaseTool, CodeInterpreter, FileSearch
 from agency_swarm.user import User
+from agency_swarm.util.errors import RefusalError
 from agency_swarm.util.files import determine_file_type
 from agency_swarm.util.shared_state import SharedState
-from openai.types.beta.threads.runs.tool_call import ToolCall, FunctionToolCall, CodeInterpreterToolCall, FileSearchToolCall
-
-
 from agency_swarm.util.streaming import AgencyEventHandler
 
 console = Console()
 
+T = TypeVar('T', bound=BaseModel)
 
 class SettingsCallbacks(TypedDict):
     load: Callable[[], List[Dict]]
@@ -127,7 +132,8 @@ class Agency:
                        additional_instructions: str = None,
                        attachments: List[dict] = None,
                        tool_choice: dict = None,
-                       verbose: bool = False):
+                       verbose: bool = False,
+                       response_format: dict = None):
         """
         Retrieves the completion for a given message from the main thread.
 
@@ -141,6 +147,7 @@ class Agency:
             tool_choice (dict, optional): The tool choice for the recipient agent to use. Defaults to None.
             parallel_tool_calls (bool, optional): Whether to enable parallel function calling during tool use. Defaults to True.
             verbose (bool, optional): Whether to print the intermediary messages in console. Defaults to False.
+            response_format (dict, optional): The response format to use for the completion.
 
         Returns:
             Generator or final response: Depending on the 'yield_messages' flag, this method returns either a generator yielding intermediate messages or the final response from the main thread.
@@ -154,7 +161,9 @@ class Agency:
                                                recipient_agent=recipient_agent,
                                                additional_instructions=additional_instructions,
                                                tool_choice=tool_choice,
-                                               yield_messages=yield_messages or verbose)
+                                               yield_messages=yield_messages or verbose,
+                                               response_format=response_format)
+        
         if not yield_messages or verbose:
             while True:
                 try:
@@ -174,7 +183,8 @@ class Agency:
                               recipient_agent: Agent = None,
                               additional_instructions: str = None,
                               attachments: List[dict] = None,
-                              tool_choice: dict = None):
+                              tool_choice: dict = None,
+                              response_format: dict = None):
         """
         Generates a stream of completions for a given message from the main thread.
 
@@ -200,14 +210,60 @@ class Agency:
                                                       attachments=attachments,
                                                       recipient_agent=recipient_agent,
                                                       additional_instructions=additional_instructions,
-                                                      tool_choice=tool_choice)
+                                                      tool_choice=tool_choice,
+                                                      response_format=response_format)
 
         while True:
             try:
                 next(res)
             except StopIteration as e:
                 event_handler.on_all_streams_end()
+
                 return e.value
+                
+    def get_completion_parse(self, message: str,
+                             response_format: Type[T],
+                             message_files: List[str] = None,
+                             recipient_agent: Agent = None,
+                             additional_instructions: str = None,
+                             attachments: List[dict] = None,
+                             tool_choice: dict = None) -> T:
+        """
+        Retrieves the completion for a given message from the main thread and parses the response using the provided response format.
+
+        Parameters:
+            message (str): The message for which completion is to be retrieved.
+            response_format (type(T)): The response format to use for the completion.
+            message_files (list, optional): A list of file ids to be sent as attachments with the message. When using this parameter, files will be assigned both to file_search and code_interpreter tools if available. It is recommended to assign files to the most sutiable tool manually, using the attachments parameter.  Defaults to None.
+            recipient_agent (Agent, optional): The agent to which the message should be sent. Defaults to the first agent in the agency chart.
+            additional_instructions (str, optional): Additional instructions to be sent with the message. Defaults to None.
+            attachments (List[dict], optional): A list of attachments to be sent with the message, following openai format. Defaults to None.
+            tool_choice (dict, optional): The tool choice for the recipient agent to use. Defaults to None.
+        
+        Returns:
+            Final response: The final response from the main thread, parsed using the provided response format.
+        """
+        response_model = None
+        if isinstance(response_format, type):
+            response_model = response_format
+            response_format = type_to_response_format_param(response_format)
+
+        res = self.get_completion(message=message,
+                            message_files=message_files,
+                            recipient_agent=recipient_agent,
+                            additional_instructions=additional_instructions,
+                            attachments=attachments,
+                            tool_choice=tool_choice,
+                            response_format=response_format)
+        
+        try:
+            return response_model.model_validate_json(res)
+        except:
+            parsed_res = json.loads(res)
+            if 'refusal' in parsed_res:
+                raise RefusalError(parsed_res['refusal'])
+            else:
+                raise Exception("Failed to parse response: " + res)
 
     def demo_gradio(self, height=450, dark_mode=True, **kwargs):
         """

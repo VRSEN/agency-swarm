@@ -521,6 +521,11 @@ class AgencyTest(unittest.TestCase):
         # check if result is a MathReasoning object
         self.assertTrue(MathReasoning.model_validate_json(result))
 
+        result = agency.get_completion_parse("how can I solve 3x + 2 = 14", response_format=MathReasoning)
+
+        # check if result is a MathReasoning object
+        self.assertTrue(isinstance(result, MathReasoning))
+
     # --- Helper methods ---
 
     def get_class_folder_path(self):

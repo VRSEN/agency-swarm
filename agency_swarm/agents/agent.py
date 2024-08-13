@@ -16,7 +16,6 @@ from agency_swarm.util.oai import get_openai_client
 from agency_swarm.util.openapi import validate_openapi_spec
 from agency_swarm.util.shared_state import SharedState
 from pydantic import BaseModel
-from openai import pydantic_function_tool
 from openai.lib._parsing._completions import type_to_response_format_param
 
 class ExampleMessage(TypedDict):
@@ -106,7 +105,7 @@ class Agent():
             tool_resources (ToolResources, optional): A set of resources that are used by the assistant's tools. The resources are specific to the type of tool. For example, the code_interpreter tool requires a list of file IDs, while the file_search tool requires a list of vector store IDs. Defaults to None.
             temperature (float, optional): The temperature parameter for the OpenAI API. Defaults to None.
             top_p (float, optional): The top_p parameter for the OpenAI API. Defaults to None.
-            response_format (Dict, optional): The response format for the OpenAI API. Defaults to None.
+            response_format (Union[str, Dict, type], optional): The response format for the OpenAI API. If BaseModel is provided, it will be converted to a response format. Defaults to None.
             tools_folder (str, optional): Path to a directory containing tools associated with the agent. Each tool must be defined in a separate file. File must be named as the class name of the tool. Defaults to None.
             files_folder (Union[List[str], str], optional): Path or list of paths to directories containing files associated with the agent. Defaults to None.
             schemas_folder (Union[List[str], str], optional): Path or list of paths to directories containing OpenAPI schemas associated with the agent. Defaults to None.

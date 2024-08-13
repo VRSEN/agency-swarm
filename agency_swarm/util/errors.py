@@ -1,0 +1,2 @@
+class RefusalError(Exception):
+    pass
