@@ -3,7 +3,7 @@ from typing import List, Literal, Optional
 import json
 
 import os
-from agency_swarm import llm_validator
+from agency_swarm.util.validators import llm_validator
 
 from agency_swarm import get_openai_client
 from agency_swarm.tools import BaseTool
