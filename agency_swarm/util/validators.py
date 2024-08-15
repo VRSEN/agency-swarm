@@ -2,13 +2,13 @@ from openai import OpenAI
 from typing import Callable
 from pydantic import Field
 from agency_swarm.tools import BaseTool
+from agency_swarm.util.oai import get_openai_client
 
 class Validator(BaseTool):
     """
     Validate if an attribute is correct and if not,
     return a new value with an error message
     """
-
     is_valid: bool = Field(
         default=True,
         description="Whether the attribute is valid based on the requirements",
@@ -65,6 +65,9 @@ def llm_validator(
         temperature (float): The temperature to use for the LLM (default: 0)
         openai_client (OpenAI): The OpenAI client to use (default: None)
     """
+    if client is None:
+        client = get_openai_client()
+
     def llm(v: str) -> str:
         resp = client.beta.chat.completions.parse(
             response_format=Validator,
