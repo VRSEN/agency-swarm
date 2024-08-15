@@ -1075,8 +1075,8 @@ class Agency:
                 if not outer_self.async_mode == 'threading':
                     message = thread.get_completion(message=self.message,
                                                     message_files=self.message_files,
-                                                    event_handler=self.event_handler,
-                                                    yield_messages=not self.event_handler,
+                                                    event_handler=self._event_handler,
+                                                    yield_messages=not self._event_handler,
                                                     additional_instructions=self.additional_instructions,
                                                     )
                 else:
