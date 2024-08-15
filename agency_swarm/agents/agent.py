@@ -51,7 +51,7 @@ class Agent():
         self._shared_state = value
         for tool in self.tools:
             if issubclass(tool, BaseTool):
-                tool.shared_state = value
+                tool._shared_state = value
 
     def response_validator(self, message: str | list) -> str:
         """

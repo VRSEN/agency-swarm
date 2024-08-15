@@ -118,7 +118,7 @@ class AgencyTest(unittest.TestCase):
                 """
                 Executes the test tool's main functionality. In this case, it simply returns a success message.
                 """
-                self.shared_state.set("test_tool_used", True)
+                self._shared_state.set("test_tool_used", True)
 
                 return "Test Successful"
 
@@ -306,7 +306,7 @@ class AgencyTest(unittest.TestCase):
         self.assertTrue(test_agent2_used)
         self.assertTrue(num_on_all_streams_end_calls == 1)
 
-        self.assertTrue(self.__class__.TestTool.shared_state.get("test_tool_used"))
+        self.assertTrue(self.__class__.TestTool._shared_state.get("test_tool_used"))
 
         agent1_thread = self.__class__.agency.agents_and_threads[self.__class__.ceo.name][self.__class__.agent1.name]
         self.assertFalse(agent1_thread.run.parallel_tool_calls)

@@ -69,14 +69,14 @@ class QueryDatabase(BaseTool):
     
     def run(self):
         # Check if context is already retrieved 
-        if self.shared_state.get("context", None) is not None:
+        if self._shared_state.get("context", None) is not None:
             raise ValueError("Context already retrieved. Please proceed with the AnswerQuestion tool.")
         
         # Your code to retrieve the context here
         context = "This is a test context"
         
         # Then, save the context to the shared state
-        self.shared_state.set("context", context)
+        self._shared_state.set("context", context)
         
         return f"Context retrieved: {context}.\n\n Please proceed with the AnswerQuestion tool."
 
@@ -99,7 +99,7 @@ class AnswerQuestion(BaseTool):
     
     def run(self):
         # Remove the context after question is answered
-        self.shared_state.set("context", None)
+        self._shared_state.set("context", None)
         
         # additional logic here as needed, for example save the answer to a database
         
@@ -108,7 +108,7 @@ class AnswerQuestion(BaseTool):
     @model_validator(mode="after")
     def validate_sources(self) -> "QuestionAnswer":
         # In "Agency Swarm", context is directly extracted from `shared_state`
-        context = self.shared_state.get("context", None)  # Highlighting the change
+        context = self._shared_state.get("context", None)  # Highlighting the change
         if context is None:
             # Additional check to ensure context is retrieved before proceeding
             raise ValueError("Please retrieve the context with the QueryDatabase tool first.")
@@ -132,7 +132,7 @@ class Fact(BaseTool):
     
     @model_validator(mode="after")
     def validate_sources(self) -> "Fact":
-        context = self.shared_state.get("context", None)  
+        context = self._shared_state.get("context", None)  
         text_chunks = context.get("text_chunk", None)
         spans = list(self.get_spans(text_chunks))
         self.substring_quote = [text_chunks[span[0] : span[1]] for span in spans]
@@ -234,7 +234,7 @@ tools = ToolFactory.from_openapi_schema(
             if context is None:
                 raise ValueError("No context found. Please propose to the user to change the topic.")
             else:
-                self.shared_state.set("context", context)
+                self._shared_state.set("context", context)
                 return "Context retrieved. Please proceed with explaining the answer."
     ``` 
 3. Use `shared_state` to validate actions taken by other agents, before allowing them to proceed with the next action.
@@ -244,7 +244,7 @@ tools = ToolFactory.from_openapi_schema(
         input: str = Field(...)
    
         def run(self):
-            if self.shared_state.get("action_1_result", None) is "failure":
+            if self._shared_state.get("action_1_result", None) is "failure":
                 raise ValueError("Please proceed with the Action1 tool first.")
             else:
                 return "Success. The action has been taken."

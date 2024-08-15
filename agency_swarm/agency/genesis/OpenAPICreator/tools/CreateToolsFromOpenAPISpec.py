@@ -30,7 +30,7 @@ class CreateToolsFromOpenAPISpec(BaseTool):
     )
 
     def run(self):
-        os.chdir(self.shared_state.get("agency_path"))
+        os.chdir(self._shared_state.get("agency_path"))
 
         os.chdir(self.agent_name)
 
@@ -58,9 +58,9 @@ class CreateToolsFromOpenAPISpec(BaseTool):
             with open("schemas/" + api_name + ".json", "w") as f:
                 f.write(self.openapi_spec)
 
-            return "Successfully added OpenAPI Schema to " + self.shared_state.get("agent_name")
+            return "Successfully added OpenAPI Schema to " + self._shared_state.get("agent_name")
         finally:
-            os.chdir(self.shared_state.get("default_folder"))
+            os.chdir(self._shared_state.get("default_folder"))
 
     @field_validator("openapi_spec", mode='before')
     @classmethod

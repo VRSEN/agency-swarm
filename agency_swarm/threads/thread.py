@@ -443,8 +443,8 @@ class Thread:
                         hasattr(tool, "ToolConfig") and hasattr(tool.ToolConfig, "one_call_at_a_time") and tool.ToolConfig.one_call_at_a_time):
                     return f"Error: Function {tool_call.function.name} is already called. You can only call this function once at a time. Please wait for the previous call to finish before calling it again."
             
-            tool.caller_agent = recipient_agent
-            tool.event_handler = event_handler
+            tool._caller_agent = recipient_agent
+            tool._event_handler = event_handler
 
             return tool.run()
         except Exception as e:

@@ -17,14 +17,14 @@ class ImportAgent(BaseTool):
         None, description="Path to the agency where the agent will be imported. Default is the current agency.")
 
     def run(self):
-        if not self.shared_state.get("default_folder"):
-            self.shared_state.set("default_folder", os.getcwd())
+        if not self._shared_state.get("default_folder"):
+            self._shared_state.set("default_folder", os.getcwd())
 
-        if not self.shared_state.get("agency_path") and not self.agency_path:
+        if not self._shared_state.get("agency_path") and not self.agency_path:
             return "Error: You must set the agency_path."
 
-        if self.shared_state.get("agency_path"):
-            os.chdir(self.shared_state.get("agency_path"))
+        if self._shared_state.get("agency_path"):
+            os.chdir(self._shared_state.get("agency_path"))
         else:
             os.chdir(self.agency_path)
 
@@ -38,7 +38,7 @@ class ImportAgent(BaseTool):
         with open("agency.py", "w") as f:
             f.writelines(lines)
 
-        os.chdir(self.shared_state.get("default_folder"))
+        os.chdir(self._shared_state.get("default_folder"))
 
         return (f"Success. {self.agent_name} has been imported. "
                 f"You can now tell the user to user proceed with next agents.")
@@ -54,5 +54,5 @@ class ImportAgent(BaseTool):
 
 if __name__ == "__main__":
     tool = ImportAgent(agent_name="Devid")
-    tool.shared_state.set("agency_path", "./")
+    tool._shared_state.set("agency_path", "./")
     tool.run()

@@ -34,7 +34,7 @@ Note: This tool only supports opening one URL at a time. The previous URL will b
 
         set_web_driver(wd)
 
-        self.shared_state.set("elements_highlighted", "")
+        self._shared_state.set("elements_highlighted", "")
 
         return "Current URL is: " + wd.current_url + "\n" + "Please output '[send screenshot]' next to analyze the current web page or '[highlight clickable elements]' for further navigation."
 

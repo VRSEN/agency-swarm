@@ -14,22 +14,22 @@ class ReadManifesto(BaseTool):
     )
 
     def run(self):
-        if not self.shared_state.get("default_folder"):
-            self.shared_state.set('default_folder', os.getcwd())
+        if not self._shared_state.get("default_folder"):
+            self._shared_state.set('default_folder', os.getcwd())
 
-        if not self.shared_state.get("agency_path") and not self.agency_name:
+        if not self._shared_state.get("agency_path") and not self.agency_name:
             raise ValueError("Please specify the agency name. Ask user for clarification if needed.")
 
         if self.agency_name:
             os.chdir("./" + self.agency_name)
         else:
-            os.chdir(self.shared_state.get("agency_path"))
+            os.chdir(self._shared_state.get("agency_path"))
 
         with open("agency_manifesto.md", "r") as f:
             manifesto = f.read()
 
-        os.chdir(self.shared_state.get("default_folder"))
+        os.chdir(self._shared_state.get("default_folder"))
 
-        self.shared_state.set("manifesto_read", True)
+        self._shared_state.set("manifesto_read", True)
 
         return manifesto

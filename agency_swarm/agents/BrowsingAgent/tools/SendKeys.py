@@ -38,7 +38,7 @@ class SendKeys(BaseTool):
 
     def run(self):
         wd = get_web_driver()
-        if 'input' not in self.shared_state.get("elements_highlighted", ""):
+        if 'input' not in self._shared_state.get("elements_highlighted", ""):
             raise ValueError("Please highlight input elements on the page first by outputting '[highlight text fields]' message. You must output just the message without calling the tool first, so the user can respond with the screenshot.")
 
         all_elements = wd.find_elements(By.CSS_SELECTOR, '.highlighted-element')

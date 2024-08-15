@@ -52,12 +52,12 @@ class CreateAgentTemplate(BaseTool):
     )
 
     def run(self):
-        if not self.shared_state.get("manifesto_read"):
+        if not self._shared_state.get("manifesto_read"):
             raise ValueError("Please read the manifesto first with the ReadManifesto tool.")
 
-        self.shared_state.set("agent_name", self.agent_name)
+        self._shared_state.set("agent_name", self.agent_name)
 
-        os.chdir(self.shared_state.get("agency_path"))
+        os.chdir(self._shared_state.get("agency_path"))
 
         # remove folder if it already exists
         if os.path.exists(self.agent_name):
@@ -70,7 +70,7 @@ class CreateAgentTemplate(BaseTool):
                               include_example_tool=False)
 
         # # create or append to init file
-        path = self.shared_state.get("agency_path")
+        path = self._shared_state.get("agency_path")
         class_name = self.agent_name.replace(" ", "").strip()
         if not os.path.isfile("__init__.py"):
             with open("__init__.py", "w") as f:
@@ -87,7 +87,7 @@ class CreateAgentTemplate(BaseTool):
         with open("agency.py", "w") as f:
             f.writelines(lines)
 
-        os.chdir(self.shared_state.get("default_folder"))
+        os.chdir(self._shared_state.get("default_folder"))
 
         if "ceo" in self.agent_name.lower():
             return f"You can tell the user that the process of creating {self.agent_name} has been completed, because CEO agent does not need to utilizie any tools or APIs."

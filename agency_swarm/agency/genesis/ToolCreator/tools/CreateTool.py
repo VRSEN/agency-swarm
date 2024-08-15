@@ -77,10 +77,10 @@ To share state between 2 or more tools, you can use the `shared_state` attribute
 class MyCustomTool(BaseTool):
     def run(self):
         # Access the shared state
-        value = self.shared_state.get("key")
+        value = self._shared_state.get("key")
         
         # Update the shared state
-        self.shared_state.set("key", "value")
+        self._shared_state.set("key", "value")
         
         return "Result of MyCustomTool operation"
         
@@ -88,7 +88,7 @@ class MyCustomTool(BaseTool):
 class AnotherTool(BaseTool):
     def run(self):
         # Access the shared state
-        value = self.shared_state.get("key")
+        value = self._shared_state.get("key")
         
         return "Result of AnotherTool operation"
 ```
@@ -132,7 +132,7 @@ class CreateTool(BaseTool):
         if self.agency_name:
             os.chdir("./" + self.agency_name)
         else:
-            os.chdir(self.shared_state.get("agency_path"))
+            os.chdir(self._shared_state.get("agency_path"))
         os.chdir(self.agent_name)
 
         client = get_openai_client()
@@ -153,7 +153,7 @@ class CreateTool(BaseTool):
                     prev_content = file.read()
                     message += f"\n\n```{prev_content}```"
             except Exception as e:
-                os.chdir(self.shared_state.get("default_folder"))
+                os.chdir(self._shared_state.get("default_folder"))
                 return f'Error reading {self.tool_name}: {e}'
 
         history.append({
@@ -212,16 +212,16 @@ class CreateTool(BaseTool):
         if n == 3 or not code:
             # remove last message from history
             history.pop()
-            os.chdir(self.shared_state.get("default_folder"))
+            os.chdir(self._shared_state.get("default_folder"))
             return "Error: Could not generate a valid file."
         try:
             with open("./tools/" + self.tool_name + ".py", "w") as file:
                 file.write(code)
 
-            os.chdir(self.shared_state.get("default_folder"))
+            os.chdir(self._shared_state.get("default_folder"))
             return f'{content}\n\nPlease make sure to now test this tool if possible.'
         except Exception as e:
-            os.chdir(self.shared_state.get("default_folder"))
+            os.chdir(self._shared_state.get("default_folder"))
             return f'Error writing to file: {e}'
 
     @field_validator("requirements", mode="after")
@@ -250,7 +250,7 @@ class CreateTool(BaseTool):
 
     @model_validator(mode="after")
     def validate_agency_name(self):
-        if not self.agent_name and not self.shared_state.get("agent_name"):
+        if not self.agent_name and not self._shared_state.get("agent_name"):
             raise ValueError("Please provide agent name.")
 
         check_agency_path(self)

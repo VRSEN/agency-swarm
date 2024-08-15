@@ -1067,7 +1067,7 @@ class Agency:
                 return value
 
             def run(self):
-                thread = outer_self.agents_and_threads[self.caller_agent.name][self.recipient.value]
+                thread = outer_self.agents_and_threads[self._caller_agent.name][self.recipient.value]
 
                 if not outer_self.async_mode == 'threading':
                     message = thread.get_completion(message=self.message,
@@ -1083,7 +1083,7 @@ class Agency:
 
                 return message or ""
 
-        SendMessage.caller_agent = agent
+        SendMessage._caller_agent = agent
         if self.async_mode == 'threading':
             SendMessage.__doc__ = self.send_message_tool_description_async
             SendMessage.ToolConfig.one_call_at_a_time = False
@@ -1114,11 +1114,11 @@ class Agency:
                 return value
 
             def run(self):
-                thread = outer_self.agents_and_threads[self.caller_agent.name][self.recipient.value]
+                thread = outer_self.agents_and_threads[self._caller_agent.name][self.recipient.value]
 
                 return thread.check_status()
 
-        GetResponse.caller_agent = agent
+        GetResponse._caller_agent = agent
 
         return GetResponse
 

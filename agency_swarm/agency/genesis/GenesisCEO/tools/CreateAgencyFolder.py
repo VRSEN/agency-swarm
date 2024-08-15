@@ -28,21 +28,21 @@ class CreateAgencyFolder(BaseTool):
     )
 
     def run(self):
-        if not self.shared_state.get("default_folder"):
-            self.shared_state.set('default_folder', Path.cwd())
+        if not self._shared_state.get("default_folder"):
+            self._shared_state.set('default_folder', Path.cwd())
 
-        if self.shared_state.get("agency_name") is None:
+        if self._shared_state.get("agency_name") is None:
             os.mkdir(self.agency_name)
             os.chdir("./" + self.agency_name)
-            self.shared_state.set("agency_name", self.agency_name)
-            self.shared_state.set("agency_path", Path("./").resolve())
-        elif self.shared_state.get("agency_name") == self.agency_name and os.path.exists(self.shared_state.get("agency_path")):
-            os.chdir(self.shared_state.get("agency_path"))
+            self._shared_state.set("agency_name", self.agency_name)
+            self._shared_state.set("agency_path", Path("./").resolve())
+        elif self._shared_state.get("agency_name") == self.agency_name and os.path.exists(self._shared_state.get("agency_path")):
+            os.chdir(self._shared_state.get("agency_path"))
             for file in os.listdir():
                 if file != "__init__.py" and os.path.isfile(file):
                     os.remove(file)
         else:
-            os.mkdir(self.shared_state.get("agency_path"))
+            os.mkdir(self._shared_state.get("agency_path"))
             os.chdir("./" + self.agency_name)
 
         # check that agency chart is valid
@@ -67,7 +67,7 @@ class CreateAgencyFolder(BaseTool):
         with open(path, "w") as f:
             f.write(self.manifesto)
 
-        os.chdir(self.shared_state.get('default_folder'))
+        os.chdir(self._shared_state.get('default_folder'))
 
         return f"Agency folder has been created. You can now tell AgentCreator to create agents for {self.agency_name}.\n"
 

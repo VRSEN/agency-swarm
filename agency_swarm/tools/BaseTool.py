@@ -8,14 +8,14 @@ from agency_swarm.util.shared_state import SharedState
 
 
 class BaseTool(BaseModel, ABC):
-    shared_state: ClassVar[SharedState] = None
-    caller_agent: Any = None
-    event_handler: Any = None
+    _shared_state: ClassVar[SharedState] = None
+    _caller_agent: Any = None
+    _event_handler: Any = None
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        if not self.__class__.shared_state:
-            self.__class__.shared_state = SharedState()
+        if not self.__class__._shared_state:
+            self.__class__._shared_state = SharedState()
 
     class ToolConfig:
         strict: bool = False
@@ -58,38 +58,11 @@ class BaseTool(BaseModel, ABC):
                     f"the required parameters with correct types"
                 )
 
-        schema = {
+        return {
             "name": schema["title"],
             "description": schema["description"],
             "parameters": parameters,
         }
-
-        properties = schema.get("parameters", {}).get("properties", {})
-
-        properties.pop("caller_agent", None)
-        properties.pop("shared_state", None)
-        properties.pop("event_handler", None)
-
-        schema["strict"] = cls.ToolConfig.strict
-        if cls.ToolConfig.strict:
-            schema["parameters"]["additionalProperties"] = False
-
-        required = schema.get("parameters", {}).get("required", [])
-        if "caller_agent" in required:
-            required.remove("caller_agent")
-        if "shared_state" in required:
-            required.remove("shared_state")
-        if "event_handler" in required:
-            required.remove("event_handler")
-
-        return schema
-
-    def model_dump(self, exclude=None, **kwargs):
-        if exclude is None:
-            exclude = {"caller_agent", "shared_state", "event_handler"}
-        else:
-            exclude.update({"caller_agent", "shared_state", "event_handler"})
-        return super().model_dump(exclude=exclude, **kwargs)
 
     @abstractmethod
     def run(self, **kwargs):
