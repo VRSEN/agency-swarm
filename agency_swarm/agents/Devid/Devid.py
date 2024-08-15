@@ -2,7 +2,7 @@ from typing_extensions import override
 import re
 from agency_swarm.agents import Agent
 from agency_swarm.tools import FileSearch
-from instructor import llm_validator
+from agency_swarm import llm_validator
 
 
 class Devid(Agent):
