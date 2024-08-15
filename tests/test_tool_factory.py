@@ -6,8 +6,7 @@ import sys
 import unittest
 from typing import List, Optional
 
-from instructor import OpenAISchema
-from pydantic import Field
+from pydantic import Field, BaseModel
 
 sys.path.insert(0, '../agency-swarm')
 from agency_swarm.tools import ToolFactory
@@ -34,7 +33,7 @@ class ToolFactoryTest(unittest.TestCase):
         tool.run()
 
     def test_complex_schema(self):
-        class FriendDetail(OpenAISchema):
+        class FriendDetail(BaseModel):
             "test 123"
             id: int = Field(..., description="Unique identifier for each friend.")
             name: str = Field(..., description="Name of the friend.")
@@ -42,7 +41,7 @@ class ToolFactoryTest(unittest.TestCase):
             email: Optional[str] = Field(None, description="Email address of the friend.")
             is_active: Optional[bool] = Field(None, description="Indicates if the friend is currently active.")
 
-        class UserDetail(OpenAISchema):
+        class UserDetail(BaseModel):
             """Hey this is a test?"""
             id: int = Field(..., description="Unique identifier for each user.")
             age: int
@@ -55,7 +54,7 @@ class ToolFactoryTest(unittest.TestCase):
             FRIEND = "friend"
             COLLEAGUE = "colleague"
 
-        class UserRelationships(OpenAISchema):
+        class UserRelationships(BaseModel):
             """Hey this is a test?"""
             users: List[UserDetail] = Field(...,
                                             description="Collection of users, correctly capturing the relationships among them.", title="Users")
