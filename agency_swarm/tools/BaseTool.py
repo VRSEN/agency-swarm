@@ -58,11 +58,18 @@ class BaseTool(BaseModel, ABC):
                     f"the required parameters with correct types"
                 )
 
-        return {
+        schema = {
             "name": schema["title"],
             "description": schema["description"],
             "parameters": parameters,
         }
+
+        strict = getattr(cls.ToolConfig, "strict", False)
+        if strict:
+            schema["strict"] = True
+            schema["parameters"]["additionalProperties"] = False
+
+        return schema
 
     @abstractmethod
     def run(self, **kwargs):
