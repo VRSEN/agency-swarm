@@ -68,7 +68,9 @@ class BaseTool(BaseModel, ABC):
         if strict:
             schema["strict"] = True
             schema["parameters"]["additionalProperties"] = False
-
+        else:
+            schema["strict"] = False
+            
         return schema
 
     @abstractmethod
