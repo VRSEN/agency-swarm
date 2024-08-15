@@ -9,7 +9,7 @@ from typing import List, Optional
 from pydantic import Field, BaseModel
 
 sys.path.insert(0, '../agency-swarm')
-from agency_swarm.tools import ToolFactory
+from agency_swarm.tools import ToolFactory, BaseTool
 from agency_swarm.util.schema import dereference_schema, reference_schema
 from langchain.tools import MoveFileTool, YouTubeSearchTool
 
@@ -54,7 +54,7 @@ class ToolFactoryTest(unittest.TestCase):
             FRIEND = "friend"
             COLLEAGUE = "colleague"
 
-        class UserRelationships(BaseModel):
+        class UserRelationships(BaseTool):
             """Hey this is a test?"""
             users: List[UserDetail] = Field(...,
                                             description="Collection of users, correctly capturing the relationships among them.", title="Users")
