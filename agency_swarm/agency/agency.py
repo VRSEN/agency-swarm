@@ -227,21 +227,23 @@ class Agency:
                              recipient_agent: Agent = None,
                              additional_instructions: str = None,
                              attachments: List[dict] = None,
-                             tool_choice: dict = None) -> T:
+                             tool_choice: dict = None,
+                             verbose: bool = False) -> T:
         """
-        Retrieves the completion for a given message from the main thread and parses the response using the provided response format.
+        Retrieves the completion for a given message from the main thread and parses the response using the provided pydantic model.
 
         Parameters:
             message (str): The message for which completion is to be retrieved.
-            response_format (type(T)): The response format to use for the completion.
+            response_format (type(BaseModel)): The response format to use for the completion. 
             message_files (list, optional): A list of file ids to be sent as attachments with the message. When using this parameter, files will be assigned both to file_search and code_interpreter tools if available. It is recommended to assign files to the most sutiable tool manually, using the attachments parameter.  Defaults to None.
             recipient_agent (Agent, optional): The agent to which the message should be sent. Defaults to the first agent in the agency chart.
             additional_instructions (str, optional): Additional instructions to be sent with the message. Defaults to None.
             attachments (List[dict], optional): A list of attachments to be sent with the message, following openai format. Defaults to None.
             tool_choice (dict, optional): The tool choice for the recipient agent to use. Defaults to None.
+            verbose (bool, optional): Whether to print the intermediary messages in console. Defaults to False.
         
         Returns:
-            Final response: The final response from the main thread, parsed using the provided response format.
+            Final response: The final response from the main thread, parsed using the provided pydantic model.
         """
         response_model = None
         if isinstance(response_format, type):
@@ -254,7 +256,8 @@ class Agency:
                             additional_instructions=additional_instructions,
                             attachments=attachments,
                             tool_choice=tool_choice,
-                            response_format=response_format)
+                            response_format=response_format,
+                            verbose=verbose)
         
         try:
             return response_model.model_validate_json(res)
