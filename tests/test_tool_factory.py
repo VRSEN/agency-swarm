@@ -103,7 +103,6 @@ class ToolFactoryTest(unittest.TestCase):
         print("tool schema", json.dumps(tool.openai_schema, indent=4))
 
         tool_schema = tool.openai_schema
-        tool_schema.pop("strict", None)
 
         assert cleaned_schema == tool_schema
 
