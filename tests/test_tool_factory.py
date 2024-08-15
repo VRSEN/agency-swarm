@@ -140,7 +140,7 @@ class ToolFactoryTest(unittest.TestCase):
 
         print(tool.model_dump())
 
-        self.assertFalse(tool.openai_schema["strict"])
+        self.assertFalse(tool.openai_schema.get("strict", False))
 
         tool.run()
 
