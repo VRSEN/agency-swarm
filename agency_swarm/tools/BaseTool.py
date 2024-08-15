@@ -12,7 +12,12 @@ class BaseTool(OpenAISchema, ABC):
     caller_agent: Any = None
     event_handler: Any = None
     one_call_at_a_time: bool = False
-    
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        if not self.shared_state:
+            self.shared_state = SharedState()
+
     class ToolConfig:
         strict: bool = False
 
