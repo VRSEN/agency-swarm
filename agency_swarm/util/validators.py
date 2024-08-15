@@ -8,13 +8,13 @@ class Validator(BaseModel):
     Validate if an attribute is correct and if not,
     return a new value with an error message
     """
-    is_valid: bool = Field(
-        default=True,
-        description="Whether the attribute is valid based on the requirements",
-    )
     reason: str = Field(
         default=None,
-        description="The error message if the attribute is not valid, otherwise None",
+        description="Step-by-step reasoning why the attribute could be valid or not with a conclussion at the end.",
+    )
+    is_valid: bool = Field(
+        default=True,
+        description="Whether the attribute is valid based on the requirements.",
     )
     fixed_value: str = Field(
         default=None,
@@ -25,7 +25,7 @@ def llm_validator(
     statement: str,
     client: OpenAI=None,
     allow_override: bool = False,
-    model: str = "gpt-3.5-turbo",
+    model: str = "gpt-4o-mini",
     temperature: float = 0,
 ) -> Callable[[str], str]:
     """
@@ -57,7 +57,7 @@ def llm_validator(
 
     Parameters:
         statement (str): The statement to validate
-        model (str): The LLM to use for validation (default: "gpt-3.5-turbo-0613")
+        model (str): The LLM to use for validation. Must be compatible with structured outputs. (default: "gpt-4o-mini")
         temperature (float): The temperature to use for the LLM (default: 0)
         openai_client (OpenAI): The OpenAI client to use (default: None)
     """
@@ -70,7 +70,7 @@ def llm_validator(
             messages=[
                 {
                     "role": "system",
-                    "content": "You are a world class validation model. Capable to determine if the following value is valid for the statement, if it is not, explain why and suggest a new value.",
+                    "content": "You are a world class validation model, capable to determine if the following value is valid or not for a given statement. Before providing a response, you must think step by step about the validation.",
                 },
                 {
                     "role": "user",
