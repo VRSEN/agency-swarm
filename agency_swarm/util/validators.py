@@ -1,10 +1,9 @@
 from openai import OpenAI
 from typing import Callable
-from pydantic import Field
-from agency_swarm.tools import BaseTool
+from pydantic import Field, BaseModel
 from agency_swarm.util.oai import get_openai_client
 
-class Validator(BaseTool):
+class Validator(BaseModel):
     """
     Validate if an attribute is correct and if not,
     return a new value with an error message
@@ -21,9 +20,6 @@ class Validator(BaseTool):
         default=None,
         description="If the attribute is not valid, suggest a new value for the attribute",
     )
-
-    def run(self):
-        pass
 
 def llm_validator(
     statement: str,
