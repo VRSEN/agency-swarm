@@ -15,8 +15,8 @@ class BaseTool(OpenAISchema, ABC):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        if not self.shared_state:
-            self.shared_state = SharedState()
+        if not self.__class__.shared_state:
+            self.__class__.shared_state = SharedState()
 
     class ToolConfig:
         strict: bool = False
