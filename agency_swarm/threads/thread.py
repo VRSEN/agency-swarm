@@ -428,25 +428,25 @@ class Thread:
             recipient_agent = self.recipient_agent
 
         funcs = recipient_agent.functions
-        func = next((func for func in funcs if func.__name__ == tool_call.function.name), None)
+        tool = next((func for func in funcs if func.__name__ == tool_call.function.name), None)
 
-        if not func:
+        if not tool:
             return f"Error: Function {tool_call.function.name} not found. Available functions: {[func.__name__ for func in funcs]}"
 
         try:
             # init tool
             args = tool_call.function.arguments
             args = json.loads(args) if args else {}
-            func = func(**args)
+            tool = tool(**args)
             for tool_name in [name for name, _ in tool_outputs_and_names]:
                 if tool_name == tool_call.function.name and (
-                        hasattr(func, "one_call_at_a_time") and func.one_call_at_a_time):
+                        hasattr(tool, "ToolConfig") and hasattr(tool.ToolConfig, "one_call_at_a_time") and tool.ToolConfig.one_call_at_a_time):
                     return f"Error: Function {tool_call.function.name} is already called. You can only call this function once at a time. Please wait for the previous call to finish before calling it again."
             
-            func.caller_agent = recipient_agent
-            func.event_handler = event_handler
+            tool.caller_agent = recipient_agent
+            tool.event_handler = event_handler
 
-            return func.run()
+            return tool.run()
         except Exception as e:
             error_message = f"Error: {e}"
             if "For further information visit" in error_message:

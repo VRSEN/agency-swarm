@@ -124,7 +124,9 @@ class CreateTool(BaseTool):
     agency_name: str = Field(
         None, description="Name of the agency to create the tool for. Defaults to the agency currently being created."
     )
-    one_call_at_a_time: bool = True
+
+    class ToolConfig:
+        one_call_at_a_time: bool = True
 
     def run(self):
         if self.agency_name:

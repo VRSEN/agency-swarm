@@ -11,7 +11,6 @@ class BaseTool(BaseModel, ABC):
     shared_state: ClassVar[SharedState] = None
     caller_agent: Any = None
     event_handler: Any = None
-    one_call_at_a_time: bool = False
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -20,6 +19,7 @@ class BaseTool(BaseModel, ABC):
 
     class ToolConfig:
         strict: bool = False
+        one_call_at_a_time: bool = False
 
     @classmethod
     @property
@@ -69,7 +69,6 @@ class BaseTool(BaseModel, ABC):
         properties.pop("caller_agent", None)
         properties.pop("shared_state", None)
         properties.pop("event_handler", None)
-        properties.pop("one_call_at_a_time", None)
 
         schema["strict"] = cls.ToolConfig.strict
         if cls.ToolConfig.strict:
@@ -82,16 +81,14 @@ class BaseTool(BaseModel, ABC):
             required.remove("shared_state")
         if "event_handler" in required:
             required.remove("event_handler")
-        if "one_call_at_a_time" in required:
-            required.remove("one_call_at_a_time")
 
         return schema
 
     def model_dump(self, exclude=None, **kwargs):
         if exclude is None:
-            exclude = {"caller_agent", "shared_state", "event_handler", "one_call_at_a_time"}
+            exclude = {"caller_agent", "shared_state", "event_handler"}
         else:
-            exclude.update({"caller_agent", "shared_state", "event_handler", "one_call_at_a_time"})
+            exclude.update({"caller_agent", "shared_state", "event_handler"})
         return super().model_dump(exclude=exclude, **kwargs)
 
     @abstractmethod

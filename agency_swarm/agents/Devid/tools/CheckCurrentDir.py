@@ -12,7 +12,9 @@ class CheckCurrentDir(BaseTool):
         description="Please think step-by-step about what you need to do next, after checking current directory to solve the task.",
         exclude=True,
     )
-    one_call_at_a_time: bool = True
+
+    class ToolConfig:
+        one_call_at_a_time: bool = True
 
     def run(self):
         import os

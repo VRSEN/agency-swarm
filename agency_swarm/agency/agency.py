@@ -1086,10 +1086,10 @@ class Agency:
         SendMessage.caller_agent = agent
         if self.async_mode == 'threading':
             SendMessage.__doc__ = self.send_message_tool_description_async
-            SendMessage.one_call_at_a_time = False
+            SendMessage.ToolConfig.one_call_at_a_time = False
         else:
             SendMessage.__doc__ = self.send_message_tool_description
-            SendMessage.one_call_at_a_time = True
+            SendMessage.ToolConfig.one_call_at_a_time = True
 
         return SendMessage
 

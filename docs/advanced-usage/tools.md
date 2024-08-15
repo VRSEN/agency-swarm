@@ -249,13 +249,31 @@ tools = ToolFactory.from_openapi_schema(
             else:
                 return "Success. The action has been taken."
     ```
-4. Consider `one_call_at_a_time` class attribute to prevent multiple instances of the same tool from running at the same time. This is useful when you want your agents to see the results of the previous action before proceeding with the next one.
+4. Consider `one_call_at_a_time` ToolConfig class attribute to prevent multiple instances of the same tool from running at the same time. This is useful when you want your agents to see the results of the previous action before proceeding with the next one.
 
     ```python
     class Action1(BaseTool):
         input: str = Field(...)
-        one_call_at_a_time: bool = True
+
+        class ToolConfig:
+            one_call_at_a_time = True
    
         def run(self):
             # your code here
+    ```
+5. Enable [strict mode](https://openai.com/index/introducing-structured-outputs-in-the-api/) for extremely complex nested schemas or mission crictical tools.
+
+    ```python
+    class GetWeatherTool(BaseTool):
+    """
+    Determine weather in a specified location.
+    """
+
+    location: str = Field(..., description="The city and state e.g. San Francisco, CA")
+
+    class ToolConfig:
+      strict = True # setting strict to true
+
+    def run(self):
+        return f"The weather in {self.location} is 30 degrees."
     ```
