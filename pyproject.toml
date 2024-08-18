@@ -15,7 +15,7 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
 ]
 dependencies = [
-    "openai==1.40.6",
+    "openai==1.41.0",
     "docstring_parser==0.16",
     "pydantic==2.8.2",
     "datamodel-code-generator==0.25.8",
