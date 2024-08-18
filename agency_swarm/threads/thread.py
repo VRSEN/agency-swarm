@@ -236,7 +236,7 @@ class Thread:
             elif self.run.status == "failed":
                 full_message += self._get_last_message_text()
                 # retry run 2 times
-                if error_attempts < 1 and "something went wrong" in self.run.last_error.message.lower():
+                if error_attempts < 1 and ("something went wrong" in self.run.last_error.message.lower() or "The server had an error processing your request" in self.run.last_error.message.lower()):
                     time.sleep(1)
                     self._create_run(recipient_agent, additional_instructions, event_handler, tool_choice, response_format=response_format)
                     error_attempts += 1
@@ -405,17 +405,19 @@ class Thread:
             
             if match:
                 thread_id, run_id = match.groups()
+                thread_id = f"thread_{thread_id}"
+                run_id = f"run_{run_id}"
                 self.client.beta.threads.runs.cancel(
-                    thread_id=f"thread_{thread_id}",
-                    run_id=f"run_{run_id}"
+                    thread_id=thread_id,
+                    run_id=run_id
                 )
                 self.run = self.client.beta.threads.runs.poll(
-                    thread_id=self.id,
-                    run_id=self.run.id,
+                    thread_id=thread_id,
+                    run_id=run_id,
                     poll_interval_ms=500,
                 )
                 return self.client.beta.threads.messages.create(
-                    thread_id=self.id,
+                    thread_id=thread_id,
                     role=role,
                     content=message,
                     attachments=attachments
