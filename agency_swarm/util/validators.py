@@ -8,18 +8,9 @@ class Validator(BaseModel):
     Validate if an attribute is correct and if not,
     return a new value with an error message
     """
-    reason: str = Field(
-        default=None,
-        description="Step-by-step reasoning why the attribute could be valid or not with a conclussion at the end.",
-    )
-    is_valid: bool = Field(
-        default=True,
-        description="Whether the attribute is valid based on the requirements.",
-    )
-    fixed_value: str = Field(
-        default=None,
-        description="If the attribute is not valid, suggest a new value for the attribute",
-    )
+    reason: str = Field(..., description="Step-by-step reasoning why the attribute could be valid or not with a conclussion at the end.")
+    is_valid: bool = Field(..., description="Whether the attribute is valid based on the requirements.")
+    fixed_value: str = Field(..., description="If the attribute is not valid, suggest a new value for the attribute. Otherwise, leave it empty.")
 
 def llm_validator(
     statement: str,
@@ -80,6 +71,11 @@ def llm_validator(
             model=model,
             temperature=temperature,
         )
+
+        if resp.choices[0].message.refusal:
+            raise ValueError(resp.choices[0].message.refusal)
+
+        resp = resp.choices[0].message.parsed
 
         # If the response is  not valid, return the reason, this could be used in
         # the future to generate a better response, via reasking mechanism.

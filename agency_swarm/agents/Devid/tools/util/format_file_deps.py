@@ -39,7 +39,7 @@ def format_file_deps(v):
                     "content": f"Extract the dependencies from the file '{file}'."
                 }
             ],
-            model="gpt-3.5-turbo",
+            model="gpt-4o-mini",
             temperature=0,
             response_format=Dependencies
         )
