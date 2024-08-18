@@ -13,9 +13,9 @@ class BaseTool(BaseModel, ABC):
     _event_handler: Any = None
 
     def __init__(self, **kwargs):
-        super().__init__(**kwargs)
         if not self.__class__._shared_state:
             self.__class__._shared_state = SharedState()
+        super().__init__(**kwargs)
 
     class ToolConfig:
         strict: bool = False
@@ -68,6 +68,10 @@ class BaseTool(BaseModel, ABC):
         if strict:
             schema["strict"] = True
             schema["parameters"]["additionalProperties"] = False
+            # iterate through defs and set additionalProperties to false
+            if "$defs" in schema["parameters"]:
+                for def_ in schema["parameters"]["$defs"].values():
+                    def_["additionalProperties"] = False
         else:
             schema["strict"] = False
             
