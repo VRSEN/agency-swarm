@@ -1055,6 +1055,10 @@ class Agency:
                                                        examples=["file-1234", "file-5678"])
             additional_instructions: str = Field(default=None,
                                                  description="Any additional instructions or clarifications that you would like to provide to the recipient agent.")
+            
+            class ToolConfig:
+                strict = False
+                one_call_at_a_time = outer_self.async_mode != 'threading'
 
             @model_validator(mode='after')
             def validate_files(self):
@@ -1089,10 +1093,8 @@ class Agency:
         SendMessage._caller_agent = agent
         if self.async_mode == 'threading':
             SendMessage.__doc__ = self.send_message_tool_description_async
-            SendMessage.ToolConfig.one_call_at_a_time = False
         else:
             SendMessage.__doc__ = self.send_message_tool_description
-            SendMessage.ToolConfig.one_call_at_a_time = True
 
         return SendMessage
 
