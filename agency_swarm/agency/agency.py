@@ -27,7 +27,7 @@ from agency_swarm.threads import Thread
 from agency_swarm.tools import BaseTool, CodeInterpreter, FileSearch
 from agency_swarm.user import User
 from agency_swarm.util.errors import RefusalError
-from agency_swarm.util.files import determine_file_type
+from agency_swarm.util.files import determine_file_type, get_tools
 from agency_swarm.util.shared_state import SharedState
 from agency_swarm.util.streaming import AgencyEventHandler
 
@@ -349,7 +349,7 @@ class Agency:
                             else:
                                 attachments.append({
                                     "file_id": file.id,
-                                    "tools": tools
+                                    "tools": get_tools(file.filename)
                                 })
 
                             message_file_names.append(file.filename)
