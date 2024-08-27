@@ -1,5 +1,9 @@
 import mimetypes
 
+image_types = [
+    "image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"
+]
+
 code_interpreter_types = [
     "application/csv", "image/jpeg", "image/gif", "image/png",
     "application/x-tar", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -17,18 +21,17 @@ dual_types = [
     "application/typescript"
 ]
 
-def determine_file_type(file_path):
+def get_file_purpose(file_path):
     mime_type, _ = mimetypes.guess_type(file_path)
     if mime_type:
-        if mime_type in code_interpreter_types:
-            return "assistants.code_interpreter"
-        elif mime_type.startswith('image/'):
+        if mime_type in image_types:
             return "vision"
-        elif mime_type in dual_types:
-            return "assistants.file_search"
+        if mime_type in code_interpreter_types or mime_type in dual_types:
+            return "assistants"
     raise ValueError(f"Unsupported file type: {mime_type}")
 
 def get_tools(file_path):
+    """Returns the tools for the given file path"""
     mime_type, _ = mimetypes.guess_type(file_path)
     if mime_type in code_interpreter_types:
         return [{"type": "code_interpreter"}]

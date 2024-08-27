@@ -27,7 +27,7 @@ from agency_swarm.threads import Thread
 from agency_swarm.tools import BaseTool, CodeInterpreter, FileSearch
 from agency_swarm.user import User
 from agency_swarm.util.errors import RefusalError
-from agency_swarm.util.files import determine_file_type, get_tools
+from agency_swarm.util.files import get_tools, get_file_purpose
 from agency_swarm.util.shared_state import SharedState
 from agency_swarm.util.streaming import AgencyEventHandler
 
@@ -330,9 +330,7 @@ class Agency:
                 if file_list:
                     try:
                         for file_obj in file_list:
-                            file_type = determine_file_type(file_obj.name)
-                            purpose = "assistants" if file_type != "vision" else "vision"
-                            tools = [{"type": "code_interpreter"}] if file_type == "assistants.code_interpreter" else [{"type": "file_search"}]
+                            purpose = get_file_purpose(file_obj.name)
 
                             with open(file_obj.name, 'rb') as f:
                                 # Upload the file to OpenAI
@@ -341,7 +339,7 @@ class Agency:
                                     purpose=purpose
                                 )
 
-                            if file_type == "vision":
+                            if purpose == "vision":
                                 images.append({
                                     "type": "image_file",
                                     "image_file": {"file_id": file.id}
