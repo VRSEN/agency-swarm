@@ -433,7 +433,7 @@ class Thread:
                     attachments=attachments
                 )
             else:
-                raise Exception("Please start a new chat.") from e
+                raise e
 
     def execute_tool(self, tool_call, recipient_agent=None, event_handler=None, tool_outputs_and_names={}):
         if not recipient_agent:
