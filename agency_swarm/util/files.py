@@ -1,5 +1,8 @@
 import mimetypes
 
+# Register the MIME type for .xlsx files
+mimetypes.add_type('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', '.xlsx')
+
 image_types = [
     "image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"
 ]
@@ -23,19 +26,22 @@ dual_types = [
 
 def get_file_purpose(file_path):
     mime_type, _ = mimetypes.guess_type(file_path)
-    if mime_type:
-        if mime_type in image_types:
-            return "vision"
-        if mime_type in code_interpreter_types or mime_type in dual_types:
-            return "assistants"
+    if not mime_type:
+        raise ValueError(f"Could not determine type for file: {file_path}")
+    if mime_type in image_types:
+        return "vision"
+    if mime_type in code_interpreter_types or mime_type in dual_types:
+        return "assistants"
     raise ValueError(f"Unsupported file type: {mime_type}")
 
 def get_tools(file_path):
     """Returns the tools for the given file path"""
     mime_type, _ = mimetypes.guess_type(file_path)
+    if not mime_type:
+        raise ValueError(f"Could not determine type for file: {file_path}")
     if mime_type in code_interpreter_types:
         return [{"type": "code_interpreter"}]
     elif mime_type in dual_types:
-        return [{"type": "code_interpreter"}, {"type": "retrieval"}]
+        return [{"type": "code_interpreter"}, {"type": "file_search"}]
     else:
         raise ValueError(f"Unsupported file type: {mime_type}")
