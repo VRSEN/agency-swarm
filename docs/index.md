@@ -13,7 +13,7 @@ An open source agent orchestration framework built on top of the latest [OpenAI 
 
 ## What is Agency Swarm?
 
-Agency Swarm started as a desire and effort of Arsenii Shatokhin (aka VRSEN) to fully automate his AI Agency with AI. By building this framework, we aim to simplify the agent creation process and enable anyoone to create collaborative swarm of agents (Agencies), each with distinct roles and capabilities. By thinking about automation in terms of **real world entities**, such as agencies and specialized agent roles, we make it a lot more intuitive for both the agents and the users. 
+Agency Swarm started as a desire and effort of Arsenii Shatokhin (aka VRSEN) to fully automate his AI Agency with AI. By building this framework, we aim to simplify the agent creation process and enable anyone to create collaborative swarm of agents (Agencies), each with distinct roles and capabilities. By thinking about automation in terms of **real world entities**, such as agencies and specialized agent roles, we make it a lot more intuitive for both the agents and the users. 
 
 
 ### Key Features
