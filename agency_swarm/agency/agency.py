@@ -1051,7 +1051,7 @@ class Agency:
             message_files: Optional[List[str]] = Field(default=None,
                                                        description="A list of file ids to be sent as attachments to this message. Only use this if you have the file id that starts with 'file-'.",
                                                        examples=["file-1234", "file-5678"])
-            additional_instructions: str = Field(default=None,
+            additional_instructions: Optional[List[str]] = Field(default=None,
                                                  description="Any additional instructions or clarifications that you would like to provide to the recipient agent.")
             
             class ToolConfig:
