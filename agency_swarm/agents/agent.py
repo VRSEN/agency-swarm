@@ -679,25 +679,24 @@ class Agent():
                 self.instructions = f.read()
         elif "./instructions.md" in self.instructions or "./instructions.txt" in self.instructions:
             raise Exception("Instructions file not found.")
-
-    def get_class_folder_path(self) -> str:
+    
+    def get_class_folder_path(self):
         try:
-            # First, try to get the path from the module
-            module = sys.modules[self.__class__.__module__]
-            if hasattr(module, '__file__'):
-                module_file = module.__file__
-                module_dir = os.path.abspath(os.path.dirname(module_file))
-                return module_dir
+            # First, try to use the __file__ attribute of the module
+            module_name = self.__module__
+            module = sys.modules.get(module_name)
+            if module and hasattr(module, '__file__'):
+                return os.path.abspath(os.path.dirname(module.__file__))
             else:
                 raise AttributeError("Module has no __file__ attribute.")
-        except (KeyError, TypeError, OSError, AttributeError):
-            # If that fails, try to get the path from the file that created the instance
+        except (TypeError, OSError, AttributeError):
+            # If that fails, fall back to inspect
             try:
                 class_file = inspect.getfile(self.__class__)
-                class_dir = os.path.abspath(os.path.realpath(os.path.dirname(class_file)))
-                return class_dir
+                return os.path.abspath(os.path.dirname(class_file))
             except (TypeError, OSError, AttributeError):
-                return "./"
+                # Fallback: return the current working directory
+                return os.getcwd()
 
     def add_shared_instructions(self, instructions: str):
         if not instructions:
