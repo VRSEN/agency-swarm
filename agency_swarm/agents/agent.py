@@ -679,7 +679,7 @@ class Agent():
                 self.instructions = f.read()
         elif "./instructions.md" in self.instructions or "./instructions.txt" in self.instructions:
             raise Exception("Instructions file not found.")
-    
+
     def get_class_folder_path(self):
         try:
             # First, try to use the __file__ attribute of the module
