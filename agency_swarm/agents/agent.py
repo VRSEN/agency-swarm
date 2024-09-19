@@ -2,6 +2,7 @@ import copy
 import inspect
 import json
 import os
+import sys
 from typing import Dict, Union, Any, Type, Literal, TypedDict, Optional
 from typing import List
 
@@ -15,8 +16,8 @@ from agency_swarm.tools.oai.FileSearch import FileSearchConfig
 from agency_swarm.util.oai import get_openai_client
 from agency_swarm.util.openapi import validate_openapi_spec
 from agency_swarm.util.shared_state import SharedState
-from pydantic import BaseModel
 from openai.lib._parsing._completions import type_to_response_format_param
+
 
 class ExampleMessage(TypedDict):
     role: Literal["user", "assistant"]
@@ -679,17 +680,24 @@ class Agent():
         elif "./instructions.md" in self.instructions or "./instructions.txt" in self.instructions:
             raise Exception("Instructions file not found.")
 
-    def get_class_folder_path(self):
+    def get_class_folder_path(self) -> str:
         try:
-            # First, try to use the __file__ attribute of the module
-            return os.path.abspath(os.path.dirname(self.__module__.__file__))
-        except (TypeError, OSError, AttributeError) as e:
-            # If that fails, fall back to inspect
+            # First, try to get the path from the module
+            module = sys.modules[self.__class__.__module__]
+            if hasattr(module, '__file__'):
+                module_file = module.__file__
+                module_dir = os.path.abspath(os.path.dirname(module_file))
+                return module_dir
+            else:
+                raise AttributeError("Module has no __file__ attribute.")
+        except (KeyError, TypeError, OSError, AttributeError):
+            # If that fails, try to get the path from the file that created the instance
             try:
                 class_file = inspect.getfile(self.__class__)
-            except (TypeError, OSError, AttributeError) as e:
+                class_dir = os.path.abspath(os.path.realpath(os.path.dirname(class_file)))
+                return class_dir
+            except (TypeError, OSError, AttributeError):
                 return "./"
-            return os.path.abspath(os.path.realpath(os.path.dirname(class_file)))
 
     def add_shared_instructions(self, instructions: str):
         if not instructions:
