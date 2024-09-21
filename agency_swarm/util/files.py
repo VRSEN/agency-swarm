@@ -2,6 +2,8 @@ import mimetypes
 
 # Register the MIME type for .xlsx files
 mimetypes.add_type('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', '.xlsx')
+mimetypes.add_type('application/vnd.openxmlformats-officedocument.wordprocessingml.document', '.docx')
+mimetypes.add_type('application/vnd.openxmlformats-officedocument.presentationml.presentation', '.pptx')
 
 image_types = [
     "image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"
@@ -10,7 +12,7 @@ image_types = [
 code_interpreter_types = [
     "application/csv", "image/jpeg", "image/gif", "image/png",
     "application/x-tar", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    "application/xml", "text/xml", "application/zip"
+    "application/xml", "text/xml", "application/zip", "text/csv"
 ]
 
 dual_types = [
