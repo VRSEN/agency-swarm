@@ -8,15 +8,18 @@ from typing import List
 from deepdiff import DeepDiff
 from openai import NotFoundError
 from openai.types.beta.assistant import ToolResources
+from astra_assistants import patch, OpenAI
 
 from agency_swarm.tools import BaseTool, ToolFactory, Retrieval
 from agency_swarm.tools import FileSearch, CodeInterpreter
 from agency_swarm.tools.oai.FileSearch import FileSearchConfig
-from agency_swarm.util.oai import get_openai_client
+from agency_swarm.util.oai import get_openai_client, set_openai_client
 from agency_swarm.util.openapi import validate_openapi_spec
 from agency_swarm.util.shared_state import SharedState
 from pydantic import BaseModel
 from openai.lib._parsing._completions import type_to_response_format_param
+
+DEFAULT_MODEL = "gpt-4o-2024-08-06"
 
 class ExampleMessage(TypedDict):
     role: Literal["user", "assistant"]
@@ -84,7 +87,7 @@ class Agent():
             api_params: Dict[str, Dict[str, str]] = None,
             file_ids: List[str] = None,
             metadata: Dict[str, str] = None,
-            model: str = "gpt-4o-2024-08-06",
+            model: str = DEFAULT_MODEL,
             validation_attempts: int = 1,
             max_prompt_tokens: int = None,
             max_completion_tokens: int = None,
@@ -159,7 +162,7 @@ class Agent():
         self._shared_instructions = None
 
         # init methods
-        self.client = get_openai_client()
+        self.client = get_openai_client(model=model)
         self._read_instructions()
 
         # upload files
@@ -226,6 +229,7 @@ class Agent():
                     if assistant_settings['name'] == self.name:
                         try:
                             self.assistant = self.client.beta.assistants.retrieve(assistant_settings['id'])
+
                             self.id = assistant_settings['id']
 
                             # update assistant if parameters are different
@@ -239,6 +243,7 @@ class Agent():
                             self._update_settings()
                             return self
                         except NotFoundError:
+                            print(f"Assistant not found. {assistant_settings} consider deleting your settings.json file and starting over.")
                             continue
 
         # create assistant if settings.json does not exist or assistant with the same name does not exist

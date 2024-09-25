@@ -5,17 +5,17 @@ from .GenesisCEO import GenesisCEO
 from .OpenAPICreator import OpenAPICreator
 from .ToolCreator import ToolCreator
 from agency_swarm.util.helpers import get_available_agent_descriptions
-
+from agency_swarm.agents.agent import DEFAULT_MODEL
 class GenesisAgency(Agency):
-    def __init__(self, with_browsing=True, **kwargs):
+    def __init__(self, with_browsing=True, model=DEFAULT_MODEL, **kwargs):
         if "max_prompt_tokens" not in kwargs:
             kwargs["max_prompt_tokens"] = 25000
 
         if 'agency_chart' not in kwargs:
-            agent_creator = AgentCreator()
-            genesis_ceo = GenesisCEO()
-            tool_creator = ToolCreator()
-            openapi_creator = OpenAPICreator()
+            agent_creator = AgentCreator(model=model)
+            genesis_ceo = GenesisCEO(model=model)
+            tool_creator = ToolCreator(model=model)
+            openapi_creator = OpenAPICreator(model=model)
             kwargs['agency_chart'] = [
                 genesis_ceo, tool_creator, agent_creator,
                 [genesis_ceo, agent_creator],

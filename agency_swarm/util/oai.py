@@ -3,6 +3,9 @@ import openai
 import threading
 import os
 
+from astra_assistants import patch
+from openai.types.chat_model import ChatModel
+
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -11,7 +14,7 @@ client_lock = threading.Lock()
 client = None
 
 
-def get_openai_client():
+def get_openai_client(model:str=None):
     global client
     with client_lock:
         if client is None:
@@ -23,6 +26,9 @@ def get_openai_client():
                                    timeout=httpx.Timeout(60.0, read=40, connect=5.0),
                                    max_retries=10,
                                    default_headers={"OpenAI-Beta": "assistants=v2"})
+            if model is not None and model not in ChatModel:
+                print(f"Using astra-assistants for non OpenAI model {model}, note thread URLs will not work.")
+                client = patch(client)
     return client
 
 
