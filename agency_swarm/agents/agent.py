@@ -377,7 +377,7 @@ class Agent():
             print("Detected files without FileSearch. Adding FileSearch tool...")
             self.add_tool(FileSearch)
         if CodeInterpreter not in self.tools and code_interpreter_ids:
-            print("Detected files without FileSearch. Adding FileSearch tool...")
+            print("Detected files without CodeInterpreter. Adding CodeInterpreter tool...")
             self.add_tool(CodeInterpreter)
 
         self.add_file_ids(file_search_ids, "file_search")
