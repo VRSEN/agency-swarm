@@ -8,7 +8,7 @@ class Validator(BaseModel):
     Validate if an attribute is correct and if not,
     return a new value with an error message
     """
-    reason: str = Field(..., description="Step-by-step reasoning why the attribute could be valid or not with a conclussion at the end.")
+    reason: str = Field(..., description="Step-by-step reasoning why the attribute could be valid or not with a conclusion at the end.")
     is_valid: bool = Field(..., description="Whether the attribute is valid based on the requirements.")
     fixed_value: str = Field(..., description="If the attribute is not valid, suggest a new value for the attribute. Otherwise, leave it empty.")
 
@@ -56,20 +56,21 @@ def llm_validator(
         client = get_openai_client()
 
     def llm(v: str) -> str:
+        system_content = "You are a world class validation model, capable to determine if the following value is valid or not for a given statement. Before providing a response, you must think step by step about the validation."
+        user_content = f"Does `{v}` follow the rules: {statement}"
+        messages = [
+            {"role": "system", "content": system_content},
+            {"role": "user", "content": user_content}
+        ]
+
+        if model.startswith("o1"):
+            messages = [{"role": "user", "content": system_content + "\n\n" + user_content}]
+
         resp = client.beta.chat.completions.parse(
             response_format=Validator,
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You are a world class validation model, capable to determine if the following value is valid or not for a given statement. Before providing a response, you must think step by step about the validation.",
-                },
-                {
-                    "role": "user",
-                    "content": f"Does `{v}` follow the rules: {statement}",
-                },
-            ],
+            messages=messages,
             model=model,
-            temperature=temperature,
+            temperature=None if model.startswith("o1") else temperature,
         )
 
         if resp.choices[0].message.refusal:

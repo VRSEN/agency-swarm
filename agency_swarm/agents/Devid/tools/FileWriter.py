@@ -2,7 +2,7 @@ from typing import List, Literal, Optional
 
 
 import os
-from instructor import llm_validator
+from agency_swarm.util.validators import llm_validator
 
 from agency_swarm import get_openai_client
 from agency_swarm.tools import BaseTool
