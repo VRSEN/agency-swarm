@@ -41,7 +41,7 @@ test_agent2 = Agent(name="Test Agent2",
 
 agency = Agency([
     ceo, [ceo, test_agent, test_agent2],
-], shared_instructions="", async_tool_calls=False)
+], shared_instructions="", settings_path="./test_settings.json")
 
 # agency.demo_gradio()
 

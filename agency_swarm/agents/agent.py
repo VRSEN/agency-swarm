@@ -547,12 +547,35 @@ class Agent():
                 print(f"Instructions mismatch: {self.instructions} != {assistant_settings['instructions']}")
             return False
 
-        tools_diff = DeepDiff(self.get_oai_tools(), assistant_settings['tools'], ignore_order=True)
+        def sort_tool(tool):
+            return json.dumps(tool, sort_keys=True)
+
+        # Sort the tools in both local and assistant settings
+        local_tools = sorted(self.get_oai_tools(), key=sort_tool)
+        assistant_tools = sorted(assistant_settings['tools'], key=sort_tool)
+
+        # Remove 'strict' from all assistant tools if it's set to False
+        for tool in assistant_tools:
+            if isinstance(tool, dict) and 'function' in tool:
+                if 'strict' in tool['function'] and tool['function']['strict'] is False:
+                    tool['function'].pop('strict', None)
+
+        # Ignore specific differences in file_search tool
+        for tool in assistant_tools:
+            if isinstance(tool, dict) and tool.get('type') == 'file_search':
+                if 'file_search' in tool:
+                    tool['file_search'].pop('ranking_options', None)
+        for tool in local_tools:
+            if isinstance(tool, dict) and tool.get('type') == 'file_search':
+                if 'file_search' in tool:
+                    tool['file_search'].pop('ranking_options', None)
+
+        tools_diff = DeepDiff(local_tools, assistant_tools, ignore_order=True)
         if tools_diff != {}:
             if debug:
                 print(f"Tools mismatch: {tools_diff}")
-                print("local tools: ", self.get_oai_tools())
-                print("assistant tools: ", assistant_settings['tools'])
+                print("local tools: ", local_tools)
+                print("assistant tools: ", assistant_tools)
             return False
 
         if self.temperature != assistant_settings['temperature']:

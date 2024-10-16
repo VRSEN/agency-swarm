@@ -72,9 +72,6 @@ class BaseTool(BaseModel, ABC):
             if "$defs" in schema["parameters"]:
                 for def_ in schema["parameters"]["$defs"].values():
                     def_["additionalProperties"] = False
-        else:
-            if "strict" in schema:
-                del schema["strict"]
             
         return schema
 
