@@ -430,9 +430,14 @@ class Agent():
             elif issubclass(tool, Retrieval):
                 tools.append(tool().model_dump())
             elif issubclass(tool, BaseTool):
+                tool_config = tool.openai_schema
+                # remove strict if it's set to False
+                if 'function' in tool_config and 'strict' in tool_config['function']:
+                    if tool_config['function']['strict'] is False:
+                        tool_config['function'].pop('strict', None)
                 tools.append({
                     "type": "function",
-                    "function": tool.openai_schema
+                    "function": tool_config
                 })
             else:
                 raise Exception("Invalid tool type.")
