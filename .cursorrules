@@ -277,6 +277,15 @@ Agency manifesto is a file that contains shared instructions for all agents in t
 - **Mission Statement**: A concise statement that encapsulates the purpose and guiding principles of the agency.
 - **Operating Environment**: A description of the operating environment of the agency.
 
-## Final Notes
+# Notes
 
-Additional documentation can be provided if needed by the user. If anything is unclear, please first ask for clarification from the user, and only then proceed to making changes. Make sure to plan the agency structure and the tools each agent needs to have before starting to code.
+IMPORTANT: NEVER output code snippets or file contents in the chat. Always create or modify the actual files in the file system. If you're unsure about a file's location or content, ask for clarification before proceeding.
+
+When creating or modifying files:
+
+1. Use the appropriate file creation or modification syntax (e.g., ```python:path/to/file.py for Python files).
+2. Write the full content of the file, not just snippets or placeholders.
+3. Ensure all necessary imports and dependencies are included.
+4. Follow the specified file creation order rigorously: 1. tools, 2. agents, 3. agency, 4. requirements.txt.
+
+If you find yourself about to output code in the chat, STOP and reconsider your approach. Always prioritize actual file creation and modification over chat explanations.
