@@ -92,6 +92,7 @@ class Agent():
             examples: List[ExampleMessage] = None,
             file_search: FileSearchConfig = None,
             parallel_tool_calls: bool = True,
+            refresh_from_id: bool = True,
     ):
         """
         Initializes an Agent with specified attributes, tools, and OpenAI client.
@@ -120,6 +121,7 @@ class Agent():
             examples (List[Dict], optional): A list of example messages for the agent. Defaults to None.
             file_search (FileSearchConfig, optional): A dictionary containing the file search tool configuration. Defaults to None.
             parallel_tool_calls (bool, optional): Whether to enable parallel function calling during tool use. Defaults to True.
+            refresh_from_id (bool, optional): Whether to load and update the agent from the OpenAI assistant ID when provided. Defaults to True.
 
         This constructor sets up the agent with its unique properties, initializes the OpenAI client, reads instructions if provided, and uploads any associated files.
         """
@@ -151,6 +153,7 @@ class Agent():
         self.examples = examples
         self.file_search = file_search
         self.parallel_tool_calls = parallel_tool_calls
+        self.refresh_from_id = refresh_from_id
 
         self.settings_path = './settings.json'
 
@@ -187,7 +190,7 @@ class Agent():
         path = self.get_settings_path()
 
         # load assistant from id
-        if self.id:
+        if self.id and self.refresh_from_id:
             self.assistant = self.client.beta.assistants.retrieve(self.id)
 
             # Assign attributes to self if they are None
@@ -211,9 +214,9 @@ class Agent():
                 if tool.type == "retrieval":
                     self.client.beta.assistants.update(self.id, tools=self.get_oai_tools())
 
-            # # update assistant if parameters are different
-            # if not self._check_parameters(self.assistant.model_dump()):
-            #     self._update_assistant()
+            # update assistant if parameters are different
+            if not self._check_parameters(self.assistant.model_dump()):
+                self._update_assistant()
 
             return self
 
