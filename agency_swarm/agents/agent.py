@@ -547,35 +547,26 @@ class Agent():
                 print(f"Instructions mismatch: {self.instructions} != {assistant_settings['instructions']}")
             return False
 
-        def sort_tool(tool):
-            return json.dumps(tool, sort_keys=True)
-
-        # Sort the tools in both local and assistant settings
-        local_tools = sorted(self.get_oai_tools(), key=sort_tool)
-        assistant_tools = sorted(assistant_settings['tools'], key=sort_tool)
-
-        # Remove 'strict' from all assistant tools if it's set to False
-        for tool in assistant_tools:
-            if isinstance(tool, dict) and 'function' in tool:
-                if 'strict' in tool['function'] and tool['function']['strict'] is False:
+        def clean_tool(tool):
+            if isinstance(tool, dict):
+                if 'function' in tool and 'strict' in tool['function'] and not tool['function']['strict']:
                     tool['function'].pop('strict', None)
+                if tool.get('type') == 'file_search' and 'file_search' in tool:
+                    tool['file_search'].pop('ranking_options', None)
+            return tool
 
-        # Ignore specific differences in file_search tool
-        for tool in assistant_tools:
-            if isinstance(tool, dict) and tool.get('type') == 'file_search':
-                if 'file_search' in tool:
-                    tool['file_search'].pop('ranking_options', None)
-        for tool in local_tools:
-            if isinstance(tool, dict) and tool.get('type') == 'file_search':
-                if 'file_search' in tool:
-                    tool['file_search'].pop('ranking_options', None)
+        local_tools = [clean_tool(tool) for tool in self.get_oai_tools()]
+        assistant_tools = [clean_tool(tool) for tool in assistant_settings['tools']]
+
+        local_tools.sort(key=lambda x: json.dumps(x, sort_keys=True))
+        assistant_tools.sort(key=lambda x: json.dumps(x, sort_keys=True))
 
         tools_diff = DeepDiff(local_tools, assistant_tools, ignore_order=True)
-        if tools_diff != {}:
+        if tools_diff:
             if debug:
                 print(f"Tools mismatch: {tools_diff}")
-                print("local tools: ", local_tools)
-                print("assistant tools: ", assistant_tools)
+                print("Local tools:", local_tools)
+                print("Assistant tools:", assistant_tools)
             return False
 
         if self.temperature != assistant_settings['temperature']:
