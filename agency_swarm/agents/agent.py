@@ -551,12 +551,30 @@ class Agent():
             if isinstance(tool, dict):
                 if 'function' in tool and 'strict' in tool['function'] and not tool['function']['strict']:
                     tool['function'].pop('strict', None)
-                if tool.get('type') == 'file_search' and 'file_search' in tool:
-                    tool['file_search'].pop('ranking_options', None)
             return tool
 
         local_tools = [clean_tool(tool) for tool in self.get_oai_tools()]
         assistant_tools = [clean_tool(tool) for tool in assistant_settings['tools']]
+
+        # find file_search and code_interpreter tools in local_tools and assistant_tools
+        # Find file_search tools in local and assistant tools
+        local_file_search = next((tool for tool in local_tools if tool['type'] == 'file_search'), None)
+        assistant_file_search = next((tool for tool in assistant_tools if tool['type'] == 'file_search'), None)
+
+        if local_file_search:
+            # If local file_search doesn't have a 'file_search' key, use assistant's if available
+            if 'file_search' not in local_file_search and assistant_file_search and 'file_search' in assistant_file_search:
+                local_file_search['file_search'] = assistant_file_search['file_search']
+            elif 'file_search' in local_file_search:
+                # Update max_num_results if not set locally but available in assistant
+                if 'max_num_results' not in local_file_search['file_search'] and assistant_file_search and \
+                   assistant_file_search['file_search'].get('max_num_results') is not None:
+                    local_file_search['file_search']['max_num_results'] = assistant_file_search['file_search']['max_num_results']
+                
+                # Update ranking_options if not set locally but available in assistant
+                if 'ranking_options' not in local_file_search['file_search'] and assistant_file_search and \
+                   assistant_file_search['file_search'].get('ranking_options') is not None:
+                    local_file_search['file_search']['ranking_options'] = assistant_file_search['file_search']['ranking_options']
 
         local_tools.sort(key=lambda x: json.dumps(x, sort_keys=True))
         assistant_tools.sort(key=lambda x: json.dumps(x, sort_keys=True))
@@ -579,13 +597,31 @@ class Agent():
                 print(f"Top_p mismatch: {self.top_p} != {assistant_settings['top_p']}")
             return False
 
+        # adjust differences between local and assistant tool resources
         tool_resources_settings = copy.deepcopy(self.tool_resources)
-        if tool_resources_settings and tool_resources_settings.get('file_search'):
+        if tool_resources_settings is None:
+            tool_resources_settings = {}
+        if tool_resources_settings.get('file_search'):
             tool_resources_settings['file_search'].pop('vector_stores', None)
-        tool_resources_diff = DeepDiff(tool_resources_settings, assistant_settings['tool_resources'], ignore_order=True)
+        if tool_resources_settings.get('file_search') is None:
+            tool_resources_settings['file_search'] = {'vector_store_ids': []}
+        if tool_resources_settings.get('code_interpreter') is None:
+            tool_resources_settings['code_interpreter'] = {"file_ids": []}
+        
+        assistant_tool_resources = assistant_settings['tool_resources']
+        if assistant_tool_resources is None:
+            assistant_tool_resources = {}
+        if assistant_tool_resources.get('code_interpreter') is None:
+            assistant_tool_resources['code_interpreter'] = {"file_ids": []}
+        if assistant_tool_resources.get('file_search') is None:
+            assistant_tool_resources['file_search'] = {'vector_store_ids': []}
+
+        tool_resources_diff = DeepDiff(tool_resources_settings, assistant_tool_resources, ignore_order=True)
         if tool_resources_diff != {}:
             if debug:
                 print(f"Tool resources mismatch: {tool_resources_diff}")
+                print("Local tool resources:", tool_resources_settings)
+                print("Assistant tool resources:", assistant_settings['tool_resources'])
             return False
 
         metadata_diff = DeepDiff(self.metadata, assistant_settings['metadata'], ignore_order=True)
