@@ -1,6 +1,6 @@
 openai==1.51.2
 docstring_parser==0.16
-pydantic==2.8.2
+pydantic==2.9.2
 datamodel-code-generator==0.25.8
 deepdiff==6.7.1
 termcolor==2.4.0
