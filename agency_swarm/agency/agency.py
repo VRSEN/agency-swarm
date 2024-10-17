@@ -1051,8 +1051,8 @@ class Agency:
             message_files: Optional[List[str]] = Field(default=None,
                                                        description="A list of file ids to be sent as attachments to this message. Only use this if you have the file id that starts with 'file-'.",
                                                        examples=["file-1234", "file-5678"])
-            additional_instructions: Optional[List[str]] = Field(default=None,
-                                                 description="Any additional instructions or clarifications that you would like to provide to the recipient agent.")
+            additional_instructions: Optional[str] = Field(default=None,
+                                                 description="Additional context or instructions for the recipient agent about the task. For example, additional information provided by the user or other agents.")
             
             class ToolConfig:
                 strict = False
@@ -1066,9 +1066,17 @@ class Agency:
                         raise ValueError("You must include file ids in message_files parameter.")
 
             @field_validator('recipient')
+            @classmethod
             def check_recipient(cls, value):
                 if value.value not in recipient_names:
                     raise ValueError(f"Recipient {value} is not valid. Valid recipients are: {recipient_names}")
+                return value
+            
+            @field_validator('additional_instructions', mode='before')
+            @classmethod
+            def validate_additional_instructions(cls, value):
+                if isinstance(value, list):
+                    return "\n".join(value)
                 return value
 
             def run(self):
