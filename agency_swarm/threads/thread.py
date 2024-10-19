@@ -27,7 +27,7 @@ class Thread:
 
     @property
     def thread_url(self):
-        return f'https://platform.openai.com/playground/assistants?assistant={self.recipient_agent.assistant.id}&mode=assistant&thread={self.id}'
+        return f'https://platform.openai.com/playground/assistants?assistant={self.recipient_agent.id}&mode=assistant&thread={self.id}'
 
     def __init__(self, agent: Union[Agent, User], recipient_agent: Agent):
         self.agent = agent
