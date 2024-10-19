@@ -190,9 +190,11 @@ class Agent():
         path = self.get_settings_path()
 
         # load assistant from id
-        if self.id and self.refresh_from_id:
+        if self.id:
+            if not self.refresh_from_id:
+                return self
+            
             self.assistant = self.client.beta.assistants.retrieve(self.id)
-
             # Assign attributes to self if they are None
             self.instructions = self.instructions or self.assistant.instructions
             self.name = self.name if self.name != self.__class__.__name__ else self.assistant.name
