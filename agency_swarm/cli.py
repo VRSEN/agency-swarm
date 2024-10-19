@@ -2,7 +2,7 @@ import argparse
 import os
 from dotenv import load_dotenv
 from agency_swarm.util.helpers import list_available_agents
-
+from agents.agent import DEFAULT_MODEL
 
 def main():
     parser = argparse.ArgumentParser(description='Agency Swarm CLI.')
@@ -23,6 +23,7 @@ def main():
     genesis_parser.add_argument('--openai_key', default=None, type=str, help='OpenAI API key.')
     genesis_parser.add_argument('--with_browsing', default=False, action='store_true',
                                 help='Enable browsing agent.')
+    genesis_parser.add_argument('--model', default=DEFAULT_MODEL, type=str, help='Model to use for the agency.')
 
     # import-agent
     import_parser = subparsers.add_parser('import-agent', help='Import pre-made agent by name to a local directory.')
@@ -47,7 +48,7 @@ def main():
             set_openai_key(args.openai_key)
 
         from agency_swarm.agency.genesis import GenesisAgency
-        agency = GenesisAgency(with_browsing=args.with_browsing)
+        agency = GenesisAgency(with_browsing=args.with_browsing, model=args.model)
         agency.run_demo()
     elif args.command == "import-agent":
         from agency_swarm.util import import_agent
