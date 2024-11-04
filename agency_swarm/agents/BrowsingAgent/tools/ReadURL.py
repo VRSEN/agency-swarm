@@ -21,8 +21,9 @@ Note: This tool only supports opening one URL at a time. The previous URL will b
     url: str = Field(
         ..., description="URL of the webpage.", examples=["https://google.com/search?q=search"]
     )
-    one_call_at_a_time: bool = True
 
+    class ToolConfig:
+        one_call_at_a_time: bool = True
 
     def run(self):
         wd = get_web_driver()
@@ -33,7 +34,7 @@ Note: This tool only supports opening one URL at a time. The previous URL will b
 
         set_web_driver(wd)
 
-        self.shared_state.set("elements_highlighted", "")
+        self._shared_state.set("elements_highlighted", "")
 
         return "Current URL is: " + wd.current_url + "\n" + "Please output '[send screenshot]' next to analyze the current web page or '[highlight clickable elements]' for further navigation."
 

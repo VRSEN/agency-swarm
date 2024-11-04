@@ -2,12 +2,11 @@ import os
 from enum import Enum
 from typing import Literal, Optional, List
 
-from instructor import OpenAISchema
-from pydantic import Field, model_validator, field_validator
+from pydantic import Field, model_validator, field_validator, BaseModel
 
 from agency_swarm import BaseTool
 
-class LineChange(OpenAISchema):
+class LineChange(BaseModel):
     """
     Line changes to be made.
     """

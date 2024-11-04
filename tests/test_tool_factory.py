@@ -1,3 +1,4 @@
+import asyncio
 from enum import Enum
 import json
 import os
@@ -5,11 +6,10 @@ import sys
 import unittest
 from typing import List, Optional
 
-from instructor import OpenAISchema
-from pydantic import Field
+from pydantic import Field, BaseModel
 
 sys.path.insert(0, '../agency-swarm')
-from agency_swarm.tools import ToolFactory
+from agency_swarm.tools import ToolFactory, BaseTool
 from agency_swarm.util.schema import dereference_schema, reference_schema
 from langchain.tools import MoveFileTool, YouTubeSearchTool
 
@@ -33,7 +33,7 @@ class ToolFactoryTest(unittest.TestCase):
         tool.run()
 
     def test_complex_schema(self):
-        class FriendDetail(OpenAISchema):
+        class FriendDetail(BaseModel):
             "test 123"
             id: int = Field(..., description="Unique identifier for each friend.")
             name: str = Field(..., description="Name of the friend.")
@@ -41,7 +41,7 @@ class ToolFactoryTest(unittest.TestCase):
             email: Optional[str] = Field(None, description="Email address of the friend.")
             is_active: Optional[bool] = Field(None, description="Indicates if the friend is currently active.")
 
-        class UserDetail(OpenAISchema):
+        class UserDetail(BaseModel):
             """Hey this is a test?"""
             id: int = Field(..., description="Unique identifier for each user.")
             age: int
@@ -54,7 +54,7 @@ class ToolFactoryTest(unittest.TestCase):
             FRIEND = "friend"
             COLLEAGUE = "colleague"
 
-        class UserRelationships(OpenAISchema):
+        class UserRelationships(BaseTool):
             """Hey this is a test?"""
             users: List[UserDetail] = Field(...,
                                             description="Collection of users, correctly capturing the relationships among them.", title="Users")
@@ -102,7 +102,9 @@ class ToolFactoryTest(unittest.TestCase):
 
         print("tool schema", json.dumps(tool.openai_schema, indent=4))
 
-        assert cleaned_schema == tool.openai_schema
+        tool_schema = tool.openai_schema
+
+        assert cleaned_schema == tool_schema
 
     def test_youtube_search_tool(self):
         # requires pip install youtube_search to run
@@ -122,9 +124,14 @@ class ToolFactoryTest(unittest.TestCase):
                 },
                 "required": ["query"],
             },
+            "strict": False
         }
 
         tool = ToolFactory.from_openai_schema(schema, lambda x: x)
+
+        schema['strict'] = True
+
+        tool2 = ToolFactory.from_openai_schema(schema, lambda x: x)
 
         print(json.dumps(tool.openai_schema, indent=4))
 
@@ -132,11 +139,17 @@ class ToolFactoryTest(unittest.TestCase):
 
         print(tool.model_dump())
 
+        self.assertFalse(tool.openai_schema.get("strict", False))
+
         tool.run()
+
+        self.assertTrue(tool2.openai_schema["strict"])
 
     def test_get_weather_openapi(self):
         with open("./data/schemas/get-weather.json", "r") as f:
             tools = ToolFactory.from_openapi_schema(f.read())
+
+        self.assertFalse(tools[0].openai_schema.get("strict", False))
 
         print(json.dumps(tools[0].openai_schema, indent=4))
 
@@ -148,7 +161,11 @@ class ToolFactoryTest(unittest.TestCase):
 
         print(json.dumps(tools[0].openai_schema, indent=4))
 
-        output = tools[0](requestBody={"text":'test'}).run()
+        async def gather_output():
+            output = await tools[0](requestBody={"text": 'test'}).run()
+            return output
+
+        output = asyncio.run(gather_output())
 
         print(output)
 
@@ -160,7 +177,11 @@ class ToolFactoryTest(unittest.TestCase):
                 "Bearer": os.environ.get("GET_HEADERS_SCHEMA_API_KEY")
             })
 
-        output = tools[0](parameters={"domain": "print-headers", "query": "test"}).run()
+        async def gather_output():
+            output = await tools[0](parameters={"domain": "print-headers", "query": "test"}).run()
+            return output
+
+        output = asyncio.run(gather_output())
 
         self.assertTrue("headers" in output)
 

@@ -22,7 +22,7 @@ class ClickElement(BaseTool):
     def run(self):
         wd = get_web_driver()
 
-        if 'button' not in self.shared_state.get("elements_highlighted", ""):
+        if 'button' not in self._shared_state.get("elements_highlighted", ""):
             raise ValueError("Please highlight clickable elements on the page first by outputting '[highlight clickable elements]' message. You must output just the message without calling the tool first, so the user can respond with the screenshot.")
 
         all_elements = wd.find_elements(By.CSS_SELECTOR, '.highlighted-element')
@@ -54,6 +54,6 @@ class ClickElement(BaseTool):
 
         set_web_driver(wd)
 
-        self.shared_state.set("elements_highlighted", "")
+        self._shared_state.set("elements_highlighted", "")
 
         return result

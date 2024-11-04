@@ -33,7 +33,7 @@ class ExportFile(BaseTool):
 
         file_id = client.files.create(file=open("exported_file.pdf", "rb"), purpose="assistants",).id
 
-        self.shared_state.set("file_id", file_id)
+        self._shared_state.set("file_id", file_id)
 
         return "Success. File exported with id: `" + file_id + "` You can now send this file id back to the user."
 

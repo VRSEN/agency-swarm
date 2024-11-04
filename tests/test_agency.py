@@ -4,6 +4,7 @@ import os
 import shutil
 import sys
 import time
+from typing import ClassVar
 import unittest
 
 from openai.types.beta.threads import Text
@@ -16,7 +17,9 @@ from agency_swarm.util import create_agent_template
 
 from agency_swarm import set_openai_key, Agent, Agency, AgencyEventHandler, get_openai_client
 from typing_extensions import override
-from agency_swarm.tools import BaseTool
+from agency_swarm.tools import BaseTool, ToolFactory
+
+from pydantic import BaseModel
 
 os.environ["DEBUG_MODE"] = "True"
 
@@ -108,14 +111,14 @@ class AgencyTest(unittest.TestCase):
             """
             A simple test tool that returns "Test Successful" to demonstrate the functionality of a custom tool within the Agency Swarm framework.
             """
-
-            # This tool does not require any input fields, but you can define them similarly for other tools.
+            class ToolConfig:
+                strict = True
 
             def run(self):
                 """
                 Executes the test tool's main functionality. In this case, it simply returns a success message.
                 """
-                self.shared_state.set("test_tool_used", True)
+                self._shared_state.set("test_tool_used", True)
 
                 return "Test Successful"
 
@@ -130,6 +133,7 @@ class AgencyTest(unittest.TestCase):
             "type": "last_messages",
             "last_messages": 10
         }
+        cls.agent1.file_search = {'max_num_results': 49}
 
         cls.agent2 = TestAgent2()
         cls.agent2.add_tool(cls.TestTool)
@@ -137,6 +141,8 @@ class AgencyTest(unittest.TestCase):
         cls.agent2.response_format = {
             "type": "json_object",
         }
+
+        cls.agent2.model="gpt-4o-2024-08-06"
 
         cls.ceo = CEO()
         cls.ceo.examples = [
@@ -164,6 +170,8 @@ class AgencyTest(unittest.TestCase):
             temperature=0,
         )
 
+        self.assertTrue(self.__class__.TestTool.openai_schema["strict"])
+
         self.check_all_agents_settings()
 
     def test_2_load_agent(self):
@@ -173,6 +181,7 @@ class AgencyTest(unittest.TestCase):
         agent3.add_shared_instructions(self.__class__.agency.shared_instructions)
         agent3.tools = self.__class__.agent1.tools
         agent3.top_p = self.__class__.agency.top_p
+        agent3.file_search = self.__class__.agent1.file_search
         agent3 = agent3.init_oai()
 
         print("agent3", agent3.assistant.model_dump())
@@ -190,6 +199,7 @@ class AgencyTest(unittest.TestCase):
         from test_agents import TestAgent1
         agent3 = Agent(id=self.__class__.agent1.id)
         agent3.tools = self.__class__.agent1.tools
+        agent3.file_search = self.__class__.agent1.file_search
         agent3 = agent3.init_oai()
 
         print("agent3", agent3.assistant.model_dump())
@@ -205,10 +215,11 @@ class AgencyTest(unittest.TestCase):
     def test_4_agent_communication(self):
         """it should communicate between agents"""
         print("TestAgent1 tools", self.__class__.agent1.tools)
+        self.__class__.agent1.parallel_tool_calls = False
         message = self.__class__.agency.get_completion("Please tell TestAgent1 to say test to TestAgent2.",
                                                        tool_choice={"type": "function", "function": {"name": "SendMessage"}})
 
-        self.assertFalse('error' in message.lower())
+        self.assertFalse('error' in message.lower(), f"Error found in message: {message}")
 
         for agent_name, threads in self.__class__.agency.agents_and_threads.items():
             for other_agent_name, thread in threads.items():
@@ -244,6 +255,7 @@ class AgencyTest(unittest.TestCase):
 
         self.assertTrue(agent1_run.truncation_strategy.type == "last_messages")
         self.assertTrue(agent1_run.truncation_strategy.last_messages == 10)
+        self.assertFalse(agent1_run.parallel_tool_calls)
 
         agent2_thread = self.__class__.agency.agents_and_threads[self.__class__.agent1.name][self.__class__.agent2.name]
 
@@ -294,7 +306,10 @@ class AgencyTest(unittest.TestCase):
         self.assertTrue(test_agent2_used)
         self.assertTrue(num_on_all_streams_end_calls == 1)
 
-        self.assertTrue(self.__class__.TestTool.shared_state.get("test_tool_used"))
+        self.assertTrue(self.__class__.TestTool._shared_state.get("test_tool_used"))
+
+        agent1_thread = self.__class__.agency.agents_and_threads[self.__class__.ceo.name][self.__class__.agent1.name]
+        self.assertFalse(agent1_thread.run.parallel_tool_calls)
 
         for agent_name, threads in self.__class__.agency.agents_and_threads.items():
             for other_agent_name, thread in threads.items():
@@ -320,6 +335,8 @@ class AgencyTest(unittest.TestCase):
             "type": "last_messages",
             "last_messages": 10
         }
+
+        agent1.file_search = {'max_num_results': 49}
 
         agent2 = TestAgent2()
         agent2.add_tool(self.__class__.TestTool)
@@ -370,6 +387,8 @@ class AgencyTest(unittest.TestCase):
         self.__class__.ceo.id = None
         self.__class__.agent1.id = None
         self.__class__.agent2.id = None
+
+        self.__class__.agent1.file_search = {'max_num_results': 49}
 
         self.__class__.agency = Agency([
             self.__class__.ceo,
@@ -428,8 +447,7 @@ class AgencyTest(unittest.TestCase):
         self.assertTrue(EventHandler.recipient_agent_name == "TestAgent1")
 
         if 'error' in message.lower():
-            print(self.__class__.agency.get_completion("Explain why you said error."))
-            self.assertFalse('error' in message.lower())
+            self.assertFalse('error' in message.lower(), self.__class__.agency.main_thread.thread_url)
 
         for agent_name, threads in self.__class__.agency.agents_and_threads.items():
             for other_agent_name, thread in threads.items():
@@ -437,6 +455,76 @@ class AgencyTest(unittest.TestCase):
 
         for agent in self.__class__.agency.agents:
             self.assertTrue(agent.id in [settings['id'] for settings in self.__class__.loaded_agents_settings])
+
+    def test_9_async_tool_calls(self):
+        """it should execute tools asynchronously"""
+        class PrintTool(BaseTool):
+            def run(self, **kwargs):
+                time.sleep(2)  # Simulate a delay
+                return "Printed successfully."
+
+        class AnotherPrintTool(BaseTool):
+            def run(self, **kwargs):
+                time.sleep(2)  # Simulate a delay
+                return "Another print successful."
+            
+        ceo = Agent(name="CEO", tools=[PrintTool, AnotherPrintTool])
+
+        agency = Agency(
+            [ceo],
+            async_mode='tools_threading',
+            temperature=0
+        )
+
+        self.assertTrue(agency.main_thread.async_mode == 'tools_threading')
+
+        result = agency.get_completion("Use 2 print tools together at the same time and output the results exectly as they are. ", yield_messages=False)
+
+        self.assertIn("success", result.lower(), agency.main_thread.thread_url)
+        self.assertIn("success", result.lower(), agency.main_thread.thread_url)
+
+    def test_10_concurrent_API_calls(self):
+        """it should execute API calls concurrently with asyncio"""
+        tools = []
+        with open("./data/schemas/get-headers-params.json", "r") as f:
+            tools = ToolFactory.from_openapi_schema(f.read(), {})
+
+        ceo = Agent(name="CEO", tools=tools, instructions="You are an agent that tests concurrent API calls. You must say 'success' if the output contains headers, and 'error' if it does not and **nothing else**.")
+
+        agency = Agency([ceo], temperature=0)
+
+        result = agency.get_completion("Please call PrintHeaders tool TWICE at the same time in a single message. If any of the function outputs do not contains headers, please say 'error'.")
+
+        self.assertTrue(result.lower().count('error') == 0, agency.main_thread.thread_url)
+
+    def test_11_structured_outputs(self):
+        class MathReasoning(BaseModel):
+            class Step(BaseModel):
+                explanation: str
+                output: str
+
+            steps: list[Step]
+            final_answer: str
+
+        math_tutor_prompt = '''
+            You are a helpful math tutor. You will be provided with a math problem,
+            and your goal will be to output a step by step solution, along with a final answer.
+            For each step, just provide the output as an equation use the explanation field to detail the reasoning.
+        '''
+
+        agent = Agent(name="MathTutor", response_format=MathReasoning, instructions=math_tutor_prompt)
+
+        agency = Agency([agent], temperature=0)
+
+        result = agency.get_completion("how can I solve 8x + 7 = -23")
+
+        # check if result is a MathReasoning object
+        self.assertTrue(MathReasoning.model_validate_json(result))
+
+        result = agency.get_completion_parse("how can I solve 3x + 2 = 14", response_format=MathReasoning)
+
+        # check if result is a MathReasoning object
+        self.assertTrue(isinstance(result, MathReasoning))
 
     # --- Helper methods ---
 
@@ -451,11 +539,11 @@ class AgencyTest(unittest.TestCase):
                 settings = json.load(f)
                 for assistant_settings in settings:
                     if assistant_settings['id'] == agent.id:
-                        self.assertTrue(agent._check_parameters(assistant_settings))
+                        self.assertTrue(agent._check_parameters(assistant_settings, debug=True))
 
             assistant = agent.assistant
             self.assertTrue(assistant)
-            self.assertTrue(agent._check_parameters(assistant.model_dump()))
+            self.assertTrue(agent._check_parameters(assistant.model_dump(), debug=True))
             if agent.name == "TestAgent1":
                 num_tools = 3 if not async_mode else 4
 
@@ -475,16 +563,23 @@ class AgencyTest(unittest.TestCase):
                 self.assertTrue(len(agent.tools) == num_tools)
                 self.assertTrue(assistant.tools[0].type == "code_interpreter")
                 self.assertTrue(assistant.tools[1].type == "file_search")
+                if not async_mode:
+                    self.assertTrue(assistant.tools[1].file_search.max_num_results == 49)  # Updated line
                 self.assertTrue(assistant.tools[2].type == "function")
                 self.assertTrue(assistant.tools[2].function.name == "SendMessage")
+                self.assertFalse(assistant.tools[2].function.strict)
                 if async_mode:
                     self.assertTrue(assistant.tools[3].type == "function")
                     self.assertTrue(assistant.tools[3].function.name == "GetResponse")
+                    self.assertFalse(assistant.tools[3].function.strict)
+                
             elif agent.name == "TestAgent2":
                 self.assertTrue(len(assistant.tools) == self.__class__.num_schemas + 1)
                 for tool in assistant.tools:
                     self.assertTrue(tool.type == "function")
                     self.assertTrue(tool.function.name in [tool.__name__ for tool in agent.tools])
+                test_tool = next((tool for tool in assistant.tools if tool.function.name == "TestTool"), None)
+                self.assertTrue(test_tool.function.strict, test_tool)
             elif agent.name == "CEO":
                 num_tools = 1 if not async_mode else 2
                 self.assertFalse(assistant.tool_resources.code_interpreter)
@@ -504,8 +599,9 @@ class AgencyTest(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         shutil.rmtree("./test_agents")
-        os.remove("./settings.json")
-        cls.agency.delete()
+        # os.remove("./settings.json")
+        if cls.agency:
+            cls.agency.delete()
 
 
 if __name__ == '__main__':

@@ -1,5 +1,4 @@
-from instructor import OpenAISchema
-from pydantic import Field
+from pydantic import Field, BaseModel
 from typing import List, Literal
 
 from agency_swarm import get_openai_client
@@ -13,11 +12,11 @@ def format_file_deps(v):
         with open(file, 'r') as f:
             content = f.read()
 
-        class Dependency(OpenAISchema):
+        class Dependency(BaseModel):
             type: Literal['class', 'function', 'import'] = Field(..., description="The type of the dependency.")
             name: str = Field(..., description="The name of the dependency, matching the import or definition.")
 
-        class Dependencies(OpenAISchema):
+        class Dependencies(BaseModel):
             dependencies: List[Dependency] = Field([], description="The dependencies extracted from the file.")
 
             def append_dependencies(self):
@@ -29,7 +28,7 @@ def format_file_deps(v):
                 result += f"File path: {file}\n"
                 result += f"Functions: {functions}\nClasses: {classes}\nImports: {imports}\nVariables: {variables}\n\n"
 
-        resp = client.chat.completions.create(
+        completion = client.beta.chat.completions.parse(
             messages=[
                 {
                     "role": "system",
@@ -40,11 +39,16 @@ def format_file_deps(v):
                     "content": f"Extract the dependencies from the file '{file}'."
                 }
             ],
-            model="gpt-3.5-turbo",
+            model="gpt-4o-mini",
             temperature=0,
-            response_model=Dependencies
+            response_format=Dependencies
         )
 
-        resp.append_dependencies()
+        if completion.choices[0].message.refusal:
+            raise ValueError(completion.choices[0].message.refusal)
+
+        model = completion.choices[0].message.parsed
+
+        model.append_dependencies()
 
     return result

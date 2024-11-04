@@ -33,7 +33,7 @@ class SelectDropdown(BaseTool):
     def run(self):
         wd = get_web_driver()
 
-        if 'select' not in self.shared_state.get("elements_highlighted", ""):
+        if 'select' not in self._shared_state.get("elements_highlighted", ""):
             raise ValueError("Please highlight dropdown elements on the page first by outputting '[highlight dropdowns]' message. You must output just the message without calling the tool first, so the user can respond with the screenshot.")
 
         all_elements = wd.find_elements(By.CSS_SELECTOR, '.highlighted-element')

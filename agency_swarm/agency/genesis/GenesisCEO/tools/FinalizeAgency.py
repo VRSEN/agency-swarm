@@ -17,9 +17,9 @@ class FinalizeAgency(BaseTool):
 
     def run(self):
         agency_path = None
-        if self.shared_state.get("agency_path"):
-            os.chdir(self.shared_state.get("agency_path"))
-            agency_path = self.shared_state.get("agency_path")
+        if self._shared_state.get("agency_path"):
+            os.chdir(self._shared_state.get("agency_path"))
+            agency_path = self._shared_state.get("agency_path")
         else:
             os.chdir(self.agency_path)
             agency_path = self.agency_path
@@ -50,7 +50,7 @@ class FinalizeAgency(BaseTool):
 
     @model_validator(mode="after")
     def validate_agency_path(self):
-        if not self.shared_state.get("agency_path") and not self.agency_path:
+        if not self._shared_state.get("agency_path") and not self.agency_path:
             raise ValueError("Agency path not found. Please specify the agency_path. Ask user for clarification if needed.")
 
 

@@ -13,7 +13,9 @@ class DirectoryNavigator(BaseTool):
     create: bool = Field(
         False, description="If True, the directory will be created if it does not exist."
     )
-    one_call_at_a_time: bool = True
+
+    class ToolConfig:
+        one_call_at_a_time: bool = True
 
     def run(self):
         try:

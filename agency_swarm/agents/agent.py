@@ -11,9 +11,12 @@ from openai.types.beta.assistant import ToolResources
 
 from agency_swarm.tools import BaseTool, ToolFactory, Retrieval
 from agency_swarm.tools import FileSearch, CodeInterpreter
+from agency_swarm.tools.oai.FileSearch import FileSearchConfig
 from agency_swarm.util.oai import get_openai_client
 from agency_swarm.util.openapi import validate_openapi_spec
 from agency_swarm.util.shared_state import SharedState
+from pydantic import BaseModel
+from openai.lib._parsing._completions import type_to_response_format_param
 
 class ExampleMessage(TypedDict):
     role: Literal["user", "assistant"]
@@ -48,7 +51,7 @@ class Agent():
         self._shared_state = value
         for tool in self.tools:
             if issubclass(tool, BaseTool):
-                tool.shared_state = value
+                tool._shared_state = value
 
     def response_validator(self, message: str | list) -> str:
         """
@@ -73,7 +76,7 @@ class Agent():
             tool_resources: ToolResources = None,
             temperature: float = None,
             top_p: float = None,
-            response_format: Union[str, dict] = "auto",
+            response_format: Union[str, dict, type] = "auto",
             tools_folder: str = None,
             files_folder: Union[List[str], str] = None,
             schemas_folder: Union[List[str], str] = None,
@@ -81,12 +84,15 @@ class Agent():
             api_params: Dict[str, Dict[str, str]] = None,
             file_ids: List[str] = None,
             metadata: Dict[str, str] = None,
-            model: str = "gpt-4o",
+            model: str = "gpt-4o-2024-08-06",
             validation_attempts: int = 1,
             max_prompt_tokens: int = None,
             max_completion_tokens: int = None,
             truncation_strategy: dict = None,
             examples: List[ExampleMessage] = None,
+            file_search: FileSearchConfig = None,
+            parallel_tool_calls: bool = True,
+            refresh_from_id: bool = True,
     ):
         """
         Initializes an Agent with specified attributes, tools, and OpenAI client.
@@ -100,7 +106,7 @@ class Agent():
             tool_resources (ToolResources, optional): A set of resources that are used by the assistant's tools. The resources are specific to the type of tool. For example, the code_interpreter tool requires a list of file IDs, while the file_search tool requires a list of vector store IDs. Defaults to None.
             temperature (float, optional): The temperature parameter for the OpenAI API. Defaults to None.
             top_p (float, optional): The top_p parameter for the OpenAI API. Defaults to None.
-            response_format (Dict, optional): The response format for the OpenAI API. Defaults to None.
+            response_format (Union[str, Dict, type], optional): The response format for the OpenAI API. If BaseModel is provided, it will be converted to a response format. Defaults to None.
             tools_folder (str, optional): Path to a directory containing tools associated with the agent. Each tool must be defined in a separate file. File must be named as the class name of the tool. Defaults to None.
             files_folder (Union[List[str], str], optional): Path or list of paths to directories containing files associated with the agent. Defaults to None.
             schemas_folder (Union[List[str], str], optional): Path or list of paths to directories containing OpenAPI schemas associated with the agent. Defaults to None.
@@ -113,6 +119,9 @@ class Agent():
             max_completion_tokens (int, optional): Maximum number of tokens allowed in the completion. Defaults to None.
             truncation_strategy (TruncationStrategy, optional): Truncation strategy for the OpenAI API. Defaults to None.
             examples (List[Dict], optional): A list of example messages for the agent. Defaults to None.
+            file_search (FileSearchConfig, optional): A dictionary containing the file search tool configuration. Defaults to None.
+            parallel_tool_calls (bool, optional): Whether to enable parallel function calling during tool use. Defaults to True.
+            refresh_from_id (bool, optional): Whether to load and update the agent from the OpenAI assistant ID when provided. Defaults to True.
 
         This constructor sets up the agent with its unique properties, initializes the OpenAI client, reads instructions if provided, and uploads any associated files.
         """
@@ -127,6 +136,9 @@ class Agent():
         self.temperature = temperature
         self.top_p = top_p
         self.response_format = response_format
+        # use structured outputs if response_format is a BaseModel
+        if isinstance(self.response_format, type):
+            self.response_format = type_to_response_format_param(self.response_format)
         self.tools_folder = tools_folder
         self.files_folder = files_folder if files_folder else []
         self.schemas_folder = schemas_folder if schemas_folder else []
@@ -139,6 +151,9 @@ class Agent():
         self.max_completion_tokens = max_completion_tokens
         self.truncation_strategy = truncation_strategy
         self.examples = examples
+        self.file_search = file_search
+        self.parallel_tool_calls = parallel_tool_calls
+        self.refresh_from_id = refresh_from_id
 
         self.settings_path = './settings.json'
 
@@ -176,8 +191,10 @@ class Agent():
 
         # load assistant from id
         if self.id:
+            if not self.refresh_from_id:
+                return self
+            
             self.assistant = self.client.beta.assistants.retrieve(self.id)
-
             # Assign attributes to self if they are None
             self.instructions = self.instructions or self.assistant.instructions
             self.name = self.name if self.name != self.__class__.__name__ else self.assistant.name
@@ -199,9 +216,9 @@ class Agent():
                 if tool.type == "retrieval":
                     self.client.beta.assistants.update(self.id, tools=self.get_oai_tools())
 
-            # # update assistant if parameters are different
-            # if not self._check_parameters(self.assistant.model_dump()):
-            #     self._update_assistant()
+            # update assistant if parameters are different
+            if not self._check_parameters(self.assistant.model_dump()):
+                self._update_assistant()
 
             return self
 
@@ -365,7 +382,7 @@ class Agent():
             print("Detected files without FileSearch. Adding FileSearch tool...")
             self.add_tool(FileSearch)
         if CodeInterpreter not in self.tools and code_interpreter_ids:
-            print("Detected files without FileSearch. Adding FileSearch tool...")
+            print("Detected files without CodeInterpreter. Adding CodeInterpreter tool...")
             self.add_tool(CodeInterpreter)
 
         self.add_file_ids(file_search_ids, "file_search")
@@ -412,7 +429,7 @@ class Agent():
                 raise Exception("Tool must not be initialized.")
 
             if issubclass(tool, FileSearch):
-                tools.append(tool().model_dump())
+                tools.append(tool(file_search=self.file_search).model_dump(exclude_none=True))
             elif issubclass(tool, CodeInterpreter):
                 tools.append(tool().model_dump())
             elif issubclass(tool, Retrieval):
@@ -507,12 +524,13 @@ class Agent():
 
     # --- Settings Methods ---
 
-    def _check_parameters(self, assistant_settings):
+    def _check_parameters(self, assistant_settings, debug=False):
         """
         Checks if the agent's parameters match with the given assistant settings.
 
         Parameters:
             assistant_settings (dict): A dictionary containing the settings of an assistant.
+            debug (bool): If True, prints debug statements. Default is False.
 
         Returns:
             bool: True if all the agent's parameters match the assistant settings, False otherwise.
@@ -520,40 +538,112 @@ class Agent():
         This method compares the current agent's parameters such as name, description, instructions, tools, file IDs, metadata, and model with the given assistant settings. It uses DeepDiff to compare complex structures like tools and metadata. If any parameter does not match, it returns False; otherwise, it returns True.
         """
         if self.name != assistant_settings['name']:
+            if debug:
+                print(f"Name mismatch: {self.name} != {assistant_settings['name']}")
             return False
 
         if self.description != assistant_settings['description']:
+            if debug:
+                print(f"Description mismatch: {self.description} != {assistant_settings['description']}")
             return False
 
         if self.instructions != assistant_settings['instructions']:
+            if debug:
+                print(f"Instructions mismatch: {self.instructions} != {assistant_settings['instructions']}")
             return False
 
-        tools_diff = DeepDiff(self.get_oai_tools(), assistant_settings['tools'], ignore_order=True)
-        if tools_diff != {}:
+        def clean_tool(tool):
+            if isinstance(tool, dict):
+                if 'function' in tool and 'strict' in tool['function'] and not tool['function']['strict']:
+                    tool['function'].pop('strict', None)
+            return tool
+
+        local_tools = [clean_tool(tool) for tool in self.get_oai_tools()]
+        assistant_tools = [clean_tool(tool) for tool in assistant_settings['tools']]
+
+        # find file_search and code_interpreter tools in local_tools and assistant_tools
+        # Find file_search tools in local and assistant tools
+        local_file_search = next((tool for tool in local_tools if tool['type'] == 'file_search'), None)
+        assistant_file_search = next((tool for tool in assistant_tools if tool['type'] == 'file_search'), None)
+
+        if local_file_search:
+            # If local file_search doesn't have a 'file_search' key, use assistant's if available
+            if 'file_search' not in local_file_search and assistant_file_search and 'file_search' in assistant_file_search:
+                local_file_search['file_search'] = assistant_file_search['file_search']
+            elif 'file_search' in local_file_search:
+                # Update max_num_results if not set locally but available in assistant
+                if 'max_num_results' not in local_file_search['file_search'] and assistant_file_search and \
+                   assistant_file_search['file_search'].get('max_num_results') is not None:
+                    local_file_search['file_search']['max_num_results'] = assistant_file_search['file_search']['max_num_results']
+                
+                # Update ranking_options if not set locally but available in assistant
+                if 'ranking_options' not in local_file_search['file_search'] and assistant_file_search and \
+                   assistant_file_search['file_search'].get('ranking_options') is not None:
+                    local_file_search['file_search']['ranking_options'] = assistant_file_search['file_search']['ranking_options']
+
+        local_tools.sort(key=lambda x: json.dumps(x, sort_keys=True))
+        assistant_tools.sort(key=lambda x: json.dumps(x, sort_keys=True))
+
+        tools_diff = DeepDiff(local_tools, assistant_tools, ignore_order=True)
+        if tools_diff:
+            if debug:
+                print(f"Tools mismatch: {tools_diff}")
+                print("Local tools:", local_tools)
+                print("Assistant tools:", assistant_tools)
             return False
 
         if self.temperature != assistant_settings['temperature']:
+            if debug:
+                print(f"Temperature mismatch: {self.temperature} != {assistant_settings['temperature']}")
             return False
 
         if self.top_p != assistant_settings['top_p']:
+            if debug:
+                print(f"Top_p mismatch: {self.top_p} != {assistant_settings['top_p']}")
             return False
 
+        # adjust differences between local and assistant tool resources
         tool_resources_settings = copy.deepcopy(self.tool_resources)
-        if tool_resources_settings and tool_resources_settings.get('file_search'):
+        if tool_resources_settings is None:
+            tool_resources_settings = {}
+        if tool_resources_settings.get('file_search'):
             tool_resources_settings['file_search'].pop('vector_stores', None)
-        tool_resources_diff = DeepDiff(tool_resources_settings, assistant_settings['tool_resources'], ignore_order=True)
+        if tool_resources_settings.get('file_search') is None:
+            tool_resources_settings['file_search'] = {'vector_store_ids': []}
+        if tool_resources_settings.get('code_interpreter') is None:
+            tool_resources_settings['code_interpreter'] = {"file_ids": []}
+        
+        assistant_tool_resources = assistant_settings['tool_resources']
+        if assistant_tool_resources is None:
+            assistant_tool_resources = {}
+        if assistant_tool_resources.get('code_interpreter') is None:
+            assistant_tool_resources['code_interpreter'] = {"file_ids": []}
+        if assistant_tool_resources.get('file_search') is None:
+            assistant_tool_resources['file_search'] = {'vector_store_ids': []}
+
+        tool_resources_diff = DeepDiff(tool_resources_settings, assistant_tool_resources, ignore_order=True)
         if tool_resources_diff != {}:
+            if debug:
+                print(f"Tool resources mismatch: {tool_resources_diff}")
+                print("Local tool resources:", tool_resources_settings)
+                print("Assistant tool resources:", assistant_settings['tool_resources'])
             return False
 
         metadata_diff = DeepDiff(self.metadata, assistant_settings['metadata'], ignore_order=True)
         if metadata_diff != {}:
+            if debug:
+                print(f"Metadata mismatch: {metadata_diff}")
             return False
 
         if self.model != assistant_settings['model']:
+            if debug:
+                print(f"Model mismatch: {self.model} != {assistant_settings['model']}")
             return False
 
         response_format_diff = DeepDiff(self.response_format, assistant_settings['response_format'], ignore_order=True)
         if response_format_diff != {}:
+            if debug:
+                print(f"Response format mismatch: {response_format_diff}")
             return False
 
         return True

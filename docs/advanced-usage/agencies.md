@@ -73,25 +73,28 @@ response = agency.get_completion_stream("I want you to build me a website", even
 
 Also, there is an additional class method `on_all_streams_end` which is called when all streams have ended. This method is needed because, unlike in the official documentation, your event handler will be called multiple times and probably by even multiple agents. 
 
-## Asynchronous Communication
+## Async Mode
 
-If you would like to use asynchronous communication between agents, you can specify a `async_mode` parameter. This is useful when you want your agents to execute multiple tasks concurrently. Only `threading` mode is supported for now.
+When it comes to asynchronous execution, there are 2 modes you can use at the moment: `threading`, `tools_threading`.
+
+### Agents - Threading
+
+If you would like to use asynchronous communication between agents, you can specify a `async_mode` parameter to `threading`. This is useful when you don't want to wait for a response from an agent. For example, if it takes it long to write it.
 
 ```python
-agency = Agency([ceo], async_mode='threading') 
+agency = Agency([ceo], async_mode='threading')
 ```
 
 With this mode, the response from the `SendMessage` tool will be returned instantly as a system notification with a status update. The recipient agent will then continue to execute the task in the background. The caller agent can check the status (if task is in progress) or the response (if the task is completed) with the `GetResponse` tool.
 
-## Additional Features
+### Tools - Threading
 
-### Shared Instructions
-
-You can share instructions between all agents in the agency by adding a `shared_instructions` parameter to the agency. This is useful for providing additional context about your environment, defining processes, mission, technical details, and more.
+If you would like to use asynchronous execution for tools, you can specify a `async_mode` parameter to `tools_threading`. With this mode on, all tools will be executed concurrently in separate threads, which can significantly speed up the work flow of I/O bound tasks.
 
 ```python
-agency = Agency([ceo], shared_instructions='agency_manifesto.md') 
+agency = Agency([ceo], async_mode='tools_threading') 
 ```
+
 
 ### Shared Files
 
@@ -138,9 +141,12 @@ response = agency.get_completion("I want you to build me a website",
                                  additional_instructions="This is an additional instruction for the task.",
                                  tool_choice={"type": "function", "function": {"name": "SendMessage"}},
                                  attachments=[],
+                                 recipient_agent=dev,
                                  )
 print(response)
 ```
+
+Params like `additional_instructions`, `tool_choice`, and `attachments` are optional. You can also specify the `recipient_agent` parameter to send the message to a specific agent.
 
 ### Running the Agency from your terminal
 

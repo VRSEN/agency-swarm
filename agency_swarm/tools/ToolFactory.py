@@ -1,13 +1,9 @@
-from enum import Enum
-import importlib.util
 import inspect
 import json
 import os
-from pathlib import Path
 import sys
 from importlib import import_module
 from typing import Any, Dict, List, Type, Union
-import typing
 
 import jsonref
 from jsonref import requests
@@ -20,6 +16,7 @@ from datamodel_code_generator import DataModelType, PythonVersion
 from datamodel_code_generator.model import get_data_model_types
 from datamodel_code_generator.parser.jsonschema import JsonSchemaParser
 
+import httpx
 
 class ToolFactory:
 
@@ -116,15 +113,20 @@ class ToolFactory:
         if not model:
             raise ValueError(f"Could not extract model from schema {schema['name']}")
         
+        class ToolConfig:
+            strict: bool = schema.get("strict", False)
+        
         tool = type(schema['name'], (BaseTool, model), {
             "__doc__": schema.get('description', ""),
             "run": callback,
         })
 
+        tool.ToolConfig = ToolConfig
+
         return tool
 
     @staticmethod
-    def from_openapi_schema(schema: Union[str, dict], headers: Dict[str, str] = None, params: Dict[str, Any] = None) \
+    def from_openapi_schema(schema: Union[str, dict], headers: Dict[str, str] = None, params: Dict[str, Any] = None, strict: bool = False) \
             -> List[Type[BaseTool]]:
         """
         Converts an OpenAPI schema into a list of BaseTools.
@@ -133,7 +135,7 @@ class ToolFactory:
             schema: The OpenAPI schema to convert.
             headers: The headers to use for requests.
             params: The parameters to use for requests.
-
+            strict: Whether to use strict OpenAI mode.
         Returns:
             A list of BaseTools.
         """
@@ -144,9 +146,10 @@ class ToolFactory:
             openapi_spec = jsonref.loads(schema)
         tools = []
         headers = headers or {}
+        headers = {k: v for k, v in headers.items() if v is not None}
         for path, methods in openapi_spec["paths"].items():
             for method, spec_with_ref in methods.items():
-                def callback(self):
+                async def callback(self):
                     url = openapi_spec["servers"][0]["url"] + path
                     parameters = self.model_dump().get('parameters', {})
                     # replace all parameters in url
@@ -157,28 +160,25 @@ class ToolFactory:
                     url = url.rstrip("/")
                     parameters = {k: v for k, v in parameters.items() if v is not None}
                     parameters = {**parameters, **params} if params else parameters
-                    if method == "get":
-                        return requests.get(url, params=parameters, headers=headers,
-                                            json=self.model_dump().get('requestBody', None)
-                                            ).json()
-                    elif method == "post":
-                        return requests.post(url,
-                                             params=parameters,
-                                             json=self.model_dump().get('requestBody', None),
-                                             headers=headers
-                                             ).json()
-                    elif method == "put":
-                        return requests.put(url,
-                                            params=parameters,
-                                            json=self.model_dump().get('requestBody', None),
-                                            headers=headers
-                                            ).json()
-                    elif method == "delete":
-                        return requests.delete(url,
-                                               params=parameters,
-                                               json=self.model_dump().get('requestBody', None),
-                                               headers=headers
-                                               ).json()
+                    async with httpx.AsyncClient(timeout=90) as client:  # Set custom read timeout to 10 seconds
+                        if method == "get":
+                            response = await client.get(url, params=parameters, headers=headers)
+                        elif method == "post":
+                            response = await client.post(url,
+                                                         params=parameters,
+                                                         json=self.model_dump().get('requestBody', None),
+                                                         headers=headers)
+                        elif method == "put":
+                            response = await client.put(url,
+                                                        params=parameters,
+                                                        json=self.model_dump().get('requestBody', None),
+                                                        headers=headers)
+                        elif method == "delete":
+                            response = await client.delete(url,
+                                                           params=parameters,
+                                                           json=self.model_dump().get('requestBody', None),
+                                                           headers=headers)
+                        return response.json()
 
                 # 1. Resolve JSON references.
                 spec = jsonref.replace_refs(spec_with_ref)
@@ -227,6 +227,7 @@ class ToolFactory:
                     "name": function_name,
                     "description": desc,
                     "parameters": schema,
+                    "strict": strict
                 }
 
                 tools.append(ToolFactory.from_openai_schema(function, callback))

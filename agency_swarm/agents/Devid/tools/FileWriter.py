@@ -3,7 +3,7 @@ from typing import List, Literal, Optional
 import json
 
 import os
-from instructor import llm_validator, OpenAISchema
+from agency_swarm.util.validators import llm_validator
 
 from agency_swarm import get_openai_client
 from agency_swarm.tools import BaseTool
@@ -49,7 +49,9 @@ class FileWriter(BaseTool):
         description="Any library dependencies required for the file to be written.",
         examples=["numpy", "pandas"]
     )
-    one_call_at_a_time: bool = True
+    
+    class ToolConfig:
+        one_call_at_a_time = True
 
     def run(self):
         client = get_openai_client()
