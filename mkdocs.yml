@@ -48,6 +48,7 @@ nav:
     - Agencies: "advanced-usage/agencies.md"
     - Azure OpenAI: "advanced-usage/azure-openai.md"
   - Deployment to Production: "deployment.md"
+  - Observability: "advanced-usage/observability.md"
   - Open Source Models: "advanced-usage/open-source-models.md"
   - API Reference: "api.md"
   - Contributing: "contributing.md"
