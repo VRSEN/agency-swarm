@@ -65,7 +65,7 @@ class FileWriter(BaseTool):
         if self.mode == "write":
             message = f"Please write {filename} file that meets the following requirements: '{self.requirements}'.\n"
         else:
-            message = f"Please rewrite the {filename} file according to the following requirements: '{self.requirements}'.\n"
+            message = f"Please rewrite the {filename} file according to the following requirements: '{self.requirements}'.\n Only output the file content, without any other text."
 
         if file_dependencies:
             message += f"\nHere are the dependencies from other project files: {file_dependencies}."
