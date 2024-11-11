@@ -65,7 +65,7 @@ class FileWriter(BaseTool):
         if self.mode == "write":
             message = f"Please write {filename} file that meets the following requirements: '{self.requirements}'.\n"
         else:
-            message = f"Please rewrite the {filename} file according to the following requirements: '{self.requirements}'.\n"
+            message = f"Please rewrite the {filename} file according to the following requirements: '{self.requirements}'.\n Only output the file content, without any other text."
 
         if file_dependencies:
             message += f"\nHere are the dependencies from other project files: {file_dependencies}."
@@ -78,11 +78,11 @@ class FileWriter(BaseTool):
 
         if self.mode == "modify":
             message += f"\nThe existing file content is as follows:"
-
+        
             try:
                 with open(self.file_path, 'r') as file:
-                    prev_content = file.read()
-                    message += f"\n\n```{prev_content}```"
+                    file_content = file.read()
+                    message += f"\n\n```{file_content}```"
             except Exception as e:
                 return f'Error reading {self.file_path}: {e}'
 
@@ -102,11 +102,22 @@ class FileWriter(BaseTool):
         n = 0
         error_message = ""
         while n < 3:
-            resp = client.chat.completions.create(
-                messages=messages,
-                model="gpt-4o",
-                temperature=0,
-            )
+            if self.mode == "modify":
+                resp = client.chat.completions.create(
+                    messages=messages,
+                    model="gpt-4o",
+                    temperature=0,
+                    prediction={
+                        "type": "content",
+                        "content": file_content
+                    }
+                )
+            else:
+                resp = client.chat.completions.create(
+                    messages=messages,
+                    model="gpt-4o",
+                    temperature=0,
+                )
 
             content = resp.choices[0].message.content
 
@@ -236,9 +247,18 @@ class FileWriter(BaseTool):
 
 
 if __name__ == "__main__":
-    tool = FileWriter(
+    # Test case for 'write' mode
+    tool_write = FileWriter(
         requirements="Write a program that takes a list of integers as input and returns the sum of all the integers in the list.",
         mode="write",
-        file_path="test.py",
+        file_path="test_write.py",
     )
-    print(tool.run())
+    print(tool_write.run())
+
+    # Test case for 'modify' mode
+    tool_modify = FileWriter(
+        requirements="Modify the program to also return the product of all the integers in the list.",
+        mode="modify",
+        file_path="test_write.py",
+    )
+    print(tool_modify.run())
