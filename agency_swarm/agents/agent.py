@@ -10,6 +10,7 @@ from openai import NotFoundError
 from openai.types.beta.assistant import ToolResources
 from astra_assistants import patch, OpenAI
 
+from agency_swarm.agents.config import DEFAULT_MODEL
 from agency_swarm.tools import BaseTool, ToolFactory, Retrieval
 from agency_swarm.tools import FileSearch, CodeInterpreter
 from agency_swarm.tools.oai.FileSearch import FileSearchConfig
@@ -18,8 +19,6 @@ from agency_swarm.util.openapi import validate_openapi_spec
 from agency_swarm.util.shared_state import SharedState
 from pydantic import BaseModel
 from openai.lib._parsing._completions import type_to_response_format_param
-
-DEFAULT_MODEL = "gpt-4o-2024-08-06"
 
 class ExampleMessage(TypedDict):
     role: Literal["user", "assistant"]
