@@ -57,82 +57,81 @@
     {
       "group": "Introduction",
       "pages": [
-        "overview",
-        "key-features",
-        "design-principles"
+        "introduction/overview",
+        "introduction/key-features",
+        "introduction/design-principles"
       ]
     },
     {
       "group": "Getting Started",
       "pages": [
-        "installation",
-        "quickstart",
-        "examples"
+        "getting-started/installation",
+        "getting-started/quickstart"
       ]
     },
     {
       "group": "Framework Overview",
       "pages": [
-        "design-and-architecture",
-        "communication-flows",
-        "conversation-context-management",
-        "state-management",
-        "output-validation-and-reliability",
-        "streaming-support",
-        "prompt-flexibility"
+        "framework-overview/design-and-architecture",
+        "framework-overview/communication-flows",
+        "framework-overview/conversation-context-management",
+        "framework-overview/state-management",
+        "framework-overview/output-validation-and-reliability",
+        "framework-overview/streaming-support",
+        "framework-overview/prompt-flexibility"
       ]
     },
     {
       "group": "Key Entities",
       "pages": [
-        "agents",
-        "tools",
-        "tasks-and-functions"
+        "key-entities/agents",
+        "key-entities/tools",
+        "key-entities/tasks-and-functions"
       ]
     },
     {
       "group": "How-To Guides",
       "pages": [
-        "creating-tools",
-        "creating-agents",
-        "defining-agent-instructions",
-        "managing-communication-flows",
-        "using-code-interpreter-and-filesearch",
-        "creating-agencies",
-        "deployment"
+        "how-to-guides/creating-tools",
+        "how-to-guides/creating-agents",
+        "how-to-guides/defining-agent-instructions",
+        "how-to-guides/managing-communication-flows",
+        "how-to-guides/using-code-interpreter-and-filesearch",
+        "how-to-guides/creating-agencies",
+        "how-to-guides/deployment"
       ]
     },
     {
       "group": "API Reference",
       "pages": [
-        "api-reference"
+        "api-reference/api-reference"
       ]
     },
     {
       "group": "Folder Structure",
       "pages": [
-        "folder-structure"
+        "folder-structure/folder-structure"
       ]
     },
     {
       "group": "Contributing",
       "pages": [
-        "contributing"
+        "contributing/contributing"
       ]
     },
     {
       "group": "FAQ",
       "pages": [
-        "faq"
+        "faq/faq"
       ]
     },
     {
       "group": "Advanced Topics",
       "pages": [
-        "asynchronous-execution",
-        "customizing-prompts-and-few-shot-learning",
-        "open-source-models-support",
-        "production-readiness"
+        "advanced-topics/asynchronous-execution",
+        "advanced-topics/customizing-prompts-and-few-shot-learning",
+        "advanced-topics/open-source-models-support",
+        "advanced-topics/production-readiness"
       ]
     }
   ],

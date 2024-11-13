@@ -8,7 +8,7 @@ Asynchronous execution allows agents and tools to operate concurrently, improvin
 
 ## Enabling Asynchronous Agents
 
-To enable asynchronous execution for agents, set the <Code>async_mode</Code> parameter to <Code>"threading"</Code> when initializing the agency.
+To enable asynchronous execution for agents, set the `async_mode` parameter to `"threading"` when initializing the agency.
 
 <CodeBlock title="Initialize Agency with Asynchronous Agents" language="python">
 agency = Agency(agents=[ceo], async_mode='threading')
@@ -21,7 +21,7 @@ agency = Agency(agents=[ceo], async_mode='threading')
 
 ## Enabling Asynchronous Tools
 
-To enable asynchronous execution for tools, set the <Code>async_mode</Code> parameter to <Code>"tools_threading"</Code>.
+To enable asynchronous execution for tools, set the `async_mode` parameter to `"tools_threading"`.
 
 <CodeBlock title="Initialize Agency with Asynchronous Tools" language="python">
 agency = Agency(agents=[ceo], async_mode='tools_threading')
