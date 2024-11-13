@@ -1,0 +1,75 @@
+# Open-Source Models Support
+
+While OpenAI models are recommended, Agency Swarm supports open-source models through projects that mimic the Assistants API.
+
+<Info>
+Utilizing open-source models allows for more flexibility and control over your AI agents.
+</Info>
+
+## Supported Projects
+
+<CardGroup>
+
+<Card title="Astra Assistants API" icon="rocket" iconType="solid" href="https://github.com/your-org/astra-assistants-api">
+Best option for running open-source models. Supports Assistants API V2.
+</Card>
+
+<Card title="Open Assistant API" icon="users" iconType="solid" href="https://github.com/your-org/open-assistant-api">
+Fully local and stable, supports Assistants API V1.
+</Card>
+
+</CardGroup>
+
+## Integration Steps
+
+<Steps>
+
+<Step title="Install Required Packages" icon="download" iconType="solid">
+Use pip to install necessary packages.
+
+<CodeBlock language="bash">
+pip install astra-assistants-api gradio
+</CodeBlock>
+</Step>
+
+<Step title="Set Up API Clients" icon="cogs" iconType="solid">
+Configure your API clients to use the open-source models.
+
+<CodeBlock language="python">
+from openai import OpenAI
+from astra_assistants import patch
+from agency_swarm import set_openai_client
+
+client = patch(OpenAI())
+set_openai_client(client)
+</CodeBlock>
+</Step>
+
+<Step title="Create Agents with Open-Source Models" icon="user-plus" iconType="solid">
+Instantiate your agents using the open-source models.
+
+<CodeBlock language="python">
+ceo = Agent(name="CEO", model='ollama/llama3')
+</CodeBlock>
+</Step>
+
+<Step title="Run the Agency" icon="play" iconType="solid">
+Start your agency with the configured agents.
+
+<CodeBlock language="python">
+agency = Agency([ceo])
+agency.run_demo()
+</CodeBlock>
+</Step>
+
+</Steps>
+
+## Limitations
+
+<Warning>
+Be aware of the limitations when using open-source models.
+</Warning>
+
+- **Function Calling**: Not supported by most open-source models.
+- **Retrieval-Augmented Generation**: Often limited; consider custom implementations.
+- **Code Interpreter**: Not supported in current open-source assistants.

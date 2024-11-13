@@ -1,0 +1,71 @@
+# Examples
+
+Explore various examples to understand how to use Agency Swarm effectively.
+
+<Tabs>
+
+<Tab title="Basic Agent">
+
+Create a basic agent that responds to user input.
+
+<CodeBlock language="python">
+from agency_swarm import Agent, Agency
+
+assistant = Agent(name="Assistant", role="Provide helpful responses.")
+
+agency = Agency(agents=[assistant])
+agency.run_demo()
+</CodeBlock>
+
+</Tab>
+
+<Tab title="Multi-Agent Communication">
+
+Set up multiple agents that communicate with each other.
+
+<CodeBlock language="python">
+from agency_swarm import Agent, Agency
+
+agent1 = Agent(name="Agent1", role="Send messages to Agent2.")
+agent2 = Agent(name="Agent2", role="Respond to messages from Agent1.")
+
+agency_chart = {
+    "Agent1": ["Agent2"],
+    "Agent2": []
+}
+
+agency = Agency(agents=[agent1, agent2], agency_chart=agency_chart)
+agency.run_demo()
+</CodeBlock>
+
+</Tab>
+
+<Tab title="Custom Tools">
+
+Create custom tools for agents to perform specific tasks.
+
+<CodeBlock language="python">
+from agency_swarm import Agent, Agency, Tool
+
+class CalculatorTool(Tool):
+    def run(self, input):
+        return str(eval(input))
+
+calculator = CalculatorTool(name="Calculator")
+
+agent = Agent(name="MathAssistant", tools=[calculator])
+
+agency = Agency(agents=[agent])
+agency.run_demo()
+</CodeBlock>
+
+</Tab>
+
+</Tabs>
+
+<NextSteps>
+
+- **[API Reference](./api-reference/api-reference.md)**
+- **[Advanced Topics](./advanced-topics)**
+
+</NextSteps>

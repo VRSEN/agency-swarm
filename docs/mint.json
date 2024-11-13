@@ -79,8 +79,7 @@
         "state-management",
         "output-validation-and-reliability",
         "streaming-support",
-        "prompt-flexibility",
-        "evaluation-and-monitoring"
+        "prompt-flexibility"
       ]
     },
     {
@@ -101,16 +100,6 @@
         "using-code-interpreter-and-filesearch",
         "creating-agencies",
         "deployment"
-      ]
-    },
-    {
-      "group": "Advanced Topics",
-      "pages": [
-        "asynchronous-execution",
-        "open-source-models-support",
-        "production-readiness",
-        "customizing-prompts-and-few-shot-learning",
-        "advanced-monitoring-and-evaluation"
       ]
     },
     {
@@ -135,6 +124,15 @@
       "group": "FAQ",
       "pages": [
         "faq"
+      ]
+    },
+    {
+      "group": "Advanced Topics",
+      "pages": [
+        "asynchronous-execution",
+        "customizing-prompts-and-few-shot-learning",
+        "open-source-models-support",
+        "production-readiness"
       ]
     }
   ],
