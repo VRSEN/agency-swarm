@@ -3,7 +3,8 @@
   "theme": "venus",
   "logo": {
     "dark": "agency_swarm_logo.png",
-    "light": "agency_swarm_logo.png"
+    "light": "agency_swarm_logo.png",
+    "href": "https://github.com/VRSEN/agency-swarm"
   },
   "favicon": "favicon.svg",
   "colors": {
@@ -56,62 +57,72 @@
     {
       "group": "Introduction",
       "pages": [
-        "introduction",
-        "installation",
+        "overview",
         "key-features",
-        "design-and-architecture",
-        "framework-overview"
+        "design-principles"
       ]
     },
     {
       "group": "Getting Started",
       "pages": [
+        "installation",
         "quickstart",
         "examples"
       ]
     },
     {
-      "group": "Core Concepts",
+      "group": "Framework Overview",
       "pages": [
-        "agents",
-        "tools-and-functions",
-        "tasks-and-delegation",
+        "design-and-architecture",
         "communication-flows",
         "conversation-context-management",
         "state-management",
-        "output-validation",
-        "framework-structure",
+        "output-validation-and-reliability",
+        "streaming-support",
         "prompt-flexibility",
-        "streaming-support"
+        "evaluation-and-monitoring"
+      ]
+    },
+    {
+      "group": "Key Entities",
+      "pages": [
+        "agents",
+        "tools",
+        "tasks-and-functions"
       ]
     },
     {
       "group": "How-To Guides",
       "pages": [
-        "create-tools",
-        "create-agents",
-        "create-agencies",
-        "define-agent-instructions",
-        "manage-communication-flows",
-        "use-code-interpreter",
-        "use-filesearch"
+        "creating-tools",
+        "creating-agents",
+        "defining-agent-instructions",
+        "managing-communication-flows",
+        "using-code-interpreter-and-filesearch",
+        "creating-agencies",
+        "deployment"
       ]
     },
     {
       "group": "Advanced Topics",
       "pages": [
-        "open-source-models",
-        "advanced-tools",
-        "deployment",
-        "evaluation-and-monitoring",
+        "asynchronous-execution",
+        "open-source-models-support",
         "production-readiness",
-        "output-validation-and-reliability"
+        "customizing-prompts-and-few-shot-learning",
+        "advanced-monitoring-and-evaluation"
       ]
     },
     {
       "group": "API Reference",
       "pages": [
         "api-reference"
+      ]
+    },
+    {
+      "group": "Folder Structure",
+      "pages": [
+        "folder-structure"
       ]
     },
     {

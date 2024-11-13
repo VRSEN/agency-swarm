@@ -1,0 +1,40 @@
+# Creating Agencies
+
+An agency is a collection of agents working collaboratively. Setting up an agency involves defining agents and their communication flows.
+
+## Steps to Create an Agency
+
+1. **Import Agents and Agency Class**:
+   ```python
+   from agency_swarm import Agency
+   from CEO import CEO
+   from Developer import Developer
+   from VirtualAssistant import VirtualAssistant   ```
+
+2. **Instantiate Agents**:
+   ```python
+   ceo = CEO()
+   dev = Developer()
+   va = VirtualAssistant()   ```
+
+3. **Define the Agency**:
+   ```python
+   agency = Agency([
+       ceo,
+       [ceo, dev],
+       [ceo, va],
+       [dev, va]
+   ],
+   shared_instructions='agency_manifesto.md',
+   temperature=0.5,
+   max_prompt_tokens=25000)   ```
+
+4. **Run the Agency**:
+   ```python
+   if __name__ == "__main__":
+       agency.run_demo()   ```
+
+## Shared Instructions
+
+- **Agency Manifesto**: A `agency_manifesto.md` file containing shared instructions and guidelines.
+- **Purpose**: Aligns all agents with common goals and operating principles. 

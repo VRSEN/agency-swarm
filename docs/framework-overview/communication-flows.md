@@ -1,0 +1,21 @@
+# Communication Flows
+
+Communication flows in Agency Swarm are flexible and user-defined. Unlike other frameworks, they are **not strictly hierarchical** or **sequential**. Communication permissions are established from left to right inside the `agency_chart`.
+
+For example: 
+
+```python
+from agency_swarm import Agency
+agency = Agency([
+    ceo,       # CEO is the entry point for user communication
+    [ceo, dev],  # CEO can initiate communication with Developer
+    [ceo, va],   # CEO can initiate communication with Virtual Assistant
+    [dev, va]    # Developer can initiate communication with Virtual Assistant
+])
+```
+
+In this setup:
+
+- The **CEO** can initiate conversations and assign tasks to the **Developer** and **Virtual Assistant**.
+- The **Developer** cannot initiate a conversation with the **CEO**, but can communicate with the **Virtual Assistant**.
+- Agents added at the top level (e.g., `ceo`) can interact directly with the user.
