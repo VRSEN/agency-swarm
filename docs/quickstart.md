@@ -6,11 +6,6 @@ When it comes to getting started with Agency Swarm, you have two options:
 2. **Use Genesis Swarm**: This is the best option if you want to get started quickly and don't want to spend time creating your own agents and tools. You can use the Genesis Agency to create your agent templates and tools, and then fine-tune them to your needs.
 3. **Create agent templates with CLI**: This is the best option if you want to create a structured environment for each agent and tool. See [Advanced Agents](advanced-usage/agents.md) for more information.
 
-### Installation
-
-```python
-pip install agency-swarm
-```
 
 ## Start from Scratch
 

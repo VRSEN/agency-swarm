@@ -1,0 +1,139 @@
+{
+  "name": "Agency Swarm",
+  "theme": "venus",
+  "logo": {
+    "dark": "agency_swarm_logo.png",
+    "light": "agency_swarm_logo.png"
+  },
+  "favicon": "favicon.svg",
+  "colors": {
+    "primary": "#EB6658",
+    "light": "#F3A78B",
+    "dark": "#C94C3C",
+    "anchors": {
+      "from": "#737373",
+      "to": "#EB6658"
+    }
+  },
+  "seo": {
+    "indexHiddenPages": false
+  },
+  "modeToggle": {
+    "default": "dark",
+    "isHidden": false
+  },
+  "feedback": {
+    "suggestEdit": true,
+    "raiseIssue": true,
+    "thumbsRating": true
+  },
+  "topbarCtaButton": {
+    "type": "github",
+    "url": "https://github.com/VRSEN/agency-swarm"
+  },
+  "primaryTab": {
+    "name": "Get Started"
+  },
+  "tabs": [
+    {
+      "name": "Examples",
+      "url": "examples"
+    }
+  ],
+  "anchors": [
+    {
+      "name": "Discord Community",
+      "icon": "discourse",
+      "url": "https://discord.gg/cw2xBaWfFM"
+    },
+    {
+      "name": "Changelog",
+      "icon": "timeline",
+      "url": "https://github.com/VRSEN/agency-swarm/releases"
+    }
+  ],
+  "navigation": [
+    {
+      "group": "Introduction",
+      "pages": [
+        "introduction",
+        "installation",
+        "key-features",
+        "design-and-architecture",
+        "framework-overview"
+      ]
+    },
+    {
+      "group": "Getting Started",
+      "pages": [
+        "quickstart",
+        "examples"
+      ]
+    },
+    {
+      "group": "Core Concepts",
+      "pages": [
+        "agents",
+        "tools-and-functions",
+        "tasks-and-delegation",
+        "communication-flows",
+        "conversation-context-management",
+        "state-management",
+        "output-validation",
+        "framework-structure",
+        "prompt-flexibility",
+        "streaming-support"
+      ]
+    },
+    {
+      "group": "How-To Guides",
+      "pages": [
+        "create-tools",
+        "create-agents",
+        "create-agencies",
+        "define-agent-instructions",
+        "manage-communication-flows",
+        "use-code-interpreter",
+        "use-filesearch"
+      ]
+    },
+    {
+      "group": "Advanced Topics",
+      "pages": [
+        "open-source-models",
+        "advanced-tools",
+        "deployment",
+        "evaluation-and-monitoring",
+        "production-readiness",
+        "output-validation-and-reliability"
+      ]
+    },
+    {
+      "group": "API Reference",
+      "pages": [
+        "api-reference"
+      ]
+    },
+    {
+      "group": "Contributing",
+      "pages": [
+        "contributing"
+      ]
+    },
+    {
+      "group": "FAQ",
+      "pages": [
+        "faq"
+      ]
+    }
+  ],
+  "search": {
+    "prompt": "Search Agency Swarm docs"
+  },
+  "footerSocials": {
+    "website": "https://vrsen.ai",
+    "x": "https://x.com/__vrsen__",
+    "github": "https://github.com/VRSEN/agency-swarm",
+    "youtube": "https://youtube.com/@vrsen"
+  }
+}
