@@ -42,6 +42,8 @@ class Thread:
 
         self.num_run_retries = 0
 
+        self.terminal_states = ["cancelled", "completed", "failed", "expired", "incomplete"]
+
     def init_thread(self):
         if self.id:
             self.thread = self.client.beta.threads.retrieve(self.id)
@@ -57,7 +59,7 @@ class Thread:
                     )
 
     def get_completion_stream(self,
-                              message: str,
+                              message: Union[str, List[dict], None],
                               event_handler: type(AgencyEventHandler),
                               message_files: List[str] = None,
                               attachments: Optional[List[Attachment]] = None,
@@ -77,10 +79,10 @@ class Thread:
                                    response_format=response_format)
 
     def get_completion(self,
-                       message: str | List[dict],
+                       message: Union[str, List[dict], None],
                        message_files: List[str] = None,
                        attachments: Optional[List[dict]] = None,
-                       recipient_agent: Agent = None,
+                       recipient_agent: Union[Agent, None] = None,
                        additional_instructions: str = None,
                        event_handler: type(AgencyEventHandler) = None,
                        tool_choice: AssistantToolChoice = None,
@@ -117,14 +119,15 @@ class Thread:
         print(f'THREAD:[ {sender_name} -> {recipient_agent.name} ]: URL {self.thread_url}')
 
         # send message
-        message_obj = self.create_message(
-            message=message,
-            role="user",
-            attachments=attachments
-        )
+        if message:
+            message_obj = self.create_message(
+                message=message,
+                role="user",
+                attachments=attachments
+            )
 
-        if yield_messages:
-            yield MessageOutput("text", self.agent.name, recipient_agent.name, message, message_obj)
+            if yield_messages:
+                yield MessageOutput("text", self.agent.name, recipient_agent.name, message, message_obj)
 
         self._create_run(recipient_agent, additional_instructions, event_handler, tool_choice, response_format=response_format)
 
@@ -138,8 +141,8 @@ class Thread:
             if self.run.status == "requires_action":
                 tool_calls = self.run.required_action.submit_tool_outputs.tool_calls
                 tool_outputs_and_names = [] # list of tuples (name, tool_output)
-                sync_tool_calls = [tool_call for tool_call in tool_calls if tool_call.function.name == "SendMessage"]
-                async_tool_calls = [tool_call for tool_call in tool_calls if tool_call.function.name != "SendMessage"]
+                sync_tool_calls = [tool_call for tool_call in tool_calls if tool_call.function.name.startswith("SendMessage")]
+                async_tool_calls = [tool_call for tool_call in tool_calls if not tool_call.function.name.startswith("SendMessage")]
 
                 def handle_output(tool_call, output):
                     if inspect.isgenerator(output):
@@ -157,6 +160,8 @@ class Thread:
                     for tool_output in tool_outputs_and_names:
                         if tool_output[1]["tool_call_id"] == tool_call.id:
                             tool_output[1]["output"] = output
+                    
+                    return output
 
                 if len(async_tool_calls) > 0 and self.async_mode == "tools_threading":
                     max_workers = min(self.max_workers, os.cpu_count() or 1)  # Use at most 4 workers or the number of CPUs available
@@ -170,8 +175,11 @@ class Thread:
 
                         for future in as_completed(futures):
                             tool_call = futures[future]
-                            output = future.result()
-                            yield from handle_output(tool_call, output)
+                            output, output_as_result = future.result()
+                            output = yield from handle_output(tool_call, output)
+                            if output_as_result:
+                                self._cancel_run()
+                                return output
                 else:
                     sync_tool_calls += async_tool_calls
 
@@ -179,10 +187,13 @@ class Thread:
                 for tool_call in sync_tool_calls:
                     if yield_messages:
                         yield MessageOutput("function", recipient_agent.name, self.agent.name, str(tool_call.function), tool_call)
-                    output = self.execute_tool(tool_call, recipient_agent, event_handler, tool_outputs_and_names)
+                    output, output_as_result = self.execute_tool(tool_call, recipient_agent, event_handler, tool_outputs_and_names)
                     tool_outputs_and_names.append((tool_call.function.name, {"tool_call_id": tool_call.id, "output": output}))
-                    yield from handle_output(tool_call, output)
-                
+                    output = yield from handle_output(tool_call, output)
+                    if output_as_result:
+                        self._cancel_run()
+                        return output
+
                 # split names and outputs
                 tool_outputs = [tool_output for _, tool_output in tool_outputs_and_names]
                 tool_names = [name for name, _ in tool_outputs_and_names]
@@ -340,8 +351,11 @@ class Thread:
                     # poll_interval_ms=500,
                 )
         except APIError as e:
-            if "The server had an error processing your request" in e.message and self.num_run_retries < 3:
-                time.sleep(1 + self.num_run_retries)
+            match = re.search(r"Thread (\w+) already has an active run (\w+)", e.message)
+            if match:
+                self._cancel_run(thread_id=match.groups()[0], run_id=match.groups()[1], check_status=False)
+            elif "The server had an error processing your request" in e.message and self.num_run_retries < 3:
+                time.sleep(1)
                 self._create_run(recipient_agent, additional_instructions, event_handler, tool_choice, response_format=response_format)
                 self.num_run_retries += 1
             else:
@@ -355,22 +369,48 @@ class Thread:
                 run_id=self.run.id
             )
 
-    def _submit_tool_outputs(self, tool_outputs, event_handler):
-        if not event_handler:
-            self.run = self.client.beta.threads.runs.submit_tool_outputs_and_poll(
+    def _submit_tool_outputs(self, tool_outputs, event_handler=None, poll=True):
+        if not poll:
+            self.run = self.client.beta.threads.runs.submit_tool_outputs(
                 thread_id=self.thread.id,
                 run_id=self.run.id,
                 tool_outputs=tool_outputs
             )
         else:
-            with self.client.beta.threads.runs.submit_tool_outputs_stream(
+            if not event_handler:
+                self.run = self.client.beta.threads.runs.submit_tool_outputs_and_poll(
                     thread_id=self.thread.id,
                     run_id=self.run.id,
-                    tool_outputs=tool_outputs,
-                    event_handler=event_handler()
-            ) as stream:
-                stream.until_done()
-                self.run = stream.get_final_run()
+                    tool_outputs=tool_outputs
+                )
+            else:
+                with self.client.beta.threads.runs.submit_tool_outputs_stream(
+                        thread_id=self.thread.id,
+                        run_id=self.run.id,
+                        tool_outputs=tool_outputs,
+                        event_handler=event_handler()
+                ) as stream:
+                    stream.until_done()
+                    self.run = stream.get_final_run()
+
+    def _cancel_run(self, thread_id=None, run_id=None, check_status=True):
+        if check_status and self.run.status in self.terminal_states and not run_id:
+            return
+        
+        try:
+            self.run = self.client.beta.threads.runs.cancel(
+                thread_id=self.thread.id,
+                run_id=self.run.id
+            )
+        except BadRequestError as e:
+            if "Cannot cancel run with status" in e.message:
+                self.run = self.client.beta.threads.runs.poll(
+                    thread_id=thread_id or self.thread.id,
+                    run_id=run_id or self.run.id,
+                    poll_interval_ms=500,
+                )
+            else:
+                raise e
 
     def _get_last_message_text(self):
         messages = self.client.beta.threads.messages.list(
@@ -417,15 +457,9 @@ class Thread:
                 thread_id, run_id = match.groups()
                 thread_id = f"thread_{thread_id}"
                 run_id = f"run_{run_id}"
-                self.client.beta.threads.runs.cancel(
-                    thread_id=thread_id,
-                    run_id=run_id
-                )
-                self.run = self.client.beta.threads.runs.poll(
-                    thread_id=thread_id,
-                    run_id=run_id,
-                    poll_interval_ms=500,
-                )
+                
+                self._cancel_run(thread_id=thread_id, run_id=run_id)
+
                 return self.client.beta.threads.messages.create(
                     thread_id=thread_id,
                     role=role,
@@ -443,7 +477,7 @@ class Thread:
         tool = next((func for func in funcs if func.__name__ == tool_call.function.name), None)
 
         if not tool:
-            return f"Error: Function {tool_call.function.name} not found. Available functions: {[func.__name__ for func in funcs]}"
+            return f"Error: Function {tool_call.function.name} not found. Available functions: {[func.__name__ for func in funcs]}", False
 
         try:
             # init tool
@@ -453,17 +487,18 @@ class Thread:
             for tool_name in [name for name, _ in tool_outputs_and_names]:
                 if tool_name == tool_call.function.name and (
                         hasattr(tool, "ToolConfig") and hasattr(tool.ToolConfig, "one_call_at_a_time") and tool.ToolConfig.one_call_at_a_time):
-                    return f"Error: Function {tool_call.function.name} is already called. You can only call this function once at a time. Please wait for the previous call to finish before calling it again."
+                    return f"Error: Function {tool_call.function.name} is already called. You can only call this function once at a time. Please wait for the previous call to finish before calling it again.", False
             
             tool._caller_agent = recipient_agent
             tool._event_handler = event_handler
+            tool._tool_call = tool_call
 
-            return tool.run()
+            return tool.run(), tool.ToolConfig.output_as_result
         except Exception as e:
             error_message = f"Error: {e}"
             if "For further information visit" in error_message:
                 error_message = error_message.split("For further information visit")[0]
-            return error_message
+            return error_message, False
         
     def _execute_async_tool_calls_outputs(self, tool_outputs):
         async_tool_calls = []

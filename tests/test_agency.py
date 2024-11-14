@@ -219,9 +219,11 @@ class AgencyTest(unittest.TestCase):
         message = self.__class__.agency.get_completion("Please tell TestAgent1 to say test to TestAgent2.",
                                                        tool_choice={"type": "function", "function": {"name": "SendMessage"}})
 
-        self.assertFalse('error' in message.lower(), f"Error found in message: {message}")
+        self.assertFalse('error' in message.lower(), f"Error found in message: {message}. Thread url: {self.__class__.agency.main_thread.thread_url}")
 
         for agent_name, threads in self.__class__.agency.agents_and_threads.items():
+            if agent_name == "main_thread":
+                continue
             for other_agent_name, thread in threads.items():
                 self.assertTrue(thread.id in self.__class__.loaded_thread_ids[agent_name][other_agent_name])
 
@@ -312,6 +314,8 @@ class AgencyTest(unittest.TestCase):
         self.assertFalse(agent1_thread.run.parallel_tool_calls)
 
         for agent_name, threads in self.__class__.agency.agents_and_threads.items():
+            if agent_name == "main_thread":
+                continue
             for other_agent_name, thread in threads.items():
                 self.assertTrue(thread.id in self.__class__.loaded_thread_ids[agent_name][other_agent_name])
 
@@ -369,6 +373,8 @@ class AgencyTest(unittest.TestCase):
 
         # check that threads are the same
         for agent_name, threads in agency.agents_and_threads.items():
+            if agent_name == "main_thread":
+                continue
             for other_agent_name, thread in threads.items():
                 self.assertTrue(thread.id in self.__class__.loaded_thread_ids[agent_name][other_agent_name])
                 self.assertTrue(thread.id in previous_loaded_thread_ids[agent_name][other_agent_name])
@@ -450,6 +456,8 @@ class AgencyTest(unittest.TestCase):
             self.assertFalse('error' in message.lower(), self.__class__.agency.main_thread.thread_url)
 
         for agent_name, threads in self.__class__.agency.agents_and_threads.items():
+            if agent_name == "main_thread":
+                continue
             for other_agent_name, thread in threads.items():
                 self.assertTrue(thread.id in self.__class__.loaded_thread_ids[agent_name][other_agent_name])
 
