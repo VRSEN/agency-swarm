@@ -24,6 +24,7 @@ agency.run_demo()
 Set up multiple agents that communicate with each other.
 
 <CodeBlock language="python">
+```python
 from agency_swarm import Agent, Agency
 
 agent1 = Agent(name="Agent1", role="Send messages to Agent2.")
@@ -36,6 +37,7 @@ agency_chart = {
 
 agency = Agency(agents=[agent1, agent2], agency_chart=agency_chart)
 agency.run_demo()
+```
 </CodeBlock>
 
 </Tab>

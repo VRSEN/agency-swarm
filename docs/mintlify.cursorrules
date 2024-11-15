@@ -1,5 +1,17 @@
 Mintlify Docs
 
+
+# General
+
+Always start a page with this metadata block:
+Example:
+```mdx
+---
+title: 'Introduction'
+description: 'Example section for showcasing API endpoints'
+---
+```
+
 # Headers and Text Formatting in Mintlify
 
 ## Headers

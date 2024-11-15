@@ -40,6 +40,7 @@ Few-shot examples provide sample interactions to guide agent responses.
 ### Implementation
 
 <CodeBlock title="Providing Few-Shot Examples" language="python">
+```python
 examples = [
     {"role": "user", "content": "Hi!"},
     {"role": "assistant", "content": "Hello! How can I assist you today?"},
@@ -48,6 +49,7 @@ examples = [
 ]
 
 agent = Agent(name="Helper", examples=examples)
+```
 </CodeBlock>
 
 <Note>
