@@ -57,7 +57,7 @@ class Thread:
     def init_thread(self):
         if self.id:
             return
-        print("creating thread")
+        
         self._thread = self.client.beta.threads.create()
         self.id = self._thread.id
         if self.recipient_agent.examples:
@@ -66,7 +66,7 @@ class Thread:
                     thread_id=self.id,
                     **example,
                 )
-        print("thread created", self.id)
+
     def get_completion_stream(self,
                               message: Union[str, List[dict], None],
                               event_handler: type(AgencyEventHandler),
@@ -149,8 +149,7 @@ class Thread:
             if self._run.status == "requires_action":
                 tool_calls = self._run.required_action.submit_tool_outputs.tool_calls
                 tool_outputs_and_names = [] # list of tuples (name, tool_output)
-                sync_tool_calls = [tool_call for tool_call in tool_calls if tool_call.function.name.startswith("SendMessage")]
-                async_tool_calls = [tool_call for tool_call in tool_calls if not tool_call.function.name.startswith("SendMessage")]
+                sync_tool_calls, async_tool_calls = self._get_sync_async_tool_calls(tool_calls, recipient_agent)
 
                 def handle_output(tool_call, output):
                     if inspect.isgenerator(output):
@@ -207,7 +206,7 @@ class Thread:
                 tool_names = [name for name, _ in tool_outputs_and_names]
 
                 # await coroutines
-                tool_outputs = self._execute_async_tool_calls_outputs(tool_outputs)
+                tool_outputs = self._await_coroutines(tool_outputs)
 
                 # convert all tool outputs to strings
                 for tool_output in tool_outputs:
@@ -508,7 +507,7 @@ class Thread:
                 error_message = error_message.split("For further information visit")[0]
             return error_message, False
         
-    def _execute_async_tool_calls_outputs(self, tool_outputs):
+    def _await_coroutines(self, tool_outputs):
         async_tool_calls = []
         for tool_output in tool_outputs:
             if inspect.iscoroutine(tool_output["output"]):
@@ -530,6 +529,39 @@ class Thread:
                 tool_output["output"] = str(result)
         
         return tool_outputs
+    
+    def _get_sync_async_tool_calls(self, tool_calls, recipient_agent):
+        async_tool_calls = []
+        sync_tool_calls = []
+        for tool_call in tool_calls:
+            if tool_call.function.name.startswith("SendMessage"):
+                sync_tool_calls.append(tool_call)
+                continue
+
+            tool = next((func for func in recipient_agent.functions if func.__name__ == tool_call.function.name), None)
+
+            if (hasattr(tool.ToolConfig, "async_mode") and tool.ToolConfig.async_mode) or self.async_mode == "tools_threading":
+                async_tool_calls.append(tool_call)
+            else:
+                sync_tool_calls.append(tool_call)
+
+        return sync_tool_calls, async_tool_calls
+    
+    def get_messages(self, limit=None):
+        all_messages = []
+        after = None
+        while True:
+            response = self.client.beta.threads.messages.list(thread_id=self.id, limit=100, after=after)
+            messages = response.data
+            if not messages:
+                break
+            all_messages.extend(messages)
+            after = messages[-1].id  # Set the 'after' cursor to the ID of the last message
+
+            if limit and len(all_messages) >= limit:
+                break
+
+        return all_messages
 
 
 

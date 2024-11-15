@@ -38,5 +38,13 @@ class TestSendMessage(unittest.TestCase):
         response = self.agency.get_completion("Who are you?")
         self.assertTrue("customer support" in response.lower())
 
+        main_thread = self.agency.main_thread
+
+        # check if recipient agent is correct
+        self.assertEqual(main_thread.recipient_agent, self.customer_support)
+
+        #check if all messages in the same thread (this is how Swarm works)
+        self.assertTrue(len(main_thread.get_messages()) >= 4) # sometimes run does not cancel immediately, so there might be 5 messages
+
 if __name__ == '__main__':
     unittest.main()

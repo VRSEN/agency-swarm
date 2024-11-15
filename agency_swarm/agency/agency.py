@@ -101,12 +101,19 @@ class Agency:
         self.max_completion_tokens = max_completion_tokens
         self.truncation_strategy = truncation_strategy
 
+        # set thread type based send_message_tool_class async mode
+        if hasattr(send_message_tool_class.ToolConfig, "async_mode") and send_message_tool_class.ToolConfig.async_mode:
+            self._thread_type = ThreadAsync
+        else:
+            self._thread_type = Thread  
+
         if self.async_mode == "threading":
             from agency_swarm.tools.send_message import SendMessageAsyncThreading
             print("Warning: 'threading' mode is deprecated. Please use send_message_tool_class = SendMessageAsyncThreading to use async communication.")
             self.send_message_tool_class = SendMessageAsyncThreading
         elif self.async_mode == "tools_threading":
-            Thread.async_mode = self.async_mode
+            Thread.async_mode = "tools_threading"
+            print("Warning: 'tools_threading' mode is deprecated. Use tool.ToolConfig.async_mode = 'threading' instead.")
         elif self.async_mode is None:
             pass
         else:
@@ -887,7 +894,7 @@ class Agency:
                 continue
             for other_agent, items in threads.items():
                 # create thread class
-                self.agents_and_threads[agent_name][other_agent] = self.send_message_tool_class._thread_type(
+                self.agents_and_threads[agent_name][other_agent] = self._thread_type(
                     self._get_agent_by_name(items["agent"]),
                     self._get_agent_by_name(
                         items["recipient_agent"]))
@@ -1034,7 +1041,7 @@ class Agency:
                 continue
             agent = self._get_agent_by_name(agent_name)
             agent.add_tool(self._create_send_message_tool(agent, recipient_agents))
-            if self.send_message_tool_class._thread_type == ThreadAsync:
+            if self._thread_type == ThreadAsync:
                 agent.add_tool(self._create_get_response_tool(agent, recipient_agents))
 
     def _create_send_message_tool(self, agent: Agent, recipient_agents: List[Agent]):

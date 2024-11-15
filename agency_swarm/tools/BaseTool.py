@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Literal, Union
 
 from docstring_parser import parse
 
@@ -22,7 +22,8 @@ class BaseTool(BaseModel, ABC):
         config_defaults = {
             'strict': False,
             'one_call_at_a_time': False,
-            'output_as_result': False
+            'output_as_result': False,
+            'async_mode': None
         }
         
         for key, value in config_defaults.items():
@@ -34,6 +35,7 @@ class BaseTool(BaseModel, ABC):
         one_call_at_a_time: bool = False
         # return the tool output as assistant message
         output_as_result: bool = False
+        async_mode: Union[Literal["threading"], None] = None
 
     @classmethod
     @property

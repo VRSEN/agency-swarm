@@ -11,10 +11,10 @@ class SendMessageSwarm(SendMessageBase):
     
     def run(self):            
         # get main thread
-        thread: Thread = self._agents_and_threads["main_thread"]
+        thread = self._get_main_thread()
 
         # get recipient agent from thread
-        recipient_agent = self._agents_and_threads[self._caller_agent.name][self.recipient.value].recipient_agent
+        recipient_agent = self._get_recipient_agent()
 
         # submit tool output
         try:
