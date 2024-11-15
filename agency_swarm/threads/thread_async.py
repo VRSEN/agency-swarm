@@ -90,11 +90,10 @@ class ThreadAsync(Thread):
         return f"""{self.recipient_agent.name}'s Response: '{messages.data[0].content[0].text.value}'"""
 
     def get_last_run(self):
-        if not self.thread:
-            self.init_thread()
+        self.init_thread()
 
         runs = self.client.beta.threads.runs.list(
-            thread_id=self.thread.id,
+            thread_id=self.id,
             order="desc",
         )
 

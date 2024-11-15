@@ -881,17 +881,21 @@ class Agency:
         # Save main_thread into agents_and_threads
         self.agents_and_threads["main_thread"] = self.main_thread
 
+        # initialize threads
         for agent_name, threads in self.agents_and_threads.items():
             if agent_name == "main_thread":
                 continue
             for other_agent, items in threads.items():
+                # create thread class
                 self.agents_and_threads[agent_name][other_agent] = self.send_message_tool_class._thread_type(
                     self._get_agent_by_name(items["agent"]),
                     self._get_agent_by_name(
                         items["recipient_agent"]))
 
+                # load thread id if available
                 if agent_name in loaded_thread_ids and other_agent in loaded_thread_ids[agent_name]:
                     self.agents_and_threads[agent_name][other_agent].id = loaded_thread_ids[agent_name][other_agent]
+                # init threads if threre are threads callbacks so the ids are saved for later use
                 elif self.threads_callbacks:
                     self.agents_and_threads[agent_name][other_agent].init_thread()
 
