@@ -1,6 +1,5 @@
 Mintlify Docs
 
-
 # General
 
 Always start a page with this metadata block:
@@ -12,259 +11,653 @@ description: 'Example section for showcasing API endpoints'
 ---
 ```
 
-# Headers and Text Formatting in Mintlify
+# Getting Started
 
-## Headers
+## Global Settings
 
-Mintlify supports different header levels using markdown syntax:
+Customize your documentation using the `mint.json` file.
+
+Every Mintlify site requires a `mint.json` file containing core configuration settings. Learn more about the properties or view an example [here](path/to/example).
+
+---
+
+## Properties
+
+### Styling
+
+| Property           | Type                                                                            | Required | Description                                                                                                                                                                         |
+| ------------------ | --------------------------------------------------------------------------------| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **name**           | `string`                                                                        | Yes      | The name of your company or project. Used as the global title.                                                                                                                     |
+| **logo**           | `string` or `Logo`                                                              | No       | Path to the logo image or an object containing paths to “light” and “dark” mode logo images, and the URL where the logo links to. SVG format is recommended for scalability and size. |
+| **favicon**        | `string`                                                                        | No       | Path to the favicon image, e.g., `/path/to/favicon.svg`.                                                                                                                           |
+| **colors**         | `Colors`                                                                        | No       | Hex color codes defining your global theme.                                                                                                                                         |
+| **theme**          | `"venus"` \| `"quill"` \| `"prism"`                                             | No       | Preset theme configurations changing the project's look and feel.                                                                                                                  |
+| **layout**         | `"topnav"` \| `"sidenav"` \| `"solidSidenav"`                                   | No       | The global layout style of the documentation. Options include `"topnav"`, `"sidenav"`, and `"solidSidenav"`.                                                                        |
+| **background**     | `Background`                                                                    | No       | Sets a decorative background for the documentation site.                                                                                                                            |
+| **font**           | `FontDetailsType` \| `{ headings?: FontDetailsType, body?: FontDetailsType }`   | No       | Custom fonts applied globally or set differently for headings and body text.                                                                                                       |
+| **modeToggle**     | `ModeToggle`                                                                    | No       | Customize the dark mode toggle feature.                                                                                                                                              |
+| **sidebar**        | `Sidebar`                                                                       | No       | Customize the styling of components within the sidebar.                                                                                                                             |
+| **topbar**         | `Topbar`                                                                        | No       | Styling configurations for the topbar.                                                                                                                                               |
+| **search**         | `Search`                                                                        | No       | Configure the location options for the search bar.                                                                                                                                  |
+| **rounded**        | `"default"` \| `"sharp"`                                                        | No       | Defines the style of the rounded edges in the UI.                                                                                                                                     |
+| **codeBlock**      | `CodeBlock`                                                                     | No       | Specifies the style of the code blocks in the documentation.                                                                                                                        |
+
+#### Show Styling Options
+
+- [Show Logo](#logo)
+- [Show Colors](#colors)
+- [Show Background](#background)
+- [Show Font](#font)
+- [Show ModeToggle](#modeToggle)
+- [Show Sidebar](#sidebar)
+- [Show Topbar](#topbar)
+- [Show Search](#search)
+- [Show CodeBlock](#codeBlock)
+
+---
+
+### Structure
+
+| Property           | Type                                                                            | Required | Description                                                                                               |
+| ------------------ | --------------------------------------------------------------------------------| -------- | --------------------------------------------------------------------------------------------------------- |
+| **navigation**     | `Navigation[]`                                                                  | Yes      | An array of groups containing all the pages within each group.                                           |
+| **topbarLinks**    | `TopbarLink[]`                                                                  | No       | An array of names and URLs for links to include in the topbar.                                            |
+| **topbarCtaButton**| `Call to Action`                                                                | No       | Configuration for the call-to-action button in the topbar.                                               |
+| **versions**       | `string[]`                                                                      | No       | An array of version names for showing different doc versions with a dropdown in the navigation bar. Useful for localization. |
+| **anchors**        | `Anchor[]`                                                                      | No       | An array of anchors, including icon, color, and URL.                                                      |
+| **topAnchor**      | `Anchor`                                                                        | No       | Overrides the default configurations for the top-most anchor. Note: Does not apply if tabs are configured. |
+| **tabs**           | `Tabs[]`                                                                        | No       | An array of navigational tabs.                                                                               |
+| **footer**         | `{ socials?: FooterSocials, links?: FooterLinksColumn[] }`                      | No       | Configures the footer with socials and links.                                                              |
+| **feedback**       | `Feedback`                                                                      | No       | Configurations to enable feedback buttons.                                                                  |
+
+#### Show Structure Options
+
+- [Show Navigation](#navigation)
+- [Show TopbarLink](#topbarLinks)
+- [Show Topbar Call to Action](#topbarCtaButton)
+
+---
+
+### API Configurations
+
+#### api
+
+`API`
+
+Configuration for API settings. Learn more about API pages at [API Components](path/to/api-components).
+
+#### openapi
+
+`string` | `string[]`
+
+A string or an array of strings of URLs or relative paths pointing to your OpenAPI file.
+
+**Examples:**
+
+- **Absolute:**
+  ```json
+  "openapi": "https://example.com/openapi.json"
+  ```
+
+- **Relative:**
+  ```json
+  "openapi": "./path/to/openapi.json"
+  ```
+
+- **Multiple:**
+  ```json
+  "openapi": ["https://example.com/openapi.json", "./path/to/another-openapi.json"]
+  ```
+
+#### integrations
+
+`Integrations`
+
+Configurations to add third-party integrations (excluding analytics integrations).
+
+#### analytics
+
+`Analytics`
+
+Configurations to add third-party analytics integrations. [See full list of supported analytics here](path/to/supported-analytics).
+
+---
+
+### Redirects
+
+#### redirects
+
+`Redirect[]`
+
+An array of paths to configure permanent redirects to another path.
+
+**Example:**
+```json
+"redirects": [
+  {
+    "source": "/source/path",
+    "destination": "/destination/path"
+  }
+]
+```
+
+---
+
+### Search Engine Optimization
+
+#### seo
+
+`SEO`
+
+Settings for Search Engine Optimization.
+
+**Example:**
+```json
+"seo": {
+  "indexHiddenPages": true
+}
+```
+
+#### indexHiddenPages
+
+`boolean`
+
+Default: `false`
+
+Enables indexing of pages not included in the navigation.
+
+---
+
+---
+
+## Getting Started
+
+### Navigation
+
+Organize your docs directory to guide your users to the information they need.
+
+### Tabs
+
+Tabs help distinguish between different topics or sections of your documentation. They appear above the main sidebar.
+
+Configure tabs with the `tabs` field in the `mint.json` file. The `url` field of the tab object should map to a folder of content added to your sidebar or an external link.
+
+```json
+"tabs": [
+    {
+        "name": "API References",
+        "url": "api-references"
+    },
+    {
+        "name": "Content",
+        "url": "content"
+    },
+    {
+        "name": "Blog",
+        "url": "https://your-website.com/blog"
+    }
+]
+```
+
+To configure the default Documentation primary tab, add the `primaryTab` field to your `mint.json` file with your desired name. Any files in your navigation not in a folder reserved by another tab will appear in the primary tab.
+
+```json
+"primaryTab": {
+    "name": "Home"
+}
+```
+
+### Anchors
+
+Anchors provide another way to direct users to sections of your documentation or link out to external URLs.
+
+Configure anchors with the `anchors` field in the `mint.json` file. The `url` field of the anchor object should map to an external link or a folder of content added to your sidebar.
+
+```json
+"anchors": [
+    {
+        "name": "API References",
+        "icon": "code",
+        "url": "api-references"
+    },
+    {
+        "name": "Content",
+        "icon": "pencil",
+        "url": "content"
+    },
+    {
+        "name": "Contact Us",
+        "icon": "envelope",
+        "url": "https://mintlify.com/contact-us"
+    }
+]
+```
+
+To configure the default Documentation top anchor, add the `topAnchor` field to your `mint.json` file.
+
+```json
+"topAnchor": {
+    "name": "Home",
+    "icon": "building"
+}
+```
+
+### Sidebar
+
+Organize your navigation by defining the `navigation` property in your `mint.json` file. You don’t need to include `.mdx` in page names.
+
+Once you add a page to your docs directory, you’ll need to add the path to `mint.json` to include it in the sidebar. Pages do not show up automatically.
+
+#### Regular Navigation
+
+```json
+"navigation": [
+    {
+        "group": "Getting Started",
+        "pages": ["quickstart"]
+    }
+]
+```
+
+#### Groups
+
+Create groups by recursively nesting a group within a group.
+
+##### Nested Navigation
+
+```json
+"navigation": [
+    {
+        "group": "Getting Started",
+        "pages": [
+            "quickstart",
+            {
+                "group": "Nested Reference Pages",
+                "pages": ["nested-reference-page"]
+            }
+        ]
+    }
+]
+```
+
+### Folders
+
+Simply place your MDX files in folders and update the paths in `mint.json`.
+
+For example, to have a page at `https://yoursite.com/your-folder/your-page`, create a folder called `your-folder` containing an MDX file named `your-page.mdx`.
+
+**Note:** You cannot use `api` as the name of a folder unless you nest it inside another folder. Mintlify uses Next.js, which reserves the top-level `api` folder for internal server calls. We recommend using the folder name `api-reference` instead.
+
+#### Navigation With Folder
+
+##### Nested Navigation
+
+```json
+"navigation": [
+    {
+        "group": "Group Name",
+        "pages": ["your-folder/your-page"]
+    }
+]
+```
+
+### Hidden Pages
+
+MDX files not included in `mint.json` will not appear in the sidebar but are accessible by linking directly to them.
+
+Hidden pages are not indexed for search within your docs by default. To override this behavior, set the `seo.indexHiddenPages` attribute in your `mint.json` file to `true`.
+
+### Topbar
+
+#### Links
+
+Add links to the topbar using the `topbarLinks` field in the `mint.json` file.
+
+The `topbarLinks` field supports the following properties: `name`, `url`.
+
+```json
+"topbarLinks": [
+    {
+        "name": "Community",
+        "url": "https://mintlify.com/community"
+    }
+]
+```
+
+#### CTA Button
+
+Customize the call-to-action (CTA) button in the topbar using the `topbarCTA` field.
+
+The `topbarCTA` field supports the following properties: `name`, `url`, and `type`.
+
+```json
+"topbarCTA": {
+    "name": "Get Started",
+    "url": "https://mintlify.com/get-started"
+}
+```
+
+#### Github
+
+You can configure the CTA button to link directly to your GitHub repository. Use the `topbarCtaButton` field with the `type` set to `github`.
+
+```json
+"topbarCtaButton": {
+    "type": "github",
+    "url": "https://github.com/mintlify/docs"
+}
+```
+
+---
+
+# Writing Content
+
+## Page Titles and Metadata
+
+Set the title and metadata for navigation and SEO.
+
+### The Basics
+
+Each page is an MDX file that should begin with the following metadata syntax with `---` at the start and end:
+
+**Schema**
+
+**Example**
+```mdx
+---
+title: "Page Title"
+description: "Brief description of the page"
+---
+```
+
+Mintlify will use the file name if you omit the title.
+
+### API Pages
+
+API pages allow you to build interactive API playgrounds. To create an API page, set an `api` or `openapi` property in the page metadata.
+
+### Descriptions
+
+Use the `description` metadata to display a description directly under the title.
+
+```mdx
+description: "Your description goes here."
+```
+
+### Sidebar Title
+
+Use `sidebarTitle` to display a different title in the navigation.
+
+```mdx
+---
+title: "Long Page Title"
+sidebarTitle: "Short Title"
+---
+```
+
+### Sidebar Icons
+
+Add an `icon` attribute in the metadata to include icons for sidebar items.
+
+```mdx
+---
+title: "Code Block"
+icon: "rectangle-code"
+iconType: "solid"
+---
+```
+
+### Page Mode
+
+Customize the appearance of your page with the `mode` attribute.
+
+- **Default Mode:** Standard layout with table of contents.
+- **Wide Mode:** Hide the table of contents.
+  
+```mdx
+---
+title: "Page with no ToC"
+mode: "wide"
+---
+```
+
+- **Custom Mode:** Minimalist layout with only the top bar.
+  
+```mdx
+---
+mode: "custom"
+---
+```
+
+### External Links
+
+To create external links in the sidebar, set the `url` metadata.
+
+```mdx
+---
+title: "External Link Page"
+url: "https://www.example.com"
+---
+```
+
+### Search Engine Optimization
+
+Set meta tags in your page’s metadata for better SEO and social media sharing.
+
+```mdx
+---
+title: "SEO Page"
+description: "Optimizing your documentation"
+"twitter:image": "/images/seo-image.jpg"
+---
+```
+
+---
+
+## Headers and Text
+
+### Titles
+
+Use headers to structure your content.
 
 ```markdown
 ## Title (H2)
 ### Subtitle (H3)
 ```
 
-Each title and subtitle automatically creates an anchor and appears in the table of contents.
+Each title and subtitle creates an anchor and appears in the table of contents.
 
-## Text Formatting Options
+### Text Formatting
 
-### Basic Formatting
+Use markdown for text styling:
 
-| Style | Syntax | Result |
-| --- | --- | --- |
-| Bold | `**text**` | **text** |
-| Italic | `_text_` | _text_ |
-| Strikethrough | `~text~` | ~~text~~ |
+| Style          | Syntax       | Result                |
+| -------------- | ------------ | --------------------- |
+| **Bold**       | `**text**`   | **text**              |
+| *Italic*       | `_text_`     | _italic_              |
+| ~~Strikethrough~~ | `~text~` | ~~strikethrough~~     |
 
-You can combine these formats, e.g., `**_bold and italic_**` becomes **_bold and italic_**
+Combine styles as needed, e.g., `**_bold and italic_**`.
 
 ### Superscript and Subscript
-Uses HTML tags:
+
+Use HTML tags for superscript and subscript.
+
 ```html
 <sup>superscript</sup>
 <sub>subscript</sub>
 ```
 
-## Links
-- External links: `[link text](https://example.com)`
-- Internal docs links: Use root-relative paths like `/content/text`
-- Avoid relative links (`../text`) for better performance
+### Links
 
-## Blockquotes
+- **External Links:** `[link text](https://example.com)`
+- **Internal Links:** Use root-relative paths like `/content/page`
 
-### Single-line
+Avoid relative links (`../page`) for better performance.
+
+### Blockquotes
+
+- **Single-line:**
+  ```markdown
+  > Single line quote
+  ```
+
+- **Multi-line:**
+  ```markdown
+  > First paragraph
+  >
+  > Second paragraph
+  ```
+
+### LaTeX Support
+
+- **Inline LaTeX:** `$a^2 + b^2 = c^2$`
+- **Block LaTeX:** `$$\exists \, x \notin [0,1]$$`
+
+### Line Breaks
+
+Use double line breaks in markdown or the `<br />` tag.
+
+---
+
+## Images, Videos, and Embeds
+
+### Images
+
+**Using Markdown:**
 ```markdown
-> Single line quote
+![Alt Text](/path/image.jpg)
+```
+Ensure image size is under 5MB or use external hosting.
+
+**Using Embeds:**
+```html
+<img height="200" src="/path/image.jpg" />
 ```
 
-### Multi-line
+**Disable Image Zoom:**
+```html
+<img height="200" noZoom src="/path/image.jpg" />
+```
+
+**Linking Images:**
+```html
+<a href="https://mintlify.com" target="_blank">
+  <img height="200" noZoom src="/path/image.jpg" />
+</a>
+```
+
+**Dark Mode Images:**
+```html
+<img className="block h-32 dark:hidden" src="/path/image-light.jpg" />
+<img className="hidden h-32 dark:block" src="/path/image-dark.jpg" />
+```
+
+### Videos
+
+**YouTube:**
+```html
+<iframe
+  width="560"
+  height="315"
+  src="https://www.youtube.com/embed/4KzFe50RQkQ"
+  title="YouTube video player"
+  frameborder="0"
+  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+  allowfullscreen
+></iframe>
+```
+
+**Other Videos:**
+```html
+<video
+  controls
+  className="w-full aspect-video"
+  src="link-to-your-video.com"
+></video>
+```
+
+**Autoplay Videos:**
+```html
+<video
+  autoPlay
+  muted
+  loop
+  playsInline
+  className="w-full aspect-video"
+  src="link-to-your-video.com"
+></video>
+```
+
+### iFrames
+
+Embed another HTML page:
+```html
+<iframe src="https://www.youtube.com/embed/4KzFe50RQkQ"></iframe>
+```
+
+For better SEO, add `alt` and `title` attributes to images.
+
+---
+
+## Lists and Tables
+
+### Lists
+
+**Ordered List:**
 ```markdown
-> First paragraph
->
-> Second paragraph
+1. First item
+2. Second item
+3. Third item
+4. Fourth item
 ```
 
-## LaTeX Support
-- Inline LaTeX: Use single `$` symbols
-- Block LaTeX: Use double `$$` symbols
-
-Example:
+**Unordered List:**
 ```markdown
-Inline: $(a^2 + b^2 = c^2)$
-Block: $$\exists \, x \notin [0,1]$$
+- First item
+- Second item
+- Third item
+- Fourth item
 ```
 
-## Line Breaks
-- Use double line breaks in markdown for paragraphs
-- Or use HTML `<br />` tag
-
-
-
-# Accordion Component Documentation
-
-Accordions are dropdown components used for toggling content in Mintlify documentation. 
-
-## Props
-
-| Prop | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `title` | string | Yes | - | Title shown in the Accordion preview |
-| `description` | string | No | - | Detail text displayed below the title |
-| `defaultOpen` | boolean | No | `false` | Controls if Accordion is open by default |
-| `icon` | string/svg | No | - | Font Awesome icon or SVG code |
-| `iconType` | string | No | - | Icon type: "regular", "solid", "light", "thin", "sharp-solid", "duotone", or "brands" |
-
-## Usage Notes
-- Accordions can contain any type of content
-- Can be used individually or within an `AccordionGroup` component for grouping multiple accordions
-- Provides an expandable/collapsible interface for organizing content
-
-
-
-# Accordion Groups in Mintlify
-
-Accordion Groups are components that allow you to bundle multiple accordions into a single unified display. Here's what you need to know:
-
-## Usage
-To create an accordion group, you simply need to wrap your existing `<Accordion>` components within an `<AccordionGroup>` tag:
-
-```jsx
-<AccordionGroup>
-  <Accordion title="FAQ without Icon">
-    {/* Accordion content */}
-  </Accordion>
-  <Accordion title="FAQ with Icon">
-    {/* Accordion content */}
-  </Accordion>
-</AccordionGroup>
+**Nested List:**
+```markdown
+- First item
+- Second item
+  - Additional item
+  - Additional item
+- Third item
 ```
 
-## Key Points
-- The `<AccordionGroup>` component doesn't accept any props
-- You can include other components inside individual Accordions
-- For individual accordion properties, you'll need to refer to the Accordion documentation
+### Tables
 
+Create tables using pipes and hyphens.
 
-
-
-
-[Mintlify's Callout Boxes](https://mintlify.com/docs/content/components/callouts) are components used to add eye-catching context to content. There are five different types of callout components:
-
-1. Note Callouts
-```jsx
-<Note>This adds a note in the content</Note>
+**Example:**
+```markdown
+| Property | Description                           |
+| -------- | ------------------------------------- |
+| Name     | Full name of user                     |
+| Age      | Reported age                          |
+| Joined   | Whether the user joined the community |
 ```
 
-2. Warning Callouts
-```jsx
-<Warning>This raises a warning to watch out for</Warning>
+---
+
+## Code Blocks
+
+### Inline Code
+
+Enclose code in backticks.
+
+```markdown
+`inline code`
 ```
 
-3. Info Callouts
-```jsx
-<Info>This draws attention to important information</Info>
-```
+### Code Block
 
-4. Tip Callouts
-```jsx
-<Tip>This suggests a helpful tip</Tip>
-```
+Use fenced code blocks with language identifiers for syntax highlighting.
 
-5. Check Callouts
-```jsx
-<Check>This brings us a checked status</Check>
-```
-
-Each callout type serves a different purpose:
-- Notes are for general additional content
-- Warnings highlight potential issues or important cautions
-- Info boxes draw attention to key information
-- Tips provide helpful suggestions
-- Check callouts indicate a checked or completed status
-
-These components can be used in Mintlify documentation to make content more visually organized and to highlight important information for readers.
-
-
-
-
-# Cards in Mintlify
-
-Cards are UI components used to highlight main points or links with customizable icons. Here are the main types and features:
-
-## Types of Cards
-
-1. **Basic Card** - Standard card with title, content, and optional icon
-2. **Horizontal Card** - A more compact version that displays content horizontally
-3. **Image Card** - Card that can display an image at the top
-
-## Props Available
-
-| Prop | Type | Required | Description |
-|------|------|----------|-------------|
-| `title` | string | Yes | The title of the card |
-| `icon` | string/svg | No | Font Awesome icon or SVG code in `icon={}` |
-| `iconType` | string | No | Can be: `regular`, `solid`, `light`, `thin`, `sharp-solid`, `duotone`, `brands` |
-| `color` | string | No | Hex code for icon color |
-| `href` | string | No | URL for card navigation |
-| `horizontal` | boolean | No | Enables horizontal layout |
-| `img` | string | No | URL or local path for image display |
-
-## Example Usage
-
-```mdx
-<Card
-  title="Card Title"
-  icon="icon-name"
-  href="/some-link"
->
-  This is how you use a card with an icon and a link.
-</Card>
-```
-
-For horizontal cards:
-```mdx
-<Card
-  title="Horizontal Card"
-  horizontal={true}
->
-  Here is an example of a horizontal card
-</Card>
-```
-
-For image cards:
-```mdx
-<Card
-  title="Image Card"
-  img="path/to/image.jpg"
->
-  Here is an example of a card with an image
-</Card>
-```
-
-
-
-# Card Groups Component
-
-The `CardGroup` component is a layout utility that allows you to display multiple `Card` components side by side in a grid format. Here are the key details:
-
-## Purpose
-- Used to group multiple `Card` components together
-- Commonly used to arrange cards in the same column
-- Creates a grid-based layout for cards
-
-## Properties
-- `cols` prop: Controls the number of columns per row
-  - Default value: 2
-
-## Example Structure
-The documentation shows an example with four cards:
-1. First Card: "Neque porro quisquam est qui dolorem ipsum quia dolor sit amet"
-2. Second Card: "Lorem ipsum dolor sit amet, consectetur adipiscing elit"
-3. Third Card: "Ut enim ad minim veniam, quis nostrud exercitation ullamco"
-4. Fourth Card: "Excepteur sint occaecat cupidatat non proident"
-
-[Source: Mintlify Card Groups Documentation](https://mintlify.com/docs/content/components/card-groups)
-
-The component appears to be part of Mintlify's documentation system, alongside other components like Accordions, Code Blocks, Frames, Icons, and more.
-
-
-
-
-
-# Code Blocks in Mintlify
-
-## Basic Usage
-The simplest way to create a code block is by using three backticks:
-
-````md
-```
-helloWorld();
-```
-````
-
-## Syntax Highlighting
-Add a language identifier after the backticks for syntax highlighting:
-
-````md
 ```java
 class HelloWorld {
     public static void main(String[] args) {
@@ -272,21 +665,19 @@ class HelloWorld {
     }
 }
 ```
-````
 
-## Named Code Blocks
-You can add a name/title to your code block by adding text after the language identifier:
+### Named Code Blocks
 
-````md
+Add a name/title after the language identifier.
+
 ```javascript Code Block Example
 const hello = "world";
 ```
-````
 
-## Line Highlighting
-You can highlight specific lines using curly braces with line numbers or ranges after the language identifier:
+### Line Highlighting
 
-````md
+Highlight specific lines using curly braces.
+
 ```javascript Line Highlighting Example {1,3-5}
 const greeting = "Hello, World!";
 function sayHello() {
@@ -294,21 +685,10 @@ function sayHello() {
 }
 sayHello();
 ```
-````
 
-The documentation mentions that Mintlify uses Prism for syntax highlighting, and there's a reference to Code Groups for displaying multiple code examples in one code box.
+### Code Groups
 
-
-
-
-
-Code Groups are components that allow you to combine multiple code blocks into a tabbed interface. Here are the key points:
-
-1. Code Groups require the `<CodeGroup>` component to wrap around individual code blocks
-2. Each code block within the group must have a filename, which will be used as the tab label
-3. This creates a clean, organized way to show multiple code examples or variations
-
-While the search results don't show the exact syntax example, the typical structure would look something like this:
+Combine multiple code blocks into a tabbed interface using `<CodeGroup>`.
 
 ```mdx
 <CodeGroup>
@@ -322,88 +702,240 @@ console.log("Hello from JavaScript");
 </CodeGroup>
 ```
 
+---
 
+# Accordion Component Documentation
 
+Accordions are dropdown components used for toggling content in Mintlify documentation.
 
-# Frames Component Documentation
+## Props
 
-Frames are container components in Mintlify that serve to wrap images or other components. They are particularly useful for:
+| Prop          | Type         | Required | Description                                |
+| ------------- | ------------ | -------- | ------------------------------------------ |
+| `title`       | string       | Yes      | Title shown in the Accordion preview       |
+| `description` | string       | No       | Detail text displayed below the title      |
+| `defaultOpen` | boolean      | No       | Controls if Accordion is open by default    |
+| `icon`        | string/svg   | No       | Font Awesome icon or SVG code               |
+| `iconType`    | string       | No       | Icon type: "regular", "solid", etc.         |
 
-1. Centering images
-2. Adding structure to content
-3. Providing additional context through captions
+## Usage Notes
+
+- Accordions can contain any type of content
+- Can be used individually or within an `AccordionGroup` component
+- Provides an expandable/collapsible interface for organizing content
+
+# Accordion Groups in Mintlify
+
+Accordion Groups allow bundling multiple accordions into a unified display.
 
 ## Usage
 
-The Frame component accepts the following prop:
+Wrap `<Accordion>` components within an `<AccordionGroup>` tag:
 
-- `caption` (string, optional): Displays centered text underneath the component
+```jsx
+<AccordionGroup>
+  <Accordion title="FAQ without Icon">
+    {/* Accordion content */}
+  </Accordion>
+  <Accordion title="FAQ with Icon">
+    {/* Accordion content */}
+  </Accordion>
+</AccordionGroup>
+```
+
+## Key Points
+
+- `<AccordionGroup>` does not accept any props
+- Include other components inside individual Accordions
+- Refer to Accordion documentation for individual properties
+
+# Cards in Mintlify
+
+Cards highlight main points or links with customizable icons.
+
+## Types of Cards
+
+1. **Basic Card** - Standard card with title, content, and optional icon
+2. **Horizontal Card** - Compact horizontal layout
+3. **Image Card** - Displays an image at the top
+
+## Props Available
+
+| Prop        | Type                | Required | Description                              |
+| ----------- | ------------------- | -------- | ---------------------------------------- |
+| `title`     | string              | Yes      | The title of the card                    |
+| `icon`      | string/svg          | No       | Font Awesome icon or SVG code            |
+| `iconType`  | string              | No       | `regular`, `solid`, etc.                  |
+| `color`     | string              | No       | Hex code for icon color                  |
+| `href`      | string              | No       | URL for card navigation                  |
+| `horizontal`| boolean             | No       | Enables horizontal layout                |
+| `img`       | string              | No       | URL or local path for image display      |
+
+## Example Usage
+
+**Basic Card:**
+```mdx
+<Card
+  title="Card Title"
+  icon="icon-name"
+  href="/some-link"
+>
+  This is how you use a card with an icon and a link.
+</Card>
+```
+
+**Horizontal Card:**
+```mdx
+<Card
+  title="Horizontal Card"
+  horizontal={true}
+>
+  Here is an example of a horizontal card
+</Card>
+```
+
+**Image Card:**
+```mdx
+<Card
+  title="Image Card"
+  img="path/to/image.jpg"
+>
+  Here is an example of a card with an image
+</Card>
+```
+
+# Card Groups Component
+
+`CardGroup` displays multiple `Card` components side by side in a grid.
+
+## Purpose
+
+- Group multiple `Card` components together
+- Arrange cards in columns
+- Create a grid-based layout
+
+## Properties
+
+- `cols`: Number of columns per row (Default: 2)
 
 ## Example Structure
 
+Displays four cards in a grid layout.
+
+# Code Blocks in Mintlify
+
+## Basic Usage
+
+Create a code block using three backticks.
+
+````md
+```
+helloWorld();
+```
+````
+
+## Syntax Highlighting
+
+Add a language identifier for syntax highlighting.
+
+````md
+```java
+class HelloWorld {
+    public static void main(String[] args) {
+        System.out.println("Hello, World!");
+    }
+}
+```
+````
+
+## Named Code Blocks
+
+Add a name/title after the language identifier.
+
+````md
+```javascript Code Block Example
+const hello = "world";
+```
+````
+
+## Line Highlighting
+
+Highlight specific lines using curly braces.
+
+````md
+```javascript Line Highlighting Example {1,3-5}
+const greeting = "Hello, World!";
+function sayHello() {
+  console.log(greeting);
+}
+sayHello();
+```
+````
+
+Mintlify uses Prism for syntax highlighting and supports Code Groups for multiple code examples.
+
+# Frames Component Documentation
+
+Frames wrap images or other components, useful for:
+
+1. Centering images
+2. Adding structure to content
+3. Providing context through captions
+
+## Usage
+
 ```jsx
-<Frame caption="Yosemite National Park is visited by over 3.5 million people every year">
-  {/* Content or image goes here */}
+<Frame caption="Yosemite National Park attracts millions annually">
+  {/* Content or image */}
 </Frame>
 ```
 
-
-
-
-
 # Icons in Mintlify
 
-Icons can be added using Font Awesome icons anywhere in your documentation. Here's how to use them:
+Add Font Awesome icons using the `<Icon>` component.
 
 ## Inline Icons
 
-Icons can be placed inline within paragraphs using the `<Icon>` component.
+Place icons within paragraphs.
 
-### Basic Syntax
 ```markdown
-<Icon icon="check" iconType="solid" /> The documentation you want, effortlessly
+<Icon icon="check" iconType="solid" /> Effortless documentation
 ```
 
 ## Component Properties
 
-The `<Icon>` component accepts the following props:
-
-| Prop | Type | Required | Description |
-|------|------|----------|-------------|
-| `icon` | string | Yes | A Font Awesome icon name |
-| `iconType` | string | No | One of: `regular`, `solid`, `light`, `thin`, `sharp-solid`, `duotone`, `brands` |
-| `color` | string | No | Hex color code (e.g., `#FF5733`) |
-| `size` | number | No | Icon size in pixels |
-
-
-
+| Prop     | Type   | Required | Description                       |
+| -------- | ------ | -------- | --------------------------------- |
+| `icon`   | string | Yes      | A Font Awesome icon name          |
+| `iconType`| string | No       | `regular`, `solid`, etc.           |
+| `color`  | string | No       | Hex color code, e.g., `#FF5733`    |
+| `size`   | number | No       | Icon size in pixels                |
 
 # Mermaid Diagrams in Mintlify
 
-Mermaid is a tool that allows you to create visual diagrams using text and code. 
+Create visual diagrams using Mermaid.
 
-## Supported Diagram Types
+## Supported Diagrams
+
 - Flowcharts
 - Sequence diagrams
 - Class diagrams
 - State diagrams
 - Entity relationship diagrams
-- User journey diagrams
-- And more
 
 ## How to Use
-To create a Mermaid diagram in Mintlify documentation, use the following syntax:
 
-````markdown
+```markdown
 ```mermaid
-// Your mermaid code block here
+graph TD
+    A[Start] --> B[Process]
+    B --> C[End]
 ```
-````
+```
 
-The documentation mentions that for a complete list of supported diagrams, users should refer to the Mermaid website.
+Refer to the Mermaid website for more diagram types.
 
 ## Example
-Here's a simple example of a Mermaid flowchart:
 
 ```mermaid
 graph TD
@@ -411,27 +943,22 @@ graph TD
     B --> C[End]
 ```
 
-
-
-
-
 # Steps Component Documentation
 
-The Steps component is used to display sequential content or instructions in a numbered format. Here's what you need to know:
+Display sequential content or instructions in a numbered format.
 
 ## Basic Usage
-Steps are used to present a series of actions or events in a sequential order. Example structure:
 
 ```jsx
 <Steps>
   <Step title="First Step">
-    These are instructions or content that only pertain to the first step.
+    Instructions for the first step.
   </Step>
   <Step title="Second Step">
-    These are instructions or content that only pertain to the second step.
+    Instructions for the second step.
   </Step>
   <Step title="Third Step">
-    These are instructions or content that only pertain to the third step.
+    Instructions for the third step.
   </Step>
 </Steps>
 ```
@@ -439,137 +966,114 @@ Steps are used to present a series of actions or events in a sequential order. E
 ## Component Props
 
 ### Steps Props
-- `children`: Required. Array of `Step` components
-- `titleSize`: Optional. Controls the size of step titles
-  - Values: `"p"` (default), `"h2"`, or `"h3"`
+
+- `children`: Array of `Step` components (Required)
+- `titleSize`: Size of step titles (`"p"`, `"h2"`, `"h3"`)
 
 ### Individual Step Props
-- `children`: Required. The step content (can be text or React components)
-- `icon`: Optional. Can be a Font Awesome icon or SVG code
-- `iconType`: Optional. Specifies the icon style
-  - Options: `regular`, `solid`, `light`, `thin`, `sharp-solid`, `duotone`, `brands`
-- `title`: Optional. The step's title text
-- `stepNumber`: Optional. The numerical position of the step
-- `titleSize`: Optional. Controls individual step title size
-  - Values: `"p"` (default), `"h2"`, or `"h3"`
 
-
-
+- `children`: Step content (Required)
+- `icon`: Font Awesome icon or SVG code
+- `iconType`: Icon style
+- `title`: Step title
+- `stepNumber`: Numerical position
+- `titleSize`: Individual step title size
 
 # Mintlify Tabs Component
 
-Tabs are UI components that allow you to toggle between different content sections. They're commonly used in documentation to organize related information in a space-efficient way.
+Tabs allow toggling between content sections.
 
 ## Properties
 
-The Tab component has one required property:
-- `title` (string): The label shown in the tab header. It's recommended to keep titles concise for better navigation.
+- `title` (string): Label shown in the tab header.
 
 ## Example Usage
-
-Here's how you can implement tabs in your Mintlify documentation:
 
 ```mdx
 <Tabs>
   <Tab title="First Tab">
-    ☝️ Welcome to the content that you can only see inside the first Tab.
+    Content for the first tab.
   </Tab>
   <Tab title="Second Tab">
-    Content for second tab
+    Content for the second tab.
   </Tab>
   <Tab title="Third Tab">
-    Content for third tab
+    Content for the third tab.
   </Tab>
 </Tabs>
 ```
 
-When rendered, this creates a tabbed interface where users can switch between different content sections by clicking on the tab headers.
-
-
-
-
 # Tooltips
 
-Show a definition when you hover over text.
+Display definitions on hover.
 
 ## Example
+
+```jsx
 <Tooltip tip="This is a tooltip!">Hover over me</Tooltip>
-
-
-
+```
 
 # Update Component
 
-The Update component is used to keep track of changes and updates in documentation. It creates a changelog-style display with sticky sections for each update.
+Track changes and updates in documentation with changelog-style displays.
 
 ## Key Features
+
 - Responsive design
-- Sticky sections for each changelog entry
-- Automatic table of contents generation
+- Sticky sections for changelog entries
+- Automatic table of contents
 - Anchor links for each label
 
 ## Usage Example
 
 ```md
 <Update label="2024-10-12" description="v0.1.1">
-  This is how you use a changelog with a label 
-  and a description.
+  Changelog details for version 0.1.1.
 </Update>
 
 <Update label="2024-10-11" description="v0.1.0">
-  This is how you use a changelog with a label 
-  and a description.
+  Changelog details for version 0.1.0.
 </Update>
 ```
 
 ## Props
 
-| Prop | Type | Required | Description |
-|------|------|----------|-------------|
-| label | string | Yes | Label displayed on the sticky left side of the changelog |
-| description | string | No | Description text shown below the label |
+| Prop        | Type    | Required | Description                                  |
+| ----------- | ------- | -------- | -------------------------------------------- |
+| `label`     | string  | Yes      | Label displayed on the changelog             |
+| `description`| string | No       | Description below the label                  |
 
-You can include any content within the Update component, such as:
-- Screenshots
-- Code snippets
-- Lists of changes
-- Feature descriptions
-
-Each `label` automatically creates an anchor link and appears in the table of contents on the right side of the documentation.
-
-
+Include content such as screenshots, code snippets, and feature descriptions within the `Update` component.
 
 # API Components
 
-## Parameter Fields in Mintlify
+## Parameter Fields
 
-Parameter Fields (`ParamField` components) are used to define parameters for APIs or SDKs. When you add a ParamField, it automatically creates an API Playground.
+Define parameters for APIs or SDKs using `ParamField` components, automatically creating an API Playground.
 
 ### Props Available
 
-Here are all the supported properties for ParamField components:
-
-| Prop | Type | Description |
-|------|------|-------------|
-| param | string | Query, path, body, or header parameter name |
-| type | string | Expected type of the parameter's value |
-| required | boolean | Whether the parameter is required |
-| deprecated | boolean | Whether the parameter is deprecated |
-| default | string | Default value used by the server |
-| initialValue | any | Value to initialize the playground |
-| placeholder | string | Placeholder text for playground input |
-| children | string | Parameter description (supports markdown) |
+| Prop          | Type   | Description                       |
+| ------------- | ------ | --------------------------------- |
+| param         | string | Parameter name (query, path, etc.)|
+| type          | string | Type of the parameter value        |
+| required      | boolean| Whether the parameter is required   |
+| deprecated    | boolean| Whether the parameter is deprecated |
+| default       | string | Default value                       |
+| initialValue  | any    | Initial value in the playground     |
+| placeholder   | string | Placeholder text for input          |
+| children      | string | Parameter description (supports markdown) |
 
 ### Code Examples
 
-Basic usage:
+**Basic Usage:**
 ```mdx
 <ParamField param="user_id" type="string" required>
   The unique identifier for the user
 </ParamField>
 ```
 
-Example with multiple properties:
+**Multiple Properties:**
 ```mdx
 <ParamField 
   param="api_key" 
@@ -582,28 +1086,28 @@ Example with multiple properties:
 </ParamField>
 ```
 
-Query parameter example:
+**Query Parameter:**
 ```mdx
 <ParamField query="filter" type="string" default="all">
   Filter results by specific criteria
 </ParamField>
 ```
 
-Path parameter example:
+**Path Parameter:**
 ```mdx
 <ParamField path="user_id" type="string" required>
   The ID of the user to retrieve
 </ParamField>
 ```
 
-Body parameter example:
+**Body Parameter:**
 ```mdx
 <ParamField body="email" type="string" required>
   User's email address
 </ParamField>
 ```
 
-Deprecated parameter example:
+**Deprecated Parameter:**
 ```mdx
 <ParamField 
   param="old_key" 
@@ -614,17 +1118,11 @@ Deprecated parameter example:
 </ParamField>
 ```
 
-
-
 ## Response Fields Component
 
-The `<ResponseField>` component is specifically designed for:
-- Defining API return values
-- Listing types in documentation
+Define API return values with `<ResponseField>` components.
 
 ### Basic Usage
-
-Here's how to use the ResponseField component:
 
 ```jsx
 <ResponseField name="response" type="string" required>
@@ -634,18 +1132,14 @@ Here's how to use the ResponseField component:
 
 ### Props
 
-The component accepts the following props:
-
-| Prop | Type | Required | Description |
-|------|------|----------|-------------|
-| name | string | ✓ | The name of the response value |
-| type | string | ✓ | Expected type of the response value |
-| default | string | | The default value |
-| required | boolean | | Shows "required" beside the field name |
+| Prop     | Type   | Required | Description                      |
+| -------- | ------ | -------- | -------------------------------- |
+| name     | string | ✓        | Name of the response value       |
+| type     | string | ✓        | Type of the response value       |
+| default  | string | No       | Default value                    |
+| required | boolean| No       | Indicates if the field is required|
 
 ### Example with Multiple Fields
-
-Here's an example showing how you might document multiple response fields:
 
 ```jsx
 <ResponseField name="user" type="object" required>
@@ -664,15 +1158,11 @@ Here's an example showing how you might document multiple response fields:
 </ResponseField>
 ```
 
-
-
 # Expandables Component
 
-Expandables are components that allow you to toggle the display of nested properties, which is particularly useful when documenting complex objects or API responses.
+Toggle the display of nested properties using Expandables.
 
 ## Basic Usage Example
-
-Here's how to implement an expandable component:
 
 ```mdx
 <Expandable title="user" description="User Object">
@@ -687,14 +1177,12 @@ Here's how to implement an expandable component:
 
 ## Props
 
-The Expandable component accepts the following props:
+| Prop         | Type    | Default | Description                                      |
+| ------------ | ------- | ------- | ------------------------------------------------ |
+| `title`      | string  | required| Name of the object for toggle text               |
+| `defaultOpen`| boolean | false   | Set to `true` to open the expandable by default  |
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `title` | string | required | The name of the object you are showing. Used to generate the "Show NAME" and "Hide NAME" text. |
-| `defaultOpen` | boolean | false | Set to true to show the component as open when the page loads. |
-
-## Example with defaultOpen
+## Example with `defaultOpen`
 
 ```mdx
 <Expandable title="user" description="User Object" defaultOpen={true}>
@@ -707,24 +1195,17 @@ The Expandable component accepts the following props:
 </Expandable>
 ```
 
-When rendered, this creates a toggleable section that can show or hide the nested properties, making your documentation cleaner and more organized.
-
-
-
+---
 
 # Sidebar Code Examples
 
-Mintlify provides components that allow you to display code blocks that stick to the top-right of the page on desktop devices. These are particularly useful for API documentation but can be used on any page.
+Display code blocks that stick to the top-right on desktop using `<RequestExample>` and `<ResponseExample>`.
 
-There are two main components:
-- `<RequestExample>` - For request code blocks
-- `<ResponseExample>` - For response code blocks
+## Key Features
 
-## Key Features:
 - Sticks to top-right on desktop
 - Displays as regular code blocks on mobile
-- Can contain multiple code blocks
-- Supports code groups within the components
+- Supports multiple code blocks and code groups
 
 ## Usage Examples
 
@@ -778,6 +1259,6 @@ There are two main components:
 ```
 
 **Important Notes:**
-- Each code block inside `RequestExample` must have a name/title
-- `ResponseExample` will appear below `RequestExample` in the sidebar
+- Each code block inside `RequestExample` must have a title
+- `ResponseExample` appears below `RequestExample` in the sidebar
 - Both components render as regular code blocks on mobile devices
