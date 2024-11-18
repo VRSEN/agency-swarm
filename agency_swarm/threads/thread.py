@@ -51,10 +51,16 @@ class Thread:
         self._stream = None
 
         self._num_run_retries = 0
+        # names of recepient agents that were called in SendMessage tool
+        # needed to prevent agents calling the same recepient agent multiple times
+        self._called_recepients = [] 
 
         self.terminal_states = ["cancelled", "completed", "failed", "expired", "incomplete"]
 
     def init_thread(self):
+        self._called_recepients = []
+        self._num_run_retries = 0
+
         if self.id:
             return
         
@@ -147,6 +153,7 @@ class Thread:
 
             # function execution
             if self._run.status == "requires_action":
+                self._called_recepients = []
                 tool_calls = self._run.required_action.submit_tool_outputs.tool_calls
                 tool_outputs_and_names = [] # list of tuples (name, tool_output)
                 sync_tool_calls, async_tool_calls = self._get_sync_async_tool_calls(tool_calls, recipient_agent)
@@ -480,8 +487,9 @@ class Thread:
         if not recipient_agent:
             recipient_agent = self.recipient_agent
 
+        tool_name = tool_call.function.name
         funcs = recipient_agent.functions
-        tool = next((func for func in funcs if func.__name__ == tool_call.function.name), None)
+        tool = next((func for func in funcs if func.__name__ == tool_name), None)
 
         if not tool:
             return f"Error: Function {tool_call.function.name} not found. Available functions: {[func.__name__ for func in funcs]}", False
@@ -491,11 +499,19 @@ class Thread:
             args = tool_call.function.arguments
             args = json.loads(args) if args else {}
             tool = tool(**args)
+
+            # check if the tool is already called
             for tool_name in [name for name, _ in tool_outputs_and_names]:
-                if tool_name == tool_call.function.name and (
+                if tool_name == tool_name and (
                         hasattr(tool, "ToolConfig") and hasattr(tool.ToolConfig, "one_call_at_a_time") and tool.ToolConfig.one_call_at_a_time):
-                    return f"Error: Function {tool_call.function.name} is already called. You can only call this function once at a time. Please wait for the previous call to finish before calling it again.", False
+                    return f"Error: Function {tool_name} is already called. You can only call this function once at a time. Please wait for the previous call to finish before calling it again.", False
             
+            # for send message tools, don't allow calling the same recepient agent multiple times
+            if tool_name.startswith("SendMessage"):
+                if tool.recipient.value in self._called_recepients:
+                    return f"Error: Agent {tool.recipient.value} has already been called. You can only call each agent once at a time. Please wait for the previous call to finish before calling it again.", False
+                self._called_recepients.append(tool.recipient.value)
+
             tool._caller_agent = recipient_agent
             tool._event_handler = event_handler
             tool._tool_call = tool_call

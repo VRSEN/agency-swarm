@@ -24,7 +24,7 @@ class SendMessageSwarm(SendMessageBase):
                 poll=False
             )
         except BadRequestError as e:
-            raise BadRequestError("You can only call this tool by itself. Do not use any other tools together with this tool.")
+            raise Exception("You can only call this tool by itself. Do not use any other tools together with this tool.")
         
         try:
             # cancel run

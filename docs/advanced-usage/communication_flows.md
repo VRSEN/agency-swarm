@@ -101,7 +101,7 @@ In the following sections, we'll look at some common use cases for extending the
 
 The most basic use case is if you want to have your own parameter descriptions, such as you want to change the docstring or the description of the `message` parameter. This can help you better customize how the agents communicate with each other and what information they relay.
 
-Let's say that instead of sending messages, I want my agents to send tasks to each other. In this case, I can change the docstring and the `message` parameter description to better fit the task-oriented nature of my application.
+Let's say that instead of sending messages, I want my agents to send tasks to each other. In this case, I can change the docstring and the `message` parameter to a `task` parameter to better fit the task-oriented nature of my application.
 
 ```python
 from pydantic import Field
@@ -145,6 +145,7 @@ You can, of course, also use GPT for this:
 ```python
 from agency_swarm.tools.send_message import SendMessage
 from agency_swarm.util.validators import llm_validator
+from pydantic import model_validator
 
 class SendMessageLLMValidation(SendMessage):
     @model_validator(mode='after')
