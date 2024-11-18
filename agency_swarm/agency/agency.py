@@ -1078,7 +1078,6 @@ class Agency:
 
         SendMessage._caller_agent = agent
         SendMessage._agents_and_threads = self.agents_and_threads
-        SendMessage._agency = self
 
         return SendMessage
 

@@ -1,5 +1,4 @@
-from agency_swarm.threads.thread import Thread
-from typing import ClassVar, Optional, List, Type
+from typing import Optional, List
 from pydantic import Field, field_validator, model_validator
 from .SendMessageBase import SendMessageBase
 
@@ -14,12 +13,12 @@ class SendMessage(SendMessageBase):
             "recipient agent via the message parameter. Each identified step should be "
             "sent in a separate message. Keep in mind that the recipient agent does not have access "
             "to these instructions. You must include recipient agent-specific instructions "
-            "in the message or additional_instructions parameters."
+            "in the message or in the additional_instructions parameters."
         )
     )
     message: str = Field(
         ..., 
-        description="Specify the task required for the recipient agent to complete. Focus on clarifying what the task entails, rather than providing exact instructions. Make sure to inlcude all the relevant information needed to complete the task."
+        description="Specify the task required for the recipient agent to complete. Focus on clarifying what the task entails, rather than providing exact instructions. Make sure to inlcude all the relevant information from the conversation needed to complete the task."
     )
     message_files: Optional[List[str]] = Field(
         default=None,
@@ -31,30 +30,15 @@ class SendMessage(SendMessageBase):
         description="Additional context or instructions from the conversation needed by the recipient agent to complete the task."
     )
 
-
     @model_validator(mode='after')
     def validate_files(self):
+        # prevent hallucinations with file IDs if the necessary parameters are provided
         if hasattr(self, 'message') and "file-" in self.message or (self.additional_instructions and "file-" in self.additional_instructions):
             if not self.message_files:
                 raise ValueError("You must include file IDs in message_files parameter.")
         return self
-
-    @field_validator('additional_instructions', mode='before')
-    @classmethod
-    def validate_additional_instructions(cls, value):
-        if isinstance(value, list):
-            return "\n".join(value)
-        return value
-
     
     def run(self):
-        thread = self._get_thread()
-
-        message = thread.get_completion(message=self.message,
-                                message_files=self.message_files,
-                                event_handler=self._event_handler,
-                                yield_messages=not self._event_handler,
-                                additional_instructions=self.additional_instructions,
-                                )
-
-        return message or ""
+        return self._get_completion(message=self.message,
+                                    message_files=self.message_files,
+                                    additional_instructions=self.additional_instructions)

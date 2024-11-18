@@ -6,6 +6,7 @@ class SendMessageSwarm(SendMessageBase):
     """Use this tool to route messages to other agents within your agency. After using this tool, you will be switched to the recipient agent. This tool can only be used once per message. Do not use any other tools together with this tool."""
 
     class ToolConfig:
+        # set output as result because the communication will be finished after this tool is called
         output_as_result: bool = True
         one_call_at_a_time: bool = True
     
