@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "agency-swarm"
 dynamic = ["version"]
-authors = [{ name = "VRSEN", email = "arseny9795@gmail.com" }]
+authors = [{ name = "VRSEN", email = "me@vrsen.ai" }]
 description = "An open source agent orchestration framework built on top of the latest OpenAI Assistants API."
 readme = "README.md"
 license = { file = "LICENSE" }
