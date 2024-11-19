@@ -1,0 +1,103 @@
+---
+title: "Quickstart"
+description: "Get started quickly with Agency Swarm."
+icon: "rocket"
+---
+
+Get up and running with Agency Swarm quickly by following these steps:
+
+## Import Modules and Set Up
+
+1. **Import the necessary modules**:
+   ```python
+   from agency_swarm import Agent, Agency   ```
+
+2. **Set Your OpenAI Key**:
+   ```python
+   from agency_swarm import set_openai_key
+   set_openai_key("YOUR_API_KEY")   ```
+
+## Start from Scratch
+
+1. **Create Tools**: Define your custom tools with [Instructor](https://github.com/jxnl/instructor).  
+   All tools must extend the `BaseTool` class and implement the `run` method.
+   ```python
+   from agency_swarm.tools import BaseTool
+   from pydantic import Field
+
+   class MyCustomTool(BaseTool):
+       """
+       A brief description of what the custom tool does. 
+       The docstring should clearly explain the tool's purpose and functionality.
+       It will be used by the agent to determine when to use this tool.
+       """
+
+       example_field: str = Field(
+           ..., description="Description of the example field, explaining its purpose and usage for the Agent."
+       )
+
+       def run(self):
+           """
+           The implementation of the run method, where the tool's main functionality is executed.
+           """
+           # Your custom tool logic goes here
+           do_something(self.example_field)
+           return "Result of MyCustomTool operation"
+   ```
+
+2. **Define Agent Roles**: Create your agents with specific roles and responsibilities.
+   ```python
+   from agency_swarm import Agent
+
+   ceo = Agent(
+       name="CEO",
+       description="Responsible for client communication, task planning, and management.",
+       instructions="path/to/instructions.md",  # can be a string or file path
+       tools=[],
+       temperature=0.5,
+       max_prompt_tokens=25000,
+   )
+
+   developer = Agent(
+       name="Developer",
+       description="Responsible for executing tasks and providing feedback.",
+       instructions="You must execute the tasks provided by the CEO and provide feedback.",
+       tools=[MyCustomTool]
+   )   ```
+
+3. **Create an Agency**:
+   ```python
+   agency = Agency([
+       ceo,
+       [ceo, developer],
+   ], shared_instructions='You are a part of an AI development agency.\n\n')   ```
+        
+    !!! note "Note on Communication Flows"
+         Communication flows are directional, established from left to right in the agency_chart definition. The CEO can initiate a chat with the developer (dev) who can respond, but the developer cannot initiate a chat with the CEO.
+
+4. **Run the Agency**:
+    Choose your preferred interface:
+
+    - **Web interface**:
+        ```python
+        agency.demo_gradio(height=900)   ```
+        
+    - **Terminal version**:
+        ```python
+        agency.run_demo()   ```
+        
+    - **Backend version**:
+        ```python
+        completion_output = agency.get_completion("Please create a new website for our client.", yield_messages=False)   ```
+
+## Use Genesis Agency
+
+1. **Run the `genesis` command**:
+    ```bash
+    agency-swarm genesis [--openai_key "YOUR_API_KEY"]   ```
+
+## Next Steps
+
+- Learn how to create more Tools, Agents, and Agencies
+- Deploy in Production
+- Check out the [Examples](examples.md) section for detailed tutorials 

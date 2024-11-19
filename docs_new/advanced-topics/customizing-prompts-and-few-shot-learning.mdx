@@ -1,0 +1,71 @@
+---
+title: "Customizing Prompts and Few-Shot Learning"
+description: "Fine-tune agent behavior by customizing prompts and providing few-shot examples."
+icon: "magic"
+---
+
+Fine-tune agent behavior by customizing prompts and providing few-shot examples.
+
+<Info>
+Custom prompts and few-shot learning help your agents understand the desired response style and content, leading to more accurate and tailored outputs.
+</Info>
+
+## Custom Prompts
+
+### Modify Instructions
+
+Adjust the `instructions.md` file associated with your agent to change how it responds.
+
+<CodeBlock title="instructions.md" language="markdown">
+# Agent Instructions
+
+You are a friendly assistant that helps users with booking flights and hotels.
+</CodeBlock>
+
+### Dynamic Prompts
+
+Programmatically alter prompts based on context or user input.
+
+<CodeBlock title="Dynamic Prompt Example" language="python">
+base_instructions = "You are an assistant who provides technical support."
+
+additional_context = "Assist the user with troubleshooting network issues."
+
+agent = Agent(
+    name="SupportAgent",
+    prompt=f"{base_instructions}\n\n{additional_context}"
+)
+</CodeBlock>
+
+## Few-Shot Examples
+
+Few-shot examples provide sample interactions to guide agent responses.
+
+### Implementation
+
+<CodeBlock title="Providing Few-Shot Examples" language="python">
+```python
+examples = [
+    {"role": "user", "content": "Hi!"},
+    {"role": "assistant", "content": "Hello! How can I assist you today?"},
+    {"role": "user", "content": "I need help resetting my password."},
+    {"role": "assistant", "content": "Sure, I can help with that. Have you tried using the 'Forgot Password' feature?"}
+]
+
+agent = Agent(name="Helper", examples=examples)
+```
+</CodeBlock>
+
+<Note>
+These examples help the agent understand the expected conversation flow and response style.
+</Note>
+
+## Benefits
+
+<Check>
+
+- **Consistency**: Ensures agents produce consistent and predictable outputs aligned with your desired style.
+
+- **Adaptability**: Tailors agent responses to specific domains, improving user experience.
+
+</Check>
