@@ -1,20 +1,301 @@
-# Tools
+---
+title: "Tools"
+description: "Learn how to create and use tools to enhance your agents' capabilities in Agency Swarm"
+icon: "wrench"
+---
 
-Tools are modular functions that agents can call to perform specific tasks. They extend the capabilities of agents, allowing them to interact with the environment or perform computations.
+# Tools in Agency Swarm
 
-## Characteristics of Tools
+Tools are the building blocks that give agents their capabilities. They are specialized functions or actions that agents can perform to interact with the environment, process data, communicate, and much more. By defining custom tools, you can extend the functionality of your agents to suit specific tasks or integrate with external systems.
 
-- **Modular**: Tools are independent functions that can be reused across agents.
-- **Typed Parameters**: Use Pydantic for clear parameter definitions and validation.
-- **Response Handling**: Tools can process inputs and produce outputs that agents use in decision-making.
-- **Error Handling**: Built-in mechanisms to handle exceptions and validate outputs.
+## Understanding Tools
 
-## Creating Tools
+In Agency Swarm, tools are Python classes that inherit from `BaseTool`. They are defined using [Pydantic](https://docs.pydantic.dev/latest/) for data validation and settings management. Each tool encapsulates a specific piece of functionality that an agent can invoke during its operation.
 
-Tools are created by:
+**Key characteristics of tools:**
 
-- **Extending the `BaseTool` Class**: Implement the `run` method with custom logic.
-- **Defining Parameters**: Specify input fields using Pydantic's `Field`.
-- **Implementing Validation**: Use Pydantic validators for input/output validation.
+- **Modular:** Each tool performs a single, well-defined task.
+- **Reusable:** Tools can be shared among multiple agents.
+- **Extensible:** You can create custom tools to interact with APIs, process data, and more.
 
-For detailed instructions on creating tools, refer to the [Creating Tools](../how-to-guides/creating-tools.md) guide. 
+## Creating Basic Tools
+
+Let's walk through creating a simple tool step by step.
+
+### Step 1: Import Necessary Modules
+
+You'll need to import `BaseTool` from `agency_swarm.tools` and `Field` from `pydantic`. If your tool interacts with external systems or requires environment variables, import those as well.
+``python
+from agency_swarm.tools import BaseTool
+from pydantic import Field
+import os
+from dotenv import load_dotenv
+load_dotenv() # Load environment variables from a .env file
+```
+
+### Step 2: Define Your Tool Class
+
+Create a new class that inherits from `BaseTool`. Use Pydantic fields to define the inputs your tool will accept.
+```python
+class Calculator(BaseTool):
+    """
+    A simple calculator tool that evaluates mathematical expressions.
+    """
+    expression: str = Field(
+        ...,
+        description="The mathematical expression to evaluate."
+    )
+    def run(self):
+        # Implement the tool's functionality
+        try:
+            result = eval(self.expression)
+            return str(result)
+        except Exception as e:
+            return f"Error calculating expression: {e}"
+```
+
+### Step 3: Add the Tool to an Agent
+
+To use your new tool, add it to an agent's list of tools.
+```python
+from agency_swarm import Agent
+from .tools.calculator import Calculator
+class MathAgent(Agent):
+    def init(self):
+        super().init(
+            name="MathAgent",
+            description="An agent capable of performing mathematical calculations.",
+            tools=[Calculator],
+            instructions="./instructions.md",
+            temperature=0.5,
+            max_prompt_tokens=2500,
+        )
+```
+
+## Advanced Tool Features
+
+### Tool Configuration with `ToolConfig`
+
+The `ToolConfig` allows you to customize tool behavior with additional settings, such as timeouts, retries, and more.
+```python
+from agency_swarm.tools import BaseTool, ToolConfig
+from pydantic import Field
+import requests
+class APITool(BaseTool):
+    """
+    Tool for interacting with external APIs.
+    """
+    config = ToolConfig(
+        max_retries=3,
+        retry_delay=1,
+        timeout=30 # seconds
+    )
+    endpoint: str = Field(..., description="API endpoint URL.")
+    query_params: dict = Field({}, description="Query parameters for the API call.")
+    def run(self):
+        try:
+            response = requests.get(self.endpoint, params=self.query_params, timeout=self.config.timeout)
+            response.raise_for_status()
+            return response.text
+        except requests.RequestException as e:
+            return f"API request failed: {e}"
+```
+
+### OpenAI Built-in Tools
+
+Agency Swarm supports OpenAI's built-in tools, such as the Code Interpreter and File Search.
+
+#### Using the Code Interpreter and File Search Tools
+```python
+from agency_swarm import Agent
+from agency_swarm.tools import CodeInterpreter, FileSearch
+    class DataAgent(Agent):
+    def init(self):
+        super().init(
+            name="DataAgent",
+            description="An agent capable of executing code and searching files.",
+            tools=[CodeInterpreter, FileSearch],
+            instructions="./instructions.md",
+        )
+```
+
+- **Code Interpreter:** Allows the agent to execute Python code in a sandboxed environment.
+- **File Search:** Enables the agent to search and retrieve information from files.
+
+### Best Practices for Tools
+
+#### Using Chain-of-Thought (CoT) Parameters
+
+To improve the accuracy of function calls, add a planning parameter (like `planning` or `thought_process`) as a separate first parameter in your tool. This encourages the model to plan the parameter values before executing the function.
+```python
+from agency_swarm.tools import BaseTool
+from pydantic import Field
+class EmailSender(BaseTool):
+    """
+    Sends emails after planning the content and recipients.
+    """
+    planning: str = Field(
+        ...,
+        description="Plan how to construct the email. Consider the recipient, subject, and content."
+    )
+    recipient: str = Field(..., description="Email recipient's address.")
+    subject: str = Field(..., description="Subject of the email.")
+    body: str = Field(..., description="Content of the email.")
+    def run(self):
+        # Implement email sending logic here
+        # For example, using smtplib or a third-party email service
+        return "Email sent successfully."
+```
+
+#### General Best Practices
+
+- **Use Clear Descriptions:** Provide detailed descriptions for each field to guide the agent.
+- **Validate Inputs:** Leverage Pydantic's validation to ensure inputs are correctly formatted.
+- **Handle Exceptions:** Implement error handling within the `run` method to manage unexpected issues.
+- **Avoid Hardcoding Sensitive Data:** Use environment variables for API keys and other sensitive information.
+- **Define Constants Globally:** For values that don't change (e.g., API endpoints), define them outside the class.
+
+## Complex Tool Examples
+
+### Example: GitHub Repository Tool
+```python
+from agency_swarm.tools import BaseTool
+from pydantic import Field
+import os
+from github import Github
+class GitHubTool(BaseTool):
+    """
+    Interact with GitHub repositories to list and create issues.
+    """
+    repo_name: str = Field(..., description="Repository name in 'owner/repo' format.")
+    action: str = Field(..., description="Action to perform: 'list_issues' or 'create_issue'.")
+    issue_title: str = Field(None, description="Title of the issue to create.")
+    issue_body: str = Field(None, description="Body content of the issue to create.")
+    def run(self):
+        github_token = os.getenv("GITHUB_TOKEN")
+        if not github_token:
+            return "GitHub token not found in environment variables."
+        github = Github(github_token)
+        try:
+            repo = github.get_repo(self.repo_name)
+            if self.action == "list_issues":
+                issues = repo.get_issues(state='open')
+                return [issue.title for issue in issues]
+            elif self.action == "create_issue":
+                if not self.issue_title:
+                    return "Issue title is required to create an issue."
+                issue = repo.create_issue(title=self.issue_title, body=self.issue_body)
+                return f"Issue '{issue.title}' created successfully."
+            else:
+                return "Invalid action specified."
+        except Exception as e:
+            return f"Error interacting with GitHub: {e}"
+```
+
+### Example: Data Processing Tool
+
+```python
+from agency_swarm.tools import BaseTool
+from pydantic import Field
+import pandas as pd
+
+class DataProcessor(BaseTool):
+    """
+    Processes CSV data files and performs operations like summary and filtering.
+    """
+    file_path: str = Field(..., description="Path to the CSV data file.")
+    operation: str = Field(..., description="Operation to perform: 'summary' or 'filter'.")
+    filter_condition: str = Field(None, description="Condition for filtering data (e.g., 'age > 30').")
+    def run(self):
+        try:
+            df = pd.read_csv(self.file_path)
+            if self.operation == "summary":
+                return df.describe().to_string()
+            elif self.operation == "filter":
+                if not self.filter_condition:
+                    return "Filter condition is required for filtering operation."
+                filtered_df = df.query(self.filter_condition)
+                return filtered_df.to_csv(index=False)
+            else:
+                return "Invalid operation specified."
+        except Exception as e:
+            return f"Error processing data: {e}"
+```
+
+## Testing Tools
+
+Include test cases at the bottom of your tool files to ensure they work as expected.
+```python
+if __name__ == "__main__":
+    # Test the Calculator tool
+    calc = Calculator(expression="2 + 2 * 3")
+    print(calc.run()) # Output should be '8'
+```
+
+## Common Patterns
+
+### Asynchronous Tools
+
+For I/O-bound tasks or when dealing with multiple requests, you can create asynchronous tools.
+```python
+from agency_swarm.tools import BaseTool
+from pydantic import Field
+import aiohttp
+import asyncio
+class AsyncAPITool(BaseTool):
+    """
+    Performs asynchronous API calls to multiple endpoints.
+    """
+    endpoints: list = Field(..., description="List of API endpoint URLs to call.")
+    async def run(self):
+        async with aiohttp.ClientSession() as session:
+            tasks = [self.fetch(session, url) for url in self.endpoints]
+            results = await asyncio.gather(tasks)
+            return results
+    async def fetch(self, session, url):
+        async with session.get(url) as response:
+            return await response.text()
+```
+
+### Tool Composition
+
+Combine multiple tools to handle complex operations.
+```python
+class CompositeTool(BaseTool):
+    """
+    A tool that combines other tools to perform a series of actions.
+    """
+    input_data: str = Field(..., description="Input data for the composite operation.")
+    def run(self):
+        # Step 1: Process data
+        processed_data = self.process_data(self.input_data)
+        # Step 2: Analyze results
+        analysis = self.analyze_results(processed_data)
+        # Step 3: Format output
+        output = self.format_output(analysis)
+        return output
+    def process_data(self, data):
+        # Implement data processing logic
+        pass
+    def analyze_results(self, data):
+        # Implement analysis logic
+        pass
+    def format_output(self, data):
+        # Implement output formatting
+        pass
+```
+
+## Conclusion
+
+By leveraging tools in Agency Swarm, you can extend the capabilities of your agents significantly. Whether it's interacting with external APIs, processing data, or executing code, tools make it possible for agents to perform complex tasks.
+
+Remember to:
+
+- **Define clear and concise tool functionalities.**
+- **Provide detailed descriptions and validate inputs with Pydantic.**
+- **Handle exceptions gracefully to prevent agent failures.**
+- **Include test cases to ensure your tools work as intended.**
+
+Feel free to explore and create custom tools that suit your specific needs. The modular nature of tools in Agency Swarm makes it easy to expand and adapt your agents' abilities over time.
+
+---
