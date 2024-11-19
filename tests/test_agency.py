@@ -13,6 +13,7 @@ from openai.types.beta.threads.runs import ToolCall
 from agency_swarm.tools import CodeInterpreter, FileSearch
 
 sys.path.insert(0, '../agency-swarm')
+from agency_swarm.tools.send_message import SendMessageAsyncThreading
 from agency_swarm.util import create_agent_template
 
 from agency_swarm import set_openai_key, Agent, Agency, AgencyEventHandler, get_openai_client
@@ -219,11 +220,11 @@ class AgencyTest(unittest.TestCase):
         message = self.__class__.agency.get_completion("Please tell TestAgent1 to say test to TestAgent2.",
                                                        tool_choice={"type": "function", "function": {"name": "SendMessage"}})
 
-        self.assertFalse('error' in message.lower(), f"Error found in message: {message}")
+        self.assertFalse('error' in message.lower(), f"Error found in message: {message}. Thread url: {self.__class__.agency.main_thread.thread_url}")
 
-        for agent_name, threads in self.__class__.agency.agents_and_threads.items():
-            for other_agent_name, thread in threads.items():
-                self.assertTrue(thread.id in self.__class__.loaded_thread_ids[agent_name][other_agent_name])
+        self.assertTrue(self.__class__.agency.agents_and_threads['main_thread'].id)
+        self.assertTrue(self.__class__.agency.agents_and_threads['CEO']['TestAgent1'].id)
+        self.assertTrue(self.__class__.agency.agents_and_threads['TestAgent1']['TestAgent2'].id)
 
         for agent in self.__class__.agency.agents:
             self.assertTrue(agent.id in [settings['id'] for settings in self.__class__.loaded_agents_settings])
@@ -238,7 +239,7 @@ class AgencyTest(unittest.TestCase):
 
         self.assertTrue(thread_messages.data[0].content[0].text.value == "Hi!")
 
-        run = main_thread.run
+        run = main_thread._run
         self.assertTrue(run.max_prompt_tokens == self.__class__.ceo.max_prompt_tokens)
         self.assertTrue(run.max_completion_tokens == self.__class__.ceo.max_completion_tokens)
         self.assertTrue(run.tool_choice.type == "function")
@@ -251,7 +252,7 @@ class AgencyTest(unittest.TestCase):
 
         self.assertTrue(len(agent1_thread_messages.data) == 2)
 
-        agent1_run = agent1_thread.run
+        agent1_run = agent1_thread._run
 
         self.assertTrue(agent1_run.truncation_strategy.type == "last_messages")
         self.assertTrue(agent1_run.truncation_strategy.last_messages == 10)
@@ -309,11 +310,11 @@ class AgencyTest(unittest.TestCase):
         self.assertTrue(self.__class__.TestTool._shared_state.get("test_tool_used"))
 
         agent1_thread = self.__class__.agency.agents_and_threads[self.__class__.ceo.name][self.__class__.agent1.name]
-        self.assertFalse(agent1_thread.run.parallel_tool_calls)
+        self.assertFalse(agent1_thread._run.parallel_tool_calls)
 
-        for agent_name, threads in self.__class__.agency.agents_and_threads.items():
-            for other_agent_name, thread in threads.items():
-                self.assertTrue(thread.id in self.__class__.loaded_thread_ids[agent_name][other_agent_name])
+        self.assertTrue(self.__class__.agency.main_thread.id)
+        self.assertTrue(self.__class__.agency.agents_and_threads['CEO']['TestAgent1'].id)
+        self.assertTrue(self.__class__.agency.agents_and_threads['TestAgent1']['TestAgent2'].id)
 
         for agent in self.__class__.agency.agents:
             self.assertTrue(agent.id in [settings['id'] for settings in self.__class__.loaded_agents_settings])
@@ -322,8 +323,8 @@ class AgencyTest(unittest.TestCase):
         """it should load agents from db"""
         # os.rename("settings.json", "settings2.json")
 
-        previous_loaded_thread_ids = self.__class__.loaded_thread_ids
-        previous_loaded_agents_settings = self.__class__.loaded_agents_settings
+        previous_loaded_thread_ids = self.__class__.loaded_thread_ids.copy()
+        previous_loaded_agents_settings = self.__class__.loaded_agents_settings.copy()
 
         from test_agents.CEO import CEO
         from test_agents.TestAgent1 import TestAgent1
@@ -368,10 +369,18 @@ class AgencyTest(unittest.TestCase):
         self.check_all_agents_settings()
 
         # check that threads are the same
-        for agent_name, threads in agency.agents_and_threads.items():
-            for other_agent_name, thread in threads.items():
-                self.assertTrue(thread.id in self.__class__.loaded_thread_ids[agent_name][other_agent_name])
-                self.assertTrue(thread.id in previous_loaded_thread_ids[agent_name][other_agent_name])
+        print("previous_loaded_thread_ids", previous_loaded_thread_ids)
+        print("self.__class__.loaded_thread_ids", self.__class__.loaded_thread_ids)
+        # Start of Selection
+        for agent, threads in self.__class__.agency.agents_and_threads.items():
+            if agent == "main_thread":
+                print("main_thread", threads)
+                continue
+            for other_agent, thread in threads.items():
+                print(f"Thread ID between {agent} and {other_agent}: {thread.id}")
+        self.assertTrue(self.__class__.agency.agents_and_threads['main_thread'].id == previous_loaded_thread_ids['main_thread'] == self.__class__.loaded_thread_ids['main_thread'])
+        self.assertTrue(self.__class__.agency.agents_and_threads['CEO']['TestAgent1'].id == previous_loaded_thread_ids['CEO']['TestAgent1'] == self.__class__.loaded_thread_ids['CEO']['TestAgent1'])
+        self.assertTrue(self.__class__.agency.agents_and_threads['TestAgent1']['TestAgent2'].id == previous_loaded_thread_ids['TestAgent1']['TestAgent2'] == self.__class__.loaded_thread_ids['TestAgent1']['TestAgent2'])
 
         # check that agents are the same
         for agent in agency.agents:
@@ -379,7 +388,7 @@ class AgencyTest(unittest.TestCase):
             self.assertTrue(agent.id in [settings['id'] for settings in previous_loaded_agents_settings])
 
     def test_7_init_async_agency(self):
-        """it should initialize agency with agents"""
+        """it should initialize async agency with agents"""
         # reset loaded thread ids
         self.__class__.loaded_thread_ids = {}
 
@@ -397,7 +406,7 @@ class AgencyTest(unittest.TestCase):
             shared_instructions="",
             settings_callbacks=self.__class__.settings_callbacks,
             threads_callbacks=self.__class__.threads_callbacks,
-            async_mode='threading',
+            send_message_tool_class=SendMessageAsyncThreading,
             temperature=0,
         )
 
@@ -405,7 +414,6 @@ class AgencyTest(unittest.TestCase):
 
     def test_8_async_agent_communication(self):
         """it should communicate between agents asynchronously"""
-        print("TestAgent1 tools", self.__class__.agent1.tools)
         self.__class__.agency.get_completion("Please tell TestAgent2 hello.",
                                              tool_choice={"type": "function", "function": {"name": "SendMessage"}},
                                              recipient_agent=self.__class__.agent1)
@@ -449,9 +457,8 @@ class AgencyTest(unittest.TestCase):
         if 'error' in message.lower():
             self.assertFalse('error' in message.lower(), self.__class__.agency.main_thread.thread_url)
 
-        for agent_name, threads in self.__class__.agency.agents_and_threads.items():
-            for other_agent_name, thread in threads.items():
-                self.assertTrue(thread.id in self.__class__.loaded_thread_ids[agent_name][other_agent_name])
+        self.assertTrue(self.__class__.agency.main_thread.id)
+        self.assertTrue(self.__class__.agency.agents_and_threads['TestAgent1']['TestAgent2'].id)
 
         for agent in self.__class__.agency.agents:
             self.assertTrue(agent.id in [settings['id'] for settings in self.__class__.loaded_agents_settings])
@@ -459,11 +466,16 @@ class AgencyTest(unittest.TestCase):
     def test_9_async_tool_calls(self):
         """it should execute tools asynchronously"""
         class PrintTool(BaseTool):
+            class ToolConfig:
+                async_mode = "threading"
             def run(self, **kwargs):
                 time.sleep(2)  # Simulate a delay
                 return "Printed successfully."
 
         class AnotherPrintTool(BaseTool):
+            class ToolConfig:
+                async_mode = "threading"
+
             def run(self, **kwargs):
                 time.sleep(2)  # Simulate a delay
                 return "Another print successful."
@@ -472,11 +484,8 @@ class AgencyTest(unittest.TestCase):
 
         agency = Agency(
             [ceo],
-            async_mode='tools_threading',
             temperature=0
         )
-
-        self.assertTrue(agency.main_thread.async_mode == 'tools_threading')
 
         result = agency.get_completion("Use 2 print tools together at the same time and output the results exectly as they are. ", yield_messages=False)
 

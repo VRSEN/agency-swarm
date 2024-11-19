@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Literal, Union
 
 from docstring_parser import parse
 
@@ -11,15 +11,31 @@ class BaseTool(BaseModel, ABC):
     _shared_state: ClassVar[SharedState] = None
     _caller_agent: Any = None
     _event_handler: Any = None
+    _tool_call: Any = None
 
     def __init__(self, **kwargs):
         if not self.__class__._shared_state:
             self.__class__._shared_state = SharedState()
         super().__init__(**kwargs)
+        
+        # Ensure all ToolConfig variables are initialized
+        config_defaults = {
+            'strict': False,
+            'one_call_at_a_time': False,
+            'output_as_result': False,
+            'async_mode': None
+        }
+        
+        for key, value in config_defaults.items():
+            if not hasattr(self.ToolConfig, key):
+                setattr(self.ToolConfig, key, value)
 
     class ToolConfig:
         strict: bool = False
         one_call_at_a_time: bool = False
+        # return the tool output as assistant message
+        output_as_result: bool = False
+        async_mode: Union[Literal["threading"], None] = None
 
     @classmethod
     @property
@@ -76,5 +92,5 @@ class BaseTool(BaseModel, ABC):
         return schema
 
     @abstractmethod
-    def run(self, **kwargs):
+    def run(self):
         pass

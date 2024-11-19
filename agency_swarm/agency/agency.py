@@ -6,7 +6,6 @@ import threading
 import uuid
 from enum import Enum
 from typing import Any, Callable, Dict, List, Literal, Optional, Type, TypeVar, TypedDict, Union
-
 from openai.lib._parsing._completions import type_to_response_format_param
 from openai.types.beta.threads import Message
 from openai.types.beta.threads.runs import RunStep
@@ -24,7 +23,9 @@ from agency_swarm.agents import Agent
 from agency_swarm.messages import MessageOutput
 from agency_swarm.messages.message_output import MessageOutputLive
 from agency_swarm.threads import Thread
+from agency_swarm.threads.thread_async import ThreadAsync
 from agency_swarm.tools import BaseTool, CodeInterpreter, FileSearch
+from agency_swarm.tools.send_message import SendMessage, SendMessageBase
 from agency_swarm.user import User
 from agency_swarm.util.errors import RefusalError
 from agency_swarm.util.files import get_tools, get_file_purpose
@@ -46,15 +47,12 @@ class ThreadsCallbacks(TypedDict):
 
 
 class Agency:
-    ThreadType = Thread
-    send_message_tool_description = """Use this tool to facilitate direct, synchronous communication between specialized agents within your agency. When you send a message using this tool, you receive a response exclusively from the designated recipient agent. To continue the dialogue, invoke this tool again with the desired recipient agent and your follow-up message. Remember, communication here is synchronous; the recipient agent won't perform any tasks post-response. You are responsible for relaying the recipient agent's responses back to the user, as the user does not have direct access to these replies. Keep engaging with the tool for continuous interaction until the task is fully resolved. Do not send more than 1 message at a time."""
-    send_message_tool_description_async = """Use this tool for asynchronous communication with other agents within your agency. Initiate tasks by messaging, and check status and responses later with the 'GetResponse' tool. Relay responses to the user, who instructs on status checks. Continue until task completion."""
-
     def __init__(self,
                  agency_chart: List,
                  shared_instructions: str = "",
                  shared_files: Union[str, List[str]] = None,
                  async_mode: Literal['threading', "tools_threading"] = None,
+                 send_message_tool_class: Type[SendMessageBase] = SendMessage,
                  settings_path: str = "./settings.json",
                  settings_callbacks: SettingsCallbacks = None,
                  threads_callbacks: ThreadsCallbacks = None,
@@ -72,6 +70,7 @@ class Agency:
             shared_instructions (str, optional): A path to a file containing shared instructions for all agents. Defaults to an empty string.
             shared_files (Union[str, List[str]], optional): A path to a folder or a list of folders containing shared files for all agents. Defaults to None.
             async_mode (str, optional): Specifies the mode for asynchronous processing. In "threading" mode, all sub-agents run in separate threads. In "tools_threading" mode, all tools run in separate threads, but agents do not. Defaults to None.
+            send_message_tool_class (Type[SendMessageBase], optional): The class to use for the send_message tool. For async communication, use `SendMessageAsyncThreading`. Defaults to SendMessage.
             settings_path (str, optional): The path to the settings file for the agency. Must be json. If file does not exist, it will be created. Defaults to None.
             settings_callbacks (SettingsCallbacks, optional): A dictionary containing functions to load and save settings for the agency. The keys must be "load" and "save". Both values must be defined. Defaults to None.
             threads_callbacks (ThreadsCallbacks, optional): A dictionary containing functions to load and save threads for the agency. The keys must be "load" and "save". Both values must be defined. Defaults to None.
@@ -92,6 +91,7 @@ class Agency:
         self.recipient_agents = None  # for autocomplete
         self.shared_files = shared_files if shared_files else []
         self.async_mode = async_mode
+        self.send_message_tool_class = send_message_tool_class
         self.settings_path = settings_path
         self.settings_callbacks = settings_callbacks
         self.threads_callbacks = threads_callbacks
@@ -101,11 +101,19 @@ class Agency:
         self.max_completion_tokens = max_completion_tokens
         self.truncation_strategy = truncation_strategy
 
+        # set thread type based send_message_tool_class async mode
+        if hasattr(send_message_tool_class.ToolConfig, "async_mode") and send_message_tool_class.ToolConfig.async_mode:
+            self._thread_type = ThreadAsync
+        else:
+            self._thread_type = Thread  
+
         if self.async_mode == "threading":
-            from agency_swarm.threads.thread_async import ThreadAsync
-            self.ThreadType = ThreadAsync
+            from agency_swarm.tools.send_message import SendMessageAsyncThreading
+            print("Warning: 'threading' mode is deprecated. Please use send_message_tool_class = SendMessageAsyncThreading to use async communication.")
+            self.send_message_tool_class = SendMessageAsyncThreading
         elif self.async_mode == "tools_threading":
-            Thread.async_mode = self.async_mode
+            Thread.async_mode = "tools_threading"
+            print("Warning: 'tools_threading' mode is deprecated. Use tool.ToolConfig.async_mode = 'threading' instead.")
         elif self.async_mode is None:
             pass
         else:
@@ -121,9 +129,9 @@ class Agency:
         self.shared_state = SharedState()
 
         self._parse_agency_chart(agency_chart)
+        self._init_threads()
         self._create_special_tools()
         self._init_agents()
-        self._init_threads()
 
     def get_completion(self, message: str,
                        message_files: List[str] = None,
@@ -300,7 +308,7 @@ class Agency:
         images = []
         message_file_names = None
         uploading_files = False
-        recipient_agents = [agent.name for agent in self.main_recipients]
+        recipient_agent_names = [agent.name for agent in self.main_recipients]
         recipient_agent = self.main_recipients[0]
 
         with gr.Blocks(js=js) as demo:
@@ -308,7 +316,7 @@ class Agency:
             chatbot = gr.Chatbot(height=height)
             with gr.Row():
                 with gr.Column(scale=9):
-                    dropdown = gr.Dropdown(label="Recipient Agent", choices=recipient_agents,
+                    dropdown = gr.Dropdown(label="Recipient Agent", choices=recipient_agent_names,
                                            value=recipient_agent.name)
                     msg = gr.Textbox(label="Your Message", lines=4)
                 with gr.Column(scale=1):
@@ -412,9 +420,14 @@ class Agency:
             class GradioEventHandler(AgencyEventHandler):
                 message_output = None
 
+                @classmethod
+                def change_recipient_agent(cls, recipient_agent_name):
+                    nonlocal chatbot_queue
+                    chatbot_queue.put("[change_recipient_agent]")
+                    chatbot_queue.put(recipient_agent_name)
+
                 @override
                 def on_message_created(self, message: Message) -> None:
-
                     if message.role == "user":
                         full_content = ""
                         for content in message.content:
@@ -530,19 +543,20 @@ class Agency:
                     chatbot_queue.put("[end]")
 
             def bot(original_message, history):
-                if not original_message:
-                    return "", history
-
                 nonlocal attachments
                 nonlocal message_file_names
                 nonlocal recipient_agent
+                nonlocal recipient_agent_names
                 nonlocal images
                 nonlocal uploading_files
 
+                if not original_message:
+                    return "", history, gr.update(value=recipient_agent.name, choices=set([*recipient_agent_names, recipient_agent.name]))
+
                 if uploading_files:
                     history.append([None, "Uploading files... Please wait."])
-                    yield "", history
-                    return "", history
+                    yield "", history, gr.update(value=recipient_agent.name, choices=set([*recipient_agent_names, recipient_agent.name]))
+                    return "", history, gr.update(value=recipient_agent.name, choices=set([*recipient_agent_names, recipient_agent.name]))
 
                 print("Message files: ", attachments)
                 print("Images: ", images)
@@ -579,13 +593,19 @@ class Agency:
                             new_message = True
                             continue
 
+                        if bot_message == "[change_recipient_agent]":
+                            new_agent_name = chatbot_queue.get(block=True)
+                            recipient_agent = self._get_agent_by_name(new_agent_name)
+                            yield "", history, gr.update(value=new_agent_name, choices=set([*recipient_agent_names, recipient_agent.name]))
+                            continue
+
                         if new_message:
                             history.append([None, bot_message])
                             new_message = False
                         else:
                             history[-1][1] += bot_message
 
-                        yield "", history
+                        yield "", history, gr.update(value=recipient_agent.name, choices=set([*recipient_agent_names, recipient_agent.name]))
                     except queue.Empty:
                         break
 
@@ -594,12 +614,12 @@ class Agency:
                 inputs=[msg, chatbot],
                 outputs=[msg, chatbot]
             ).then(
-                bot, [msg, chatbot], [msg, chatbot]
+                bot, [msg, chatbot, dropdown], [msg, chatbot, dropdown]
             )
             dropdown.change(handle_dropdown_change, dropdown)
             file_upload.change(handle_file_upload, file_upload)
             msg.submit(user, [msg, chatbot], [msg, chatbot], queue=False).then(
-                bot, [msg, chatbot], [msg, chatbot]
+                bot, [msg, chatbot], [msg, chatbot, dropdown]
             )
 
             # Enable queuing for streaming intermediate outputs
@@ -647,6 +667,7 @@ class Agency:
         """
         Executes agency in the terminal with autocomplete for recipient agent names.
         """
+        outer_self = self
         from agency_swarm import AgencyEventHandler
         class TermEventHandler(AgencyEventHandler):
             message_output = None
@@ -714,7 +735,7 @@ class Agency:
                 if snapshot.type != "function":
                     return
 
-                if snapshot.function.name == "SendMessage":
+                if snapshot.function.name == "SendMessage" and not (hasattr(outer_self.send_message_tool_class.ToolConfig, 'output_as_result') and outer_self.send_message_tool_class.ToolConfig.output_as_result):
                     try:
                         args = eval(snapshot.function.arguments)
                         recipient = args["recipient"]
@@ -864,15 +885,24 @@ class Agency:
             else:
                 self.main_thread.init_thread()
 
+        # Save main_thread into agents_and_threads
+        self.agents_and_threads["main_thread"] = self.main_thread
+
+        # initialize threads
         for agent_name, threads in self.agents_and_threads.items():
+            if agent_name == "main_thread":
+                continue
             for other_agent, items in threads.items():
-                self.agents_and_threads[agent_name][other_agent] = self.ThreadType(
+                # create thread class
+                self.agents_and_threads[agent_name][other_agent] = self._thread_type(
                     self._get_agent_by_name(items["agent"]),
                     self._get_agent_by_name(
                         items["recipient_agent"]))
 
+                # load thread id if available
                 if agent_name in loaded_thread_ids and other_agent in loaded_thread_ids[agent_name]:
                     self.agents_and_threads[agent_name][other_agent].id = loaded_thread_ids[agent_name][other_agent]
+                # init threads if threre are threads callbacks so the ids are saved for later use
                 elif self.threads_callbacks:
                     self.agents_and_threads[agent_name][other_agent].init_thread()
 
@@ -880,6 +910,8 @@ class Agency:
         if self.threads_callbacks:
             loaded_thread_ids = {}
             for agent_name, threads in self.agents_and_threads.items():
+                if agent_name == "main_thread":
+                    continue
                 loaded_thread_ids[agent_name] = {}
                 for other_agent, thread in threads.items():
                     loaded_thread_ids[agent_name][other_agent] = thread.id
@@ -1001,13 +1033,15 @@ class Agency:
         No output parameters; this method modifies the agents' toolset internally.
         """
         for agent_name, threads in self.agents_and_threads.items():
+            if agent_name == "main_thread":
+                continue
             recipient_names = list(threads.keys())
             recipient_agents = self._get_agents_by_names(recipient_names)
             if len(recipient_agents) == 0:
                 continue
             agent = self._get_agent_by_name(agent_name)
             agent.add_tool(self._create_send_message_tool(agent, recipient_agents))
-            if self.async_mode == 'threading':
+            if self._thread_type == ThreadAsync:
                 agent.add_tool(self._create_get_response_tool(agent, recipient_agents))
 
     def _create_send_message_tool(self, agent: Agent, recipient_agents: List[Agent]):
@@ -1032,38 +1066,8 @@ class Agency:
             agent_descriptions += recipient_agent.name + ": "
             agent_descriptions += recipient_agent.description + "\n"
 
-        outer_self = self
-
-        class SendMessage(BaseTool):
-            my_primary_instructions: str = Field(...,
-                                                 description="Please repeat your primary instructions step-by-step, including both completed "
-                                                             "and the following next steps that you need to perform. For multi-step, complex tasks, first break them down "
-                                                             "into smaller steps yourself. Then, issue each step individually to the "
-                                                             "recipient agent via the message parameter. Each identified step should be "
-                                                             "sent in separate message. Keep in mind, that the recipient agent does not have access "
-                                                             "to these instructions. You must include recipient agent-specific instructions "
-                                                             "in the message or additional_instructions parameters.")
+        class SendMessage(self.send_message_tool_class):
             recipient: recipients = Field(..., description=agent_descriptions)
-            message: str = Field(...,
-                                 description="Specify the task required for the recipient agent to complete. Focus on "
-                                             "clarifying what the task entails, rather than providing exact "
-                                             "instructions.")
-            message_files: Optional[List[str]] = Field(default=None,
-                                                       description="A list of file ids to be sent as attachments to this message. Only use this if you have the file id that starts with 'file-'.",
-                                                       examples=["file-1234", "file-5678"])
-            additional_instructions: Optional[str] = Field(default=None,
-                                                 description="Additional context or instructions for the recipient agent about the task. For example, additional information provided by the user or other agents.")
-            
-            class ToolConfig:
-                strict = False
-                one_call_at_a_time = outer_self.async_mode != 'threading'
-
-            @model_validator(mode='after')
-            def validate_files(self):
-                if "file-" in self.message or (
-                        self.additional_instructions and "file-" in self.additional_instructions):
-                    if not self.message_files:
-                        raise ValueError("You must include file ids in message_files parameter.")
 
             @field_validator('recipient')
             @classmethod
@@ -1071,36 +1075,9 @@ class Agency:
                 if value.value not in recipient_names:
                     raise ValueError(f"Recipient {value} is not valid. Valid recipients are: {recipient_names}")
                 return value
-            
-            @field_validator('additional_instructions', mode='before')
-            @classmethod
-            def validate_additional_instructions(cls, value):
-                if isinstance(value, list):
-                    return "\n".join(value)
-                return value
-
-            def run(self):
-                thread = outer_self.agents_and_threads[self._caller_agent.name][self.recipient.value]
-
-                if not outer_self.async_mode == 'threading':
-                    message = thread.get_completion(message=self.message,
-                                                    message_files=self.message_files,
-                                                    event_handler=self._event_handler,
-                                                    yield_messages=not self._event_handler,
-                                                    additional_instructions=self.additional_instructions,
-                                                    )
-                else:
-                    message = thread.get_completion_async(message=self.message,
-                                                          message_files=self.message_files,
-                                                          additional_instructions=self.additional_instructions)
-
-                return message or ""
 
         SendMessage._caller_agent = agent
-        if self.async_mode == 'threading':
-            SendMessage.__doc__ = self.send_message_tool_description_async
-        else:
-            SendMessage.__doc__ = self.send_message_tool_description
+        SendMessage._agents_and_threads = self.agents_and_threads
 
         return SendMessage
 

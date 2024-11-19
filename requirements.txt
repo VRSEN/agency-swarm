@@ -1,4 +1,4 @@
-openai==1.54.3
+openai==1.54.4
 docstring_parser==0.16
 pydantic==2.8.2
 datamodel-code-generator==0.26.1

@@ -28,6 +28,16 @@ class Thread:
     @property
     def thread_url(self):
         return f'https://platform.openai.com/playground/assistants?assistant={self.recipient_agent.id}&mode=assistant&thread={self.id}'
+    
+    @property
+    def thread(self):
+        self.init_thread()
+
+        if not self._thread:
+            print("retrieving thread", self.id)
+            self._thread = self.client.beta.threads.retrieve(self.id)
+
+        return self._thread
 
     def __init__(self, agent: Union[Agent, User], recipient_agent: Agent):
         self.agent = agent
@@ -36,28 +46,35 @@ class Thread:
         self.client = get_openai_client()
 
         self.id = None
-        self.thread = None
-        self.run = None
-        self.stream = None
+        self._thread = None
+        self._run = None
+        self._stream = None
 
-        self.num_run_retries = 0
+        self._num_run_retries = 0
+        # names of recepient agents that were called in SendMessage tool
+        # needed to prevent agents calling the same recepient agent multiple times
+        self._called_recepients = [] 
+
+        self.terminal_states = ["cancelled", "completed", "failed", "expired", "incomplete"]
 
     def init_thread(self):
-        if self.id:
-            self.thread = self.client.beta.threads.retrieve(self.id)
-        else:
-            self.thread = self.client.beta.threads.create()
-            self.id = self.thread.id
+        self._called_recepients = []
+        self._num_run_retries = 0
 
-            if self.recipient_agent.examples:
-                for example in self.recipient_agent.examples:
-                    self.client.beta.threads.messages.create(
-                        thread_id=self.id,
-                        **example,
-                    )
+        if self.id:
+            return
+        
+        self._thread = self.client.beta.threads.create()
+        self.id = self._thread.id
+        if self.recipient_agent.examples:
+            for example in self.recipient_agent.examples:
+                self.client.beta.threads.messages.create(
+                    thread_id=self.id,
+                    **example,
+                )
 
     def get_completion_stream(self,
-                              message: str,
+                              message: Union[str, List[dict], None],
                               event_handler: type(AgencyEventHandler),
                               message_files: List[str] = None,
                               attachments: Optional[List[Attachment]] = None,
@@ -77,16 +94,18 @@ class Thread:
                                    response_format=response_format)
 
     def get_completion(self,
-                       message: str | List[dict],
+                       message: Union[str, List[dict], None],
                        message_files: List[str] = None,
                        attachments: Optional[List[dict]] = None,
-                       recipient_agent: Agent = None,
+                       recipient_agent: Union[Agent, None] = None,
                        additional_instructions: str = None,
                        event_handler: type(AgencyEventHandler) = None,
                        tool_choice: AssistantToolChoice = None,
                        yield_messages: bool = False,
                        response_format: Optional[dict] = None
                        ):
+        self.init_thread()
+
         if not recipient_agent:
             recipient_agent = self.recipient_agent
         
@@ -105,9 +124,6 @@ class Thread:
                 attachments.append({"file_id": file_id,
                                     "tools": recipient_tools or [{"type": "file_search"}]})
 
-        if not self.thread:
-            self.init_thread()
-
         if event_handler:
             event_handler.set_agent(self.agent)
             event_handler.set_recipient_agent(recipient_agent)
@@ -117,14 +133,15 @@ class Thread:
         print(f'THREAD:[ {sender_name} -> {recipient_agent.name} ]: URL {self.thread_url}')
 
         # send message
-        message_obj = self.create_message(
-            message=message,
-            role="user",
-            attachments=attachments
-        )
+        if message:
+            message_obj = self.create_message(
+                message=message,
+                role="user",
+                attachments=attachments
+            )
 
-        if yield_messages:
-            yield MessageOutput("text", self.agent.name, recipient_agent.name, message, message_obj)
+            if yield_messages:
+                yield MessageOutput("text", self.agent.name, recipient_agent.name, message, message_obj)
 
         self._create_run(recipient_agent, additional_instructions, event_handler, tool_choice, response_format=response_format)
 
@@ -135,11 +152,11 @@ class Thread:
             self._run_until_done()
 
             # function execution
-            if self.run.status == "requires_action":
-                tool_calls = self.run.required_action.submit_tool_outputs.tool_calls
+            if self._run.status == "requires_action":
+                self._called_recepients = []
+                tool_calls = self._run.required_action.submit_tool_outputs.tool_calls
                 tool_outputs_and_names = [] # list of tuples (name, tool_output)
-                sync_tool_calls = [tool_call for tool_call in tool_calls if tool_call.function.name == "SendMessage"]
-                async_tool_calls = [tool_call for tool_call in tool_calls if tool_call.function.name != "SendMessage"]
+                sync_tool_calls, async_tool_calls = self._get_sync_async_tool_calls(tool_calls, recipient_agent)
 
                 def handle_output(tool_call, output):
                     if inspect.isgenerator(output):
@@ -157,6 +174,8 @@ class Thread:
                     for tool_output in tool_outputs_and_names:
                         if tool_output[1]["tool_call_id"] == tool_call.id:
                             tool_output[1]["output"] = output
+                    
+                    return output
 
                 if len(async_tool_calls) > 0 and self.async_mode == "tools_threading":
                     max_workers = min(self.max_workers, os.cpu_count() or 1)  # Use at most 4 workers or the number of CPUs available
@@ -170,8 +189,11 @@ class Thread:
 
                         for future in as_completed(futures):
                             tool_call = futures[future]
-                            output = future.result()
-                            yield from handle_output(tool_call, output)
+                            output, output_as_result = future.result()
+                            output = yield from handle_output(tool_call, output)
+                            if output_as_result:
+                                self._cancel_run()
+                                return output
                 else:
                     sync_tool_calls += async_tool_calls
 
@@ -179,16 +201,19 @@ class Thread:
                 for tool_call in sync_tool_calls:
                     if yield_messages:
                         yield MessageOutput("function", recipient_agent.name, self.agent.name, str(tool_call.function), tool_call)
-                    output = self.execute_tool(tool_call, recipient_agent, event_handler, tool_outputs_and_names)
+                    output, output_as_result = self.execute_tool(tool_call, recipient_agent, event_handler, tool_outputs_and_names)
                     tool_outputs_and_names.append((tool_call.function.name, {"tool_call_id": tool_call.id, "output": output}))
-                    yield from handle_output(tool_call, output)
-                
+                    output = yield from handle_output(tool_call, output)
+                    if output_as_result:
+                        self._cancel_run()
+                        return output
+
                 # split names and outputs
                 tool_outputs = [tool_output for _, tool_output in tool_outputs_and_names]
                 tool_names = [name for name, _ in tool_outputs_and_names]
 
                 # await coroutines
-                tool_outputs = self._execute_async_tool_calls_outputs(tool_outputs)
+                tool_outputs = self._await_coroutines(tool_outputs)
 
                 # convert all tool outputs to strings
                 for tool_output in tool_outputs:
@@ -213,11 +238,11 @@ class Thread:
                         self._create_run(recipient_agent, additional_instructions, event_handler, 'required', temperature=0)
                         self._run_until_done()
 
-                        if self.run.status != "requires_action":
-                            raise Exception("Run Failed. Error: ", self.run.last_error or self.run.incomplete_details)
+                        if self._run.status != "requires_action":
+                            raise Exception("Run Failed. Error: ", self._run.last_error or self._run.incomplete_details)
 
                         # change tool call ids
-                        tool_calls = self.run.required_action.submit_tool_outputs.tool_calls
+                        tool_calls = self._run.required_action.submit_tool_outputs.tool_calls
 
                         if len(tool_calls) != len(tool_outputs):
                             tool_outputs = []
@@ -235,10 +260,10 @@ class Thread:
                     else:
                         raise e
             # error
-            elif self.run.status == "failed":
+            elif self._run.status == "failed":
                 full_message += self._get_last_message_text()
                 common_errors = ["something went wrong", "the server had an error processing your request", "rate limit reached"]
-                error_message = self.run.last_error.message.lower()
+                error_message = self._run.last_error.message.lower()
 
                 if error_attempts < 3 and any(error in error_message for error in common_errors):
                     if error_attempts < 2:
@@ -250,9 +275,9 @@ class Thread:
                                      tool_choice, response_format=response_format)
                     error_attempts += 1
                 else:
-                    raise Exception("OpenAI Run Failed. Error: ", self.run.last_error.message)
-            elif self.run.status == "incomplete":
-                raise Exception("OpenAI Run Incomplete. Details: ", self.run.incomplete_details)
+                    raise Exception("OpenAI Run Failed. Error: ", self._run.last_error.message)
+            elif self._run.status == "incomplete":
+                raise Exception("OpenAI Run Incomplete. Details: ", self._run.incomplete_details)
             # return assistant message
             else:
                 message_obj = self._get_last_assistant_message()
@@ -307,7 +332,7 @@ class Thread:
         try:
             if event_handler:
                 with self.client.beta.threads.runs.stream(
-                        thread_id=self.thread.id,
+                        thread_id=self.id,
                         event_handler=event_handler(),
                         assistant_id=recipient_agent.id,
                         additional_instructions=additional_instructions,
@@ -320,10 +345,10 @@ class Thread:
                         response_format=response_format
                 ) as stream:
                     stream.until_done()
-                    self.run = stream.get_final_run()
+                    self._run = stream.get_final_run()
             else:
-                self.run = self.client.beta.threads.runs.create(
-                    thread_id=self.thread.id,
+                self._run = self.client.beta.threads.runs.create(
+                    thread_id=self.id,
                     assistant_id=recipient_agent.id,
                     additional_instructions=additional_instructions,
                     tool_choice=tool_choice,
@@ -334,43 +359,72 @@ class Thread:
                     parallel_tool_calls=recipient_agent.parallel_tool_calls,
                     response_format=response_format
                 )
-                self.run = self.client.beta.threads.runs.poll(
-                    thread_id=self.thread.id,
-                    run_id=self.run.id,
+                self._run = self.client.beta.threads.runs.poll(
+                    thread_id=self.id,
+                    run_id=self._run.id,
                     # poll_interval_ms=500,
                 )
         except APIError as e:
-            if "The server had an error processing your request" in e.message and self.num_run_retries < 3:
-                time.sleep(1 + self.num_run_retries)
+            match = re.search(r"Thread (\w+) already has an active run (\w+)", e.message)
+            if match:
+                self._cancel_run(thread_id=match.groups()[0], run_id=match.groups()[1], check_status=False)
+            elif "The server had an error processing your request" in e.message and self._num_run_retries < 3:
+                time.sleep(1)
                 self._create_run(recipient_agent, additional_instructions, event_handler, tool_choice, response_format=response_format)
-                self.num_run_retries += 1
+                self._num_run_retries += 1
             else:
                 raise e
 
     def _run_until_done(self):
-        while self.run.status in ['queued', 'in_progress', "cancelling"]:
+        while self._run.status in ['queued', 'in_progress', "cancelling"]:
             time.sleep(0.5)
-            self.run = self.client.beta.threads.runs.retrieve(
-                thread_id=self.thread.id,
-                run_id=self.run.id
+            self._run = self.client.beta.threads.runs.retrieve(
+                thread_id=self.id,
+                run_id=self._run.id
             )
 
-    def _submit_tool_outputs(self, tool_outputs, event_handler):
-        if not event_handler:
-            self.run = self.client.beta.threads.runs.submit_tool_outputs_and_poll(
-                thread_id=self.thread.id,
-                run_id=self.run.id,
+    def _submit_tool_outputs(self, tool_outputs, event_handler=None, poll=True):
+        if not poll:
+            self._run = self.client.beta.threads.runs.submit_tool_outputs(
+                thread_id=self.id,
+                run_id=self._run.id,
                 tool_outputs=tool_outputs
             )
         else:
-            with self.client.beta.threads.runs.submit_tool_outputs_stream(
-                    thread_id=self.thread.id,
-                    run_id=self.run.id,
-                    tool_outputs=tool_outputs,
-                    event_handler=event_handler()
-            ) as stream:
-                stream.until_done()
-                self.run = stream.get_final_run()
+            if not event_handler:
+                self._run = self.client.beta.threads.runs.submit_tool_outputs_and_poll(
+                    thread_id=self.id,
+                    run_id=self._run.id,
+                    tool_outputs=tool_outputs
+                )
+            else:
+                with self.client.beta.threads.runs.submit_tool_outputs_stream(
+                        thread_id=self.id,
+                        run_id=self._run.id,
+                        tool_outputs=tool_outputs,
+                        event_handler=event_handler()
+                ) as stream:
+                    stream.until_done()
+                    self._run = stream.get_final_run()
+
+    def _cancel_run(self, thread_id=None, run_id=None, check_status=True):
+        if check_status and self._run.status in self.terminal_states and not run_id:
+            return
+        
+        try:
+            self._run = self.client.beta.threads.runs.cancel(
+                thread_id=self.id,
+                run_id=self._run.id
+            )
+        except BadRequestError as e:
+            if "Cannot cancel run with status" in e.message:
+                self._run = self.client.beta.threads.runs.poll(
+                    thread_id=thread_id or self.id,
+                    run_id=run_id or self._run.id,
+                    poll_interval_ms=500,
+                )
+            else:
+                raise e
 
     def _get_last_message_text(self):
         messages = self.client.beta.threads.messages.list(
@@ -417,15 +471,9 @@ class Thread:
                 thread_id, run_id = match.groups()
                 thread_id = f"thread_{thread_id}"
                 run_id = f"run_{run_id}"
-                self.client.beta.threads.runs.cancel(
-                    thread_id=thread_id,
-                    run_id=run_id
-                )
-                self.run = self.client.beta.threads.runs.poll(
-                    thread_id=thread_id,
-                    run_id=run_id,
-                    poll_interval_ms=500,
-                )
+                
+                self._cancel_run(thread_id=thread_id, run_id=run_id)
+
                 return self.client.beta.threads.messages.create(
                     thread_id=thread_id,
                     role=role,
@@ -439,33 +487,43 @@ class Thread:
         if not recipient_agent:
             recipient_agent = self.recipient_agent
 
+        tool_name = tool_call.function.name
         funcs = recipient_agent.functions
-        tool = next((func for func in funcs if func.__name__ == tool_call.function.name), None)
+        tool = next((func for func in funcs if func.__name__ == tool_name), None)
 
         if not tool:
-            return f"Error: Function {tool_call.function.name} not found. Available functions: {[func.__name__ for func in funcs]}"
+            return f"Error: Function {tool_call.function.name} not found. Available functions: {[func.__name__ for func in funcs]}", False
 
         try:
             # init tool
             args = tool_call.function.arguments
             args = json.loads(args) if args else {}
             tool = tool(**args)
+
+            # check if the tool is already called
             for tool_name in [name for name, _ in tool_outputs_and_names]:
-                if tool_name == tool_call.function.name and (
+                if tool_name == tool_name and (
                         hasattr(tool, "ToolConfig") and hasattr(tool.ToolConfig, "one_call_at_a_time") and tool.ToolConfig.one_call_at_a_time):
-                    return f"Error: Function {tool_call.function.name} is already called. You can only call this function once at a time. Please wait for the previous call to finish before calling it again."
+                    return f"Error: Function {tool_name} is already called. You can only call this function once at a time. Please wait for the previous call to finish before calling it again.", False
             
+            # for send message tools, don't allow calling the same recepient agent multiple times
+            if tool_name.startswith("SendMessage"):
+                if tool.recipient.value in self._called_recepients:
+                    return f"Error: Agent {tool.recipient.value} has already been called. You can only call each agent once at a time. Please wait for the previous call to finish before calling it again.", False
+                self._called_recepients.append(tool.recipient.value)
+
             tool._caller_agent = recipient_agent
             tool._event_handler = event_handler
+            tool._tool_call = tool_call
 
-            return tool.run()
+            return tool.run(), tool.ToolConfig.output_as_result
         except Exception as e:
             error_message = f"Error: {e}"
             if "For further information visit" in error_message:
                 error_message = error_message.split("For further information visit")[0]
-            return error_message
+            return error_message, False
         
-    def _execute_async_tool_calls_outputs(self, tool_outputs):
+    def _await_coroutines(self, tool_outputs):
         async_tool_calls = []
         for tool_output in tool_outputs:
             if inspect.iscoroutine(tool_output["output"]):
@@ -487,6 +545,39 @@ class Thread:
                 tool_output["output"] = str(result)
         
         return tool_outputs
+    
+    def _get_sync_async_tool_calls(self, tool_calls, recipient_agent):
+        async_tool_calls = []
+        sync_tool_calls = []
+        for tool_call in tool_calls:
+            if tool_call.function.name.startswith("SendMessage"):
+                sync_tool_calls.append(tool_call)
+                continue
+
+            tool = next((func for func in recipient_agent.functions if func.__name__ == tool_call.function.name), None)
+
+            if (hasattr(tool.ToolConfig, "async_mode") and tool.ToolConfig.async_mode) or self.async_mode == "tools_threading":
+                async_tool_calls.append(tool_call)
+            else:
+                sync_tool_calls.append(tool_call)
+
+        return sync_tool_calls, async_tool_calls
+    
+    def get_messages(self, limit=None):
+        all_messages = []
+        after = None
+        while True:
+            response = self.client.beta.threads.messages.list(thread_id=self.id, limit=100, after=after)
+            messages = response.data
+            if not messages:
+                break
+            all_messages.extend(messages)
+            after = messages[-1].id  # Set the 'after' cursor to the ID of the last message
+
+            if limit and len(all_messages) >= limit:
+                break
+
+        return all_messages
 
 
 
