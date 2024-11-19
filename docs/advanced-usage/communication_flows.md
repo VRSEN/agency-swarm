@@ -2,7 +2,18 @@
 
 Multi-agent communication is the core functionality of any Multi-Agent System. Unlike in all other frameworks, Agency Swarm not only allows you to define communication flows in any way you want (uniform communication flows), but to also configure the underlying logic for this feature. This means that you can create entirely new types of communication, or adjust it to your own needs. Below you will find a guide on how to do all this, along with some common examples.
 
-**To use your own `SendMessage` calss**, simply put it in the `send_message_tool_class` parameter when initializing the `Agency` class:
+## Pre-Made SendMessage Classes
+
+Agency Swarm contains multiple commonly requested classes for communication flows. Currently, the following classes are available:
+
+| Class Name                  | Description                                                                                                                                                                                                                               | When to Use                                                                                                    | Code Link |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | --------- |
+| `SendMessage` (default)     | This is the default class for sending messages to other agents. It uses synchronous communication with basic COT (Chain of Thought) prompting and allows agents to relay files and modify system instructions for each other.             | Suitable for most use cases. Balances speed and functionality.                                                 |           |
+| `SendMessageQuick`          | A variant of the SendMessage class without Chain of Thought prompting, files, and additional instructions. It allows for faster communication without the overhead of COT.                                                                | Use for simpler use cases or when you want to save tokens and increase speed.                                  |           |
+| `SendMessageAsyncThreading` | Similar to `SendMessage` but with `async_mode='threading'`. Each agent will execute asynchronously in a separate thread. In the meantime, the caller agent can continue the conversation with the user and check the results later.       | Use for asynchronous applications or when sub-agents take singificant amounts of time to complete their tasks. |           |
+| `SendMessageSwarm`          | Instead of sending a message to another agent, it replaces the caller agent with the recipient agent, similar to [OpenAI's Swarm](https://github.com/openai/swarm). The recipient agent will then have access to the entire conversation. | When you need more granular control. It is not able to handle complex multi-step, multi-agent tasks.           |           |
+
+**To use any of the pre-made `SendMessage` classes**, simply put it in the `send_message_tool_class` parameter when initializing the `Agency` class:
 
 ```python
 from agency_swarm.tools.send_message import SendMessageQuick
@@ -14,17 +25,6 @@ agency = Agency(
 ```
 
 That's it! Now, your agents will use your own custom `SendMessageQuick` class for communication.
-
-## Pre-Made SendMessage Classes
-
-Agency Swarm contains multiple commonly requested classes for communication flows. Currently, the following classes are available:
-
-| Class Name                  | Description                                                                                                                                                                                                                               | When to Use                                                                                                    | Code Link |
-| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | --------- |
-| `SendMessage` (default)     | This is the default class for sending messages to other agents. It uses synchronous communication with basic COT (Chain of Thought) prompting and allows agents to relay files and modify system instructions for each other.             | Suitable for most use cases. Balances speed and functionality.                                                 |           |
-| `SendMessageQuick`          | A variant of the SendMessage class without Chain of Thought prompting, files, and additional instructions. It allows for faster communication without the overhead of COT.                                                                | Use for simpler use cases or when you want to save tokens and increase speed.                                  |           |
-| `SendMessageAsyncThreading` | Similar to `SendMessage` but with `async_mode='threading'`. Each agent will execute asynchronously in a separate thread. In the meantime, the caller agent can continue the conversation with the user and check the results later.       | Use for asynchronous applications or when sub-agents take singificant amounts of time to complete their tasks. |           |
-| `SendMessageSwarm`          | Instead of sending a message to another agent, it replaces the caller agent with the recipient agent, similar to [OpenAI's Swarm](https://github.com/openai/swarm). The recipient agent will then have access to the entire conversation. | When you need more granular control. It is not able to handle complex multi-step, multi-agent tasks.           |           |
 
 ## Creating Your Own Unique Communication Flows
 
@@ -222,7 +222,7 @@ agency = Agency(
 )
 ```
 
-Now, your agents will use your own custom `SendMessageAPI` class for communication!
+That's it! Now, your agents will use your own custom `SendMessageAPI` class for communication!
 
 ## Conclusion
 
