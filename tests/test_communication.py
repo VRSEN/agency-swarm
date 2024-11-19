@@ -34,7 +34,7 @@ class TestSendMessage(unittest.TestCase):
                              temperature=0, send_message_tool_class=SendMessageSwarm)
 
     def test_send_message_swarm(self):
-        response = self.agency.get_completion("Hello, can you send me to customer support? If there are any issues, please say 'error'")
+        response = self.agency.get_completion("Hello, can you send me to customer support? If tool responds says that you have NOT been rerouted, or if there is another error, please say 'error'")
         self.assertFalse("error" in response.lower(), self.agency.main_thread.thread_url)
         response = self.agency.get_completion("Who are you?")
         self.assertTrue("customer support" in response.lower(), self.agency.main_thread.thread_url)
@@ -50,7 +50,7 @@ class TestSendMessage(unittest.TestCase):
     def test_send_message_double_recepient_error(self):
         ceo = Agent(name="CEO",
             description="Responsible for client communication, task planning and management.",
-            instructions="You are an agent for testing. Route request AT THE SAME TIME as instructed. If there is an error in a single request, please say 'error'. If there are errors in both requests, please say 'fatal'. do not output anything else.", # can be a file like ./instructions.md
+            instructions="You are an agent for testing. Route request AT THE SAME TIME as instructed. If there is an error in a single request, please say 'error'. If there are errors in both requests, please say 'fatal'. do not output anything else.",
         )
         test_agent = Agent(name="Test Agent1",
                             description="Responsible for testing.",

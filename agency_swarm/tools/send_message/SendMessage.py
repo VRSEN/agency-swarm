@@ -32,8 +32,8 @@ class SendMessage(SendMessageBase):
 
     @model_validator(mode='after')
     def validate_files(self):
-        # prevent hallucinations with file IDs if the necessary parameters are provided
-        if hasattr(self, 'message') and "file-" in self.message or (self.additional_instructions and "file-" in self.additional_instructions):
+        # prevent hallucinations with agents sending file IDs into incorrect fields
+        if "file-" in self.message or (self.additional_instructions and "file-" in self.additional_instructions):
             if not self.message_files:
                 raise ValueError("You must include file IDs in message_files parameter.")
         return self

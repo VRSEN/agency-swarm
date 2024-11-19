@@ -67,14 +67,13 @@ class SendMessage(SendMessageBase):
         description="Additional context or instructions from the conversation needed by the recipient agent to complete the task."
     )
 
-    @field_validator('additional_instructions', mode='before')
-    @classmethod
-    def validate_additional_instructions(cls, value):
-        # previously the parameter was a list, now it's a string
-        # add compatibility for old code
-        if isinstance(value, list):
-            return "\n".join(value)
-        return value
+    @model_validator(mode='after')
+    def validate_files(self):
+        # prevent hallucinations with agents sending file IDs into incorrect fields
+        if "file-" in self.message or (self.additional_instructions and "file-" in self.additional_instructions):
+            if not self.message_files:
+                raise ValueError("You must include file IDs in message_files parameter.")
+        return self
 
 
     def run(self):
@@ -99,9 +98,9 @@ In the following sections, we'll look at some common use cases for extending the
 
 #### 1. Adjusting parameters and descriptions
 
-The most basic use case is if you want to have your own parameter descriptions, such as you want to change the docstring or the description of the `message` parameter. This can help you better customize how the agents communicate with each other and what information they relay.
+The most basic use case is if you want to use your own parameter descriptions, such as if you want to change the docstring or the description of the `message` parameter. This can help you better customize how the agents communicate with each other and what information they relay.
 
-Let's say that instead of sending messages, I want my agents to send tasks to each other. In this case, I can change the docstring and the `message` parameter to a `task` parameter to better fit the task-oriented nature of my application.
+Let's say that instead of sending messages, I want my agents to send tasks to each other. In this case, I can change the docstring and the `message` parameter to a `task` parameter to better fit the nature of my application.
 
 ```python
 from pydantic import Field
@@ -126,7 +125,7 @@ To remove the chain of thought, you can simply remove the `chain_of_thought` par
 
 #### 2. Adding custom validation logic
 
-Now, let's say that I need to ensure that my message is sent to the correct recepient agent. (This is a very common hallucination in production.) In this case, I can add custom validator to the `recipient` parameter, which is defined in the `SendMessageBase` class. Since I don't want to change any other logic, I can inherit the `SendMessage` class and only add this new validation logic.
+Now, let's say that I need to ensure that my message is sent to the correct recepient agent. (This is a very common hallucination in production.) In this case, I can add custom validator to the `recipient` parameter, which is defined in the `SendMessageBase` class. Since I don't want to change any other parameters or descriptions, I can inherit the default `SendMessage` class and only add this new validation logic.
 
 ```python
 from agency_swarm.tools.send_message import SendMessage
@@ -157,11 +156,11 @@ class SendMessageLLMValidation(SendMessage):
         return self
 ```
 
-In this example, the `llm_validator` will throw an error if the message is not related to customer support. The caller agent will then have to fix the recipient or the message and send it again!
+In this example, the `llm_validator` will throw an error if the message is not related to customer support. The caller agent will then have to fix the recipient or the message and send it again! This is extremely useful when you have a lot of agents.
 
 #### 3. Summurizing previous conversations with other agents and adding to context
 
-Sometimes, when using default `SendMessage`, the agents might not relay all the neceessary details to the recipient agent. Especially, when the previous conversation is long. In this case, you can summarize the previous conversation with GPT and add it to the context, instead of the additional instructions. I will extend the `SendMessageQuick` class, which already contains the `message` parameter.
+Sometimes, when using default `SendMessage`, the agents might not relay all the neceessary details to the recipient agent. Especially, when the previous conversation is too long. In this case, you can summarize the previous conversation with GPT and add it to the context, instead of the additional instructions. I will extend the `SendMessageQuick` class, which already contains the `message` parameter, as I don't need chain of thought or files in this case.
 
 ```python
 from agency_swarm.tools.send_message import SendMessageQuick
@@ -189,6 +188,8 @@ class SendMessageSummary(SendMessageQuick):
         return self._get_completion(message=self.message, additional_instructions=f"\n\nPrevious conversation summary: '{summary.choices[0].message.content}'")
 ```
 
+With this example, you can add your own custom logic to the `run` method. It does not have to be a summary; you can also use it to add any other information to the context. For example, you can even query a vector database or use an external API.
+
 #### 4. Running each agent in a separate API call
 
 If you are a PRO, and you have managed to deploy each agent in a separate API endpoint, instead of using `_get_completion()`, you can call your own API and let the agents communicate with each other over the internet.
@@ -212,6 +213,19 @@ This is very powerful, as you can even allow your agents to colloborate with age
 
     If you have any ideas for new communication flows, please either adjust this page in docs, or add your new send message tool in the `agency_swarm/tools/send_message` folder and open a PR!
 
+**After implementing your own `SendMessage` tool**, simply pass it into the `send_message_tool_class` parameter when initializing the `Agency` class:
+
+```python
+agency = Agency(
+    ...
+    send_message_tool_class=SendMessageAPI
+)
+```
+
+Now, your agents will use your own custom `SendMessageAPI` class for communication!
+
 ## Conclusion
 
-Agency Swarm is the only framework that gives you full control over your systems. With this new feature, now there is **not a single prompt, parameter or part of the system** that you cannot adjust or customize to your own needs!
+Agency Swarm has been designed to give you, the developer, full control over your systems. It is the only framework that does not hard-code any prompts, parameters, or even worse, agents for you. With this new feature, the last part of the system that you couldn't fully customize to your own needs is now gone!
+
+So, I want to encourage you to keep experimenting and designing your own unique communication flows. While the examples above should serve as a good starting point, they do not even merely scratch the surface of what's possible here! I am looking forward to seeing what you will create. Please share it in our [Discord server](https://discord.gg/7HcABDpFPG) so we can all learn from each other.
