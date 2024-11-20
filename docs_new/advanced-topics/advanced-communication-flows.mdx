@@ -39,7 +39,6 @@ To create you own communication flow, you will first need to extend the `SendMes
 By defualt, Agency Swarm uses the following tool for communication:
 
 ```python
-from typing import Optional, List
 from pydantic import Field, field_validator, model_validator
 from .SendMessageBase import SendMessageBase
 
@@ -61,7 +60,7 @@ class SendMessage(SendMessageBase):
         ...,
         description="Specify the task required for the recipient agent to complete. Focus on clarifying what the task entails, rather than providing exact instructions. Make sure to inlcude all the relevant information needed to complete the task."
     )
-    message_files: Optional[List[str]] = Field(
+    message_files: list[str] | None = Field(
         default=None,
         description="A list of file IDs to be sent as attachments to this message. Only use this if you have the file ID that starts with 'file-'.",
         examples=["file-1234", "file-5678"]

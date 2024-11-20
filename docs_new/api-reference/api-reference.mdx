@@ -16,7 +16,7 @@ class Agent:
                  name: str,
                  description: str,
                  instructions: str,
-                 tools: List[Type[BaseTool]],
+                 tools: list[Type[BaseTool]],
                  temperature: float = 0.5,
                  max_prompt_tokens: int = 25000):
         """
@@ -47,7 +47,7 @@ def add_tool(self, tool: Type[BaseTool]):
 ```
 
 ```python get_oai_tools
-def get_oai_tools(self) -> List[dict]:
+def get_oai_tools(self) -> list[dict]:
     """
     Get the OpenAI-formatted list of tools.
 
@@ -75,7 +75,7 @@ from agency_swarm import Agency
 
 class Agency:
     def __init__(self,
-                 communication_flows: List[List[Agent]],
+                 communication_flows: list[list[Agent]],
                  shared_instructions: str,
                  temperature: float = 0.5,
                  max_prompt_tokens: int = 25000):
@@ -200,7 +200,7 @@ def from_openapi_schema(
     headers: Dict[str, str] = None,
     params: Dict[str, Any] = None,
     strict: bool = False
-) -> List[Type[BaseTool]]:
+) -> list[Type[BaseTool]]:
     """
     Create tools from an OpenAPI schema.
 
@@ -218,7 +218,7 @@ def from_openapi_schema(
 ```python get_openapi_schema
 @staticmethod
 def get_openapi_schema(
-    tools: List[Type[BaseTool]],
+    tools: list[Type[BaseTool]],
     url: str,
     title: str = "Agent Tools",
     description: str = "A collection of tools."
