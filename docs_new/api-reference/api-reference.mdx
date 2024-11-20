@@ -4,47 +4,237 @@ description: "Gain a deeper understanding of the core classes and methods availa
 icon: "book"
 ---
 
-## Agents
+## Agent Class
 
-<Frame caption="Agent Class Documentation">
-::: agency_swarm.agents.agent
-:::
-</Frame>
+The Agent class is the core component of the Agency Swarm framework. It defines the basic structure and behavior of an agent.
 
-## Agency
-
-<Frame caption="Agency Class Documentation">
-::: agency_swarm.agency.agency
-:::
-</Frame>
-
-## ToolFactory
-
-<Frame caption="ToolFactory Class Documentation">
-::: agency_swarm.tools.ToolFactory
-:::
-</Frame> 
-
-## Agents (Agent Class Methods)
-
-<Frame caption="Agent Class Methods Documentation">
 ```python
-::: agency_swarm.agents.agent.Agent
+from agency_swarm import Agent
+
+class Agent:
+    def __init__(self,
+                 name: str,
+                 description: str,
+                 instructions: str,
+                 tools: List[Type[BaseTool]],
+                 temperature: float = 0.5,
+                 max_prompt_tokens: int = 25000):
+        """
+        Initialize an Agent instance.
+
+        Parameters:
+            name: The agent's name
+            description: Brief description of the agent's role
+            instructions: Path to markdown file containing agent instructions
+            tools: List of tool classes available to the agent
+            temperature: Controls randomness in responses (0-1)
+            max_prompt_tokens: Maximum tokens for conversation history
+        """
 ```
-</Frame>
 
-## Agency (Agency Class Methods)
+### Key Methods
 
-<Frame caption="Agency Class Methods Documentation">
+<CodeGroup>
+
+```python add_tool
+def add_tool(self, tool: Type[BaseTool]):
+    """
+    Add a tool to the agent's available tools.
+
+    Parameters:
+        tool: Tool class to add (must be subclass of BaseTool)
+    """
+```
+
+```python get_oai_tools
+def get_oai_tools(self) -> List[dict]:
+    """
+    Get the OpenAI-formatted list of tools.
+
+    Returns:
+        List of tool configurations in OpenAI format
+    """
+```
+
+```python _upload_files
+def _upload_files(self):
+    """
+    Upload files from the agent's files folder to OpenAI.
+    Automatically adds FileSearch/CodeInterpreter tools if needed.
+    """
+```
+
+</CodeGroup>
+
+## Agency Class
+
+The Agency class manages a collection of agents and facilitates their communication.
+
 ```python
-::: agency_swarm.agency.agency.Agency
+from agency_swarm import Agency
+
+class Agency:
+    def __init__(self,
+                 communication_flows: List[List[Agent]],
+                 shared_instructions: str,
+                 temperature: float = 0.5,
+                 max_prompt_tokens: int = 25000):
+        """
+        Initialize an Agency instance.
+
+        Parameters:
+            communication_flows: List of agent pairs defining who can communicate
+            shared_instructions: Path to shared instructions markdown file
+            temperature: Default temperature for all agents
+            max_prompt_tokens: Default max tokens for all agents
+        """
 ```
-</Frame>
 
-## ToolFactory (ToolFactory Class Methods)
+### Key Methods
 
-<Frame caption="ToolFactory Class Methods Documentation">
+<CodeGroup>
+
+```python run_demo
+def run_demo(self):
+    """
+    Start the agency in terminal mode for demonstration.
+    """
+```
+
+```python demo_gradio
+def demo_gradio(self, height: int = 450, dark_mode: bool = True, **kwargs):
+    """
+    Launch a Gradio web interface for the agency.
+
+    Parameters:
+        height: Height of the chat interface
+        dark_mode: Enable dark mode
+        **kwargs: Additional Gradio interface options
+    """
+```
+
+</CodeGroup>
+
+## BaseTool Class
+
+The base class for creating custom tools that agents can use.
+
 ```python
-::: agency_swarm.tools.ToolFactory
+from agency_swarm.tools import BaseTool
+from pydantic import BaseModel, Field
+
+class BaseTool(BaseModel, ABC):
+    """
+    Abstract base class for all tools.
+    Inherits from Pydantic BaseModel for automatic validation.
+    """
+
+    class ToolConfig:
+        strict: bool = False  # Enable strict schema validation
+        one_call_at_a_time: bool = False  # Prevent concurrent calls
 ```
-</Frame>
+
+### Key Methods
+
+<CodeGroup>
+
+```python openai_schema
+@classmethod
+@property
+def openai_schema(cls) -> dict:
+    """
+    Generate OpenAI function schema from the tool class.
+
+    Returns:
+        Dictionary containing tool schema in OpenAI format
+    """
+```
+
+```python run
+@abstractmethod
+def run(self, **kwargs):
+    """
+    Execute the tool's main functionality.
+    Must be implemented by subclasses.
+    """
+```
+
+</CodeGroup>
+
+## ToolFactory Class
+
+Factory class for creating and managing tools.
+
+```python
+from agency_swarm.tools import ToolFactory
+
+class ToolFactory:
+    """
+    Utility class for creating tools from various sources
+    and generating OpenAPI schemas.
+    """
+```
+
+### Key Methods
+
+<CodeGroup>
+
+```python from_file
+@staticmethod
+def from_file(file_path: str) -> Type[BaseTool]:
+    """
+    Import a BaseTool class from a Python file.
+
+    Parameters:
+        file_path: Path to the Python file containing the tool
+
+    Returns:
+        The imported BaseTool class
+    """
+```
+
+```python from_openapi_schema
+@staticmethod
+def from_openapi_schema(
+    schema: Union[str, dict],
+    headers: Dict[str, str] = None,
+    params: Dict[str, Any] = None,
+    strict: bool = False
+) -> List[Type[BaseTool]]:
+    """
+    Create tools from an OpenAPI schema.
+
+    Parameters:
+        schema: OpenAPI schema (string or dict)
+        headers: Request headers
+        params: Additional parameters
+        strict: Enable strict validation
+
+    Returns:
+        List of generated tool classes
+    """
+```
+
+```python get_openapi_schema
+@staticmethod
+def get_openapi_schema(
+    tools: List[Type[BaseTool]],
+    url: str,
+    title: str = "Agent Tools",
+    description: str = "A collection of tools."
+) -> str:
+    """
+    Generate OpenAPI schema from a list of tools.
+
+    Parameters:
+        tools: List of tool classes
+        url: Base URL for the API
+        title: Schema title
+        description: Schema description
+
+    Returns:
+        OpenAPI schema as JSON string
+    """
+```
+
+</CodeGroup>

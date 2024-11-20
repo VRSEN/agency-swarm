@@ -1,6 +1,10 @@
-# Using Code Interpreter and FileSearch
+---
+title: "Using Code Interpreter and FileSearch"
+description: "Enhance agent capabilities by integrating the Code Interpreter and File Search tools."
+icon: "calculator"
+---
 
-Enhance agent capabilities by integrating the Code Interpreter and FileSearch tools.
+Enhance agent capabilities by integrating the Code Interpreter and File Search tools.
 
 ## Code Interpreter
 
@@ -13,9 +17,10 @@ Enhance agent capabilities by integrating the Code Interpreter and FileSearch to
       name="DataAnalyst",
       tools=[CodeInterpreter],
       # Other agent parameters
-  )  ```
+  )
+  ```
 
-## FileSearch
+## File Search
 
 - **Purpose**: Enables Retrieval-Augmented Generation (RAG) by allowing agents to search files.
 - **Integration**:
@@ -26,9 +31,10 @@ Enhance agent capabilities by integrating the Code Interpreter and FileSearch to
       name="Researcher",
       tools=[FileSearch],
       # Other agent parameters
-  )  ```
+  )
+  ```
 
 ## Usage Considerations
 
 - **Permissions**: Ensure agents have access to necessary files and resources.
-- **Security**: Be cautious of code execution to prevent unintended actions. 
+- **Security**: Be cautious of code execution to prevent unintended actions.

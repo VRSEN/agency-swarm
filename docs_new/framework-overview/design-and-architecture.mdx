@@ -1,5 +1,128 @@
-# Design and Architecture
+---
+title: "Design and Architecture"
+description: "Learn about Agency Swarm's modular architecture and how its components work together"
+icon: "cube"
+---
 
-Agency Swarm employs a modular architecture that allows for flexible configuration of AI agents. The framework connects assistants with a `SendMessage` tool, enabling them to call other agents as tools. This design facilitates a collaborative environment where agents can communicate and coordinate to solve complex tasks.
+Agency Swarm employs a **modular architecture** that facilitates the flexible configuration and dynamic management of AI agents. This architecture is meticulously designed to enable seamless collaboration, communication, and coordination among agents, empowering them to tackle complex, multifaceted tasks efficiently.
 
-Agents within Agency Swarm are designed to communicate and collaborate, enabling the creation of complex, multi-agent systems that can solve sophisticated problems by working together.
+## Core Components
+
+<Accordion title="Agency">
+At the core of the framework lies the `Agency` class, responsible for managing the collective of agents. It initializes with a list of agents, each potentially containing sub-agents, and references shared instructions to maintain consistency across the agency.
+</Accordion>
+
+<Accordion title="Agents">
+Agents are the fundamental units within Agency Swarm, each designed with distinct roles and capabilities. They operate based on predefined roles that guide their interactions and decision-making processes. Agents can autonomously execute tasks, modify files, and utilize various tools to enhance their functionality.
+
+Key characteristics of agents:
+
+- **Role-Based**: Agents function according to their designated roles.
+- **Custom Instructions**: Each agent can be configured with unique instructions, enabling specialized behavior.
+- **Tools and Functions**: Agents can be equipped with various tools to extend their capabilities.
+- **Communication**: Agents communicate with each other using the `SendMessage` tool, enabling synchronous interactions.
+</Accordion>
+
+<Accordion title="Tools">
+Tools extend the capabilities of agents by providing them with specialized functions or actions they can perform. They are crucial for allowing agents to interact with the environment, process data, communicate, and execute complex tasks.
+
+### Types of Tools
+
+<Tabs>
+  <Tab title="Custom Tools">
+    Developed by developers to provide agents with functionalities tailored to specific tasks or integrations with external systems. Custom tools are fixed and assigned to agents based on their roles.
+  </Tab>
+  <Tab title="Built-in Tools">
+    The framework includes built-in tools that are readily available for agents:
+    - **File Search**: Provided by OpenAI, allows agents to search and retrieve information from files. Useful for Retrieval-Augmented Generation (RAG).
+    - **Code Interpreter**: Provided by OpenAI, allows agents to execute code within a sandboxed environment.
+  </Tab>
+</Tabs>
+
+### Tool Integration
+
+Tools are integrated into agents based on their roles and the tasks they need to perform. This integration is typically done during the agent's initialization.
+
+<CodeGroup>
+```python Example Agent with Tools
+from agency_swarm import Agent
+from agency_swarm.tools import CodeInterpreter
+
+class DeveloperAgent(Agent):
+    def __init__(self):
+        super().__init__(
+            name="DeveloperAgent",
+            description="An agent responsible for developing and testing code.",
+            tools=[CodeInterpreter],
+            instructions="./instructions.md",
+            temperature=0.5,
+            max_prompt_tokens=2500,
+        )
+```
+</CodeGroup>
+
+In this example, the `DeveloperAgent` is equipped with the `CodeInterpreter` tool, enabling it to execute code.
+</Accordion>
+
+## Communication Flow
+
+<Steps>
+  <Step title="Message Sending">
+    Agents communicate using the `SendMessage` tool, which facilitates synchronous interactions.
+  </Step>
+  <Step title="Event Handling">
+    The `AgencyEventHandler` intercepts and processes messages based on type:
+    - **Function Calls**: Queued and executed
+    - **Text Messages**: Directly relayed to recipients
+  </Step>
+</Steps>
+
+## Agency Creation and Finalization
+
+<Card title="Genesis Agents" icon="rocket-launch">
+  The framework includes specialized agents like `GenesisCEO` and `ToolCreator`, which are responsible for setting up the agency structure and creating necessary tools.
+</Card>
+
+<Card title="Tool Creation" icon="screwdriver-wrench">
+  The `ToolCreator` agent automates the development and testing of tools, ensuring that each tool is functional and integrates seamlessly with the agents.
+</Card>
+
+<Card title="Agency Finalization" icon="check">
+  Once all agents and tools are set up, the `FinalizeAgency` tool ensures that the agency is properly configured and ready for deployment.
+</Card>
+
+## Getting Started
+
+To get started with Agency Swarm, navigate to the agency folder and run:
+
+```bash
+python agency.py
+```
+
+## Further Enhancements
+
+<Accordion title="Planned Improvements">
+- **Tool Expansion**: Continuously develop and integrate new tools to expand agent capabilities.
+- **Scalability**: Optimize the framework to handle larger agencies with more complex agent interactions.
+- **User Customization**: Allow users to define custom agent roles and tool integrations based on specific needs.
+</Accordion>
+
+---
+
+## Related Documentation
+
+<Card title="Tools" icon="wrench" href="../key-entities/tools">
+  Learn how to create and use tools to enhance your agents' capabilities.
+</Card>
+
+<Card title="Agents" icon="user" href="../key-entities/agents">
+  Understand how to define and configure agents within your agency.
+</Card>
+
+<Card title="Creating Tools" icon="toolbox" href="../how-to-guides/creating-tools">
+  Step-by-step guide on creating custom tools for your agents.
+</Card>
+
+<Card title="Using Code Interpreter and File Search" icon="code" href="../how-to-guides/using-code-interpreter-and-filesearch">
+  Enhance agent capabilities by integrating OpenAI's Code Interpreter and File Search tools.
+</Card>

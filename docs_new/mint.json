@@ -86,8 +86,7 @@
       "group": "Key Entities",
       "pages": [
         "key-entities/agents",
-        "key-entities/tools",
-        "key-entities/tasks-and-functions"
+        "key-entities/tools"
       ]
     },
     {
@@ -109,9 +108,9 @@
       ]
     },
     {
-      "group": "Folder Structure",
+      "group": "Directory Structure",
       "pages": [
-        "folder-structure/folder-structure"
+        "directory-structure/directory-structure"
       ]
     },
     {
@@ -129,6 +128,7 @@
     {
       "group": "Advanced Topics",
       "pages": [
+        "advanced-topics/advanced-communication-flows",
         "advanced-topics/asynchronous-execution",
         "advanced-topics/customizing-prompts-and-few-shot-learning",
         "advanced-topics/open-source-models-support",
