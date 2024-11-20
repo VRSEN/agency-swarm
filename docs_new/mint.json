@@ -55,37 +55,27 @@
   ],
   "navigation": [
     {
-      "group": "Introduction",
+      "group": "Get Started",
       "pages": [
         "introduction/overview",
         "introduction/key-features",
         "introduction/design-principles",
-        "introduction/framework-comparison"
-      ]
-    },
-    {
-      "group": "Getting Started",
-      "pages": [
         "getting-started/installation",
-        "getting-started/quickstart"
+        "getting-started/quickstart",
+        "getting-started/using-cursor"
       ]
     },
     {
-      "group": "Framework Overview",
+      "group": "Core Concepts",
       "pages": [
         "framework-overview/design-and-architecture",
         "framework-overview/communication-flows",
         "framework-overview/state-management",
         "framework-overview/output-validation-and-reliability",
         "framework-overview/streaming-support",
-        "framework-overview/prompt-flexibility"
-      ]
-    },
-    {
-      "group": "Key Entities",
-      "pages": [
         "key-entities/agents",
-        "key-entities/tools"
+        "key-entities/tools",
+        "directory-structure/directory-structure"
       ]
     },
     {
@@ -101,15 +91,25 @@
       ]
     },
     {
-      "group": "API Reference",
+      "group": "Advanced Topics",
       "pages": [
-        "api-reference/api-reference"
+        "advanced-topics/advanced-communication-flows",
+        "advanced-topics/asynchronous-execution",
+        "advanced-topics/customizing-prompts-and-few-shot-learning",
+        "advanced-topics/open-source-models-support",
+        "advanced-topics/production-readiness"
       ]
     },
     {
-      "group": "Directory Structure",
+      "group": "Examples",
       "pages": [
-        "directory-structure/directory-structure"
+        "examples"
+      ]
+    },
+    {
+      "group": "API Reference",
+      "pages": [
+        "api-reference/api-reference"
       ]
     },
     {
@@ -122,16 +122,6 @@
       "group": "FAQ",
       "pages": [
         "faq/faq"
-      ]
-    },
-    {
-      "group": "Advanced Topics",
-      "pages": [
-        "advanced-topics/advanced-communication-flows",
-        "advanced-topics/asynchronous-execution",
-        "advanced-topics/customizing-prompts-and-few-shot-learning",
-        "advanced-topics/open-source-models-support",
-        "advanced-topics/production-readiness"
       ]
     }
   ],
