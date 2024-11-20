@@ -37,8 +37,12 @@
   },
   "tabs": [
     {
-      "name": "Examples",
-      "url": "examples"
+      "name": "Tutorials",
+      "url": "tutorials"
+    },
+    {
+      "name": "Extras",
+      "url": "extras"
     }
   ],
   "anchors": [
@@ -122,6 +126,18 @@
       "group": "FAQ",
       "pages": [
         "faq/faq"
+      ]
+    },
+    {
+      "group": "Tutorials",
+      "pages": [
+        "tutorials/tutorials"
+      ]
+    },
+    {
+      "group": "Extras",
+      "pages": [
+        "extras/extras"
       ]
     }
   ],

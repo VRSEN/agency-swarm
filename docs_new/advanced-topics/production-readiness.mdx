@@ -1,7 +1,7 @@
 ---
 title: "Production Readiness"
 description: "Prepare your agency for production by enhancing reliability, scalability, and security."
-icon: "check-circle-o"
+icon: "check"
 ---
 
 <Info>
@@ -10,9 +10,9 @@ Ensuring your agency is production-ready involves careful planning and implement
 
 ## Key Considerations
 
-<AccordionGroup>
+<AccordionGroup defaultOpen={true}>
 
-<Accordion title="Robust Error Handling" icon="bug" iconType="solid">
+<Accordion title="Robust Error Handling" icon="bug" iconType="solid" defaultOpen={true}>
 Implement comprehensive error handling within agents and tools to gracefully handle unexpected issues.
 
 <Tip>
@@ -20,7 +20,7 @@ Use try-except blocks and logging to capture and manage exceptions.
 </Tip>
 </Accordion>
 
-<Accordion title="Security Measures" icon="shield-alt" iconType="solid">
+<Accordion title="Security Measures" icon="shield" iconType="solid" defaultOpen={true}>
 Secure API keys, enforce access controls, and sanitize inputs to protect against vulnerabilities.
 
 <Warning>
@@ -28,12 +28,12 @@ Never hard-code API keys or sensitive information in your code.
 </Warning>
 </Accordion>
 
-<Accordion title="Monitoring and Logging" icon="eye" iconType="solid">
+<Accordion title="Monitoring and Logging" icon="eye" iconType="solid" defaultOpen={true}>
 Use monitoring tools to track performance and detect anomalies. Maintain logs for auditing and debugging.
 
 </Accordion>
 
-<Accordion title="Scalability" icon="arrows-alt" iconType="solid">
+<Accordion title="Scalability" icon="arrows" iconType="solid" defaultOpen={true}>
 Design for horizontal scaling to handle increased loads efficiently.
 
 <Tip>
@@ -46,11 +46,7 @@ Consider using cloud services that support auto-scaling features.
 ## Best Practices
 
 <Check>
-
 - **Testing**: Thoroughly test agents and tools under various conditions, including edge cases.
-
 - **Documentation**: Maintain clear documentation for maintenance and onboarding of new team members.
-
 - **Continuous Integration/Continuous Deployment (CI/CD)**: Set up pipelines for automated testing and deployment to streamline updates.
-
 </Check>
