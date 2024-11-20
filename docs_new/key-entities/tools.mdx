@@ -25,17 +25,20 @@ Let's walk through creating a simple tool step by step.
 ### Step 1: Import Necessary Modules
 
 You'll need to import `BaseTool` from `agency_swarm.tools` and `Field` from `pydantic`. If your tool interacts with external systems or requires environment variables, import those as well.
-``python
+
+```python
 from agency_swarm.tools import BaseTool
 from pydantic import Field
 import os
 from dotenv import load_dotenv
-load_dotenv() # Load environment variables from a .env file
+
+load_dotenv()  # Load environment variables from a .env file
 ```
 
 ### Step 2: Define Your Tool Class
 
 Create a new class that inherits from `BaseTool`. Use Pydantic fields to define the inputs your tool will accept.
+
 ```python
 class Calculator(BaseTool):
     """
@@ -45,6 +48,7 @@ class Calculator(BaseTool):
         ...,
         description="The mathematical expression to evaluate."
     )
+
     def run(self):
         # Implement the tool's functionality
         try:
@@ -57,12 +61,14 @@ class Calculator(BaseTool):
 ### Step 3: Add the Tool to an Agent
 
 To use your new tool, add it to an agent's list of tools.
+
 ```python
 from agency_swarm import Agent
 from .tools.calculator import Calculator
+
 class MathAgent(Agent):
-    def init(self):
-        super().init(
+    def __init__(self):
+        super().__init__(
             name="MathAgent",
             description="An agent capable of performing mathematical calculations.",
             tools=[Calculator],
@@ -74,44 +80,79 @@ class MathAgent(Agent):
 
 ## Advanced Tool Features
 
-### Tool Configuration with `ToolConfig`
+### Controlling Execution with `ToolConfig`
 
-The `ToolConfig` allows you to customize tool behavior with additional settings, such as timeouts, retries, and more.
+The `ToolConfig` allows you to customize tool behavior with additional settings. Currently, two key attributes are supported:
+
+- `strict`: When set to `True`, enables strict mode for structured outputs. This means the agent must produce outputs that exactly match the expected schema, reducing errors in tool execution.
+- `one_call_at_a_time`: Consider `one_call_at_a_time` ToolConfig class attribute to prevent multiple instances of the same tool from running at the same time. This is useful when you want your agents to see the results of the previous action before proceeding with the next one.
+
+#### Using `strict` for Structured Outputs
+
+By default, tools are responsible for parsing agent outputs and returning errors if the output doesn't match the expected schema. 
+However, correcting errors can be difficult for the model, so you can set `strict = True` in `ToolConfig` to enforce precise adherence to the output schema.
+
 ```python
-from agency_swarm.tools import BaseTool, ToolConfig
+from agency_swarm.tools import BaseTool
 from pydantic import Field
-import requests
-class APITool(BaseTool):
+
+class GetWeatherTool(BaseTool):
     """
-    Tool for interacting with external APIs.
+    Determine weather in a specified location.
     """
-    config = ToolConfig(
-        max_retries=3,
-        retry_delay=1,
-        timeout=30 # seconds
-    )
-    endpoint: str = Field(..., description="API endpoint URL.")
-    query_params: dict = Field({}, description="Query parameters for the API call.")
+
+    location: str = Field(..., description="The city and state, e.g., 'San Francisco, CA'")
+
+    class ToolConfig:
+        strict = True  # Enforce strict adherence to the output schema
+
     def run(self):
-        try:
-            response = requests.get(self.endpoint, params=self.query_params, timeout=self.config.timeout)
-            response.raise_for_status()
-            return response.text
-        except requests.RequestException as e:
-            return f"API request failed: {e}"
+        # Implement weather retrieval logic
+        return f"The weather in {self.location} is sunny with a temperature of 75°F."
 ```
+
+With `strict` mode enabled, the agent is required to provide outputs that exactly match the expected format, which can improve reliability in mission-critical applications.
+
+#### Using `one_call_at_a_time` to Control Tool Invocation
+
+The `one_call_at_a_time` setting prevents the agent from making multiple consecutive calls to the same tool within a single response. When enabled, the agent must perform some other action or reasoning between calls to the same tool. This is particularly useful for:
+
+- Preventing infinite loops or repetitive tool calls
+- Ensuring the agent processes and reasons about each tool's response
+- Maintaining a more structured conversation flow
+- Reducing unnecessary API calls or resource usage
+
+```python
+class DatabaseQueryTool(BaseTool):
+    """
+    Query the database for information.
+    """
+
+    query: str = Field(..., description="The SQL query to execute.")
+
+    class ToolConfig:
+        one_call_at_a_time = True  # Forces the agent to process each query result before making another query
+
+    def run(self):
+        # Implement database query logic
+        return f"Results for query '{self.query}': [...]"
+```
+
+With this setting enabled, the agent must include additional reasoning or use different tools between consecutive calls to the database query tool, preventing rapid-fire queries without proper analysis of results.
 
 ### OpenAI Built-in Tools
 
 Agency Swarm supports OpenAI's built-in tools, such as the Code Interpreter and File Search.
 
 #### Using the Code Interpreter and File Search Tools
+
 ```python
 from agency_swarm import Agent
 from agency_swarm.tools import CodeInterpreter, FileSearch
-    class DataAgent(Agent):
-    def init(self):
-        super().init(
+
+class DataAgent(Agent):
+    def __init__(self):
+        super().__init__(
             name="DataAgent",
             description="An agent capable of executing code and searching files.",
             tools=[CodeInterpreter, FileSearch],
@@ -126,21 +167,24 @@ from agency_swarm.tools import CodeInterpreter, FileSearch
 
 #### Using Chain-of-Thought (CoT) Parameters
 
-To improve the accuracy of function calls, add a planning parameter (like `planning` or `thought_process`) as a separate first parameter in your tool. This encourages the model to plan the parameter values before executing the function.
+To improve the accuracy of function calls, add a planning parameter (like `planning` or `chain_of_thought`) as a separate first parameter in your tool. This encourages the model to plan the parameter values before executing the function.
+
 ```python
 from agency_swarm.tools import BaseTool
 from pydantic import Field
+
 class EmailSender(BaseTool):
     """
     Sends emails after planning the content and recipients.
     """
-    planning: str = Field(
+    chain_of_thought: str = Field(
         ...,
         description="Plan how to construct the email. Consider the recipient, subject, and content."
     )
     recipient: str = Field(..., description="Email recipient's address.")
     subject: str = Field(..., description="Subject of the email.")
     body: str = Field(..., description="Content of the email.")
+
     def run(self):
         # Implement email sending logic here
         # For example, using smtplib or a third-party email service
@@ -158,11 +202,13 @@ class EmailSender(BaseTool):
 ## Complex Tool Examples
 
 ### Example: GitHub Repository Tool
+
 ```python
 from agency_swarm.tools import BaseTool
 from pydantic import Field
 import os
 from github import Github
+
 class GitHubTool(BaseTool):
     """
     Interact with GitHub repositories to list and create issues.
@@ -171,6 +217,7 @@ class GitHubTool(BaseTool):
     action: str = Field(..., description="Action to perform: 'list_issues' or 'create_issue'.")
     issue_title: str = Field(None, description="Title of the issue to create.")
     issue_body: str = Field(None, description="Body content of the issue to create.")
+
     def run(self):
         github_token = os.getenv("GITHUB_TOKEN")
         if not github_token:
@@ -206,6 +253,7 @@ class DataProcessor(BaseTool):
     file_path: str = Field(..., description="Path to the CSV data file.")
     operation: str = Field(..., description="Operation to perform: 'summary' or 'filter'.")
     filter_condition: str = Field(None, description="Condition for filtering data (e.g., 'age > 30').")
+
     def run(self):
         try:
             df = pd.read_csv(self.file_path)
@@ -225,47 +273,27 @@ class DataProcessor(BaseTool):
 ## Testing Tools
 
 Include test cases at the bottom of your tool files to ensure they work as expected.
+
 ```python
 if __name__ == "__main__":
     # Test the Calculator tool
     calc = Calculator(expression="2 + 2 * 3")
-    print(calc.run()) # Output should be '8'
+    print(calc.run())  # Output should be '8'
 ```
 
 ## Common Patterns
 
-### Asynchronous Tools
-
-For I/O-bound tasks or when dealing with multiple requests, you can create asynchronous tools.
-```python
-from agency_swarm.tools import BaseTool
-from pydantic import Field
-import aiohttp
-import asyncio
-class AsyncAPITool(BaseTool):
-    """
-    Performs asynchronous API calls to multiple endpoints.
-    """
-    endpoints: list = Field(..., description="List of API endpoint URLs to call.")
-    async def run(self):
-        async with aiohttp.ClientSession() as session:
-            tasks = [self.fetch(session, url) for url in self.endpoints]
-            results = await asyncio.gather(tasks)
-            return results
-    async def fetch(self, session, url):
-        async with session.get(url) as response:
-            return await response.text()
-```
-
 ### Tool Composition
 
 Combine multiple tools to handle complex operations.
+
 ```python
 class CompositeTool(BaseTool):
     """
     A tool that combines other tools to perform a series of actions.
     """
     input_data: str = Field(..., description="Input data for the composite operation.")
+
     def run(self):
         # Step 1: Process data
         processed_data = self.process_data(self.input_data)
@@ -274,16 +302,71 @@ class CompositeTool(BaseTool):
         # Step 3: Format output
         output = self.format_output(analysis)
         return output
+
     def process_data(self, data):
         # Implement data processing logic
         pass
+
     def analyze_results(self, data):
         # Implement analysis logic
         pass
+
     def format_output(self, data):
         # Implement output formatting
         pass
 ```
+
+## PRO Tips
+
+1. **Use Enums or Literal Types:** Use enumerated or literal types to restrict the agent's input to specific allowed values.
+
+   ```python
+   from typing import Literal
+
+   class RunCommand(BaseTool):
+       """
+       Execute predefined system commands.
+       """
+       command: Literal["start", "stop"] = Field(..., description="Command to execute: 'start' or 'stop'.")
+
+       def run(self):
+           if self.command == "start":
+               # Execute start command
+               pass
+           elif self.command == "stop":
+               # Execute stop command
+               pass
+           else:
+               raise ValueError("Invalid command.")
+   ```
+
+2. **Use Shared State:** Utilize `self._shared_state` to share information between tools or to control the execution flow based on previous actions.
+
+   ```python
+   class QueryDatabase(BaseTool):
+       """
+       Query the database and store the context.
+       """
+       question: str = Field(..., description="The question to query.")
+
+       def run(self):
+           # Assume we retrieve some context
+           context = "This is the retrieved context."
+           self._shared_state['context'] = context
+           return "Context retrieved and stored."
+
+   class AnswerQuestion(BaseTool):
+       """
+       Answer a question using the stored context.
+       """
+       def run(self):
+           context = self._shared_state.get('context')
+           if not context:
+               return "No context available. Please retrieve context first."
+           # Use the context to generate an answer
+           answer = f"Based on the context: {context}"
+           return answer
+   ```
 
 ## Conclusion
 
