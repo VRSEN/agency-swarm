@@ -1,0 +1,39 @@
+---
+title: "Framework Comparison"
+description: "Compare Agency Swarm with other multi-agent AI frameworks."
+icon: "exchange-alt"
+---
+
+# Framework Comparison
+
+This section compares **Agency Swarm** with other multi-agent AI frameworks like **AutoGen** and **CrewAI**. The comparison highlights key features and differences to help you understand how Agency Swarm stands out.
+
+## Overview
+
+| **Criteria**                     | **Agency Swarm**                                                                                                                                                     | **AutoGen**                                                                                                                            | **CrewAI**                                                                                                                                      |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Design & Architecture**        | - Modular, production-focused<br/>- Hierarchical agent structure via agency chart<br/>- Built for real business needs                                                 | - Event-driven, scalable<br/>- Asynchronous message passing<br/>- Supports distributed computing                                         | - Flexible agent organization into crews<br/>- Agents with rich attributes<br/>- Emphasis on collaboration                                        |
+| **Key Entities**                 | - Agents<br/>- Tools<br/>- Agencies                                                                                                                                  | - ConversableAgent<br/>- AssistantAgent<br/>- UserProxyAgent                                                                              | - Agents<br/>- Tasks<br/>- Crews                                                                                                                  |
+| **Agent Structure**              | - Hierarchical (supervisor-subordinate)<br/>- Customizable communication flows                                                                                        | - Supports sequential, group, and nested structures                                                                                        | - Supports various workflows (sequential, hierarchical, asynchronous)                                                                             |
+| **Tool Integration**             | - Python-based tools with Pydantic validation<br/>- Easy tool creation and integration                                                                                | - Extensive tool support<br/>- Function calling for task delegation                                                                     | - Built-in and custom tools<br/>- Caching mechanisms for performance                                                                             |
+| **State Management**             | - Shared state among agents and tools<br/>- Conversation context via OpenAI API                                                                                       | - Conversation history maintenance<br/>- Dynamic context truncation                                                                     | - Three-tier memory system<br/>- Context sharing among agents and tasks                                                                             |
+| **Production Readiness**         | - Designed for production environments<br/>- Business-oriented design<br/>- Robust validation and error correction                                                     | - Scalable and distributed<br/>- Active development towards production features                                                         | - Requires additional development for production<br/>- Scalability testing needed                                                                |
+| **Prompt Flexibility**           | - Full control over prompts<br/>- No hardcoded interactions<br/>- Markdown instructions for agents                                                                     | - Flexible prompt engineering<br/>- Supports few-shot learning                                                                          | - Extensive prompt customization<br/>- Supports multiple languages                                                                               |
+| **Output Validation & Reliability** | - Input validation with Pydantic<br/>- Custom response validators<br/>- Auto-correction using LLM capabilities                                                  | - Robust error handling<br/>- Code execution validation<br/>- Self-correction by agents                                                   | - Custom validation logic<br/>- Reliability features: retries, exception handling<br/>- Multiple validation layers including human review         |
+| **Conversation Context Management** | - Managed via OpenAI Assistants API<br/>- Separate threads for communication flows<br/>- Built-in RAG support                                                  | - Conversation modes: static, dynamic, human-in-the-loop<br/>- Context-aware responses                                                  | - Memory systems manage context<br/>- Context sharing among agents and tasks                                                                     |
+| **Task Delegation**              | - Agent autonomy in task delegation<br/>- `SendMessage` tool for communication<br/>- Hierarchical delegation via agency chart                                         | - Automated task coordination<br/>- Function calls for delegation<br/>- Various interaction patterns                                      | - Delegation control via agent attributes<br/>- Autonomous delegation based on capabilities<br/>- Hand-off mechanisms with context preservation |
+| **Streaming Support**            | - Supports streaming responses<br/>- Voice interface for real-time interaction                                                                                       | - Real-time interaction with streaming<br/>- Event-driven architecture facilitates this                                                 | - Streaming support for real-time outputs<br/>- Enhances interactivity and responsiveness                                                        |
+| **Evaluation & Monitoring**      | - OpenAI dashboard for cost and usage<br/>- Third-party integration in progress                                                                                       | - Built-in observability features<br/>- Performance metrics and debugging tools                                                          | - Custom evaluation metrics can be implemented<br/>- Logging and analytics support<br/>- Callbacks for execution monitoring                       |
+
+## Summary
+
+- **Agency Swarm** is ideal for production environments requiring full control over agent behavior, with a focus on business needs and hierarchical structures.
+- **AutoGen** emphasizes scalability and extensibility with its event-driven architecture and supports distributed computing.
+- **CrewAI** offers flexible agent organization suitable for collaborative projects but may require additional development for production readiness.
+
+<NextSteps>
+
+- **[Getting Started](./installation.md)**
+- **[Creating Agents](../how-to-guides/creating-agents.md)**
+
+</NextSteps>
