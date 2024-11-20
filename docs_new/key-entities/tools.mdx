@@ -85,7 +85,7 @@ class MathAgent(Agent):
 The `ToolConfig` allows you to customize tool behavior with additional settings. Currently, two key attributes are supported:
 
 - `strict`: When set to `True`, enables strict mode for structured outputs. This means the agent must produce outputs that exactly match the expected schema, reducing errors in tool execution.
-- `one_call_at_a_time`: Consider `one_call_at_a_time` ToolConfig class attribute to prevent multiple instances of the same tool from running at the same time. This is useful when you want your agents to see the results of the previous action before proceeding with the next one.
+- `one_call_at_a_time`: When set to `True`, ensures that the agent processes each tool call's result before making another call to the same tool. This prevents multiple consecutive invocations of the same tool within a single response.
 
 #### Using `strict` for Structured Outputs
 
@@ -115,12 +115,12 @@ With `strict` mode enabled, the agent is required to provide outputs that exactl
 
 #### Using `one_call_at_a_time` to Control Tool Invocation
 
-The `one_call_at_a_time` setting prevents the agent from making multiple consecutive calls to the same tool within a single response. When enabled, the agent must perform some other action or reasoning between calls to the same tool. This is particularly useful for:
+The `one_call_at_a_time` setting ensures that the agent processes the result of each tool invocation before making another call to the same tool. This is particularly useful for:
 
-- Preventing infinite loops or repetitive tool calls
-- Ensuring the agent processes and reasons about each tool's response
-- Maintaining a more structured conversation flow
-- Reducing unnecessary API calls or resource usage
+- **Preventing Infinite Loops or Repetitive Calls:** Ensures the agent doesn't get stuck making the same tool call repeatedly without processing results.
+- **Ensuring Sequential Processing:** Guarantees that each tool call is handled individually, allowing for accurate reasoning and response generation.
+- **Maintaining Structured Workflow:** Promotes a clear and organized sequence of actions within the agent's operations.
+- **Reducing Resource Usage:** Minimizes unnecessary API calls or computational overhead by avoiding redundant tool invocations.
 
 ```python
 class DatabaseQueryTool(BaseTool):
@@ -131,7 +131,7 @@ class DatabaseQueryTool(BaseTool):
     query: str = Field(..., description="The SQL query to execute.")
 
     class ToolConfig:
-        one_call_at_a_time = True  # Forces the agent to process each query result before making another query
+        one_call_at_a_time = True  # Ensures sequential processing of tool calls
 
     def run(self):
         # Implement database query logic
