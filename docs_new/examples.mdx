@@ -11,12 +11,14 @@ icon: "code"
 Create a basic agent that responds to user input.
 
 <CodeBlock language="python">
+```python
 from agency_swarm import Agent, Agency
 
 assistant = Agent(name="Assistant", role="Provide helpful responses.")
 
 agency = Agency(agents=[assistant])
 agency.run_demo()
+```
 </CodeBlock>
 
 </Tab>
@@ -49,6 +51,7 @@ agency.run_demo()
 Create custom tools for agents to perform specific tasks.
 
 <CodeBlock language="python">
+```python
 from agency_swarm import Agent, Agency, Tool
 
 class CalculatorTool(Tool):
@@ -61,6 +64,7 @@ agent = Agent(name="MathAssistant", tools=[calculator])
 
 agency = Agency(agents=[agent])
 agency.run_demo()
+```
 </CodeBlock>
 
 </Tab>

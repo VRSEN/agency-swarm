@@ -17,9 +17,11 @@ Custom prompts and few-shot learning help your agents understand the desired res
 Adjust the `instructions.md` file associated with your agent to change how it responds.
 
 <CodeBlock title="instructions.md" language="markdown">
+```markdown
 # Agent Instructions
 
 You are a friendly assistant that helps users with booking flights and hotels.
+```
 </CodeBlock>
 
 ### Dynamic Prompts
@@ -27,6 +29,7 @@ You are a friendly assistant that helps users with booking flights and hotels.
 Programmatically alter prompts based on context or user input.
 
 <CodeBlock title="Dynamic Prompt Example" language="python">
+```python
 base_instructions = "You are an assistant who provides technical support."
 
 additional_context = "Assist the user with troubleshooting network issues."
@@ -35,6 +38,7 @@ agent = Agent(
     name="SupportAgent",
     prompt=f"{base_instructions}\n\n{additional_context}"
 )
+```
 </CodeBlock>
 
 ## Few-Shot Examples

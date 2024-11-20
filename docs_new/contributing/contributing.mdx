@@ -1,6 +1,7 @@
 ---
 title: "Contributing to Agency Swarm"
 description: "Learn how to contribute to Agency Swarm"
+icon: "code-fork"
 ---
 
 We welcome contributions to Agency Swarm! Here's how you can contribute:
@@ -9,6 +10,97 @@ We welcome contributions to Agency Swarm! Here's how you can contribute:
 By contributing to the project, you help improve the tool for everyone.
 </Info>
 
+## Setting Up Your Development Environment
+
+Follow these steps to set up your local development environment:
+
+<Steps titleSize="h3">
+
+<Step title="Clone the Repository" icon="code-branch" iconType="solid">
+Clone the repository and navigate to the project directory.
+
+<CodeBlock>
+```bash
+git clone https://github.com/VRSEN/agency-swarm.git
+cd agency-swarm
+```
+</CodeBlock>
+</Step>
+
+<Step title="Create a Virtual Environment" icon="laptop-code" iconType="solid">
+Create and activate a virtual environment.
+
+<CodeBlock>
+```bash
+python3 -m venv venv
+source venv/bin/activate  # On Windows use `venv\Scripts\activate`
+```
+</CodeBlock>
+</Step>
+
+<Step title="Install Dependencies" icon="download" iconType="solid">
+Install the required packages.
+
+<CodeBlock>
+```bash
+pip install -r requirements-dev.txt
+```
+</CodeBlock>
+</Step>
+
+<Step title="Install Pre-Commit Hooks" icon="check-circle" iconType="solid">
+Install pre-commit hooks for code quality checks.
+
+<CodeBlock>
+```bash
+pip install pre-commit
+pre-commit install
+```
+</CodeBlock>
+</Step>
+
+</Steps>
+
+## Running Tests
+
+<Note>
+Testing ensures that your contributions work as intended and do not break existing functionality.
+</Note>
+
+<Steps titleSize="h3">
+
+<Step title="Install Test Dependencies" icon="tools" iconType="solid">
+Install the test dependencies.
+
+<CodeBlock>
+```bash
+pip install -r requirements-dev.txt
+```
+</CodeBlock>
+</Step>
+
+<Step title="Run Tests" icon="play-circle" iconType="solid">
+Run the test suite using Pytest.
+
+<CodeBlock>
+```bash
+pytest
+```
+</CodeBlock>
+</Step>
+
+<Step title="Check Test Coverage" icon="chart-bar" iconType="solid">
+Check the test coverage.
+
+<CodeBlock>
+```bash
+pytest --cov=agency_swarm tests/
+```
+</CodeBlock>
+</Step>
+
+</Steps>
+
 ## Contributing Agents and Tools
 
 <Steps titleSize="h3">
@@ -16,30 +108,34 @@ By contributing to the project, you help improve the tool for everyone.
 <Step title="Agents" icon="user-secret" iconType="solid">
 Place new agents in the `agency_swarm/agents/` directory within an appropriate category.
 
-<CodeBlock language="bash">
+<CodeBlock>
+```
 agency_swarm/
 └── agents/
     └── your_agent_category/
-        └── YourAgentName/
+        └── AgentName/
             ├── __init__.py
-            ├── YourAgentName.py
+            ├── AgentName.py
             ├── instructions.md
             └── tools/
                 ├── ToolName.py
                 └── ...
+```
 </CodeBlock>
 </Step>
 
 <Step title="Tools" icon="wrench" iconType="solid">
 Add new tools to the `agency_swarm/tools/` directory under a relevant category.
 
-<CodeBlock language="bash">
+<CodeBlock>
+```
 agency_swarm/
 └── tools/
     └── your_tool_category/
         ├── __init__.py
         ├── ToolName.py
         └── ...
+```
 </CodeBlock>
 </Step>
 
@@ -54,10 +150,12 @@ Testing ensures that your contributions work as intended and do not break existi
 - **Location**: Place tests in the `agency_swarm/tests/` directory.
 
 <CodeBlock title="Example Test" language="python">
+```python
 def test_my_custom_tool():
-    tool = MyCustomTool(input_field="test")
+    tool = MyCustomTool(example_field="test value")
     result = tool.run()
     assert "expected_output" in result
+```
 </CodeBlock>
 
 ## Submitting Changes
@@ -72,7 +170,9 @@ Create a fork of the Agency Swarm repository on GitHub.
 Work on a feature branch for your changes.
 
 <CodeBlock language="bash">
+```bash
 git checkout -b feature/your-feature-name
+```
 </CodeBlock>
 </Accordion>
 

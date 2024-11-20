@@ -17,26 +17,32 @@ Set up Agency Swarm in a few simple steps.
 <Step title="1. Install via pip" icon="download" iconType="solid">
 
 <CodeBlock language="bash">
+```bash
 pip install agency-swarm
+```
 </CodeBlock>
 </Step>
 
 <Step title="2. Verify the Installation" icon="check-circle" iconType="solid">
 
 <CodeBlock language="bash">
+```bash
 python -c "import agency_swarm; print('Agency Swarm is installed successfully.')"
+```
 </CodeBlock>
 </Step>
 
 <Step title="3. Run a Demo" icon="play" iconType="solid">
 
 <CodeBlock language="python">
+```python
 from agency_swarm import Agent, Agency
 
 agent = Agent(name="Assistant", role="Provide helpful responses.")
 
 agency = Agency(agents=[agent])
 agency.run_demo()
+```
 </CodeBlock>
 </Step>
 
