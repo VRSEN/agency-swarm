@@ -12,7 +12,7 @@ Asynchronous execution allows agents and tools to operate concurrently, improvin
 
 To enable asynchronous execution for agents, set the `async_mode` parameter to `"threading"` when initializing the agency.
 
-<CodeBlock title="Initialize Agency with Asynchronous Agents" language="python">
+<CodeBlock title="Initialize Agency with Asynchronous Agents">
 ```python
 agency = Agency(agents=[ceo], async_mode='threading')
 ```
@@ -27,7 +27,7 @@ agency = Agency(agents=[ceo], async_mode='threading')
 
 To enable asynchronous execution for tools, set the `async_mode` parameter to `"tools_threading"`.
 
-<CodeBlock title="Initialize Agency with Asynchronous Tools" language="python">
+<CodeBlock title="Initialize Agency with Asynchronous Tools">
 ```python
 agency = Agency(agents=[ceo], async_mode='tools_threading')
 ```
@@ -47,4 +47,3 @@ When using asynchronous execution, be mindful of concurrency issues.
 - **Concurrency Control**: Ensure thread-safe operations to prevent race conditions. Use thread locks or other synchronization mechanisms if necessary.
 
 - **Resource Management**: Monitor system resources to avoid overconsumption due to multiple threads. Keep an eye on CPU and memory usage.
-  

@@ -16,7 +16,7 @@ Custom prompts and few-shot learning help your agents understand the desired res
 
 Adjust the `instructions.md` file associated with your agent to change how it responds.
 
-<CodeBlock title="instructions.md" language="markdown">
+<CodeBlock title="instructions.md">
 ```markdown
 # Agent Instructions
 
@@ -28,7 +28,7 @@ You are a friendly assistant that helps users with booking flights and hotels.
 
 Programmatically alter prompts based on context or user input.
 
-<CodeBlock title="Dynamic Prompt Example" language="python">
+<CodeBlock title="Dynamic Prompt Example">
 ```python
 base_instructions = "You are an assistant who provides technical support."
 
@@ -47,7 +47,7 @@ Few-shot examples provide sample interactions to guide agent responses.
 
 ### Implementation
 
-<CodeBlock title="Providing Few-Shot Examples" language="python">
+<CodeBlock title="Providing Few-Shot Examples">
 ```python
 examples = [
     {"role": "user", "content": "Hi!"},

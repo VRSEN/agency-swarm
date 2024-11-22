@@ -31,7 +31,7 @@ Fully local and stable, supports Assistants API V1.
 <Step title="Install Required Packages" icon="download" iconType="solid">
 Use pip to install necessary packages.
 
-<CodeBlock language="bash">
+<CodeBlock>
 ```bash
 pip install astra-assistants-api gradio
 ```
@@ -41,7 +41,7 @@ pip install astra-assistants-api gradio
 <Step title="Set Up API Clients" icon="cogs" iconType="solid">
 Configure your API clients to use the open-source models.
 
-<CodeBlock language="python">
+<CodeBlock>
 ```python
 from openai import OpenAI
 from astra_assistants import patch
@@ -55,7 +55,7 @@ set_openai_client(client)
 <Step title="Create Agents with Open-Source Models" icon="user-plus" iconType="solid">
 Instantiate your agents using the open-source models.
 
-<CodeBlock language="python">
+<CodeBlock>
 ```python
 ceo = Agent(name="CEO", model='ollama/llama3')
 ```
@@ -65,7 +65,7 @@ ceo = Agent(name="CEO", model='ollama/llama3')
 <Step title="Run the Agency" icon="play" iconType="solid">
 Start your agency with the configured agents.
 
-<CodeBlock language="python">
+<CodeBlock>
 ```python
 agency = Agency([ceo])
 agency.run_demo()

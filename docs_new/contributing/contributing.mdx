@@ -127,7 +127,7 @@ Thorough testing ensures that your contributions are reliable and integrate seam
 
 - **Location**: Place tests in the `agency_swarm/tests/` directory, specifically within `test_tools.py` or relevant test files based on the component.
 
-<CodeBlock title="Example Test" language="python">
+<CodeBlock title="Example Test">
 ```python
 def test_my_custom_tool():
     tool = MyCustomTool(example_field="test value")
@@ -151,7 +151,7 @@ Create a fork of the Agency Swarm repository on GitHub.
 <Accordion title="2. Create a Branch" icon="code" iconType="solid">
 Work on a feature branch for your changes.
 
-<CodeBlock language="bash">
+<CodeBlock>
 ```bash
 git checkout -b feature/your-feature-name
 ```
@@ -161,7 +161,7 @@ git checkout -b feature/your-feature-name
 <Accordion title="3. Commit Your Changes" icon="git-commit" iconType="solid">
 Commit your changes with clear and descriptive messages.
 
-<CodeBlock language="bash">
+<CodeBlock>
 ```bash
 git add .
 git commit -m "Add [feature]: Description of the feature"
@@ -172,7 +172,7 @@ git commit -m "Add [feature]: Description of the feature"
 <Accordion title="4. Push to Your Fork" icon="git-push" iconType="solid">
 Push your changes to your forked repository.
 
-<CodeBlock language="bash">
+<CodeBlock>
 ```bash
 git push origin feature/your-feature-name
 ```
@@ -182,7 +182,8 @@ git push origin feature/your-feature-name
 <Accordion title="5. Submit a Pull Request" icon="paper-plane" iconType="solid">
 Describe your changes and submit a pull request for review.
 
-<CodeBlock language="markdown">
+<CodeBlock>
+```markdown
 - Provide a clear title and description for your pull request.
 - Reference any related issues.
 - Ensure all tests pass and coverage remains adequate.
