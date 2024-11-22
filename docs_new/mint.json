@@ -105,12 +105,6 @@
       ]
     },
     {
-      "group": "Examples",
-      "pages": [
-        "examples"
-      ]
-    },
-    {
       "group": "API Reference",
       "pages": [
         "api-reference/api-reference"

@@ -4,10 +4,10 @@ description: "Learn how to contribute to Agency Swarm"
 icon: "code-fork"
 ---
 
-We welcome contributions to Agency Swarm! Here's how you can contribute:
+We welcome contributions to Agency Swarm! By contributing, you help improve the framework for everyone. Here's how you can get involved:
 
 <Info>
-By contributing to the project, you help improve the tool for everyone.
+Your contributions enable the development of a more robust and versatile Agency Swarm, benefiting all users.
 </Info>
 
 ## Setting Up Your Development Environment
@@ -70,7 +70,7 @@ Testing ensures that your contributions work as intended and do not break existi
 <Steps titleSize="h3">
 
 <Step title="Install Test Dependencies" icon="tools" iconType="solid">
-Install the test dependencies.
+Ensure all test dependencies are installed.
 
 <CodeBlock>
 ```bash
@@ -90,7 +90,7 @@ pytest
 </Step>
 
 <Step title="Check Test Coverage" icon="chart-bar" iconType="solid">
-Check the test coverage.
+Check the test coverage to ensure comprehensive testing.
 
 <CodeBlock>
 ```bash
@@ -103,51 +103,29 @@ pytest --cov=agency_swarm tests/
 
 ## Contributing Agents and Tools
 
+When contributing new agents or tools, adhere to the following guidelines to maintain consistency within the framework:
+
 <Steps titleSize="h3">
 
 <Step title="Agents" icon="user-secret" iconType="solid">
-Place new agents in the `agency_swarm/agents/` directory within an appropriate category.
-
-<CodeBlock>
-```
-agency_swarm/
-└── agents/
-    └── your_agent_category/
-        └── AgentName/
-            ├── __init__.py
-            ├── AgentName.py
-            ├── instructions.md
-            └── tools/
-                ├── ToolName.py
-                └── ...
-```
-</CodeBlock>
+Place new agents in the appropriate category directory. For detailed folder structures, refer to the [Directory Structure Guide](directory-structure/directory-structure.mdx).
 </Step>
 
 <Step title="Tools" icon="wrench" iconType="solid">
-Add new tools to the `agency_swarm/tools/` directory under a relevant category.
-
-<CodeBlock>
-```
-agency_swarm/
-└── tools/
-    └── your_tool_category/
-        ├── __init__.py
-        ├── ToolName.py
-        └── ...
-```
-</CodeBlock>
+Add new tools to the relevant category directory. For detailed folder structures, refer to the [Directory Structure Guide](directory-structure/directory-structure.mdx).
 </Step>
 
 </Steps>
 
+Ensure that each tool includes appropriate tests as outlined in the **Adding Tests** section.
+
 ## Adding Tests
 
 <Note>
-Testing ensures that your contributions work as intended and do not break existing functionality.
+Thorough testing ensures that your contributions are reliable and integrate seamlessly with the existing framework.
 </Note>
 
-- **Location**: Place tests in the `agency_swarm/tests/` directory.
+- **Location**: Place tests in the `agency_swarm/tests/` directory, specifically within `test_tools.py` or relevant test files based on the component.
 
 <CodeBlock title="Example Test" language="python">
 ```python
@@ -158,7 +136,11 @@ def test_my_custom_tool():
 ```
 </CodeBlock>
 
+Refer to existing tests for examples and adhere to the testing conventions used throughout the project.
+
 ## Submitting Changes
+
+Follow these steps to submit your contributions:
 
 <AccordionGroup>
 
@@ -176,8 +158,36 @@ git checkout -b feature/your-feature-name
 </CodeBlock>
 </Accordion>
 
-<Accordion title="3. Submit a Pull Request" icon="paper-plane" iconType="solid">
+<Accordion title="3. Commit Your Changes" icon="git-commit" iconType="solid">
+Commit your changes with clear and descriptive messages.
+
+<CodeBlock language="bash">
+```bash
+git add .
+git commit -m "Add [feature]: Description of the feature"
+```
+</CodeBlock>
+</Accordion>
+
+<Accordion title="4. Push to Your Fork" icon="git-push" iconType="solid">
+Push your changes to your forked repository.
+
+<CodeBlock language="bash">
+```bash
+git push origin feature/your-feature-name
+```
+</CodeBlock>
+</Accordion>
+
+<Accordion title="5. Submit a Pull Request" icon="paper-plane" iconType="solid">
 Describe your changes and submit a pull request for review.
+
+<CodeBlock language="markdown">
+- Provide a clear title and description for your pull request.
+- Reference any related issues.
+- Ensure all tests pass and coverage remains adequate.
+```
+</CodeBlock>
 </Accordion>
 
 </AccordionGroup>
@@ -191,5 +201,9 @@ Describe your changes and submit a pull request for review.
 - **Documentation**: Update or add documentation for your contributions to help others understand your work.
 
 - **Testing**: Ensure all new and existing tests pass before submitting your pull request.
+
+- **Commit Messages**: Write clear and descriptive commit messages.
+
+- **Branching**: Use meaningful branch names that reflect the purpose of the changes.
 
 </Check>
