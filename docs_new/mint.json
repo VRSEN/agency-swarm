@@ -33,7 +33,7 @@
     "url": "https://github.com/VRSEN/agency-swarm"
   },
   "primaryTab": {
-    "name": "Get Started"
+    "name": "Docs"
   },
   "tabs": [
     {
@@ -59,20 +59,25 @@
   ],
   "navigation": [
     {
-      "group": "Get Started",
+      "group": "Welcome",
       "pages": [
-        "introduction/overview",
-        "introduction/key-features",
-        "introduction/design-principles",
-        "getting-started/installation",
-        "getting-started/quickstart",
-        "getting-started/using-cursor"
+        "welcome/overview",
+        "welcome/ai-agency-vs-other-frameworks",
+        "welcome/state-management"
       ]
     },
     {
-      "group": "Core Concepts",
+      "group": "Quick Start",
       "pages": [
-        "framework-overview/design-and-architecture",
+        "quickstart/quickstart",
+        "quickstart/from-scratch",
+        "quickstart/genesis-agency",
+        "quickstart/cursor-ai"
+      ]
+    },
+    {
+      "group": "Core Entities",
+      "pages": [
         "framework-overview/communication-flows",
         "framework-overview/state-management",
         "framework-overview/output-validation-and-reliability",

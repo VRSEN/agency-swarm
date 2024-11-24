@@ -1,0 +1,43 @@
+---
+title: "Genesis Agency"
+description: "Quick start guide using the Genesis Agency."
+icon: "magic"
+---
+
+## Use Genesis Agency
+
+<Steps>
+  <Step title="Run the `genesis` command">
+    This command initializes the Genesis Agency in your terminal and generates your agent templates.
+
+    #### **Command Syntax:**
+
+    ```bash
+    agency-swarm genesis [--openai_key "YOUR_API_KEY"]
+    ```
+  </Step>
+
+  <Step title="Chat with Genesis CEO">
+    Provide comprehensive context to the Genesis Agency by including:
+    - **Your mission and goals.**
+    - **The agents you wish to involve and their communication flows.**
+    - **Tools or APIs each agent should have access to, if any.**
+  </Step>
+
+  <Step title="Fine Tune">
+    Once Genesis has created your agents, you'll find all the agent folders in the directory where you ran the `genesis` command. Fine-tune the agents and tools as needed by following these steps:
+
+    1. **Adjust Tools**: Modify the tools in each agent's `tools` directory to meet your requirements.
+    2. **Adjust Instructions**: Update the agents in each `agents` directory according to your needs.
+    3. **Run Agency**: Execute the `agency.py` file, dispatch your tasks, and monitor their performance.
+    4. **Repeat**: Continue refining until your agents perform optimally.
+
+    !!! note "Agent Development is an Iterative Process"
+        Currently, agent development requires ongoing monitoring and adjustments to ensure desired performance. As larger and more advanced models become available, this process will become more streamlined.
+  </Step>
+</Steps>
+
+## Next Steps
+
+- Learn how to create more Tools, Agents, and Agencies
+- Deploy in Production

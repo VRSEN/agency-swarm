@@ -11,7 +11,7 @@ Tools are crucial for extending the functionality of agents. They allow agents t
 1. **Import Necessary Modules**:
    ```python
    from agency_swarm.tools import BaseTool
-   from pydantic import Field
+   from pydantic import Field, field_validator
    ```
 
 2. **Define the Tool Class**:
@@ -32,7 +32,8 @@ Tools are crucial for extending the functionality of agents. They allow agents t
    Use Pydantic validators for input validation.
 
    ```python
-   @validator('input_field')
+   @field_validator('input_field', mode='after')
+   @classmethod
    def check_input(cls, v):
        if not v:
            raise ValueError('Input cannot be empty')

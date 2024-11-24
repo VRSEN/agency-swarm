@@ -1,0 +1,61 @@
+---
+title: "AI Agency vs Other Frameworks"
+description: "Compare Agency Swarm with other multi-agent AI frameworks."
+---
+
+# AI Agency vs Other Frameworks
+
+This section compares **Agency Swarm** with other multi-agent AI frameworks like **AutoGen** and **CrewAI**. The comparison highlights key features and differences to help you understand how Agency Swarm stands out.
+
+## Key Differentiators
+
+Unlike other frameworks, Agency Swarm takes a unique approach with three key differentiators:
+
+<CardGroup cols={3}>
+  <Card title="No Predefined Prompts" icon="message-code">
+    Agency Swarm does not write prompts for you, giving you full control over agent behavior
+  </Card>
+  <Card title="Type Safety" icon="shield-check">
+    Prevents hallucinations with automatic type checking and error correction
+  </Card>
+  <Card title="Communication Control" icon="diagram-project">
+    Enables easy definition of communication flows between agents
+  </Card>
+</CardGroup>
+
+## Detailed Comparison Table
+
+| **Criteria**                     | **Agency Swarm**                                                                                                                                              | **AutoGen**                                                                                                                 | **CrewAI**                                                                                                                                     |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Design & Architecture**        | - Modular, production-focused<br/>- Hierarchical agent structure via agency chart<br/>- Built for real business needs                                        | - Event-driven, scalable<br/>- Asynchronous message passing<br/>- Supports distributed computing                            | - Flexible agent organization into crews<br/>- Agents with rich attributes<br/>- Emphasis on collaboration                                     |
+| **Key Entities**                 | - Agents<br/>- Tools<br/>- Agencies                                                                                                                           | - ConversableAgent<br/>- AssistantAgent<br/>- UserProxyAgent                                                                | - Agents<br/>- Tasks<br/>- Crews                                                                                                               |
+| **Prompt Flexibility**           | - Full control over prompts<br/>- No predefined prompts<br/>- Does not write prompts for you                                                                  | - Flexible prompt engineering<br/>- Supports few-shot learning                                                              | - Extensive prompt customization<br/>- Supports multiple languages                                                                             |
+| **Type Safety**                  | - Input validation with Pydantic<br/>- Custom response validators<br/>- Prevents hallucinations with automatic type checking and error correction | - Robust error handling<br/>- Code execution validation<br/>- Self-correction by agents                                      | - No built-in type checking or error correction<br/>- Built on Langchain (pre-function-calling models)                                         |
+| **Communication Control**        | - Enables easy definition of communication flows<br/>- Agents determine communication based on their descriptions<br/>- Uses specialized `SendMessage` tool   | - Uses extra model call for "role play" to determine next speaker<br/>- Recently added support for hardcoded conditions     | - Uses "process" concept for communication flow<br/>- Delegation control via agent attributes                                                  |
+| **Integration with Modern Models** | - Built for modern function-calling models<br/>- Direct integration with OpenAI Assistants API                                                              | - Supports various interaction patterns<br/>- Event-driven architecture facilitates this                                    | - Built on Langchain (pre-function-calling models)                                                                                             |
+| **State Management**             | - Shared state among agents and tools<br/>- Conversation context via OpenAI API                                                                               | - Conversation history maintenance<br/>- Dynamic context truncation                                                         | - Three-tier memory system<br/>- Context sharing among agents and tasks                                                                        |
+| **Production Readiness**         | - Designed for production environments<br/>- Business-oriented design<br/>- Robust validation and error correction                                            | - Scalable and distributed<br/>- Active development towards production features                                             | - Requires additional development for production<br/>- Scalability testing needed                                                              |
+| **Task Delegation**              | - Agent autonomy in task delegation<br/>- Hierarchical delegation via agency chart                                                                            | - Automated task coordination<br/>- Function calls for delegation                                                           | - Autonomous delegation based on capabilities<br/>- Hand-off mechanisms with context preservation                                              |
+| **Streaming Support**            | - Supports streaming responses<br/>- Voice interface for real-time interaction                                                                                | - Real-time interaction with streaming<br/>- Event-driven architecture facilitates this                                     | - Streaming support for real-time outputs<br/>- Enhances interactivity and responsiveness                                                      |
+| **Evaluation & Monitoring**      | - OpenAI dashboard for cost and usage<br/>- Third-party integration in progress                                                                               | - Built-in observability features<br/>- Performance metrics and debugging tools                                             | - Custom evaluation metrics can be implemented<br/>- Logging and analytics support<br/>- Callbacks for execution monitoring                     |
+
+<Note>
+Agency Swarm's philosophy: Set boundaries for your agents, not specific conditions. This allows for better adaptability to real-world scenarios.
+</Note>
+
+## Summary
+
+- **Agency Swarm** is ideal for production environments requiring full control over agent behavior, with a focus on business needs and hierarchical structures. It provides type safety to prevent hallucinations and enables easy definition of communication flows between agents.
+- **AutoGen** emphasizes scalability and extensibility with its event-driven architecture and supports distributed computing but may be less efficient and harder to control agent interactions due to extra model calls for "role play".
+- **CrewAI** offers flexible agent organization suitable for collaborative projects but lacks built-in type checking or error correction and may require additional development for production readiness.
+
+## Getting Support
+
+<CardGroup cols={2}>
+  <Card title="Community Support" icon="discord" href="https://discord.gg/cw2xBaWfFM">
+    Join our Discord community for quick help and discussions
+  </Card>
+  <Card title="Professional Services" icon="briefcase" href="https://agents.vrsen.ai/">
+    Get professional help with our Agents-as-a-Service subscription
+  </Card>
+</CardGroup>
