@@ -43,7 +43,6 @@ Tools extend the capabilities of agents by providing them with specialized funct
 
 Tools are integrated into agents based on their roles and the tasks they need to perform. This integration is typically done during the agent's initialization.
 
-<CodeGroup>
 ```python Example Agent with Tools
 from agency_swarm import Agent
 from agency_swarm.tools import CodeInterpreter
@@ -59,7 +58,6 @@ class DeveloperAgent(Agent):
             max_prompt_tokens=2500,
         )
 ```
-</CodeGroup>
 
 In this example, the `DeveloperAgent` is equipped with the `CodeInterpreter` tool, enabling it to execute code.
 </Accordion>

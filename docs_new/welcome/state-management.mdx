@@ -33,12 +33,10 @@ Agency Swarm leverages OpenAI's Assistants API to manage conversation context th
 
 ## Shared Memory System
 
-<CodeGroup>
 ```python
 # Access shared state within tools
 self._shared_state["key"] = value
 ```
-</CodeGroup>
 
 Tools can share data through an in-memory key-value store using `self._shared_state`. This enables:
 - Data passing between different tools
@@ -115,7 +113,6 @@ The threads data structure must match the framework's expected format:
 
 <Info>
 The callbacks are executed:
-- On agency initialization
-- When new threads are created
+- On Agency initialization, when threads are created
 - When assistant settings are modified
 </Info>

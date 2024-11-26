@@ -19,44 +19,36 @@ Follow these steps to set up your local development environment:
 <Step title="Clone the Repository" icon="code-branch" iconType="solid">
 Clone the repository and navigate to the project directory.
 
-<CodeBlock>
 ```bash
 git clone https://github.com/VRSEN/agency-swarm.git
 cd agency-swarm
 ```
-</CodeBlock>
 </Step>
 
 <Step title="Create a Virtual Environment" icon="laptop-code" iconType="solid">
 Create and activate a virtual environment.
 
-<CodeBlock>
 ```bash
 python3 -m venv venv
 source venv/bin/activate  # On Windows use `venv\Scripts\activate`
 ```
-</CodeBlock>
 </Step>
 
 <Step title="Install Dependencies" icon="download" iconType="solid">
 Install the required packages.
 
-<CodeBlock>
 ```bash
 pip install -r requirements-dev.txt
 ```
-</CodeBlock>
 </Step>
 
 <Step title="Install Pre-Commit Hooks" icon="check-circle" iconType="solid">
 Install pre-commit hooks for code quality checks.
 
-<CodeBlock>
 ```bash
 pip install pre-commit
 pre-commit install
 ```
-</CodeBlock>
 </Step>
 
 </Steps>
@@ -72,31 +64,25 @@ Testing ensures that your contributions work as intended and do not break existi
 <Step title="Install Test Dependencies" icon="tools" iconType="solid">
 Ensure all test dependencies are installed.
 
-<CodeBlock>
 ```bash
 pip install -r requirements-dev.txt
 ```
-</CodeBlock>
 </Step>
 
 <Step title="Run Tests" icon="play-circle" iconType="solid">
 Run the test suite using Pytest.
 
-<CodeBlock>
 ```bash
 pytest
 ```
-</CodeBlock>
 </Step>
 
 <Step title="Check Test Coverage" icon="chart-bar" iconType="solid">
 Check the test coverage to ensure comprehensive testing.
 
-<CodeBlock>
 ```bash
 pytest --cov=agency_swarm tests/
 ```
-</CodeBlock>
 </Step>
 
 </Steps>
@@ -151,44 +137,36 @@ Create a fork of the Agency Swarm repository on GitHub.
 <Accordion title="2. Create a Branch" icon="code" iconType="solid">
 Work on a feature branch for your changes.
 
-<CodeBlock>
 ```bash
 git checkout -b feature/your-feature-name
 ```
-</CodeBlock>
 </Accordion>
 
 <Accordion title="3. Commit Your Changes" icon="git-commit" iconType="solid">
 Commit your changes with clear and descriptive messages.
 
-<CodeBlock>
 ```bash
 git add .
 git commit -m "Add [feature]: Description of the feature"
 ```
-</CodeBlock>
 </Accordion>
 
 <Accordion title="4. Push to Your Fork" icon="git-push" iconType="solid">
 Push your changes to your forked repository.
 
-<CodeBlock>
 ```bash
 git push origin feature/your-feature-name
 ```
-</CodeBlock>
 </Accordion>
 
 <Accordion title="5. Submit a Pull Request" icon="paper-plane" iconType="solid">
 Describe your changes and submit a pull request for review.
 
-<CodeBlock>
 ```markdown
 - Provide a clear title and description for your pull request.
 - Reference any related issues.
 - Ensure all tests pass and coverage remains adequate.
 ```
-</CodeBlock>
 </Accordion>
 
 </AccordionGroup>

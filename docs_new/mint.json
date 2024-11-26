@@ -78,13 +78,9 @@
     {
       "group": "Core Entities",
       "pages": [
-        "framework-overview/communication-flows",
-        "framework-overview/state-management",
-        "framework-overview/output-validation-and-reliability",
-        "framework-overview/streaming-support",
-        "key-entities/agents",
-        "key-entities/tools",
-        "directory-structure/directory-structure"
+        "core-entities/agencies",
+        "core-entities/agents",
+        "core-entities/tools"
       ]
     },
     {
@@ -100,19 +96,19 @@
       ]
     },
     {
-      "group": "Advanced Topics",
+      "group": "Advanced Features",
       "pages": [
-        "advanced-topics/advanced-communication-flows",
-        "advanced-topics/asynchronous-execution",
-        "advanced-topics/customizing-prompts-and-few-shot-learning",
-        "advanced-topics/open-source-models-support",
-        "advanced-topics/production-readiness"
+        "advanced-features/streaming",
+        "advanced-features/asynchronous-execution",
+        "advanced-features/customizing-prompts-and-few-shot-learning",
+        "advanced-features/open-source-models",
+        "advanced-features/production-readiness"
       ]
     },
     {
       "group": "API Reference",
       "pages": [
-        "api-reference/api-reference"
+        "api"
       ]
     },
     {
@@ -124,7 +120,7 @@
     {
       "group": "FAQ",
       "pages": [
-        "faq/faq"
+        "faq"
       ]
     },
     {

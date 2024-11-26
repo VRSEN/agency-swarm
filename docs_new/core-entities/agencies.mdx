@@ -1,0 +1,151 @@
+---
+title: "Agencies"
+description: "Understanding agencies in Agency Swarm."
+---
+
+An **Agency** is a collection of agents that can communicate with one another.
+
+## Benefits of Using an Agency
+
+Using an Agency instead of individual agents offers several advantages:
+
+<Card title="Key Benefits">
+1. **Fewer Hallucinations**: Agents within an agency can supervise each other, reducing mistakes and handling unexpected scenarios more effectively.
+2. **More Complex Tasks**: Adding more agents allows for longer sequences of actions, enabling the completion of more intricate tasks before delivering results to the user.
+3. **Scalability**: Agencies can grow in complexity by adding more agents, accommodating increasing integration demands.
+</Card>
+
+<Tip>
+Start with a minimal number of agents. Fine-tune them to ensure they function correctly before adding more. Introducing too many agents initially can make debugging and understanding interactions challenging.
+</Tip>
+
+## Communication Flows
+
+In Agency Swarm, communication flows are **user-defined** and highly **flexible**, set up in the `agency_chart` as a directed graph where permissions to initiate communication flow from left to right. Agents listed at the top level of `agency_chart` can interact directly with the user.
+
+For example:
+
+```python
+from agency_swarm import Agency
+agency = Agency([
+    ceo, dev,   # Agents that can interact directly with the user
+    [ceo, dev], # CEO can initiate communication with Developer
+    [ceo, va],  # CEO can initiate communication with Virtual Assistant
+    [dev, va]   # Developer can initiate communication with Virtual Assistant
+])
+```
+
+In this configuration:
+
+- The **CEO** can initiate conversations with the **Developer** and **Virtual Assistant**.
+- The **Developer** can communicate with the **Virtual Assistant**, but cannot initiate communication with the **CEO**.
+
+## Async Mode
+
+Agency Swarm supports asynchronous execution in two modes: `'threading'` and `'tools_threading'`.
+
+### Agents - Threading
+
+Enable asynchronous communication between agents by setting `async_mode` to `'threading'`. This allows agents to execute tasks in the background without waiting for a response.
+
+```python
+agency = Agency([ceo], async_mode='threading')
+```
+
+With this mode, responses from the `SendMessage` tool are returned instantly as system notifications with status updates. The recipient agent will then continue the task in the background. The caller agent can check the task status (if the task is in progress) or the response (if the task is complete) using the `GetResponse` tool.
+
+### Tools - Threading
+
+Enable concurrent execution of tools by setting `async_mode` to `'tools_threading'`. This is beneficial for I/O-bound tasks, as it allows tools to run in separate threads, speeding up the workflow.
+
+```python
+agency = Agency([ceo], async_mode='tools_threading')
+```
+
+### Shared Files
+
+Share common resources among all agents by specifying a `shared_files` folder path.
+
+```python
+agency = Agency([ceo], shared_files='shared_files')
+```
+
+### Settings Path
+
+Use the `settings_path` parameter to specify a custom settings file. This file replaces the default `settings.json` and stores all agent settings, including Assistant IDs for OpenAI and the tools in use. If the specified file does not exist, it will be created automatically.
+
+```python
+agency = Agency([ceo], settings_path='my_settings.json')
+```
+
+### Temperature and Max Token Controls
+
+You can control the behavior of all agents in your agency by setting default parameters:
+
+- `temperature`: Controls the randomness of responses (0.0-1.0, default 0.3)
+- `top_p`: Controls diversity via nucleus sampling (0.0-1.0, default 1.0)
+- `max_prompt_tokens`: Limits the size of input prompts
+- `max_completion_tokens`: Limits the size of agent responses
+- `truncation_strategy`: Configures how to handle token limits
+
+These agency-level defaults can be overridden by individual agent settings when needed.
+
+```python
+agency = Agency([ceo], temperature=0.3, max_prompt_tokens=25000)
+```
+
+## Running the Agency
+
+Choose from three options to run your agency:
+
+1. **Gradio Interface**: The easiest way to get started.
+2. **Backend Integration**: Use for custom or backend setups.
+3. **Terminal**: Ideal for quick debugging and testing.
+
+### Running Inside a Gradio Interface
+
+```python
+agency.demo_gradio(height=700)
+```
+
+### Getting Completion from the Agency
+
+```python
+response = agency.get_completion(
+    "I want you to build me a website",
+    additional_instructions="This is an additional instruction for the task.",
+    tool_choice={"type": "function", "function": {"name": "SendMessage"}},
+    attachments=[],
+    recipient_agent=dev,
+)
+print(response)
+```
+
+**Parameters (optional)**:
+
+- `additional_instructions`: Additional directives for the task.
+- `tool_choice`: Specify tools like functions to use.
+- `attachments`: Attachments to include with the message.
+- `recipient_agent`: Target a specific agent or leave as `None`.
+
+### Running from the Terminal
+
+```bash
+agency.run_demo()
+```
+
+To interact with top-level agents via the terminal, use the **mentions feature**:
+
+```bash
+@Developer I want you to build me a website
+```
+
+This sends the message directly to the Developer agent. Use the `Tab` key to autocomplete agent names after the `@` symbol.
+
+## Deleting the Agency
+
+Remove the agency and all its agents, along with associated files and vector stores, using the `delete` method.
+
+```python
+agency.delete()
+```
