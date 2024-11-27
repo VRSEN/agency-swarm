@@ -67,42 +67,41 @@
       ]
     },
     {
-      "group": "Quick Start",
+      "group": "Getting Started",
       "pages": [
-        "quickstart/quickstart",
-        "quickstart/from-scratch",
-        "quickstart/genesis-agency",
-        "quickstart/cursor-ai"
+        "getting-started/quickstart",
+        "getting-started/from-scratch",
+        "getting-started/genesis-agency",
+        "getting-started/cursor-ai"
       ]
     },
     {
       "group": "Core Entities",
       "pages": [
-        "core-entities/agencies",
+        "core-entities/tools",
         "core-entities/agents",
-        "core-entities/tools"
-      ]
-    },
-    {
-      "group": "How-To Guides",
-      "pages": [
-        "how-to-guides/creating-tools",
-        "how-to-guides/creating-agents",
-        "how-to-guides/defining-agent-instructions",
-        "how-to-guides/managing-communication-flows",
-        "how-to-guides/using-code-interpreter-and-filesearch",
-        "how-to-guides/creating-agencies",
-        "how-to-guides/deployment"
+        "core-entities/agencies"
       ]
     },
     {
       "group": "Advanced Features",
       "pages": [
-        "advanced-features/streaming",
         "advanced-features/asynchronous-execution",
-        "advanced-features/customizing-prompts-and-few-shot-learning",
+        "advanced-features/shared-state",
+        "advanced-features/openapi-schemas",
+        "advanced-features/few-shot-examples",
+        "advanced-features/response-validators",
+        "advanced-features/streaming",
+        "advanced-features/observability",
         "advanced-features/open-source-models",
-        "advanced-features/production-readiness"
+        {
+          "group": "Custom Communication Flows",
+          "pages": [
+            "advanced-features/custom-communication-flows/overview",
+            "advanced-features/custom-communication-flows/common-use-cases"
+          ]
+        },
+        "advanced-features/deployment-to-production"
       ]
     },
     {

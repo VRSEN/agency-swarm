@@ -1,0 +1,195 @@
+---
+title: "Agents"
+description: "Understanding Agents in Agency Swarm."
+icon: "robot"
+---
+
+Agents are the core building blocks of the Agency Swarm framework. Each agent is a specialized entity designed to play a specific role and perform a specific set of tasks.
+
+Agents essentially act as wrappers for [OpenAI Assistants](https://platform.openai.com/docs/assistants/deep-dive#creating-assistants). The `Agent` class includes many convenience methods to help you manage the state of your assistant, upload files, attach tools, and more.
+
+## Characteristics of Agents
+
+- **Role-Based**: Agents operate based on predefined roles that guide their interactions and decision-making processes.
+- **Custom Instructions**: Each agent can be configured with unique instructions, enabling specialized behavior.
+- **Tools and Functions**: Agents can be equipped with various tools to enhance their capabilities.
+
+## Advanced Parameters
+
+While the parameters inside the `Agent` class primarily follow the same structure as OpenAI's Assistants API, there are several additional parameters you can use to customize your agent.
+
+### Parallel Tool Calls
+
+Control whether to run tools in parallel or sequentially by setting the `parallel_tool_calls` parameter. By default, this parameter is set to `True`.
+
+```python
+from agency_swarm import Agent
+
+agent = Agent(name='MyAgent', parallel_tool_calls=False)
+```
+
+With `parallel_tool_calls=False`, the agent will run all tools sequentially.
+
+### File Search Configuration
+
+Specify the file search configuration as described in the [OpenAI documentation](https://platform.openai.com/docs/api-reference/assistants/createAssistant#assistants-createassistant-tools).
+
+```python
+from agency_swarm import Agent
+
+agent = Agent(
+    name='MyAgent',
+    file_search={'max_num_results': 25},
+    tool_resources={'file_search': {'vector_store_ids': ["your-vector-store-id"]}}
+)  # max_num_results must be between 1 and 50
+```
+
+### Schemas Folder
+
+Define the folder where the agent will look for OpenAPI schemas to convert into tools. You can also add `api_params` and `api_headers` to pass additional parameters and headers to the API call.
+
+```python
+from agency_swarm import Agent
+
+agent = Agent(
+    name='MyAgent',
+    schemas_folder='schemas',
+    api_params={'my_schema.json': {'param1': 'value1'}},
+    api_headers={'my_schema.json': {'Authorization': 'Bearer token'}}
+)
+```
+
+<Note type="info">
+The `schemas_folder` automatically converts any OpenAPI schemas into `BaseTool`s. This ensures that your agents type-check all API parameters **before** calling the API, significantly reducing the chances of errors.
+</Note>
+
+### Fine-Tuned Models
+
+Use any previously fine-tuned model by specifying the `model` parameter in the agent.
+
+```python
+from agency_swarm import Agent
+
+agent = Agent(name='MyAgent', model='gpt-4o-mini-model-name')
+```
+
+### Response Validator
+
+Provide a response validator function to validate the response before sending it to the user or another agent. This function should raise an error if the response is invalid.
+
+```python
+from agency_swarm import Agent
+
+class MyAgent(Agent):
+    def response_validator(self, message: str) -> str:
+        """Validate the response before sending it."""
+        if "bad word" in message:
+            raise ValueError("Please avoid using inappropriate language.")
+        return message
+```
+
+
+## Creating Agents
+
+When creating an agent, you need to:
+
+- **Define Agent Classes**: Extend the base `Agent` class and customize parameters.
+- **Set Instructions**: Provide detailed instructions to guide agent behavior.
+- **Assign Tools**: Equip agents with tools relevant to their roles.
+
+There are two ways to create an agent:
+- Define an agent directly in code
+- Create an agent template using the CLI
+
+### Defining an Agent Directly in Code
+
+Instantiate the `Agent` class directly in your code and pass the required parameters.
+
+```python
+from agency_swarm import Agent
+
+agent = Agent(
+    name="MyAgent",
+    description="This is a description of my agent.",
+    instructions="These are the instructions for my agent.",
+    tools=[ToolClass1, ToolClass2],
+    temperature=0.3,
+    max_prompt_tokens=25000
+)
+```
+
+### Creating an Agent Template Using the CLI
+
+Simplify the process of creating a structured environment for each agent using the CLI command.
+
+#### Command Syntax
+
+```bash
+agency-swarm create-agent-template --name "AgentName" --description "Agent Description" [--path "/path/to/directory"] [--use_txt]
+```
+
+#### Folder Structure
+
+Running the `create-agent-template` command generates the following folder structure for your agent:
+
+```
+/your-specified-path/
+├── agency_manifesto.md or .txt  # Agency's guiding principles (created if not exists)
+└── AgentName/                   # Directory for the specific agent
+    ├── files/                   # Files to be uploaded to OpenAI
+    ├── schemas/                 # OpenAPI schemas to be converted into tools
+    ├── tools/                   # Tools to be imported by default
+    ├── AgentName.py             # Main agent class file
+    ├── __init__.py              # Initializes the agent folder as a Python package
+    └── instructions.md or .txt  # Instruction document for the agent
+```
+
+- **files**: Store files to be uploaded to OpenAI. Acceptable formats are listed in [File Search](https://platform.openai.com/docs/assistants/tools/file-search#supported-files) and [Code Interpreter](https://platform.openai.com/docs/assistants/tools/code-interpreter#supported-files). Uploaded files receive an ID to prevent re-uploading.
+- **schemas**: Store OpenAPI schemas to be automatically converted into tools. Place the schema in this folder and specify it when initializing your agent.
+- **tools**: Store tools as Python files. Each file must have the same name as the tool class (e.g., `ExampleTool.py` must contain a class called `ExampleTool`).
+
+#### Agent Template
+
+The `AgentName.py` file contains:
+
+```python
+from agency_swarm import Agent
+
+class AgentName(Agent):
+    def __init__(self):
+        super().__init__(
+            name="agent_name",
+            description="agent_description",
+            instructions="./instructions.md",
+            files_folder="./files",
+            schemas_folder="./schemas",
+            tools_folder="./tools",
+            temperature=0.3,
+            max_prompt_tokens=25000,
+            examples=[]
+        )
+
+    def response_validator(self, message: str) -> str:
+        """Validate the response before sending it."""
+        if "bad word" in message:
+            raise ValueError("Please avoid using inappropriate language.")
+        return message
+```
+
+To initialize the agent:
+
+```python
+from AgentName import AgentName
+
+agent = AgentName()
+```
+
+### Importing Existing Agents
+
+For complex use cases, you can import pre-made agents. Run the following CLI command:
+
+```bash
+agency-swarm import-agent --name "AgentName" --destination "/path/to/directory"
+```
+
+This copies all source files of the agent locally. You can then import the agent as shown above. To check available agents, simply run the command without any arguments.

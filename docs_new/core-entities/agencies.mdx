@@ -1,32 +1,44 @@
 ---
 title: "Agencies"
 description: "Understanding agencies in Agency Swarm."
+icon: "sitemap"
 ---
 
-An **Agency** is a collection of agents that can communicate with one another.
+An **Agency** is a collection of agents that can communicate with one another, working collaboratively to achieve complex tasks efficiently.
 
 ## Benefits of Using an Agency
 
 Using an Agency instead of individual agents offers several advantages:
 
-<Card title="Key Benefits">
-1. **Fewer Hallucinations**: Agents within an agency can supervise each other, reducing mistakes and handling unexpected scenarios more effectively.
-2. **More Complex Tasks**: Adding more agents allows for longer sequences of actions, enabling the completion of more intricate tasks before delivering results to the user.
-3. **Scalability**: Agencies can grow in complexity by adding more agents, accommodating increasing integration demands.
-</Card>
+<AccordionGroup defaultOpen={true}>
+
+<Accordion title="Fewer Hallucinations" icon="bug" iconType="solid" defaultOpen={true}>
+Agents within an agency can supervise each other, reducing mistakes and handling unexpected scenarios more effectively.
+</Accordion>
+
+<Accordion title="More Complex Tasks" icon="code" iconType="solid">
+Adding more agents allows for longer sequences of actions, enabling the completion of more intricate tasks before delivering results to the user.
+</Accordion>
+
+<Accordion title="Scalability" icon="cog" iconType="solid">
+Agencies can grow in complexity by adding more agents, accommodating increasing integration demands.
+</Accordion>
 
 <Tip>
 Start with a minimal number of agents. Fine-tune them to ensure they function correctly before adding more. Introducing too many agents initially can make debugging and understanding interactions challenging.
 </Tip>
 
+</AccordionGroup>
+
 ## Communication Flows
 
-In Agency Swarm, communication flows are **user-defined** and highly **flexible**, set up in the `agency_chart` as a directed graph where permissions to initiate communication flow from left to right. Agents listed at the top level of `agency_chart` can interact directly with the user.
+In Agency Swarm, communication flows are **user-defined** and highly **flexible**. They are set up in the `agency_chart` as a directed graph, allowing permissions to initiate communication to flow from left to right. Agents listed at the top level of `agency_chart` can interact directly with the user.
 
-For example:
+### Example Configuration
 
 ```python
 from agency_swarm import Agency
+
 agency = Agency([
     ceo, dev,   # Agents that can interact directly with the user
     [ceo, dev], # CEO can initiate communication with Developer
@@ -35,14 +47,14 @@ agency = Agency([
 ])
 ```
 
-In this configuration:
+**In this configuration:**
 
 - The **CEO** can initiate conversations with the **Developer** and **Virtual Assistant**.
 - The **Developer** can communicate with the **Virtual Assistant**, but cannot initiate communication with the **CEO**.
 
 ## Async Mode
 
-Agency Swarm supports asynchronous execution in two modes: `'threading'` and `'tools_threading'`.
+Agency Swarm supports asynchronous execution in two modes: `'threading'` and `'tools_threading'`. These modes enhance the efficiency and responsiveness of agent interactions.
 
 ### Agents - Threading
 
@@ -52,11 +64,14 @@ Enable asynchronous communication between agents by setting `async_mode` to `'th
 agency = Agency([ceo], async_mode='threading')
 ```
 
-With this mode, responses from the `SendMessage` tool are returned instantly as system notifications with status updates. The recipient agent will then continue the task in the background. The caller agent can check the task status (if the task is in progress) or the response (if the task is complete) using the `GetResponse` tool.
+With this mode:
+- **Immediate Notifications**: Responses from the `SendMessage` tool are returned instantly as system notifications with status updates.
+- **Background Processing**: The recipient agent continues the task in the background.
+- **Status Checks**: The caller agent can check the task status (if the task is in progress) or retrieve the response (if the task is complete) using the `GetResponse` tool.
 
 ### Tools - Threading
 
-Enable concurrent execution of tools by setting `async_mode` to `'tools_threading'`. This is beneficial for I/O-bound tasks, as it allows tools to run in separate threads, speeding up the workflow.
+Enable concurrent execution of tools by setting `async_mode` to `'tools_threading'`. This is beneficial for I/O-bound tasks, allowing tools to run in separate threads and speeding up the workflow.
 
 ```python
 agency = Agency([ceo], async_mode='tools_threading')
@@ -72,7 +87,7 @@ agency = Agency([ceo], shared_files='shared_files')
 
 ### Settings Path
 
-Use the `settings_path` parameter to specify a custom settings file. This file replaces the default `settings.json` and stores all agent settings, including Assistant IDs for OpenAI and the tools in use. If the specified file does not exist, it will be created automatically.
+Specify a custom settings file using the `settings_path` parameter. This file replaces the default `settings.json` and stores all agent settings, including Assistant IDs for OpenAI and the tools in use. If the specified file does not exist, it will be created automatically.
 
 ```python
 agency = Agency([ceo], settings_path='my_settings.json')
@@ -80,7 +95,7 @@ agency = Agency([ceo], settings_path='my_settings.json')
 
 ### Temperature and Max Token Controls
 
-You can control the behavior of all agents in your agency by setting default parameters:
+Control the behavior of all agents in your agency by setting default parameters:
 
 - `temperature`: Controls the randomness of responses (0.0-1.0, default 0.3)
 - `top_p`: Controls diversity via nucleus sampling (0.0-1.0, default 1.0)
@@ -121,7 +136,7 @@ response = agency.get_completion(
 print(response)
 ```
 
-**Parameters (optional)**:
+**Parameters (optional):**
 
 - `additional_instructions`: Additional directives for the task.
 - `tool_choice`: Specify tools like functions to use.

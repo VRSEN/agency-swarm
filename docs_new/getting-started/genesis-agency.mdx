@@ -4,7 +4,7 @@ description: "Quick start guide using the Genesis Agency."
 icon: "wand-sparkles"
 ---
 
-Genesis Agency is an AI-powered agency architect that helps you design and create custom agent swarms. It was developed to automate the process of building collaborative AI agent networks. The agency consists of specialized agents that work together to:
+Genesis Agency is an AI-powered agency architect that helps you design and create custom agent swarms. It automates the process of building collaborative AI agent networks. The agency consists of specialized agents that work together to:
 
 - Design your agency's structure and communication flows
 - Generate agent templates with appropriate roles and instructions
@@ -15,9 +15,9 @@ Genesis Agency is an AI-powered agency architect that helps you design and creat
 
 <Steps>
   <Step title="Run the `genesis` command">
-    This command initializes the Genesis Agency in your terminal and generates your agent templates.
+    Initialize the Genesis Agency in your terminal and generate your agent templates.
 
-    #### **Command Syntax:**
+    **Command Syntax:**
 
     ```bash
     agency-swarm genesis [--openai_key "YOUR_API_KEY"]
@@ -26,12 +26,16 @@ Genesis Agency is an AI-powered agency architect that helps you design and creat
 
   <Step title="Chat with Genesis CEO">
     Provide comprehensive context to the Genesis Agency by including:
-    - **Your mission and goals.**
+    - **Your agency's mission and goals.**
     - **The agents you wish to involve and their communication flows.**
     - **Tools or APIs each agent should have access to, if any.**
   </Step>
 
-  <Step title="Fine Tune">
+  <Step title="Wait for Genesis to create your agents">
+    After executing the `genesis` command, specialized agents such as `GenesisCEO` and `ToolCreator` will begin constructing your agency's structure and developing the required tools.
+  </Step>
+
+  <Step title="Fine Tune Your Agents and Tools">
     Once Genesis has created your agents, you'll find all the agent folders in the directory where you ran the `genesis` command. Fine-tune the agents and tools as needed by following these steps:
 
     1. **Adjust Tools**: Modify the tools in each agent's `tools` directory to meet your requirements.
@@ -39,8 +43,11 @@ Genesis Agency is an AI-powered agency architect that helps you design and creat
     3. **Run Agency**: Execute the `agency.py` file, dispatch your tasks, and monitor their performance.
     4. **Repeat**: Continue refining until your agents perform optimally.
 
-    !!! note "Agent Development is an Iterative Process"
-        Currently, agent development requires ongoing monitoring and adjustments to ensure desired performance. As larger and more advanced models become available, this process will become more streamlined.
+    <Note>
+      **Agent Development is an Iterative Process**
+
+      Currently, agent development requires ongoing monitoring and adjustments to ensure desired performance. As larger and more advanced models become available, this process will become more streamlined.
+    </Note>
   </Step>
 </Steps>
 
