@@ -8,7 +8,7 @@ Agency Swarm implements a multi-layered approach to state management, combining 
 
 ## Assistant State Management
 
-<Card title="Local Settings Storage" icon="gear">
+<Card title="Local Settings Storage" icon="database">
   Agency Swarm maintains assistant configurations in a local `settings.json` file, preventing unnecessary recreation of assistants on application restart.
 </Card>
 
@@ -17,10 +17,10 @@ Agency Swarm implements a multi-layered approach to state management, combining 
 Agency Swarm leverages OpenAI's Assistants API to manage conversation context through **threads**. A thread represents a persistent conversation between an assistant and a user, automatically handling the storage and truncation of messages to fit within the model's context window. This approach offloads the complexity of thread state management to OpenAI, ensuring efficient and seamless context handling.
 
 <CardGroup cols={2}>
-  <Card title="Persistent Conversations" icon="conversation">
+  <Card title="Persistent Conversations" icon="messages">
     Maintains ongoing dialogues without manual history management
   </Card>
-  <Card title="Automatic Context Management" icon="automation">
+  <Card title="Automatic Context Management" icon="scissors">
     Handles message storage and truncation within token limits
   </Card>
 </CardGroup>
@@ -34,14 +34,18 @@ Agency Swarm leverages OpenAI's Assistants API to manage conversation context th
 ## Shared Memory System
 
 ```python
-# Access shared state within tools
-self._shared_state["key"] = value
+# Set shared state within a tool
+self._shared_state.set("key", value)
+# Retrieve shared state in another tool
+value = self._shared_state.get("key")
 ```
 
 Tools can share data through an in-memory key-value store using `self._shared_state`. This enables:
 - Data passing between different tools
-- Temporary storage during task execution
+- Temporary storage during agency execution
 - Cross-agent data sharing within a session
+
+See more in [Shared State](../advanced-features/shared-state).
 
 ## Persistence Between Restarts
 
