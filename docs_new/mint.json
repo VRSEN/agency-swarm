@@ -1,19 +1,20 @@
 {
   "name": "Agency Swarm",
-  "theme": "venus",
+  "theme": "prism",
+  "layout": "sidenav",
   "logo": {
-    "dark": "agency_swarm_logo.png",
-    "light": "agency_swarm_logo.png",
+    "dark": "/agencii_logo_dark.svg",
+    "light": "/agencii_logo_light.svg",
     "href": "https://github.com/VRSEN/agency-swarm"
   },
   "favicon": "favicon.svg",
   "colors": {
-    "primary": "#EB6658",
-    "light": "#F3A78B",
-    "dark": "#C94C3C",
+    "primary": "#212B36",
+    "light": "#FCD53B",
+    "dark": "#B76E00",
     "anchors": {
       "from": "#737373",
-      "to": "#EB6658"
+      "to": "#D4B74E"
     }
   },
   "seo": {
@@ -95,6 +96,7 @@
         "advanced-features/open-source-models",
         {
           "group": "Custom Communication Flows",
+          "icon": "comments",
           "pages": [
             "advanced-features/custom-communication-flows/overview",
             "advanced-features/custom-communication-flows/common-use-cases"
