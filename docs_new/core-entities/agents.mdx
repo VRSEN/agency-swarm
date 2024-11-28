@@ -46,22 +46,7 @@ agent = Agent(
 
 ### Schemas Folder
 
-Define the folder where the agent will look for OpenAPI schemas to convert into tools. You can also add `api_params` and `api_headers` to pass additional parameters and headers to the API call.
-
-```python
-from agency_swarm import Agent
-
-agent = Agent(
-    name='MyAgent',
-    schemas_folder='schemas',
-    api_params={'my_schema.json': {'param1': 'value1'}},
-    api_headers={'my_schema.json': {'Authorization': 'Bearer token'}}
-)
-```
-
-<Note type="info">
-The `schemas_folder` automatically converts any OpenAPI schemas into `BaseTool`s. This ensures that your agents type-check all API parameters **before** calling the API, significantly reducing the chances of errors.
-</Note>
+See the [OpenAPI Schemas](../advanced-features/openapi-schemas) page for more information on how to use OpenAPI schemas to create tools for your agents.
 
 ### Fine-Tuned Models
 
@@ -72,22 +57,6 @@ from agency_swarm import Agent
 
 agent = Agent(name='MyAgent', model='gpt-4o-mini-model-name')
 ```
-
-### Response Validator
-
-Provide a response validator function to validate the response before sending it to the user or another agent. This function should raise an error if the response is invalid.
-
-```python
-from agency_swarm import Agent
-
-class MyAgent(Agent):
-    def response_validator(self, message: str) -> str:
-        """Validate the response before sending it."""
-        if "bad word" in message:
-            raise ValueError("Please avoid using inappropriate language.")
-        return message
-```
-
 
 ## Creating Agents
 
@@ -193,3 +162,8 @@ agency-swarm import-agent --name "AgentName" --destination "/path/to/directory"
 ```
 
 This copies all source files of the agent locally. You can then import the agent as shown above. To check available agents, simply run the command without any arguments.
+
+
+### Response Validator
+
+See the [Response Validators](../advanced-features/response-validators) page for more information on how to use response validators to validate the response before sending it to the user or another agent.

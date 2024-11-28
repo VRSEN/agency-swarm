@@ -90,9 +90,8 @@
         "advanced-features/shared-state",
         "advanced-features/openapi-schemas",
         "advanced-features/few-shot-examples",
-        "advanced-features/response-validators",
+        "advanced-features/output-validation",
         "advanced-features/streaming",
-        "advanced-features/observability",
         "advanced-features/open-source-models",
         {
           "group": "Custom Communication Flows",
