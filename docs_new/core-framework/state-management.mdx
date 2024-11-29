@@ -32,20 +32,17 @@ Agency Swarm leverages OpenAI's Assistants API to manage conversation context th
 - **Efficiency:** By offloading context management to OpenAI, Agency Swarm reduces the overhead of handling conversation states manually.
 - **Scalability:** Threads support prolonged and detailed conversations, making them ideal for applications requiring extensive context retention.
 
-## Shared Memory System
-
-```python
-# Set shared state within a tool
-self._shared_state.set("key", value)
-# Retrieve shared state in another tool
-value = self._shared_state.get("key")
-```
+## Shared State
 
 Tools can share data through an in-memory key-value store using `self._shared_state`. This enables:
 
 - Data passing between different tools
 - Temporary storage during agency execution
 - Cross-agent data sharing within a session
+
+Example usage:
+- Set shared state within a tool: `self._shared_state.set("key", value)`
+- Retrieve shared state in another tool: `value = self._shared_state.get("key")`
 
 See more in [Shared State](../advanced-features/shared-state).
 
@@ -54,7 +51,7 @@ See more in [Shared State](../advanced-features/shared-state).
 Agency Swarm provides callbacks for maintaining state across application restarts through two main mechanisms:
 
 <Accordion title="Settings Management" defaultOpen={true}>
-Settings callbacks manage the persistence of agent states. The data structure is defined as `list[dict]`, where each dictionary contains the state of an individual agent.
+Settings callbacks manage the persistence of agent states. The data structure is defined as `list[dict]`, where each dictionary contains the state of an individual agent. These callbacks are executed every time settings are loaded or saved, ensuring that any changes are captured and persisted.
 
 ```python
 def load_settings(user_id):
@@ -79,7 +76,21 @@ agency = Agency(
 </Accordion>
 
 <Accordion title="Thread Management" defaultOpen={true}>
-Thread callbacks maintain conversation continuity. The data structure is a nested dictionary mapping agent names and their recipient agents to thread IDs.
+Thread callbacks maintain conversation continuity. The data structure is a nested dictionary mapping agent names and their recipient agents to thread IDs. This allows agents to continue conversations seamlessly, even after restarts.
+
+<Note>
+The threads data structure must match the framework's expected format:
+```python
+{
+    "main_thread": "thread_123...",
+    "agent_name": {
+        "other_agent_name": "thread_456...",
+        # Other recipient agents...
+    },
+    # Other agents...
+}
+```
+</Note>
 
 ```python
 def load_threads(chat_id):
@@ -100,20 +111,6 @@ agency = Agency(
     }
 )
 ```
-
-<Warning>
-The threads data structure must match the framework's expected format:
-```python
-{
-    "main_thread": "thread_123...",
-    "agent_name": {
-        "other_agent_name": "thread_456...",
-        # Other recipient agents...
-    },
-    # Other agents...
-}
-```
-</Warning>
 
 </Accordion>
 

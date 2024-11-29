@@ -15,28 +15,25 @@ Welcome to **AI Agency**, an open-source framework for creating and orchestratin
 ## Key Features
 
 <CardGroup cols={2}>
-  <Card title="Customizable Agent Roles" icon="users">
-    Define and customize specialized roles like CEO, developer, or assistant using the OpenAI Assistants API
+  <Card title="Full Control" icon="sliders">
+    Write your own prompts without restrictions. No pre-defined roles or hard-coded interactions.
+  </Card>
+  <Card title="Declarative Communication" icon="messages">
+    Agents determine who to talk to based on their descriptions and agency boundaries
   </Card>
   <Card title="Type-Safe Tools" icon="shield-check">
-    Create reliable tools with automatic type validation and error correction
-  </Card>
-  <Card title="Efficient Communication" icon="messages">
-    Agents communicate through a specialized messaging system based on their roles and descriptions
+    Prevent hallucinations with Pydantic-based type validation and error correction
   </Card>
   <Card title="Production Ready" icon="rocket">
     Built for reliability and easy deployment in production environments
   </Card>
+  <Card title="State Management" icon="database">
+    Handles state through OpenAI threads, shared memory, and persistent storage.
+  </Card>
+  <Card title="Real-World Agency Model" icon="building">
+    Organize agents into intuitive business roles and hierarchies
+  </Card>
 </CardGroup>
-
-## Why Agency Swarm?
-
-Agency Swarm takes a unique approach to agent orchestration:
-
-- **Full Control**: Complete customization of prompts without pre-defined restrictions
-- **Type Safety**: Prevents hallucinations through automatic type checking and error correction
-- **Intuitive Communication**: Agents determine who to communicate with based on their descriptions and agency boundaries
-- **State Management**: Efficiently manages assistant states on OpenAI through a `settings.json` file
 
 <Note>
   Unlike other frameworks, Agency Swarm focuses on setting boundaries for agents rather than hardcoding communication
