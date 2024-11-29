@@ -4,64 +4,166 @@ description: "Understanding agencies in Agency Swarm."
 icon: "sitemap"
 ---
 
-An **Agency** is a collection of agents that can communicate with one another, working collaboratively to achieve complex tasks efficiently.
+An **Agency** is a collection of agents that can communicate with one another, working collaboratively to achieve complex tasks efficiently. In Agency Swarm, agencies provide structure and coordination, allowing agents to interact based on defined communication flows and shared goals.
 
-## Benefits of Using an Agency
+## Why Use an Agency?
 
-Using an Agency instead of individual agents offers several advantages:
+Utilizing an Agency instead of individual agents offers several advantages:
 
-<AccordionGroup defaultOpen={true}>
+<CardGroup>
 
-<Accordion title="Fewer Hallucinations" icon="bug" iconType="solid" defaultOpen={true}>
+
+<Card title="Fewer Hallucinations" icon="bug" iconType="solid">
 Agents within an agency can supervise each other, reducing mistakes and handling unexpected scenarios more effectively.
-</Accordion>
+</Card>
 
-<Accordion title="More Complex Tasks" icon="code" iconType="solid">
-Adding more agents allows for longer sequences of actions, enabling the completion of more intricate tasks before delivering results to the user.
-</Accordion>
 
-<Accordion title="Scalability" icon="cog" iconType="solid">
+<Card title="Handle Complex Tasks" icon="diagram-project" iconType="solid">
+Adding more agents allows for longer sequences of actions, enabling the completion of more complex tasks before delivering results to the user.
+</Card>
+
+
+<Card title="Scalability" icon="arrow-up-right-dots" iconType="solid">
 Agencies can grow in complexity by adding more agents, accommodating increasing integration demands.
-</Accordion>
+</Card>
+
+
+</CardGroup>
+
 
 <Tip>
 Start with a minimal number of agents. Fine-tune them to ensure they function correctly before adding more. Introducing too many agents initially can make debugging and understanding interactions challenging.
 </Tip>
 
-</AccordionGroup>
 
 ## Communication Flows
 
-In Agency Swarm, communication flows are **user-defined** and highly **flexible**. They are set up in the `agency_chart` as a directed graph, allowing permissions to initiate communication to flow from left to right. Agents listed at the top level of `agency_chart` can interact directly with the user.
+In Agency Swarm, communication flows are **user-defined** and **highly flexible**. They are set up in the agency chart as a directed graph, allowing permissions to initiate communication to flow from left to right.
 
-### Example Configuration
+Communication flows are defined when creating the agency, specifying which agents can communicate with each other. More information on advanced communication flows can be found on the [Custom Communication Flows](../advanced-features/custom-communication-flows/overview) page.
+
+## Creating an Agency
+
+Let's walk through creating an agency step by step, starting from basic concepts to more advanced configurations.
+
+<Steps>
+
+
+<Step title="Import Necessary Modules">
+First, import the `Agency` class from `agency_swarm` and the agent classes you plan to include in your agency.
 
 ```python
 from agency_swarm import Agency
+from .ceo import CEO
+from .developer import Developer
+from .virtual_assistant import VirtualAssistant
+```
+</Step>
 
-agency = Agency([
-    ceo, dev,   # Agents that can interact directly with the user
-    [ceo, dev], # CEO can initiate communication with Developer
-    [ceo, va],  # CEO can initiate communication with Virtual Assistant
-    [dev, va]   # Developer can initiate communication with Virtual Assistant
-])
+
+<Step title="Instantiate Agents">
+Create instances of each agent you want to include.
+
+```python
+ceo = CEO()
+dev = Developer()
+va = VirtualAssistant()
+```
+</Step>
+
+
+<Step title="Define the Agency">
+Create an `Agency` instance, specifying the agents and their communication flows.
+
+```python
+agency = Agency(
+    agency_chart=[
+        ceo,        # Agents that can interact directly with the user
+        [ceo, dev], # CEO can initiate communication with Developer
+        [ceo, va],  # CEO can initiate communication with Virtual Assistant
+        [dev, va]   # Developer can initiate communication with Virtual Assistant
+    ],
+    shared_instructions='agency_manifesto.md',
+    temperature=0.3,
+    max_prompt_tokens=25000
+)
 ```
 
-**In this configuration:**
+In the `agency_chart`:
+- Agents at the top level (e.g., ceo) can interact directly with the user.
+- Lists define directed communication flows. For example, `[ceo, dev]` allows the CEO to initiate communication with the Developer.
+- Communication permissions flow from left to right.
 
+**In this configuration:**
 - The **CEO** can initiate conversations with the **Developer** and **Virtual Assistant**.
-- The **Developer** can communicate with the **Virtual Assistant**, but cannot initiate communication with the **CEO**.
+- The **Developer** can communicate with the **Virtual Assistant**, but cannot initiate communication with the **CEO** directly.
+
+</Step>
+
+
+<Step title="Run the Agency">
+You can run your agency using one of the provided methods.
+
+```python
+if __name__ == "__main__":
+    agency.run_demo()
+```
+
+This will start an interactive session where you can interact with your agency through the terminal.
+
+</Step>
+
+
+</Steps>
+
+
+## Shared Instructions: The Agency Manifesto
+
+The `agency_manifesto.md` file contains shared instructions and guidelines for all agents within the agency.
+
+### Creating the Agency Manifesto
+
+Create an `agency_manifesto.md` file in your agency's folder.
+
+```markdown
+# Agency Manifesto
+
+## Mission Statement
+
+Our mission is to build innovative solutions by leveraging collaborative AI agents to achieve complex tasks efficiently and effectively.
+
+## Operating Principles
+
+- **Collaboration**: All agents should work together, sharing information and assisting one another.
+- **Efficiency**: Maximize productivity by delegating tasks appropriately among agents.
+- **Reliability**: Ensure all outputs are accurate and meet the highest quality standards.
+```
+
+### Using the Shared Instructions
+
+Specify the path to your manifesto in the `Agency` definition.
+
+```python
+agency = Agency(
+    agency_chart=[...],
+    shared_instructions='agency_manifesto.md',
+    ...
+)
+```
 
 ## Async Mode
 
-Agency Swarm supports asynchronous execution in two modes: `'threading'` and `'tools_threading'`. These modes enhance the efficiency and responsiveness of agent interactions.
+Agency Swarm supports asynchronous execution modes to enhance efficiency and responsiveness of agent interactions.
 
-### Agents - Threading
+### Agents-Threading Mode
 
-Enable asynchronous communication between agents by setting `async_mode` to `'threading'`. This allows agents to execute tasks in the background without waiting for a response.
+Enable asynchronous communication between agents by setting `async_mode='threading'`.
 
 ```python
-agency = Agency([ceo], async_mode='threading')
+agency = Agency(
+    agency_chart=[...],
+    async_mode='threading'
+)
 ```
 
 With this mode:
@@ -69,50 +171,71 @@ With this mode:
 - **Background Processing**: The recipient agent continues the task in the background.
 - **Status Checks**: The caller agent can check the task status (if the task is in progress) or retrieve the response (if the task is complete) using the `GetResponse` tool.
 
-### Tools - Threading
+### Tools-Threading Mode
 
-Enable concurrent execution of tools by setting `async_mode` to `'tools_threading'`. This is beneficial for I/O-bound tasks, allowing tools to run in separate threads and speeding up the workflow.
+Enable concurrent execution of tools by setting `async_mode='tools_threading'`.
 
 ```python
-agency = Agency([ceo], async_mode='tools_threading')
+agency = Agency(
+    agency_chart=[...],
+    async_mode='tools_threading'
+)
 ```
+
+This is beneficial for I/O-bound tasks, allowing tools to run in separate threads and speeding up the workflow.
+
+## Advanced Configurations
 
 ### Shared Files
 
 Share common resources among all agents by specifying a `shared_files` folder path.
 
 ```python
-agency = Agency([ceo], shared_files='shared_files')
+agency = Agency(
+    agency_chart=[...],
+    shared_files='shared_files'
+)
 ```
 
-### Settings Path
+Place any files or data that should be accessible by all agents in this directory.
 
-Specify a custom settings file using the `settings_path` parameter. This file replaces the default `settings.json` and stores all agent settings, including Assistant IDs for OpenAI and the tools in use. If the specified file does not exist, it will be created automatically.
+### Custom Settings Path
+
+Specify a custom settings file using the `settings_path` parameter.
 
 ```python
-agency = Agency([ceo], settings_path='my_settings.json')
+agency = Agency(
+    agency_chart=[...],
+    settings_path='my_settings.json'
+)
 ```
 
-### Temperature and Max Token Controls
+This file replaces the default `settings.json` and stores all agent settings, including Assistant IDs for OpenAI and the tools in use. If the specified file does not exist, it will be created automatically.
 
-Control the behavior of all agents in your agency by setting default parameters:
+### Controlling Agent Behavior
 
-- `temperature`: Controls the randomness of responses (0.0-1.0, default 0.3)
-- `top_p`: Controls diversity via nucleus sampling (0.0-1.0, default 1.0)
-- `max_prompt_tokens`: Limits the size of input prompts
-- `max_completion_tokens`: Limits the size of agent responses
-- `truncation_strategy`: Configures how to handle token limits
+Customize agent behavior with parameters:
+- `temperature`: Controls the randomness of responses (0.0 to 1.0).
+- `top_p`: Controls diversity via nucleus sampling (0.0 to 1.0).
+- `max_prompt_tokens`: Limits the size of input prompts.
+- `max_completion_tokens`: Limits the size of agent responses.
+- `truncation_strategy`: Configures how to handle token limits. More details can be found [here](https://platform.openai.com/docs/api-reference/runs/createRun#runs-createrun-truncation_strategy).
 
-These agency-level defaults can be overridden by individual agent settings when needed.
+Example:
 
 ```python
-agency = Agency([ceo], temperature=0.3, max_prompt_tokens=25000)
+agency = Agency(
+    agency_chart=[...],
+    temperature=0.3,
+    max_prompt_tokens=25000,
+    max_completion_tokens=500,
+    truncation_strategy={'type': 'auto'}
+)
 ```
 
 ## Running the Agency
 
 Choose from three options to run your agency:
-
 1. **Gradio Interface**: The easiest way to get started.
 2. **Backend Integration**: Use for custom or backend setups.
 3. **Terminal**: Ideal for quick debugging and testing.
@@ -123,44 +246,54 @@ Choose from three options to run your agency:
 agency.demo_gradio(height=700)
 ```
 
-### Getting Completion from the Agency
+This launches a web interface where you can interact with your agency.
+
+### Backend Integration
+
+Use the `get_completion` method to programmatically interact with the agency.
 
 ```python
 response = agency.get_completion(
     "I want you to build me a website",
-    additional_instructions="This is an additional instruction for the task.",
-    tool_choice={"type": "function", "function": {"name": "SendMessage"}},
-    attachments=[],
-    recipient_agent=dev,
+    additional_instructions="Focus on a modern design.",
+    recipient_agent=dev
 )
 print(response)
 ```
 
 **Parameters (optional):**
-
 - `additional_instructions`: Additional directives for the task.
 - `tool_choice`: Specify tools like functions to use.
 - `attachments`: Attachments to include with the message.
 - `recipient_agent`: Target a specific agent or leave as `None`.
 
-### Running from the Terminal
+### Running the Agency in Terminal Mode
 
-```bash
+```python
 agency.run_demo()
 ```
 
-To interact with top-level agents via the terminal, use the **mentions feature**:
+To interact with top-level agents via the terminal, use the **mentions** feature:
 
 ```bash
 @Developer I want you to build me a website
 ```
 
-This sends the message directly to the Developer agent. Use the `Tab` key to autocomplete agent names after the `@` symbol.
+This sends the message directly to the Developer agent. Use the Tab key to autocomplete agent names after the `@` symbol.
 
 ## Deleting the Agency
 
-Remove the agency and all its agents, along with associated files and vector stores, using the `delete` method.
+Remove the agency and all its agents, along with associated files and vector stores, using the `delete()` method.
 
 ```python
 agency.delete()
 ```
+
+<Check>
+**Best Practices:**
+
+- **Begin with a Few Agents**: Start with a minimal number of agents and communication flows.
+- **Fine-Tune Agents Individually**: Ensure each agent functions correctly before adding more.
+- **Gradual Scaling**: Introduce additional agents as needed.
+
+</Check>

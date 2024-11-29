@@ -9,7 +9,7 @@
   },
   "favicon": "favicon.svg",
   "colors": {
-    "primary": "#212B36",
+    "primary": "#0C102D",
     "light": "#FCD53B",
     "dark": "#B76E00",
     "anchors": {
@@ -93,7 +93,6 @@
         "advanced-features/few-shot-examples",
         "advanced-features/output-validation",
         "advanced-features/streaming",
-        "advanced-features/open-source-models",
         {
           "group": "Custom Communication Flows",
           "icon": "comments",
@@ -102,6 +101,8 @@
             "advanced-features/custom-communication-flows/common-use-cases"
           ]
         },
+        "advanced-features/azure-openai",
+        "advanced-features/open-source-models",
         "advanced-features/deployment-to-production"
       ]
     },
