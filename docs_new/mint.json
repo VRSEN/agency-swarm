@@ -64,24 +64,25 @@
       "pages": [
         "welcome/overview",
         "welcome/ai-agency-vs-other-frameworks",
-        "welcome/state-management"
+        {
+          "group": "Getting Started",
+          "icon": "rocket",
+          "pages": [
+            "welcome/installation",
+            "welcome/getting-started/from-scratch",
+            "welcome/getting-started/genesis-agency",
+            "welcome/getting-started/cursor-ai"
+          ]
+        }
       ]
     },
     {
-      "group": "Getting Started",
+      "group": "Core Framework",
       "pages": [
-        "getting-started/quickstart",
-        "getting-started/from-scratch",
-        "getting-started/genesis-agency",
-        "getting-started/cursor-ai"
-      ]
-    },
-    {
-      "group": "Core Entities",
-      "pages": [
-        "core-entities/tools",
-        "core-entities/agents",
-        "core-entities/agencies"
+        "core-framework/tools",
+        "core-framework/agents",
+        "core-framework/agencies",
+        "core-framework/state-management"
       ]
     },
     {
@@ -108,33 +109,23 @@
     },
     {
       "group": "API Reference",
-      "pages": [
-        "api"
-      ]
+      "pages": ["api"]
     },
     {
       "group": "Contributing",
-      "pages": [
-        "contributing/contributing"
-      ]
+      "pages": ["contributing/contributing"]
     },
     {
       "group": "FAQ",
-      "pages": [
-        "faq"
-      ]
+      "pages": ["faq"]
     },
     {
       "group": "Tutorials",
-      "pages": [
-        "tutorials/tutorials"
-      ]
+      "pages": ["tutorials/tutorials"]
     },
     {
       "group": "Extras",
-      "pages": [
-        "extras/extras"
-      ]
+      "pages": ["extras/extras"]
     }
   ],
   "search": {

@@ -9,9 +9,10 @@ icon: "code"
     Begin by setting your OpenAI API key.
 
     ```python
-    from agency_swarm import set_openai_key
+    from aiagency import set_openai_key
     set_openai_key("YOUR_API_KEY")
     ```
+
   </Step>
 
   <Step title="Create Project Structure">
@@ -47,6 +48,7 @@ icon: "code"
     - **agency.py**: Main file where agents are imported and the agency is defined.
     - **agency_manifesto.md**: Shared instructions and guidelines for all agents.
     - **requirements.txt**: File listing all dependencies.
+
   </Step>
 
   <Step title="Create Tools">
@@ -84,6 +86,7 @@ icon: "code"
             # Return the result of the tool's operation as a string
             return "Result of MyCustomTool operation"
     ```
+
   </Step>
 
   <Step title="Define Agent Roles">
@@ -106,6 +109,7 @@ icon: "code"
         tools=[MyCustomTool]
     )
     ```
+
   </Step>
 
   <Step title="Create Agency">
@@ -128,6 +132,7 @@ icon: "code"
     <Note title="Note on Communication Flows">
       In Agency Swarm, communication flows are directional, meaning they are established from left to right in the `agency_chart` definition. For instance, in the example above, the CEO can initiate a chat with the Developer (`developer`), and the Developer can respond in this chat. However, the Developer cannot initiate a chat with the CEO.
     </Note>
+
   </Step>
 
   <Step title="Run Demo">
@@ -150,5 +155,6 @@ icon: "code"
     ```python
     completion_output = agency.get_completion("Please create a new website for our client.", yield_messages=False)
     ```
+
   </Step>
 </Steps>
