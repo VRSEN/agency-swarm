@@ -8,32 +8,73 @@ Tools are the building blocks that give agents their capabilities. They are spec
 
 In Agency Swarm, tools are Python classes that inherit from `BaseTool`. They are defined using [Pydantic](https://docs.pydantic.dev/latest/) for data validation and settings management. Each tool encapsulates a specific piece of functionality that an agent can invoke during its operation.
 
+<Note>
 **Key characteristics of tools:**
 
 - **Modular:** Each tool performs a single, well-defined task.
 - **Reusable:** Tools can be shared among multiple agents.
 - **Extensible:** You can create custom tools to interact with APIs, process data, and more.
+</Note>
 
-## Basic Process Overview for Creating Tools
+## Built-in Tools
 
-To create a new tool in Agency Swarm, follow these steps:
+Agency Swarm comes with several built-in tools to enhance agent capabilities:
 
-1. **Plan the Tool's Purpose and Functionality:**
-   - Define what the tool will do and how it will be used by agents.
-2. **Create a New Python Class Inheriting from `BaseTool`:**
-   - Import `BaseTool` and create a new class that extends it.
-3. **Write a Clear Docstring Describing the Tool's Purpose:**
-   - This docstring is crucial as it helps agents understand how to use the tool.
-4. **Define Input Fields with Proper Types and Descriptions:**
-   - Use Pydantic's `Field` to define the tool's input parameters.
-5. **Implement the `run` Method with the Tool's Logic:**
-   - Write the code that executes the tool's functionality.
-6. **Test the Tool Independently:**
-   - Ensure the tool works as expected before integrating it.
-7. **Add the Tool to an Agent's Toolset:**
-   - Include the tool in the agent's list of available tools.
+<Accordion title="Code Interpreter" icon="code">
+- **Purpose**: Allows agents to execute code within a Jupyter Notebook environment (without internet access).
+- **Integration**:
+  ```python
+  from agency_swarm.tools import CodeInterpreter
 
-## Creating Basic Tools
+  agent = Agent(
+      name="DataAnalyst",
+      tools=[CodeInterpreter],
+      # Other agent parameters
+  )
+  ```
+</Accordion>
+
+<Accordion title="File Search" icon="magnifying-glass">
+- **Purpose**: Enables Retrieval-Augmented Generation (RAG) by allowing agents to search files.
+- **Integration**:
+  ```python
+  from agency_swarm.tools import FileSearch
+
+  agent = Agent(
+      name="Researcher",
+      tools=[FileSearch],
+      # Other agent parameters
+  )
+  ```
+</Accordion>
+
+## Basic Process Overview for Creating Custom Tools
+
+<Steps>
+  <Step title="Plan the Tool's Purpose and Functionality">
+    Define what the tool will do and how it will be used by agents.
+  </Step>
+  <Step title="Create a New Python Class">
+    Import `BaseTool` and create a new class that extends it.
+  </Step>
+  <Step title="Write a Clear Docstring">
+    This docstring is crucial as it helps agents understand how to use the tool.
+  </Step>
+  <Step title="Define Input Fields">
+    Use Pydantic's `Field` to define the tool's input parameters.
+  </Step>
+  <Step title="Implement the run Method">
+    Write the code that executes the tool's functionality.
+  </Step>
+  <Step title="Test the Tool">
+    Ensure the tool works as expected before integrating it.
+  </Step>
+  <Step title="Add to Agent's Toolset">
+    Include the tool in the agent's list of available tools.
+  </Step>
+</Steps>
+
+## Creating Custom Tools
 
 Let's walk through creating a simple tool step by step.
 
@@ -69,9 +110,11 @@ class Calculator(BaseTool):
             return f"Error calculating expression: {e}"
 ```
 
-#### How Docstrings Affect Agent Behavior
+<Note>
+**How Docstrings Affect Agent Behavior:**
 
 Docstrings are parsed and included in the OpenAI schema of the respective tools. This allows agents to understand the tools they have at their disposal and perform function calls properly with this awareness. Developers should write good tool docstrings, clearly describing the tool's purpose and usage to facilitate effective agent interactions.
+</Note>
 
 ### Step 3: Define Input Fields
 
@@ -140,9 +183,11 @@ Leverage Pydantic's special types for enhanced validation:
 
 See more special types in [Pydantic's documentation](https://docs.pydantic.dev/latest/api/types/).
 
-#### Field Descriptions and Their Impact
+<Note>
+**Field Descriptions and Their Impact:**
 
 Field descriptions are used in the OpenAI function schemas presented to agents. They guide the agent in generating the correct inputs when calling the tool. Clear and descriptive field descriptions improve the agent's ability to use the tool effectively.
+</Note>
 
 #### Default Values and Their Impact
 
