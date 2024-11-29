@@ -1,0 +1,75 @@
+---
+title: "Cursor IDE"
+description: "Getting started with Cursor."
+icon: "cube"
+---
+
+<iframe
+  width="100%"
+  height="400"
+  src="https://www.youtube.com/embed/Og73plUTabs"
+  title="YouTube video player"
+  frameborder="0"
+  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+  allowfullscreen
+  style={{ borderRadius: "10px" }}
+></iframe>
+
+## Why Use Cursor
+
+Cursor makes coding easier by adding AI tools directly into your Cursor IDE. These tools can help you save time by automating repetitive tasks, fixing code, and even helping your team work together more effectively.
+
+![Cursor IDE Overview](/images/cursor-overview.png)
+
+## What are Cursor Rules
+
+**Cursor Rules** are custom instructions that tell Cursor how to work with your code. They help the AI understand your project, make changes, and assist you in completing tasks.
+
+![Cursor Rules Example](/images/cursor-rules-example.png)
+
+## Getting Started with Cursor
+
+Follow these steps to set up Cursor IDE in your project:
+
+<Steps>
+  <Step title="Enable Cursor Rules in Settings">
+    First, you need to enable Cursor Rules in the Cursor IDE:
+
+    - Open the Cursor IDE.
+    - Go to **Settings...** > **Cursor Settings**.
+    <img src="/images/open-cursor-settings.png" width="65%" alt="Open Cursor Settings" style={{display: 'block', margin: '0 auto'}} />
+    - Turn on the **Rules for AI** option. This allows you to use a `.cursorrules` file in your project.
+    ![Enable Cursor Rules](/images/enable-cursor-rules.png)
+  </Step>
+
+  <Step title="Add the `.cursorrules` File to Your Project">
+    The `.cursorrules` file contains the instructions that guide Cursor's AI. To add it:
+    - Download the `.cursorrules` file from the Agency Swarm repository.
+    - Place the file in the main folder (root directory) of your project.
+  </Step>
+
+  <Step title="Edit the `.cursorrules` File">
+    You can edit the `.cursorrules` file to customize how Cursor AI works for your project. For example, you can define specific tasks or rules for the AI to follow.
+  </Step>
+
+  <Step title="Use Cursor's AI Tools">
+    Cursor provides several tools to make coding easier:
+
+    - **Composer**:
+      ![Cursor Composer](/images/cursor-composer.gif)
+      - Open Composer by pressing `Cmd+Shift+I` (macOS) or `Ctrl+Shift+I` (Windows/Linux).
+      - Use it to edit multiple files at once or create entire setups based on simple instructions.
+
+    - **Inline Editing**:
+      ![Inline Editing](/images/cursor-inline-editing.svg)
+      - Highlight the code you want to change and press `Cmd+K` (macOS) or `Ctrl+K` (Windows/Linux).
+      - The AI will help you rewrite or improve the selected code.
+
+    - **Chat Interface**:
+      <img src="/images/cursor-chat.svg" width="65%" alt="Chat Interface" style={{display: 'block', margin: '0 auto'}} />
+      - Open the chat by pressing `Cmd+L` (macOS) or `Ctrl+L` (Windows/Linux).
+      - Use it to ask the AI questions, debug your code, or see changes made to your files.
+  </Step>
+</Steps>
+
+With these steps, you're ready to start using Cursor to make your coding experience faster and easier!

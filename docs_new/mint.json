@@ -3,11 +3,11 @@
   "theme": "prism",
   "layout": "sidenav",
   "logo": {
-    "dark": "/agencii_logo_dark.svg",
-    "light": "/agencii_logo_light.svg",
+    "dark": "/images/agencii_logo_dark.svg",
+    "light": "/images/agencii_logo_light.svg",
     "href": "https://github.com/VRSEN/agency-swarm"
   },
-  "favicon": "favicon.svg",
+  "favicon": "/images/favicon.svg",
   "colors": {
     "primary": "#0C102D",
     "light": "#FCD53B",
@@ -75,7 +75,7 @@
             "welcome/installation",
             "welcome/getting-started/from-scratch",
             "welcome/getting-started/genesis-agency",
-            "welcome/getting-started/cursor-ai"
+            "welcome/getting-started/cursor-ide"
           ]
         }
       ]
