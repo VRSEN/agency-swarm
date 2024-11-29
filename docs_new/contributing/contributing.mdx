@@ -7,7 +7,7 @@ icon: "code-fork"
 We welcome contributions to Agency Swarm! By contributing, you help improve the framework for everyone. Here's how you can get involved:
 
 <Info>
-Your contributions enable the development of a more robust and versatile Agency Swarm, benefiting all users.
+  Your contributions enable the development of a more robust and versatile Agency Swarm, benefiting all users.
 </Info>
 
 ## Setting Up Your Development Environment
@@ -16,13 +16,18 @@ Follow these steps to set up your local development environment:
 
 <Steps titleSize="h3">
 
-<Step title="Clone the Repository" icon="code-branch" iconType="solid">
-Clone the repository and navigate to the project directory.
+<Step title="Fork the Repository" icon="code-branch" iconType="solid">
+  Fork the Agency Swarm repository on GitHub to your own account.
+</Step>
+
+<Step title="Clone Your Fork" icon="arrow-down-to-line" iconType="solid">
+Clone your forked repository and navigate to the project directory.
 
 ```bash
-git clone https://github.com/VRSEN/agency-swarm.git
+git clone https://github.com/YOUR_USERNAME/agency-swarm.git
 cd agency-swarm
 ```
+
 </Step>
 
 <Step title="Create a Virtual Environment" icon="laptop-code" iconType="solid">
@@ -32,6 +37,7 @@ Create and activate a virtual environment.
 python3 -m venv venv
 source venv/bin/activate  # On Windows use `venv\Scripts\activate`
 ```
+
 </Step>
 
 <Step title="Install Dependencies" icon="download" iconType="solid">
@@ -40,15 +46,17 @@ Install the required packages.
 ```bash
 pip install -r requirements-dev.txt
 ```
+
 </Step>
 
-<Step title="Install Pre-Commit Hooks" icon="check-circle" iconType="solid">
+<Step title="Install Pre-Commit Hooks" icon="check" iconType="solid">
 Install pre-commit hooks for code quality checks.
 
 ```bash
 pip install pre-commit
 pre-commit install
 ```
+
 </Step>
 
 </Steps>
@@ -56,25 +64,27 @@ pre-commit install
 ## Running Tests
 
 <Note>
-Testing ensures that your contributions work as intended and do not break existing functionality.
+  Testing ensures that your contributions work as intended and do not break existing functionality.
 </Note>
 
 <Steps titleSize="h3">
 
-<Step title="Install Test Dependencies" icon="tools" iconType="solid">
+<Step title="Install Test Dependencies" icon="download" iconType="solid">
 Ensure all test dependencies are installed.
 
 ```bash
 pip install -r requirements-dev.txt
 ```
+
 </Step>
 
-<Step title="Run Tests" icon="play-circle" iconType="solid">
+<Step title="Run Tests" icon="play" iconType="solid">
 Run the test suite using Pytest.
 
 ```bash
 pytest
 ```
+
 </Step>
 
 <Step title="Check Test Coverage" icon="chart-bar" iconType="solid">
@@ -83,6 +93,7 @@ Check the test coverage to ensure comprehensive testing.
 ```bash
 pytest --cov=agency_swarm tests/
 ```
+
 </Step>
 
 </Steps>
@@ -94,11 +105,11 @@ When contributing new agents or tools, adhere to the following guidelines to mai
 <Steps titleSize="h3">
 
 <Step title="Agents" icon="user-secret" iconType="solid">
-Place new agents in the appropriate category directory.
+  Place new agents in the appropriate category directory.
 </Step>
 
 <Step title="Tools" icon="wrench" iconType="solid">
-Add new tools to the relevant category directory.
+  Add new tools to the relevant category directory.
 </Step>
 
 </Steps>
@@ -108,18 +119,18 @@ Ensure that each tool includes appropriate tests as outlined in the **Adding Tes
 ## Adding Tests
 
 <Note>
-Thorough testing ensures that your contributions are reliable and integrate seamlessly with the existing framework.
+  Thorough testing ensures that your contributions are reliable and integrate seamlessly with the existing framework.
 </Note>
 
 - **Location**: Place tests in the `agency_swarm/tests/` directory, specifically within `test_tools.py` or relevant test files based on the component.
 
 <CodeBlock title="Example Test">
-```python
-def test_my_custom_tool():
-    tool = MyCustomTool(example_field="test value")
-    result = tool.run()
-    assert "expected_output" in result
-```
+  ```python
+  def test_my_custom_tool():
+      tool = MyCustomTool(example_field="test value")
+      result = tool.run()
+      assert "expected_output" in result
+  ```
 </CodeBlock>
 
 Refer to existing tests for examples and adhere to the testing conventions used throughout the project.
@@ -131,7 +142,7 @@ Follow these steps to submit your contributions:
 <AccordionGroup>
 
 <Accordion title="1. Fork the Repository" icon="code-branch" iconType="solid">
-Create a fork of the Agency Swarm repository on GitHub.
+  Create a fork of the Agency Swarm repository on GitHub.
 </Accordion>
 
 <Accordion title="2. Create a Branch" icon="code" iconType="solid">
@@ -140,6 +151,7 @@ Work on a feature branch for your changes.
 ```bash
 git checkout -b feature/your-feature-name
 ```
+
 </Accordion>
 
 <Accordion title="3. Commit Your Changes" icon="git-commit" iconType="solid">
@@ -149,6 +161,7 @@ Commit your changes with clear and descriptive messages.
 git add .
 git commit -m "Add [feature]: Description of the feature"
 ```
+
 </Accordion>
 
 <Accordion title="4. Push to Your Fork" icon="git-push" iconType="solid">
@@ -157,6 +170,7 @@ Push your changes to your forked repository.
 ```bash
 git push origin feature/your-feature-name
 ```
+
 </Accordion>
 
 <Accordion title="5. Submit a Pull Request" icon="paper-plane" iconType="solid">
@@ -167,6 +181,7 @@ Describe your changes and submit a pull request for review.
 - Reference any related issues.
 - Ensure all tests pass and coverage remains adequate.
 ```
+
 </Accordion>
 
 </AccordionGroup>

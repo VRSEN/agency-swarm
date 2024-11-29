@@ -46,6 +46,7 @@ Agency Swarm comes with several built-in tools to enhance agent capabilities:
       # Other agent parameters
   )
   ```
+
 </Accordion>
 
 ## Basic Process Overview for Creating Custom Tools
@@ -114,6 +115,7 @@ class Calculator(BaseTool):
 **How Docstrings Affect Agent Behavior:**
 
 Docstrings are parsed and included in the OpenAI schema of the respective tools. This allows agents to understand the tools they have at their disposal and perform function calls properly with this awareness. Developers should write good tool docstrings, clearly describing the tool's purpose and usage to facilitate effective agent interactions.
+
 </Note>
 
 ### Step 3: Define Input Fields
@@ -187,6 +189,7 @@ See more special types in [Pydantic's documentation](https://docs.pydantic.dev/l
 **Field Descriptions and Their Impact:**
 
 Field descriptions are used in the OpenAI function schemas presented to agents. They guide the agent in generating the correct inputs when calling the tool. Clear and descriptive field descriptions improve the agent's ability to use the tool effectively.
+
 </Note>
 
 #### Default Values and Their Impact
@@ -367,90 +370,69 @@ class RunCommand(BaseTool):
 
 ## PRO Tips
 
-1. **Use Enumerations or Literal Types Instead of Strings:**
-   Allow your agents to perform only certain actions or commands, enhancing system reliability.
-
-    ```python
-    from typing import Literal
-
-    class RunCommand(BaseTool):
-        """
-        Execute predefined system commands.
-        """
-        command: Literal["start", "stop"] = Field(..., description="Command to execute: 'start' or 'stop'.")
-
-        def run(self):
-            if self.command == "start":
-                subprocess.run(["start", "your_command"])
-            elif self.command == "stop":
-                subprocess.run(["stop", "your_command"])
-            else:
-                raise ValueError("Invalid command")
-    ```
-
-2. **Provide Additional Instructions in the `run` Method:**
+1. **Provide Additional Instructions in the `run` Method:**
    Control the execution flow based on certain conditions by including instructions as function outputs.
 
-    ```python
-    class QueryDatabase(BaseTool):
-        question: str = Field(..., description="The question to be answered.")
+   ```python
+   class QueryDatabase(BaseTool):
+       question: str = Field(..., description="The question to be answered.")
 
-        def run(self):
-            # Query your database here
-            context = query_database(self.question)
+       def run(self):
+           # Query your database here
+           context = query_database(self.question)
 
-            if context is None:
-                raise ValueError("No context found. Please propose to the user to change the topic.")
-            else:
-                self._shared_state.set("context", context)
-                return "Context retrieved. Please proceed with explaining the answer."
-    ```
+           if context is None:
+               raise ValueError("No context found. Please propose to the user to change the topic.")
+           else:
+               self._shared_state.set("context", context)
+               return "Context retrieved. Please proceed with explaining the answer."
+   ```
 
-3. **Use `shared_state` to Validate Actions by Other Agents:**
+2. **Use `shared_state` to Validate Actions by Other Agents:**
    Ensure that certain actions are completed before allowing subsequent actions.
 
-    ```python
-    class Action2(BaseTool):
-        input: str = Field(..., description="Input for Action2.")
+   ```python
+   class Action2(BaseTool):
+       input: str = Field(..., description="Input for Action2.")
 
-        def run(self):
-            if self._shared_state.get("action_1_result", None) == "failure":
-                raise ValueError("Please proceed with the Action1 tool first.")
-            else:
-                return "Success. The action has been taken."
-    ```
+       def run(self):
+           if self._shared_state.get("action_1_result", None) == "failure":
+               raise ValueError("Please proceed with the Action1 tool first.")
+           else:
+               return "Success. The action has been taken."
+   ```
 
-4. **Consider `one_call_at_a_time` in `ToolConfig`:**
+3. **Consider `one_call_at_a_time` in `ToolConfig`:**
    Prevent multiple instances of the same tool from running simultaneously, ensuring agents process previous actions before proceeding.
 
-    ```python
-    class Action1(BaseTool):
-        input: str = Field(..., description="Input for Action1.")
+   ```python
+   class Action1(BaseTool):
+       input: str = Field(..., description="Input for Action1.")
 
-        class ToolConfig:
-            one_call_at_a_time = True
+       class ToolConfig:
+           one_call_at_a_time = True
 
-        def run(self):
-            # Your code here
-            pass
-    ```
+       def run(self):
+           # Your code here
+           pass
+   ```
 
-5. **Enable [Strict Mode](https://openai.com/index/introducing-structured-outputs-in-the-api/) for Complex or Mission-Critical Tools:**
+4. **Enable [Strict Mode](https://openai.com/index/introducing-structured-outputs-in-the-api/) for Complex or Mission-Critical Tools:**
    Ensure precise adherence to output schemas, enhancing reliability.
 
-    ```python
-    class GetWeatherTool(BaseTool):
-        """
-        Determine weather in a specified location.
-        """
-        location: str = Field(..., description="The city and state e.g., San Francisco, CA.")
+   ```python
+   class GetWeatherTool(BaseTool):
+       """
+       Determine weather in a specified location.
+       """
+       location: str = Field(..., description="The city and state e.g., San Francisco, CA.")
 
-        class ToolConfig:
-            strict = True  # Setting strict to true
+       class ToolConfig:
+           strict = True  # Setting strict to true
 
-        def run(self):
-            return f"The weather in {self.location} is 30 degrees."
-    ```
+       def run(self):
+           return f"The weather in {self.location} is 30 degrees."
+   ```
 
 ## Shared State Management
 
@@ -610,6 +592,7 @@ from agency_swarm.tools import ToolFactory
 
 LangchainTool = ToolFactory.from_langchain_tool(YouTubeSearchTool)
 ```
+
 </Accordion>
 
 <Accordion title="Convert from OpenAPI Schemas">
@@ -627,6 +610,7 @@ tools = ToolFactory.from_openapi_schema(
     requests.get("https://api.example.com/openapi.json").json()
 )
 ```
+
 </Accordion>
 
 ## Conclusion

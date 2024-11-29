@@ -12,29 +12,26 @@ Utilizing an Agency instead of individual agents offers several advantages:
 
 <CardGroup>
 
-
 <Card title="Fewer Hallucinations" icon="bug" iconType="solid">
-Agents within an agency can supervise each other, reducing mistakes and handling unexpected scenarios more effectively.
+  Agents within an agency can supervise each other, reducing mistakes and handling unexpected scenarios more
+  effectively.
 </Card>
-
 
 <Card title="Handle Complex Tasks" icon="diagram-project" iconType="solid">
-Adding more agents allows for longer sequences of actions, enabling the completion of more complex tasks before delivering results to the user.
+  Adding more agents allows for longer sequences of actions, enabling the completion of more complex tasks before
+  delivering results to the user.
 </Card>
-
 
 <Card title="Scalability" icon="arrow-up-right-dots" iconType="solid">
-Agencies can grow in complexity by adding more agents, accommodating increasing integration demands.
+  Agencies can grow in complexity by adding more agents, accommodating increasing integration demands.
 </Card>
-
 
 </CardGroup>
 
-
 <Tip>
-Start with a minimal number of agents. Fine-tune them to ensure they function correctly before adding more. Introducing too many agents initially can make debugging and understanding interactions challenging.
+  Start with a minimal number of agents. Fine-tune them to ensure they function correctly before adding more.
+  Introducing too many agents initially can make debugging and understanding interactions challenging.
 </Tip>
-
 
 ## Communication Flows
 
@@ -48,7 +45,6 @@ Let's walk through creating an agency step by step, starting from basic concepts
 
 <Steps>
 
-
 <Step title="Import Necessary Modules">
 First, import the `Agency` class from `agency_swarm` and the agent classes you plan to include in your agency.
 
@@ -58,8 +54,8 @@ from .ceo import CEO
 from .developer import Developer
 from .virtual_assistant import VirtualAssistant
 ```
-</Step>
 
+</Step>
 
 <Step title="Instantiate Agents">
 Create instances of each agent you want to include.
@@ -69,8 +65,8 @@ ceo = CEO()
 dev = Developer()
 va = VirtualAssistant()
 ```
-</Step>
 
+</Step>
 
 <Step title="Define the Agency">
 Create an `Agency` instance, specifying the agents and their communication flows.
@@ -90,16 +86,17 @@ agency = Agency(
 ```
 
 In the `agency_chart`:
+
 - Agents at the top level (e.g., ceo) can interact directly with the user.
 - Lists define directed communication flows. For example, `[ceo, dev]` allows the CEO to initiate communication with the Developer.
 - Communication permissions flow from left to right.
 
 **In this configuration:**
+
 - The **CEO** can initiate conversations with the **Developer** and **Virtual Assistant**.
 - The **Developer** can communicate with the **Virtual Assistant**, but cannot initiate communication with the **CEO** directly.
 
 </Step>
-
 
 <Step title="Run the Agency">
 You can run your agency using one of the provided methods.
@@ -113,9 +110,7 @@ This will start an interactive session where you can interact with your agency t
 
 </Step>
 
-
 </Steps>
-
 
 ## Shared Instructions: The Agency Manifesto
 
@@ -167,6 +162,7 @@ agency = Agency(
 ```
 
 With this mode:
+
 - **Immediate Notifications**: Responses from the `SendMessage` tool are returned instantly as system notifications with status updates.
 - **Background Processing**: The recipient agent continues the task in the background.
 - **Status Checks**: The caller agent can check the task status (if the task is in progress) or retrieve the response (if the task is complete) using the `GetResponse` tool.
@@ -215,6 +211,7 @@ This file replaces the default `settings.json` and stores all agent settings, in
 ### Controlling Agent Behavior
 
 Customize agent behavior with parameters:
+
 - `temperature`: Controls the randomness of responses (0.0 to 1.0).
 - `top_p`: Controls diversity via nucleus sampling (0.0 to 1.0).
 - `max_prompt_tokens`: Limits the size of input prompts.
@@ -236,6 +233,7 @@ agency = Agency(
 ## Running the Agency
 
 Choose from three options to run your agency:
+
 1. **Gradio Interface**: The easiest way to get started.
 2. **Backend Integration**: Use for custom or backend setups.
 3. **Terminal**: Ideal for quick debugging and testing.
@@ -262,6 +260,7 @@ print(response)
 ```
 
 **Parameters (optional):**
+
 - `additional_instructions`: Additional directives for the task.
 - `tool_choice`: Specify tools like functions to use.
 - `attachments`: Attachments to include with the message.

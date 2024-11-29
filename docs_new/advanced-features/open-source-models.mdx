@@ -10,20 +10,27 @@ While OpenAI is generally recommended, there are situations where you might pref
 
 <CardGroup>
 
-<Card title="Astra Assistants API" icon="rocket" iconType="solid" href="https://github.com/datastax/astra-assistants-api">
-The best and the easiest option for running Open Source models. Supports Assistants API V2. See example [notebook](https://github.com/VRSEN/agency-swarm/blob/main/notebooks/os_models_with_astra_assistants_api.ipynb).
+<Card
+  title="Astra Assistants API"
+  icon="rocket"
+  iconType="solid"
+  href="https://github.com/datastax/astra-assistants-api"
+>
+  The best and the easiest option for running Open Source models. Supports Assistants API V2. See example
+  [notebook](https://github.com/VRSEN/agency-swarm/blob/main/notebooks/os_models_with_astra_assistants_api.ipynb).
 </Card>
 
 <Card title="Open Assistant API" icon="users" iconType="solid" href="https://github.com/MLT-OSS/open-assistant-api">
-Fully local, stable, and tested, but only supports Assistants V1. See example [here](https://github.com/VRSEN/agency-swarm-lab/tree/main/OpenSourceSwarm).
+  Fully local, stable, and tested, but only supports Assistants V1. See example
+  [here](https://github.com/VRSEN/agency-swarm-lab/tree/main/OpenSourceSwarm).
 </Card>
 
 <Card title="OpenOpenAI" icon="code" iconType="solid" href="https://github.com/transitive-bullshit/OpenOpenAI">
-Unverified.
+  Unverified.
 </Card>
 
 <Card title="LiteLLM" icon="code" iconType="solid" href="https://github.com/BerriAI/litellm/issues/2842">
-Assistants API Proxy in development.
+  Assistants API Proxy in development.
 </Card>
 
 </CardGroup>
@@ -33,8 +40,9 @@ Assistants API Proxy in development.
 <Steps>
 
 <Step title="1. Create an account on Astra Assistants API and obtain an API key." icon="user">
-Open the [Astra Assistants API](https://astra.datastax.com/signup) and create an account. Once you have an account, you can obtain an API key by clicking on the "Generate Token" button.
-![Astra Assistants API Example](https://firebasestorage.googleapis.com/v0/b/vrsen-ai/o/public%2Fgithub%2FScreenshot%202024-07-01%20at%208.19.00%E2%80%AFAM.png?alt=media&token=b4f1a7ad-3b77-40fa-a5da-866a4f1410bd)
+  Open the [Astra Assistants API](https://astra.datastax.com/signup) and create an account. Once you have an account,
+  you can obtain an API key by clicking on the "Generate Token" button. ![Astra Assistants API
+  Example](https://firebasestorage.googleapis.com/v0/b/vrsen-ai/o/public%2Fgithub%2FScreenshot%202024-07-01%20at%208.19.00%E2%80%AFAM.png?alt=media&token=b4f1a7ad-3b77-40fa-a5da-866a4f1410bd)
 </Step>
 
 <Step title="2. Add Astra DB Token to your .env file:" icon="file">
@@ -43,6 +51,7 @@ Copy the token from the file that starts with "AstraCS:" and paste it into your 
 ```env
 ASTRA_DB_APPLICATION_TOKEN=AstraCS:dsfkgn...
 ```
+
 </Step>
 
 <Step title="3. Add other model provider API keys to .env as well:" icon="key">
@@ -60,7 +69,7 @@ pip install astra-assistants-api gradio
 ```
 </Step>
 
-<Step title="5. Patch the OpenAI client:" icon="cogs">
+<Step title="5. Patch the OpenAI client:" icon="code">
 ```python
 from openai import OpenAI
 from astra_assistants import patch
@@ -92,6 +101,7 @@ ceo = Agent(
     files_folder="path/to/your/files"
 )
 ```
+
 </Step>
 
 <Step title="7. Create an agency:" icon="people-arrows">
@@ -102,6 +112,7 @@ from agency_swarm import Agency
 
 agency = Agency([ceo])
 ```
+
 </Step>
 
 <Step title="8. Start Gradio:" icon="play">
@@ -115,6 +126,7 @@ agency = Agency([ceo])
 
 demo_gradio(agency)
 ```
+
 </Step>
 
 </Steps>
@@ -127,24 +139,24 @@ To use agency-swarm with any other projects that mimic the Assistants API, gener
 
 <Steps>
 
-<Step title="1. Install the previous version of agency-swarm as most projects are not yet compatible with streaming and Assistants V2:" icon="download">
+<Step title="Install the previous version of agency-swarm as most projects are not yet compatible with streaming and Assistants V2:">
 ```bash
 pip install agency-swarm==0.1.7
 ```
 </Step>
 
-<Step title="2. Switch out the OpenAI client:" icon="cogs">
+<Step title="Switch out the OpenAI client:">
 ```python
 import openai
 from agency_swarm import set_openai_client
 
-client = openai.OpenAI(api_key="whatever", base_url="http://127.0.0.1:8000/")
+client = openai.OpenAI(api_key="your-api-key", base_url="http://127.0.0.1:8000/")
 
 set_openai_client(client)
 ```
 </Step>
 
-<Step title="3. Set the model parameter:" icon="user">
+<Step title="Set the model parameter:">
 ```python
 from agency_swarm import Agent
 
@@ -154,9 +166,10 @@ ceo = Agent(
     model='ollama/llama3'
 )
 ```
+
 </Step>
 
-<Step title="4. Start Gradio:" icon="play">
+<Step title="Start Gradio:">
 To utilize your agency in Gradio, apply a specific non-streaming `demo_gradio` method from the [agency-swarm-lab](https://github.com/VRSEN/agency-swarm-lab/blob/main/OpenSourceSwarm/demo_gradio.py) repository:
 
 ```python
@@ -167,9 +180,10 @@ agency = Agency([ceo])
 
 demo_gradio(agency)
 ```
+
 </Step>
 
-<Step title="5. For backend integrations, simply use:" icon="code">
+<Step title="For backend integrations, simply use:">
 ```python
 agency.get_completion("I am the CEO")
 ```

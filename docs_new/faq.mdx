@@ -36,6 +36,7 @@ def save_threads(new_threads, chat_id):
     with open(f"{chat_id}_threads.json", "w") as file:
         json.dump(new_threads, file)
 ```
+
 Implement in agency:
 
 ```python
@@ -46,7 +47,9 @@ agency = GenesisAgency(
         'save': lambda new_threads: save_threads(new_threads, chat_id=chat_id)
     })
 ```
+
 Note: These code examples are simplified for illustration. Production implementations should include proper error handling, security measures, and scalability considerations.
+
 </Accordion>
 
 <Accordion title="Should I use local file storage for thread management in a production environment?" icon="rocket">
@@ -59,13 +62,15 @@ Note: These code examples are simplified for illustration. Production implementa
 </Accordion>
 
 <Accordion title="Will previous messages be visible in Gradio when continuing a conversation?" icon="comments">
-**A**: No, previous messages won't be displayed in the Gradio interface. However, the agents will retain the context of these messages and continue the conversation appropriately.
+  **A**: No, previous messages won't be displayed in the Gradio interface. However, the agents will retain the context
+  of these messages and continue the conversation appropriately.
 </Accordion>
 
 <Accordion title="How can I serve an Agency as an API using FastAPI?" icon="book">
 **A**: Here's an example of how to serve an Agency as an API using FastAPI:
 
 - Define the agency within the chat endpoint:
+
 ```python
 @app.post("/chat")
 async def chat(user_request: UserRequest):
@@ -82,7 +87,6 @@ async def chat(user_request: UserRequest):
 </Accordion>
 
 </AccordionGroup>
-
 
 ## Getting Support
 

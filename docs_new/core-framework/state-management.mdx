@@ -9,7 +9,8 @@ Agency Swarm implements a multi-layered approach to state management, combining 
 ## Assistant State Management
 
 <Card title="Local Settings Storage" icon="database">
-  Agency Swarm maintains assistant configurations in a local `settings.json` file, preventing unnecessary recreation of assistants on application restart.
+  Agency Swarm maintains assistant configurations in a local `settings.json` file, preventing unnecessary recreation of
+  assistants on application restart.
 </Card>
 
 ## Conversation Threads
@@ -41,6 +42,7 @@ value = self._shared_state.get("key")
 ```
 
 Tools can share data through an in-memory key-value store using `self._shared_state`. This enables:
+
 - Data passing between different tools
 - Temporary storage during agency execution
 - Cross-agent data sharing within a session
@@ -116,7 +118,7 @@ The threads data structure must match the framework's expected format:
 </Accordion>
 
 <Info>
-The callbacks are executed:
-- On Agency initialization, when threads are created
-- When assistant settings are modified
+  The callbacks are executed:
+  - On Agency initialization, when threads are created
+  - When assistant settings are modified
 </Info>

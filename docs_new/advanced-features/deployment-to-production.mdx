@@ -91,13 +91,13 @@ Simplify deployment by deploying your agents and tools together using our ready-
 Leverage our Railway deployment template to quickly deploy your agency as a web service. Railway is a platform that simplifies deploying applications without the overhead of managing servers.
 
 <Card
-    title="API Railway Template"
-    color="#F3A78B"
-    href="https://github.com/VRSEN/agency-swarm-api-railway-template"
-    icon="train"
-    iconType="duotone"
+  title="API Railway Template"
+  color="#F3A78B"
+  href="https://github.com/VRSEN/agency-swarm-api-railway-template"
+  icon="train"
+  iconType="duotone"
 >
-    Click here to access the template and follow the instructions to get your agency deployed.
+  Click here to access the template and follow the instructions to get your agency deployed.
 </Card>
 
 Find more detailed instructions in the video below:
@@ -108,12 +108,13 @@ Find more detailed instructions in the video below:
 
 <Accordion title="Option 2: Deploy Tools as Separate API Endpoints" defaultOpen={false}>
 
-Alternatively, you can deploy your tools as separate API endpoints (e.g., serverless functions) and integrate them into your agents using [OpenAPI schemas](/advanced-features/openapi-schemas). This approach allows for greater scalability and modularity, especially if you plan to reuse tools across different agents or services.
+Alternatively, you can deploy your tools as separate API endpoints (e.g., serverless functions) and integrate them into your agents using [OpenAPI schemas](/advanced-features/openapi-schemas). This method is ideal if you plan to reuse tools across different agents or services.
 
-Deploying tools separately allows for greater flexibility and scalability. You can deploy individual tools as serverless functions on platforms like AWS Lambda, Google Cloud Functions, or Azure Functions. This approach provides on-demand scalability and cost efficiency. Alternatively, you can host your tools as custom API endpoints using frameworks like FastAPI or Flask and deploy them on platforms such as Heroku, DigitalOcean, Railway, or your own servers.
+Deploying tools separately provides flexibility and scalability. You can deploy individual tools as serverless functions on platforms like AWS Lambda, Google Cloud Functions, or Azure Functions. This ensures on-demand scaling and cost efficiency. Alternatively, you can host your tools as custom API endpoints using frameworks like FastAPI or Flask and deploy them on platforms such as Heroku, DigitalOcean, Railway, or your own servers.
 
 <Note>
-When deploying tools separately, ensure proper authentication and secure communication between your agents and the tool APIs.
+  When deploying tools separately, ensure proper authentication and secure communication between your agents and the
+  tool APIs.
 </Note>
 
 </Accordion>
