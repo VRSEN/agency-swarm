@@ -11,6 +11,7 @@ from typing import (
     Dict,
     List,
     Literal,
+    Optional,
     Type,
     TypedDict,
     TypeVar,
@@ -218,7 +219,7 @@ class Agency:
     def get_completion_stream(
         self,
         message: str,
-        event_handler: type(AgencyEventHandler),
+        event_handler: Optional[Type[AgencyEventHandler]] = None,
         message_files: List[str] = None,
         recipient_agent: Agent = None,
         additional_instructions: str = None,
@@ -231,7 +232,7 @@ class Agency:
 
         Parameters:
             message (str): The message for which completion is to be retrieved.
-            event_handler (type(AgencyEventHandler)): The event handler class to handle the completion stream. https://github.com/openai/openai-python/blob/main/helpers.md
+            event_handler (Type[AgencyEventHandler], optional): The event handler class to handle the completion stream. https://github.com/openai/openai-python/blob/main/helpers.md Defaults to None.
             message_files (list, optional): A list of file ids to be sent as attachments with the message. When using this parameter, files will be assigned both to file_search and code_interpreter tools if available. It is recommended to assign files to the most sutiable tool manually, using the attachments parameter.  Defaults to None.
             recipient_agent (Agent, optional): The agent to which the message should be sent. Defaults to the first agent in the agency chart.
             additional_instructions (str, optional): Additional instructions to be sent with the message. Defaults to None.
@@ -280,7 +281,7 @@ class Agency:
 
         Parameters:
             message (str): The message for which completion is to be retrieved.
-            response_format (type(BaseModel)): The response format to use for the completion.
+            response_format (Type[BaseModel]): The response format to use for the completion.
             message_files (list, optional): A list of file ids to be sent as attachments with the message. When using this parameter, files will be assigned both to file_search and code_interpreter tools if available. It is recommended to assign files to the most sutiable tool manually, using the attachments parameter.  Defaults to None.
             recipient_agent (Agent, optional): The agent to which the message should be sent. Defaults to the first agent in the agency chart.
             additional_instructions (str, optional): Additional instructions to be sent with the message. Defaults to None.
