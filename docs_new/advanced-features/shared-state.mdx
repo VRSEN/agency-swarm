@@ -53,7 +53,7 @@ Shared state is available only when tools are deployed together with agents (con
 
         def run(self):
             # Fetch data based on the question
-            context = "Retrieved context based on the question."
+            context = query_database(self.question)
             # Store the context in shared state
             self._shared_state.set('context', context)
             return "Context has been retrieved and stored successfully."

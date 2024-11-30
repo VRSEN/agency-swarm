@@ -1,0 +1,115 @@
+---
+title: "Overview"
+description: "Understanding Tools in Agency Swarm."
+icon: "book-open"
+---
+
+Tools are the building blocks that give agents their capabilities. They are specialized functions or actions that agents can perform to interact with the environment, process data, communicate, and much more. By defining custom tools, you can extend the functionality of your agents to suit specific tasks or integrate with external systems.
+
+In Agency Swarm, tools are Python classes that inherit from `BaseTool`. They are defined using [Pydantic](https://docs.pydantic.dev/latest/) for data validation and settings management. Each tool encapsulates a specific piece of functionality that an agent can invoke during its operation.
+
+<Note>
+**Key characteristics of tools:**
+
+- **Modular:** Each tool performs a single, well-defined task.
+- **Reusable:** Tools can be shared among multiple agents.
+- **Extensible:** You can create custom tools to interact with APIs, process data, and more.
+</Note>
+
+## Built-in Tools
+
+Agency Swarm comes with several built-in tools to enhance agent capabilities:
+
+<Accordion title="Code Interpreter" icon="code">
+- **Purpose**: Allows agents to execute code within a Jupyter Notebook environment (without internet access).
+- **Integration**:
+  ```python
+  from agency_swarm.tools import CodeInterpreter
+
+  agent = Agent(
+      name="DataAnalyst",
+      tools=[CodeInterpreter],
+      # Other agent parameters
+  )
+  ```
+</Accordion>
+
+<Accordion title="File Search" icon="magnifying-glass">
+- **Purpose**: Enables Retrieval-Augmented Generation (RAG) by allowing agents to search files.
+- **Integration**:
+  ```python
+  from agency_swarm.tools import FileSearch
+
+  agent = Agent(
+      name="Researcher",
+      tools=[FileSearch],
+      # Other agent parameters
+  )
+  ```
+</Accordion>
+
+## Basic Process Overview for Creating Custom Tools
+
+<Steps>
+  <Step title="Plan the Tool's Purpose and Functionality">
+    Define what the tool will do and how it will be used by agents.
+  </Step>
+  <Step title="Create a New Python Class">
+    Import `BaseTool` and create a new class that extends it.
+  </Step>
+  <Step title="Write a Clear Docstring">
+    This docstring is crucial as it helps agents understand how to use the tool.
+  </Step>
+  <Step title="Define Input Fields">
+    Use Pydantic's `Field` to define the tool's input parameters.
+  </Step>
+  <Step title="Implement the run Method">
+    Write the code that executes the tool's functionality.
+  </Step>
+  <Step title="Test the Tool">
+    Ensure the tool works as expected before integrating it.
+  </Step>
+  <Step title="Add to Agent's Toolset">
+    Include the tool in the agent's list of available tools.
+  </Step>
+</Steps>
+
+
+## Next Steps
+
+Learn more about tools in Agency Swarm:
+
+<CardGroup cols={2}>
+  <Card
+    title="Creating Custom Tools"
+    icon="hammer"
+    iconType="duotone"
+    href="./creating-custom-tools"
+  >
+    Learn how to create your own tools from scratch with step-by-step examples and best practices.
+  </Card>
+  <Card
+    title="Advanced Features"
+    icon="wand-sparkles"
+    iconType="duotone"
+    href="./advanced-tool-features"
+  >
+    Explore validation, error handling, ToolConfig, and other advanced capabilities.
+  </Card>
+  <Card
+    title="Best Practices & Examples"
+    icon="code"
+    iconType="duotone"
+    href="./best-practices-and-examples"
+  >
+    Real-world examples and patterns for building robust, production-ready tools.
+  </Card>
+  <Card
+    title="Tool Factory"
+    icon="industry"
+    iconType="duotone"
+    href="./tool-factory"
+  >
+    Convert Langchain tools and OpenAPI schemas into Agency Swarm tools.
+  </Card>
+</CardGroup>

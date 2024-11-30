@@ -170,7 +170,7 @@ agent = Agent(name='MyAgent', model='gpt-4o-mini-model-name')
 
 <Note>
 
-**Note**: For more information on using OpenAPI schemas to create tools for your agents, see the [OpenAPI Schemas](../advanced-features/openapi-schemas) page.
+**Note**: For more information on using OpenAPI schemas to create tools for your agents, see the [OpenAPI Schemas](/advanced-features/openapi-schemas) page.
 
 </Note>
 
@@ -194,7 +194,7 @@ To check available agents, simply run the command without any arguments.
 
 ## Response Validator
 
-See the [Output Validation](../advanced-features/output-validation) page for more information on how to use response validators to validate the response before sending it to the user or another agent.
+See the [Output Validation](/advanced-features/output-validation) page for more information on how to use response validators to validate the response before sending it to the user or another agent.
 
 ## Agent Template Using the CLI
 
@@ -230,7 +230,7 @@ Running the command generates the following folder structure:
 **Explanation:**
 
 - **files**: Store files to be uploaded to OpenAI. Acceptable formats are listed in [File Search](https://platform.openai.com/docs/assistants/tools/file-search#supported-files) and [Code Interpreter](https://platform.openai.com/docs/assistants/tools/code-interpreter#supported-files). Uploaded files receive an ID to prevent re-uploading.
-- **schemas**: Store OpenAPI schemas to be automatically converted into tools. Place the schema in this folder and specify it when initializing your agent. [Read more](../advanced-features/openapi-schemas).
+- **schemas**: Store OpenAPI schemas to be automatically converted into tools. Place the schema in this folder and specify it when initializing your agent. [Read more](/advanced-features/openapi-schemas).
 - **tools**: Store tools as Python files. Each file must have the same name as the tool class (e.g., `ExampleTool.py` must contain a class called `ExampleTool`). [Read more](./tools).
 
 </Step>

@@ -83,7 +83,17 @@
     {
       "group": "Agency Framework",
       "pages": [
-        "core-framework/tools",
+        {
+          "group": "Tools",
+          "icon": "wrench",
+          "pages": [
+            "core-framework/tools/overview",
+            "core-framework/tools/creating-custom-tools",
+            "core-framework/tools/advanced-tool-features",
+            "core-framework/tools/best-practices-and-examples",
+            "core-framework/tools/tool-factory"
+          ]
+        },
         "core-framework/agents",
         "core-framework/agencies",
         "core-framework/state-management"

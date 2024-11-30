@@ -1,0 +1,221 @@
+---
+title: "Creating Custom Tools"
+description: "Learn how to create custom tools in Agency Swarm"
+icon: "hammer"
+---
+
+## Basic Process Overview
+
+<Steps>
+  <Step title="Plan the Tool's Purpose and Functionality">
+    Define what the tool will do and how it will be used by agents.
+  </Step>
+  <Step title="Create a New Python Class">
+    Import `BaseTool` and create a new class that extends it.
+  </Step>
+  <Step title="Write a Clear Docstring">
+    This docstring is crucial as it helps agents understand how to use the tool.
+  </Step>
+  <Step title="Define Input Fields">
+    Use Pydantic's `Field` to define the tool's input parameters.
+  </Step>
+  <Step title="Implement the run Method">
+    Write the code that executes the tool's functionality.
+  </Step>
+  <Step title="Test the Tool">
+    Ensure the tool works as expected before integrating it.
+  </Step>
+  <Step title="Add to Agent's Toolset">
+    Include the tool in the agent's list of available tools.
+  </Step>
+</Steps>
+
+## Creating Your First Tool
+
+Let's walk through creating a simple tool step by step.
+
+### Step 1: Import Necessary Modules
+
+You'll need to import `BaseTool` from `agency_swarm.tools` and `Field` from `pydantic`.
+
+```python
+from agency_swarm.tools import BaseTool
+from pydantic import Field
+```
+
+### Step 2: Define Your Tool Class
+
+Create a new class that inherits from `BaseTool`. Write a clear docstring describing the tool's purpose.
+
+```python
+class Calculator(BaseTool):
+    """
+    A simple calculator tool that evaluates mathematical expressions.
+    """
+    expression: str = Field(
+        ...,
+        description="The mathematical expression to evaluate."
+    )
+
+    def run(self):
+        # Implement the tool's functionality
+        try:
+            result = eval(self.expression)
+            return str(result)
+        except Exception as e:
+            return f"Error calculating expression: {e}"
+```
+
+<Note>
+**How Docstrings Affect Agent Behavior:**
+
+Docstrings are parsed and included in the OpenAI schema of the respective tools. This allows agents to understand the tools they have at their disposal and perform function calls properly with this awareness. Developers should write good tool docstrings, clearly describing the tool's purpose and usage to facilitate effective agent interactions.
+
+</Note>
+
+### Step 3: Define Input Fields
+
+Use Pydantic fields to define the inputs your tool will accept.
+
+#### Basic Field Types
+
+Common field types include:
+
+- `str` for strings
+- `int` for integers
+- `float` for floating-point numbers
+- `bool` for boolean values
+
+Example:
+
+```python
+from pydantic import Field
+
+class ExampleTool(BaseTool):
+    age: int = Field(..., description="User's age.")
+    name: str = Field(..., description="User's full name.")
+```
+
+#### Required vs Optional Fields
+
+- **Required Fields:** Use `...` (Ellipsis) to indicate a required field.
+
+  ```python
+  location: str = Field(..., description="The location to search.")
+  ```
+
+- **Optional Fields:** Provide a default value to make a field optional.
+
+  ```python
+  comments: str = Field("", description="Additional comments.")
+  ```
+
+  For lists, use `default_factory`:
+
+  ```python
+  from typing import List
+
+  tags: List[str] = Field(default_factory=list, description="List of tags.")
+  ```
+
+#### Special Pydantic Types
+
+Leverage Pydantic's special types for enhanced validation:
+
+- `EmailStr` for validating email addresses (requires `pip install email-validator`)
+- `HttpUrl` for validating URLs
+
+Example:
+
+```python
+from pydantic import EmailStr, HttpUrl
+
+class UserTool(BaseTool):
+    email: EmailStr = Field(..., description="User's email address.")
+    website: HttpUrl = Field(..., description="User's website URL.")
+```
+
+See more special types in [Pydantic's documentation](https://docs.pydantic.dev/latest/api/types/).
+
+<Note>
+**Field Descriptions and Their Impact:**
+
+Field descriptions are used in the OpenAI function schemas presented to agents. They guide the agent in generating the correct inputs when calling the tool. Clear and descriptive field descriptions improve the agent's ability to use the tool effectively.
+
+</Note>
+
+#### Default Values and Their Impact
+
+Providing default values for fields makes them optional. Agents may omit these fields when invoking the tool, and the default values will be used. This can simplify tool usage but be cautious with defaults that might lead to unintended behavior.
+
+### Step 4: Implement the `run` Method
+
+Write the logic that the tool will execute when called.
+
+```python
+def run(self):
+    # Implement the tool's functionality
+    try:
+        # Your tool logic here
+        result = self.process_data()
+        return result
+    except Exception as e:
+        return f"An error occurred: {e}"
+```
+
+### Step 5: Test the Tool Independently
+
+Before integrating the tool with an agent, test it to ensure it behaves as expected.
+
+```python
+if __name__ == "__main__":
+    # Test the Calculator tool
+    calc = Calculator(expression="2 + 2 * 3")
+    print(calc.run())  # Output should be '8'
+```
+
+### Step 6: Add the Tool to an Agent
+
+Include the tool in an agent's list of tools.
+
+```python
+from agency_swarm import Agent
+from .tools.calculator import Calculator
+
+class MathAgent(Agent):
+    def __init__(self):
+        super().__init__(
+            name="MathAgent",
+            description="An agent capable of performing mathematical calculations.",
+            tools=[Calculator],
+            instructions="./instructions.md",
+            temperature=0.0,
+            max_prompt_tokens=25000,
+        )
+```
+
+## Testing Your Tools
+
+Include test cases to ensure tools work as intended:
+
+```python
+if __name__ == "__main__":
+    # Test the EmailSender tool
+    email_sender = EmailSender(
+        chain_of_thought="Plan to inform the team about the update.",
+        recipient="user@example.com",
+        subject="Project Update",
+        body="The project is on track."
+    )
+    print(email_sender.run())  # Expected output: 'Email sent successfully.'
+```
+
+<Check>
+Remember to:
+- Write clear docstrings that explain the tool's purpose
+- Validate all inputs using Pydantic fields
+- Handle errors gracefully in the run method
+- Test your tool thoroughly before deployment
+</Check>
+
+---

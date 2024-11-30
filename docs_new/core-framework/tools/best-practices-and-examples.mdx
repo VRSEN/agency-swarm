@@ -1,0 +1,204 @@
+---
+title: "Best Practices & Examples"
+description: "Best practices and real-world examples for Agency Swarm tools."
+icon: "code"
+---
+
+## Best Practices for Tools
+
+### Use Clear Descriptions
+
+Provide detailed descriptions for tools and fields.
+
+- **Tool Docstrings:**
+  - Clearly explain the tool's purpose and usage.
+- **Field Descriptions:**
+  - Guide the agent in providing correct inputs.
+
+### Validate Inputs Thoroughly
+
+- Use Pydantic's validation features.
+- Implement custom validators when necessary.
+
+### Handle Exceptions Gracefully
+
+- Catch and handle exceptions within the `run` method.
+- Provide informative error messages.
+
+### Avoid Hardcoding Sensitive Data
+
+- Use environment variables for API keys and secrets.
+
+### Define Constants Globally
+
+- For values that don't change, define them outside the class.
+
+### Use Enumerations or Literal Types
+
+Restrict agent inputs to specific allowed values.
+
+```python
+from typing import Literal
+
+class RunCommand(BaseTool):
+    """
+    Execute predefined system commands.
+    """
+    command: Literal["start", "stop"] = Field(..., description="Command to execute: 'start' or 'stop'.")
+
+    def run(self):
+        if self.command == "start":
+            # Start command logic
+            pass
+        elif self.command == "stop":
+            # Stop command logic
+            pass
+        else:
+            raise ValueError("Invalid command")
+```
+
+## Complex Tool Examples
+
+### Example: Email Sending Tool
+
+```python
+from agency_swarm.tools import BaseTool
+from pydantic import Field, EmailStr
+
+class EmailSender(BaseTool):
+    """
+    Sends emails after planning the content and recipients.
+    """
+    chain_of_thought: str = Field(
+        ...,
+        description="Plan how to construct the email. Consider the recipient, subject, and content."
+    )
+    recipient: EmailStr = Field(..., description="Email recipient's address.")
+    subject: str = Field(..., description="Subject of the email.")
+    body: str = Field(..., description="Content of the email.")
+
+    def run(self):
+        # Implement email sending logic, e.g., using smtplib
+        return "Email sent successfully."
+```
+
+### Example: GitHub Repository Tool
+
+```python
+from agency_swarm.tools import BaseTool
+from pydantic import Field
+from typing import Literal
+import os
+from github import Github
+
+class GitHubTool(BaseTool):
+    """
+    Interact with GitHub repositories to list and create issues.
+    """
+    repo_name: str = Field(..., description="Repository name in 'owner/repo' format.")
+    action: Literal["list_issues", "create_issue"] = Field(..., description="Action to perform.")
+    issue_title: str = Field(None, description="Title of the issue to create.")
+    issue_body: str = Field(None, description="Body content of the issue to create.")
+
+    def run(self):
+        github_token = os.getenv("GITHUB_TOKEN")
+        if not github_token:
+            return "GitHub token not found in environment variables."
+        github = Github(github_token)
+        try:
+            repo = github.get_repo(self.repo_name)
+            if self.action == "list_issues":
+                issues = repo.get_issues(state='open')
+                return [issue.title for issue in issues]
+            elif self.action == "create_issue":
+                if not self.issue_title:
+                    return "Issue title is required to create an issue."
+                issue = repo.create_issue(title=self.issue_title, body=self.issue_body)
+                return f"Issue '{issue.title}' created successfully."
+            else:
+                return "Invalid action specified."
+        except Exception as e:
+            return f"Error interacting with GitHub: {e}"
+```
+
+## Common Patterns
+
+### Method Composition
+
+Combine multiple methods to handle complex operations.
+
+```python
+class CompositeTool(BaseTool):
+    """
+    A tool that combines several methods to perform a series of actions.
+    """
+    input_data: str = Field(..., description="Input data for the composite operation.")
+
+    def run(self):
+        # Step 1: Process data
+        processed_data = self.process_data(self.input_data)
+        # Step 2: Analyze results
+        analysis = self.analyze_results(processed_data)
+        # Step 3: Format output
+        output = self.format_output(analysis)
+        return output
+
+    def process_data(self, data):
+        # Implement data processing logic
+        pass
+
+    def analyze_results(self, data):
+        # Implement analysis logic
+        pass
+
+    def format_output(self, data):
+        # Implement output formatting
+        pass
+```
+
+### Using Chain-of-Thought Parameters
+
+Improve function call accuracy by adding a planning parameter.
+
+```python
+from agency_swarm.tools import BaseTool
+from pydantic import Field
+
+class ComplexAnalysisTool(BaseTool):
+    """
+    Performs complex analysis after planning the approach.
+    """
+    chain_of_thought: str = Field(
+        ...,
+        description="Plan the analysis steps and considerations."
+    )
+    data: str = Field(..., description="Data to analyze.")
+
+    def run(self):
+        # Analysis logic
+        return "Analysis complete."
+```
+
+## Testing Tools
+
+Include test cases to ensure tools work as intended.
+
+```python
+if __name__ == "__main__":
+    # Test the EmailSender tool
+    email_sender = EmailSender(
+        chain_of_thought="Plan to inform the team about the update.",
+        recipient="user@example.com",
+        subject="Project Update",
+        body="The project is on track."
+    )
+    print(email_sender.run())  # Expected output: 'Email sent successfully.'
+```
+
+<Check>
+Remember to:
+- Describe Tools and Fields: Provide detailed descriptions for effective agent usage.
+- Validate Inputs: Use Pydantic's Field and validators.
+- Test Thoroughly: Add test cases to ensure functionality.
+- Leverage Advanced Features: Use ToolConfig, shared_state, and enumerations for reliability.
+</Check>
