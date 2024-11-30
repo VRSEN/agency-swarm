@@ -56,32 +56,32 @@ Follow these steps to create your first Agency using Cursor:
   <Step title="Send Your First Prompt to Composer">
     Spend as much time as possible on your first prompt. This will save you a lot of time later. Make sure to include:
       - All agents that you want to create
-      - All tools and APIs that the agents must use.
-      - Communication flows between your agents.
+      - All tools and APIs that the agents must use
+      - Communication flows between your agents
   </Step>
 
-  <Step title="Varify The Agency Structure">
+  <Step title="Verify The Agency Structure">
     Sometimes Cursor forgets certain files or hallucinates the agency structure. Make sure to verify that:
-    - All import statements are correct.
-    - `requirements.txt` file exists.
-    - `agency.py` file executes properly.   
+    - All import statements are correct
+    - `requirements.txt` file exists
+    - `agency.py` file executes properly
 
     If any of these are missing or not working, instruct composer to create them or fix the code.
   </Step>
 
   <Step title="Adjust the Tools">
-    Run each tool file to make sure they work as expected. You will see the test cases that Cursor created at the bottom in `if __name__ == "__main__"` statements.  
+    Run each tool file to make sure they work as expected. You will see the test cases that Cursor created at the bottom in `if __name__ == "__main__"` statements.
     - If any of the tools are not working, send the error message to composer and ask it to fix the code.
-    - If you want to adjust the functionality of the tool, either use inline editing `CMD+K` (macOS) or `Ctrl+K` (Windows/Linux) or send another message to composer.
-    - If you are stuck, use Chat `CMD+L` (macOS) or `Ctrl+L` (Windows/Linux) to ask questions and brain storm alternative approaches. For example, ask "What other APIs can I use for this tool?"
-  
+    - If you want to adjust the functionality of the tool, either use inline editing `Cmd+K` (macOS) or `Ctrl+K` (Windows/Linux) or send another message to composer.
+    - If you are stuck, use Chat `Cmd+L` (macOS) or `Ctrl+L` (Windows/Linux) to ask questions and brainstorm alternative approaches. For example, ask "What other APIs can I use for this tool?"
+
   </Step>
 
   <Step title="Adjust the Agents">
     Verify the agent instructions and parameters are correct after adjustments. **Actually think about instructions.**
     - Use Chat or Inline Editing to adjust the `instruction.md` files to your needs.
     - Edit instructions manually and remove all boilerplate text.
-    - Make sure each agent has access to all the new tools either by speciying `tools_folder` path or adding them in `tools` parameter.
+    - Make sure each agent has access to all the new tools either by specifying `tools_folder` path or adding them in `tools` parameter.
   </Step>
 
   <Step title="Test Your Agency">
@@ -92,7 +92,7 @@ Follow these steps to create your first Agency using Cursor:
   </Step>
 
   <Step title="Repeat">
-    Iterate on your agency by repeating the process until you are satisfied with the results.  
+    Iterate on your agency by repeating the process until you are satisfied with the results.
 
       <Note>
       **Agent Development is an Iterative Process**
@@ -108,4 +108,3 @@ Follow these steps to create your first Agency using Cursor:
 
 - Learn the core concepts of Tools, Agents, and Agencies.
 - Watch the [Deployment Tutorial](https://www.youtube.com/watch?v=53_e3lmk6Mo).
-
