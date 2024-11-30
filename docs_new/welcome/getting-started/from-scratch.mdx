@@ -102,44 +102,58 @@ icon: "code"
   </Step>
 
   <Step title="Define Agent Roles">
-    Define your agent roles. For example, a CEO agent for managing tasks and a developer agent for executing tasks.
+    Adjust the parameters and instructions for each agent.
+
+    **Agent Template:**
 
     ```python
     from agency_swarm import Agent
 
-    ceo = Agent(
-        name="CEO",
-        description="Responsible for client communication, task planning, and management.",
-        instructions="You must converse with other agents to ensure complete task execution.",  # can be a file like ./instructions.md
-        tools=[]
-    )
-
-    developer = Agent(
-        name="Developer",
-        description="Responsible for executing tasks and providing feedback.",
-        instructions="You must execute the tasks provided by the CEO and provide feedback.",  # can be a file like ./instructions.md
-        tools=[MyCustomTool]
-    )
+    class Developer(Agent):
+        def __init__(self):
+            super().__init__(
+                name="Developer",
+                description="Responsible for executing tasks and providing feedback.",
+                instructions="./instructions.md",
+                files_folder="./files",
+                schemas_folder="./schemas",
+                tools_folder="./tools",
+                temperature=0.3,
+                max_prompt_tokens=25000,
+                examples=[]
+            )
     ```
 
+    Tools will be imported automatically from the `tools` folder.
+
+    **Instructions:**
+
+    ```md
+    You must execute the tasks provided by the CEO and provide feedback.
+    ```
   </Step>
 
   <Step title="Create Agency">
-    Define your agency chart.
-
-    Any agents that are listed in the same list (e.g., `[[ceo, developer]]`) can communicate with each other. The top-level list (`[ceo]`) defines agents that can communicate with the user.
+    Initialize your agents and define your agency chart.
 
     ```python
     from agency_swarm import Agency
+    from .Developer import Developer
+    from .CEO import CEO
+
+    developer = Developer()
+    ceo = CEO()
 
     agency = Agency(
         [
             ceo,  # CEO will be the entry point for communication with the user
             [ceo, developer],  # CEO can initiate communication with Developer
         ],
-        shared_instructions='You are a part of an AI development agency.\n\n'  # shared instructions for all agents
+        shared_instructions='./agency_manifesto.md'  # shared instructions for all agents
     )
     ```
+
+    Any agents that are listed in the same list (e.g., `[[ceo, developer]]`) can communicate with each other. The top-level list (`[ceo]`) defines agents that can communicate with the user.
 
     <Note title="Note on Communication Flows">
       In Agency Swarm, communication flows are directional, meaning they are established from left to right in the `agency_chart` definition. For instance, in the example above, the CEO can initiate a chat with the Developer (`developer`), and the Developer can respond in this chat. However, the Developer cannot initiate a chat with the CEO.
