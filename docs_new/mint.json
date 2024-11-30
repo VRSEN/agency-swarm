@@ -81,7 +81,7 @@
       ]
     },
     {
-      "group": "Agency Framework",
+      "group": "Core Framework",
       "pages": [
         {
           "group": "Tools",
@@ -100,25 +100,25 @@
       ]
     },
     {
-      "group": "Advanced Features",
+      "group": "Additional Features",
       "pages": [
-        "advanced-features/asynchronous-execution",
-        "advanced-features/shared-state",
-        "advanced-features/openapi-schemas",
-        "advanced-features/few-shot-examples",
-        "advanced-features/output-validation",
-        "advanced-features/streaming",
+        "additional-features/asynchronous-execution",
+        "additional-features/shared-state",
+        "additional-features/openapi-schemas",
+        "additional-features/few-shot-examples",
+        "additional-features/output-validation",
+        "additional-features/streaming",
         {
           "group": "Custom Communication Flows",
           "icon": "comments",
           "pages": [
-            "advanced-features/custom-communication-flows/overview",
-            "advanced-features/custom-communication-flows/common-use-cases"
+            "additional-features/custom-communication-flows/overview",
+            "additional-features/custom-communication-flows/common-use-cases"
           ]
         },
-        "advanced-features/azure-openai",
-        "advanced-features/open-source-models",
-        "advanced-features/deployment-to-production"
+        "additional-features/azure-openai",
+        "additional-features/open-source-models",
+        "additional-features/deployment-to-production"
       ]
     },
     {

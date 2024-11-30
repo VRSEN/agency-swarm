@@ -1,6 +1,6 @@
 ---
 title: "From Scratch"
-description: "Quick start guide to building an AI Agency from scratch."
+description: "Quick start guide to building an Agency from scratch."
 icon: "code"
 ---
 
@@ -9,45 +9,57 @@ icon: "code"
     Begin by setting your OpenAI API key.
 
     ```python
-    from aiagency import set_openai_key
+    from agency import set_openai_key
     set_openai_key("YOUR_API_KEY")
+    ```
+
+    Alternatively, you can set the API key in the `.env` file.
+
+    ```
+    OPENAI_API_KEY=sk-...
     ```
 
   </Step>
 
   <Step title="Create Project Structure">
-    Create the recommended directory structure for your agency:
+    Use the `create-agent-template` command to create the recommended directory structure for each agent.
+
+    **Command Syntax:**
+
+    ```bash
+    agency-swarm create-agent-template --name "AgentName" --description "Agent Description" [--path "/path/to/directory"] [--use_txt]
+    ```
+
+    **Agent Folder Structure:**
+
+    When you run the create-agent-template command, it creates the following folder structure for your agent:
+
+    ```
+    /your-agency-path/
+    └── AgentName/                    # Directory for the specific agent
+        ├── files/                    # Directory for files that will be uploaded to openai
+        ├── schemas/                  # Directory for OpenAPI schemas to be converted into tools
+        ├── tools/                    # Directory for tools to be imported by default. 
+        ├── AgentName.py              # The main agent class file
+        ├── __init__.py               # Initializes the agent folder as a Python package
+        └── instructions.md or .txt   # Instruction document for the agent
+    ```
+
+    This structure ensures that each agent has its dedicated space with all necessary files to start working on its specific tasks.  
+
+    **Agency Folder Structure:**
+
+    The full structure of the project will look like this:
 
     ```
     AgencyName/
-    ├── AgentName/
-    │   ├── __init__.py
-    │   ├── AgentName.py
-    │   ├── instructions.md
-    │   └── schemas/
-    │       ├── schema1.json
-    │       ├── schema2.json
-    │       └── ...
-    │   └── tools/
-    │       ├── ToolName1.py
-    │       ├── ToolName2.py
-    │       └── ...
-    ├── AnotherAgent/
-    │   └── ...
-    ├── agency.py
-    ├── agency_manifesto.md
-    ├── requirements.txt
+    ├── AgentName/            # Agent folder created with the command above
+    ├── AnotherAgent/         # Another agent folder 
+    ├── agency.py             # Main file where agents are imported and the agency is defined
+    ├── agency_manifesto.md   # Shared instructions and guidelines for all agents
+    ├── requirements.txt      # File listing all dependencies 
     └── ...
     ```
-
-    ## Components
-
-    - **AgencyName**: Root directory for your agency.
-    - **AgentName**: Directory for each agent, containing code and instructions.
-    - **Tools**: Directory within each agent for tools specific to that agent.
-    - **agency.py**: Main file where agents are imported and the agency is defined.
-    - **agency_manifesto.md**: Shared instructions and guidelines for all agents.
-    - **requirements.txt**: File listing all dependencies.
 
   </Step>
 
@@ -158,3 +170,8 @@ icon: "code"
 
   </Step>
 </Steps>
+
+## Next Steps
+
+- Learn the core concepts of Tools, Agents, and Agencies.
+- Watch the [Deployment Tutorial](https://www.youtube.com/watch?v=53_e3lmk6Mo).
