@@ -5,21 +5,16 @@ import sys
 from importlib import import_module
 from typing import Any, Dict, List, Type, Union
 
+import httpx
 import jsonref
-from jsonref import requests
-from pydantic import create_model, Field
-
-from .BaseTool import BaseTool
-from ..util.schema import dereference_schema, reference_schema
-
 from datamodel_code_generator import DataModelType, PythonVersion
 from datamodel_code_generator.model import get_data_model_types
 from datamodel_code_generator.parser.jsonschema import JsonSchemaParser
 
-import httpx
+from .BaseTool import BaseTool
+
 
 class ToolFactory:
-
     @staticmethod
     def from_langchain_tools(tools: List) -> List[Type[BaseTool]]:
         """
@@ -64,14 +59,14 @@ class ToolFactory:
                 if len(tool_input) == 1:
                     return tool.run(list(tool_input.values())[0])
                 else:
-                    raise TypeError(f"Error parsing input for tool '{tool.__class__.__name__}' Please open an issue "
-                                    f"on github.")
+                    raise TypeError(
+                        f"Error parsing input for tool '{tool.__class__.__name__}' Please open an issue "
+                        f"on github."
+                    )
 
         return ToolFactory.from_openai_schema(
-            format_tool_to_openai_function(tool),
-            callback
+            format_tool_to_openai_function(tool), callback
         )
-
 
     @staticmethod
     def from_openai_schema(schema: Dict[str, Any], callback: Any) -> Type[BaseTool]:
@@ -86,12 +81,11 @@ class ToolFactory:
             A BaseTool.
         """
         data_model_types = get_data_model_types(
-            DataModelType.PydanticV2BaseModel,
-            target_python_version=PythonVersion.PY_37
+            DataModelType.PydanticV2BaseModel, target_python_version=PythonVersion.PY_37
         )
 
         parser = JsonSchemaParser(
-            json.dumps(schema['parameters']),
+            json.dumps(schema["parameters"]),
             data_model_type=data_model_types.data_model,
             data_model_root_type=data_model_types.root_model,
             data_model_field_type=data_model_types.field_model,
@@ -99,7 +93,7 @@ class ToolFactory:
             dump_resolve_reference_action=data_model_types.dump_resolve_reference_action,
             use_schema_description=True,
             validation=False,
-            class_name='Model',
+            class_name="Model",
             # custom_template_dir=Path('/Users/vrsen/Projects/agency-swarm/agency-swarm/agency_swarm/tools/data_schema_templates')
         )
 
@@ -108,26 +102,34 @@ class ToolFactory:
         # # Execute the result to extract the model
         exec_globals = {}
         exec(result, exec_globals)
-        model = exec_globals.get('Model')
+        model = exec_globals.get("Model")
 
         if not model:
             raise ValueError(f"Could not extract model from schema {schema['name']}")
-        
+
         class ToolConfig:
             strict: bool = schema.get("strict", False)
-        
-        tool = type(schema['name'], (BaseTool, model), {
-            "__doc__": schema.get('description', ""),
-            "run": callback,
-        })
+
+        tool = type(
+            schema["name"],
+            (BaseTool, model),
+            {
+                "__doc__": schema.get("description", ""),
+                "run": callback,
+            },
+        )
 
         tool.ToolConfig = ToolConfig
 
         return tool
 
     @staticmethod
-    def from_openapi_schema(schema: Union[str, dict], headers: Dict[str, str] = None, params: Dict[str, Any] = None, strict: bool = False) \
-            -> List[Type[BaseTool]]:
+    def from_openapi_schema(
+        schema: Union[str, dict],
+        headers: Dict[str, str] = None,
+        params: Dict[str, Any] = None,
+        strict: bool = False,
+    ) -> List[Type[BaseTool]]:
         """
         Converts an OpenAPI schema into a list of BaseTools.
 
@@ -149,9 +151,10 @@ class ToolFactory:
         headers = {k: v for k, v in headers.items() if v is not None}
         for path, methods in openapi_spec["paths"].items():
             for method, spec_with_ref in methods.items():
+
                 async def callback(self):
                     url = openapi_spec["servers"][0]["url"] + path
-                    parameters = self.model_dump().get('parameters', {})
+                    parameters = self.model_dump().get("parameters", {})
                     # replace all parameters in url
                     for param, value in parameters.items():
                         if "{" + str(param) + "}" in url:
@@ -160,24 +163,34 @@ class ToolFactory:
                     url = url.rstrip("/")
                     parameters = {k: v for k, v in parameters.items() if v is not None}
                     parameters = {**parameters, **params} if params else parameters
-                    async with httpx.AsyncClient(timeout=90) as client:  # Set custom read timeout to 10 seconds
+                    async with httpx.AsyncClient(
+                        timeout=90
+                    ) as client:  # Set custom read timeout to 10 seconds
                         if method == "get":
-                            response = await client.get(url, params=parameters, headers=headers)
+                            response = await client.get(
+                                url, params=parameters, headers=headers
+                            )
                         elif method == "post":
-                            response = await client.post(url,
-                                                         params=parameters,
-                                                         json=self.model_dump().get('requestBody', None),
-                                                         headers=headers)
+                            response = await client.post(
+                                url,
+                                params=parameters,
+                                json=self.model_dump().get("requestBody", None),
+                                headers=headers,
+                            )
                         elif method == "put":
-                            response = await client.put(url,
-                                                        params=parameters,
-                                                        json=self.model_dump().get('requestBody', None),
-                                                        headers=headers)
+                            response = await client.put(
+                                url,
+                                params=parameters,
+                                json=self.model_dump().get("requestBody", None),
+                                headers=headers,
+                            )
                         elif method == "delete":
-                            response = await client.delete(url,
-                                                           params=parameters,
-                                                           json=self.model_dump().get('requestBody', None),
-                                                           headers=headers)
+                            response = await client.delete(
+                                url,
+                                params=parameters,
+                                json=self.model_dump().get("requestBody", None),
+                                headers=headers,
+                            )
                         return response.json()
 
                 # 1. Resolve JSON references.
@@ -209,31 +222,37 @@ class ToolFactory:
                             param["schema"] = {"type": param["type"]}
                         param_properties[param["name"]] = param["schema"]
                         if "description" in param:
-                            param_properties[param["name"]]["description"] = param["description"]
+                            param_properties[param["name"]]["description"] = param[
+                                "description"
+                            ]
                         if "required" in param and param["required"]:
                             required_params.append(param["name"])
                         if "example" in param:
-                            param_properties[param["name"]]["example"] = param["example"]
+                            param_properties[param["name"]]["example"] = param[
+                                "example"
+                            ]
                         if "examples" in param:
-                            param_properties[param["name"]]["examples"] = param["examples"]
-                    
+                            param_properties[param["name"]]["examples"] = param[
+                                "examples"
+                            ]
+
                     schema["properties"]["parameters"] = {
                         "type": "object",
                         "properties": param_properties,
-                        "required": required_params
+                        "required": required_params,
                     }
 
                 function = {
                     "name": function_name,
                     "description": desc,
                     "parameters": schema,
-                    "strict": strict
+                    "strict": strict,
                 }
 
                 tools.append(ToolFactory.from_openai_schema(function, callback))
 
         return tools
-    
+
     @staticmethod
     def from_file(file_path: str) -> Type[BaseTool]:
         """Dynamically imports a BaseTool class from a Python file within a package structure.
@@ -251,7 +270,7 @@ class ToolFactory:
         class_name = os.path.splitext(file_name)[0]
 
         exec_globals = globals()
-        
+
         # importing from agency_swarm package
         if "agency_swarm" in import_path:
             import_path = import_path.lstrip(".")
@@ -261,8 +280,6 @@ class ToolFactory:
             current_working_directory = os.getcwd()
             sys.path.append(current_working_directory)
             exec(f"from {import_path} import {class_name}", exec_globals)
-
-        
 
         imported_class = exec_globals.get(class_name)
         if not imported_class:
@@ -275,8 +292,12 @@ class ToolFactory:
         return imported_class
 
     @staticmethod
-    def get_openapi_schema(tools: List[Type[BaseTool]], url: str, title="Agent Tools",
-                           description="A collection of tools.") -> str:
+    def get_openapi_schema(
+        tools: List[Type[BaseTool]],
+        url: str,
+        title="Agent Tools",
+        description="A collection of tools.",
+    ) -> str:
         """
         Generates an OpenAPI schema from a list of BaseTools.
 
@@ -291,11 +312,7 @@ class ToolFactory:
         """
         schema = {
             "openapi": "3.1.0",
-            "info": {
-                "title": title,
-                "description": description,
-                "version": "v1.0.0"
-            },
+            "info": {"title": title, "description": description, "version": "v1.0.0"},
             "servers": [
                 {
                     "url": url,
@@ -304,11 +321,7 @@ class ToolFactory:
             "paths": {},
             "components": {
                 "schemas": {},
-                "securitySchemes": {
-                    "apiKey": {
-                        "type": "apiKey"
-                    }
-                }
+                "securitySchemes": {"apiKey": {"type": "apiKey"}},
             },
         }
 
@@ -318,28 +331,28 @@ class ToolFactory:
 
             openai_schema = tool.openai_schema
             defs = {}
-            if '$defs' in openai_schema['parameters']:
-                defs = openai_schema['parameters']['$defs']
-                del openai_schema['parameters']['$defs']
+            if "$defs" in openai_schema["parameters"]:
+                defs = openai_schema["parameters"]["$defs"]
+                del openai_schema["parameters"]["$defs"]
 
-            schema['paths']["/" + openai_schema['name']] = {
+            schema["paths"]["/" + openai_schema["name"]] = {
                 "post": {
-                    "description": openai_schema['description'],
-                    "operationId": openai_schema['name'],
+                    "description": openai_schema["description"],
+                    "operationId": openai_schema["name"],
                     "x-openai-isConsequential": False,
                     "parameters": [],
                     "requestBody": {
                         "content": {
-                            "application/json": {
-                                "schema": openai_schema['parameters']
-                            }
+                            "application/json": {"schema": openai_schema["parameters"]}
                         }
                     },
                 }
             }
 
-            schema['components']['schemas'].update(defs)
+            schema["components"]["schemas"].update(defs)
 
-        schema = json.dumps(schema, indent=2).replace("#/$defs/", "#/components/schemas/")
+        schema = json.dumps(schema, indent=2).replace(
+            "#/$defs/", "#/components/schemas/"
+        )
 
         return schema

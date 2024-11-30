@@ -1,8 +1,11 @@
-from agency_swarm.tools import BaseTool
-from pydantic import Field
-import subprocess
 import shlex
-from dotenv import load_dotenv, find_dotenv
+import subprocess
+
+from dotenv import find_dotenv, load_dotenv
+from pydantic import Field
+
+from agency_swarm.tools import BaseTool
+
 
 class CommandExecutor(BaseTool):
     """
@@ -11,9 +14,7 @@ class CommandExecutor(BaseTool):
     This tool runs a given command in the system's default shell and returns the stdout and stderr.
     """
 
-    command: str = Field(
-        ..., description="The command to execute in the terminal."
-    )
+    command: str = Field(..., description="The command to execute in the terminal.")
 
     def run(self):
         """
@@ -32,10 +33,13 @@ class CommandExecutor(BaseTool):
 
         # check if the command failed
         if result.returncode != 0 or result.stderr:
-            return (f"stdout: {result.stdout}\nstderr: {result.stderr}\nexit code: {result.returncode}\n\n"
-                    f"Please add error handling and continue debugging until the command runs successfully.")
+            return (
+                f"stdout: {result.stdout}\nstderr: {result.stderr}\nexit code: {result.returncode}\n\n"
+                f"Please add error handling and continue debugging until the command runs successfully."
+            )
 
         return f"stdout: {result.stdout}\nstderr: {result.stderr}\nexit code: {result.returncode}"
+
 
 if __name__ == "__main__":
     tool = CommandExecutor(command="ls -l")

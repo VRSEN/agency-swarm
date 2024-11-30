@@ -1,4 +1,5 @@
 from agency_swarm import Agent
+
 from .tools.CreateTool import CreateTool
 from .tools.TestTool import TestTool
 
@@ -11,5 +12,3 @@ class ToolCreator(Agent):
             tools=[CreateTool, TestTool],
             temperature=0,
         )
-
-

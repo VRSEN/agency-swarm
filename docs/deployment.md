@@ -8,7 +8,7 @@ To deploy your Agency on a production server, typically, you need to do the foll
 
 ## Loading Agents and Threads dynamically
 
-To load agents and threads dynamically, based on specific conditions, you will need to implement `threads_callbacks` and `settings_callbacks` in your agency. 
+To load agents and threads dynamically, based on specific conditions, you will need to implement `threads_callbacks` and `settings_callbacks` in your agency.
 
 ### Settings Callbacks
 
@@ -49,11 +49,11 @@ def save_threads(new_threads: Dict):
 ### Example
 
 Below is an example of how you initialize an agency with these callbacks. You will typically need to get some info like `user_id` or `chat_id` beforehand, and pass them into these callbacks, depending on your use case or business logic:
-    
+
 ```python
 agency = Agency([ceo],
                 threads_callbacks={
-                    'load': lambda: load_threads(chat_id), 
+                    'load': lambda: load_threads(chat_id),
                     'save': lambda new_threads: save_threads(new_threads)
                 },
                 settings_callbacks={
@@ -67,4 +67,3 @@ agency = Agency([ceo],
 ## Deploy each agent as a separate microservice
 
 ... coming soon ...
-

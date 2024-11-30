@@ -2,14 +2,17 @@ import base64
 import time
 
 from selenium.webdriver.common.by import By
-from selenium.webdriver.support.expected_conditions import presence_of_element_located, \
-    frame_to_be_available_and_switch_to_it
+from selenium.webdriver.support.expected_conditions import (
+    frame_to_be_available_and_switch_to_it,
+    presence_of_element_located,
+)
 from selenium.webdriver.support.wait import WebDriverWait
 
 from agency_swarm.tools import BaseTool
+from agency_swarm.util import get_openai_client
+
 from .util import get_b64_screenshot, remove_highlight_and_labels
 from .util.selenium import get_web_driver
-from agency_swarm.util import get_openai_client
 
 
 class SolveCaptcha(BaseTool):
@@ -22,7 +25,9 @@ class SolveCaptcha(BaseTool):
 
         try:
             WebDriverWait(wd, 10).until(
-                frame_to_be_available_and_switch_to_it((By.XPATH, "//iframe[@title='reCAPTCHA']"))
+                frame_to_be_available_and_switch_to_it(
+                    (By.XPATH, "//iframe[@title='reCAPTCHA']")
+                )
             )
 
             element = WebDriverWait(wd, 3).until(
@@ -44,8 +49,10 @@ class SolveCaptcha(BaseTool):
         try:
             # Now check if the reCAPTCHA is checked
             WebDriverWait(wd, 3).until(
-                lambda d: d.find_element(By.CLASS_NAME, "recaptcha-checkbox").get_attribute(
-                    "aria-checked") == "true"
+                lambda d: d.find_element(
+                    By.CLASS_NAME, "recaptcha-checkbox"
+                ).get_attribute("aria-checked")
+                == "true"
             )
 
             return "Success"
@@ -58,7 +65,11 @@ class SolveCaptcha(BaseTool):
 
         WebDriverWait(wd, 10).until(
             frame_to_be_available_and_switch_to_it(
-                (By.XPATH, "//iframe[@title='recaptcha challenge expires in two minutes']"))
+                (
+                    By.XPATH,
+                    "//iframe[@title='recaptcha challenge expires in two minutes']",
+                )
+            )
         )
 
         time.sleep(2)
@@ -68,8 +79,13 @@ class SolveCaptcha(BaseTool):
             tiles = wd.find_elements(By.CLASS_NAME, "rc-imageselect-tile")
 
             # filter out tiles with rc-imageselect-dynamic-selected class
-            tiles = [tile for tile in tiles if
-                     not tile.get_attribute("class").endswith("rc-imageselect-dynamic-selected")]
+            tiles = [
+                tile
+                for tile in tiles
+                if not tile.get_attribute("class").endswith(
+                    "rc-imageselect-dynamic-selected"
+                )
+            ]
 
             image_content = []
             i = 0
@@ -86,11 +102,10 @@ class SolveCaptcha(BaseTool):
                 image_content.append(
                     {
                         "type": "image_url",
-                        "image_url":
-                            {
-                                "url": f"data:image/jpeg;base64,{screenshot}",
-                                "detail": "high",
-                            }
+                        "image_url": {
+                            "url": f"data:image/jpeg;base64,{screenshot}",
+                            "detail": "high",
+                        },
                     },
                 )
             # highlight all titles with rc-imageselect-tile class but not with rc-imageselect-dynamic-selected
@@ -98,10 +113,13 @@ class SolveCaptcha(BaseTool):
 
             # screenshot = get_b64_screenshot(wd, wd.find_element(By.ID, "rc-imageselect"))
 
-            task_text = wd.find_element(By.CLASS_NAME, "rc-imageselect-instructions").text.strip().replace("\n",
-                                                                                                           " ")
+            task_text = (
+                wd.find_element(By.CLASS_NAME, "rc-imageselect-instructions")
+                .text.strip()
+                .replace("\n", " ")
+            )
 
-            continuous_task = 'once there are none left' in task_text.lower()
+            continuous_task = "once there are none left" in task_text.lower()
 
             task_text = task_text.replace("Click verify", "Output 0")
             task_text = task_text.replace("click skip", "Output 0")
@@ -112,15 +130,17 @@ class SolveCaptcha(BaseTool):
 
             additional_info = ""
             if len(tiles) > 9:
-                additional_info = ("Keep in mind that all images are a part of a bigger image "
-                                   "from left to right, and top to bottom. The grid is 4x4. ")
+                additional_info = (
+                    "Keep in mind that all images are a part of a bigger image "
+                    "from left to right, and top to bottom. The grid is 4x4. "
+                )
 
             messages = [
                 {
                     "role": "system",
-                    "content": f"""You are an advanced AI designed to support users with visual impairments. 
-                    User will provide you with {i} images numbered from 1 to {i}. Your task is to output 
-                    the numbers of the images that contain the requested object, or at least some part of the requested 
+                    "content": f"""You are an advanced AI designed to support users with visual impairments.
+                    User will provide you with {i} images numbered from 1 to {i}. Your task is to output
+                    the numbers of the images that contain the requested object, or at least some part of the requested
                     object. {additional_info}If there are no individual images that satisfy this condition, output 0.
                     """.replace("\n", ""),
                 },
@@ -131,10 +151,11 @@ class SolveCaptcha(BaseTool):
                         {
                             "type": "text",
                             "text": f"{task_text}. Only output numbers separated by commas and nothing else. "
-                                    f"Output 0 if there are none."
-                        }
-                    ]
-                }]
+                            f"Output 0 if there are none.",
+                        },
+                    ],
+                },
+            ]
 
             response = client.chat.completions.create(
                 model="gpt-4o",
@@ -162,11 +183,15 @@ class SolveCaptcha(BaseTool):
                     if self.verify_checkbox(wd):
                         return "Success. Captcha solved."
                 except Exception as e:
-                    print('Not checked')
+                    print("Not checked")
                     pass
 
             else:
-                numbers = [int(s.strip()) for s in message_text.split(",") if s.strip().isdigit()]
+                numbers = [
+                    int(s.strip())
+                    for s in message_text.split(",")
+                    if s.strip().isdigit()
+                ]
 
                 # Click the tiles based on the provided numbers
                 for number in numbers:
@@ -205,7 +230,9 @@ class SolveCaptcha(BaseTool):
                 presence_of_element_located((By.XPATH, "//iframe[@title='reCAPTCHA']"))
             )
 
-            wd.execute_script(f"document.elementFromPoint({element.location['x']}, {element.location['y']-10}).click();")
+            wd.execute_script(
+                f"document.elementFromPoint({element.location['x']}, {element.location['y']-10}).click();"
+            )
         except Exception as e:
             print(e)
             pass
@@ -217,12 +244,16 @@ class SolveCaptcha(BaseTool):
 
         try:
             WebDriverWait(wd, 10).until(
-                frame_to_be_available_and_switch_to_it((By.XPATH, "//iframe[@title='reCAPTCHA']"))
+                frame_to_be_available_and_switch_to_it(
+                    (By.XPATH, "//iframe[@title='reCAPTCHA']")
+                )
             )
 
             WebDriverWait(wd, 5).until(
-                lambda d: d.find_element(By.CLASS_NAME, "recaptcha-checkbox").get_attribute(
-                    "aria-checked") == "true"
+                lambda d: d.find_element(
+                    By.CLASS_NAME, "recaptcha-checkbox"
+                ).get_attribute("aria-checked")
+                == "true"
             )
 
             return True
@@ -231,8 +262,11 @@ class SolveCaptcha(BaseTool):
 
             WebDriverWait(wd, 10).until(
                 frame_to_be_available_and_switch_to_it(
-                    (By.XPATH, "//iframe[@title='recaptcha challenge expires in two minutes']"))
+                    (
+                        By.XPATH,
+                        "//iframe[@title='recaptcha challenge expires in two minutes']",
+                    )
+                )
             )
 
         return False
-

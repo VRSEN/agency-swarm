@@ -1,18 +1,17 @@
 import asyncio
-from enum import Enum
 import json
 import os
 import sys
 import unittest
+from enum import Enum
 from typing import List, Optional
 
-from pydantic import Field, BaseModel
+from pydantic import BaseModel, Field
 
-sys.path.insert(0, '../agency-swarm')
-from agency_swarm.tools import ToolFactory, BaseTool
-from agency_swarm.util.schema import dereference_schema, reference_schema
+sys.path.insert(0, "../agency-swarm")
 from langchain.tools import MoveFileTool, YouTubeSearchTool
 
+from agency_swarm.tools import BaseTool, ToolFactory
 from agency_swarm.util import get_openai_client
 
 
@@ -25,8 +24,10 @@ class ToolFactoryTest(unittest.TestCase):
         print(json.dumps(tool.openai_schema, indent=4))
         print(tool)
 
-        tool = tool(destination_path="Move a file from one folder to another",
-                    source_path="Move a file from one folder to another")
+        tool = tool(
+            destination_path="Move a file from one folder to another",
+            source_path="Move a file from one folder to another",
+        )
 
         print(tool.model_dump())
 
@@ -35,19 +36,27 @@ class ToolFactoryTest(unittest.TestCase):
     def test_complex_schema(self):
         class FriendDetail(BaseModel):
             "test 123"
+
             id: int = Field(..., description="Unique identifier for each friend.")
             name: str = Field(..., description="Name of the friend.")
             age: Optional[int] = Field(25, description="Age of the friend.")
-            email: Optional[str] = Field(None, description="Email address of the friend.")
-            is_active: Optional[bool] = Field(None, description="Indicates if the friend is currently active.")
+            email: Optional[str] = Field(
+                None, description="Email address of the friend."
+            )
+            is_active: Optional[bool] = Field(
+                None, description="Indicates if the friend is currently active."
+            )
 
         class UserDetail(BaseModel):
             """Hey this is a test?"""
+
             id: int = Field(..., description="Unique identifier for each user.")
             age: int
             name: str
-            friends: List[FriendDetail] = Field(...,
-                                                description="List of friends, each represented by a FriendDetail model.")
+            friends: List[FriendDetail] = Field(
+                ...,
+                description="List of friends, each represented by a FriendDetail model.",
+            )
 
         class RelationshipType(Enum):
             FAMILY = "family"
@@ -56,34 +65,39 @@ class ToolFactoryTest(unittest.TestCase):
 
         class UserRelationships(BaseTool):
             """Hey this is a test?"""
-            users: List[UserDetail] = Field(...,
-                                            description="Collection of users, correctly capturing the relationships among them.", title="Users")
-            relationship_type: RelationshipType = Field(..., description="Type of relationship among users.", title="Relationship Type")
+
+            users: List[UserDetail] = Field(
+                ...,
+                description="Collection of users, correctly capturing the relationships among them.",
+                title="Users",
+            )
+            relationship_type: RelationshipType = Field(
+                ...,
+                description="Type of relationship among users.",
+                title="Relationship Type",
+            )
 
         print("schema", json.dumps(UserRelationships.openai_schema, indent=4))
 
         # print("ref", json.dumps(reference_schema(deref_schema), indent=4))
 
-        tool = ToolFactory.from_openai_schema(UserRelationships.openai_schema, lambda x: x)
+        tool = ToolFactory.from_openai_schema(
+            UserRelationships.openai_schema, lambda x: x
+        )
 
         print(json.dumps(tool.openai_schema, indent=4))
         user_detail_instance = {
             "id": 1,
             "age": 20,
             "name": "John Doe",
-            "friends": [
-                {
-                    "id": 1,
-                    "name": "Jane Doe"
-                }
-            ]
+            "friends": [{"id": 1, "name": "Jane Doe"}],
         }
         user_relationships_instance = {
             "users": [user_detail_instance],
-            "relationship_type": "family"
+            "relationship_type": "family",
         }
-        
-        #print user detail instance
+
+        # print user detail instance
         tool = tool(**user_relationships_instance)
 
         user_relationships_schema = UserRelationships.openai_schema
@@ -94,7 +108,9 @@ class ToolFactoryTest(unittest.TestCase):
             """
             if not isinstance(d, dict):
                 return d
-            return {k: remove_empty_fields(v) for k, v in d.items() if v not in [{}, [], '']}
+            return {
+                k: remove_empty_fields(v) for k, v in d.items() if v not in [{}, [], ""]
+            }
 
         cleaned_schema = remove_empty_fields(user_relationships_schema)
 
@@ -124,12 +140,12 @@ class ToolFactoryTest(unittest.TestCase):
                 },
                 "required": ["query"],
             },
-            "strict": False
+            "strict": False,
         }
 
         tool = ToolFactory.from_openai_schema(schema, lambda x: x)
 
-        schema['strict'] = True
+        schema["strict"] = True
 
         tool2 = ToolFactory.from_openai_schema(schema, lambda x: x)
 
@@ -155,30 +171,32 @@ class ToolFactoryTest(unittest.TestCase):
 
     def test_relevance_openapi_schema(self):
         with open("./data/schemas/relevance.json", "r") as f:
-            tools = ToolFactory.from_openapi_schema(f.read(), {
-                "Authorization": os.environ.get("TEST_SCHEMA_API_KEY")
-            })
+            tools = ToolFactory.from_openapi_schema(
+                f.read(), {"Authorization": os.environ.get("TEST_SCHEMA_API_KEY")}
+            )
 
         print(json.dumps(tools[0].openai_schema, indent=4))
 
         async def gather_output():
-            output = await tools[0](requestBody={"text": 'test'}).run()
+            output = await tools[0](requestBody={"text": "test"}).run()
             return output
 
         output = asyncio.run(gather_output())
 
         print(output)
 
-        assert output['output']['transformed']['data'] == 'test complete.'
+        assert output["output"]["transformed"]["data"] == "test complete."
 
     def test_get_headers_openapi_schema(self):
         with open("./data/schemas/get-headers-params.json", "r") as f:
-            tools = ToolFactory.from_openapi_schema(f.read(),{
-                "Bearer": os.environ.get("GET_HEADERS_SCHEMA_API_KEY")
-            })
+            tools = ToolFactory.from_openapi_schema(
+                f.read(), {"Bearer": os.environ.get("GET_HEADERS_SCHEMA_API_KEY")}
+            )
 
         async def gather_output():
-            output = await tools[0](parameters={"domain": "print-headers", "query": "test"}).run()
+            output = await tools[0](
+                parameters={"domain": "print-headers", "query": "test"}
+            ).run()
             return output
 
         output = asyncio.run(gather_output())
@@ -200,7 +218,7 @@ class ToolFactoryTest(unittest.TestCase):
 
         self.assertTrue(tool.__name__ == "ExampleTool1")
 
-        self.assertTrue(tool(content='test').run() == "Tool output")
+        self.assertTrue(tool(content="test").run() == "Tool output")
 
     # def test_openapi_schema(self):
     #     with open("./data/schemas/get-headers-params.json", "r") as f:
@@ -211,7 +229,5 @@ class ToolFactoryTest(unittest.TestCase):
     #     self.assertTrue(schema)
 
 
-
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

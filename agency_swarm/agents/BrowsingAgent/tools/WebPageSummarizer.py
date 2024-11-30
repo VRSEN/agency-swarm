@@ -1,6 +1,7 @@
 from selenium.webdriver.common.by import By
 
 from agency_swarm.tools import BaseTool
+
 from .util import get_web_driver, set_web_driver
 
 
@@ -23,13 +24,21 @@ class WebPageSummarizer(BaseTool):
         completion = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": "Your task is to summarize the content of the provided webpage. The summary should be concise and informative, capturing the main points and takeaways of the page."},
-                {"role": "user", "content": "Summarize the content of the following webpage:\n\n" + content},
+                {
+                    "role": "system",
+                    "content": "Your task is to summarize the content of the provided webpage. The summary should be concise and informative, capturing the main points and takeaways of the page.",
+                },
+                {
+                    "role": "user",
+                    "content": "Summarize the content of the following webpage:\n\n"
+                    + content,
+                },
             ],
             temperature=0.0,
         )
 
         return completion.choices[0].message.content
+
 
 if __name__ == "__main__":
     wd = get_web_driver()

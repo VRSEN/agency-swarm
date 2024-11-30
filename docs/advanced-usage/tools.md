@@ -1,12 +1,12 @@
 # Advanced Tools
 
-All tools in Agency Swarm are created using [Instructor](https://github.com/jxnl/instructor). 
+All tools in Agency Swarm are created using [Instructor](https://github.com/jxnl/instructor).
 
 The only difference is that you must extend the `BaseTool` class and implement the `run` method with your logic inside. For many great examples on what you can create, checkout [Instructor Cookbook](https://jxnl.github.io/instructor/examples/).
 
 ---
 
-## Example: Converting [Answering Questions with Validated Citations Example](https://jxnl.github.io/instructor/examples/exact_citations/) from Instructor 
+## Example: Converting [Answering Questions with Validated Citations Example](https://jxnl.github.io/instructor/examples/exact_citations/) from Instructor
 
 This is an example of how to convert an extremely useful tool for RAG applications from instructor. It allows your agents to not only answer questions based on context, but also to provide the exact citations for the answers. This way your users can be sure that the information is always accurate and reliable.
 
@@ -23,7 +23,7 @@ import re
 class Fact(BaseModel):
     fact: str = Field(...)
     substring_quote: List[str] = Field(...)
-    
+
     @model_validator(mode="after")
     def validate_sources(self, info: FieldValidationInfo) -> "Fact":
         text_chunks = info.context.get("text_chunk", None)
@@ -66,24 +66,24 @@ To allow your agents to retrieve the context themselves, we must split `Question
 class QueryDatabase(BaseTool):
     """Use this tool to query a vector database to retrieve the relevant context for the question."""
     question: str = Field(..., description="The question to be answered")
-    
+
     def run(self):
-        # Check if context is already retrieved 
+        # Check if context is already retrieved
         if self._shared_state.get("context", None) is not None:
             raise ValueError("Context already retrieved. Please proceed with the AnswerQuestion tool.")
-        
+
         # Your code to retrieve the context here
         context = "This is a test context"
-        
+
         # Then, save the context to the shared state
         self._shared_state.set("context", context)
-        
+
         return f"Context retrieved: {context}.\n\n Please proceed with the AnswerQuestion tool."
 
 ```
 
 !!! note "Shared State"
-    `shared_state` is a state that is shared between all tools, across all agents. It allows you to control the execution flow, share data, and provide instructions to the agents based on certain conditions or actions performed by other agents. 
+    `shared_state` is a state that is shared between all tools, across all agents. It allows you to control the execution flow, share data, and provide instructions to the agents based on certain conditions or actions performed by other agents.
 
 #### The `AnswerQuestion` tool will:
 
@@ -96,15 +96,15 @@ class QueryDatabase(BaseTool):
 class AnswerQuestion(BaseTool):
     answer: str = Field(..., description="The answer to the question, based on context.")
     sources: List[Fact] = Field(..., description="The sources of the answer")
-    
+
     def run(self):
         # Remove the context after question is answered
         self._shared_state.set("context", None)
-        
+
         # additional logic here as needed, for example save the answer to a database
-        
+
         return "Success. The question has been answered." # or return the answer, if needed
-    
+
     @model_validator(mode="after")
     def validate_sources(self) -> "QuestionAnswer":
         # In "Agency Swarm", context is directly extracted from `shared_state`
@@ -114,7 +114,7 @@ class AnswerQuestion(BaseTool):
             raise ValueError("Please retrieve the context with the QueryDatabase tool first.")
         self.answer = [fact for fact in self.answer if len(fact.substring_quote) > 0]
         return self
-    
+
 
 ```
 
@@ -126,13 +126,13 @@ The `Fact` tool will stay primarily the same. The only difference is that we mus
 class Fact(BaseTool):
     fact: str = Field(...)
     substring_quote: List[str] = Field(...)
-    
+
     def run(self):
         pass
-    
+
     @model_validator(mode="after")
     def validate_sources(self) -> "Fact":
-        context = self._shared_state.get("context", None)  
+        context = self._shared_state.get("context", None)
         text_chunks = context.get("text_chunk", None)
         spans = list(self.get_spans(text_chunks))
         self.substring_quote = [text_chunks[span[0] : span[1]] for span in spans]
@@ -150,7 +150,7 @@ To implement tools with Instructor in Agency Swarm, generally, you must:
 1. Extend the `BaseTool` class.
 2. Add fields with types and clear descriptions, plus the tool description itself.
 3. Implement the `run` method with your execution logic inside.
-4. Add validators and checks based on various conditions. 
+4. Add validators and checks based on various conditions.
 5. Split tools into smaller tools to give your agents more control, as needed.
 
 
@@ -163,23 +163,23 @@ Tool factory is a class that allows you to create tools from different sources. 
 
 ### Import from Langchain
 
-!!! warning "Not recommended"  
+!!! warning "Not recommended"
     This method is not recommended, as it does not provide the same level of type checking, error correction and tool descriptions as Instructor. However, it is still possible to use this method if you prefer.
 
     ```python
     from langchain.tools import YouTubeSearchTool
     from agency_swarm.tools import ToolFactory
-    
+
     LangchainTool = ToolFactory.from_langchain_tool(YouTubeSearchTool)
     ```
-    
+
     ```python
     from langchain.agents import load_tools
-    
+
     tools = load_tools(
         ["arxiv", "human"],
     )
-    
+
     tools = ToolFactory.from_langchain_tools(tools)
     ```
 
@@ -210,7 +210,7 @@ tools = ToolFactory.from_openapi_schema(
     ```python
     class RunCommand(BaseTool):
         command: Literal["start", "stop"] = Field(...)
-   
+
        def run(self):
             if command == "start":
                 subprocess.run(["start", "your_command"])
@@ -226,23 +226,23 @@ tools = ToolFactory.from_openapi_schema(
     ```python
     class QueryDatabase(BaseTool):
         question: str = Field(...)
-   
+
         def run(self):
             # query your database here
             context = query_database(self.question)
-   
+
             if context is None:
                 raise ValueError("No context found. Please propose to the user to change the topic.")
             else:
                 self._shared_state.set("context", context)
                 return "Context retrieved. Please proceed with explaining the answer."
-    ``` 
+    ```
 3. Use `shared_state` to validate actions taken by other agents, before allowing them to proceed with the next action.
 
     ```python
     class Action2(BaseTool):
         input: str = Field(...)
-   
+
         def run(self):
             if self._shared_state.get("action_1_result", None) is "failure":
                 raise ValueError("Please proceed with the Action1 tool first.")
@@ -257,7 +257,7 @@ tools = ToolFactory.from_openapi_schema(
 
         class ToolConfig:
             one_call_at_a_time = True
-   
+
         def run(self):
             # your code here
     ```

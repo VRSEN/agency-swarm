@@ -1,16 +1,15 @@
 import time
 from typing import Dict
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from selenium.webdriver import Keys
 from selenium.webdriver.common.by import By
 
 from agency_swarm.tools import BaseTool
+
 from .util import get_web_driver, set_web_driver
 from .util.highlights import remove_highlight_and_labels
 
-
-from pydantic import model_validator
 
 class SendKeys(BaseTool):
     """
@@ -18,18 +17,20 @@ class SendKeys(BaseTool):
 
     Before using this tool make sure to highlight the input elements on the page by outputting '[highlight text fields]' message.
     """
-    elements_and_texts: Dict[int, str] = Field(...,
+
+    elements_and_texts: Dict[int, str] = Field(
+        ...,
         description="A dictionary where the key is the element number and the value is the text to be typed.",
         examples=[
             {52: "johndoe@gmail.com", 53: "password123"},
             {3: "John Doe", 4: "123 Main St"},
-        ]
+        ],
     )
 
-    @model_validator(mode='before')  
+    @model_validator(mode="before")
     @classmethod
     def check_elements_and_texts(cls, data):
-        if not data.get('elements_and_texts'):
+        if not data.get("elements_and_texts"):
             raise ValueError(
                 "elements_and_texts is required. Example format: "
                 "elements_and_texts={1: 'John Doe', 2: '123 Main St'}"
@@ -38,10 +39,12 @@ class SendKeys(BaseTool):
 
     def run(self):
         wd = get_web_driver()
-        if 'input' not in self._shared_state.get("elements_highlighted", ""):
-            raise ValueError("Please highlight input elements on the page first by outputting '[highlight text fields]' message. You must output just the message without calling the tool first, so the user can respond with the screenshot.")
+        if "input" not in self._shared_state.get("elements_highlighted", ""):
+            raise ValueError(
+                "Please highlight input elements on the page first by outputting '[highlight text fields]' message. You must output just the message without calling the tool first, so the user can respond with the screenshot."
+            )
 
-        all_elements = wd.find_elements(By.CSS_SELECTOR, '.highlighted-element')
+        all_elements = wd.find_elements(By.CSS_SELECTOR, ".highlighted-element")
 
         i = 0
         try:
