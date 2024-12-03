@@ -1,115 +1,107 @@
 ---
-title: "Overview"
-description: "Understanding Tools in Agency Swarm."
+title: "The Basics of Tools"
+description: "Understanding Tools in Agentic Systems."
 icon: "book-open"
 ---
 
-Tools are the building blocks that give agents their capabilities. They are specialized functions or actions that agents can perform to interact with the environment, process data, communicate, and much more. By defining custom tools, you can extend the functionality of your agents to suit specific tasks or integrate with external systems.
+Tools are the most important component of any Agentic system. In this guide, we'll cover the basics: what tools are, key characteristics, and the three primary ways you can build or import your own tools.
 
-In Agency Swarm, tools are Python classes that inherit from `BaseTool`. They are defined using [Pydantic](https://docs.pydantic.dev/latest/) for data validation and settings management. Each tool encapsulates a specific piece of functionality that an agent can invoke during its operation.
+## Key Characteristics of Tools
 
-<Note>
-**Key characteristics of tools:**
+Here are the 3 primary characteristics of tools:
 
-- **Modular:** Each tool performs a single, well-defined task.
-- **Reusable:** Tools can be shared among multiple agents.
-- **Extensible:** You can create custom tools to interact with APIs, process data, and more.
-</Note>
-
-## Built-in Tools
-
-Agency Swarm comes with several built-in tools to enhance agent capabilities:
-
-<Accordion title="Code Interpreter" icon="code">
-- **Purpose**: Allows agents to execute code within a Jupyter Notebook environment (without internet access).
-- **Integration**:
-  ```python
-  from agency_swarm.tools import CodeInterpreter
-
-  agent = Agent(
-      name="DataAnalyst",
-      tools=[CodeInterpreter],
-      # Other agent parameters
-  )
-  ```
-</Accordion>
-
-<Accordion title="File Search" icon="magnifying-glass">
-- **Purpose**: Enables Retrieval-Augmented Generation (RAG) by allowing agents to search files.
-- **Integration**:
-  ```python
-  from agency_swarm.tools import FileSearch
-
-  agent = Agent(
-      name="Researcher",
-      tools=[FileSearch],
-      # Other agent parameters
-  )
-  ```
-</Accordion>
-
-## Basic Process Overview for Creating Custom Tools
-
-<Steps>
-  <Step title="Plan the Tool's Purpose and Functionality">
-    Define what the tool will do and how it will be used by agents.
-  </Step>
-  <Step title="Create a New Python Class">
-    Import `BaseTool` and create a new class that extends it.
-  </Step>
-  <Step title="Write a Clear Docstring">
-    This docstring is crucial as it helps agents understand how to use the tool.
-  </Step>
-  <Step title="Define Input Fields">
-    Use Pydantic's `Field` to define the tool's input parameters.
-  </Step>
-  <Step title="Implement the run Method">
-    Write the code that executes the tool's functionality.
-  </Step>
-  <Step title="Test the Tool">
-    Ensure the tool works as expected before integrating it.
-  </Step>
-  <Step title="Add to Agent's Toolset">
-    Include the tool in the agent's list of available tools.
-  </Step>
-</Steps>
-
-
-## Next Steps
-
-Learn more about tools in Agency Swarm:
-
-<CardGroup cols={2}>
+<CardGroup cols={3}>
   <Card
-    title="Creating Custom Tools"
-    icon="hammer"
-    iconType="duotone"
-    href="./creating-custom-tools"
+    title="Task-Specific"
+    icon="bullseye"
   >
-    Learn how to create your own tools from scratch with step-by-step examples and best practices.
+    Each tool performs a single, well-defined task. They should not be focused on an API, but rather on whatever it takes to complete the task.
   </Card>
+
   <Card
-    title="Advanced Features"
-    icon="wand-sparkles"
-    iconType="duotone"
-    href="./advanced-tool-features"
+    title="Configurable"
+    icon="gear"
   >
-    Explore validation, error handling, ToolConfig, and other advanced capabilities.
+    Tools can be configured to perform the same task in different ways. The agent must be able to adapt based on previous circumstances.
   </Card>
+
   <Card
-    title="Best Practices & Examples"
-    icon="code"
-    iconType="duotone"
-    href="./best-practices-and-examples"
+    title="Reusable"
+    icon="recycle"
   >
-    Real-world examples and patterns for building robust, production-ready tools.
-  </Card>
-  <Card
-    title="Tool Factory"
-    icon="industry"
-    iconType="duotone"
-    href="./tool-factory"
-  >
-    Convert Langchain tools and OpenAPI schemas into Agency Swarm tools.
+    Tools must be easily reusable not only by the same agent, but also across different agents. Each tool should have specific instructions on how to use it.
   </Card>
 </CardGroup>
+
+## What are Tools?
+
+**At a high level, tools represent the capabilities that your agents have.**
+
+Tools enable your agents to perform specific tasks necessary to fulfill their designated roles. For instance, just as a real virtual assistant can search the web or send emails, the virtual assistant agent can be equipped with similar tools. 
+
+Below are some more examples of tools:
+
+- **FileWriter:** A tool that allows an agent to write code or text to a file.
+- **CommandExecutor:** A tool that allows an agent to execute terminal commands.
+- **LeadUpdater:** A tool that allows an agent to update a lead in a CRM.
+- **LinkedInProfileScraper:** A tool that allows an agent to scrape a LinkedIn profile.
+- **FacebookAdCreator:** A tool that allows an agent to create a Facebook ad.
+
+
+<Tip>
+
+By themselves each of these tools is not very useful, however in combination with each other, they allow agents to perform a much wider range of tasks.  
+
+For example, `FileWriter` tool by itself can allow the developer agent to write code, however, in combination with the `CommandExecutor` tool, it can also run and test it's own code, which instantly makes it more powerful. (We'll cover the key characteristics of tools in a bit.)
+</Tip>
+**At a low level, tools are essentially just code.** 
+
+Whatever the tool you are creating, at the lowest level, it always comes down to code. The only difference is where this code is being executed. For instance, if you are making an API call, it will primarily be executed in the cloud, and if it's a file system tool, it will be executed on same machine where the agent is running. **Even if you are using a no-code platform to build your tools, like n8n or zapier, at the lowest level, it all still comes down to code.**
+
+This means that agentic systems are a lot more similar to traditional software programs than you might think... 
+
+![Tools Diagram](/images/agents-vs-programs.png)
+
+Just as in a standard program, we have functions that are executed in a loop, in an agentic system, we have tools that are executed by your agents.
+
+And what this allows you to do, is tackle sinigificantly more complex tasks. Tasks where there are so many possibles paths that you can't hard code all of the possible conditional logic in advance.
+
+Now, that we understand what tools are, let's cover how you can build your own tools.
+
+
+## 3 Ways to Build Tools
+
+When it comes to building your own tools, you have 3 primary options:
+
+<CardGroup cols={3}>
+
+  <Card
+    title="Custom Tools"
+    icon="hammer"
+    href="./creating-custom-tools"
+  >
+    Build your own completely custom tools from scratch. (Recommended)
+  </Card>
+
+  <Card
+    title="Pre-Made Tools"
+    icon="box"
+    href="./tool-factory"
+  >
+    Import out-of-the-box pre-made tools from the special [agency-tools](https://github.com/VRSEN/agency-tools) open source repository.
+  </Card> 
+
+  <Card
+    title="OpenAPI Schemas"
+    icon="file-code"
+    href="./openapi"
+  >
+    Use public OpenAPI schemas and convert them into tools.
+  </Card>
+
+</CardGroup>
+
+**It is recommended to start with custom tools**, as they give you the most flexibility and control. Even if you are connecting to external APIs, we still recommend creating custom tools, as they allow you to have more control over the tool's outputs.
+
+Click on the card of your choice to learn more about each one.
+
