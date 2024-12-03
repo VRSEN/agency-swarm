@@ -33,10 +33,15 @@ class AgencyEventHandler(AssistantEventHandler, ABC):
 class AgencyEventHandlerWithTracking(AgencyEventHandler):
     usage_tracker: AbstractTracker
 
+    """
+    A special event handler that implements tracking of usage for the run step.
+    """
+
     @override
-    def on_run_step_done(self, run_step: RunStep) -> None:
+    @classmethod
+    def on_run_step_done(cls, run_step: RunStep) -> None:
         """
-        Handles the event when a run step is completed.
+        Implements tracking of usage for the run step.
         """
-        if run_step.usage and self.usage_tracker:
-            self.usage_tracker.track_usage(run_step.usage)
+        if run_step.usage and cls.usage_tracker:
+            cls.usage_tracker.track_usage(run_step.usage)

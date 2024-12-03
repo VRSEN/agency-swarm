@@ -1,68 +1,46 @@
-import queue
 from typing import override
 
 from openai.types.beta.threads import Message
-from openai.types.beta.threads.runs.run_step import RunStep
+from openai.types.beta.threads.runs import RunStep
 from openai.types.beta.threads.runs.tool_call import (
     CodeInterpreterToolCall,
     FileSearchToolCall,
     FunctionToolCall,
-    ToolCall,
+)
+from typing_extensions import override
+
+from agency_swarm.messages.message_output import MessageOutputLive
+from agency_swarm.util.streaming.agency_event_handler import (
+    AgencyEventHandlerWithTracking,
 )
 
-from agency_swarm.messages import MessageOutput
-from agency_swarm.util.streaming import AgencyEventHandlerWithTracking
 
-
-class GradioEventHandler(AgencyEventHandlerWithTracking):
+class TermEventHandler(AgencyEventHandlerWithTracking):
     message_output = None
-
-    def __init__(self, chatbot_queue: queue.Queue, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.chatbot_queue = chatbot_queue
-
-    @classmethod
-    def change_recipient_agent(cls, recipient_agent_name):
-        cls.chatbot_queue.put("[change_recipient_agent]")
-        cls.chatbot_queue.put(recipient_agent_name)
+    agency = None
 
     @override
     def on_message_created(self, message: Message) -> None:
         if message.role == "user":
-            full_content = ""
-            for content in message.content:
-                if content.type == "image_file":
-                    full_content += f"🖼️ Image File: {content.image_file.file_id}\n"
-                    continue
-
-                if content.type == "image_url":
-                    full_content += f"\n{content.image_url.url}\n"
-                    continue
-
-                if content.type == "text":
-                    full_content += content.text.value + "\n"
-
-            self.message_output = MessageOutput(
-                "text",
-                self.agent_name,
-                self.recipient_agent_name,
-                full_content,
+            self.message_output = MessageOutputLive(
+                "text", self.agent_name, self.recipient_agent_name, ""
             )
-
+            self.message_output.cprint_update(message.content[0].text.value)
         else:
-            self.message_output = MessageOutput(
+            self.message_output = MessageOutputLive(
                 "text", self.recipient_agent_name, self.agent_name, ""
             )
 
-        self.chatbot_queue.put("[new_message]")
-        self.chatbot_queue.put(self.message_output.get_formatted_content())
+    @override
+    def on_message_done(self, message: Message) -> None:
+        self.message_output = None
 
     @override
     def on_text_delta(self, delta, snapshot):
-        self.chatbot_queue.put(delta.value)
+        self.message_output.cprint_update(snapshot.value)
 
     @override
-    def on_tool_call_created(self, tool_call: ToolCall):
+    def on_tool_call_created(self, tool_call):
         if isinstance(tool_call, dict):
             if "type" not in tool_call:
                 tool_call["type"] = "function"
@@ -76,19 +54,18 @@ class GradioEventHandler(AgencyEventHandlerWithTracking):
             else:
                 raise ValueError("Invalid tool call type: " + tool_call["type"])
 
-        # TODO: add support for code interpreter and retrieval tools
+        # TODO: add support for code interpreter and retirieval tools
+
         if tool_call.type == "function":
-            self.chatbot_queue.put("[new_message]")
-            self.message_output = MessageOutput(
+            self.message_output = MessageOutputLive(
                 "function",
                 self.recipient_agent_name,
                 self.agent_name,
                 str(tool_call.function),
             )
-            self.chatbot_queue.put(self.message_output.get_formatted_header() + "\n")
 
     @override
-    def on_tool_call_done(self, snapshot: ToolCall):
+    def on_tool_call_delta(self, delta, snapshot):
         if isinstance(snapshot, dict):
             if "type" not in snapshot:
                 snapshot["type"] = "function"
@@ -102,27 +79,31 @@ class GradioEventHandler(AgencyEventHandlerWithTracking):
             else:
                 raise ValueError("Invalid tool call type: " + snapshot["type"])
 
+        self.message_output.cprint_update(str(snapshot.function))
+
+    @override
+    def on_tool_call_done(self, snapshot):
         self.message_output = None
 
         # TODO: add support for code interpreter and retrieval tools
         if snapshot.type != "function":
             return
 
-        self.chatbot_queue.put(str(snapshot.function))
-
-        if snapshot.function.name == "SendMessage":
+        if snapshot.function.name == "SendMessage" and not (
+            hasattr(
+                self.agency.send_message_tool_class.ToolConfig,
+                "output_as_result",
+            )
+            and self.agency.send_message_tool_class.ToolConfig.output_as_result
+        ):
             try:
                 args = eval(snapshot.function.arguments)
                 recipient = args["recipient"]
-                self.message_output = MessageOutput(
-                    "text",
-                    self.recipient_agent_name,
-                    recipient,
-                    args["message"],
+                self.message_output = MessageOutputLive(
+                    "text", self.recipient_agent_name, recipient, ""
                 )
 
-                self.chatbot_queue.put("[new_message]")
-                self.chatbot_queue.put(self.message_output.get_formatted_content())
+                self.message_output.cprint_update(args["message"])
             except Exception as e:
                 pass
 
@@ -141,21 +122,16 @@ class GradioEventHandler(AgencyEventHandlerWithTracking):
                     continue
 
                 self.message_output = None
-                self.chatbot_queue.put("[new_message]")
-
-                self.message_output = MessageOutput(
+                self.message_output = MessageOutputLive(
                     "function_output",
                     tool_call.function.name,
                     self.recipient_agent_name,
                     tool_call.function.output,
                 )
+                self.message_output.cprint_update(tool_call.function.output)
 
-                self.chatbot_queue.put(
-                    self.message_output.get_formatted_header() + "\n"
-                )
-                self.chatbot_queue.put(tool_call.function.output)
+            self.message_output = None
 
     @override
-    def on_all_streams_end(self):
+    def on_end(self):
         self.message_output = None
-        self.chatbot_queue.put("[end]")

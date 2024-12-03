@@ -16,7 +16,7 @@ from agency_swarm.messages import MessageOutput
 from agency_swarm.tools import CodeInterpreter, FileSearch
 from agency_swarm.user import User
 from agency_swarm.util.oai import get_openai_client
-from agency_swarm.util.streaming import AgencyEventHandler
+from agency_swarm.util.streaming.agency_event_handler import AgencyEventHandler
 
 
 class Thread:
