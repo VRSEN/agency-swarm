@@ -48,3 +48,6 @@ class SQLiteUsageTracker(AbstractTracker):
                 completion_tokens=completion or 0,
                 total_tokens=total or 0,
             )
+
+    def close(self) -> None:
+        self.conn.close()

@@ -28,3 +28,10 @@ class AbstractTracker(ABC):
             Dictionary containing total token usage statistics
         """
         pass
+
+    @abstractmethod
+    def close(self) -> None:
+        """
+        Close the tracker.
+        """
+        pass

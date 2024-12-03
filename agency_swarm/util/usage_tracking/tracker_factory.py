@@ -9,5 +9,3 @@ def get_tracker(tracker_type: Literal["sqlite", "langfuse"]):
         return SQLiteUsageTracker()
     elif tracker_type == "langfuse":
         return LangfuseUsageTracker()
-    else:
-        raise ValueError(f"Invalid tracker type: {tracker_type}")

@@ -32,10 +32,14 @@ class AgencyEventHandler(AssistantEventHandler, ABC):
 
 class AgencyEventHandlerWithTracking(AgencyEventHandler):
     usage_tracker: AbstractTracker
-
     """
     A special event handler that implements tracking of usage for the run step.
     """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not self.usage_tracker:
+            raise ValueError("usage_tracker is not set")
 
     @override
     @classmethod

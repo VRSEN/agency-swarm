@@ -33,13 +33,13 @@ from agency_swarm.util.files import get_file_purpose, get_tools
 from agency_swarm.util.shared_state import SharedState
 from agency_swarm.util.streaming import (
     AgencyEventHandler,
-    GradioEventHandler,
-    TermEventHandler,
+    AgencyEventHandlerWithTracking,
+    create_gradio_handler,
+    create_term_handler,
 )
 from agency_swarm.util.usage_tracking.tracker_factory import get_tracker
 
 console = Console()
-
 T = TypeVar("T", bound=BaseModel)
 
 
@@ -158,6 +158,7 @@ class Agency:
         self._init_agents()
 
         self.usage_tracker = get_tracker(usage_tracker)
+        AgencyEventHandlerWithTracking.usage_tracker = self.usage_tracker
 
     def get_completion(
         self,
@@ -320,7 +321,7 @@ class Agency:
         Launches a Gradio-based demo interface for the agency chatbot.
 
         Parameters:
-            height (int, optional): The height of the chatbot widget in the Gradio interface. Default is 600.
+            height (int, optional): The height of the chatbot widget in the Gradio interface. Default is 450.
             dark_mode (bool, optional): Flag to determine if the interface should be displayed in dark mode. Default is True.
             **kwargs: Additional keyword arguments to be passed to the Gradio interface.
         This method sets up and runs a Gradio interface, allowing users to interact with the agency's chatbot. It includes a text input for the user's messages and a chatbot interface for displaying the conversation. The method handles user input and chatbot responses, updating the interface dynamically.
@@ -332,10 +333,10 @@ class Agency:
             raise Exception("Please install gradio: pip install gradio")
 
         js = """function () {
-          gradioURL = window.location.href
-          if (!gradioURL.endsWith('?__theme={theme}')) {
-            window.location.replace(gradioURL + '?__theme={theme}');
-          }
+            gradioURL = window.location.href
+            if (!gradioURL.endsWith('?__theme={theme}')) {
+                window.location.replace(gradioURL + '?__theme={theme}');
+            }
         }"""
 
         if dark_mode:
@@ -350,11 +351,10 @@ class Agency:
         recipient_agent_names = [agent.name for agent in self.main_recipients]
         recipient_agent = self.main_recipients[0]
 
-        with gr.Blocks(js=js) as demo:
-            chatbot_queue = queue.Queue()
-            GradioEventHandler.chatbot_queue = chatbot_queue
-            GradioEventHandler.usage_tracker = self.usage_tracker
+        chatbot_queue = queue.Queue()
+        gradio_handler = create_gradio_handler(chatbot_queue=chatbot_queue)
 
+        with gr.Blocks(js=js) as demo:
             chatbot = gr.Chatbot(height=height)
             with gr.Row():
                 with gr.Column(scale=9):
@@ -477,7 +477,6 @@ class Agency:
                 else:
                     user_message = f"👤 User:" + user_message.strip()
 
-                nonlocal message_file_names
                 if message_file_names:
                     user_message += "\n\n📎 Files:\n" + "\n".join(message_file_names)
 
@@ -536,7 +535,7 @@ class Agency:
                     target=self.get_completion_stream,
                     args=(
                         original_message,
-                        GradioEventHandler,
+                        gradio_handler,
                         [],
                         recipient_agent,
                         "",
@@ -614,20 +613,6 @@ class Agency:
         demo.launch(**kwargs)
         return demo
 
-    def _recipient_agent_completer(self, text, state):
-        """
-        Autocomplete completer for recipient agent names.
-        """
-        options = [
-            agent
-            for agent in self.recipient_agents
-            if agent.lower().startswith(text.lower())
-        ]
-        if state < len(options):
-            return options[state]
-        else:
-            return None
-
     def _setup_autocomplete(self):
         """
         Sets up readline with the completer function.
@@ -647,8 +632,22 @@ class Agency:
         if not readline:
             return
 
+        def recipient_agent_completer(text, state):
+            """
+            Autocomplete completer for recipient agent names.
+            """
+            options = [
+                agent
+                for agent in self.recipient_agents
+                if agent.lower().startswith(text.lower())
+            ]
+            if state < len(options):
+                return options[state]
+            else:
+                return None
+
         try:
-            readline.set_completer(self._recipient_agent_completer)
+            readline.set_completer(recipient_agent_completer)
             readline.parse_and_bind("tab: complete")
         except Exception as e:
             print(
@@ -659,8 +658,7 @@ class Agency:
         """
         Executes agency in the terminal with autocomplete for recipient agent names.
         """
-        TermEventHandler.usage_tracker = self.usage_tracker
-        TermEventHandler.agency = self
+        term_handler = create_term_handler(agency=self)
 
         self.recipient_agents = [str(agent.name) for agent in self.main_recipients]
 
@@ -693,7 +691,7 @@ class Agency:
 
             self.get_completion_stream(
                 message=text,
-                event_handler=TermEventHandler,
+                event_handler=term_handler,
                 recipient_agent=recipient_agent,
             )
 
@@ -1096,3 +1094,7 @@ class Agency:
         """
         for agent in self.agents:
             agent.delete()
+
+    def __del__(self):
+        if self.usage_tracker:
+            self.usage_tracker.close()
