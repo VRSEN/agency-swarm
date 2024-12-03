@@ -11,18 +11,22 @@ class TestTool(BaseTool):
     """
     This tool tests other tools defined in tools.py file with the given arguments. Make sure to define the run method before testing.
     """
-    agent_name: str = Field(
-        ..., description="Name of the agent to test the tool for."
-    )
+
+    agent_name: str = Field(..., description="Name of the agent to test the tool for.")
     chain_of_thought: str = Field(
-        ..., description="Think step by step to determine the correct arguments for testing.", exclude=True
+        ...,
+        description="Think step by step to determine the correct arguments for testing.",
+        exclude=True,
     )
     tool_name: str = Field(..., description="Name of the tool to be run.")
-    arguments: Optional[str] = Field(...,
-                                     description="Arguments to be passed to the tool for testing "
-                                                 "in serialized JSON format.")
+    arguments: Optional[str] = Field(
+        ...,
+        description="Arguments to be passed to the tool for testing "
+        "in serialized JSON format.",
+    )
     agency_name: str = Field(
-        None, description="Name of the agency to create the tool for. Defaults to the agency currently being created."
+        None,
+        description="Name of the agency to create the tool for. Defaults to the agency currently being created.",
     )
 
     def run(self):
@@ -68,29 +72,51 @@ class TestTool(BaseTool):
         tool_path = os.path.join(str(tool_path), "tools")
         tool_path = os.path.join(tool_path, self.tool_name + ".py")
 
-
         # check if tools.py file exists
         if not os.path.isfile(tool_path):
-            available_tools = os.listdir(os.path.join(self._shared_state.get("agency_path"), agent_name))
+            available_tools = os.listdir(
+                os.path.join(self._shared_state.get("agency_path"), agent_name)
+            )
             available_tools = [tool for tool in available_tools if tool.endswith(".py")]
-            available_tools = [tool for tool in available_tools if
-                               not tool.startswith("__") and not tool.startswith(".")]
+            available_tools = [
+                tool
+                for tool in available_tools
+                if not tool.startswith("__") and not tool.startswith(".")
+            ]
             available_tools = [tool.replace(".py", "") for tool in available_tools]
             available_tools = ", ".join(available_tools)
-            raise ValueError(f"Tool {self.tool_name} not found. Available tools are: {available_tools}")
+            raise ValueError(
+                f"Tool {self.tool_name} not found. Available tools are: {available_tools}"
+            )
 
-        agent_path = os.path.join(self._shared_state.get("agency_path"), self.agent_name)
+        agent_path = os.path.join(
+            self._shared_state.get("agency_path"), self.agent_name
+        )
         if not os.path.exists(agent_path):
             available_agents = os.listdir(self._shared_state.get("agency_path"))
-            available_agents = [agent for agent in available_agents if
-                                os.path.isdir(os.path.join(self._shared_state.get("agency_path"), agent))]
-            raise ValueError(f"Agent {self.agent_name} not found. Available agents are: {available_agents}")
+            available_agents = [
+                agent
+                for agent in available_agents
+                if os.path.isdir(
+                    os.path.join(self._shared_state.get("agency_path"), agent)
+                )
+            ]
+            raise ValueError(
+                f"Agent {self.agent_name} not found. Available agents are: {available_agents}"
+            )
 
         return True
 
 
 if __name__ == "__main__":
-    TestTool._shared_state.data = {"agency_path": "/Users/vrsen/Projects/agency-swarm/agency-swarm/TestAgency",
-                              "default_folder": "/Users/vrsen/Projects/agency-swarm/agency-swarm/TestAgency"}
-    test_tool = TestTool(agent_name="TestAgent", tool_name="PrintTestTool", arguments="{}", chain_of_thought="")
+    TestTool._shared_state.data = {
+        "agency_path": "/Users/vrsen/Projects/agency-swarm/agency-swarm/TestAgency",
+        "default_folder": "/Users/vrsen/Projects/agency-swarm/agency-swarm/TestAgency",
+    }
+    test_tool = TestTool(
+        agent_name="TestAgent",
+        tool_name="PrintTestTool",
+        arguments="{}",
+        chain_of_thought="",
+    )
     print(test_tool.run())

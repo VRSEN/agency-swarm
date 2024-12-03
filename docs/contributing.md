@@ -62,7 +62,7 @@ class AgentName(Agent):
 
         # Set instructions
         kwargs['instructions'] = "./instructions.md"
-        
+
         # Add more kwargs as needed
 
         # Initialize the parent class

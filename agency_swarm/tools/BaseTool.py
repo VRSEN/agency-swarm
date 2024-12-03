@@ -2,8 +2,8 @@ from abc import ABC, abstractmethod
 from typing import Any, ClassVar, Literal, Union
 
 from docstring_parser import parse
-
 from pydantic import BaseModel
+
 from agency_swarm.util.shared_state import SharedState
 
 
@@ -17,15 +17,15 @@ class BaseTool(BaseModel, ABC):
         if not self.__class__._shared_state:
             self.__class__._shared_state = SharedState()
         super().__init__(**kwargs)
-        
+
         # Ensure all ToolConfig variables are initialized
         config_defaults = {
-            'strict': False,
-            'one_call_at_a_time': False,
-            'output_as_result': False,
-            'async_mode': None
+            "strict": False,
+            "one_call_at_a_time": False,
+            "output_as_result": False,
+            "async_mode": None,
         }
-        
+
         for key, value in config_defaults.items():
             if not hasattr(self.ToolConfig, key):
                 setattr(self.ToolConfig, key, value)
@@ -88,7 +88,7 @@ class BaseTool(BaseModel, ABC):
             if "$defs" in schema["parameters"]:
                 for def_ in schema["parameters"]["$defs"].values():
                     def_["additionalProperties"] = False
-            
+
         return schema
 
     @abstractmethod

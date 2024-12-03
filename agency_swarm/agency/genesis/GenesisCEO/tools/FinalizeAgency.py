@@ -1,7 +1,7 @@
 import os
 from typing import List
 
-from pydantic import Field, model_validator, field_validator
+from pydantic import Field, field_validator, model_validator
 
 from agency_swarm import BaseTool, get_openai_client
 from agency_swarm.util import create_agent_template
@@ -11,8 +11,10 @@ class FinalizeAgency(BaseTool):
     """
     This tool finalizes the agency structure and it's imports. Please make sure to use at only at the very end, after all agents have been created.
     """
+
     agency_path: str = Field(
-        None, description="Path to the agency folder. Defaults to the agency currently being created."
+        None,
+        description="Path to the agency folder. Defaults to the agency currently being created.",
     )
 
     def run(self):
@@ -33,8 +35,9 @@ class FinalizeAgency(BaseTool):
 
         res = client.chat.completions.create(
             model="gpt-3.5-turbo",
-            messages=examples + [
-                {'role': "user", 'content': agency_py},
+            messages=examples
+            + [
+                {"role": "user", "content": agency_py},
             ],
             temperature=0.0,
         )
@@ -51,10 +54,12 @@ class FinalizeAgency(BaseTool):
     @model_validator(mode="after")
     def validate_agency_path(self):
         if not self._shared_state.get("agency_path") and not self.agency_path:
-            raise ValueError("Agency path not found. Please specify the agency_path. Ask user for clarification if needed.")
+            raise ValueError(
+                "Agency path not found. Please specify the agency_path. Ask user for clarification if needed."
+            )
 
 
-SYSTEM_PROMPT = """"Please read the file provided by the user and fix all the imports and indentation accordingly. 
+SYSTEM_PROMPT = """"Please read the file provided by the user and fix all the imports and indentation accordingly.
 
 Only output the full valid python code and nothing else."""
 
@@ -88,12 +93,12 @@ agency = Agency([ceo, [ceo, market_analyst],
                  [ceo, news_curator],
                  [market_analyst, news_curator]],
                 shared_instructions='./agency_manifesto.md')
-    
+
 if __name__ == '__main__':
     agency.demo_gradio()"""
 
 examples = [
-    {'role': "system", 'content': SYSTEM_PROMPT},
-    {'role': "user", 'content': example_input},
-    {'role': "assistant", 'content': example_output}
+    {"role": "system", "content": SYSTEM_PROMPT},
+    {"role": "user", "content": example_input},
+    {"role": "assistant", "content": example_output},
 ]

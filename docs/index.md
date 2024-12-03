@@ -13,14 +13,14 @@ An open source agent orchestration framework built on top of the latest [OpenAI 
 
 ## What is Agency Swarm?
 
-Agency Swarm started as a desire and effort of Arsenii Shatokhin (aka VRSEN) to fully automate his AI Agency with AI. By building this framework, we aim to simplify the agent creation process and enable anyone to create collaborative swarm of agents (Agencies), each with distinct roles and capabilities. By thinking about automation in terms of **real world entities**, such as agencies and specialized agent roles, we make it a lot more intuitive for both the agents and the users. 
+Agency Swarm started as a desire and effort of Arsenii Shatokhin (aka VRSEN) to fully automate his AI Agency with AI. By building this framework, we aim to simplify the agent creation process and enable anyone to create collaborative swarm of agents (Agencies), each with distinct roles and capabilities. By thinking about automation in terms of **real world entities**, such as agencies and specialized agent roles, we make it a lot more intuitive for both the agents and the users.
 
 
 ### Key Features
 
 - **Customizable Agent Roles**: Define roles like CEO, virtual assistant, developer, etc., and customize their functionalities with [Assistants API](https://platform.openai.com/docs/assistants/overview).
 - **Full Control Over Prompts**: Avoid conflicts and restrictions of pre-defined prompts, allowing full customization.
-- **Tool Creation**: Tools within Agency Swarm are created using [Instructor](https://github.com/jxnl/instructor), which provides a convenient interface and automatic type validation. 
+- **Tool Creation**: Tools within Agency Swarm are created using [Instructor](https://github.com/jxnl/instructor), which provides a convenient interface and automatic type validation.
 - **Efficient Communication**: Agents communicate through a specially designed "send message" tool based on their own descriptions.
 - **State Management**: Agency Swarm efficiently manages the state of your assistants on OpenAI, maintaining it in a special `settings.json` file.
 - **Deployable in Production**: Agency Swarm is designed to be reliable and easily deployable in production environments.
@@ -37,7 +37,7 @@ Unlike other frameworks, Agency Swarm:
 
 ### **AutoGen** vs Agency Swarm
 
-In AutoGen, by default, the next speaker is determined with an extra call to the model that emulates "role play" between the agents. [[1]](https://microsoft.github.https://microsoft.github.io/autogen/blog/2023/12/29/AgentDescriptionsio/autogen/blog/2023/12/29/AgentDescriptions) Not only this is very inefficient, but it also makes the system less controllable and less customizable, because you cannot control which agent can communicate with which other agent. 
+In AutoGen, by default, the next speaker is determined with an extra call to the model that emulates "role play" between the agents. [[1]](https://microsoft.github.https://microsoft.github.io/autogen/blog/2023/12/29/AgentDescriptionsio/autogen/blog/2023/12/29/AgentDescriptions) Not only this is very inefficient, but it also makes the system less controllable and less customizable, because you cannot control which agent can communicate with which other agent.
 
 Recently, autogen has added support for [determining the next speaker based on certain hardcoded conditions](https://microsoft.github.io/autogen/docs/notebooks/agentchat_groupchat_customized/). While this does make your system more customizable, it completely undermines the main benefit of agentic systems - adaptability. In my opinion, **you should only determine the boundaries for your agents, not the conditions themselves, as you are unlikely to account for every single condition in the real world.** ([#113](https://github.com/VRSEN/agency-swarm/issues/113))
 

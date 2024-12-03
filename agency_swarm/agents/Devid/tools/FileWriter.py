@@ -1,55 +1,62 @@
+import os
+import re
 from typing import List, Literal, Optional
 
-import json
-
-import os
-from agency_swarm.util.validators import llm_validator
+from pydantic import Field, field_validator
 
 from agency_swarm import get_openai_client
 from agency_swarm.tools import BaseTool
-from pydantic import Field, field_validator
-import re
+from agency_swarm.util.validators import llm_validator
 
 from .util import format_file_deps
 
 history = [
-            {
-                "role": "system",
-                "content": "As a top-tier software engineer focused on developing programs incrementally, you are entrusted with the creation or modification of files based on user requirements. It's imperative to operate under the assumption that all necessary dependencies are pre-installed and accessible, and the file in question will be deployed in an appropriate environment. Furthermore, it is presumed that all other modules or files upon which this file relies are accurate and error-free. Your output should be encapsulated within a code block, without specifying the programming language. Prior to embarking on the coding process, you must outline a methodical, step-by-step plan to precisely fulfill the requirements — no more, no less. It is crucial to ensure that the final code block is a complete file, without any truncation. This file should embody a flawless, fully operational program, inclusive of all requisite imports and functions, devoid of any placeholders, unless specified otherwise by the user."
-            },
-        ]
+    {
+        "role": "system",
+        "content": "As a top-tier software engineer focused on developing programs incrementally, you are entrusted with the creation or modification of files based on user requirements. It's imperative to operate under the assumption that all necessary dependencies are pre-installed and accessible, and the file in question will be deployed in an appropriate environment. Furthermore, it is presumed that all other modules or files upon which this file relies are accurate and error-free. Your output should be encapsulated within a code block, without specifying the programming language. Prior to embarking on the coding process, you must outline a methodical, step-by-step plan to precisely fulfill the requirements — no more, no less. It is crucial to ensure that the final code block is a complete file, without any truncation. This file should embody a flawless, fully operational program, inclusive of all requisite imports and functions, devoid of any placeholders, unless specified otherwise by the user.",
+    },
+]
 
 
 class FileWriter(BaseTool):
     """This tools allows you to write new files or modify existing files according to specified requirements. In 'write' mode, it creates a new file or overwrites an existing one. In 'modify' mode, it modifies an existing file according to the provided requirements.
     Note: This tool does not have access to other files within the project. You must provide all necessary details to ensure that the generated file can be used in conjunction with other files in this project."""
+
     file_path: str = Field(
-        ..., description="The path of the file to write or modify. Will create directories if they don't exist."
+        ...,
+        description="The path of the file to write or modify. Will create directories if they don't exist.",
     )
     requirements: str = Field(
         ...,
-        description="The comprehensive requirements explaining how the file should be written or modified. This should be a detailed description of what the file should contain, including example inputs, desired behaviour and ideal outputs. It must not contain any code or implementation details."
+        description="The comprehensive requirements explaining how the file should be written or modified. This should be a detailed description of what the file should contain, including example inputs, desired behaviour and ideal outputs. It must not contain any code or implementation details.",
     )
     details: str = Field(
-        None, description="Additional details like error messages, or class, function, and variable names from other files that this file depends on."
+        None,
+        description="Additional details like error messages, or class, function, and variable names from other files that this file depends on.",
     )
     documentation: Optional[str] = Field(
-        None, description="Relevant documentation extracted with the myfiles_browser tool. You must pass all the relevant code from the documentation, as this tool does not have access to those files."
+        None,
+        description="Relevant documentation extracted with the myfiles_browser tool. You must pass all the relevant code from the documentation, as this tool does not have access to those files.",
     )
     mode: Literal["write", "modify"] = Field(
-        ..., description="The mode of operation for the tool. 'write' is used to create a new file or overwrite an existing one. 'modify' is used to modify an existing file."
+        ...,
+        description="The mode of operation for the tool. 'write' is used to create a new file or overwrite an existing one. 'modify' is used to modify an existing file.",
     )
     file_dependencies: List[str] = Field(
         [],
         description="Paths to other files that the file being written depends on.",
-        examples=["/path/to/dependency1.py", "/path/to/dependency2.css", "/path/to/dependency3.js"]
-        )
+        examples=[
+            "/path/to/dependency1.py",
+            "/path/to/dependency2.css",
+            "/path/to/dependency3.js",
+        ],
+    )
     library_dependencies: List[str] = Field(
         [],
         description="Any library dependencies required for the file to be written.",
-        examples=["numpy", "pandas"]
+        examples=["numpy", "pandas"],
     )
-    
+
     class ToolConfig:
         one_call_at_a_time = True
 
@@ -78,18 +85,15 @@ class FileWriter(BaseTool):
 
         if self.mode == "modify":
             message += f"\nThe existing file content is as follows:"
-        
+
             try:
-                with open(self.file_path, 'r') as file:
+                with open(self.file_path, "r") as file:
                     file_content = file.read()
                     message += f"\n\n```{file_content}```"
             except Exception as e:
-                return f'Error reading {self.file_path}: {e}'
+                return f"Error reading {self.file_path}: {e}"
 
-        history.append({
-                "role": "user",
-                "content": message
-            })
+        history.append({"role": "user", "content": message})
 
         messages = history.copy()
 
@@ -107,10 +111,7 @@ class FileWriter(BaseTool):
                     messages=messages,
                     model="gpt-4o",
                     temperature=0,
-                    prediction={
-                        "type": "content",
-                        "content": file_content
-                    }
+                    prediction={"type": "content", "content": file_content},
                 )
             else:
                 resp = client.chat.completions.create(
@@ -121,12 +122,7 @@ class FileWriter(BaseTool):
 
             content = resp.choices[0].message.content
 
-            messages.append(
-                {
-                    "role": "assistant",
-                    "content": content
-                }
-            )
+            messages.append({"role": "assistant", "content": content})
 
             pattern = r"```(?:[a-zA-Z]+\n)?(.*?)```"
             match = re.findall(pattern, content, re.DOTALL)
@@ -135,46 +131,28 @@ class FileWriter(BaseTool):
                 try:
                     self.validate_content(code)
 
-                    history.append(
-                        {
-                            "role": "assistant",
-                            "content": content
-                        }
-                    )
+                    history.append({"role": "assistant", "content": content})
 
                     break
                 except Exception as e:
                     print(f"Error: {e}. Trying again.")
                     error_message = str(e)
                     messages.append(
-                        {
-                            "role": "user",
-                            "content": f"Error: {e}. Please try again."
-                        }
+                        {"role": "user", "content": f"Error: {e}. Please try again."}
                     )
             else:
                 messages.append(
                     {
                         "role": "user",
-                        "content": f"Error: Could not find the code block in the response. Please try again."
+                        "content": f"Error: Could not find the code block in the response. Please try again.",
                     }
                 )
 
             n += 1
 
         if n == 3 or not code:
-            history.append(
-                {
-                    "role": "assistant",
-                    "content": content
-                }
-            )
-            history.append(
-                {
-                    "role": "user",
-                    "content": error_message
-                }
-            )
+            history.append({"role": "assistant", "content": content})
+            history.append({"role": "user", "content": error_message})
             return "Error: Could not generate a valid file: " + error_message
 
         try:
@@ -183,11 +161,11 @@ class FileWriter(BaseTool):
             if dir_path != "" and not os.path.exists(dir_path):
                 os.makedirs(dir_path, exist_ok=True)
 
-            with open(self.file_path, 'w') as file:
+            with open(self.file_path, "w") as file:
                 file.write(code)
-            return f'Successfully wrote to file: {self.file_path}. Please make sure to now test the program. Below is the content of the file:\n\n```{content}```\n\nPlease now verify the integrity of the file and test it.'
+            return f"Successfully wrote to file: {self.file_path}. Please make sure to now test the program. Below is the content of the file:\n\n```{content}```\n\nPlease now verify the integrity of the file and test it."
         except Exception as e:
-            return f'Error writing to file: {e}'
+            return f"Error writing to file: {e}"
 
     @field_validator("file_dependencies", mode="after")
     @classmethod
@@ -202,11 +180,11 @@ class FileWriter(BaseTool):
 
         llm_validator(
             statement="Check if the code is bug-free. Code should be considered in isolation, with the understanding that it is part of a larger, fully developed program that strictly adheres to these standards of completeness and correctness. All files, elements, components, functions, or modules referenced within this snippet are assumed to exist in other parts of the project and are also devoid of any errors, ensuring a cohesive and error-free integration across the entire software solution. Certain placeholders may be present.",
-                      client=client,
-                      model="gpt-4o",
-                      temperature=0,
-                      allow_override=False
-                      )(v)
+            client=client,
+            model="gpt-4o",
+            temperature=0,
+            allow_override=False,
+        )(v)
 
         return v
 
@@ -214,11 +192,13 @@ class FileWriter(BaseTool):
     @classmethod
     def validate_requirements(cls, v):
         if "placeholder" in v:
-            raise ValueError("Requirements contain placeholders. "
-                             "Please never user placeholders. Instead, implement only the code that you are confident about.")
+            raise ValueError(
+                "Requirements contain placeholders. "
+                "Please never user placeholders. Instead, implement only the code that you are confident about."
+            )
 
         # check if code is included in requirements
-        pattern = r'(```)((.*\n){5,})(```)'
+        pattern = r"(```)((.*\n){5,})(```)"
         if re.search(pattern, v):
             raise ValueError(
                 "Requirements contain a code snippet. Please never include code snippets in requirements. "
@@ -231,15 +211,17 @@ class FileWriter(BaseTool):
     @classmethod
     def validate_details(cls, v):
         if len(v) == 0:
-            raise ValueError("Details are required. Remember: this tool does not have access to other files. Please provide additional details like relevant documentation, error messages, or class, function, and variable names from other files that this file depends on.")
+            raise ValueError(
+                "Details are required. Remember: this tool does not have access to other files. Please provide additional details like relevant documentation, error messages, or class, function, and variable names from other files that this file depends on."
+            )
         return v
 
     @field_validator("documentation", mode="after")
     @classmethod
     def validate_documentation(cls, v):
         # check if documentation contains code
-        pattern = r'(```)((.*\n){5,})(```)'
-        pattern2 = r'(`)(.*)(`)'
+        pattern = r"(```)((.*\n){5,})(```)"
+        pattern2 = r"(`)(.*)(`)"
         if not (re.search(pattern, v) or re.search(pattern2, v)):
             raise ValueError(
                 "Documentation does not contain a code snippet. Please provide relevant documentation extracted with the myfiles_browser tool. You must pass all the relevant code snippets information, as this tool does not have access to those files."

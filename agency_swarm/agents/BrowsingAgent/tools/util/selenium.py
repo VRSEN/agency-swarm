@@ -14,6 +14,7 @@ def get_web_driver():
     try:
         from selenium import webdriver
         from selenium.webdriver.chrome.service import Service as ChromeService
+
         print("Selenium imported successfully.")
     except ImportError:
         print("Selenium not installed. Please install it with pip install selenium")
@@ -21,16 +22,22 @@ def get_web_driver():
 
     try:
         from webdriver_manager.chrome import ChromeDriverManager
+
         print("webdriver_manager imported successfully.")
     except ImportError:
-        print("webdriver_manager not installed. Please install it with pip install webdriver-manager")
+        print(
+            "webdriver_manager not installed. Please install it with pip install webdriver-manager"
+        )
         raise ImportError
 
     try:
         from selenium_stealth import stealth
+
         print("selenium_stealth imported successfully.")
     except ImportError:
-        print("selenium_stealth not installed. Please install it with pip install selenium-stealth")
+        print(
+            "selenium_stealth not installed. Please install it with pip install selenium-stealth"
+        )
         raise ImportError
 
     global wd, selenium_config
@@ -43,7 +50,9 @@ def get_web_driver():
     profile_directory = None
     user_data_dir = None
     if isinstance(chrome_profile_path, str) and os.path.exists(chrome_profile_path):
-        profile_directory = os.path.split(chrome_profile_path)[-1].strip("\\").rstrip("/")
+        profile_directory = (
+            os.path.split(chrome_profile_path)[-1].strip("\\").rstrip("/")
+        )
         user_data_dir = os.path.split(chrome_profile_path)[0].strip("\\").rstrip("/")
         print(f"Using Chrome profile: {profile_directory}")
         print(f"Using Chrome user data dir: {user_data_dir}")
@@ -54,13 +63,15 @@ def get_web_driver():
 
     chrome_driver_path = "/usr/bin/chromedriver"
     if not os.path.exists(chrome_driver_path):
-        print("ChromeDriver not found at /usr/bin/chromedriver. Installing using webdriver_manager.")
+        print(
+            "ChromeDriver not found at /usr/bin/chromedriver. Installing using webdriver_manager."
+        )
         chrome_driver_path = ChromeDriverManager().install()
     else:
         print(f"ChromeDriver found at {chrome_driver_path}.")
 
     if selenium_config.get("headless", False):
-        chrome_options.add_argument('--headless')
+        chrome_options.add_argument("--headless")
         print("Headless mode enabled.")
     if selenium_config.get("full_page_screenshot", False):
         chrome_options.add_argument("--start-maximized")
@@ -86,12 +97,16 @@ def get_web_driver():
     if user_data_dir and profile_directory:
         chrome_options.add_argument(f"user-data-dir={user_data_dir}")
         chrome_options.add_argument(f"profile-directory={profile_directory}")
-        print(f"Using user data dir: {user_data_dir} and profile directory: {profile_directory}")
+        print(
+            f"Using user data dir: {user_data_dir} and profile directory: {profile_directory}"
+        )
 
     try:
-        wd = webdriver.Chrome(service=ChromeService(chrome_driver_path), options=chrome_options)
+        wd = webdriver.Chrome(
+            service=ChromeService(chrome_driver_path), options=chrome_options
+        )
         print("WebDriver initialized successfully.")
-        if wd.capabilities['chrome']['userDataDir']:
+        if wd.capabilities["chrome"]["userDataDir"]:
             print(f"Profile path in use: {wd.capabilities['chrome']['userDataDir']}")
     except Exception as e:
         print(f"Error initializing WebDriver: {e}")
