@@ -1,6 +1,10 @@
 from abc import ABC
+from typing import override
 
 from openai.lib.streaming import AssistantEventHandler
+from openai.types.beta.threads.runs.run_step import RunStep
+
+from agency_swarm.util.usage_tracking.abstract_tracker import AbstractTracker
 
 
 class AgencyEventHandler(AssistantEventHandler, ABC):
@@ -24,3 +28,15 @@ class AgencyEventHandler(AssistantEventHandler, ABC):
     def set_recipient_agent(cls, value):
         cls.recipient_agent = value
         cls.recipient_agent_name = value.name if value else None
+
+
+class AgencyEventHandlerWithTracking(AgencyEventHandler):
+    usage_tracker: AbstractTracker
+
+    @override
+    def on_run_step_done(self, run_step: RunStep) -> None:
+        """
+        Handles the event when a run step is completed.
+        """
+        if run_step.usage and self.usage_tracker:
+            self.usage_tracker.track_usage(run_step.usage)

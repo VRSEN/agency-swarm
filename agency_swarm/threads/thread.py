@@ -468,6 +468,10 @@ class Thread:
                     extra_body={
                         "parallel_tool_calls": recipient_agent.parallel_tool_calls
                     },
+                    metadata={
+                        "sender_agent": self.agent.name,
+                        "recipient_agent": recipient_agent.name,
+                    },
                     response_format=response_format,
                 ) as stream:
                     stream.until_done()
@@ -484,6 +488,10 @@ class Thread:
                     temperature=temperature,
                     parallel_tool_calls=recipient_agent.parallel_tool_calls,
                     response_format=response_format,
+                    metadata={
+                        "sender_agent": self.agent.name,
+                        "recipient_agent": recipient_agent.name,
+                    },
                 )
                 self._run = self.client.beta.threads.runs.poll(
                     thread_id=self.id,
