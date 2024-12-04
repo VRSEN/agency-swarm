@@ -4,8 +4,7 @@ from agency_swarm.util.usage_tracking.langfuse_tracker import LangfuseUsageTrack
 from agency_swarm.util.usage_tracking.sqlite_tracker import SQLiteUsageTracker
 
 
-def get_tracker(tracker_type: Literal["sqlite", "langfuse"]):
-    if tracker_type == "sqlite":
-        return SQLiteUsageTracker()
-    elif tracker_type == "langfuse":
+def get_tracker(tracker_type: Literal["sqlite", "langfuse"] = "sqlite"):
+    if tracker_type == "langfuse":
         return LangfuseUsageTracker()
+    return SQLiteUsageTracker()

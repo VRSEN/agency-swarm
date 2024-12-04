@@ -3,6 +3,11 @@ from unittest.mock import patch
 import pytest
 from openai.types.beta.threads.runs.run_step import Usage
 
+from agency_swarm.util.oai import (
+    _get_openai_module,
+    set_openai_client,
+    set_usage_tracker,
+)
 from agency_swarm.util.usage_tracking import LangfuseUsageTracker, SQLiteUsageTracker
 
 
@@ -50,6 +55,11 @@ if __name__ == "__main__":
 
     load_dotenv()
     from agency_swarm import Agency, Agent
+
+    # Test Langfuse configuration
+    set_usage_tracker("langfuse")
+    openai = _get_openai_module()
+    openai.langfuse_auth_check()
 
     agent = Agent(name="test_agent")
     agency = Agency(agency_chart=[agent])

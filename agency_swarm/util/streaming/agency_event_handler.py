@@ -4,6 +4,7 @@ from typing import override
 from openai.lib.streaming import AssistantEventHandler
 from openai.types.beta.threads.runs.run_step import RunStep
 
+from agency_swarm.util.oai import get_usage_tracker
 from agency_swarm.util.usage_tracking.abstract_tracker import AbstractTracker
 
 
@@ -31,15 +32,9 @@ class AgencyEventHandler(AssistantEventHandler, ABC):
 
 
 class AgencyEventHandlerWithTracking(AgencyEventHandler):
-    usage_tracker: AbstractTracker
     """
     A special event handler that implements tracking of usage for the run step.
     """
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        if not self.usage_tracker:
-            raise ValueError("usage_tracker is not set")
 
     @override
     @classmethod
@@ -47,5 +42,11 @@ class AgencyEventHandlerWithTracking(AgencyEventHandler):
         """
         Implements tracking of usage for the run step.
         """
-        if run_step.usage and cls.usage_tracker:
-            cls.usage_tracker.track_usage(run_step.usage)
+        if run_step.usage:
+            usage_tracker = get_usage_tracker()
+            usage_tracker.track_usage(
+                usage=run_step.usage,
+                assistant_id=run_step.assistant_id,
+                thread_id=run_step.thread_id,
+                model="gpt-4o",  # TODO: RunStep does not contain model information
+            )

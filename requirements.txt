@@ -1,9 +1,10 @@
-openai>=1.55.3,<2.0.0
-docstring_parser==0.16
-pydantic==2.8.2
 datamodel-code-generator==0.26.1
 deepdiff==6.7.1
-termcolor==2.4.0
+docstring_parser==0.16
+jsonref==1.1.0
+langfuse==2.55.0
+openai>=1.55.3,<2.0.0
+pydantic==2.8.2
 python-dotenv==1.0.1
 rich==13.7.1
-jsonref==1.1.0
+termcolor==2.4.0

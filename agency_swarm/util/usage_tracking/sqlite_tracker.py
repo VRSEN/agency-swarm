@@ -20,19 +20,31 @@ class SQLiteUsageTracker(AbstractTracker):
                     prompt_tokens INTEGER,
                     completion_tokens INTEGER,
                     total_tokens INTEGER,
+                    assistant_id TEXT,
+                    thread_id TEXT,
+                    model TEXT,
                     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
                 )
             """)
 
-    def track_usage(self, usage: Usage) -> None:
+    def track_usage(
+        self, usage: Usage, assistant_id: str, thread_id: str, model: str
+    ) -> None:
         with self.lock:
             with self.conn:
                 self.conn.execute(
                     """
-                    INSERT INTO token_usage (prompt_tokens, completion_tokens, total_tokens)
-                    VALUES (?, ?, ?)
+                    INSERT INTO token_usage (prompt_tokens, completion_tokens, total_tokens, assistant_id, thread_id, model)
+                    VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                    (usage.prompt_tokens, usage.completion_tokens, usage.total_tokens),
+                    (
+                        usage.prompt_tokens,
+                        usage.completion_tokens,
+                        usage.total_tokens,
+                        assistant_id,
+                        thread_id,
+                        model,
+                    ),
                 )
 
     def get_total_tokens(self) -> Usage:
@@ -51,3 +63,8 @@ class SQLiteUsageTracker(AbstractTracker):
 
     def close(self) -> None:
         self.conn.close()
+
+    @classmethod
+    def get_observe_decorator(cls):
+        # Return a noop decorator (decorator tracking is supported by other providers)
+        return lambda f: f

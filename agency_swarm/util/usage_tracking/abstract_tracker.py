@@ -10,12 +10,17 @@ class AbstractTracker(ABC):
     """
 
     @abstractmethod
-    def track_usage(self, usage: Usage) -> None:
+    def track_usage(
+        self, usage: Usage, assistant_id: str, thread_id: str, model: str
+    ) -> None:
         """
         Track token usage.
 
         Args:
             usage: Usage object containing token usage statistics
+            assistant_id: ID of the assistant that generated the usage
+            thread_id: ID of the thread that generated the usage
+            model: Model that generated the usage
         """
         pass
 
@@ -32,6 +37,19 @@ class AbstractTracker(ABC):
     @abstractmethod
     def close(self) -> None:
         """
-        Close the tracker.
+        Close the tracker. Called automatically when the tracker is garbage collected.
+        """
+        pass
+
+    def __del__(self):
+        self.close()
+
+    @classmethod
+    def get_observe_decorator(cls):
+        """
+        Get the observe decorator for the tracker. Will be applied to the get_completion function.
+
+        Returns:
+            The observe decorator
         """
         pass

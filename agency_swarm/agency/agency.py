@@ -30,14 +30,13 @@ from agency_swarm.tools.send_message import SendMessage, SendMessageBase
 from agency_swarm.user import User
 from agency_swarm.util.errors import RefusalError
 from agency_swarm.util.files import get_file_purpose, get_tools
+from agency_swarm.util.oai import get_usage_tracker
 from agency_swarm.util.shared_state import SharedState
 from agency_swarm.util.streaming import (
     AgencyEventHandler,
-    AgencyEventHandlerWithTracking,
     create_gradio_handler,
     create_term_handler,
 )
-from agency_swarm.util.usage_tracking.tracker_factory import get_tracker
 
 console = Console()
 T = TypeVar("T", bound=BaseModel)
@@ -69,7 +68,6 @@ class Agency:
         max_prompt_tokens: int = None,
         max_completion_tokens: int = None,
         truncation_strategy: dict = None,
-        usage_tracker: Literal["sqlite", "langfuse"] = "sqlite",
     ):
         """
         Initializes the Agency object, setting up agents, threads, and core functionalities.
@@ -88,7 +86,6 @@ class Agency:
             max_prompt_tokens (int, optional): The maximum number of tokens allowed in the prompt for each agent. Agent-specific values will override this. Defaults to None.
             max_completion_tokens (int, optional): The maximum number of tokens allowed in the completion for each agent. Agent-specific values will override this. Defaults to None.
             truncation_strategy (dict, optional): The truncation strategy to use for the completion for each agent. Agent-specific values will override this. Defaults to None.
-            usage_tracker (Literal["sqlite", "langfuse"], optional): The usage tracking mechanism to use. Choose "sqlite" for local SQLite tracking or "langfuse" for Langfuse. Defaults to "sqlite".
 
         This constructor initializes various components of the Agency, including CEO, agents, threads, and user interactions. It parses the agency chart to set up the organizational structure and initializes the messaging tools, agents, and threads necessary for the operation of the agency. Additionally, it prepares a main thread for user interactions.
         """
@@ -157,9 +154,7 @@ class Agency:
         self._create_special_tools()
         self._init_agents()
 
-        self.usage_tracker = get_tracker(usage_tracker)
-        AgencyEventHandlerWithTracking.usage_tracker = self.usage_tracker
-
+    @get_usage_tracker().get_observe_decorator()
     def get_completion(
         self,
         message: str,
@@ -215,6 +210,7 @@ class Agency:
 
         return res
 
+    @get_usage_tracker().get_observe_decorator()
     def get_completion_stream(
         self,
         message: str,
@@ -1094,7 +1090,3 @@ class Agency:
         """
         for agent in self.agents:
             agent.delete()
-
-    def __del__(self):
-        if self.usage_tracker:
-            self.usage_tracker.close()
