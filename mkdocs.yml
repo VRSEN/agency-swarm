@@ -14,7 +14,7 @@ theme:
     - navigation.instant.prefetch
     - navigation.instant.progress
     - navigation.prune
-#    - navigation.sections
+    #    - navigation.sections
     - navigation.tabs
     # - navigation.tabs.sticky
     - navigation.top
@@ -43,10 +43,11 @@ nav:
   - Introduction: "index.md"
   - Quick Start: "quick_start.md"
   - Advanced Usage:
-    - Advanced Tools: "advanced-usage/tools.md"
-    - Agents: "advanced-usage/agents.md"
-    - Agencies: "advanced-usage/agencies.md"
-    - Azure OpenAI: "advanced-usage/azure-openai.md"
+      - Tools: "advanced-usage/tools.md"
+      - Agents: "advanced-usage/agents.md"
+      - Agencies: "advanced-usage/agencies.md"
+      - Communication: "advanced-usage/communication_flows.md"
+      - Azure OpenAI: "advanced-usage/azure-openai.md"
   - Deployment to Production: "deployment.md"
   - Open Source Models: "advanced-usage/open-source-models.md"
   - API Reference: "api.md"

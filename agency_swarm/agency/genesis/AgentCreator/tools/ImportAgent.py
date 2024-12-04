@@ -4,17 +4,22 @@ from pydantic import Field, field_validator
 
 from agency_swarm import BaseTool
 from agency_swarm.util.cli import import_agent
-from agency_swarm.util.helpers import get_available_agent_descriptions, list_available_agents
+from agency_swarm.util.helpers import (
+    get_available_agent_descriptions,
+    list_available_agents,
+)
 
 
 class ImportAgent(BaseTool):
     """
     This tool imports an existing agent from agency swarm framework. Please make sure to first use the GetAvailableAgents tool to get the list of available agents.
     """
-    agent_name: str = Field(...,
-                            description=get_available_agent_descriptions())
+
+    agent_name: str = Field(..., description=get_available_agent_descriptions())
     agency_path: str = Field(
-        None, description="Path to the agency where the agent will be imported. Default is the current agency.")
+        None,
+        description="Path to the agency where the agent will be imported. Default is the current agency.",
+    )
 
     def run(self):
         if not self._shared_state.get("default_folder"):
@@ -40,17 +45,21 @@ class ImportAgent(BaseTool):
 
         os.chdir(self._shared_state.get("default_folder"))
 
-        return (f"Success. {self.agent_name} has been imported. "
-                f"You can now tell the user to user proceed with next agents.")
+        return (
+            f"Success. {self.agent_name} has been imported. "
+            f"You can now tell the user to user proceed with next agents."
+        )
 
-    @field_validator("agent_name", mode='after')
+    @field_validator("agent_name", mode="after")
     @classmethod
     def agent_name_exists(cls, v):
         available_agents = list_available_agents()
         if v not in available_agents:
             raise ValueError(
-                f"Agent with name {v} does not exist. Available agents are: {available_agents}")
+                f"Agent with name {v} does not exist. Available agents are: {available_agents}"
+            )
         return v
+
 
 if __name__ == "__main__":
     tool = ImportAgent(agent_name="Devid")

@@ -1,5 +1,5 @@
 # Contributing to Agency Swarm
-Each agent or tool you add to Agency Swarm will automatically be available for import by the Genesis Swarm, which will help us create an exponentially larger and smarter system.  
+Each agent or tool you add to Agency Swarm will automatically be available for import by the Genesis Swarm, which will help us create an exponentially larger and smarter system.
 
 This document provides guidelines for contributing new agents and tools to the framework.
 

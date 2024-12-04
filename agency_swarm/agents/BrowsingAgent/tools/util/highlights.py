@@ -11,10 +11,10 @@ def highlight_elements_with_labels(driver, selector):
         // Helper function to check if an element is visible
         function isElementVisible(element) {{
             var rect = element.getBoundingClientRect();
-            if (rect.width <= 0 || rect.height <= 0 || 
-                rect.top >= (window.innerHeight || document.documentElement.clientHeight) || 
-                rect.bottom <= 0 || 
-                rect.left >= (window.innerWidth || document.documentElement.clientWidth) || 
+            if (rect.width <= 0 || rect.height <= 0 ||
+                rect.top >= (window.innerHeight || document.documentElement.clientHeight) ||
+                rect.bottom <= 0 ||
+                rect.left >= (window.innerWidth || document.documentElement.clientWidth) ||
                 rect.right <= 0) {{
                 return false;
             }}
@@ -47,24 +47,24 @@ def highlight_elements_with_labels(driver, selector):
             document.head.appendChild(styleElement);
         }}
         styleElement.textContent = `
-            .highlighted-element {{ 
-                border: 2px solid red !important; 
-                position: relative; 
-                box-sizing: border-box; 
+            .highlighted-element {{
+                border: 2px solid red !important;
+                position: relative;
+                box-sizing: border-box;
             }}
-            .highlight-label {{ 
-                position: absolute; 
-                z-index: 2147483647; 
-                background: yellow; 
-                color: black; 
-                font-size: 25px; 
-                padding: 3px 5px; 
-                border: 1px solid black; 
-                border-radius: 3px; 
-                white-space: nowrap; 
-                box-shadow: 0px 0px 2px #000; 
-                top: -25px; 
-                left: 0; 
+            .highlight-label {{
+                position: absolute;
+                z-index: 2147483647;
+                background: yellow;
+                color: black;
+                font-size: 25px;
+                padding: 3px 5px;
+                border: 1px solid black;
+                border-radius: 3px;
+                white-space: nowrap;
+                box-shadow: 0px 0px 2px #000;
+                top: -25px;
+                left: 0;
                 display: none;
             }}
         `;
@@ -114,8 +114,10 @@ def remove_highlight_and_labels(driver):
 
     :param driver: Instance of Selenium WebDriver.
     """
-    selector = ('a, button, input, textarea, div[onclick], div[role="button"], div[tabindex], span[onclick], '
-                'span[role="button"], span[tabindex]')
+    selector = (
+        'a, button, input, textarea, div[onclick], div[role="button"], div[tabindex], span[onclick], '
+        'span[role="button"], span[tabindex]'
+    )
     script = f"""
         // Remove all labels
         document.querySelectorAll('.highlight-label').forEach(function(label) {{

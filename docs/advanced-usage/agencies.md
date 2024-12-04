@@ -1,6 +1,6 @@
-# Agencies 
+# Agencies
 
-An `Agency` is a collection of Agents that can communicate with one another. 
+An `Agency` is a collection of Agents that can communicate with one another.
 
 ### Benefits of using an Agency
 
@@ -8,7 +8,7 @@ Here are the primary benefits of using an Agency, instead of an individual agent
 
 1. **Fewer hallucinations**: When agents are part of an agency, they can supervise one another and recover from mistakes or unexpected circumstances.
 2. **More complex tasks**: The more agents you add, the longer the sequence of actions they can perform before returning the result back to the user.
-3. **Scalability**: As the complexity of your integration increases, you can keep adding more and more agents. 
+3. **Scalability**: As the complexity of your integration increases, you can keep adding more and more agents.
 
     !!! tip
         It is recommended to start with as few agents as possible, fine-tune them until they are working as expected, and only then add new agents to the agency. If you add too many agents at first, it will be difficult to debug and understand what is going on.
@@ -71,7 +71,7 @@ class EventHandler(AgencyEventHandler):
 response = agency.get_completion_stream("I want you to build me a website", event_handler=EventHandler)
 ```
 
-Also, there is an additional class method `on_all_streams_end` which is called when all streams have ended. This method is needed because, unlike in the official documentation, your event handler will be called multiple times and probably by even multiple agents. 
+Also, there is an additional class method `on_all_streams_end` which is called when all streams have ended. This method is needed because, unlike in the official documentation, your event handler will be called multiple times and probably by even multiple agents.
 
 ## Async Mode
 
@@ -92,7 +92,7 @@ With this mode, the response from the `SendMessage` tool will be returned instan
 If you would like to use asynchronous execution for tools, you can specify a `async_mode` parameter to `tools_threading`. With this mode on, all tools will be executed concurrently in separate threads, which can significantly speed up the work flow of I/O bound tasks.
 
 ```python
-agency = Agency([ceo], async_mode='tools_threading') 
+agency = Agency([ceo], async_mode='tools_threading')
 ```
 
 
@@ -101,7 +101,7 @@ agency = Agency([ceo], async_mode='tools_threading')
 You can add shared files for all agents in the agency by specifying a folder path in a `shared_files` parameter. This is useful for sharing common resources that all agents need to access.
 
 ```python
-agency = Agency([ceo], shared_files='shared_files') 
+agency = Agency([ceo], shared_files='shared_files')
 ```
 
 ### Settings Path
@@ -109,7 +109,7 @@ agency = Agency([ceo], shared_files='shared_files')
 If you would like to use a different file path for the settings, other than default `settings.json`, you can specify a `settings_path` parameter. All your agent states will then be saved and loaded from this file. If this file does not exist, it will be created, along with new Assistants on your OpenAI account.
 
 ```python
-agency = Agency([ceo], settings_path='my_settings.json') 
+agency = Agency([ceo], settings_path='my_settings.json')
 ```
 
 ### Temperature and Max Token Controls
@@ -117,7 +117,7 @@ agency = Agency([ceo], settings_path='my_settings.json')
 You can also specify parameters like `temperature`, `top_p`, `max_completion_tokens`,  `max_prompt_tokens` and `truncation_strategy`, parameters for the entire agency. These parameters will be used as default values for all agents in the agency, however, you can still override them for individual agents by specifying them in the agent's constructor.
 
 ```python
-agency = Agency([ceo], temperature=0.3, max_prompt_tokens=25000) 
+agency = Agency([ceo], temperature=0.3, max_prompt_tokens=25000)
 ```
 
 ## Running the Agency
@@ -131,13 +131,13 @@ When it comes to running the agency, you have 3 options:
 ### Running the Agency inside a Gradio Interface
 
 ```python
-agency.demo_gradio(height=700) 
+agency.demo_gradio(height=700)
 ```
 
 ### Get completion from the agency
 
 ```python
-response = agency.get_completion("I want you to build me a website", 
+response = agency.get_completion("I want you to build me a website",
                                  additional_instructions="This is an additional instruction for the task.",
                                  tool_choice={"type": "function", "function": {"name": "SendMessage"}},
                                  attachments=[],

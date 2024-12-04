@@ -1,5 +1,7 @@
-from typing_extensions import override
 import re
+
+from typing_extensions import override
+
 from agency_swarm.agents import Agent
 from agency_swarm.tools import FileSearch
 from agency_swarm.util.validators import llm_validator
@@ -22,7 +24,7 @@ class Devid(Agent):
 
     @override
     def response_validator(self, message):
-        pattern = r'(```)((.*\n){5,})(```)'
+        pattern = r"(```)((.*\n){5,})(```)"
 
         if re.search(pattern, message):
             # take only first 100 characters
@@ -31,13 +33,15 @@ class Devid(Agent):
                 "Use the FileWriter tool to write the code locally. Then, test it if possible. Continue."
             )
 
-        llm_validator(statement="Verify whether the update from the AI Developer Agent confirms the task's "
-                                "successful completion. If the task remains unfinished, provide guidance "
-                                "within the 'reason' argument on the next steps the agent should take. For "
-                                "instance, if the agent encountered an error, advise the inclusion of debug "
-                                "statements for another attempt. Should the agent outline potential "
-                                "solutions or further actions, direct the agent to execute those plans. "
-                                "Message does not have to contain code snippets. Just confirmation.",
-                      client=self.client)(message)
+        llm_validator(
+            statement="Verify whether the update from the AI Developer Agent confirms the task's "
+            "successful completion. If the task remains unfinished, provide guidance "
+            "within the 'reason' argument on the next steps the agent should take. For "
+            "instance, if the agent encountered an error, advise the inclusion of debug "
+            "statements for another attempt. Should the agent outline potential "
+            "solutions or further actions, direct the agent to execute those plans. "
+            "Message does not have to contain code snippets. Just confirmation.",
+            client=self.client,
+        )(message)
 
         return message

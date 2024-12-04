@@ -1,4 +1,4 @@
-# API Reference 
+# API Reference
 
 ::: agency_swarm.agents.agent
 

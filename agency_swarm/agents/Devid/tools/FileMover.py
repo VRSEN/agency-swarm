@@ -1,7 +1,10 @@
-from agency_swarm.tools import BaseTool
-from pydantic import Field
-import shutil
 import os
+import shutil
+
+from pydantic import Field
+
+from agency_swarm.tools import BaseTool
+
 
 class FileMover(BaseTool):
     """
@@ -9,10 +12,12 @@ class FileMover(BaseTool):
     """
 
     source_path: str = Field(
-        ..., description="The full path of the file to move, including the file name and extension."
+        ...,
+        description="The full path of the file to move, including the file name and extension.",
     )
     destination_path: str = Field(
-        ..., description="The destination path where the file should be moved, including the new file name and extension if changing."
+        ...,
+        description="The destination path where the file should be moved, including the new file name and extension if changing.",
     )
 
     def run(self):
