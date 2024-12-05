@@ -5,7 +5,7 @@ from openai.lib.streaming import AssistantEventHandler
 from openai.types.beta.threads.runs.run_step import RunStep
 
 from agency_swarm.util.oai import get_usage_tracker
-from agency_swarm.util.usage_tracking.abstract_tracker import AbstractTracker
+from agency_swarm.util.tracking.abstract_tracker import AbstractTracker
 
 
 class AgencyEventHandler(AssistantEventHandler, ABC):

@@ -4,7 +4,7 @@ import threading
 import httpx
 from dotenv import load_dotenv
 
-from agency_swarm.util.usage_tracking.tracker_factory import get_tracker
+from agency_swarm.util.tracking.tracker_factory import get_tracker_by_name
 
 load_dotenv()
 
@@ -32,7 +32,7 @@ def get_usage_tracker():
     Returns:
         AbstractTracker: The current usage tracker instance.
     """
-    return get_tracker(_usage_tracker)
+    return get_tracker_by_name(_usage_tracker)
 
 
 def get_openai_client():
