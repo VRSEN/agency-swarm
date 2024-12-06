@@ -1,41 +1,75 @@
 ---
-title: "Best Practices & Examples"
+title: "Best Practices & Tips"
 description: "Best practices and real-world examples for Agency Swarm tools."
 icon: "code"
 ---
 
-## Best Practices for Tools
+Although the tool interface is straightforward and simple to use, there are actually quite a few practices and tricks that you can use to get significantly better results.
 
-### Use Clear Descriptions
+## Tips & Tricks
 
-Provide detailed descriptions for tools and fields.
+### Use Chain-of-Thought Prompting for Complex Tools
 
-- **Tool Docstrings:**
-  - Clearly explain the tool's purpose and usage.
-- **Field Descriptions:**
-  - Guide the agent in providing correct inputs.
+Use chain-of-thought prompting to allow the agent to think and plan before executing a complex tool.
 
-### Validate Inputs Thoroughly
+```python
+from agency_swarm.tools import BaseTool
+from pydantic import Field
 
-- Use Pydantic's validation features.
-- Implement custom validators when necessary.
+class ComplexAnalysisTool(BaseTool):
+    """
+    Performs complex analysis after planning the approach.
+    """
+    chain_of_thought: str = Field(
+        ...,
+        description="Think-step-by-step about how to perform the analysis." 
+    )
+    data: str = Field(..., description="Data to analyze.")
 
-### Handle Exceptions Gracefully
+    def run(self):
+        # Analysis logic
+        return "Analysis complete."
+```
 
-- Catch and handle exceptions within the `run` method.
-- Provide informative error messages.
+### Provide Hints for the Agent
 
-### Avoid Hardcoding Sensitive Data
+Based on your tool's logic, you can provide hints for the agent in tool output on what to do next.
 
-- Use environment variables for API keys and secrets.
+```python
+class QueryDatabase(BaseTool):
+    question: str = Field(...)
 
-### Define Constants Globally
+    def run(self):
+        # query your database here
+        context = self.query_database(self.question)
 
-- For values that don't change, define them outside the class.
+        # context not found
+        if context is None:
+            # tell agent what to do next
+            raise ValueError("No context found. Please propose to the user to change the topic.")
+        else:
+            # return the context to the agent
+            return context
+```
+
+### Use Shared State to Control Tool Flow
+
+Use `shared_state` to validate previous actions taken by this or other agents, before allowing it to proceed with the next action.
+
+```python
+class Action2(BaseTool):
+    input: str = Field(...)
+
+    def run(self):
+        if self._shared_state.get("action_1_result", None) is "failure":
+            raise ValueError("Please proceed with the Action1 tool first.")
+        else:
+            return "Success. The action has been taken."
+```
 
 ### Use Enumerations or Literal Types
 
-Restrict agent inputs to specific allowed values.
+Restrict the agent to only use specific values for a field, instead of letting it wander by itself.
 
 ```python
 from typing import Literal
@@ -57,68 +91,13 @@ class RunCommand(BaseTool):
             raise ValueError("Invalid command")
 ```
 
-## Complex Tool Examples
-
-### Example: Email Sending Tool
+or use special Pydantic types like `EmailStr.
 
 ```python
-from agency_swarm.tools import BaseTool
-from pydantic import Field, EmailStr
+from pydantic import EmailStr
 
 class EmailSender(BaseTool):
-    """
-    Sends emails after planning the content and recipients.
-    """
-    chain_of_thought: str = Field(
-        ...,
-        description="Plan how to construct the email. Consider the recipient, subject, and content."
-    )
     recipient: EmailStr = Field(..., description="Email recipient's address.")
-    subject: str = Field(..., description="Subject of the email.")
-    body: str = Field(..., description="Content of the email.")
-
-    def run(self):
-        # Implement email sending logic, e.g., using smtplib
-        return "Email sent successfully."
-```
-
-### Example: GitHub Repository Tool
-
-```python
-from agency_swarm.tools import BaseTool
-from pydantic import Field
-from typing import Literal
-import os
-from github import Github
-
-class GitHubTool(BaseTool):
-    """
-    Interact with GitHub repositories to list and create issues.
-    """
-    repo_name: str = Field(..., description="Repository name in 'owner/repo' format.")
-    action: Literal["list_issues", "create_issue"] = Field(..., description="Action to perform.")
-    issue_title: str = Field(None, description="Title of the issue to create.")
-    issue_body: str = Field(None, description="Body content of the issue to create.")
-
-    def run(self):
-        github_token = os.getenv("GITHUB_TOKEN")
-        if not github_token:
-            return "GitHub token not found in environment variables."
-        github = Github(github_token)
-        try:
-            repo = github.get_repo(self.repo_name)
-            if self.action == "list_issues":
-                issues = repo.get_issues(state='open')
-                return [issue.title for issue in issues]
-            elif self.action == "create_issue":
-                if not self.issue_title:
-                    return "Issue title is required to create an issue."
-                issue = repo.create_issue(title=self.issue_title, body=self.issue_body)
-                return f"Issue '{issue.title}' created successfully."
-            else:
-                return "Invalid action specified."
-        except Exception as e:
-            return f"Error interacting with GitHub: {e}"
 ```
 
 ## Common Patterns
@@ -156,32 +135,10 @@ class CompositeTool(BaseTool):
         pass
 ```
 
-### Using Chain-of-Thought Parameters
 
-Improve function call accuracy by adding a planning parameter.
+### Testing Tools
 
-```python
-from agency_swarm.tools import BaseTool
-from pydantic import Field
-
-class ComplexAnalysisTool(BaseTool):
-    """
-    Performs complex analysis after planning the approach.
-    """
-    chain_of_thought: str = Field(
-        ...,
-        description="Plan the analysis steps and considerations."
-    )
-    data: str = Field(..., description="Data to analyze.")
-
-    def run(self):
-        # Analysis logic
-        return "Analysis complete."
-```
-
-## Testing Tools
-
-Include test cases to ensure tools work as intended.
+Include test cases at the bottom of each tool file.
 
 ```python
 if __name__ == "__main__":
@@ -195,10 +152,6 @@ if __name__ == "__main__":
     print(email_sender.run())  # Expected output: 'Email sent successfully.'
 ```
 
-<Check>
-Remember to:
-- Describe Tools and Fields: Provide detailed descriptions for effective agent usage.
-- Validate Inputs: Use Pydantic's Field and validators.
-- Test Thoroughly: Add test cases to ensure functionality.
-- Leverage Advanced Features: Use ToolConfig, shared_state, and enumerations for reliability.
-</Check>
+## Next Steps
+
+We highly recommend you explore the resources in the [Pydantic is all you need](/core-framework/tools/custom-tools/pydantic-is-all-you-need) section.

@@ -66,6 +66,8 @@ icon: "code"
   <Step title="Create Tools">
     Define your custom tools by extending the `BaseTool` class and implementing the `run` method.
 
+    **MyCustomTool.py:**
+
     ```python
     from agency_swarm.tools import BaseTool
     from pydantic import Field
@@ -104,7 +106,7 @@ icon: "code"
   <Step title="Define Agent Roles">
     Adjust the parameters and instructions for each agent.
 
-    **Agent Template:**
+    **Developer.py:**
 
     ```python
     from agency_swarm import Agent
@@ -126,7 +128,7 @@ icon: "code"
 
     Tools will be imported automatically from the `tools` folder.
 
-    **Instructions:**
+    **instructions.md:**
 
     ```md
     You must execute the tasks provided by the CEO and provide feedback.
@@ -134,7 +136,9 @@ icon: "code"
   </Step>
 
   <Step title="Create Agency">
-    Initialize your agents and define your agency chart.
+    Import your agents and initialize the Agency class.
+
+    **agency.py:**
 
     ```python
     from agency_swarm import Agency

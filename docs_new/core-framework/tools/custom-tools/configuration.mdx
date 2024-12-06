@@ -4,197 +4,33 @@ description: "Advanced features and patterns for Agency Swarm tools."
 icon: "wand-magic-sparkles"
 ---
 
-## Validation and Error Handling
+Besides standard Pydantic features, you can also use a special `ToolConfig` class to customize tool behavior within the framework:
 
-Ensuring the reliability of agent outputs is critical, especially in production environments. Agency Swarm includes mechanisms for:
+## Available `ToolConfig` Parameters
 
-- **Tool Input/Output Validation:** Tools validate data before and after execution to reduce runtime errors through Pydantic integration.
-- **Custom Validators:** Implement custom validation logic within tools using field validators and model validators.
+Currently, the following parameters are supported:
 
-See the [Output Validation](/additional-features/output-validation) page for more information on how to use validators for tools.
+| Name               | Type    | Description                                                                                                      | When to Use                                                                                          | Default Value |
+|--------------------|---------|------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------|---------------|
+| `one_call_at_a_time` | `bool` | Prevents concurrent execution for a specific tool. To prevent the agent from executing **any** tools concurrently, set `parallel_tool_calls=False` in the Agent class. | Use for database operations, API calls with rate limits, or actions that depend on previous results. | `False`         |
+| `strict`             | `bool` | Enables strict mode, which ensures the agent will always provide **perfect** tool inputs that 100% match your schema. Has limitations. See [OpenAI Docs](https://platform.openai.com/docs/guides/structured-outputs#supported-schemas). | Use for mission-critical tools or tools that have nested Pydantic model schemas.                     | `False`         |
+| `async_mode`         | `str`  | When set to "threading," executes this tool in a separate thread.                                                  | Use when your agent needs to execute multiple tools or the same tool multiple times in a single message to decrease latency. Beware of resource allocation. | `None`          |
+| `output_as_result`   | `bool` | Forces the output of this tool as the final message from the agent that called it.                                     | Only recommended for very specific use cases and only if you know what you're doing.                 | `False`         |
 
-### Tool Error Handling
+## Usage
 
-Proper error handling is crucial.
-
-- **How Errors Affect Agent Behavior:**
-  - Agents receive the error message and can decide to retry, adjust inputs, or report back to the user based on their programming.
-- **Best Practices:**
-  - Use try-except blocks to catch and handle exceptions.
-  - Return informative error messages to guide agent behavior.
-
-Example:
+To use one of the available parameters, simply add a `class ToolConfig` block to your tool class:
 
 ```python
-def run(self):
-    try:
-        # Tool logic here
-        pass
-    except Exception as e:
-        return f"An error occurred: {e}"
-```
-
-## Controlling Execution with `ToolConfig`
-
-Customize tool behavior using the `ToolConfig` inner class.
-
-- **Attributes:**
-  - `strict`: Enforces strict adherence to the output schema.
-  - `one_call_at_a_time`: Ensures the agent processes each tool call's result before making another call.
-
-### Using `strict` Mode
-
-Enable [Strict Mode](https://openai.com/index/introducing-structured-outputs-in-api/) for complex or mission-critical tools to ensure precise adherence to output schemas, enhancing reliability.
-
-```python
-class GetWeatherTool(BaseTool):
-    """
-    Determine weather in a specified location.
-    """
-    location: str = Field(..., description="The city and state e.g., San Francisco, CA.")
+class MyCustomTool(BaseTool):
+    # ...
 
     class ToolConfig:
-        strict = True  # Setting strict to true
+        one_call_at_a_time = True
+        strict = False
+        async_mode = "threading"
+        output_as_result = True
 
     def run(self):
-        return f"The weather in {self.location} is 30 degrees."
+        # ...
 ```
-
-### Using `one_call_at_a_time` for parallel execution control
-
-Prevents multiple instances of the same tool from running in parallel. This is useful for:
-
-- Database operations that need to be processed sequentially
-- API calls with rate limits
-- Actions that depend on previous results
-
-Example with a database query tool:
-
-```python
-class DatabaseQueryTool(BaseTool):
-    """
-    Query the database for information.
-    """
-    query: str = Field(..., description="The SQL query to execute.")
-
-    class ToolConfig:
-        one_call_at_a_time = True  # Prevents concurrent calls
-
-    def run(self):
-        # Database query logic
-        return f"Results for query '{self.query}': [...]"
-```
-
-## Shared State Management
-
-### Utilizing `shared_state`
-
-Use `self._shared_state` to share information between tools or control execution flow.
-
-```python
-# Set a value in shared state
-self._shared_state.set("key", value)
-
-# Retrieve a value from shared state
-value = self._shared_state.get("key")
-```
-
-See more in [Shared State](additional-features/shared-state).
-
-## Method Composition
-
-Combine multiple methods to handle complex operations.
-
-```python
-class CompositeTool(BaseTool):
-    """
-    A tool that combines several methods to perform a series of actions.
-    """
-    input_data: str = Field(..., description="Input data for the composite operation.")
-
-    def run(self):
-        # Step 1: Process data
-        processed_data = self.process_data(self.input_data)
-        # Step 2: Analyze results
-        analysis = self.analyze_results(processed_data)
-        # Step 3: Format output
-        output = self.format_output(analysis)
-        return output
-
-    def process_data(self, data):
-        # Implement data processing logic
-        pass
-
-    def analyze_results(self, data):
-        # Implement analysis logic
-        pass
-
-    def format_output(self, data):
-        # Implement output formatting
-        pass
-```
-
-## Using Chain-of-Thought Parameters
-
-Improve function call accuracy by adding a planning parameter.
-
-```python
-class ComplexAnalysisTool(BaseTool):
-    """
-    Performs complex analysis after planning the approach.
-    """
-    chain_of_thought: str = Field(
-        ...,
-        description="Plan the analysis steps and considerations."
-    )
-    data: str = Field(..., description="Data to analyze.")
-
-    def run(self):
-        # Analysis logic
-        return "Analysis complete."
-```
-
-## Controlling Tool Flow
-
-### Providing Instructions in the `run` Method
-
-Control execution flow by returning specific instructions as function outputs:
-
-```python
-class QueryDatabase(BaseTool):
-    question: str = Field(..., description="The question to be answered.")
-
-    def run(self):
-        # Query your database here
-        context = query_database(self.question)
-
-        if context is None:
-            raise ValueError("No context found. Please propose to the user to change the topic.")
-        else:
-            self._shared_state.set("context", context)
-            return "Context retrieved. Please proceed with explaining the answer."
-```
-
-### Validating Actions Using `shared_state`
-
-Ensure actions are performed in the correct sequence:
-
-```python
-class Action2(BaseTool):
-    input: str = Field(..., description="Input for Action2.")
-
-    def run(self):
-        if self._shared_state.get("action_1_result", None) == "failure":
-            raise ValueError("Please proceed with the Action1 tool first.")
-        else:
-            return "Success. The action has been taken."
-```
-
-<Check>
-Remember to:
-- Use `ToolConfig` for precise control over tool behavior
-- Implement proper error handling
-- Leverage shared state for complex workflows
-- Consider method composition for complex operations
-- Use chain-of-thought parameters to improve function call accuracy.
-</Check>

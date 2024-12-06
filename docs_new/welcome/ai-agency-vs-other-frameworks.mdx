@@ -4,47 +4,42 @@ description: "Compare Agency Swarm with other multi-agent AI frameworks."
 icon: "scale-unbalanced"
 ---
 
-This section compares **Agency Swarm** with other multi-agent AI frameworks like **AutoGen** and **CrewAI**. The comparison highlights key features and differences to help you understand how Agency Swarm stands out.
+## Summary
 
-## Key Differentiators
-
-Unlike other frameworks, Agency Swarm takes a unique approach with three key differentiators:
+In summary, Agency is the only framework that has:
 
 <CardGroup cols={3}>
   <Card title="No Predefined Prompts" icon="message-code">
-    Agency Swarm does not write prompts for you, giving you full control over agent behavior
+    Agency  not write prompts for you, giving you full control over agent behavior.
   </Card>
-  <Card title="Type Safety" icon="shield-check">
-    Prevents hallucinations with automatic type checking and error correction
+  <Card title="Automatic Error Correction" icon="shield-check">
+    Prevents hallucinations with automatic type checking and error correction.
   </Card>
-  <Card title="Communication Control" icon="diagram-project">
-    Enables easy definition of communication flows between agents
+  <Card title="Uniform Communication Flows" icon="diagram-project">
+    Allows you to define communication flows in any way you want.
   </Card>
 </CardGroup>
 
-## Detailed Comparison Table
+## Detailed Comparison
 
-| **Criteria**                       | **Agency Swarm**                                                                                                                                            | **AutoGen**                                                                                                             | **CrewAI**                                                                                                                  |
+Here's how Agency compares to 2 other most popular multi-agent frameworks.
+
+| **Criteria**                       | **Agency**                                                                                                                                            | **AutoGen**                                                                                                             | **CrewAI**                                                                                                                  |
 | ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| **Design & Architecture**          | - Modular, production-focused<br/>- Flexible agent structure via agency chart<br/>- Built for real business needs                                           | - Event-driven, scalable<br/>- Asynchronous message passing<br/>- Supports distributed computing                        | - Flexible agent organization into crews<br/>- Agents with rich attributes                                                  |
-| **Key Entities**                   | - Agents<br/>- Tools<br/>- Agencies                                                                                                                         | - ConversableAgent<br/>- AssistantAgent<br/>- UserProxyAgent                                                            | - Agents<br/>- Tasks<br/>- Crews                                                                                            |
-| **Prompt Flexibility**             | - Full control over prompts<br/>- No predefined prompts<br/>- Does not write prompts for you                                                                | - Flexible prompt engineering<br/>- Supports few-shot learning                                                          | - Extensive prompt customization                                                                                            |
-| **Type Safety**                    | - Input validation with Pydantic<br/>- Custom response validators<br/>- Prevents hallucinations with automatic type checking and error correction           | - Robust error handling<br/>- Code execution validation<br/>- Self-correction by agents                                 | - No built-in type checking or error correction<br/>- Built on LangChain                                                    |
-| **Communication Control**          | - Enables easy definition of communication flows<br/>- Agents determine communication based on their descriptions<br/>- Uses specialized `SendMessage` tool | - Uses extra model call for "role play" to determine next speaker<br/>- Recently added support for hardcoded conditions | - Uses "process" concept for communication flow<br/>- Delegation control via agent attributes                               |
-| **Integration with Modern Models** | - Built for modern function-calling models<br/>- Direct integration with OpenAI Assistants API                                                              | - Supports various interaction patterns<br/>- Event-driven architecture facilitates this                                | - Built on LangChain                                                                                                        |
-| **State Management**               | - Shared state among agents and tools<br/>- Conversation context via OpenAI API                                                                             | - Conversation history maintenance<br/>- Dynamic context truncation                                                     | - Three-tier memory system<br/>- Context sharing among agents and tasks                                                     |
-| **Production Readiness**           | - Designed for production environments<br/>- Business-oriented design<br/>- Robust validation and error correction                                          | - Scalable and distributed<br/>- Active development towards production features                                         | - Requires additional development for production<br/>- Scalability testing needed                                           |
-| **Task Delegation**                | - Agent autonomy in task delegation<br/>- Hierarchical delegation via agency chart                                                                          | - Automated task coordination<br/>- Function calls for delegation                                                       | - Autonomous delegation based on capabilities<br/>- Hand-off mechanisms with context preservation                           |
-| **Streaming Support**              | - Supports streaming responses<br/>- Voice interface for real-time interaction                                                                              | - Real-time interaction with streaming<br/>- Event-driven architecture facilitates this                                 | - Streaming support for real-time outputs<br/>- Enhances interactivity and responsiveness                                   |
-| **Evaluation & Monitoring**        | - OpenAI dashboard for cost and usage<br/>- Third-party integration in progress                                                                             | - Built-in observability features<br/>- Performance metrics and debugging tools                                         | - Custom evaluation metrics can be implemented<br/>- Logging and analytics support<br/>- Callbacks for execution monitoring |
+| **Origins** 🏁                     | ✅ Originated from a real AI agency building AI agents for clients worldwide.                                                                                | ✅ Originated as a research experiment.                                                                                  | ❌ Originated as a funding vehicle, rather than a real production framework.                                                     |
+| **Design & Architecture** 🏗️      | ✅ Super lightweight framework with minimal abstractions. Built on top of the OpenAI Assistants API.                                                         | ✅ Event-driven architecture with support for both ChatCompletions and Assistants API.                                   | ❌ Lacks a clear architectural design. Built on top of LangChain with numerous unnecessary abstractions.                    |
+| **Reliability** 🔍                 | ✅ Robust type checking and validation for all tools with Pydantic.                                                                                           | ❌ Type hints but no validation.                                                                                         | ❌ Some validation is possible when using BaseTool, although the interface is not convenient to use.                         |
+| **Flexibility** 🔄                 | ✅ No predefined prompts. Uniform communication.                                                                                                             | ❌ Contains predefined prompts. Limited, but customizable communication flows.                                           | ❌ Numerous predefined prompts. Only two ways of communication.                                                             |
+| **Scalability** 📈                | ✅ Easily scalable. Adding another agent only requires placing it in the agency chart.                                                                        | ❌ Although it's simple to add an agent into teams, it's almost impossible to define custom communication between them. | ❌ Although it's easy to add agents into crews, it's not possible to create custom communication between them.               |
+| **Deployability** 🚀               | ✅ Easily deployable with special callback functions. Offers open-source templates and tutorials.                                                            | ✅ Deployment with AutoGen studio.                                                                                       | ❌ Deployment via enterprise platform. No open-source deployment guides.                                                    |
+| **Open Source Model Support** 🌐   | ❌ Limited support with Astra Assistants API.                                                                                                                | ✅ Moderate open-source model support.                                                                                   | ✅ Full open-source model support.                                                                                           |
 
 <Note>
-  Agency Swarm's philosophy: Set boundaries for your agents, not specific conditions. This allows for better
-  adaptability to real-world scenarios.
+  If you want to challange any of these claims, or if some of the issues disappear as frameworks mature, please open an issue on [GitHub](https://github.com/agenty/swarm).
 </Note>
 
 ## Summary
 
-- **Agency Swarm** is ideal for production environments requiring full control over agent behavior, with a focus on business needs and flexible structures. It provides type safety to prevent hallucinations and enables easy definition of communication flows between agents.
-- **AutoGen** emphasizes scalability and extensibility with its event-driven architecture and supports distributed computing but may be less efficient and harder to control agent interactions due to extra model calls for "role play".
-- **CrewAI** offers flexible agent organization suitable for collaborative projects but lacks built-in type checking or error correction and may require additional development for production readiness.
+- **Agency** - best for **real business-oriented use cases**.
+- **AutoGen** - best for **research, experimentation and novel AI applications**.
+- **CrewAI** - best for **local development and playgrounds** with open-source models.
