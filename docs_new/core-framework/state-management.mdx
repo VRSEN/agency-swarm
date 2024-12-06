@@ -1,0 +1,121 @@
+---
+title: "State Management"
+description: "Learn how Agency Swarm manages state across agents and sessions."
+icon: "database"
+---
+
+Agency Swarm implements a multi-layered approach to state management, combining local storage, in-memory data sharing, and OpenAI's Assistants API capabilities.
+
+## Assistant State Management
+
+<Card title="Local Settings Storage" icon="database">
+  Agency Swarm maintains assistant configurations in a local `settings.json` file, preventing unnecessary recreation of
+  assistants on application restart.
+</Card>
+
+## Conversation Threads
+
+Agency Swarm leverages OpenAI's Assistants API to manage conversation context through **threads**. A thread represents a persistent conversation between an assistant and a user, automatically handling the storage and truncation of messages to fit within the model's context window. This approach offloads the complexity of thread state management to OpenAI, ensuring efficient and seamless context handling.
+
+<CardGroup cols={2}>
+  <Card title="Persistent Conversations" icon="messages">
+    Maintains ongoing dialogues without manual history management
+  </Card>
+  <Card title="Automatic Context Management" icon="scissors">
+    Handles message storage and truncation within token limits
+  </Card>
+</CardGroup>
+
+### Benefits of Using Threads
+
+- **Seamless Context Maintenance:** Threads automatically manage the conversation history, ensuring that relevant information is retained across interactions.
+- **Efficiency:** By offloading context management to OpenAI, Agency Swarm reduces the overhead of handling conversation states manually.
+- **Scalability:** Threads support prolonged and detailed conversations, making them ideal for applications requiring extensive context retention.
+
+## Shared State
+
+Tools can share data through an in-memory key-value store using `self._shared_state`. This enables:
+
+- Data passing between different tools
+- Temporary storage during agency execution
+- Cross-agent data sharing within a session
+
+Example usage:
+- Set shared state within a tool: `self._shared_state.set("key", value)`
+- Retrieve shared state in another tool: `value = self._shared_state.get("key")`
+
+See more in [Shared State](/additional-features/shared-state).
+
+## Persistence Between Restarts
+
+Agency Swarm provides callbacks for maintaining state across application restarts through two main mechanisms:
+
+<Accordion title="Settings Management" defaultOpen={true}>
+Settings callbacks manage the persistence of agent states. The data structure is defined as `list[dict]`, where each dictionary contains the state of an individual agent. These callbacks are executed every time settings are loaded or saved, ensuring that any changes are captured and persisted.
+
+```python
+def load_settings(user_id):
+    # Load settings from storage (e.g., database)
+    settings = load_settings_from_db(user_id)
+    # Must return list[dict] format
+    return settings
+
+def save_settings(new_settings: list[dict]):
+    # Save settings to storage
+    save_settings_to_db(new_settings)
+
+agency = Agency(
+    agents=[ceo],
+    settings_callbacks={
+        'load': lambda: load_settings(user_id),
+        'save': lambda new_settings: save_settings(new_settings)
+    }
+)
+```
+
+</Accordion>
+
+<Accordion title="Thread Management" defaultOpen={true}>
+Thread callbacks maintain conversation continuity. The data structure is a nested dictionary mapping agent names and their recipient agents to thread IDs. This allows agents to continue conversations seamlessly, even after restarts.
+
+<Note>
+The threads data structure must match the framework's expected format:
+```python
+{
+    "main_thread": "thread_123...",
+    "agent_name": {
+        "other_agent_name": "thread_456...",
+        # Other recipient agents...
+    },
+    # Other agents...
+}
+```
+</Note>
+
+```python
+def load_threads(chat_id):
+    # Load thread IDs from storage
+    loaded_thread_ids = load_threads_from_db(chat_id)
+    # Must return dict format matching the expected structure
+    return loaded_thread_ids
+
+def save_threads(loaded_thread_ids: dict):
+    # Save thread IDs to storage
+    save_threads_to_db(loaded_thread_ids)
+
+agency = Agency(
+    agents=[ceo],
+    threads_callbacks={
+        'load': lambda: load_threads(chat_id),
+        'save': lambda loaded_thread_ids: save_threads(loaded_thread_ids)
+    }
+)
+```
+
+</Accordion>
+
+<Info>
+  The callbacks are executed:
+  - On Agency initialization, when threads are created
+  - When assistant settings are modified
+</Info>

@@ -1,0 +1,80 @@
+---
+title: "Azure OpenAI"
+description: "Integrate Azure OpenAI with Agency Swarm to ensure secure data processing and enhanced privacy."
+icon: "microsoft"
+---
+
+Many organizations prioritize data privacy and are cautious about sharing their data with third-party providers. By leveraging Azure OpenAI, you can ensure that your data is processed within a secure Azure environment, allowing you to utilize the powerful capabilities of the OpenAI API without directly sharing data with OpenAI itself.
+
+## Prerequisites
+
+Before you begin, ensure you have the following:
+
+- An Azure Account with an active subscription. [Create an account here](https://azure.microsoft.com/en-us/free/).
+- Approved Access to OpenAI Service on Azure.
+- An Azure OpenAI resource created in [one of the available regions](https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models#assistants-preview) and a model deployed to it.
+- Enpoint URL and API key for the OpenAI resource.
+
+## Setting Up Azure OpenAI with Agency Swarm
+
+To integrate Azure OpenAI, follow these steps to configure the Agency Swarm to use the Azure OpenAI client instead of the default OpenAI client.
+
+<Steps>
+
+<Step title="Configure the Azure OpenAI Client">
+Replace the default OpenAI client with the `AzureOpenAI` client by modifying your Agency Swarm setup. Here's how to do it:
+
+```python
+from openai import AzureOpenAI
+from agency_swarm import set_openai_client
+import os
+
+client = AzureOpenAI(
+    api_key=os.getenv("AZURE_OPENAI_KEY"),
+    api_version="2024-02-15-preview",
+    azure_endpoint=os.getenv("AZURE_ENDPOINT"),
+    timeout=5,
+    max_retries=5,
+)
+
+set_openai_client(client)
+```
+
+<Note>
+Ensure that `AZURE_OPENAI_KEY` and `AZURE_ENDPOINT` environment variables are set in your environment.
+</Note>
+</Step>
+
+<Step title="Update Agent Model Parameters">
+
+Each agent in your Agency Swarm needs to reference the Azure OpenAI model deployment. Replace the `model` parameter with your Azure model deployment name:
+
+```python
+from agency_swarm import Agent
+
+ceo = Agent(
+    name="ceo",
+    description="I am the CEO",
+    model="azure-model-deployment-name"
+)
+```
+
+</Step>
+
+<Step title="Run Your Agency">
+
+After configuring the client and updating the agents, you can run your agency as usual:
+
+```python
+from agency_swarm import Agency
+
+agency = Agency([ceo])
+agency.run_demo()
+```
+
+</Step>
+</Steps>
+
+## Example Notebook
+
+For an example of using Azure OpenAI with Agency Swarm, refer to the [Azure OpenAI Notebook](https://github.com/VRSEN/agency-swarm/blob/main/notebooks/azure.ipynb) in the notebooks folder.

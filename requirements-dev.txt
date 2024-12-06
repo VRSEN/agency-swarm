@@ -1,0 +1,4 @@
+-r requirements.txt
+langchain==0.0.345
+pytest
+pytest-cov

@@ -1,0 +1,111 @@
+---
+title: "Output Validation"
+description: "Implementing validators for agents and tools."
+icon: "shield-check"
+---
+
+In Agency Swarm, validating the outputs of agents and tools is crucial for building reliable and secure AI agents. Validators help ensure data integrity and tackle LLM hallucinations.
+
+### Agent Response Validator
+
+Agents can include a `response_validator` method to check their responses before sending them to the user or other agents. This method should raise an error if the response is invalid, allowing the agent to handle the error and generate a corrected response.
+
+**Example:**
+
+```python
+from agency_swarm import Agent
+
+class MyAgent(Agent):
+    def response_validator(self, message: str) -> str:
+        """Validate the response before sending it."""
+        if "bad word" in message.lower():
+            raise ValueError("Please avoid using inappropriate language.")
+        return message
+```
+
+In this example, `MyAgent` checks the response for any inappropriate language before it is sent. If the validation fails, a `ValueError` is raised.
+
+### Field-Level Validators vs. Model Validators
+
+When defining tools and agents, Pydantic validators help enforce rules on input data. Understanding the difference between field-level and model-level validators allows you to implement effective validation logic.
+
+#### Field Validators
+
+- **Purpose:** Validate individual fields independently.
+- **Usage:** Use the `@field_validator` decorator on methods, specifying the field(s) to validate.
+
+**Example:**
+
+```python
+from pydantic import field_validator
+from agency_swarm import BaseTool
+
+class User(BaseTool):
+    username: str
+
+    @field_validator('username')
+    @classmethod
+    def validate_username(cls, value):
+        if ' ' in value:
+            raise ValueError('Username must not contain spaces.')
+        return value
+```
+
+This example ensures that the `username` field does not contain spaces using a field validator.
+
+#### Model Validators
+
+- **Purpose:** Validate the entire model, allowing checks involving multiple fields.
+- **Usage:** Use the `@model_validator` decorator on methods.
+
+**Example:**
+
+```python
+from pydantic import model_validator
+from agency_swarm import BaseTool
+
+class User(BaseTool):
+    password: str
+    confirm_password: str
+
+    @model_validator(mode='after')
+    def check_passwords_match(self):
+        if self.password != self.confirm_password:
+            raise ValueError('Passwords do not match.')
+        return self
+```
+
+In this example, a model validator checks that `password` and `confirm_password` match, which requires access to multiple fields.
+
+### Using `llm_validator`
+
+The `llm_validator` is a powerful decorator provided by Agency Swarm that leverages Large Language Models (LLMs) for validation based on natural language rules.
+
+- **Key Features:**
+  - Uses LLMs to validate against natural language rules.
+  - Can auto-correct invalid values when `allow_override=True` is set.
+  - Provides detailed reasoning for why validation failed.
+
+**Example:**
+
+```python
+from agency_swarm import BaseTool, llm_validator
+from pydantic import Field
+
+class User(BaseTool):
+    name: str = llm_validator("The name must be a full name in all lowercase letters.")
+    age: int = Field(..., description="The user's age.")
+
+try:
+    user = User(name="Jason Liu", age=20)
+except ValidationError as e:
+    print(e)
+```
+
+Here, `llm_validator` checks that the `name` field complies with the specified natural language rule. If the input does not meet the criteria, a `ValidationError` is raised with an explanation.
+
+<Note>
+Since `llm_validator` uses LLMs for validation, it may incur additional costs and latency due to the extra API calls. Use it for fields that require complex validation beyond simple checks.
+</Note>
+
+By combining agent response validators, field-level validators, model validators, and `llm_validator`, you can create robust validation logic to ensure your agents and tools perform reliably.

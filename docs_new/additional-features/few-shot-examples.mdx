@@ -1,0 +1,102 @@
+---
+title: "Few-Shot Examples"
+description: "Guide agent responses using few-shot prompting."
+icon: "clone"
+---
+
+**Few-shot prompting** is a powerful technique where you provide a small number of sample interactions (typically 2 to 5) to guide your agent's behavior. This method helps the agent understand the desired output format and task requirements by learning from the given examples, thereby improving performance even without extensive training data.
+
+## Defining Few-Shot Examples
+
+In the **Agency Swarm** framework, few-shot examples are structured using the [OpenAI message object format](https://platform.openai.com/docs/api-reference/messages/createMessage), including the `role` and `content` fields:
+
+```python
+examples = [
+    {
+        "role": "user",
+        "content": "Hello!",
+    },
+    {
+        "role": "assistant",
+        "content": "Hi there! How can I assist you today?",
+    },
+    {
+        "role": "user",
+        "content": "I'm interested in learning about your services.",
+    },
+    {
+        "role": "assistant",
+        "content": "Certainly! We offer a range of solutions to meet your needs. Could you tell me more about what you're looking for?",
+    }
+]
+```
+
+**Note**: The optional fields `attachments` and `metadata` can be included if needed but are not required for basic examples.
+
+## Incorporating Examples into Your Agent
+
+You can add few-shot examples to your agent either during initialization or afterward.
+
+<Tabs>
+    <Tab title="During Initialization">
+
+    ```python
+    from agency_swarm import Agent
+
+    agent = Agent(
+        name="CustomerSupportAgent",
+        description="Assists customers with inquiries and provides detailed information.",
+        examples=examples
+    )
+    ```
+
+    </Tab>
+    <Tab title="After Initialization">
+
+    ```python
+    agent = Agent(name="CustomerSupportAgent")
+    agent.examples = examples
+    ```
+
+    </Tab>
+
+</Tabs>
+
+## Crafting Effective Examples
+
+- **Provide Clear Task Demonstrations**: Use examples that clearly illustrate the tasks your agent should perform.
+- **Use Realistic and Diverse Scenarios**: Include interactions that mirror actual conversations your agent will handle, covering a range of situations.
+- **Maintain Consistent Tone and Style**: Ensure the assistant's replies in your examples match the desired tone, whether professional, friendly, or empathetic.
+
+## Example: Technical Support Agent
+
+Let's customize an agent to provide detailed, empathetic troubleshooting assistance:
+
+```python
+examples = [
+    {
+        "role": "user",
+        "content": "My device won't turn on.",
+    },
+    {
+        "role": "assistant",
+        "content": "I'm sorry to hear that. Let's try some troubleshooting steps. First, please press and hold the power button for at least 10 seconds.",
+    },
+    {
+        "role": "user",
+        "content": "I tried that, but it still won't turn on.",
+    },
+    {
+        "role": "assistant",
+        "content": "Thank you for trying that. Please connect your device to a charger and check if any lights appear. Let me know what you observe.",
+    }
+]
+
+technical_support_agent = Agent(
+    name="TechnicalSupportAgent",
+    description="Provides empathetic and detailed technical support to users.",
+    examples=examples
+)
+```
+
+By providing these few-shot examples, your agent learns to handle support queries with empathy and step-by-step guidance, enhancing the user experience.

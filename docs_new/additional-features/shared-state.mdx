@@ -1,0 +1,95 @@
+---
+title: "Shared State"
+description: "Leveraging shared state across agents and tools."
+icon: "database"
+---
+
+In the Agency Swarm framework, **shared state** serves as a centralized key-value store (Python dictionary) accessible by all core entities: tools, agents, and the agency itself. This shared state is automatically synchronized across these components, enabling seamless data access and modifications. By using shared state, communication and data sharing between different parts of your application become straightforward and efficient.
+
+## When to Use Shared State
+
+Shared state is particularly beneficial when your agents interact with multiple tools that need to exchange information. Here's why:
+
+- **Without Shared State**: Suppose `Tool A` collects data that `Tool B` needs. The agent must explicitly pass this data as a parameter to `Tool B`. This manual data handling can become cumbersome and error-prone as your application grows.
+
+- **With Shared State**: Both `Tool A` and `Tool B` can read from and write to the shared state. `Tool A` can store the required data in the shared state, and `Tool B` can retrieve it without needing direct parameter passing. This approach reduces complexity and minimizes the risk of errors.
+
+<Tip>
+Using shared state provides a unified storage solution accessible by all tools, agents, and the agency, streamlining data management and interactions.
+</Tip>
+
+## Accessing Shared State
+
+- **Within Tools**: Use `self._shared_state` to interact with the shared state.
+- **Within Agents and Agencies**: Use `self.shared_state` to access the shared state.
+
+### Basic Operations with Shared State
+
+Set and retrieve values in the shared state within a tool:
+
+```python
+# Set a value in shared state
+self._shared_state.set("key", value)
+
+# Retrieve a value from shared state
+value = self._shared_state.get("key")
+```
+
+<Note>
+Shared state is available only when tools are deployed together with agents (consider using our [Railway deployment template](https://github.com/VRSEN/agency-swarm-api-railway-template)). If tools are deployed as separate APIs, they won't share the same state.
+</Note>
+
+## Example Usage
+
+<Tabs>
+
+<Tab title="Within a Tool: Setting a value">
+    ```python
+    class QueryDatabase(BaseTool):
+        """
+        Retrieves data from the database and stores it in the shared state.
+        """
+        question: str = Field(..., description="The query to execute.")
+
+        def run(self):
+            # Fetch data based on the question
+            context = query_database(self.question)
+            # Store the context in shared state
+            self._shared_state.set('context', context)
+            return "Context has been retrieved and stored successfully."
+    ```
+</Tab>
+
+<Tab title="Within a Tool: Getting the value">
+    ```python
+    class AnswerQuestion(BaseTool):
+        """
+        Provides answers based on the context stored in shared state.
+        """
+        def run(self):
+            # Access the stored context
+            context = self._shared_state.get('context')
+            if not context:
+                return "Context is missing. Please retrieve the context first."
+            # Generate an answer using the context
+            answer = f"Answer derived from context: {context}"
+            return answer
+    ```
+</Tab>
+
+<Tab title="Within an Agent: Using the value">
+    ```python
+    class MyAgent(BaseAgent):
+        """
+        An agent that utilizes shared state to validate responses.
+        """
+        def response_validator(self, message: str) -> str:
+            """Validate the response before returning it."""
+            context = self.shared_state.get('context')
+            if message not in context:
+                raise ValueError(f"Invalid response: {message} is not in context: {context}")
+            return message
+    ```
+</Tab>
+
+</Tabs>
