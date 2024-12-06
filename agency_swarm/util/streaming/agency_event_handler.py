@@ -4,7 +4,7 @@ from typing import override
 from openai.lib.streaming import AssistantEventHandler
 from openai.types.beta.threads.runs.run_step import RunStep
 
-from agency_swarm.util.oai import get_usage_tracker
+from agency_swarm.util.oai import get_tracker
 from agency_swarm.util.tracking.abstract_tracker import AbstractTracker
 
 
@@ -43,8 +43,8 @@ class AgencyEventHandlerWithTracking(AgencyEventHandler):
         Implements tracking of usage for the run step.
         """
         if run_step.usage:
-            usage_tracker = get_usage_tracker()
-            usage_tracker.track_usage(
+            tracker = get_tracker()
+            tracker.track_usage(
                 usage=run_step.usage,
                 assistant_id=run_step.assistant_id,
                 thread_id=run_step.thread_id,

@@ -30,7 +30,7 @@ from agency_swarm.tools.send_message import SendMessage, SendMessageBase
 from agency_swarm.user import User
 from agency_swarm.util.errors import RefusalError
 from agency_swarm.util.files import get_file_purpose, get_tools
-from agency_swarm.util.oai import get_usage_tracker
+from agency_swarm.util.oai import get_tracker
 from agency_swarm.util.shared_state import SharedState
 from agency_swarm.util.streaming import (
     AgencyEventHandler,
@@ -154,7 +154,7 @@ class Agency:
         self._create_special_tools()
         self._init_agents()
 
-    @get_usage_tracker().get_observe_decorator()
+    @get_tracker().get_observe_decorator()
     def get_completion(
         self,
         message: str,
@@ -210,7 +210,7 @@ class Agency:
 
         return res
 
-    @get_usage_tracker().get_observe_decorator()
+    @get_tracker().get_observe_decorator()
     def get_completion_stream(
         self,
         message: str,

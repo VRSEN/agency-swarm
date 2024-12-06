@@ -3,10 +3,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 from openai.types.beta.threads.runs.run_step import Usage
 
-from agency_swarm.util.oai import (
-    _get_openai_module,
-    set_usage_tracker,
-)
 from agency_swarm.util.tracking import LangfuseUsageTracker, SQLiteUsageTracker
 
 
@@ -116,19 +112,3 @@ def test_langfuse_get_total_tokens_multiple(mock_langfuse, langfuse_tracker):
 
 def test_get_observe_decorator(langfuse_tracker):
     assert callable(langfuse_tracker.get_observe_decorator())
-
-
-if __name__ == "__main__":
-    from dotenv import load_dotenv
-
-    load_dotenv()
-    from agency_swarm import Agency, Agent
-
-    # Test Langfuse configuration
-    set_usage_tracker("langfuse")
-    openai = _get_openai_module()
-    openai.langfuse_auth_check()
-
-    agent = Agent(name="test_agent")
-    agency = Agency(agency_chart=[agent])
-    agency.demo_gradio()

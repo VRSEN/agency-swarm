@@ -11,28 +11,28 @@ load_dotenv()
 client_lock = threading.Lock()
 client = None
 _openai_module = None
-_usage_tracker = "sqlite"  # Default usage tracker
+_tracker = "sqlite"  # Default usage tracker
 
 
-def set_usage_tracker(usage_tracker: str):
+def set_tracker(tracker: str):
     """Set the global usage tracker.
 
     Args:
-        usage_tracker: The usage tracking mechanism to use.
+        tracker: The usage tracking mechanism to use.
     """
-    global _usage_tracker, client, _openai_module
+    global _tracker, client, _openai_module
     with client_lock:
-        _usage_tracker = usage_tracker
+        _tracker = tracker
     client = get_openai_client()
 
 
-def get_usage_tracker():
+def get_tracker():
     """Get the current usage tracker instance.
 
     Returns:
         AbstractTracker: The current usage tracker instance.
     """
-    return get_tracker_by_name(_usage_tracker)
+    return get_tracker_by_name(_tracker)
 
 
 def get_openai_client():
@@ -81,7 +81,7 @@ def _get_openai_module() -> object:
     if _openai_module is None:
         try:
             # Use Langfuse OpenAI client if configured
-            if _usage_tracker == "langfuse" and all(
+            if _tracker == "langfuse" and all(
                 os.getenv(key) for key in ["LANGFUSE_SECRET_KEY", "LANGFUSE_PUBLIC_KEY"]
             ):
                 from langfuse.openai import openai
