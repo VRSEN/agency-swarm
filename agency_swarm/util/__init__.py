@@ -8,5 +8,5 @@ from .oai import (
     set_openai_key,
     set_tracker,
 )
-from .tracking import AbstractTracker, LangfuseUsageTracker, SQLiteUsageTracker
+from .tracking import AbstractTracker, LangfuseTracker, SQLiteTracker
 from .validators import llm_validator

@@ -5,12 +5,18 @@ from openai.types.beta.threads.runs.run_step import Usage
 from agency_swarm.util.tracking.abstract_tracker import AbstractTracker
 
 
-class LangfuseUsageTracker(AbstractTracker):
+class LangfuseTracker(AbstractTracker):
     def __init__(self):
         self.client = Langfuse()
 
     def track_usage(
-        self, usage: Usage, assistant_id: str, thread_id: str, model: str
+        self,
+        usage: Usage,
+        assistant_id: str,
+        thread_id: str,
+        model: str,
+        sender_agent_name: str,
+        recipient_agent_name: str,
     ) -> None:
         """
         Track usage by recording a generation event in Langfuse.
@@ -20,6 +26,8 @@ class LangfuseUsageTracker(AbstractTracker):
             metadata={
                 "assistant_id": assistant_id,
                 "thread_id": thread_id,
+                "sender_agent_name": sender_agent_name,
+                "recipient_agent_name": recipient_agent_name,
             },
             usage={
                 "input": usage.prompt_tokens,
@@ -50,10 +58,6 @@ class LangfuseUsageTracker(AbstractTracker):
             completion_tokens=completion_tokens,
             total_tokens=total_tokens,
         )
-
-    def close(self) -> None:
-        # Nothing to close
-        pass
 
     @classmethod
     def get_observe_decorator(cls):

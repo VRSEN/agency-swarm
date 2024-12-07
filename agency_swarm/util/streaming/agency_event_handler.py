@@ -5,7 +5,6 @@ from openai.lib.streaming import AssistantEventHandler
 from openai.types.beta.threads.runs.run_step import RunStep
 
 from agency_swarm.util.oai import get_tracker
-from agency_swarm.util.tracking.abstract_tracker import AbstractTracker
 
 
 class AgencyEventHandler(AssistantEventHandler, ABC):
@@ -48,5 +47,7 @@ class AgencyEventHandlerWithTracking(AgencyEventHandler):
                 usage=run_step.usage,
                 assistant_id=run_step.assistant_id,
                 thread_id=run_step.thread_id,
+                sender_agent_name=cls.agent_name,
+                recipient_agent_name=cls.recipient_agent_name,
                 model="gpt-4o",  # TODO: RunStep does not contain model information
             )

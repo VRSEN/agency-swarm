@@ -6,8 +6,8 @@ from openai.types.beta.threads.runs.run_step import Usage
 from agency_swarm.util.tracking.abstract_tracker import AbstractTracker
 
 
-class SQLiteUsageTracker(AbstractTracker):
-    def __init__(self, db_path: str = "token_usage.db"):
+class SQLiteTracker(AbstractTracker):
+    def __init__(self, db_path: str = "usage.db"):
         """
         Initializes a SQLite-based usage tracker.
 
@@ -23,7 +23,7 @@ class SQLiteUsageTracker(AbstractTracker):
         with self.conn:
             self.conn.execute(
                 """
-                CREATE TABLE IF NOT EXISTS token_usage (
+                CREATE TABLE IF NOT EXISTS usage (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     prompt_tokens INTEGER,
                     completion_tokens INTEGER,
@@ -31,13 +31,21 @@ class SQLiteUsageTracker(AbstractTracker):
                     assistant_id TEXT,
                     thread_id TEXT,
                     model TEXT,
+                    sender_agent_name TEXT,
+                    recipient_agent_name TEXT,
                     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
                 )
             """
             )
 
     def track_usage(
-        self, usage: Usage, assistant_id: str, thread_id: str, model: str
+        self,
+        usage: Usage,
+        assistant_id: str,
+        thread_id: str,
+        model: str,
+        sender_agent_name: str,
+        recipient_agent_name: str,
     ) -> None:
         with self.lock:
             if self._closed:
@@ -45,8 +53,8 @@ class SQLiteUsageTracker(AbstractTracker):
             with self.conn:
                 self.conn.execute(
                     """
-                    INSERT INTO token_usage (prompt_tokens, completion_tokens, total_tokens, assistant_id, thread_id, model)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    INSERT INTO usage (prompt_tokens, completion_tokens, total_tokens, assistant_id, thread_id, model, sender_agent_name, recipient_agent_name)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         usage.prompt_tokens,
@@ -55,6 +63,8 @@ class SQLiteUsageTracker(AbstractTracker):
                         assistant_id,
                         thread_id,
                         model,
+                        sender_agent_name,
+                        recipient_agent_name,
                     ),
                 )
 
@@ -66,7 +76,7 @@ class SQLiteUsageTracker(AbstractTracker):
             cursor.execute(
                 """
                 SELECT SUM(prompt_tokens), SUM(completion_tokens), SUM(total_tokens)
-                FROM token_usage
+                FROM usage
                 """
             )
             prompt, completion, total = cursor.fetchone()
@@ -76,7 +86,7 @@ class SQLiteUsageTracker(AbstractTracker):
                 total_tokens=total or 0,
             )
 
-    def close(self) -> None:
+    def __del__(self) -> None:
         with self.lock:
             if not self._closed:
                 self.conn.close()
@@ -84,5 +94,5 @@ class SQLiteUsageTracker(AbstractTracker):
 
     @classmethod
     def get_observe_decorator(cls):
-        # Return a no-op decorator.
+        # Return a no-op decorator as decorator tracking is not supported for SQLite
         return lambda f: f

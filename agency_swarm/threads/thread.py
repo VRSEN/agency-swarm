@@ -469,8 +469,8 @@ class Thread:
                         "parallel_tool_calls": recipient_agent.parallel_tool_calls
                     },
                     metadata={
-                        "sender_agent": self.agent.name,
-                        "recipient_agent": recipient_agent.name,
+                        "sender_agent_name": self.agent.name,
+                        "recipient_agent_name": recipient_agent.name,
                     },
                     response_format=response_format,
                 ) as stream:
@@ -489,8 +489,8 @@ class Thread:
                     parallel_tool_calls=recipient_agent.parallel_tool_calls,
                     response_format=response_format,
                     metadata={
-                        "sender_agent": self.agent.name,
-                        "recipient_agent": recipient_agent.name,
+                        "sender_agent_name": self.agent.name,
+                        "recipient_agent_name": recipient_agent.name,
                     },
                 )
                 self._run = self.client.beta.threads.runs.poll(

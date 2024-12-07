@@ -5,14 +5,21 @@ load_dotenv()
 from agency_swarm import Agency, Agent
 from agency_swarm.util.oai import _get_openai_module, set_tracker
 
-# Test Langfuse configuration
-set_tracker("langfuse")
-openai = _get_openai_module()
-openai.langfuse_auth_check()
+TRACKER = "sqlite"
+# TRACKER = "langfuse"
+
+if TRACKER == "sqlite":
+    # Test SQLite configuration
+    set_tracker("sqlite")
+elif TRACKER == "langfuse":
+    # Test Langfuse configuration
+    set_tracker("langfuse")
+    openai = _get_openai_module()
+    openai.langfuse_auth_check()
 
 # Create multiple agents with different roles
-manager = Agent(
-    name="Project Manager",
+ceo = Agent(
+    name="CEO",
     description="Manages projects and coordinates between team members",
     temperature=0.5,
 )
@@ -32,12 +39,14 @@ analyst = Agent(
 # Create agency with communication flows
 agency = Agency(
     [
-        manager,  # Manager is the entry point
-        [manager, developer],  # Manager can communicate with Developer
-        [manager, analyst],  # Manager can communicate with Analyst
+        ceo,  # CEO is the entry point
+        [ceo, developer],  # CEO can communicate with Developer
+        [ceo, analyst],  # CEO can communicate with Analyst
         [developer, analyst],  # Developer can communicate with Analyst
     ]
 )
 
 # Run the demo with Gradio interface
 agency.demo_gradio()
+# Run the CLI demo
+agency.run_demo()

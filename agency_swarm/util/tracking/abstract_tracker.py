@@ -10,7 +10,13 @@ class AbstractTracker(ABC):
 
     @abstractmethod
     def track_usage(
-        self, usage: Usage, assistant_id: str, thread_id: str, model: str
+        self,
+        usage: Usage,
+        assistant_id: str,
+        thread_id: str,
+        model: str,
+        sender_agent_name: str,
+        recipient_agent_name: str,
     ) -> None:
         """
         Track token usage.
@@ -20,6 +26,8 @@ class AbstractTracker(ABC):
             assistant_id (str): ID of the assistant that generated the usage.
             thread_id (str): ID of the thread that generated the usage.
             model (str): Model that generated the usage.
+            sender_agent_name (str): Name of the sender agent.
+            recipient_agent_name (str): Name of the recipient agent.
         """
         pass
 
@@ -30,13 +38,6 @@ class AbstractTracker(ABC):
 
         Returns:
             Usage: An object containing cumulative prompt, completion, and total tokens.
-        """
-        pass
-
-    @abstractmethod
-    def close(self) -> None:
-        """
-        Close the tracker and release resources, if any.
         """
         pass
 
