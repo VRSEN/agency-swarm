@@ -5,7 +5,7 @@ import os
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import List, Optional, Union
+from typing import List, Optional, Type, Union
 
 from openai import APIError, BadRequestError
 from openai.types.beta import AssistantToolChoice
@@ -16,7 +16,7 @@ from agency_swarm.messages import MessageOutput
 from agency_swarm.tools import CodeInterpreter, FileSearch
 from agency_swarm.user import User
 from agency_swarm.util.oai import get_openai_client
-from agency_swarm.util.streaming import AgencyEventHandler
+from agency_swarm.util.streaming.agency_event_handler import AgencyEventHandler
 
 
 class Thread:
@@ -80,7 +80,7 @@ class Thread:
     def get_completion_stream(
         self,
         message: Union[str, List[dict], None],
-        event_handler: type(AgencyEventHandler),
+        event_handler: Optional[Type[AgencyEventHandler]] = None,
         message_files: List[str] = None,
         attachments: Optional[List[Attachment]] = None,
         recipient_agent: Agent = None,
@@ -107,7 +107,7 @@ class Thread:
         attachments: Optional[List[dict]] = None,
         recipient_agent: Union[Agent, None] = None,
         additional_instructions: str = None,
-        event_handler: type(AgencyEventHandler) = None,
+        event_handler: Optional[Type[AgencyEventHandler]] = None,
         tool_choice: AssistantToolChoice = None,
         yield_messages: bool = False,
         response_format: Optional[dict] = None,
@@ -468,6 +468,10 @@ class Thread:
                     extra_body={
                         "parallel_tool_calls": recipient_agent.parallel_tool_calls
                     },
+                    metadata={
+                        "sender_agent_name": self.agent.name,
+                        "recipient_agent_name": recipient_agent.name,
+                    },
                     response_format=response_format,
                 ) as stream:
                     stream.until_done()
@@ -484,6 +488,10 @@ class Thread:
                     temperature=temperature,
                     parallel_tool_calls=recipient_agent.parallel_tool_calls,
                     response_format=response_format,
+                    metadata={
+                        "sender_agent_name": self.agent.name,
+                        "recipient_agent_name": recipient_agent.name,
+                    },
                 )
                 self._run = self.client.beta.threads.runs.poll(
                     thread_id=self.id,
