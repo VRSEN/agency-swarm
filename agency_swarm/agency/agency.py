@@ -757,7 +757,7 @@ class Agency:
             dropdown.change(handle_dropdown_change, dropdown)
             file_upload.change(handle_file_upload, file_upload)
             msg.submit(user, [msg, chatbot], [msg, chatbot], queue=False).then(
-                bot, [msg, chatbot], [msg, chatbot, dropdown]
+                bot, [msg, chatbot, dropdown], [msg, chatbot, dropdown]
             )
 
             # Enable queuing for streaming intermediate outputs
