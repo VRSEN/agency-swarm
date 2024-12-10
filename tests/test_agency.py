@@ -6,13 +6,10 @@ import sys
 import time
 import unittest
 
-from openai.types.beta.threads import Text
-from openai.types.beta.threads.runs import ToolCall
-
-from agency_swarm.tools import FileSearch
-
 sys.path.insert(0, "../agency-swarm")
 
+from openai.types.beta.threads import Text
+from openai.types.beta.threads.runs import ToolCall
 from pydantic import BaseModel
 from typing_extensions import override
 
@@ -22,7 +19,7 @@ from agency_swarm import (
     Agent,
     get_openai_client,
 )
-from agency_swarm.tools import BaseTool, ToolFactory
+from agency_swarm.tools import BaseTool, FileSearch, ToolFactory
 from agency_swarm.tools.send_message import SendMessageAsyncThreading
 from agency_swarm.util import create_agent_template
 
@@ -54,6 +51,7 @@ class AgencyTest(unittest.TestCase):
         cls.agent2 = None
         cls.agency = None
         cls.client = get_openai_client()
+        cls.client.timeout = 60.0
 
         # testing loading agents from db
         cls.loaded_thread_ids = {}
@@ -114,7 +112,9 @@ class AgencyTest(unittest.TestCase):
             include_example_tool=False,
         )
 
-        sys.path.insert(0, "./test_agents")
+        # Create files and schemas directories
+        os.makedirs("./test_agents/TestAgent1/files", exist_ok=True)
+        os.makedirs("./test_agents/TestAgent2/schemas", exist_ok=True)
 
         # copy files from data/files to test_agents/TestAgent1/files
         for file in os.listdir("./data/files"):
@@ -129,6 +129,10 @@ class AgencyTest(unittest.TestCase):
                 "./data/schemas/" + file, "./test_agents/TestAgent2/schemas/" + file
             )
             cls.num_schemas += 1
+
+        from tests.test_agents.CEO.CEO import CEO
+        from tests.test_agents.TestAgent1.TestAgent1 import TestAgent1
+        from tests.test_agents.TestAgent2.TestAgent2 import TestAgent2
 
         class TestTool(BaseTool):
             """
@@ -147,10 +151,6 @@ class AgencyTest(unittest.TestCase):
                 return "Test Successful"
 
         cls.TestTool = TestTool
-
-        from test_agents.CEO import CEO
-        from test_agents.TestAgent1 import TestAgent1
-        from test_agents.TestAgent2 import TestAgent2
 
         cls.agent1 = TestAgent1()
         cls.agent1.add_tool(FileSearch)
@@ -197,7 +197,7 @@ class AgencyTest(unittest.TestCase):
 
     def test_2_load_agent(self):
         """it should load existing assistant from settings"""
-        from test_agents.TestAgent1 import TestAgent1
+        from tests.test_agents.TestAgent1.TestAgent1 import TestAgent1
 
         agent3 = TestAgent1()
         agent3.add_shared_instructions(self.__class__.agency.shared_instructions)
@@ -220,8 +220,6 @@ class AgencyTest(unittest.TestCase):
 
     def test_3_load_agent_id(self):
         """it should load existing assistant from id"""
-        from test_agents import TestAgent1
-
         agent3 = Agent(id=self.__class__.agent1.id)
         agent3.tools = self.__class__.agent1.tools
         agent3.file_search = self.__class__.agent1.file_search
@@ -388,9 +386,9 @@ class AgencyTest(unittest.TestCase):
         previous_loaded_thread_ids = self.__class__.loaded_thread_ids.copy()
         previous_loaded_agents_settings = self.__class__.loaded_agents_settings.copy()
 
-        from test_agents.CEO import CEO
-        from test_agents.TestAgent1 import TestAgent1
-        from test_agents.TestAgent2 import TestAgent2
+        from tests.test_agents.CEO.CEO import CEO
+        from tests.test_agents.TestAgent1.TestAgent1 import TestAgent1
+        from tests.test_agents.TestAgent2.TestAgent2 import TestAgent2
 
         agent1 = TestAgent1()
         agent1.add_tool(FileSearch)
