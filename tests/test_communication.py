@@ -66,7 +66,7 @@ class TestSendMessage(unittest.TestCase):
             len(main_thread.get_messages()) >= 4
         )  # sometimes run does not cancel immediately, so there might be 5 messages
 
-    def test_send_message_double_recepient_error(self):
+    def test_send_message_double_recipient_error(self):
         ceo = Agent(
             name="CEO",
             description="Responsible for client communication, task planning and management.",
