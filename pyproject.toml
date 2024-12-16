@@ -25,7 +25,7 @@ dependencies = [
     "rich==13.7.1",
     "jsonref==1.1.0"
 ]
-requires-python = ">=3.7"
+requires-python = ">=3.10"
 urls = { homepage = "https://github.com/VRSEN/agency-swarm" }
 
 [project.scripts]
