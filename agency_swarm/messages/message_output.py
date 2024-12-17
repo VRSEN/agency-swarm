@@ -161,7 +161,9 @@ class MessageOutputLive(MessageOutput):
         """
         Update the display with new snapshot content.
         """
-        self.content = snapshot  # Update content with the latest snapshot
+        self.content = (
+            snapshot or "No content available"
+        )  # Update content with the latest snapshot
 
         header_text = self.formatted_header
         md_content = Markdown(self.content)
