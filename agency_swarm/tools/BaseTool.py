@@ -7,11 +7,20 @@ from pydantic import BaseModel
 from agency_swarm.util.shared_state import SharedState
 
 
+class classproperty:
+    def __init__(self, fget):
+        self.fget = fget
+
+    def __get__(self, instance, owner):
+        return self.fget(owner)
+
+
 class BaseTool(BaseModel, ABC):
     _shared_state: ClassVar[SharedState] = None
     _caller_agent: Any = None
     _event_handler: Any = None
     _tool_call: Any = None
+    openai_schema: ClassVar[dict[str, Any]]
 
     def __init__(self, **kwargs):
         if not self.__class__._shared_state:
@@ -37,14 +46,13 @@ class BaseTool(BaseModel, ABC):
         output_as_result: bool = False
         async_mode: Union[Literal["threading"], None] = None
 
-    @classmethod
-    @property
-    def openai_schema(cls):
+    @classproperty
+    def openai_schema(cls) -> dict[str, Any]:
         """
         Return the schema in the format of OpenAI's schema as jsonschema
 
         Note:
-            Its important to add a docstring to describe how to best use this class, it will be included in the description attribute and be part of the prompt.
+            It's important to add a docstring to describe how to best use this class; it will be included in the description attribute and be part of the prompt.
 
         Returns:
             model_json_schema (dict): A dictionary in the format of OpenAI's schema as jsonschema

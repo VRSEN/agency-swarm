@@ -47,7 +47,8 @@ test_agent2 = Agent(
 agency = Agency(
     [
         ceo,
-        [ceo, test_agent, test_agent2],
+        [ceo, test_agent],
+        [test_agent, test_agent2],
     ],
     shared_instructions="",
     settings_path="./test_settings.json",
