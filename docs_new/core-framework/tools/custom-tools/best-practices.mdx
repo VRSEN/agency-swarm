@@ -6,8 +6,6 @@ icon: "code"
 
 Although the tool interface is straightforward and simple to use, there are actually quite a few practices and tricks that you can use to get significantly better results.
 
-## Tips & Tricks
-
 ### Use Chain-of-Thought Prompting for Complex Tools
 
 Use chain-of-thought prompting to allow the agent to think and plan before executing a complex tool.
@@ -52,7 +50,7 @@ class QueryDatabase(BaseTool):
             return context
 ```
 
-### Use Shared State to Control Tool Flow
+### Use Shared State to Control the Tool Flow
 
 Use `shared_state` to validate previous actions taken by this or other agents, before allowing it to proceed with the next action.
 
@@ -67,7 +65,7 @@ class Action2(BaseTool):
             return "Success. The action has been taken."
 ```
 
-### Use Enumerations or Literal Types
+### Use Special Types
 
 Restrict the agent to only use specific values for a field, instead of letting it wander by itself.
 
@@ -91,7 +89,7 @@ class RunCommand(BaseTool):
             raise ValueError("Invalid command")
 ```
 
-or use special Pydantic types like `EmailStr.
+or use special Pydantic types like `EmailStr`.
 
 ```python
 from pydantic import EmailStr
@@ -100,11 +98,9 @@ class EmailSender(BaseTool):
     recipient: EmailStr = Field(..., description="Email recipient's address.")
 ```
 
-## Common Patterns
+### Combine Multiple Methods
 
-### Method Composition
-
-Combine multiple methods to handle complex operations.
+Combine multiple methods to make your execution flow more readable.
 
 ```python
 class CompositeTool(BaseTool):
@@ -136,7 +132,7 @@ class CompositeTool(BaseTool):
 ```
 
 
-### Testing Tools
+### Include a Test Case
 
 Include test cases at the bottom of each tool file.
 
@@ -149,9 +145,9 @@ if __name__ == "__main__":
         subject="Project Update",
         body="The project is on track."
     )
-    print(email_sender.run())  # Expected output: 'Email sent successfully.'
+    assert email_sender.run() == "Email sent successfully."
 ```
 
 ## Next Steps
 
-We highly recommend you explore the resources in the [Pydantic is all you need](/core-framework/tools/custom-tools/pydantic-is-all-you-need) section.
+We highly recommend you explore the resources provided in the [Pydantic is all you need](/core-framework/tools/custom-tools/pydantic-is-all-you-need) section.

@@ -98,8 +98,7 @@
                 "core-framework/tools/custom-tools/configuration"
               ]
             },
-
-            "core-framework/tools/tool-factory"
+            "/core-framework/tools/openapi-schemas"
           ]
         },
         "core-framework/agents",
@@ -112,7 +111,6 @@
       "pages": [
         "additional-features/asynchronous-execution",
         "additional-features/shared-state",
-        "additional-features/openapi-schemas",
         "additional-features/few-shot-examples",
         "additional-features/output-validation",
         "additional-features/streaming",

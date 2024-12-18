@@ -272,3 +272,32 @@ from AgentName import AgentName
 
 agent = AgentName()
 ```
+
+Agency Swarm comes with several built-in tools to enhance agent capabilities:
+
+<Accordion title="Code Interpreter" icon="code">
+- **Purpose**: Allows agents to execute code within a Jupyter Notebook environment (without internet access).
+- **Integration**:
+  ```python
+  from agency_swarm.tools import CodeInterpreter
+
+  agent = Agent(
+      name="DataAnalyst",
+      tools=[CodeInterpreter],
+      # Other agent parameters
+  )
+  ```
+</Accordion>
+
+<Accordion title="File Search" icon="magnifying-glass">
+- **Purpose**: Enables Retrieval-Augmented Generation (RAG) by allowing agents to search files.
+- **Integration**:
+  ```python
+  from agency_swarm.tools import FileSearch
+
+  agent = Agent(
+      name="Researcher",
+      tools=[FileSearch],
+      # Other agent parameters
+  )
+  ```
