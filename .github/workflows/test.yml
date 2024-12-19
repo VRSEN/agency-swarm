@@ -1,6 +1,12 @@
 name: Python Unittest
 
-on: [push, pull_request]
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
 
 jobs:
   test:
@@ -21,6 +27,5 @@ jobs:
     - name: Run tests
       env:
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        TEST_SCHEMA_API_KEY: ${{ secrets.TEST_SCHEMA_API_KEY }}
       run: |
-        python run_tests.py
+        cd tests && pytest -v

@@ -6,10 +6,9 @@ import unittest
 from enum import Enum
 from typing import List, Optional
 
-from pydantic import BaseModel, Field
-
-sys.path.insert(0, "../agency-swarm")
+import httpx
 from langchain.tools import MoveFileTool, YouTubeSearchTool
+from pydantic import BaseModel, Field
 
 from agency_swarm.tools import BaseTool, ToolFactory
 from agency_swarm.util import get_openai_client
@@ -171,21 +170,49 @@ class ToolFactoryTest(unittest.TestCase):
 
     def test_relevance_openapi_schema(self):
         with open("./data/schemas/relevance.json", "r") as f:
-            tools = ToolFactory.from_openapi_schema(
-                f.read(), {"Authorization": os.environ.get("TEST_SCHEMA_API_KEY")}
-            )
+            # Create a mock client that will be used instead of httpx
+            class MockClient:
+                def __init__(self, **kwargs):
+                    self.timeout = kwargs.get("timeout", None)
 
-        print(json.dumps(tools[0].openai_schema, indent=4))
+                async def __aenter__(self):
+                    return self
 
-        async def gather_output():
-            output = await tools[0](requestBody={"text": "test"}).run()
-            return output
+                async def __aexit__(self, exc_type, exc_val, exc_tb):
+                    pass
 
-        output = asyncio.run(gather_output())
+                async def post(self, *args, **kwargs):
+                    class MockResponse:
+                        def json(self):
+                            return {
+                                "output": {"transformed": {"data": "test complete."}}
+                            }
 
-        print(output)
+                    return MockResponse()
 
-        assert output["output"]["transformed"]["data"] == "test complete."
+            # Patch httpx.AsyncClient with our mock
+            original_client = httpx.AsyncClient
+            httpx.AsyncClient = MockClient
+
+            try:
+                tools = ToolFactory.from_openapi_schema(
+                    f.read(), {"Authorization": "mock-key"}
+                )
+
+                print(json.dumps(tools[0].openai_schema, indent=4))
+
+                async def gather_output():
+                    output = await tools[0](requestBody={"text": "test"}).run()
+                    return output
+
+                output = asyncio.run(gather_output())
+
+                print(output)
+
+                assert output["output"]["transformed"]["data"] == "test complete."
+            finally:
+                # Restore original client
+                httpx.AsyncClient = original_client
 
     def test_get_headers_openapi_schema(self):
         with open("./data/schemas/get-headers-params.json", "r") as f:

@@ -52,8 +52,9 @@ class SendMessageSwarm(SendMessageBase):
             message = thread.get_completion(
                 message=None,
                 recipient_agent=recipient_agent,
-                yield_messages=not self._event_handler,
                 event_handler=self._event_handler,
+                yield_messages=not self._event_handler,
+                parent_run_id=self._tool_call.id,
             )
 
             return message or ""

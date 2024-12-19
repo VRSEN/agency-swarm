@@ -7,13 +7,13 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-client_lock = threading.Lock()
+_lock = threading.Lock()
 client = None
 
 
 def get_openai_client():
     global client
-    with client_lock:
+    with _lock:
         if client is None:
             # Check if the API key is set
             api_key = openai.api_key or os.getenv("OPENAI_API_KEY")
@@ -21,6 +21,7 @@ def get_openai_client():
                 raise ValueError(
                     "OpenAI API key is not set. Please set it using set_openai_key."
                 )
+
             client = openai.OpenAI(
                 api_key=api_key,
                 timeout=httpx.Timeout(60.0, read=40, connect=5.0),
@@ -32,14 +33,16 @@ def get_openai_client():
 
 def set_openai_client(new_client):
     global client
-    with client_lock:
+    with _lock:
         client = new_client
 
 
-def set_openai_key(key):
+def set_openai_key(key: str):
     if not key:
         raise ValueError("Invalid API key. The API key cannot be empty.")
+
     openai.api_key = key
+
     global client
-    with client_lock:
+    with _lock:
         client = None

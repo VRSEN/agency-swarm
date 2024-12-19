@@ -47,5 +47,6 @@ class SendMessageBase(BaseTool, ABC):
                 message=message,
                 event_handler=self._event_handler,
                 yield_messages=not self._event_handler,
+                parent_run_id=self._tool_call.id,
                 **kwargs,
             )

@@ -5,18 +5,26 @@ import os
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import List, Optional, Union
+from typing import List, Type, Union
+from uuid import UUID
 
 from openai import APIError, BadRequestError
 from openai.types.beta import AssistantToolChoice
 from openai.types.beta.threads.message import Attachment
+from openai.types.beta.threads.runs.tool_call import ToolCall
 
 from agency_swarm.agents import Agent
 from agency_swarm.messages import MessageOutput
 from agency_swarm.tools import CodeInterpreter, FileSearch
 from agency_swarm.user import User
 from agency_swarm.util.oai import get_openai_client
-from agency_swarm.util.streaming import AgencyEventHandler
+from agency_swarm.util.streaming.agency_event_handler import AgencyEventHandler
+from agency_swarm.util.tracking import get_callback_handler
+from agency_swarm.util.tracking.langchain_types import (
+    AgentAction,
+    AgentFinish,
+    HumanMessage,
+)
 
 
 class Thread:
@@ -49,8 +57,8 @@ class Thread:
         self._stream = None
 
         self._num_run_retries = 0
-        # names of recepient agents that were called in SendMessage tool
-        # needed to prevent agents calling the same recepient agent multiple times
+        # names of recipient agents that were called in SendMessage tool
+        # needed to prevent agents calling the same recipient agent multiple times
         self._called_recepients = []
 
         self.terminal_states = [
@@ -60,6 +68,8 @@ class Thread:
             "expired",
             "incomplete",
         ]
+
+        self.callback_handler = get_callback_handler()
 
     def init_thread(self):
         self._called_recepients = []
@@ -80,13 +90,13 @@ class Thread:
     def get_completion_stream(
         self,
         message: Union[str, List[dict], None],
-        event_handler: type(AgencyEventHandler),
+        event_handler: Type[AgencyEventHandler] | None = None,
         message_files: List[str] = None,
-        attachments: Optional[List[Attachment]] = None,
+        attachments: List[Attachment] | None = None,
         recipient_agent: Agent = None,
         additional_instructions: str = None,
         tool_choice: AssistantToolChoice = None,
-        response_format: Optional[dict] = None,
+        response_format: dict | None = None,
     ):
         return self.get_completion(
             message,
@@ -104,13 +114,14 @@ class Thread:
         self,
         message: Union[str, List[dict], None],
         message_files: List[str] = None,
-        attachments: Optional[List[dict]] = None,
+        attachments: List[dict] | None = None,
         recipient_agent: Union[Agent, None] = None,
         additional_instructions: str = None,
-        event_handler: type(AgencyEventHandler) = None,
+        event_handler: Type[AgencyEventHandler] | None = None,
         tool_choice: AssistantToolChoice = None,
         yield_messages: bool = False,
-        response_format: Optional[dict] = None,
+        response_format: dict | None = None,
+        parent_run_id: UUID | None = None,
     ):
         self.init_thread()
 
@@ -146,7 +157,7 @@ class Thread:
             f"THREAD:[ {sender_name} -> {recipient_agent.name} ]: URL {self.thread_url}"
         )
 
-        # send message
+        # send user message
         if message:
             message_obj = self.create_message(
                 message=message, role="user", attachments=attachments
@@ -157,6 +168,7 @@ class Thread:
                     "text", self.agent.name, recipient_agent.name, message, message_obj
                 )
 
+        # Create the run first so that self._run is available
         self._create_run(
             recipient_agent,
             additional_instructions,
@@ -165,284 +177,388 @@ class Thread:
             response_format=response_format,
         )
 
-        error_attempts = 0
-        validation_attempts = 0
-        full_message = ""
-        while True:
-            self._run_until_done()
+        chain_run_id = self._run.id
 
-            # function execution
-            if self._run.status == "requires_action":
-                self._called_recepients = []
-                tool_calls = self._run.required_action.submit_tool_outputs.tool_calls
-                tool_outputs_and_names = []  # list of tuples (name, tool_output)
-                sync_tool_calls, async_tool_calls = self._get_sync_async_tool_calls(
-                    tool_calls, recipient_agent
-                )
+        # Chain start
+        if self.callback_handler:
+            self.callback_handler.on_chain_start(
+                serialized={"name": f"Thread.get_completion -> {recipient_agent.name}"},
+                inputs={"message": message},
+                run_id=chain_run_id,
+                parent_run_id=parent_run_id,
+                metadata={
+                    "agent_name": self.agent.name,
+                    "recipient_agent_name": recipient_agent.name,
+                    "run_status": self._run.status,
+                },
+            )
 
-                def handle_output(tool_call, output):
-                    if inspect.isgenerator(output):
-                        try:
-                            while True:
-                                item = next(output)
-                                if isinstance(item, MessageOutput) and yield_messages:
-                                    yield item
-                        except StopIteration as e:
-                            output = e.value
-                    else:
-                        if yield_messages:
-                            yield MessageOutput(
-                                "function_output",
-                                tool_call.function.name,
-                                recipient_agent.name,
-                                output,
-                                tool_call,
-                            )
+        # chat model start callback
+        chat_messages = (
+            [[HumanMessage(content=message)]] if isinstance(message, str) else []
+        )
+        if self.callback_handler and chat_messages:
+            self.callback_handler.on_chat_model_start(
+                serialized={"name": self._run.model},
+                messages=chat_messages,
+                run_id=self._run.id,
+                parent_run_id=chain_run_id,
+                metadata={
+                    "agent_name": self.agent.name,
+                    "recipient_agent_name": recipient_agent.name,
+                },
+            )
 
-                    for tool_output in tool_outputs_and_names:
-                        if tool_output[1]["tool_call_id"] == tool_call.id:
-                            tool_output[1]["output"] = output
+        try:
+            error_attempts = 0
+            validation_attempts = 0
+            full_message = ""
+            while True:
+                self._run_until_done()
 
-                    return output
+                # function execution
+                if self._run.status == "requires_action":
+                    self._called_recepients = []
+                    tool_calls = (
+                        self._run.required_action.submit_tool_outputs.tool_calls
+                    )
+                    tool_outputs_and_names = []  # list of tuples (name, tool_output)
 
-                if len(async_tool_calls) > 0 and self.async_mode == "tools_threading":
-                    max_workers = min(
-                        self.max_workers, os.cpu_count() or 1
-                    )  # Use at most 4 workers or the number of CPUs available
-                    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                        futures = {}
-                        for tool_call in async_tool_calls:
+                    self._track_tool_calls(tool_calls, chain_run_id)
+
+                    sync_tool_calls, async_tool_calls = self._get_sync_async_tool_calls(
+                        tool_calls, recipient_agent
+                    )
+
+                    def handle_output(tool_call, output):
+                        if inspect.isgenerator(output):
+                            try:
+                                while True:
+                                    item = next(output)
+                                    if (
+                                        isinstance(item, MessageOutput)
+                                        and yield_messages
+                                    ):
+                                        yield item
+                            except StopIteration as e:
+                                output = e.value
+                        else:
                             if yield_messages:
                                 yield MessageOutput(
-                                    "function",
-                                    recipient_agent.name,
-                                    self.agent.name,
-                                    str(tool_call.function),
-                                    tool_call,
-                                )
-                            futures[
-                                executor.submit(
-                                    self.execute_tool,
-                                    tool_call,
-                                    recipient_agent,
-                                    event_handler,
-                                    tool_outputs_and_names,
-                                )
-                            ] = tool_call
-                            tool_outputs_and_names.append(
-                                (
+                                    "function_output",
                                     tool_call.function.name,
-                                    {"tool_call_id": tool_call.id},
+                                    recipient_agent.name,
+                                    output,
+                                    tool_call,
                                 )
-                            )
+                        for tool_output in tool_outputs_and_names:
+                            if tool_output[1]["tool_call_id"] == tool_call.id:
+                                tool_output[1]["output"] = output
 
-                        for future in as_completed(futures):
-                            tool_call = futures[future]
-                            output, output_as_result = future.result()
-                            output = yield from handle_output(tool_call, output)
-                            if output_as_result:
-                                self._cancel_run()
-                                return output
-                else:
-                    sync_tool_calls += async_tool_calls
-
-                # execute sync tool calls
-                for tool_call in sync_tool_calls:
-                    if yield_messages:
-                        yield MessageOutput(
-                            "function",
-                            recipient_agent.name,
-                            self.agent.name,
-                            str(tool_call.function),
-                            tool_call,
-                        )
-                    output, output_as_result = self.execute_tool(
-                        tool_call,
-                        recipient_agent,
-                        event_handler,
-                        tool_outputs_and_names,
-                    )
-                    tool_outputs_and_names.append(
-                        (
-                            tool_call.function.name,
-                            {"tool_call_id": tool_call.id, "output": output},
-                        )
-                    )
-                    output = yield from handle_output(tool_call, output)
-                    if output_as_result:
-                        self._cancel_run()
                         return output
 
-                # split names and outputs
-                tool_outputs = [
-                    tool_output for _, tool_output in tool_outputs_and_names
-                ]
-                tool_names = [name for name, _ in tool_outputs_and_names]
+                    if (
+                        len(async_tool_calls) > 0
+                        and self.async_mode == "tools_threading"
+                    ):
+                        max_workers = min(self.max_workers, os.cpu_count() or 1)
+                        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                            futures = {}
+                            for tool_call in async_tool_calls:
+                                if yield_messages:
+                                    yield MessageOutput(
+                                        "function",
+                                        recipient_agent.name,
+                                        self.agent.name,
+                                        str(tool_call.function),
+                                        tool_call,
+                                    )
+                                futures[
+                                    executor.submit(
+                                        self.execute_tool,
+                                        tool_call,
+                                        recipient_agent,
+                                        event_handler,
+                                        tool_outputs_and_names,
+                                    )
+                                ] = tool_call
+                                tool_outputs_and_names.append(
+                                    (
+                                        tool_call.function.name,
+                                        {"tool_call_id": tool_call.id},
+                                    )
+                                )
 
-                # await coroutines
-                tool_outputs = self._await_coroutines(tool_outputs)
+                            for future in as_completed(futures):
+                                tool_call = futures[future]
+                                output, output_as_result = future.result()
+                                output = yield from handle_output(tool_call, output)
+                                if output_as_result:
+                                    self._cancel_run()
+                                    # chain end
+                                    if self.callback_handler:
+                                        self.callback_handler.on_chain_end(
+                                            outputs={"response": output},
+                                            run_id=chain_run_id,
+                                            parent_run_id=parent_run_id,
+                                        )
+                                        finish = AgentFinish(
+                                            return_values={"response": output},
+                                            log=output,
+                                        )
+                                        self.callback_handler.on_agent_finish(
+                                            finish=finish,
+                                            run_id=self._run.id,
+                                            parent_run_id=chain_run_id,
+                                        )
+                                    return output
+                    else:
+                        sync_tool_calls += async_tool_calls
 
-                # convert all tool outputs to strings
-                for tool_output in tool_outputs:
-                    if not isinstance(tool_output["output"], str):
-                        tool_output["output"] = str(tool_output["output"])
-
-                # send message tools can change this in other threads
-                if event_handler:
-                    event_handler.set_agent(self.agent)
-                    event_handler.set_recipient_agent(recipient_agent)
-
-                # submit tool outputs
-                try:
-                    self._submit_tool_outputs(tool_outputs, event_handler)
-                except BadRequestError as e:
-                    if 'Runs in status "expired"' in e.message:
-                        self.create_message(
-                            message="Previous request timed out. Please repeat the exact same tool calls in the exact same order with the same arguments.",
-                            role="user",
+                    # execute sync tool calls
+                    for tool_call in sync_tool_calls:
+                        if yield_messages:
+                            yield MessageOutput(
+                                "function",
+                                recipient_agent.name,
+                                self.agent.name,
+                                str(tool_call.function),
+                                tool_call,
+                            )
+                        output, output_as_result = self.execute_tool(
+                            tool_call,
+                            recipient_agent,
+                            event_handler,
+                            tool_outputs_and_names,
                         )
+                        tool_outputs_and_names.append(
+                            (
+                                tool_call.function.name,
+                                {"tool_call_id": tool_call.id, "output": output},
+                            )
+                        )
+                        output = yield from handle_output(tool_call, output)
+                        if output_as_result:
+                            self._cancel_run()
+                            # chain end
+                            if self.callback_handler:
+                                self.callback_handler.on_chain_end(
+                                    outputs={"response": output},
+                                    run_id=chain_run_id,
+                                    parent_run_id=parent_run_id,
+                                )
+                                finish = AgentFinish(
+                                    return_values={"response": output}, log=output
+                                )
+                                self.callback_handler.on_agent_finish(
+                                    finish=finish,
+                                    run_id=self._run.id,
+                                    parent_run_id=chain_run_id,
+                                )
+                            return output
+
+                    tool_outputs = [t for _, t in tool_outputs_and_names]
+                    tool_names = [n for n, _ in tool_outputs_and_names]
+
+                    tool_outputs = self._await_coroutines(tool_outputs)
+
+                    for to_ in tool_outputs:
+                        if not isinstance(to_["output"], str):
+                            to_["output"] = str(to_["output"])
+
+                    if event_handler:
+                        event_handler.set_agent(self.agent)
+                        event_handler.set_recipient_agent(recipient_agent)
+
+                    try:
+                        self._submit_tool_outputs(tool_outputs, event_handler)
+                    except BadRequestError as e:
+                        if 'Runs in status "expired"' in e.message:
+                            self.create_message(
+                                message="Previous request timed out. Please repeat the exact same tool calls in the exact same order with the same arguments.",
+                                role="user",
+                            )
+                            self._create_run(
+                                recipient_agent,
+                                additional_instructions,
+                                event_handler,
+                                "required",
+                                temperature=0,
+                            )
+                            self._run_until_done()
+
+                            if self._run.status != "requires_action":
+                                raise Exception(
+                                    "Run Failed. Error: ",
+                                    self._run.last_error
+                                    or self._run.incomplete_details,
+                                )
+                            tool_calls = (
+                                self._run.required_action.submit_tool_outputs.tool_calls
+                            )
+                            if len(tool_calls) != len(tool_outputs):
+                                tool_outputs = []
+                                for i, tool_call in enumerate(tool_calls):
+                                    tool_outputs.append(
+                                        {
+                                            "tool_call_id": tool_call.id,
+                                            "output": "Error: openai run timed out. You can try again one more time.",
+                                        }
+                                    )
+                            else:
+                                for i, tool_name in enumerate(tool_names):
+                                    for tool_call in tool_calls[:]:
+                                        if tool_call.function.name == tool_name:
+                                            tool_outputs[i]["tool_call_id"] = (
+                                                tool_call.id
+                                            )
+                                            tool_calls.remove(tool_call)
+                                            break
+
+                            self._submit_tool_outputs(tool_outputs, event_handler)
+                        else:
+                            raise e
+
+                elif self._run.status == "failed":
+                    full_message += self._get_last_message_text()
+                    error_message = self._run.last_error.message.lower()
+                    common_errors = [
+                        "something went wrong",
+                        "the server had an error processing your request",
+                        "rate limit reached",
+                    ]
+                    if error_attempts < 3 and any(
+                        e in error_message for e in common_errors
+                    ):
+                        if error_attempts < 2:
+                            time.sleep(1 + error_attempts)
+                        else:
+                            self.create_message(message="Continue.", role="user")
 
                         self._create_run(
                             recipient_agent,
                             additional_instructions,
                             event_handler,
-                            "required",
-                            temperature=0,
+                            tool_choice,
+                            response_format=response_format,
                         )
-                        self._run_until_done()
-
-                        if self._run.status != "requires_action":
-                            raise Exception(
-                                "Run Failed. Error: ",
-                                self._run.last_error or self._run.incomplete_details,
+                        error_attempts += 1
+                    else:
+                        # chain error
+                        if self.callback_handler:
+                            self.callback_handler.on_chain_error(
+                                error=Exception(
+                                    "OpenAI Run Failed. Error: "
+                                    + self._run.last_error.message
+                                ),
+                                run_id=self._run.id,
+                                parent_run_id=parent_run_id,
                             )
-
-                        # change tool call ids
-                        tool_calls = (
-                            self._run.required_action.submit_tool_outputs.tool_calls
+                        raise Exception(
+                            "OpenAI Run Failed. Error: ", self._run.last_error.message
                         )
-
-                        if len(tool_calls) != len(tool_outputs):
-                            tool_outputs = []
-                            for i, tool_call in enumerate(tool_calls):
-                                tool_outputs.append(
-                                    {
-                                        "tool_call_id": tool_call.id,
-                                        "output": "Error: openai run timed out. You can try again one more time.",
-                                    }
-                                )
-                        else:
-                            for i, tool_name in enumerate(tool_names):
-                                for tool_call in tool_calls[:]:
-                                    if tool_call.function.name == tool_name:
-                                        tool_outputs[i]["tool_call_id"] = tool_call.id
-                                        tool_calls.remove(tool_call)
-                                        break
-
-                        self._submit_tool_outputs(tool_outputs, event_handler)
-                    else:
-                        raise e
-            # error
-            elif self._run.status == "failed":
-                full_message += self._get_last_message_text()
-                common_errors = [
-                    "something went wrong",
-                    "the server had an error processing your request",
-                    "rate limit reached",
-                ]
-                error_message = self._run.last_error.message.lower()
-
-                if error_attempts < 3 and any(
-                    error in error_message for error in common_errors
-                ):
-                    if error_attempts < 2:
-                        time.sleep(1 + error_attempts)
-                    else:
-                        self.create_message(message="Continue.", role="user")
-
-                    self._create_run(
-                        recipient_agent,
-                        additional_instructions,
-                        event_handler,
-                        tool_choice,
-                        response_format=response_format,
-                    )
-                    error_attempts += 1
-                else:
+                elif self._run.status == "incomplete":
+                    # chain error
+                    if self.callback_handler:
+                        self.callback_handler.on_chain_error(
+                            error=Exception(
+                                "OpenAI Run Incomplete. Details: "
+                                + str(self._run.incomplete_details)
+                            ),
+                            run_id=self._run.id,
+                            parent_run_id=parent_run_id,
+                        )
                     raise Exception(
-                        "OpenAI Run Failed. Error: ", self._run.last_error.message
+                        "OpenAI Run Incomplete. Details: ", self._run.incomplete_details
                     )
-            elif self._run.status == "incomplete":
-                raise Exception(
-                    "OpenAI Run Incomplete. Details: ", self._run.incomplete_details
-                )
-            # return assistant message
-            else:
-                message_obj = self._get_last_assistant_message()
-                last_message = message_obj.content[0].text.value
-                full_message += last_message
+                else:
+                    # final assistant message
+                    message_obj = self._get_last_assistant_message()
+                    last_message = message_obj.content[0].text.value
+                    full_message += last_message
 
-                if yield_messages:
-                    yield MessageOutput(
-                        "text",
-                        recipient_agent.name,
-                        self.agent.name,
-                        last_message,
-                        message_obj,
-                    )
+                    if yield_messages:
+                        yield MessageOutput(
+                            "text",
+                            recipient_agent.name,
+                            self.agent.name,
+                            last_message,
+                            message_obj,
+                        )
 
-                if recipient_agent.response_validator:
-                    try:
-                        if isinstance(recipient_agent, Agent):
-                            # TODO: allow users to modify the last message from response validator and replace it on OpenAI
+                    # Response validation
+                    if recipient_agent.response_validator:
+                        try:
                             recipient_agent.response_validator(message=last_message)
-                    except Exception as e:
-                        if validation_attempts < recipient_agent.validation_attempts:
-                            try:
-                                evaluated_content = eval(str(e))
-                                if isinstance(evaluated_content, list):
-                                    content = evaluated_content
-                                else:
-                                    content = str(e)
-                            except Exception as eval_exception:
-                                content = str(e)
+                        except Exception as e:
+                            if (
+                                validation_attempts
+                                < recipient_agent.validation_attempts
+                            ):
+                                try:
+                                    evaluated_content = eval(str(e))
+                                    content = (
+                                        evaluated_content
+                                        if isinstance(evaluated_content, list)
+                                        else str(e)
+                                    )
+                                except Exception as e2:
+                                    content = str(e2)
+                                message_obj = self.create_message(
+                                    message=content, role="user"
+                                )
+                                if yield_messages and hasattr(
+                                    message_obj.content[0], "text"
+                                ):
+                                    yield MessageOutput(
+                                        "text",
+                                        self.agent.name,
+                                        recipient_agent.name,
+                                        message_obj.content[0].text.value,
+                                        message_obj,
+                                    )
 
-                            message_obj = self.create_message(
-                                message=content, role="user"
-                            )
+                                if event_handler:
+                                    handler = event_handler()
+                                    handler.on_message_created(message_obj)
+                                    handler.on_message_done(message_obj)
 
-                            if yield_messages:
-                                for content in message_obj.content:
-                                    if hasattr(content, "text") and hasattr(
-                                        content.text, "value"
-                                    ):
-                                        yield MessageOutput(
-                                            "text",
-                                            self.agent.name,
-                                            recipient_agent.name,
-                                            content.text.value,
-                                            message_obj,
-                                        )
-                                        break
+                                validation_attempts += 1
+                                self._create_run(
+                                    recipient_agent,
+                                    additional_instructions,
+                                    event_handler,
+                                    tool_choice,
+                                    response_format=response_format,
+                                )
+                                continue
 
-                            if event_handler:
-                                handler = event_handler()
-                                handler.on_message_created(message_obj)
-                                handler.on_message_done(message_obj)
-
-                            validation_attempts += 1
-
-                            self._create_run(
-                                recipient_agent,
-                                additional_instructions,
-                                event_handler,
-                                tool_choice,
-                                response_format=response_format,
-                            )
-
-                            continue
-
-                return last_message
+                    # chain end
+                    if self.callback_handler:
+                        self.callback_handler.on_chain_end(
+                            outputs={"response": last_message},
+                            run_id=chain_run_id,
+                            parent_run_id=parent_run_id,
+                        )
+                        # agent finish
+                        finish = AgentFinish(
+                            return_values={"response": last_message}, log=last_message
+                        )
+                        self.callback_handler.on_agent_finish(
+                            finish=finish,
+                            run_id=self._run.id,
+                            parent_run_id=chain_run_id,
+                        )
+                    return last_message
+        except Exception as e:
+            # chain error
+            if self.callback_handler:
+                self.callback_handler.on_chain_error(
+                    error=e,
+                    run_id=chain_run_id,
+                    parent_run_id=parent_run_id,
+                )
+            raise e
 
     def _create_run(
         self,
@@ -451,7 +567,7 @@ class Thread:
         event_handler,
         tool_choice,
         temperature=None,
-        response_format: Optional[dict] = None,
+        response_format: dict | None = None,
     ):
         try:
             if event_handler:
@@ -467,6 +583,10 @@ class Thread:
                     temperature=temperature,
                     extra_body={
                         "parallel_tool_calls": recipient_agent.parallel_tool_calls
+                    },
+                    metadata={
+                        "sender_agent_name": self.agent.name,
+                        "recipient_agent_name": recipient_agent.name,
                     },
                     response_format=response_format,
                 ) as stream:
@@ -484,11 +604,14 @@ class Thread:
                     temperature=temperature,
                     parallel_tool_calls=recipient_agent.parallel_tool_calls,
                     response_format=response_format,
+                    metadata={
+                        "sender_agent_name": self.agent.name,
+                        "recipient_agent_name": recipient_agent.name,
+                    },
                 )
                 self._run = self.client.beta.threads.runs.poll(
                     thread_id=self.id,
                     run_id=self._run.id,
-                    # poll_interval_ms=500,
                 )
         except APIError as e:
             match = re.search(
@@ -613,60 +736,105 @@ class Thread:
 
     def execute_tool(
         self,
-        tool_call,
+        tool_call: ToolCall,
         recipient_agent=None,
         event_handler=None,
-        tool_outputs_and_names={},
+        tool_outputs_and_names=None,
     ):
         if not recipient_agent:
             recipient_agent = self.recipient_agent
+        if tool_outputs_and_names is None:
+            tool_outputs_and_names = {}
 
         tool_name = tool_call.function.name
         funcs = recipient_agent.functions
         tool = next((func for func in funcs if func.__name__ == tool_name), None)
 
         if not tool:
-            return (
-                f"Error: Function {tool_call.function.name} not found. Available functions: {[func.__name__ for func in funcs]}",
-                False,
+            error_message = f"Error: Function {tool_call.function.name} not found."
+            if self.callback_handler:
+                self.callback_handler.on_tool_error(
+                    error=Exception(error_message),
+                    run_id=tool_call.id,
+                    parent_run_id=self._run.id,
+                )
+            return (error_message, False)
+
+        # on_tool_start
+        if self.callback_handler:
+            self.callback_handler.on_tool_start(
+                serialized={"name": tool_call.function.name},
+                input_str=str(tool_call.function.arguments),
+                run_id=tool_call.id,
+                parent_run_id=self._run.id,
+                metadata={
+                    "agent_name": self.agent.name,
+                    "recipient_agent_name": recipient_agent.name,
+                },
+            )
+
+        args = tool_call.function.arguments
+        args = json.loads(args) if args else {}
+        tool_instance = tool(**args)
+        tool_instance._caller_agent = recipient_agent
+        tool_instance._event_handler = event_handler
+        tool_instance._tool_call = tool_call
+
+        # If this is a retriever (FileSearch), call retriever_start
+        is_retriever = isinstance(tool_instance, FileSearch)
+        if is_retriever and self.callback_handler:
+            self.callback_handler.on_retriever_start(
+                serialized={"name": tool_call.function.name},
+                query=str(args),
+                run_id=self._run.id,
+                parent_run_id=self._run.id,
+                metadata={
+                    "agent_name": self.agent.name,
+                    "recipient_agent_name": recipient_agent.name,
+                },
             )
 
         try:
-            # init tool
-            args = tool_call.function.arguments
-            args = json.loads(args) if args else {}
-            tool = tool(**args)
+            output = tool_instance.run()
 
-            # check if the tool is already called
-            for tool_name in [name for name, _ in tool_outputs_and_names]:
-                if tool_name == tool_name and (
-                    hasattr(tool, "ToolConfig")
-                    and hasattr(tool.ToolConfig, "one_call_at_a_time")
-                    and tool.ToolConfig.one_call_at_a_time
-                ):
-                    return (
-                        f"Error: Function {tool_name} is already called. You can only call this function once at a time. Please wait for the previous call to finish before calling it again.",
-                        False,
-                    )
+            # If retriever, on_retriever_end
+            if is_retriever and self.callback_handler:
+                docs = output if isinstance(output, list) else []
+                self.callback_handler.on_retriever_end(
+                    documents=docs,
+                    run_id=self._run.id,
+                    parent_run_id=self._run.id,
+                )
 
-            # for send message tools, don't allow calling the same recepient agent multiple times
-            if tool_name.startswith("SendMessage"):
-                if tool.recipient.value in self._called_recepients:
-                    return (
-                        f"Error: Agent {tool.recipient.value} has already been called. You can only call each agent once at a time. Please wait for the previous call to finish before calling it again.",
-                        False,
-                    )
-                self._called_recepients.append(tool.recipient.value)
+            # on_tool_end
+            if self.callback_handler:
+                self.callback_handler.on_tool_end(
+                    output=str(output),
+                    run_id=self._run.id,
+                    parent_run_id=self._run.id,
+                )
 
-            tool._caller_agent = recipient_agent
-            tool._event_handler = event_handler
-            tool._tool_call = tool_call
-
-            return tool.run(), tool.ToolConfig.output_as_result
+            return output, tool_instance.ToolConfig.output_as_result
         except Exception as e:
             error_message = f"Error: {e}"
             if "For further information visit" in error_message:
                 error_message = error_message.split("For further information visit")[0]
+
+            # If retriever, on_retriever_error
+            if is_retriever and self.callback_handler:
+                self.callback_handler.on_retriever_error(
+                    error=Exception(error_message),
+                    run_id=self._run.id,
+                    parent_run_id=self._run.id,
+                )
+
+            # on_tool_error
+            if self.callback_handler:
+                self.callback_handler.on_tool_error(
+                    error=Exception(error_message),
+                    run_id=self._run.id,
+                    parent_run_id=self._run.id,
+                )
             return error_message, False
 
     def _await_coroutines(self, tool_outputs):
@@ -731,11 +899,28 @@ class Thread:
             if not messages:
                 break
             all_messages.extend(messages)
-            after = messages[
-                -1
-            ].id  # Set the 'after' cursor to the ID of the last message
+            # Set the 'after' cursor to the ID of the last message
+            after = messages[-1].id
 
             if limit and len(all_messages) >= limit:
                 break
 
         return all_messages
+
+    def _track_tool_calls(self, tool_calls: List[ToolCall], chain_run_id: str) -> None:
+        """Send agent_action before each tool call"""
+        if not self.callback_handler:
+            return
+
+        for tc in tool_calls:
+            args = json.loads(tc.function.arguments) if tc.function.arguments else {}
+            action = AgentAction(
+                tool=tc.function.name,
+                tool_input=args,
+                log=f"Using tool {tc.function.name} with arguments: {args}",
+            )
+            self.callback_handler.on_agent_action(
+                action=action,
+                run_id=self._run.id,
+                parent_run_id=chain_run_id,
+            )

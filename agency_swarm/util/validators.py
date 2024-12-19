@@ -3,6 +3,7 @@ from typing import Callable
 from openai import OpenAI
 from pydantic import BaseModel, Field
 
+from agency_swarm.util.constants import DEFAULT_MODEL_MINI
 from agency_swarm.util.oai import get_openai_client
 
 
@@ -29,7 +30,7 @@ def llm_validator(
     statement: str,
     client: OpenAI = None,
     allow_override: bool = False,
-    model: str = "gpt-4o-mini",
+    model: str = DEFAULT_MODEL_MINI,
     temperature: float = 0,
 ) -> Callable[[str], str]:
     """

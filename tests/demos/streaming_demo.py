@@ -19,12 +19,12 @@ class StreamingTest(unittest.TestCase):
         self.ceo = Agent(
             name="ceo",
             instructions="You are a CEO of an agency made for testing purposes.",
-            model="gpt-3.5-turbo",
+            model="gpt-4o-mini",
         )
         self.test_agent1 = Agent(
-            name="test_agent1", tools=[TestTool], model="gpt-3.5-turbo"
+            name="test_agent1", tools=[TestTool], model="gpt-4o-mini"
         )
-        self.test_agent2 = Agent(name="test_agent2", model="gpt-3.5-turbo")
+        self.test_agent2 = Agent(name="test_agent2", model="gpt-4o-mini")
 
         self.agency = Agency(
             [
