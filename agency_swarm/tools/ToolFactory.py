@@ -2,7 +2,6 @@ import inspect
 import json
 import os
 import sys
-from importlib import import_module
 from typing import Any, Dict, List, Type, Union
 
 import httpx
@@ -129,6 +128,7 @@ class ToolFactory:
         headers: Dict[str, str] = None,
         params: Dict[str, Any] = None,
         strict: bool = False,
+        timeout: float = 600.0,
     ) -> List[Type[BaseTool]]:
         """
         Converts an OpenAPI schema into a list of BaseTools.
@@ -163,9 +163,7 @@ class ToolFactory:
                     url = url.rstrip("/")
                     parameters = {k: v for k, v in parameters.items() if v is not None}
                     parameters = {**parameters, **params} if params else parameters
-                    async with httpx.AsyncClient(
-                        timeout=90
-                    ) as client:  # Set custom read timeout to 10 seconds
+                    async with httpx.AsyncClient(timeout=timeout) as client:
                         if method == "get":
                             response = await client.get(
                                 url, params=parameters, headers=headers

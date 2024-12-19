@@ -11,7 +11,7 @@ client_lock = threading.Lock()
 client = None
 
 
-def get_openai_client():
+def get_openai_client(timeout: float = 600.0):
     global client
     with client_lock:
         if client is None:
@@ -23,7 +23,7 @@ def get_openai_client():
                 )
             client = openai.OpenAI(
                 api_key=api_key,
-                timeout=httpx.Timeout(60.0, read=40, connect=5.0),
+                timeout=httpx.Timeout(timeout, read=timeout - 20, connect=5.0),
                 max_retries=10,
                 default_headers={"OpenAI-Beta": "assistants=v2"},
             )
