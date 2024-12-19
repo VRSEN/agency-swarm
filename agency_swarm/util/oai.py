@@ -11,7 +11,7 @@ client_lock = threading.Lock()
 client = None
 
 
-def get_openai_client(timeout: float = 600.0):
+def get_openai_client(timeout: float = 60.0):
     global client
     with client_lock:
         if client is None:

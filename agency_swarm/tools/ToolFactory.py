@@ -128,7 +128,7 @@ class ToolFactory:
         headers: Dict[str, str] = None,
         params: Dict[str, Any] = None,
         strict: bool = False,
-        timeout: float = 600.0,
+        timeout: float = 60.0,
     ) -> List[Type[BaseTool]]:
         """
         Converts an OpenAPI schema into a list of BaseTools.
