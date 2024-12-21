@@ -1,13 +1,15 @@
 import os
 
 
-def create_agent_template(agent_name=None,
-                          agent_description=None,
-                          path="./",
-                          instructions=None,
-                          code_interpreter=False,
-                          use_txt=False,
-                          include_example_tool=True):
+def create_agent_template(
+    agent_name=None,
+    agent_description=None,
+    path="./",
+    instructions=None,
+    code_interpreter=False,
+    use_txt=False,
+    include_example_tool=True,
+):
     if not agent_name:
         agent_name = input("Enter agent name: ")
     if not agent_description:
@@ -23,14 +25,18 @@ def create_agent_template(agent_name=None,
 
     # create agent file
     with open(path + class_name + ".py", "w") as f:
-        f.write(agent_template.format(
-            class_name=class_name,
-            agent_name=agent_name,
-            agent_description=agent_description,
-            ext="md" if not use_txt else "txt",
-            code_interpreter="CodeInterpreter" if code_interpreter else "",
-            code_interpreter_import="from agency_swarm.tools import CodeInterpreter" if code_interpreter else ""
-        ))
+        f.write(
+            agent_template.format(
+                class_name=class_name,
+                agent_name=agent_name,
+                agent_description=agent_description,
+                ext="md" if not use_txt else "txt",
+                code_interpreter="CodeInterpreter" if code_interpreter else "",
+                code_interpreter_import="from agency_swarm.tools import CodeInterpreter"
+                if code_interpreter
+                else "",
+            )
+        )
 
     with open(path + "__init__.py", "w") as f:
         f.write(f"from .{class_name} import {class_name}")
@@ -75,7 +81,7 @@ class {class_name}(Agent):
             temperature=0.3,
             max_prompt_tokens=25000,
         )
-        
+
     def response_validator(self, message):
         return message
 """

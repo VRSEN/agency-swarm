@@ -1,5 +1,5 @@
 # Contributing to Agency Swarm
-Each agent or tool you add to Agency Swarm will automatically be available for import by the Genesis Swarm, which will help us create an exponentially larger and smarter system.  
+Each agent or tool you add to Agency Swarm will automatically be available for import by the Genesis Swarm, which will help us create an exponentially larger and smarter system.
 
 This document provides guidelines for contributing new agents to the framework.
 
@@ -23,7 +23,7 @@ agency_swarm/agents/AgentName/
 
 ### Creating an Agent
 
-1. Follow the structure below in your `AgentName.py` as a guideline. 
+1. Follow the structure below in your `AgentName.py` as a guideline.
 2. All tools (except schemas) should be imported in `AgentName.py` from the `agency_swarm/tools/...` folder.
 
 ```python

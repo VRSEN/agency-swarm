@@ -31,13 +31,13 @@ agent = Agent(name='MyAgent', file_search={'max_num_results': 25}) # must be bet
 
 ### Schemas Folder
 
-You can specify the folder where the agent will look for OpenAPI schemas to convert into tools. Additionally, you can add `api_params` and `api_headers` to the schema to pass additional parameters and headers to the API call. 
+You can specify the folder where the agent will look for OpenAPI schemas to convert into tools. Additionally, you can add `api_params` and `api_headers` to the schema to pass additional parameters and headers to the API call.
 
 ```python
 from agency_swarm import Agent
 
-agent = Agent(name='MyAgent', 
-              schemas_folder='schemas', 
+agent = Agent(name='MyAgent',
+              schemas_folder='schemas',
               api_params={'my_schema.json': {'param1': 'value1'}},
               api_headers={'my_schema.json': {'Authorization': 'Bearer token'}}
             )
@@ -49,7 +49,7 @@ agent = Agent(name='MyAgent',
 
 ### Fine Tuned models
 
-You can use any previously fine-tuned model by specifying the `model` parameter in the agent. 
+You can use any previously fine-tuned model by specifying the `model` parameter in the agent.
 
 ```python
 from agency_swarm import Agent
@@ -70,7 +70,7 @@ class MyAgent(Agent):
         """This function is used to validate the response before sending it to the user or another agent."""
         if "bad word" in message:
             raise ValueError("Please don't use bad words.")
-        
+
         return message
 ```
 
@@ -113,7 +113,7 @@ When it comes to creating your agent, you have 3 options:
 
 ### Defining the agent directly in the code
 
-To define your agent in the code, you can simply instantiate the `Agent` class and pass the required parameters. 
+To define your agent in the code, you can simply instantiate the `Agent` class and pass the required parameters.
 
 ```python
 from agency_swarm import Agent
@@ -148,18 +148,18 @@ When you run the `create-agent-template` command, it creates the following folde
 └── AgentName/                  # Directory for the specific agent
     ├── files/                  # Directory for files that will be uploaded to openai
     ├── schemas/                # Directory for OpenAPI schemas to be converted into tools
-    ├── tools/                  # Directory for tools to be imported by default. 
+    ├── tools/                  # Directory for tools to be imported by default.
     ├── AgentName.py            # The main agent class file
     ├── __init__.py             # Initializes the agent folder as a Python package
     └── instructions.md or .txt # Instruction document for the agent
-    
+
 ```
 
 - `files`: This folder is used to store files that will be uploaded to OpenAI. You can use any of the [acceptable file formats](https://platform.openai.com/docs/assistants/tools/supported-files). After file is uploaded, an id will be attached to the file name to avoid re-uploading the same file twice.
 - `schemas`: This folder is used to store OpenAPI schemas that will be converted into tools automatically. All you have to do is put the schema in this folder, and specify it when initializing your agent.
 - `tools`: This folder is used to store tools in the form of Python files. Each file must have the same name as the tool class for it to be imported by default. For example, `ExampleTool.py` must contain a class called `ExampleTool`.
 
-#### Agent Template 
+#### Agent Template
 
 The `AgentName.py` file will contain the following code:
 
@@ -184,7 +184,7 @@ class AgentName(Agent):
         """This function is used to validate the response before sending it to the user or another agent."""
         if "bad word" in message:
             raise ValueError("Please don't use bad words.")
-        
+
         return message
 ```
 

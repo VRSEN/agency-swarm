@@ -1,6 +1,8 @@
-from agency_swarm.tools import BaseTool
-from pydantic import Field
 import os
+
+from pydantic import Field
+
+from agency_swarm.tools import BaseTool
 
 
 class ReadRequirements(BaseTool):
@@ -21,7 +23,7 @@ class ReadRequirements(BaseTool):
             raise ValueError(f"File path does not exist: {self.file_path}")
 
         try:
-            with open(self.file_path, 'r', encoding='utf-8') as file:
+            with open(self.file_path, "r", encoding="utf-8") as file:
                 content = file.read()
             return content
         except Exception as e:

@@ -1,34 +1,58 @@
 from abc import ABC, abstractmethod
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Literal, Union
 
 from docstring_parser import parse
-
 from pydantic import BaseModel
+
 from agency_swarm.util.shared_state import SharedState
+
+
+class classproperty:
+    def __init__(self, fget):
+        self.fget = fget
+
+    def __get__(self, instance, owner):
+        return self.fget(owner)
 
 
 class BaseTool(BaseModel, ABC):
     _shared_state: ClassVar[SharedState] = None
     _caller_agent: Any = None
     _event_handler: Any = None
+    _tool_call: Any = None
+    openai_schema: ClassVar[dict[str, Any]]
 
     def __init__(self, **kwargs):
         if not self.__class__._shared_state:
             self.__class__._shared_state = SharedState()
         super().__init__(**kwargs)
 
+        # Ensure all ToolConfig variables are initialized
+        config_defaults = {
+            "strict": False,
+            "one_call_at_a_time": False,
+            "output_as_result": False,
+            "async_mode": None,
+        }
+
+        for key, value in config_defaults.items():
+            if not hasattr(self.ToolConfig, key):
+                setattr(self.ToolConfig, key, value)
+
     class ToolConfig:
         strict: bool = False
         one_call_at_a_time: bool = False
+        # return the tool output as assistant message
+        output_as_result: bool = False
+        async_mode: Union[Literal["threading"], None] = None
 
-    @classmethod
-    @property
-    def openai_schema(cls):
+    @classproperty
+    def openai_schema(cls) -> dict[str, Any]:
         """
         Return the schema in the format of OpenAI's schema as jsonschema
 
         Note:
-            Its important to add a docstring to describe how to best use this class, it will be included in the description attribute and be part of the prompt.
+            It's important to add a docstring to describe how to best use this class; it will be included in the description attribute and be part of the prompt.
 
         Returns:
             model_json_schema (dict): A dictionary in the format of OpenAI's schema as jsonschema
@@ -72,11 +96,9 @@ class BaseTool(BaseModel, ABC):
             if "$defs" in schema["parameters"]:
                 for def_ in schema["parameters"]["$defs"].values():
                     def_["additionalProperties"] = False
-        else:
-            schema["strict"] = False
-            
+
         return schema
 
     @abstractmethod
-    def run(self, **kwargs):
+    def run(self):
         pass

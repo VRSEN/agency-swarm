@@ -10,7 +10,7 @@ from agency_swarm.tools import BaseTool
 
 prompt = """# Agency Swarm Overview
 
-Agency Swarm started as a desire and effort of Arsenii Shatokhin (aka VRSEN) to fully automate his AI Agency with AI. By building this framework, we aim to simplify the agent creation process and enable anyone to create a collaborative swarm of agents (Agencies), each with distinct roles and capabilities. 
+Agency Swarm started as a desire and effort of Arsenii Shatokhin (aka VRSEN) to fully automate his AI Agency with AI. By building this framework, we aim to simplify the agent creation process and enable anyone to create a collaborative swarm of agents (Agencies), each with distinct roles and capabilities.
 
 # ToolCreator Agent Instructions for Agency Swarm Framework
 
@@ -64,7 +64,7 @@ class MyCustomTool(BaseTool):
         This method should utilize the fields defined above to perform the task.
         \"\"\"
         # Your custom tool logic goes here
-        # Example: 
+        # Example:
         # do_something(self.example_field, api_key, account_id)
 
         # Return the result of the tool's operation as a string
@@ -78,51 +78,56 @@ class MyCustomTool(BaseTool):
     def run(self):
         # Access the shared state
         value = self._shared_state.get("key")
-        
+
         # Update the shared state
         self._shared_state.set("key", "value")
-        
+
         return "Result of MyCustomTool operation"
-        
+
 # Access shared state in another tool
 class AnotherTool(BaseTool):
     def run(self):
         # Access the shared state
         value = self._shared_state.get("key")
-        
+
         return "Result of AnotherTool operation"
 ```
 
-This is useful to pass information between tools or agents or to verify the state of the system.  
+This is useful to pass information between tools or agents or to verify the state of the system.
 
 Remember, you must output the resulting python tool code as a whole in a code block, so the user can just copy and paste it into his program. Each tool code snippet must be ready to use. It must not contain any placeholders or hypothetical examples."""
 
 history = [
-            {
-                "role": "system",
-                "content": prompt
-            },
-        ]
+    {"role": "system", "content": prompt},
+]
 
 
 class CreateTool(BaseTool):
     """This tool creates other custom tools for the agent, based on your requirements and details."""
+
     agent_name: str = Field(
         ..., description="Name of the agent to create the tool for."
     )
-    tool_name: str = Field(..., description="Name of the tool class in camel case.", examples=["ExampleTool"])
+    tool_name: str = Field(
+        ...,
+        description="Name of the tool class in camel case.",
+        examples=["ExampleTool"],
+    )
     requirements: str = Field(
         ...,
-        description="The comprehensive requirements explaning the primary functionality of the tool. It must not contain any code or implementation details."
+        description="The comprehensive requirements explaning the primary functionality of the tool. It must not contain any code or implementation details.",
     )
     details: str = Field(
-        None, description="Additional details or error messages, class, function, and variable names."
+        None,
+        description="Additional details or error messages, class, function, and variable names.",
     )
     mode: Literal["write", "modify"] = Field(
-        ..., description="The mode of operation for the tool. 'write' is used to create a new tool or overwrite an existing one. 'modify' is used to modify an existing tool."
+        ...,
+        description="The mode of operation for the tool. 'write' is used to create a new tool or overwrite an existing one. 'modify' is used to modify an existing tool.",
     )
     agency_name: str = Field(
-        None, description="Name of the agency to create the tool for. Defaults to the agency currently being created."
+        None,
+        description="Name of the agency to create the tool for. Defaults to the agency currently being created.",
     )
 
     class ToolConfig:
@@ -149,17 +154,14 @@ class CreateTool(BaseTool):
             message += f"\nThe existing file content is as follows:"
 
             try:
-                with open("./tools/" + self.tool_name + ".py", 'r') as file:
+                with open("./tools/" + self.tool_name + ".py", "r") as file:
                     prev_content = file.read()
                     message += f"\n\n```{prev_content}```"
             except Exception as e:
                 os.chdir(self._shared_state.get("default_folder"))
-                return f'Error reading {self.tool_name}: {e}'
+                return f"Error reading {self.tool_name}: {e}"
 
-        history.append({
-                "role": "user",
-                "content": message
-            })
+        history.append({"role": "user", "content": message})
 
         messages = history.copy()
 
@@ -181,29 +183,19 @@ class CreateTool(BaseTool):
 
             content = resp.choices[0].message.content
 
-            messages.append(
-                {
-                    "role": "assistant",
-                    "content": content
-                }
-            )
+            messages.append({"role": "assistant", "content": content})
 
             pattern = r"```(?:[a-zA-Z]+\n)?(.*?)```"
             match = re.findall(pattern, content, re.DOTALL)
             if match:
                 code = match[-1].strip()
-                history.append(
-                    {
-                        "role": "assistant",
-                        "content": content
-                    }
-                )
+                history.append({"role": "assistant", "content": content})
                 break
             else:
                 messages.append(
                     {
                         "role": "user",
-                        "content": f"Error: Could not find the python code block in the response. Please try again."
+                        "content": f"Error: Could not find the python code block in the response. Please try again.",
                     }
                 )
 
@@ -219,20 +211,22 @@ class CreateTool(BaseTool):
                 file.write(code)
 
             os.chdir(self._shared_state.get("default_folder"))
-            return f'{content}\n\nPlease make sure to now test this tool if possible.'
+            return f"{content}\n\nPlease make sure to now test this tool if possible."
         except Exception as e:
             os.chdir(self._shared_state.get("default_folder"))
-            return f'Error writing to file: {e}'
+            return f"Error writing to file: {e}"
 
     @field_validator("requirements", mode="after")
     @classmethod
     def validate_requirements(cls, v):
         if "placeholder" in v:
-            raise ValueError("Requirements contain placeholders. "
-                             "Please never user placeholders. Instead, implement only the code that you are confident about.")
+            raise ValueError(
+                "Requirements contain placeholders. "
+                "Please never user placeholders. Instead, implement only the code that you are confident about."
+            )
 
         # check if code is included in requirements
-        pattern = r'(```)((.*\n){5,})(```)'
+        pattern = r"(```)((.*\n){5,})(```)"
         if re.search(pattern, v):
             raise ValueError(
                 "Requirements contain a code snippet. Please never include code snippets in requirements. "
@@ -245,7 +239,9 @@ class CreateTool(BaseTool):
     @classmethod
     def validate_details(cls, v):
         if len(v) == 0:
-            raise ValueError("Details are required. Remember this tool does not have access to other files. Please provide additional details like relevant documentation, error messages, or class, function, and variable names from other files that this file depends on.")
+            raise ValueError(
+                "Details are required. Remember this tool does not have access to other files. Please provide additional details like relevant documentation, error messages, or class, function, and variable names from other files that this file depends on."
+            )
         return v
 
     @model_validator(mode="after")

@@ -1,4 +1,3 @@
-
 def get_b64_screenshot(wd, element=None):
     if element:
         screenshot_b64 = element.screenshot_as_base64

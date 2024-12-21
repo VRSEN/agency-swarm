@@ -1,19 +1,22 @@
 import importlib
-from pathlib import Path
 import re
+from pathlib import Path
+
 from .list_available_agents import list_available_agents
+
 
 def extract_description_from_file(file_path):
     """
     Extracts the agent's description from its Python file.
     """
     description_pattern = re.compile(
-        r'\s*description\s*=\s*["\'](.*?)["\'],', re.DOTALL)
-    with open(file_path, 'r', encoding='utf-8') as file:
+        r'\s*description\s*=\s*["\'](.*?)["\'],', re.DOTALL
+    )
+    with open(file_path, "r", encoding="utf-8") as file:
         content = file.read()
     match = description_pattern.search(content)
     if match:
-        description = ' '.join(match.group(1).split())
+        description = " ".join(match.group(1).split())
         return description
     return "Description not found."
 

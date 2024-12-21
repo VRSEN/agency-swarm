@@ -1,20 +1,19 @@
+import os
+import re
 from typing import List, Literal, Optional
 
-
-import os
-from agency_swarm.util.validators import llm_validator
+from pydantic import Field, field_validator
 
 from agency_swarm import get_openai_client
 from agency_swarm.tools import BaseTool
-from pydantic import Field, field_validator
-import re
+from agency_swarm.util.validators import llm_validator
 
 from .util import format_file_deps
 
 history = [
     {
         "role": "user",
-        "content": "As a top-tier software engineer focused on developing programs incrementally, you are entrusted with the creation or modification of files based on user requirements. It's imperative to operate under the assumption that all necessary dependencies are pre-installed and accessible, and the file in question will be deployed in an appropriate environment. Furthermore, it is presumed that all other modules or files upon which this file relies are accurate and error-free. Your output should be encapsulated within a code block, without specifying the programming language. Prior to embarking on the coding process, you must outine a methodical, step-by-step plan to precisely fulfill the requirements—no more, no less. It is crucial to ensure that the final code block is a complete file, without any truncation. This file should embody a flawless, fully operational program, inclusive of all requisite imports and functions, devoid of any placeholders, unless specified otherwise by the user.",
+        "content": "As a top-tier software engineer focused on developing programs incrementally, you are entrusted with the creation or modification of files based on user requirements. It's imperative to operate under the assumption that all necessary dependencies are pre-installed and accessible, and the file in question will be deployed in an appropriate environment. Furthermore, it is presumed that all other modules or files upon which this file relies are accurate and error-free. Your output should be encapsulated within a code block, without specifying the programming language. Prior to embarking on the coding process, you must outline a methodical, step-by-step plan to precisely fulfill the requirements — no more, no less. It is crucial to ensure that the final code block is a complete file, without any truncation. This file should embody a flawless, fully operational program, inclusive of all requisite imports and functions, devoid of any placeholders, unless specified otherwise by the user.",
     },
 ]
 
@@ -37,7 +36,7 @@ class FileWriter(BaseTool):
     )
     documentation: Optional[str] = Field(
         None,
-        description="Relevant documentation extracted with the myfiles_browser tool. You must pass all the relevant code from the documentaion, as this tool does not have access to those files.",
+        description="Relevant documentation extracted with the myfiles_browser tool. You must pass all the relevant code from the documentation, as this tool does not have access to those files.",
     )
     mode: Literal["write", "modify"] = Field(
         ...,
@@ -57,7 +56,9 @@ class FileWriter(BaseTool):
         description="Any library dependencies required for the file to be written.",
         examples=["numpy", "pandas"],
     )
-    one_call_at_a_time: bool = True
+
+    class ToolConfig:
+        one_call_at_a_time: bool = True
 
     def run(self):
         client = get_openai_client()
@@ -71,7 +72,7 @@ class FileWriter(BaseTool):
         if self.mode == "write":
             message = f"Please write {filename} file that meets the following requirements: '{self.requirements}'.\n"
         else:
-            message = f"Please rewrite the {filename} file according to the following requirements: '{self.requirements}'.\n"
+            message = f"Please rewrite the {filename} file according to the following requirements: '{self.requirements}'.\n Only output the file content, without any other text."
 
         if file_dependencies:
             message += f"\nHere are the dependencies from other project files: {file_dependencies}."
@@ -87,8 +88,8 @@ class FileWriter(BaseTool):
 
             try:
                 with open(self.file_path, "r") as file:
-                    prev_content = file.read()
-                    message += f"\n\n```{prev_content}```"
+                    file_content = file.read()
+                    message += f"\n\n```{file_content}```"
             except Exception as e:
                 return f"Error reading {self.file_path}: {e}"
 
@@ -105,10 +106,19 @@ class FileWriter(BaseTool):
         n = 0
         error_message = ""
         while n < 3:
-            resp = client.chat.completions.create(
-                messages=messages,
-                model="o1-mini",
-            )
+            if self.mode == "modify":
+                resp = client.chat.completions.create(
+                    messages=messages,
+                    model="o1-mini",
+                    temperature=0,
+                    prediction={"type": "content", "content": file_content},
+                )
+            else:
+                resp = client.chat.completions.create(
+                    messages=messages,
+                    model="o1-mini",
+                    temperature=0,
+                )
 
             content = resp.choices[0].message.content
 
@@ -201,7 +211,7 @@ class FileWriter(BaseTool):
     def validate_details(cls, v):
         if len(v) == 0:
             raise ValueError(
-                "Details are required. Remember this tool does not have access to other files. Please provide additional details like relevant documentation, error messages, or class, function, and variable names from other files that this file depends on."
+                "Details are required. Remember: this tool does not have access to other files. Please provide additional details like relevant documentation, error messages, or class, function, and variable names from other files that this file depends on."
             )
         return v
 
@@ -218,9 +228,18 @@ class FileWriter(BaseTool):
 
 
 if __name__ == "__main__":
-    tool = FileWriter(
+    # Test case for 'write' mode
+    tool_write = FileWriter(
         requirements="Write a program that takes a list of integers as input and returns the sum of all the integers in the list.",
         mode="write",
-        file_path="test.py",
+        file_path="test_write.py",
     )
-    print(tool.run())
+    print(tool_write.run())
+
+    # Test case for 'modify' mode
+    tool_modify = FileWriter(
+        requirements="Modify the program to also return the product of all the integers in the list.",
+        mode="modify",
+        file_path="test_write.py",
+    )
+    print(tool_modify.run())

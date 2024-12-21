@@ -18,7 +18,7 @@ To use agency-swarm with Astra Assistants API, follow these steps:
 
 ![Astra Assistants API Example](https://firebasestorage.googleapis.com/v0/b/vrsen-ai/o/public%2Fgithub%2FScreenshot%202024-07-01%20at%208.19.00%E2%80%AFAM.png?alt=media&token=b4f1a7ad-3b77-40fa-a5da-866a4f1410bd)
 
-**2. Add Astra DB Token to your .env file:**  
+**2. Add Astra DB Token to your .env file:**
     Copy token from the file that starts with "AstraCS:" and paste it into your .env file.
 
 ```env
@@ -35,11 +35,11 @@ GROQ_API_KEY=your_groq_api_key
 ```
 
 **4. Install the Astra Assistants API and gradio:**
-    
+
 ```bash
 pip install astra-assistants-api gradio
 ```
-   
+
 **5. Patch the OpenAI client:**
 
 ```python
@@ -55,14 +55,14 @@ client = patch(OpenAI())
 set_openai_client(client)
 ```
 
-**6. Create an agent:**  
+**6. Create an agent:**
     Create an agent and replace the model parameter with the name of the model you want to use. With Astra Assistants you can upload files like usual using `files_folder`.
 
 ```python
 from agency_swarm import Agent
 
-ceo = Agent(name="ceo", 
-            description="I am the CEO", 
+ceo = Agent(name="ceo",
+            description="I am the CEO",
             model='ollama/llama3',
             # model = 'perplexity/llama-3-8b-instruct'
             # model = 'anthropic/claude-3-5-sonnet-20240620'
@@ -72,7 +72,7 @@ ceo = Agent(name="ceo",
             )
 ```
 
-**7. Create an agency:**  
+**7. Create an agency:**
 
 You can add more agents as needed, just make sure all manager agents support function calling.
 
@@ -82,7 +82,7 @@ from agency_swarm import Agency
 agency = Agency([ceo])
 ```
 
-**8. Start gradio:**  
+**8. Start gradio:**
 
 To utilize your agency in gradio, apply a specific non-streaming `demo_gradio` method from the [agency-swarm-lab](https://github.com/VRSEN/agency-swarm-lab/blob/main/OpenSourceSwarm/demo_gradio.py) repository:
 
@@ -126,7 +126,7 @@ from agency_swarm import Agent
 ceo = Agent(name="ceo", description="I am the CEO", model='ollama/llama3')
 ```
 
-**4. Start Gradio:**  
+**4. Start Gradio:**
 
 To utilize your agency in gradio, apply a specific non-streaming `demo_gradio` method from the [agency-swarm-lab](https://github.com/VRSEN/agency-swarm-lab/blob/main/OpenSourceSwarm/demo_gradio.py) repository:
 
@@ -153,6 +153,6 @@ agency.get_completion("I am the CEO")
 
 ## Future Plans
 
-Updates will be provided as new open-source assistant API implementations stabilize. 
+Updates will be provided as new open-source assistant API implementations stabilize.
 
 If you successfully integrate other projects with agency-swarm, please share your experience through an issue or pull request.
