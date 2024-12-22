@@ -3,9 +3,9 @@ from typing import TYPE_CHECKING, Any, Dict, Generic, TypeVar, Union
 from pydantic import BaseModel, Field
 
 if TYPE_CHECKING:
-    from langchain_core.schema import AgentAction as LangchainAgentAction
-    from langchain_core.schema import AgentFinish as LangchainAgentFinish
-    from langchain_core.schema import HumanMessage as LangchainHumanMessage
+    from langchain.schema import AgentAction as LangchainAgentAction
+    from langchain.schema import AgentFinish as LangchainAgentFinish
+    from langchain.schema import HumanMessage as LangchainHumanMessage
 
 
 # Create base classes that match langchain's structure
@@ -47,9 +47,9 @@ HumanMessage = Proxy[Union[BaseHumanMessage, "LangchainHumanMessage"]](BaseHuman
 def use_langchain_types() -> None:
     """Switch to using langchain types after langchain is imported"""
     global AgentAction, AgentFinish, HumanMessage
-    from langchain_core.schema import AgentAction as LangchainAgentAction
-    from langchain_core.schema import AgentFinish as LangchainAgentFinish
-    from langchain_core.schema import HumanMessage as LangchainHumanMessage
+    from langchain.schema import AgentAction as LangchainAgentAction
+    from langchain.schema import AgentFinish as LangchainAgentFinish
+    from langchain.schema import HumanMessage as LangchainHumanMessage
 
     # Call model_rebuild on these imported classes to resolve forward references
     LangchainAgentAction.model_rebuild()

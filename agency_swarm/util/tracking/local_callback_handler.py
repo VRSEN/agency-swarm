@@ -20,20 +20,20 @@ class LocalCallbackHandler:
                 """
                 CREATE TABLE IF NOT EXISTS events (
                     id TEXT PRIMARY KEY,
-                    type TEXT,
-                    serialized TEXT,
-                    inputs TEXT,
-                    outputs TEXT,
-                    error TEXT,
+                    parent_run_id TEXT,
                     start_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     end_time TIMESTAMP,
-                    parent_run_id TEXT,
-                    tags TEXT,
-                    metadata TEXT,
-                    prompts TEXT,
+                    type TEXT,
                     input_str TEXT,
+                    outputs TEXT,
+                    error TEXT,
+                    serialized TEXT,
+                    metadata TEXT,
+                    tags TEXT,
+                    prompts TEXT,
                     file_search_query TEXT,
-                    documents TEXT
+                    documents TEXT,
+                    inputs TEXT
                 )
                 """
             )
