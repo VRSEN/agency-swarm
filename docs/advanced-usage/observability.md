@@ -54,6 +54,12 @@ For additional parameters and more information on the Langfuse callback handler,
 
 The local tracker provides a lightweight solution for logging agent activities to a SQLite database.
 
+To use the local tracker, you'll need to install the tiktoken package:
+
+```bash
+pip install tiktoken
+```
+
 To use the local tracker, simply initialize it in your code:
 
 ```python
