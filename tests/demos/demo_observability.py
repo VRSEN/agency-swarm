@@ -11,8 +11,9 @@ logging.basicConfig(level=logging.INFO)
 
 def main():
     # Set the tracker type
-    TRACKER = "local"
-    # TRACKER = "langfuse"
+    # TRACKER = "local"
+    # TRACKER = "agentops"
+    TRACKER = "langfuse"
 
     # Initialize tracking based on the selected tracker
     init_tracking(TRACKER)
@@ -21,19 +22,16 @@ def main():
     ceo = Agent(
         name="CEO",
         description="Manages projects and coordinates between team members",
-        temperature=0.5,
     )
 
     developer = Agent(
         name="Developer",
         description="Implements technical solutions and writes code",
-        temperature=0.3,
     )
 
     analyst = Agent(
         name="Data Analyst",
         description="Analyzes data and provides insights",
-        temperature=0.4,
     )
 
     # Define the communication flows within the agency
@@ -43,7 +41,8 @@ def main():
             [ceo, developer],  # CEO can communicate with Developer
             [ceo, analyst],  # CEO can communicate with Analyst
             [developer, analyst],  # Developer can communicate with Analyst
-        ]
+        ],
+        temperature=0.01,
     )
 
     # Run the demo with Gradio interface

@@ -1,79 +1,77 @@
 # Observability
 
-Agency Swarm supports tracking your agents using Langchain callbacks. This allows you to monitor and analyze the behavior and performance of your agents.
-
-To use tracking with Langchain callbacks, you need to install the langchain package:
+Agency Swarm supports agent tracking through Langchain callbacks, helping you monitor and analyze agent behavior and performance. To get started, install the Langchain package:
 
 ```bash
 pip install langchain
 ```
 
+---
+
 ## Langfuse
 
-Langfuse is an observability platform that allows you to track and analyze the execution of your agents in detail. It provides features like tracing, metrics, and debugging tools.
+Langfuse is a platform for advanced observability, offering tracing, metrics, and debugging tools. To use Langfuse with Agency Swarm:
 
-To use Langfuse with Agency Swarm, follow these steps:
+1. Install the Langfuse package:
+   ```bash
+   pip install langfuse
+   ```
+2. Set environment variables for your secret and public keys (available on the Langfuse dashboard):
+   ```bash
+   export LANGFUSE_SECRET_KEY=<your-secret-key>
+   export LANGFUSE_PUBLIC_KEY=<your-public-key>
+   ```
+3. Initialize tracking in your code:
+   ```python
+   from agency_swarm import init_tracking
+   init_tracking("langfuse")
+   ```
 
-1. Install the langfuse package:
+   You can also pass additional configuration options, for example:
+   ```python
+   init_tracking("langfuse", debug=True, host="custom-host", user_id="user-123")
+   ```
 
-```bash
-pip install langfuse
-```
+For more information, consult the Langfuse documentation at [Langfuse Documentation](https://langfuse.com/docs/integrations/langchain/tracing#add-langfuse-to-your-langchain-application).
 
-2. Set the LANGFUSE_SECRET_KEY and LANGFUSE_PUBLIC_KEY environment variables:
+---
 
-```bash
-export LANGFUSE_SECRET_KEY=<your-secret-key>
-export LANGFUSE_PUBLIC_KEY=<your-public-key>
-```
+## AgentOps [WIP]
 
-You can get your keys from the [Langfuse dashboard](https://cloud.langfuse.com/).
+AgentOps is another observability platform for managing and tracking your agents:
 
-3. Initialize the tracking in your code:
+1. Install the SDK and LangChain dependency:
+   ```bash
+   pip install agentops
+   pip install 'agentops[langchain]'
+   ```
+2. Set your API key in a `.env` file:
+   ```bash
+   AGENTOPS_API_KEY=<YOUR API KEY>
+   ```
+3. Run your agent. Then visit [app.agentops.ai/drilldown](https://app.agentops.ai/drilldown) to observe your agent in action. After the run, AgentOps prints a clickable URL in the console that takes you directly to your session in the dashboard.
 
-```python
-from agency_swarm import init_tracking
+Demo GIF:
+[View Demo](https://github.com/AgentOps-AI/agentops/blob/main/docs/images/link-to-session.gif?raw=true)
 
-init_tracking("langfuse")
-```
-
-You can pass additional configuration options to the Langfuse callback handler:
-
-```python
-init_tracking(
-    "langfuse",
-    debug=True,
-    host="custom-host",
-    user_id="user-123",
-)
-```
-
-For additional parameters and more information on the Langfuse callback handler, see the [Langfuse documentation](https://langfuse.com/docs/integrations/langchain/tracing#add-langfuse-to-your-langchain-application).
+---
 
 ## Local
 
-The local tracker provides a lightweight solution for logging agent activities to a SQLite database.
+The local tracker logs agent activities to a lightweight SQLite database. To use it:
 
-To use the local tracker, you'll need to install the tiktoken package:
+1. Install the tiktoken package:
+   ```bash
+   pip install tiktoken
+   ```
+2. Initialize local tracking:
+   ```python
+   from agency_swarm import init_tracking
+   init_tracking("local")
+   ```
 
-```bash
-pip install tiktoken
-```
+A SQLite database will be created in the current directory. To specify a custom path:
 
-To use the local tracker, simply initialize it in your code:
-
-```python
-from agency_swarm import init_tracking
-
-init_tracking("local")
-```
-
-This will create a SQLite database in the current working directory.
-
-For custom database location:
-
-```python
-from agency_swarm import init_tracking
-
-init_tracking("local", db_path="path/to/your/database.db")
-```
+   ```python
+   init_tracking("local", db_path="path/to/your/database.db")
+   ```

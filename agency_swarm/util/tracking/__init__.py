@@ -1,3 +1,4 @@
+import logging
 import threading
 from typing import Callable, Literal
 
@@ -6,9 +7,11 @@ from .langchain_types import use_langchain_types
 _callback_handler = None
 _lock = threading.Lock()
 
+logger = logging.getLogger(__name__)
 
-SUPPORTED_TRACKERS = ["langfuse", "local"]
-SUPPORTED_TRACKERS_TYPE = Literal["langfuse", "local"]
+
+SUPPORTED_TRACKERS = ["agentops", "langfuse", "local"]
+SUPPORTED_TRACKERS_TYPE = Literal["agentops", "langfuse", "local"]
 
 
 def get_callback_handler():
@@ -27,16 +30,24 @@ def init_tracking(tracker_name: SUPPORTED_TRACKERS_TYPE, **kwargs):
     if tracker_name not in SUPPORTED_TRACKERS:
         raise ValueError(f"Invalid tracker name: {tracker_name}")
 
+    logger.info(f"Initializing tracking with {tracker_name}...")
+
     use_langchain_types()
 
     if tracker_name == "local":
         from .local_callback_handler import LocalCallbackHandler
 
-        set_callback_handler(lambda: LocalCallbackHandler(**kwargs))
-    elif tracker_name == "langfuse":
-        from langfuse.callback import CallbackHandler as LangfuseCallbackHandler
+        handler_class = LocalCallbackHandler
+    elif tracker_name == "agentops":
+        from agentops import LangchainCallbackHandler
 
-        set_callback_handler(lambda: LangfuseCallbackHandler(**kwargs))
+        handler_class = LangchainCallbackHandler
+    elif tracker_name == "langfuse":
+        from langfuse.callback import CallbackHandler
+
+        handler_class = CallbackHandler
+
+    set_callback_handler(lambda: handler_class(**kwargs))
 
 
 __all__ = [

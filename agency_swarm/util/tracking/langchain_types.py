@@ -51,11 +51,6 @@ def use_langchain_types() -> None:
     from langchain.schema import AgentFinish as LangchainAgentFinish
     from langchain.schema import HumanMessage as LangchainHumanMessage
 
-    # Call model_rebuild on these imported classes to resolve forward references
-    LangchainAgentAction.model_rebuild()
-    LangchainAgentFinish.model_rebuild()
-    LangchainHumanMessage.model_rebuild()
-
     AgentAction.set_implementation(LangchainAgentAction)
     AgentFinish.set_implementation(LangchainAgentFinish)
     HumanMessage.set_implementation(LangchainHumanMessage)

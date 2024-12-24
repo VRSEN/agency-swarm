@@ -5,7 +5,7 @@ import os
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import List, Type, Union
+from typing import Any, Type, Union
 from uuid import UUID
 
 from openai import APIError, BadRequestError
@@ -89,10 +89,10 @@ class Thread:
 
     def get_completion_stream(
         self,
-        message: Union[str, List[dict], None],
+        message: Union[str, list[dict], None],
         event_handler: Type[AgencyEventHandler] | None = None,
-        message_files: List[str] = None,
-        attachments: List[Attachment] | None = None,
+        message_files: list[str] = None,
+        attachments: list[Attachment] | None = None,
         recipient_agent: Agent = None,
         additional_instructions: str = None,
         tool_choice: AssistantToolChoice = None,
@@ -112,9 +112,9 @@ class Thread:
 
     def get_completion(
         self,
-        message: Union[str, List[dict], None],
-        message_files: List[str] = None,
-        attachments: List[dict] | None = None,
+        message: Union[str, list[dict], None],
+        message_files: list[str] = None,
+        attachments: list[dict] | None = None,
         recipient_agent: Union[Agent, None] = None,
         additional_instructions: str = None,
         event_handler: Type[AgencyEventHandler] | None = None,
@@ -178,6 +178,7 @@ class Thread:
         )
 
         chain_run_id = self._run.id
+        final_output = None  # Track the final output
 
         # Chain start
         if self.callback_handler:
@@ -198,29 +199,24 @@ class Thread:
 
         # chat model start callback
         if self.callback_handler:
-            chat_messages = []
             if isinstance(message, str):
-                chat_messages = [[HumanMessage(content=message)]]
-
-                kwargs = {
-                    "invocation_params": {
-                        "_type": "openai",
-                        "model": self._run.model,
-                        "temperature": self._run.temperature,
-                    },
-                    "name": recipient_agent.name if recipient_agent else "Unknown",
-                }
+                agent_name = recipient_agent.name if recipient_agent else "Unknown"
 
                 self.callback_handler.on_chat_model_start(
-                    serialized={"name": kwargs["name"], "id": [self._run.id]},
-                    messages=chat_messages,
+                    serialized={"name": agent_name, "id": [self._run.id]},
+                    messages=[[HumanMessage(content=message)]],
                     run_id=self._run.id,
                     parent_run_id=chain_run_id,
                     metadata={
                         "agent_name": self.agent.name,
                         "recipient_agent_name": recipient_agent.name,
                     },
-                    **kwargs,
+                    invocation_params={
+                        "_type": "openai",
+                        "model": self._run.model,
+                        "temperature": self._run.temperature,
+                    },
+                    name=agent_name,
                 )
 
         try:
@@ -230,13 +226,12 @@ class Thread:
             while True:
                 self._run_until_done()
 
-                # function execution
                 if self._run.status == "requires_action":
                     self._called_recepients = []
                     tool_calls = (
                         self._run.required_action.submit_tool_outputs.tool_calls
                     )
-                    tool_outputs_and_names = []  # list of tuples (name, tool_output)
+                    tool_outputs_and_names: list[tuple[str, Any]] = []
 
                     self._track_tool_calls(tool_calls, chain_run_id)
 
@@ -309,23 +304,8 @@ class Thread:
                                 output = yield from handle_output(tool_call, output)
                                 if output_as_result:
                                     self._cancel_run()
-                                    # chain end
-                                    if self.callback_handler:
-                                        self.callback_handler.on_chain_end(
-                                            outputs={"response": output},
-                                            run_id=chain_run_id,
-                                            parent_run_id=parent_run_id,
-                                        )
-                                        finish = AgentFinish(
-                                            return_values={"response": output},
-                                            log=output,
-                                        )
-                                        self.callback_handler.on_agent_finish(
-                                            finish=finish,
-                                            run_id=self._run.id,
-                                            parent_run_id=chain_run_id,
-                                        )
-                                    return output
+                                    final_output = output
+                                    break
                     else:
                         sync_tool_calls += async_tool_calls
 
@@ -354,22 +334,11 @@ class Thread:
                         output = yield from handle_output(tool_call, output)
                         if output_as_result:
                             self._cancel_run()
-                            # chain end
-                            if self.callback_handler:
-                                self.callback_handler.on_chain_end(
-                                    outputs={"response": output},
-                                    run_id=chain_run_id,
-                                    parent_run_id=parent_run_id,
-                                )
-                                finish = AgentFinish(
-                                    return_values={"response": output}, log=output
-                                )
-                                self.callback_handler.on_agent_finish(
-                                    finish=finish,
-                                    run_id=self._run.id,
-                                    parent_run_id=chain_run_id,
-                                )
-                            return output
+                            final_output = output
+                            break
+
+                    if final_output is not None:
+                        break
 
                     tool_outputs = [t for _, t in tool_outputs_and_names]
                     tool_names = [n for n, _ in tool_outputs_and_names]
@@ -547,23 +516,35 @@ class Thread:
                                 )
                                 continue
 
-                    # chain end
-                    if self.callback_handler:
-                        self.callback_handler.on_chain_end(
-                            outputs={"response": last_message},
-                            run_id=chain_run_id,
-                            parent_run_id=parent_run_id,
-                        )
-                        # agent finish
-                        finish = AgentFinish(
-                            return_values={"response": last_message}, log=last_message
-                        )
-                        self.callback_handler.on_agent_finish(
-                            finish=finish,
-                            run_id=self._run.id,
-                            parent_run_id=chain_run_id,
-                        )
-                    return last_message
+                    if final_output is None:
+                        final_output = last_message
+                    break
+
+            # Ensure final_output is a string
+            if inspect.isgenerator(final_output):
+                final_output = "".join(list(final_output))
+            elif not isinstance(final_output, str):
+                final_output = str(final_output)
+
+            # Only fire callbacks once at the end
+            if self.callback_handler:
+                self.callback_handler.on_chain_end(
+                    outputs={"response": final_output},
+                    run_id=chain_run_id,
+                    parent_run_id=parent_run_id,
+                )
+                finish = AgentFinish(
+                    return_values={"response": final_output},
+                    log=final_output,
+                )
+                self.callback_handler.on_agent_finish(
+                    finish=finish,
+                    run_id=self._run.id,
+                    parent_run_id=chain_run_id,
+                )
+
+            return final_output
+
         except Exception as e:
             # chain error
             if self.callback_handler:
@@ -720,7 +701,7 @@ class Thread:
         raise Exception("No assistant message found in the thread")
 
     def create_message(
-        self, message: str, role: str = "user", attachments: List[dict] = None
+        self, message: str, role: str = "user", attachments: list[dict] = None
     ):
         try:
             return self.client.beta.threads.messages.create(
@@ -921,7 +902,7 @@ class Thread:
 
         return all_messages
 
-    def _track_tool_calls(self, tool_calls: List[ToolCall], chain_run_id: str) -> None:
+    def _track_tool_calls(self, tool_calls: list[ToolCall], parent_run_id: str) -> None:
         """Send agent_action before each tool call"""
         if not self.callback_handler:
             return
@@ -936,5 +917,5 @@ class Thread:
             self.callback_handler.on_agent_action(
                 action=action,
                 run_id=self._run.id,
-                parent_run_id=chain_run_id,
+                parent_run_id=parent_run_id,
             )

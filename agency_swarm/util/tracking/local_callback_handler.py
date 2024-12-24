@@ -422,7 +422,7 @@ class LocalCallbackHandler:
         parent_run_id: Optional[UUID] = None,
         **kwargs: Any,
     ) -> Any:
-        docs_json = json.dumps([doc.dict() for doc in documents])
+        docs_json = json.dumps([doc.model_dump() for doc in documents])
         self._update_event(
             run_id, set_end_time=True, parent_run_id=parent_run_id, documents=docs_json
         )
