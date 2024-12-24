@@ -292,7 +292,7 @@ class LocalCallbackHandler:
         metadata: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> Any:
-        msg_data = [[m.model_dump() for m in turn] for turn in messages]
+        msg_data = [[m.dict() for m in turn] for turn in messages]
         model = kwargs.get("invocation_params", {}).get("model", DEFAULT_MODEL)
         prompt_tokens = sum(
             self._count_message_tokens(turn, model) for turn in msg_data

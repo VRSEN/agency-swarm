@@ -184,7 +184,7 @@ class Thread:
         if self.callback_handler:
             self.callback_handler.on_chain_start(
                 serialized={
-                    "name": f"Thread.get_completion -> {recipient_agent.name}",
+                    "name": f"{self.agent.name} -> {recipient_agent.name}",
                     "id": [self._run.id],
                 },
                 inputs={"message": message},
