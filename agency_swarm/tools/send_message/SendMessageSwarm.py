@@ -20,7 +20,7 @@ class SendMessageSwarm(SendMessageBase):
 
         # submit tool output
         try:
-            thread._submit_tool_outputs(
+            thread.submit_tool_outputs(
                 tool_outputs=[
                     {
                         "tool_call_id": self._tool_call.id,
@@ -38,7 +38,7 @@ class SendMessageSwarm(SendMessageBase):
 
         try:
             # cancel run
-            thread._cancel_run()
+            thread.cancel_run()
 
             # change recipient agent in thread
             thread.recipient_agent = recipient_agent

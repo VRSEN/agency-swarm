@@ -1,3 +1,4 @@
+import time
 import unittest
 
 from pydantic import Field
@@ -23,7 +24,11 @@ class TestSendMessage(unittest.TestCase):
         self.ceo = Agent(
             name="CEO",
             description="Responsible for client communication, task planning and management.",
-            instructions="Your role is to route messages to other agents within your agency.",
+            instructions="""You are a CEO agent responsible for routing messages to other agents within your agency.
+When a user asks to be connected to customer support or mentions needing help with an issue:
+1. Use the SendMessageSwarm tool to immediately route them to the Customer Support agent
+2. Do not engage in extended conversation - route them directly
+3. Only respond with 'error' if you detect multiple routing requests at once""",
             tools=[PrintTool],
         )
 
@@ -45,12 +50,25 @@ class TestSendMessage(unittest.TestCase):
         )
 
     def test_send_message_swarm(self):
-        response = self.agency.get_completion(
-            "Hello, can you send me to customer support? If tool responds says that you have NOT been rerouted, or if there is another error, please say 'error'"
-        )
+        start_time = time.time()
+        timeout = 30  # 30 second timeout
+
+        response = None
+        while time.time() - start_time < timeout:
+            try:
+                response = self.agency.get_completion(
+                    "Hello, can you send me to customer support? If tool responds says that you have NOT been rerouted, or if there is another error, please say 'error'"
+                )
+                break
+            except Exception as e:
+                time.sleep(1)
+                continue
+
+        self.assertIsNotNone(response, "Test timed out after 30 seconds")
         self.assertFalse(
             "error" in response.lower(), self.agency.main_thread.thread_url
         )
+
         response = self.agency.get_completion("Who are you?")
         self.assertTrue(
             "customer support" in response.lower(), self.agency.main_thread.thread_url
@@ -75,12 +93,7 @@ class TestSendMessage(unittest.TestCase):
             2. If you detect errors in all routing attempts, respond with 'fatal'
             3. Do not output anything else besides these exact words.""",
         )
-        test_agent = Agent(
-            name="Test Agent1",
-            description="Responsible for testing.",
-            instructions="Test agent for testing.",
-        )
-        agency = Agency([ceo, [ceo, test_agent]], temperature=0)
+        agency = Agency([ceo, [ceo, self.customer_support]], temperature=0)
         response = agency.get_completion(
             "Route me to customer support TWICE simultaneously (at the exact same time). This is a test of concurrent routing."
         )

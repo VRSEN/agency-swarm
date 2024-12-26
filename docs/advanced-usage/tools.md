@@ -167,7 +167,7 @@ Tool factory is a class that allows you to create tools from different sources. 
     This method is not recommended, as it does not provide the same level of type checking, error correction and tool descriptions as Instructor. However, it is still possible to use this method if you prefer.
 
     ```python
-    from langchain.tools import YouTubeSearchTool
+    from langchain_community.tools import YouTubeSearchTool
     from agency_swarm.tools import ToolFactory
 
     LangchainTool = ToolFactory.from_langchain_tool(YouTubeSearchTool)
