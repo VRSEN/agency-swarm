@@ -43,7 +43,6 @@ def init_tracking(tracker_name: SUPPORTED_TRACKERS_TYPE, **kwargs):
         from agentops import LangchainCallbackHandler
 
         handler_class = LangchainCallbackHandler
-        kwargs["ignore_chat_model"] = True
 
     elif tracker_name == "langfuse":
         from langfuse.callback import CallbackHandler

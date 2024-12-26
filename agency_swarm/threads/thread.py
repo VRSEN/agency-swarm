@@ -22,7 +22,6 @@ from agency_swarm.util.streaming.agency_event_handler import AgencyEventHandler
 from agency_swarm.util.tracking import get_callback_handler
 from agency_swarm.util.tracking.langchain_types import (
     AgentAction,
-    AgentFinish,
     HumanMessage,
 )
 
@@ -297,6 +296,11 @@ class Thread:
         response_format: dict | None = None,
     ):
         try:
+            model_name = (
+                self.agent.model
+                if isinstance(self.agent, Agent)
+                else recipient_agent.model
+            )
             if event_handler:
                 with self.client.beta.threads.runs.stream(
                     thread_id=self.id,
@@ -315,6 +319,7 @@ class Thread:
                         "sender_agent_name": self.agent.name,
                         "recipient_agent_name": recipient_agent.name,
                         "run_status": "created",
+                        "ls_model_name": model_name,
                     },
                     response_format=response_format,
                 ) as stream:
@@ -336,6 +341,7 @@ class Thread:
                         "sender_agent_name": self.agent.name,
                         "recipient_agent_name": recipient_agent.name,
                         "run_status": "created",
+                        "ls_model_name": model_name,
                     },
                 )
                 self._run = self.client.beta.threads.runs.poll(
@@ -500,6 +506,7 @@ class Thread:
                     "agent_name": self.agent.name,
                     "recipient_agent_name": recipient_agent.name,
                     "run_status": self._run.status,
+                    "ls_model_name": self._run.model,
                 },
             )
 
@@ -522,6 +529,7 @@ class Thread:
                     "agent_name": self.agent.name,
                     "recipient_agent_name": recipient_agent.name,
                     "run_status": self._run.status,
+                    "ls_model_name": self._run.model,
                 },
             )
 
@@ -914,6 +922,7 @@ class Thread:
                     "agent_name": self.agent.name,
                     "recipient_agent_name": recipient_agent.name,
                     "run_status": self._run.status,
+                    "ls_model_name": self._run.model,
                 },
             )
 
@@ -939,6 +948,7 @@ class Thread:
                     "agent_name": self.agent.name,
                     "recipient_agent_name": recipient_agent.name,
                     "run_status": self._run.status,
+                    "ls_model_name": self._run.model,
                 },
                 invocation_params={
                     "_type": "openai",
