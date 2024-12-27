@@ -1,0 +1,99 @@
+---
+title: "FAQ"
+description: "Find answers to common questions about Agency Swarm."
+icon: "question"
+---
+
+Find answers to common questions about Agency Swarm.
+
+<AccordionGroup defaultOpen={true}>
+
+<Accordion title="How can I restart or continue an agency creation run with Genesis after encountering an error?" icon="rotate">
+**A**: You can implement thread callbacks to save and load thread IDs in a local file. This allows you to maintain conversation context even after interruptions. Here's the basic approach:
+
+- Create load and save callback functions
+- Use these callbacks in your `GenesisAgency` initialization
+- Control threads via a `chat_id` parameter
+</Accordion>
+
+<Accordion title="How do I implement thread callbacks for conversation continuity?" icon="messages">
+**A**: You can use threads callbacks to save thread ids in a local file:
+
+Create load function:
+
+```python
+def load_threads(chat_id):
+    if os.path.exists(f"{chat_id}_threads.json"):
+        with open(f"{chat_id}_threads.json", "r") as file:
+            return json.load(file)
+    return []
+```
+
+Create save function:
+
+```python
+def save_threads(new_threads, chat_id):
+    with open(f"{chat_id}_threads.json", "w") as file:
+        json.dump(new_threads, file)
+```
+
+Implement in agency:
+
+```python
+agency = GenesisAgency(
+    with_browsing=False,
+    threads_callbacks={
+        'load': lambda: load_threads(chat_id=chat_id),
+        'save': lambda new_threads: save_threads(new_threads, chat_id=chat_id)
+    })
+```
+
+Note: These code examples are simplified for illustration. Production implementations should include proper error handling, security measures, and scalability considerations.
+
+</Accordion>
+
+<Accordion title="Should I use local file storage for thread management in a production environment?" icon="rocket">
+**A**: No, for production environments, especially with multiple users or stateless containers, you should:
+
+- Use a database instead of local file storage
+- Implement proper [state management](/core-framework/state-management)
+- Handle concurrent users appropriately
+</Accordion>
+
+<Accordion title="Will previous messages be visible in Gradio when continuing a conversation?" icon="comments">
+  **A**: No, previous messages won't be displayed in the Gradio interface. However, the agents will retain the context
+  of these messages and continue the conversation appropriately.
+</Accordion>
+
+<Accordion title="How can I serve an Agency as an API using FastAPI?" icon="book">
+**A**: Here's an example of how to serve an Agency as an API using FastAPI:
+
+- Define the agency within the chat endpoint:
+
+```python
+@app.post("/chat")
+async def chat(user_request: UserRequest):
+    chat_id = user_request.chat_id or str(uuid4())
+    agency = Agency([...],
+        threads_callbacks={
+            'load': lambda: load_threads(chat_id=chat_id),
+            'save': lambda new_threads: save_threads(new_threads, chat_id=chat_id)
+        })
+    response = agency.get_completion(user_request.message)
+    return {"chat_id": chat_id, "response": response}
+```
+
+</Accordion>
+
+</AccordionGroup>
+
+## Getting Support
+
+<CardGroup cols={2}>
+  <Card title="Community Support" icon="discord" href="https://discord.gg/cw2xBaWfFM">
+    Join our Discord community for quick help and discussions
+  </Card>
+  <Card title="Professional Services" icon="briefcase" href="https://agents.vrsen.ai/">
+    Get professional help with our Agents-as-a-Service subscription
+  </Card>
+</CardGroup>

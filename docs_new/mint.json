@@ -1,0 +1,160 @@
+{
+  "name": "Agency Swarm",
+  "theme": "prism",
+  "layout": "sidenav",
+  "logo": {
+    "dark": "/images/agencii_logo_dark.svg",
+    "light": "/images/agencii_logo_light.svg",
+    "href": "https://github.com/VRSEN/agency-swarm"
+  },
+  "favicon": "/images/favicon.svg",
+  "colors": {
+    "primary": "#0C102D",
+    "light": "#FCD53B",
+    "dark": "#B76E00",
+    "anchors": {
+      "from": "#737373",
+      "to": "#D4B74E"
+    },
+    "background": {
+      "default": "#F9F9F9",
+      "dark": "#0C102D"
+    }
+  },
+  "seo": {
+    "indexHiddenPages": false
+  },
+  "modeToggle": {
+    "default": "dark",
+    "isHidden": false
+  },
+  "feedback": {
+    "suggestEdit": true,
+    "raiseIssue": true,
+    "thumbsRating": true
+  },
+  "topbarCtaButton": {
+    "type": "github",
+    "url": "https://github.com/VRSEN/agency-swarm"
+  },
+  "primaryTab": {
+    "name": "Docs"
+  },
+  "tabs": [
+    {
+      "name": "Tutorials",
+      "url": "tutorials"
+    },
+    {
+      "name": "Extras",
+      "url": "extras"
+    }
+  ],
+  "anchors": [
+    {
+      "name": "Discord Community",
+      "icon": "discourse",
+      "url": "https://discord.gg/cw2xBaWfFM"
+    },
+    {
+      "name": "Changelog",
+      "icon": "timeline",
+      "url": "https://github.com/VRSEN/agency-swarm/releases"
+    }
+  ],
+  "navigation": [
+    {
+      "group": "Welcome",
+      "pages": [
+        "welcome/overview",
+        "welcome/ai-agency-vs-other-frameworks",
+        {
+          "group": "Get Started",
+          "icon": "rocket",
+          "pages": [
+            "welcome/installation",
+            "welcome/getting-started/from-scratch",
+            "welcome/getting-started/genesis-agency",
+            "welcome/getting-started/cursor-ide"
+          ]
+        }
+      ]
+    },
+    {
+      "group": "Core Framework",
+      "pages": [
+        {
+          "group": "Tools",
+          "icon": "wrench",
+          "pages": [
+            "core-framework/tools/overview",
+            {
+              "group": "Custom Tools",
+              "icon": "hammer",
+              "pages": [
+                "core-framework/tools/custom-tools/step-by-step-guide",
+                "core-framework/tools/custom-tools/pydantic-is-all-you-need",
+                "core-framework/tools/custom-tools/best-practices",
+                "core-framework/tools/custom-tools/configuration"
+              ]
+            },
+            "/core-framework/tools/openapi-schemas"
+          ]
+        },
+        "core-framework/agents",
+        "core-framework/agencies",
+        "core-framework/state-management"
+      ]
+    },
+    {
+      "group": "Additional Features",
+      "pages": [
+        "additional-features/asynchronous-execution",
+        "additional-features/shared-state",
+        "additional-features/few-shot-examples",
+        "additional-features/output-validation",
+        "additional-features/streaming",
+        {
+          "group": "Custom Communication Flows",
+          "icon": "comments",
+          "pages": [
+            "additional-features/custom-communication-flows/overview",
+            "additional-features/custom-communication-flows/common-use-cases"
+          ]
+        },
+        "additional-features/azure-openai",
+        "additional-features/open-source-models",
+        "additional-features/deployment-to-production"
+      ]
+    },
+    {
+      "group": "API Reference",
+      "pages": ["api"]
+    },
+    {
+      "group": "Contributing",
+      "pages": ["contributing/contributing"]
+    },
+    {
+      "group": "FAQ",
+      "pages": ["faq"]
+    },
+    {
+      "group": "Tutorials",
+      "pages": ["tutorials/tutorials"]
+    },
+    {
+      "group": "Extras",
+      "pages": ["extras/extras"]
+    }
+  ],
+  "search": {
+    "prompt": "Search Agency Swarm docs"
+  },
+  "footerSocials": {
+    "website": "https://vrsen.ai",
+    "x": "https://x.com/__vrsen__",
+    "github": "https://github.com/VRSEN/agency-swarm",
+    "youtube": "https://youtube.com/@vrsen"
+  }
+}

@@ -1,0 +1,416 @@
+---
+title: "API Reference"
+description: "Gain a deeper understanding of the core classes and methods available in Agency Swarm."
+icon: "book"
+---
+
+## Agency Class
+
+The Agency class manages a collection of agents and facilitates their communication.
+
+```python
+from agency_swarm import Agency
+
+class Agency:
+    def __init__(self,
+                 agency_chart: List,
+                 shared_instructions: str = "",
+                 shared_files: Union[str, List[str]] = None,
+                 async_mode: Literal['threading', "tools_threading"] = None,
+                 settings_path: str = "./settings.json",
+                 settings_callbacks: SettingsCallbacks = None,
+                 threads_callbacks: ThreadsCallbacks = None,
+                 temperature: float = 0.3,
+                 top_p: float = 1.0,
+                 max_prompt_tokens: int = None,
+                 max_completion_tokens: int = None,
+                 truncation_strategy: dict = None):
+        """
+        Initialize an Agency instance.
+
+        Parameters:
+            agency_chart: List defining the hierarchy and interaction of agents
+            shared_instructions: Path to shared instructions markdown file
+            shared_files: Path(s) to folder(s) containing shared files
+            async_mode: 'threading' or 'tools_threading' for async processing
+            settings_path: Path to JSON file for storing agent settings
+            settings_callbacks: Dict with 'load' and 'save' functions for settings
+            threads_callbacks: Dict with 'load' and 'save' functions for threads
+            temperature: Default temperature for all agents
+            top_p: Default top_p value for all agents
+            max_prompt_tokens: Default max tokens for prompts
+            max_completion_tokens: Default max tokens for completions
+            truncation_strategy: Default truncation strategy for agents
+        """
+```
+
+### Key Methods
+
+<CodeGroup>
+
+```python get_completion
+def get_completion(self,
+                  message: str,
+                  message_files: List[str] = None,
+                  yield_messages: bool = False,
+                  recipient_agent: Agent = None,
+                  additional_instructions: str = None,
+                  attachments: List[dict] = None,
+                  tool_choice: dict = None,
+                  verbose: bool = False,
+                  response_format: dict = None):
+    """
+    Get a completion from the agency for a given message.
+
+    Parameters:
+        message: The input message or prompt
+        message_files: List of file IDs to attach
+        yield_messages: Whether to yield intermediate messages
+        recipient_agent: Specific agent to send message to
+        additional_instructions: Extra context for the agent
+        attachments: List of file attachments in OpenAI format
+        tool_choice: Specific tool for the agent to use
+        verbose: Whether to print intermediate messages
+        response_format: Format specification for the response
+
+    Returns:
+        Either a generator of messages or the final response
+    """
+```
+
+```python get_completion_parse
+def get_completion_parse(self,
+                        message: str,
+                        response_format: Type[BaseModel],
+                        message_files: List[str] = None,
+                        recipient_agent: Agent = None,
+                        additional_instructions: str = None,
+                        attachments: List[dict] = None,
+                        tool_choice: dict = None,
+                        verbose: bool = False) -> BaseModel:
+    """
+    Get a completion and parse it into a Pydantic model.
+
+    Parameters:
+        message: The input message or prompt
+        response_format: Pydantic model to parse response into
+        message_files: List of file IDs to attach
+        recipient_agent: Specific agent to send message to
+        additional_instructions: Extra context
+        attachments: List of file attachments in OpenAI format
+        tool_choice: Specific tool for the agent to use
+        verbose: Whether to print intermediate messages
+
+    Returns:
+        Parsed response in the specified Pydantic model
+    """
+```
+
+```python get_completion_stream
+def get_completion_stream(self,
+                         message: str,
+                         event_handler: type(AgencyEventHandler),
+                         message_files: List[str] = None,
+                         recipient_agent: Agent = None,
+                         additional_instructions: str = None,
+                         attachments: List[dict] = None,
+                         tool_choice: dict = None,
+                         response_format: dict = None):
+    """
+    Stream completions with real-time event handling.
+
+    Parameters:
+        message: The input message or prompt
+        event_handler: Class to handle streaming events
+        message_files: List of file IDs to attach
+        recipient_agent: Specific agent to send message to
+        additional_instructions: Extra context for the agent
+        attachments: List of file attachments in OpenAI format
+        tool_choice: Specific tool for the agent to use
+        response_format: Format specification for the response
+
+    Returns:
+        Final response after streaming completes
+    """
+```
+
+```python run_demo
+def run_demo(self):
+    """
+    Start the agency in terminal mode for demonstration.
+    """
+```
+
+```python demo_gradio
+def demo_gradio(self, height: int = 450, dark_mode: bool = True, **kwargs):
+    """
+    Launch a Gradio web interface for the agency.
+
+    Parameters:
+        height: Height of the chat interface
+        dark_mode: Enable dark mode
+        **kwargs: Additional Gradio interface options
+    """
+```
+
+</CodeGroup>
+
+## Agent Class
+
+The Agent class is the core component of Agency Swarm that represents an AI assistant. Each agent has specific capabilities, tools, and can process files and instructions.
+
+```python
+from agency_swarm import Agent
+
+class Agent:
+    def __init__(self,
+                 name: str = None,
+                 description: str = None,
+                 instructions: str = "",
+                 tools: list = None,
+                 temperature: float = None,
+                 model: str = "gpt-4-0125-preview",
+                 files_folder: Union[List[str], str] = None):
+        """
+        Initialize an Agent instance.
+
+        Parameters:
+            name: The agent's name (defaults to class name if not provided)
+            description: Brief description of the agent's role
+            instructions: Path to markdown file containing agent instructions
+            tools: List of tool classes available to the agent
+            temperature: Controls randomness in responses (0-1)
+            model: OpenAI model to use (defaults to GPT-4)
+            files_folder: Path(s) to folder(s) containing files for the agent
+        """
+```
+
+### Key Methods
+
+<CodeGroup>
+
+```python init_oai
+def init_oai(self):
+    """
+    Initializes or updates the OpenAI assistant with current settings.
+    Must be called before using the agent.
+
+    Returns:
+        self: The agent instance for method chaining
+    """
+```
+
+```python add_tool
+def add_tool(self, tool: Type[BaseTool]):
+    """
+    Add a tool to the agent's capabilities.
+
+    Parameters:
+        tool: Tool class to add (must be a BaseTool subclass)
+
+    Example:
+        agent.add_tool(CustomTool)
+    """
+```
+
+```python delete
+def delete(self):
+    """
+    Deletes the agent and all associated resources.
+    This includes the OpenAI assistant, uploaded files, and settings.
+    """
+```
+
+```python add_shared_instructions
+def add_shared_instructions(self, instructions: str):
+    """
+    Adds shared instructions that will be prepended to the agent's instructions.
+    Useful for giving common context to multiple agents.
+
+    Parameters:
+        instructions: Instructions text to add
+    """
+```
+
+</CodeGroup>
+
+## BaseTool Class
+
+The base class for creating custom tools that agents can use. Tools allow agents to perform specific actions or access external functionality.
+
+```python
+from agency_swarm.tools import BaseTool
+from pydantic import BaseModel
+
+class BaseTool(BaseModel, ABC):
+    """
+    Abstract base class for all tools.
+    Inherits from Pydantic BaseModel for automatic validation.
+    """
+
+    class ToolConfig:
+        strict: bool = False  # Enable strict schema validation
+        one_call_at_a_time: bool = False  # Prevent concurrent calls
+
+    # Shared state and caller agent properties
+    _shared_state: ClassVar[SharedState] = None  # Manages shared state between tools
+    _caller_agent: Any = None  # Reference to the agent using the tool
+    _event_handler: Any = None  # Handles tool events
+```
+
+### Key Methods
+
+<CodeGroup>
+
+```python openai_schema
+@classmethod
+@property
+def openai_schema(cls) -> dict:
+    """
+    Generate OpenAI function schema from the tool class.
+    Automatically extracts documentation from class and parameter docstrings.
+
+    The schema includes:
+    - Tool name and description
+    - Parameter definitions with types and descriptions
+    - Required parameters list
+    - Strict validation settings (if enabled)
+
+    Returns:
+        Dictionary containing tool schema in OpenAI format
+    """
+```
+
+```python run
+@abstractmethod
+def run(self, **kwargs):
+    """
+    Execute the tool's main functionality.
+    Must be implemented by subclasses.
+
+    Parameters:
+        **kwargs: Tool-specific parameters defined in the class
+
+    Returns:
+        Tool-specific return value
+    """
+```
+
+</CodeGroup>
+
+## ToolFactory Class
+
+The ToolFactory class provides convenient methods to create tools from various sources like OpenAPI specifications, LangChain tools, or Python files. This makes it easy to integrate external APIs and existing tools into your agents.
+
+```python
+from agency_swarm.tools import ToolFactory
+
+class ToolFactory:
+    """
+    Utility class for creating tools from various sources including OpenAPI specs,
+    LangChain tools, and local Python files.
+    """
+```
+
+### Key Methods
+
+<CodeGroup>
+
+```python from_langchain_tools
+@staticmethod
+def from_langchain_tools(tools: List) -> List[Type[BaseTool]]:
+    """
+    Convert LangChain tools into Agency Swarm tools.
+
+    Parameters:
+        tools: List of LangChain tool instances or classes
+
+    Returns:
+        List of converted BaseTool classes
+
+    Example:
+        from langchain.tools import DuckDuckGoSearchTool
+        tools = ToolFactory.from_langchain_tools([DuckDuckGoSearchTool()])
+    """
+```
+
+```python from_openapi_schema
+@staticmethod
+def from_openapi_schema(
+    schema: Union[str, dict],
+    headers: Dict[str, str] = None,
+    params: Dict[str, Any] = None,
+    strict: bool = False
+) -> List[Type[BaseTool]]:
+    """
+    Create tools from an OpenAPI specification. Each endpoint becomes a separate tool.
+
+    Parameters:
+        schema: OpenAPI schema as string or dict
+        headers: Optional request headers (e.g., authentication)
+        params: Optional query parameters to include in all requests
+        strict: Enable strict schema validation
+
+    Returns:
+        List of generated tool classes
+
+    Example:
+        # Create tools from a Swagger/OpenAPI spec
+        schema = '''
+        {
+          "openapi": "3.0.0",
+          "paths": {
+            "/search": {
+              "get": {
+                "operationId": "search",
+                "parameters": [
+                  {
+                    "name": "q",
+                    "in": "query",
+                    "required": true,
+                    "schema": {"type": "string"}
+                  }
+                ]
+              }
+            }
+          }
+        }
+        '''
+        tools = ToolFactory.from_openapi_schema(
+            schema,
+            headers={"Authorization": "Bearer token"}
+        )
+    """
+```
+
+```python get_openapi_schema
+@staticmethod
+def get_openapi_schema(
+    tools: List[Type[BaseTool]],
+    url: str,
+    title: str = "Agent Tools",
+    description: str = "A collection of tools."
+) -> str:
+    """
+    Generate an OpenAPI specification from a list of tools. This is useful
+    for documenting your tools or creating an API from them.
+
+    Parameters:
+        tools: List of tool classes to include
+        url: Base URL for the API endpoints
+        title: Schema title
+        description: Schema description
+
+    Returns:
+        OpenAPI schema as JSON string
+
+    Example:
+        schema = ToolFactory.get_openapi_schema(
+            tools=[SearchTool, CalculatorTool],
+            url="https://api.example.com",
+            title="Search and Calculator API"
+        )
+    """
+```
+
+</CodeGroup>
