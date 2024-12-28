@@ -32,6 +32,7 @@ PERPLEXITYAI_API_KEY=your_perplexityai_api_key
 ANTHROPIC_API_KEY=your_anthropic_api_key
 TOGETHER_API_KEY=your_together_api_key
 GROQ_API_KEY=your_groq_api_key
+AIML_API_KEY=your_aiml_api_key
 ```
 
 **4. Install the Astra Assistants API and gradio:**
@@ -67,6 +68,7 @@ ceo = Agent(name="ceo",
             # model = 'perplexity/llama-3-8b-instruct'
             # model = 'anthropic/claude-3-5-sonnet-20240620'
             # model = 'groq/mixtral-8x7b-32768'
+            # model = You can visit our website https://aimlapi.com and choose from over 200 models to suit your preferences.
             # model="gpt-4o",
             files_folder="path/to/your/files"
             )
