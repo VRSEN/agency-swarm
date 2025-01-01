@@ -6,11 +6,10 @@ import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Generator, Type, Union
-from uuid import UUID
 
 from openai import APIError, BadRequestError
 from openai.types.beta import AssistantToolChoice
-from openai.types.beta.threads.message import Attachment
+from openai.types.beta.threads.message import Attachment, Message
 from openai.types.beta.threads.runs.tool_call import ToolCall
 
 from agency_swarm.agents import Agent
@@ -19,11 +18,7 @@ from agency_swarm.tools import CodeInterpreter, FileSearch
 from agency_swarm.user import User
 from agency_swarm.util.oai import get_openai_client
 from agency_swarm.util.streaming.agency_event_handler import AgencyEventHandler
-from agency_swarm.util.tracking import get_callback_handler
-from agency_swarm.util.tracking.langchain_types import (
-    AgentAction,
-    HumanMessage,
-)
+from agency_swarm.util.tracking.tracking_manager import TrackingManager
 
 
 class Thread:
@@ -68,7 +63,7 @@ class Thread:
             "incomplete",
         ]
 
-        self.callback_handler = get_callback_handler()
+        self._tracking_manager = TrackingManager()
 
     def init_thread(self):
         self._called_recepients = []
@@ -88,7 +83,7 @@ class Thread:
 
     def get_completion_stream(
         self,
-        message: Union[str, list[dict], None],
+        message: str | list[dict] | None,
         event_handler: Type[AgencyEventHandler] | None = None,
         message_files: list[str] = None,
         attachments: list[Attachment] | None = None,
@@ -111,21 +106,24 @@ class Thread:
 
     def get_completion(
         self,
-        message: Union[str, list[dict], None],
+        message: str | list[dict] | None,
         message_files: list[str] = None,
         attachments: list[dict] | None = None,
-        recipient_agent: Union[Agent, None] = None,
+        recipient_agent: Agent | None = None,
         additional_instructions: str = None,
         event_handler: Type[AgencyEventHandler] | None = None,
         tool_choice: AssistantToolChoice = None,
         yield_messages: bool = False,
         response_format: dict | None = None,
-        parent_run_id: UUID | None = None,
+        parent_run_id: str | None = None,
     ) -> Generator[MessageOutput, None, None] | str:
         """
         Primary entry point for sending messages to the recipient agent and handling
         the completion (including tool calls, validations, and re-tries).
         """
+        if event_handler and self._tracking_manager.callback_handler:
+            raise Exception("Observability is not supported for streaming")
+
         # 1. Prepare basic thread and attachments
         self.init_thread()
         if not recipient_agent:
@@ -141,6 +139,7 @@ class Thread:
 
         # 3. Print debug info and send user message
         self._debug_print_sender_and_url(recipient_agent)
+        message_obj = None
         if message:
             message_obj = self.create_message(
                 message=message, role="user", attachments=attachments
@@ -160,43 +159,40 @@ class Thread:
         )
         final_output = None
 
-        # 5. Fire chain start callbacks
-        self._on_chain_start(message, recipient_agent, parent_run_id)
+        # 5. Fire run start callbacks
+        self._tracking_manager.start_run(
+            message,
+            self.agent.name,
+            recipient_agent.name,
+            run_id=self._run.id,
+            parent_run_id=parent_run_id,
+            message_obj=message_obj,
+            model=self._run.model,
+            temperature=self._run.temperature,
+        )
 
-        # 6. Fire chat model start callbacks
-        self._on_chat_model_start(message, recipient_agent, parent_run_id)
+        # 6. Main try/except around the run loop
+        final_output = yield from self._execute_main_loop(
+            yield_messages=yield_messages,
+            recipient_agent=recipient_agent,
+            event_handler=event_handler,
+            parent_run_id=parent_run_id,
+            additional_instructions=additional_instructions,
+            tool_choice=tool_choice,
+            response_format=response_format,
+        )
 
-        # 7. Main try/except around the run loop
-        try:
-            final_output = yield from self._execute_main_loop(
-                yield_messages=yield_messages,
-                recipient_agent=recipient_agent,
-                event_handler=event_handler,
-                parent_run_id=parent_run_id,
-                additional_instructions=additional_instructions,
-                tool_choice=tool_choice,
-                response_format=response_format,
-            )
+        if final_output is None:
+            raise Exception("No output was generated from the execution loop")
 
-            if final_output is None:
-                raise Exception("No output was generated from the execution loop")
-
-            # 8. Final chain/agent finish callbacks
-            self._on_chain_end(final_output, parent_run_id)
-
-            return final_output
-
-        except Exception as e:
-            # chain error
-            self._on_chain_error(e, parent_run_id)
-            raise e
+        return final_output
 
     def _execute_main_loop(
         self,
         yield_messages: bool,
         recipient_agent: Agent,
         event_handler: Type[AgencyEventHandler] | None,
-        parent_run_id: UUID | None,
+        parent_run_id: str | None,
         additional_instructions: str | None,
         tool_choice: AssistantToolChoice | None,
         response_format: dict | None,
@@ -296,11 +292,6 @@ class Thread:
         response_format: dict | None = None,
     ):
         try:
-            model_name = (
-                self.agent.model
-                if isinstance(self.agent, Agent)
-                else recipient_agent.model
-            )
             if event_handler:
                 with self.client.beta.threads.runs.stream(
                     thread_id=self.id,
@@ -314,12 +305,6 @@ class Thread:
                     temperature=temperature,
                     extra_body={
                         "parallel_tool_calls": recipient_agent.parallel_tool_calls
-                    },
-                    metadata={
-                        "sender_agent_name": self.agent.name,
-                        "recipient_agent_name": recipient_agent.name,
-                        "run_status": "created",
-                        "ls_model_name": model_name,
                     },
                     response_format=response_format,
                 ) as stream:
@@ -337,12 +322,6 @@ class Thread:
                     temperature=temperature,
                     parallel_tool_calls=recipient_agent.parallel_tool_calls,
                     response_format=response_format,
-                    metadata={
-                        "sender_agent_name": self.agent.name,
-                        "recipient_agent_name": recipient_agent.name,
-                        "run_status": "created",
-                        "ls_model_name": model_name,
-                    },
                 )
                 self._run = self.client.beta.threads.runs.poll(
                     thread_id=self.id,
@@ -441,8 +420,11 @@ class Thread:
         raise Exception("No assistant message found in the thread")
 
     def create_message(
-        self, message: str, role: str = "user", attachments: list[dict] = None
-    ):
+        self,
+        message: str | list[dict],
+        role: str = "user",
+        attachments: list[dict] = None,
+    ) -> Message:
         try:
             return self.client.beta.threads.messages.create(
                 thread_id=self.id, role=role, content=message, attachments=attachments
@@ -475,11 +457,13 @@ class Thread:
         recipient_agent=None,
         event_handler=None,
         tool_outputs_and_names=None,
-    ):
+    ) -> tuple[str | Generator[MessageOutput, None, None], bool]:
         if not recipient_agent:
             recipient_agent = self.recipient_agent
         if tool_outputs_and_names is None:
             tool_outputs_and_names = {}
+
+        is_retriever = tool_call.type == "file_search"
 
         tool_name = tool_call.function.name
         funcs = recipient_agent.functions
@@ -487,93 +471,78 @@ class Thread:
 
         if not tool:
             error_message = f"Error: Function {tool_call.function.name} not found."
-            if self.callback_handler:
-                self.callback_handler.on_tool_error(
-                    error=Exception(error_message),
-                    run_id=tool_call.id,
-                    parent_run_id=self._run.id,
-                )
+            self._tracking_manager.track_tool_error(
+                error=Exception(error_message),
+                tool_call=tool_call,
+                parent_run_id=self._run.id,
+                is_retriever=is_retriever,
+            )
             return (error_message, False)
 
-        # on_tool_start
-        if self.callback_handler:
-            self.callback_handler.on_tool_start(
-                serialized={"name": tool_call.function.name},
-                input_str=tool_call.function.arguments,
-                run_id=tool_call.id,
-                parent_run_id=self._run.id,
-                metadata={
-                    "agent_name": self.agent.name,
-                    "recipient_agent_name": recipient_agent.name,
-                    "run_status": self._run.status,
-                    "ls_model_name": self._run.model,
-                },
-            )
-
-        args = tool_call.function.arguments
-        args = json.loads(args) if args else {}
-        tool_instance = tool(**args)
-        tool_instance._caller_agent = recipient_agent
-        tool_instance._event_handler = event_handler
-        tool_instance._tool_call = tool_call
-
-        # If this is a retriever (FileSearch), call retriever_start
-        is_retriever = isinstance(tool_instance, FileSearch)
-        if is_retriever and self.callback_handler:
-            self.callback_handler.on_retriever_start(
-                serialized={"name": tool_call.function.name},
-                query=str(args),
-                run_id=self._run.id,
-                parent_run_id=self._run.id,
-                metadata={
-                    "agent_name": self.agent.name,
-                    "recipient_agent_name": recipient_agent.name,
-                    "run_status": self._run.status,
-                    "ls_model_name": self._run.model,
-                },
-            )
-
         try:
+            # init tool
+            args = tool_call.function.arguments
+            args = json.loads(args) if args else {}
+            tool_instance = tool(**args)
+
+            # check if the tool is already called
+            for tool_name in [name for name, _ in tool_outputs_and_names]:
+                if tool_name == tool_name and (
+                    hasattr(tool_instance, "ToolConfig")
+                    and hasattr(tool_instance.ToolConfig, "one_call_at_a_time")
+                    and tool_instance.ToolConfig.one_call_at_a_time
+                ):
+                    error_message = f"Error: Function {tool_name} is already called. You can only call this function once at a time. Please wait for the previous call to finish before calling it again."
+                    self._tracking_manager.track_tool_error(
+                        error=Exception(error_message),
+                        tool_call=tool_call,
+                        parent_run_id=self._run.id,
+                        is_retriever=is_retriever,
+                    )
+                    return (error_message, False)
+
+            # for send message tools, don't allow calling the same recipient agent multiple times
+            if tool_name.startswith("SendMessage"):
+                if tool_instance.recipient.value in self._called_recepients:
+                    error_message = f"Error: Agent {tool_instance.recipient.value} has already been called. You can only call each agent once at a time. Please wait for the previous call to finish before calling it again."
+                    self._tracking_manager.track_tool_error(
+                        error=Exception(error_message),
+                        tool_call=tool_call,
+                        parent_run_id=self._run.id,
+                        is_retriever=is_retriever,
+                    )
+                    return (error_message, False)
+                self._called_recepients.append(tool_instance.recipient.value)
+
+            tool_instance._caller_agent = recipient_agent
+            tool_instance._event_handler = event_handler
+            tool_instance._tool_call = tool_call
+
+            # Track start of tool execution
+            self._tracking_manager.track_tool_start(
+                tool_call=tool_call,
+                run=self._run,
+                agent_name=self.agent.name,
+                recipient_agent_name=recipient_agent.name,
+                is_retriever=is_retriever,
+            )
+
             output = tool_instance.run()
-
-            # If retriever, on_retriever_end
-            if is_retriever and self.callback_handler:
-                docs = output if isinstance(output, list) else []
-                self.callback_handler.on_retriever_end(
-                    documents=docs,
-                    run_id=self._run.id,
-                    parent_run_id=self._run.id,
-                )
-
-            # on_tool_end
-            if self.callback_handler:
-                self.callback_handler.on_tool_end(
-                    output=str(output),
-                    run_id=self._run.id,
-                    parent_run_id=self._run.id,
-                )
-
             return output, tool_instance.ToolConfig.output_as_result
+
         except Exception as e:
             error_message = f"Error: {e}"
             if "For further information visit" in error_message:
                 error_message = error_message.split("For further information visit")[0]
 
-            # If retriever, on_retriever_error
-            if is_retriever and self.callback_handler:
-                self.callback_handler.on_retriever_error(
-                    error=Exception(error_message),
-                    run_id=self._run.id,
-                    parent_run_id=self._run.id,
-                )
+            # Track error
+            self._tracking_manager.track_tool_error(
+                error=Exception(error_message),
+                tool_call=tool_call,
+                parent_run_id=self._run.id,
+                is_retriever=is_retriever,
+            )
 
-            # on_tool_error
-            if self.callback_handler:
-                self.callback_handler.on_tool_error(
-                    error=Exception(error_message),
-                    run_id=self._run.id,
-                    parent_run_id=self._run.id,
-                )
             return error_message, False
 
     def _await_coroutines(self, tool_outputs):
@@ -646,30 +615,12 @@ class Thread:
 
         return all_messages
 
-    def _track_tool_calls(self, tool_calls: list[ToolCall], parent_run_id: str) -> None:
-        """Send agent_action before each tool call."""
-        if not self.callback_handler:
-            return
-
-        for tc in tool_calls:
-            args = json.loads(tc.function.arguments) if tc.function.arguments else {}
-            action = AgentAction(
-                tool=tc.function.name,
-                tool_input=args,
-                log=f"Using tool {tc.function.name} with arguments: {args}",
-            )
-            self.callback_handler.on_agent_action(
-                action=action,
-                run_id=self._run.id,
-                parent_run_id=parent_run_id,
-            )
-
     def _handle_run_requires_action(
         self,
         recipient_agent: Agent,
         event_handler: Type[AgencyEventHandler] | None,
         yield_messages: bool,
-        parent_run_id: UUID | None,
+        parent_run_id: str | None,
         additional_instructions: str,
     ) -> Union[str, None, Generator[MessageOutput, None, None]]:
         """
@@ -681,17 +632,22 @@ class Thread:
         tool_calls = self._run.required_action.submit_tool_outputs.tool_calls
         tool_outputs_and_names: list[tuple[str, Any]] = []
 
-        self._track_tool_calls(tool_calls, parent_run_id)
+        self._tracking_manager.track_agent_actions(
+            tool_calls, self._run.id, parent_run_id
+        )
 
         sync_tool_calls, async_tool_calls = self._get_sync_async_tool_calls(
             tool_calls, recipient_agent
         )
 
-        def handle_output(tool_call, output):
+        def handle_output(
+            tool_call: ToolCall, output: str | Generator[Any, None, None]
+        ) -> str | Generator[MessageOutput, None, None]:
             """
             Local helper to handle the output from each tool call.
             Yields messages if yield_messages is True.
             """
+            final_output = None
             if inspect.isgenerator(output):
                 try:
                     while True:
@@ -699,8 +655,9 @@ class Thread:
                         if isinstance(item, MessageOutput) and yield_messages:
                             yield item
                 except StopIteration as e:
-                    output = e.value
+                    final_output = e.value
             else:
+                final_output = output
                 if yield_messages:
                     yield MessageOutput(
                         "function_output",
@@ -712,8 +669,15 @@ class Thread:
 
             for tool_output in tool_outputs_and_names:
                 if tool_output[1]["tool_call_id"] == tool_call.id:
-                    tool_output[1]["output"] = output
-            return output
+                    tool_output[1]["output"] = final_output
+
+            self._tracking_manager.track_tool_end(
+                output=final_output,
+                tool_call=tool_call,
+                parent_run_id=self._run.id,
+                is_retriever=tool_call.type == "file_search",
+            )
+            return final_output
 
         final_output = None
 
@@ -902,62 +866,6 @@ class Thread:
             f"THREAD:[ {sender_name} -> {recipient_agent.name} ]: URL {self.thread_url}"
         )
 
-    def _on_chain_start(
-        self,
-        message: Union[str, list[dict], None],
-        recipient_agent: Agent,
-        parent_run_id: UUID | None,
-    ):
-        """Trigger on_chain_start callback if available."""
-        if self.callback_handler:
-            self.callback_handler.on_chain_start(
-                serialized={
-                    "name": f"{self.agent.name} -> {recipient_agent.name}",
-                    "id": [self._run.id],
-                },
-                inputs={"message": message},
-                run_id=self._run.id,
-                parent_run_id=parent_run_id,
-                metadata={
-                    "agent_name": self.agent.name,
-                    "recipient_agent_name": recipient_agent.name,
-                    "run_status": self._run.status,
-                    "ls_model_name": self._run.model,
-                },
-            )
-
-    def _on_chat_model_start(
-        self,
-        message: Union[str, list[dict], None],
-        recipient_agent: Agent,
-        parent_run_id: UUID | None,
-    ):
-        """Trigger on_chat_model_start callback if message is a string."""
-        if self.callback_handler and isinstance(message, str):
-            agent_name = recipient_agent.name if recipient_agent else "Unknown"
-            self.callback_handler.on_chat_model_start(
-                serialized={"name": agent_name, "id": [self._run.id]},
-                messages=[
-                    [
-                        HumanMessage(content=message)
-                    ]  # TODO: fix this: when parent_run_id is not None, it should be ChatMessage(content=message, role="assistant"). Explanation: because this get_completion is called from a tool call (SendMessageBase) to delegate a task to the subordinate agent.
-                ],
-                run_id=self._run.id,
-                parent_run_id=parent_run_id,
-                metadata={
-                    "agent_name": self.agent.name,
-                    "recipient_agent_name": recipient_agent.name,
-                    "run_status": self._run.status,
-                    "ls_model_name": self._run.model,
-                },
-                invocation_params={
-                    "_type": "openai",
-                    "model": self._run.model,
-                    "temperature": self._run.temperature,
-                },
-                name=agent_name,
-            )
-
     def _try_run_failed_recovery(
         self,
         error_attempts: int,
@@ -966,7 +874,7 @@ class Thread:
         event_handler: Type[AgencyEventHandler] | None,
         tool_choice: AssistantToolChoice | None,
         response_format: dict | None,
-        parent_run_id: UUID | None,
+        parent_run_id: str | None,
     ) -> bool:
         """Attempts to recover from run failures if they match common errors (up to 3 times)."""
         error_message = (
@@ -994,25 +902,22 @@ class Thread:
             return True
         else:
             # chain error
-            if self.callback_handler:
-                self.callback_handler.on_chain_error(
-                    error=Exception("OpenAI Run Failed. Error: " + error_message),
-                    run_id=self._run.id,
-                    parent_run_id=parent_run_id,
-                )
-            return False
-
-    def _on_run_incomplete(self, parent_run_id: UUID | None):
-        """Handle incomplete runs by firing chain error callbacks and raising an exception."""
-        if self.callback_handler:
-            self.callback_handler.on_chain_error(
-                error=Exception(
-                    "OpenAI Run Incomplete. Details: "
-                    + str(self._run.incomplete_details)
-                ),
+            self._tracking_manager.on_chain_error(
+                error=Exception("OpenAI Run Failed. Error: " + error_message),
                 run_id=self._run.id,
                 parent_run_id=parent_run_id,
             )
+            return False
+
+    def _on_run_incomplete(self, parent_run_id: str | None):
+        """Handle incomplete runs by firing chain error callbacks and raising an exception."""
+        self._tracking_manager.on_chain_error(
+            error=Exception(
+                "OpenAI Run Incomplete. Details: " + str(self._run.incomplete_details)
+            ),
+            run_id=self._run.id,
+            parent_run_id=parent_run_id,
+        )
         raise Exception(
             "OpenAI Run Incomplete. Details: ", self._run.incomplete_details
         )
@@ -1096,21 +1001,3 @@ class Thread:
                         "message_outputs": message_outputs,
                     }
         return None
-
-    def _on_chain_end(self, final_output: str, parent_run_id: UUID | None):
-        """Fire final chain_end and agent_finish callbacks."""
-        if self.callback_handler:
-            self.callback_handler.on_chain_end(
-                outputs={"response": final_output},
-                run_id=self._run.id,
-                parent_run_id=parent_run_id,
-            )
-
-    def _on_chain_error(self, error: Exception, parent_run_id: UUID | None):
-        """Fire chain_error callback when an exception is raised."""
-        if self.callback_handler:
-            self.callback_handler.on_chain_error(
-                error=error,
-                run_id=self._run.id,
-                parent_run_id=parent_run_id,
-            )

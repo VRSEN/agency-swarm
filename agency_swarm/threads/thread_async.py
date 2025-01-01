@@ -24,7 +24,7 @@ class ThreadAsync(Thread):
         recipient_agent=None,
         additional_instructions: str = None,
         tool_choice: AssistantToolChoice = None,
-        parent_run_id: Optional[UUID] = None,
+        parent_run_id: UUID | None = None,
     ):
         self.async_mode = False
 
@@ -57,7 +57,7 @@ class ThreadAsync(Thread):
         recipient_agent=None,
         additional_instructions: str = None,
         tool_choice: AssistantToolChoice = None,
-        parent_run_id: Optional[UUID] = None,
+        parent_run_id: UUID | None = None,
     ):
         if self.pythread and self.pythread.is_alive():
             return "System Notification: 'Agent is busy, so your message was not received. Please always use 'GetResponse' tool to check for status first, before using 'SendMessage' tool again for the same agent.'"

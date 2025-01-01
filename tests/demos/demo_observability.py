@@ -6,7 +6,7 @@ from agency_swarm import Agency, Agent
 from agency_swarm.util import init_tracking
 
 load_dotenv()
-logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 def main():
@@ -44,6 +44,9 @@ def main():
         ],
         temperature=0.01,
     )
+
+    # output = agency.get_completion("send a test message to Developer")
+    # logger.info(f"final output: {str(output)}")
 
     # Run the demo with Gradio interface
     agency.demo_gradio()

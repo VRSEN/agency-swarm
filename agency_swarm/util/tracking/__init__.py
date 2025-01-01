@@ -1,6 +1,6 @@
 import logging
 import threading
-from typing import Callable, Literal
+from typing import Any, Callable, Literal
 
 from .langchain_types import use_langchain_types
 
@@ -14,13 +14,13 @@ SUPPORTED_TRACKERS = ["agentops", "langfuse", "local"]
 SUPPORTED_TRACKERS_TYPE = Literal["agentops", "langfuse", "local"]
 
 
-def get_callback_handler():
+def get_callback_handler() -> Any | None:
     global _callback_handler
     with _lock:
         return _callback_handler
 
 
-def set_callback_handler(handler: Callable):
+def set_callback_handler(handler: Callable[[], Any]):
     global _callback_handler
     with _lock:
         _callback_handler = handler()

@@ -35,6 +35,7 @@ from agency_swarm.util.streaming import (
     create_gradio_handler,
     create_term_handler,
 )
+from agency_swarm.util.tracking.tracking_manager import TrackingManager
 
 console = Console()
 T = TypeVar("T", bound=BaseModel)
@@ -66,7 +67,6 @@ class Agency:
         max_prompt_tokens: int = None,
         max_completion_tokens: int = None,
         truncation_strategy: dict = None,
-        callback_handler: Any = None,
     ):
         """
         Initializes the Agency object, setting up agents, threads, and core functionalities.
@@ -85,7 +85,6 @@ class Agency:
             max_prompt_tokens (int, optional): The maximum number of tokens allowed in the prompt for each agent. Agent-specific values will override this. Defaults to None.
             max_completion_tokens (int, optional): The maximum number of tokens allowed in the completion for each agent. Agent-specific values will override this. Defaults to None.
             truncation_strategy (dict, optional): The truncation strategy to use for the completion for each agent. Agent-specific values will override this. Defaults to None.
-            callback_handler (Any, optional): The callback handler to use for tracking events. Defaults to None.
 
         This constructor initializes various components of the Agency, including CEO, agents, threads, and user interactions. It parses the agency chart to set up the organizational structure and initializes the messaging tools, agents, and threads necessary for the operation of the agency. Additionally, it prepares a main thread for user interactions.
         """
@@ -107,7 +106,7 @@ class Agency:
         self.max_prompt_tokens = max_prompt_tokens
         self.max_completion_tokens = max_completion_tokens
         self.truncation_strategy = truncation_strategy
-        self.callback_handler = callback_handler
+        self.tracking_manager = TrackingManager()
 
         # set thread type based send_message_tool_class async mode
         if (
@@ -173,42 +172,49 @@ class Agency:
         Parameters:
             message (str): The message for which completion is to be retrieved.
             message_files (list, optional): A list of file ids to be sent as attachments with the message. When using this parameter, files will be assigned both to file_search and code_interpreter tools if available. It is recommended to assign files to the most sutiable tool manually, using the attachments parameter.  Defaults to None.
-            yield_messages (bool, optional): Flag to determine if intermediate messages should be yielded. Defaults to True.
+            yield_messages (bool, optional): Flag to determine if intermediate messages should be yielded. Defaults to False.
             recipient_agent (Agent, optional): The agent to which the message should be sent. Defaults to the first agent in the agency chart.
             additional_instructions (str, optional): Additional instructions to be sent with the message. Defaults to None.
             attachments (List[dict], optional): A list of attachments to be sent with the message, following openai format. Defaults to None.
             tool_choice (dict, optional): The tool choice for the recipient agent to use. Defaults to None.
-            parallel_tool_calls (bool, optional): Whether to enable parallel function calling during tool use. Defaults to True.
             verbose (bool, optional): Whether to print the intermediary messages in console. Defaults to False.
             response_format (dict, optional): The response format to use for the completion.
 
         Returns:
-            Generator or final response: Depending on the 'yield_messages' flag, this method returns either a generator yielding intermediate messages or the final response from the main thread.
+            Generator or final response: Depending on the 'yield_messages' flag, this method returns either a generator yielding intermediate messages (when yield_messages=True) or the final response from the main thread.
         """
         if verbose and yield_messages:
             raise Exception("Verbose mode is not compatible with yield_messages=True")
 
-        res = self.main_thread.get_completion(
-            message=message,
-            message_files=message_files,
-            attachments=attachments,
-            recipient_agent=recipient_agent,
-            additional_instructions=additional_instructions,
-            tool_choice=tool_choice,
-            yield_messages=yield_messages or verbose,
-            response_format=response_format,
-        )
+        chain_id = self.tracking_manager.start_chain(message, "Agency.get_completion")
 
-        if not yield_messages or verbose:
-            while True:
-                try:
-                    message = next(res)
-                    if verbose:
-                        message.cprint()
-                except StopIteration as e:
-                    return e.value
+        try:
+            res = self.main_thread.get_completion(
+                message=message,
+                message_files=message_files,
+                attachments=attachments,
+                recipient_agent=recipient_agent,
+                additional_instructions=additional_instructions,
+                tool_choice=tool_choice,
+                yield_messages=yield_messages or verbose,
+                response_format=response_format,
+                parent_run_id=chain_id,
+            )
 
-        return res
+            if not yield_messages and not verbose:
+                while True:
+                    try:
+                        message = next(res)
+                    except StopIteration as e:
+                        final_output = e.value
+                        self.tracking_manager.end_chain(final_output, chain_id)
+                        return final_output
+
+            return res
+
+        except Exception as e:
+            self.tracking_manager.track_chain_error(e, chain_id)
+            raise e
 
     def get_completion_stream(
         self,
@@ -232,7 +238,6 @@ class Agency:
             additional_instructions (str, optional): Additional instructions to be sent with the message. Defaults to None.
             attachments (List[dict], optional): A list of attachments to be sent with the message, following openai format. Defaults to None.
             tool_choice (dict, optional): The tool choice for the recipient agent to use. Defaults to None.
-            parallel_tool_calls (bool, optional): Whether to enable parallel function calling during tool use. Defaults to True.
 
         Returns:
             Final response: Final response from the main thread.
