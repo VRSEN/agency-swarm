@@ -187,7 +187,7 @@ class Agency:
         if verbose and yield_messages:
             raise Exception("Verbose mode is not compatible with yield_messages=True")
 
-        chain_id = self.tracking_manager.start_chain(message, "Agency.get_completion")
+        chain_id = self.tracking_manager.start_chain(message, "Agency: chain start")
 
         try:
             res = self.main_thread.get_completion(
@@ -246,9 +246,7 @@ class Agency:
         if not inspect.isclass(event_handler):
             raise Exception("Event handler must not be an instance.")
 
-        chain_id = self.tracking_manager.start_chain(
-            message, "Agency.get_completion_stream"
-        )
+        chain_id = self.tracking_manager.start_chain(message, "Agency: chain start")
 
         res = self.main_thread.get_completion_stream(
             message=message,

@@ -58,6 +58,7 @@ def main(tracker: str):
 
 
 if __name__ == "__main__":
-    trackers = ["local", "agentops", "langfuse"]
+    trackers = ["langfuse", "agentops"]  # "local", "langfuse", "agentops"
     for tracker in trackers:
+        print(f"Running demo with {tracker.upper()} tracker")
         main(tracker)
