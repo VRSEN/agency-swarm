@@ -168,10 +168,10 @@ class TrackingManager:
         message: str | list[dict] | None,
         sender_agent: str,
         recipient_agent: str,
+        model: str,
         run_id: str,
         parent_run_id: str | None,
         message_obj: Message | None = None,
-        model: str | None = None,
         temperature: float | None = None,
     ) -> str | None:
         """Track the start of a run."""
@@ -189,6 +189,7 @@ class TrackingManager:
         }
         invocation_params = {
             "_type": "openai",
+            "model": model,
             "temperature": temperature,
         }
 
