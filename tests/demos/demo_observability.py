@@ -45,10 +45,16 @@ def main(tracker: str):
     logger.info(f"final output: {str(output)}")
 
     # 4. Run the demo with Gradio interface
-    agency.demo_gradio()
+    try:
+        agency.demo_gradio()
+    except KeyboardInterrupt:
+        pass
 
     # 5. Run the CLI demo
-    agency.run_demo()
+    try:
+        agency.run_demo()
+    except KeyboardInterrupt:
+        pass
 
 
 if __name__ == "__main__":

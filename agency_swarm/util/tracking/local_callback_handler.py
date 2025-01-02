@@ -330,6 +330,7 @@ class LocalCallbackHandler:
         metadata: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> Any:
+        prompt_tokens = self._count_tokens(str(input_str))
         self._insert_event(
             callback_type="tool_start",
             run_id=run_id,
@@ -338,6 +339,7 @@ class LocalCallbackHandler:
             inputs=input_str,
             tags=tags,
             metadata=metadata,
+            prompt_tokens=prompt_tokens,
         )
 
     def on_tool_end(
@@ -348,11 +350,13 @@ class LocalCallbackHandler:
         parent_run_id: Optional[UUID] = None,
         **kwargs: Any,
     ) -> Any:
+        completion_tokens = self._count_tokens(str(output))
         self._insert_event(
             callback_type="tool_end",
             run_id=run_id,
             parent_run_id=parent_run_id,
             outputs=output,
+            completion_tokens=completion_tokens,
         )
 
     def on_tool_error(
@@ -363,11 +367,14 @@ class LocalCallbackHandler:
         parent_run_id: Optional[UUID] = None,
         **kwargs: Any,
     ) -> Any:
+        error_str = str(error)
+        completion_tokens = self._count_tokens(error_str)
         self._insert_event(
             callback_type="tool_error",
             run_id=run_id,
             parent_run_id=parent_run_id,
-            error=str(error),
+            error=error_str,
+            completion_tokens=completion_tokens,
         )
 
     def on_agent_action(
