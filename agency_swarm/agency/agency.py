@@ -106,7 +106,6 @@ class Agency:
         self.max_prompt_tokens = max_prompt_tokens
         self.max_completion_tokens = max_completion_tokens
         self.truncation_strategy = truncation_strategy
-        self.tracking_manager = TrackingManager()
 
         # set thread type based send_message_tool_class async mode
         if (
@@ -153,6 +152,8 @@ class Agency:
         self._init_threads()
         self._create_special_tools()
         self._init_agents()
+
+        self.tracking_manager = TrackingManager()
 
     def get_completion(
         self,
@@ -245,6 +246,10 @@ class Agency:
         if not inspect.isclass(event_handler):
             raise Exception("Event handler must not be an instance.")
 
+        chain_id = self.tracking_manager.start_chain(
+            message, "Agency.get_completion_stream"
+        )
+
         res = self.main_thread.get_completion_stream(
             message=message,
             message_files=message_files,
@@ -254,6 +259,7 @@ class Agency:
             additional_instructions=additional_instructions,
             tool_choice=tool_choice,
             response_format=response_format,
+            parent_run_id=chain_id,
         )
 
         while True:
@@ -261,8 +267,12 @@ class Agency:
                 next(res)
             except StopIteration as e:
                 event_handler.on_all_streams_end()
+                self.tracking_manager.end_chain(e.value, chain_id)
 
                 return e.value
+            except Exception as e:
+                self.tracking_manager.track_chain_error(e, chain_id)
+                raise e
 
     def get_completion_parse(
         self,
@@ -475,7 +485,7 @@ class Agency:
                         f"👤 User 🗣️ @{recipient_agent.name}:\n" + user_message.strip()
                     )
                 else:
-                    user_message = f"👤 User:" + user_message.strip()
+                    user_message = "👤 User:" + user_message.strip()
 
                 if message_file_names:
                     user_message += "\n\n📎 Files:\n" + "\n".join(message_file_names)

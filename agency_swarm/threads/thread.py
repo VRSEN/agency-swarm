@@ -91,6 +91,7 @@ class Thread:
         additional_instructions: str = None,
         tool_choice: AssistantToolChoice = None,
         response_format: dict | None = None,
+        parent_run_id: str | None = None,
     ):
         return self.get_completion(
             message,
@@ -102,6 +103,7 @@ class Thread:
             tool_choice,
             yield_messages=False,
             response_format=response_format,
+            parent_run_id=parent_run_id,
         )
 
     def get_completion(
@@ -121,8 +123,6 @@ class Thread:
         Primary entry point for sending messages to the recipient agent and handling
         the completion (including tool calls, validations, and re-tries).
         """
-        if event_handler and self._tracking_manager.callback_handler:
-            raise Exception("Observability is not supported for streaming")
 
         # 1. Prepare basic thread and attachments
         self.init_thread()
