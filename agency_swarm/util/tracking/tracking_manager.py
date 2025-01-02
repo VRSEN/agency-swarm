@@ -193,7 +193,10 @@ class TrackingManager:
         }
 
         self.callback_handler.on_llm_start(
-            serialized={"name": f"{sender_agent} -> {recipient_agent}", "id": [run_id]},
+            serialized={
+                "name": f"Thread.get_completion: {sender_agent} -> {recipient_agent}",
+                "id": [run_id],
+            },
             prompts=prompts,
             run_id=run_id,
             parent_run_id=parent_run_id,

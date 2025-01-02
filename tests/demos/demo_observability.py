@@ -9,16 +9,11 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 
-def main():
-    # Set the tracker type
-    # TRACKER = "local"
-    # TRACKER = "agentops"
-    TRACKER = "langfuse"
-
+def main(tracker: str):
     # Initialize tracking based on the selected tracker
-    init_tracking(TRACKER)
+    init_tracking(tracker)
 
-    # Create agents with different roles
+    # 1. Create agents with different roles
     ceo = Agent(
         name="CEO",
         description="Manages projects and coordinates between team members",
@@ -34,7 +29,7 @@ def main():
         description="Analyzes data and provides insights",
     )
 
-    # Define the communication flows within the agency
+    # 2. Define the communication flows within the agency
     agency = Agency(
         [
             ceo,  # CEO is the entry point
@@ -45,14 +40,18 @@ def main():
         temperature=0.01,
     )
 
-    # output = agency.get_completion("send a test message to Developer")
-    # logger.info(f"final output: {str(output)}")
+    # 3. Test the agency
+    output = agency.get_completion("send a test message to Developer")
+    logger.info(f"final output: {str(output)}")
 
-    # Run the demo with Gradio interface
+    # 4. Run the demo with Gradio interface
     agency.demo_gradio()
-    # If you prefer to run the CLI demo, uncomment the next line
-    # agency.run_demo()
+
+    # 5. Run the CLI demo
+    agency.run_demo()
 
 
 if __name__ == "__main__":
-    main()
+    trackers = ["local", "agentops", "langfuse"]
+    for tracker in trackers:
+        main(tracker)
