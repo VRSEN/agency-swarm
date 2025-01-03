@@ -24,7 +24,9 @@ from LangGraph_test import rander
 from LangGraph_test import palindromist
 
 from agency_swarm import set_openai_key
-set_openai_key("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")
+with open("~/keys/OPENAI_API_KEY.txt", 'r') as file:
+    api_key = file.read()
+set_openai_key(api_key)
 
 leader = leader.create_agent()
 task_planner = task_planner.create_agent()
