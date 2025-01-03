@@ -1,0 +1,8 @@
+{
+    "step_1": {
+        "step_title": "在华为云北京可用区创建ECS实例",
+        "agent": ["ECS Agent"],
+        "description": "在华为云的北京可用区创建一个ECS实例，规格任意。",
+        "dep": []
+    }
+}

@@ -1,0 +1,9 @@
+{
+    "step_1": {
+        "step_title": "创建北京可用区的ECS",
+        "id": "step_1",
+        "agent": ["ECS Agent"],
+        "description": "使用获取的API访问凭证和上下文信息，通过华为云API在北京可用区创建一个任意规格的ECS。",
+        "dep": []
+    }
+}

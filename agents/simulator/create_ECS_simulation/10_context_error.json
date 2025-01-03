@@ -1,0 +1,5 @@
+{
+    "status": "ERROR",
+    "title": "未创建VPC和子网",
+    "description": "华为云资源中没有可用的VPC和子网，请先创建。"
+}

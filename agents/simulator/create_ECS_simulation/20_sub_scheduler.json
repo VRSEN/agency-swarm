@@ -1,0 +1,10 @@
+{
+    "completed_steps": [],
+    "context": {
+        "context_1": "AK: SCARKXC0UUA3GH8QXRQJ, SK: U3BdbkibZVo9Ycegotq1AtLjnxN7CRtUt8XLUc3z",
+        "context_2": "project_id:505lab,\nvpc_id: 2a6f4aa6-d93e-45f5-a8cb-b030dbf8cd68",
+        "context_3": "subnet_id: ef039b60-6a14-42d1-963b-687b627fea08"
+    },
+    "next_steps": ["steps_1"],
+    "reason": "由于没有已完成的任务，且 step_1 没有前置依赖，可以立即执行。"
+}

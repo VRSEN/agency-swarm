@@ -1,0 +1,37 @@
+{
+    "task_1": {
+        "title": "获取华为云API凭证",
+        "id": "task_1",
+        "capability_group": "统一身份认证服务IAM能力群",
+        "description": "获取访问华为云API所需的凭证，包括访问密钥和安全密钥。",
+        "dep": []
+    },
+    "task_2": {
+        "title": "创建VPC和子网",
+        "id": "task_2",
+        "capability_group": "VPC网络管理能力群",
+        "description": "在华为云上创建一个VPC和子网，以创建ECS实例。",
+        "dep":["task_1"]
+    },
+    "task_3": {
+        "title": "创建北京区域ECS实例",
+        "id": "task_3",
+        "capability_group": "弹性云服务器(ECS)管理能力群",
+        "description": "在华为云北京可用区创建一个ECS实例，规格任意。需要先确保有权限访问华为云，并且可以在北京区域创建资源。",
+        "dep": ["task_2"]
+    },
+    "task_4": {
+        "title": "创建曼谷区域ECS实例",
+        "id": "task_4",
+        "capability_group": "弹性云服务器(ECS)管理能力群",
+        "description": "在华为云曼谷可用区创建一个ECS实例，规格任意。需要先确保有权限访问华为云，并且可以在曼谷区域创建资源。",
+        "dep": ["task_2"]
+    },
+    "task_5": {
+        "title": "创建开罗区域ECS实例",
+        "id": "task_5",
+        "capability_group": "弹性云服务器(ECS)管理能力群",
+        "description": "在华为云开罗可用区创建一个ECS实例，规格任意。需要先确保有权限访问华为云，并且可以在开罗区域创建资源。",
+        "dep": ["task_2"]
+    }
+}

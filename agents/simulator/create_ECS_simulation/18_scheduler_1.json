@@ -1,0 +1,10 @@
+{
+    "completed_tasks": ["task_1", "task_2"],
+    "context": {
+        "context_1": "AK: SCARKXC0UUA3GH8QXRQJ, SK: U3BdbkibZVo9Ycegotq1AtLjnxN7CRtUt8XLUc3z",
+        "context_2": "project_id:505lab,\nvpc_id: 2a6f4aa6-d93e-45f5-a8cb-b030dbf8cd68",
+        "context_3": "subnet_id: ef039b60-6a14-42d1-963b-687b627fea08"
+    },
+    "next_tasks": ["task_3", "task_4", "task_5"],
+    "reason": "任务 1 和任务 2 已完成，现在可以并行执行依赖于任务 2 的任务 3、4 和 5。"
+}

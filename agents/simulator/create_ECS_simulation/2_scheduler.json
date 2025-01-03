@@ -1,0 +1,6 @@
+{
+    "completed_tasks": [],
+    "context": {},
+    "next_tasks": ["task_1"],
+    "reason": "由于没有已完成的任务，且 task_1 没有前置依赖，可以立即执行。其他任务都依赖于 task_1 的完成。"
+}
