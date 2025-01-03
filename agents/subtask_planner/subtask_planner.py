@@ -1,5 +1,5 @@
 from agency_swarm import Agent
-from agents.tools.read_json_file.read_json_file import ReadJsonFile
+from agents.tools.read_json_file.ReadJsonFile import ReadJsonFile
 
 _name = "subtask_planner"
 
@@ -7,14 +7,31 @@ _description = """
 职责是将任务按能力群拆分成子任务
 """
 
-_instruction = """
-作为子任务规划者，你将接收到一个任务，并尝试一步步对该任务做规划
-
-输入格式如下: 
+_input_format = """
 {
     "title": <任务名称>,
     "description": <任务描述>,
 }
+"""
+
+_output_format = """
+{
+    "subtask_1": {
+        "title": 任务名称,
+        "id": 任务ID, 
+        "capability_group": <能力群名称>,
+        "description": 任务描述, 
+        "dep": <前置任务ID列表>,
+    },
+    ...
+}
+"""
+
+_instruction = f"""
+作为子任务规划者，你将接收到一个任务，并尝试一步步对该任务做规划
+
+输入格式如下: 
+{_input_format}
 
 同时，你需要从context.json中读取已有环境中的上下文信息
 
@@ -32,16 +49,7 @@ _instruction = """
 "云监控CES能力群": CES管理能力群提供对云监控服务的全面管理，包括监控数据管理、监控看板管理和指标描述查询等云资源监控能力，以及云事件监控管理和告警规则管理等事件告警能力。
 
 你应该用以下json格式做子任务规划:
-{
-    "subtask_1": {
-        "title": 任务名称,
-        "id": 任务ID, 
-        "capability_group": <能力群名称>,
-        "description": 任务描述, 
-        "dep": <前置任务ID列表>,
-    },
-    ...
-}
+{_output_format}
 
 请逐步思考，用户可能会提供修改建议，综合考虑完成此任务所需的步骤。
 # 注意，拆分后的每个任务完成过程中都不能半途终止；
@@ -53,22 +61,7 @@ _instruction = """
 """
 
 
-
-
-"""
-你可能会接收到能力群管理者给出的建议，格式如下: 
-{
-    "task_description": ...,
-    "change": yes/no,
-    "original_plan": <原本的规划>,
-    "new_plan": <经过你改动后的规划>,
-    "explain": <改动的解释>
-}
-如果"change"字段为yes，仔细考虑"new_plan"和"explain"字段的内容，并修改你的规划方案
-"""
-
-
-_tools = []
+_tools = [ReadJsonFile]
 
 _file_folder = ""
 

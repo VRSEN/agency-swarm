@@ -1405,13 +1405,11 @@ class Agency:
         scheduler = plan_agents["scheduler"]
         subtask_planner = plan_agents["subtask_planner"]
         sub_scheduler = plan_agents["sub_scheduler"]
-        simulator = plan_agents["simulator"]
         planner_thread = Thread(self.user, task_planner)
         scheduler_thread = Thread(self.user, scheduler)
         inspector_thread = Thread(self.user, inspector)
         subplanner_thread = Thread(self.user, subtask_planner)
         sub_scheduler_thread = Thread(self.user, sub_scheduler)
-        simulator_thread = Thread(self.user, simulator)
         capgroup_thread = {}
         for key in cap_group_agents.keys():
             capgroup_thread[key] = Thread(self.user, cap_group_agents[key])

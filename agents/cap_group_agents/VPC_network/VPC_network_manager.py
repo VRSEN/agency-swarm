@@ -1,5 +1,5 @@
 from agency_swarm import Agent
-from agents.tools.read_json_file.read_json_file import ReadJsonFile
+from agents.tools.read_json_file.ReadJsonFile import ReadJsonFile
 
 _name = "VPC_network_mananger"
 
@@ -95,7 +95,7 @@ _instruction = f"""
 
 """
 
-_tools = []
+_tools = [ReadJsonFile]
 
 _file_folder = ""
 

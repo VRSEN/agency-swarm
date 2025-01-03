@@ -1,13 +1,14 @@
 from agency_swarm import Agent
-from agents.tools.read_json_file.read_json_file import ReadJsonFile
+from agents.tools.read_json_file.ReadJsonFile import ReadJsonFile
 _name = "task_planner"
 
 _description = """
-你的职责是规划出接下来要完成的任务
+职责是根据用户请求规划任务
+"""
+_input_format = """
 """
 
-_instruction = """
-作为任务规划者，你需要将用户输入解析成以下 JSON 格式的多个任务: 
+_output_format = """
 {
     "task_1": {
         "title": 任务名称,
@@ -17,6 +18,12 @@ _instruction = """
     },
     ...
 }
+"""
+
+_instruction = f"""
+作为任务规划者，你需要将用户输入解析成以下 JSON 格式的多个任务: 
+{_output_format}
+
 请逐步思考，用户可能会提供修改建议，综合考虑完成此任务所需的步骤。
 # 注意，拆分后的每个任务完成过程中都不能半途终止；
 # 注意: 除非用户请求中有提供初始条件的描述，初始环境中没有创建**任何资源**，且不提供任何**资源和环境信息**；确保你的规划有你任务中**所需资源的创建**或**所需信息的获取**步骤，否则请先完成它们；

@@ -1,47 +1,37 @@
 from agency_swarm import Agent, Agency
 
 from agents import leader
-from agents.task_planner import task_planner
-from agents.task_planner import inspector
-from agents.task_planner.scheduler import scheduler
-from agents import inspector_capability
-from agents import capability_planner
-
-from agents.subtask_planner import subtask_planner
-from agents.subtask_planner.scheduler import sub_scheduler
-
-from agents.simulator import simulator
-
-from agents.cap_group_agents import ECS_manager
-from agents.cap_group_agents import CES_manager
-from agents.cap_group_agents import EVS_manager
-from agents.cap_group_agents import IAM_service_manager
-from agents.cap_group_agents import Huawei_Cloud_API_manager
-from agents.cap_group_agents import VPC_network_manager
-
-from LangGraph_test import repeater
-from LangGraph_test import rander
-from LangGraph_test import palindromist
+from agents.task_planner import (
+    task_planner, scheduler, inspector
+)
+from agents.subtask_planner import (
+    subtask_planner, sub_scheduler
+)
+from agents.cap_group_agents.CES_group import CES_manager
+from agents.cap_group_agents.ECS_group import ECS_manager
+from agents.cap_group_agents.EVS_group import EVS_manager
+from agents.cap_group_agents.Huawei_Cloud_API_group import Huawei_Cloud_API_manager
+from agents.cap_group_agents.IAM_service_group import IAM_service_manager
+from agents.cap_group_agents.VPC_network import VPC_network_manager
 
 from agency_swarm import set_openai_key
-with open("~/keys/OPENAI_API_KEY.txt", 'r') as file:
+with open("/root/keys/OEPNAI_API_KEY.txt", 'r') as file:
     api_key = file.read()
+
 set_openai_key(api_key)
 
 leader = leader.create_agent()
 task_planner = task_planner.create_agent()
 inspector = inspector.create_agent()
 scheduler = scheduler.create_agent()
-capability_planner = capability_planner.create_agent()
-inspector_capability = inspector_capability.create_agent()
 subtask_planner = subtask_planner.create_agent()
 sub_scheduler = sub_scheduler.create_agent()
 
-repeater = repeater.create_agent()
-rander = rander.create_agent()
-palindromist = palindromist.create_agent()
+# repeater = repeater.create_agent()
+# rander = rander.create_agent()
+# palindromist = palindromist.create_agent()
 
-simulator = simulator.create_agent()
+# simulator = simulator.create_agent()
 
 ECS_manager = ECS_manager.create_agent()
 CES_manager = CES_manager.create_agent()
@@ -62,12 +52,10 @@ chat_graph = [leader,
               [leader, IAM_service_manager],
               [leader, Huawei_Cloud_API_manager],
               [leader, VPC_network_manager],
-              [leader, simulator],
-              [leader, repeater],
-              [leader, rander],
-              [leader, palindromist]
-            #   [leader, inspector_capability]
-            #   [task_planner, capability_planner], 
+              # [leader, simulator],
+              # [leader, repeater],
+              # [leader, rander],
+              # [leader, palindromist]
               ]
 
 agency_manifesto = """
@@ -90,11 +78,8 @@ plan_agents = {
     "scheduler": scheduler,
     "subtask_planner": subtask_planner,
     "sub_scheduler": sub_scheduler,
-    "simulator": simulator
+    # "simulator": simulator
 }
 
-# agency.demo_gradio(height=700)
-# agency.run_demo()
 # agency.langgraph_test(repeater=repeater, rander=rander, palindromist=palindromist)
 agency.task_planning(plan_agents=plan_agents, cap_group_agents=cap_group_agents)
-# agency.create_ECS_simulation()
