@@ -80,118 +80,59 @@ A SQLite database will be created in the current directory. To specify a custom 
 
 ## Implementation Details
 
-Agency Swarm implements a comprehensive tracking system that operates at multiple levels:
+### Event Hierarchy
+```
+Agency Chain
+├── Messages (tracked via MessageOutput)
+│   ├── User messages
+│   ├── Assistant messages
+│   ├── Function calls
+│   └── Function outputs
+└── Errors
+    ├── Chain errors (in agency.py)
+    │   └── Generator errors
+    └── Tool errors (in thread.py)
+        ├── Validation errors
+        ├── Execution errors
+        └── Tool-specific errors
+```
 
-Relevant code:
-- agency_swarm/threads/agency.py - The main entry point for the chain/"agency" (a team of agents that the user interacts with)
-- agency_swarm/threads/thread.py - Thread.get_completion() is called by Agency.get_completion()
-- agency_swarm/messages/message_output.py - The message output class used to track messages yielded by Agency.get_completion()
-- agency_swarm/tools/send_message/SendMessageBase.py - The SendMessage tool that sends a message to another agent
-- agency_swarm/util/tracking/__init__.py - Where the tracking system is initialized
-- agency_swarm/util/tracking/langchain_types.py - Contains use_langchain_types() for switching to Langchain types (proxy pattern)
+### Key Components
+- `TrackingManager`: Central tracking coordinator
+- `MessageOutput`: Wrapper for all messages with metadata
+- `LocalCallbackHandler`: SQLite implementation of tracking callbacks
+- Langchain callbacks: Standardized event tracking interface
 
-1. **Core Tracking Infrastructure**
-   - Built on Langchain callbacks for standardized event tracking
-   - Supports multiple tracking backends (Langfuse, AgentOps, local SQLite)
-   - Thread-safe callback handler management through global locks
-   - Tracks token usage, latencies, and error rates
+### Event Types
+1. **Chain Events**
+   - Start/end of agency runs
+   - Parent-child relationships
+   - Error tracking
 
-2. **Event Flow**
-   - Events are generated throughout the execution pipeline:
-     - Chain operations (start/end/error)
-     - Tool executions and their results
-     - Agent actions and responses
-     - Retriever operations for file searches
-   - Each event includes:
-     - Unique run IDs for tracing
-     - Parent-child relationships for nested operations
-     - Metadata about agents and models
-     - Input/output content and token counts
+2. **Message Events**
+   - User/assistant messages
+   - Tool calls and outputs
+   - Run IDs and metadata
 
-3. **Message Handling**
-   - `MessageOutput` class serves as the core message container
-   - Tracks message type, sender/receiver, content, and associated objects
-   - Supports different message categories:
-     - User messages
-     - Function (tool) calls and execution results
-     - Agent messages
+3. **Tool Events**
+   - Tool execution start/end
+   - Tool errors and validation
+   - File search and retrieval
 
-4. **Database Integration**
-   - Local SQLite storage for offline analysis
-   - Structured event logging with timestamps
-   - Token counting and usage tracking
-   - Query capabilities for usage analysis
+### Metadata Tracked
+- Run IDs and parent-child relationships
+- Agent names and roles
+- Model information
+- Timestamps
+- Token usage
+- Error details
 
-## TODO
-
-- The main challenge lies in properly classifying and tracking events at the agency level, where tool outputs and agent responses are consumed from the generator.
-
-Additional details:
-- Run hierarchy: Agency run → Thread run → Tool run → (For SendMessage tool that communicates with another agent, get_completion is called recursively until the agent responds and returns final output)
-
-Suggestion:
-- use MessageOutput.obj to solve the issue. It has the type : openai.types.beta.threads.message.Message:
-
+### Example Message Object
 ```python
-class Message(BaseModel):
-    id: str
-    """The identifier, which can be referenced in API endpoints."""
-
-    assistant_id: Optional[str] = None
-    """
-    If applicable, the ID of the
-    [assistant](https://platform.openai.com/docs/api-reference/assistants) that
-    authored this message.
-    """
-
-    attachments: Optional[List[Attachment]] = None
-    """A list of files attached to the message, and the tools they were added to."""
-
-    completed_at: Optional[int] = None
-    """The Unix timestamp (in seconds) for when the message was completed."""
-
-    content: List[MessageContent]
-    """The content of the message in array of text and/or images."""
-
-    created_at: int
-    """The Unix timestamp (in seconds) for when the message was created."""
-
-    incomplete_at: Optional[int] = None
-    """The Unix timestamp (in seconds) for when the message was marked as incomplete."""
-
-    incomplete_details: Optional[IncompleteDetails] = None
-    """On an incomplete message, details about why the message is incomplete."""
-
-    metadata: Optional[object] = None
-    """Set of 16 key-value pairs that can be attached to an object.
-
-    This can be useful for storing additional information about the object in a
-    structured format. Keys can be a maximum of 64 characters long and values can be
-    a maximum of 512 characters long.
-    """
-
-    object: Literal["thread.message"]
-    """The object type, which is always `thread.message`."""
-
-    role: Literal["user", "assistant"]
-    """The entity that produced the message. One of `user` or `assistant`."""
-
-    run_id: Optional[str] = None
-    """
-    The ID of the [run](https://platform.openai.com/docs/api-reference/runs)
-    associated with the creation of this message. Value is `null` when messages are
-    created manually using the create message or create thread endpoints.
-    """
-
-    status: Literal["in_progress", "incomplete", "completed"]
-    """
-    The status of the message, which can be either `in_progress`, `incomplete`, or
-    `completed`.
-    """
-
-    thread_id: str
-    """
-    The [thread](https://platform.openai.com/docs/api-reference/threads) ID that
-    this message belongs to.
-    """
+class MessageOutput:
+    msg_type: Literal["function", "function_output", "text", "system"]
+    sender_name: str
+    receiver_name: str
+    content: str
+    obj: Optional[Message | ToolCall]  # OpenAI object for additional metadata
 ```

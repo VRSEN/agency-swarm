@@ -9,6 +9,7 @@ from typing import (
     Any,
     Callable,
     Dict,
+    Generator,
     List,
     Literal,
     Type,
@@ -18,10 +19,13 @@ from typing import (
 )
 
 from openai.lib._parsing._completions import type_to_response_format_param
+from openai.types.beta import AssistantToolChoice
+from openai.types.beta.threads.message import Attachment
 from pydantic import BaseModel, Field, field_validator
 from rich.console import Console
 
 from agency_swarm.agents import Agent
+from agency_swarm.messages.message_output import MessageOutput
 from agency_swarm.threads import Thread
 from agency_swarm.threads.thread_async import ThreadAsync
 from agency_swarm.tools import BaseTool, CodeInterpreter, FileSearch
@@ -158,15 +162,15 @@ class Agency:
     def get_completion(
         self,
         message: str,
-        message_files: List[str] = None,
+        message_files: list[str] | None = None,
         yield_messages: bool = False,
-        recipient_agent: Agent = None,
-        additional_instructions: str = None,
-        attachments: List[dict] = None,
-        tool_choice: dict = None,
+        recipient_agent: Agent | None = None,
+        additional_instructions: str | None = None,
+        attachments: list[Attachment] | None = None,
+        tool_choice: AssistantToolChoice | None = None,
         verbose: bool = False,
-        response_format: dict = None,
-    ):
+        response_format: dict | None = None,
+    ) -> Generator[MessageOutput, None, str] | str:
         """
         Retrieves the completion for a given message from the main thread.
 
@@ -211,7 +215,16 @@ class Agency:
                         self.tracking_manager.end_chain(final_output, chain_id)
                         return final_output
 
-            return res
+            def wrapped_generator():
+                while True:
+                    try:
+                        message = next(res)
+                        yield message
+                    except StopIteration as e:
+                        self.tracking_manager.end_chain(e.value, chain_id)
+                        return e.value
+
+            return wrapped_generator()
 
         except Exception as e:
             self.tracking_manager.track_chain_error(e, chain_id)
@@ -220,20 +233,20 @@ class Agency:
     def get_completion_stream(
         self,
         message: str,
-        event_handler: Type[AgencyEventHandler] | None = None,
-        message_files: List[str] = None,
-        recipient_agent: Agent = None,
-        additional_instructions: str = None,
-        attachments: List[dict] = None,
-        tool_choice: dict = None,
-        response_format: dict = None,
-    ):
+        event_handler: Type[AgencyEventHandler],
+        message_files: list[str] | None = None,
+        recipient_agent: Agent | None = None,
+        additional_instructions: str | None = None,
+        attachments: list[Attachment] | None = None,
+        tool_choice: dict | None = None,
+        response_format: dict | None = None,
+    ) -> str:
         """
         Generates a stream of completions for a given message from the main thread.
 
         Parameters:
             message (str): The message for which completion is to be retrieved.
-            event_handler (Type[AgencyEventHandler], optional): The event handler class to handle the completion stream. https://github.com/openai/openai-python/blob/main/helpers.md Defaults to None.
+            event_handler (Type[AgencyEventHandler]): The event handler class to handle the completion stream. https://github.com/openai/openai-python/blob/main/helpers.md
             message_files (list, optional): A list of file ids to be sent as attachments with the message. When using this parameter, files will be assigned both to file_search and code_interpreter tools if available. It is recommended to assign files to the most sutiable tool manually, using the attachments parameter.  Defaults to None.
             recipient_agent (Agent, optional): The agent to which the message should be sent. Defaults to the first agent in the agency chart.
             additional_instructions (str, optional): Additional instructions to be sent with the message. Defaults to None.
@@ -250,8 +263,8 @@ class Agency:
 
         res = self.main_thread.get_completion_stream(
             message=message,
-            message_files=message_files,
             event_handler=event_handler,
+            message_files=message_files,
             attachments=attachments,
             recipient_agent=recipient_agent,
             additional_instructions=additional_instructions,

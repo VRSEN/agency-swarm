@@ -84,15 +84,15 @@ class Thread:
     def get_completion_stream(
         self,
         message: str | list[dict] | None,
-        event_handler: Type[AgencyEventHandler] | None = None,
-        message_files: list[str] = None,
+        event_handler: Type[AgencyEventHandler],
+        message_files: list[str] | None = None,
         attachments: list[Attachment] | None = None,
-        recipient_agent: Agent = None,
-        additional_instructions: str = None,
-        tool_choice: AssistantToolChoice = None,
+        recipient_agent: Agent | None = None,
+        additional_instructions: str | None = None,
+        tool_choice: AssistantToolChoice | None = None,
         response_format: dict | None = None,
         parent_run_id: str | None = None,
-    ):
+    ) -> Generator[MessageOutput, None, str]:
         return self.get_completion(
             message,
             message_files,
@@ -109,16 +109,16 @@ class Thread:
     def get_completion(
         self,
         message: str | list[dict] | None,
-        message_files: list[str] = None,
-        attachments: list[dict] | None = None,
+        message_files: list[str] | None = None,
+        attachments: list[Attachment] | None = None,
         recipient_agent: Agent | None = None,
-        additional_instructions: str = None,
+        additional_instructions: str | None = None,
         event_handler: Type[AgencyEventHandler] | None = None,
-        tool_choice: AssistantToolChoice = None,
+        tool_choice: AssistantToolChoice | None = None,
         yield_messages: bool = False,
         response_format: dict | None = None,
         parent_run_id: str | None = None,
-    ) -> Generator[MessageOutput, None, None] | str:
+    ) -> Generator[MessageOutput, None, str]:
         """
         Primary entry point for sending messages to the recipient agent and handling
         the completion (including tool calls, validations, and re-tries).
@@ -237,7 +237,7 @@ class Thread:
                 error_attempts += 1
                 if not retry_successful:
                     raise Exception(
-                        "OpenAI Run Failed. Error: ", self._run.last_error.message
+                        f"OpenAI Run Failed. Error: {self._run.last_error.message}"
                     )
 
             elif self._run.status == "incomplete":
@@ -284,11 +284,11 @@ class Thread:
 
     def _create_run(
         self,
-        recipient_agent,
-        additional_instructions,
-        event_handler,
-        tool_choice,
-        temperature=None,
+        recipient_agent: Agent,
+        additional_instructions: str | None = None,
+        event_handler: Type[AgencyEventHandler] | None = None,
+        tool_choice: AssistantToolChoice | None = None,
+        temperature: float | None = None,
         response_format: dict | None = None,
     ):
         try:
@@ -423,7 +423,7 @@ class Thread:
         self,
         message: str | list[dict],
         role: str = "user",
-        attachments: list[dict] = None,
+        attachments: list[Attachment] | None = None,
     ) -> Message:
         try:
             return self.client.beta.threads.messages.create(
@@ -831,10 +831,10 @@ class Thread:
 
     def _setup_attachments(
         self,
-        attachments: list[dict] | None,
+        attachments: list[Attachment] | None,
         message_files: list[str] | None,
         recipient_agent: Agent,
-    ) -> list[dict]:
+    ) -> list[Attachment]:
         """Prepare attachments (file_ids, relevant tools) if provided."""
         if not attachments:
             attachments = []
@@ -849,10 +849,10 @@ class Thread:
 
             for file_id in message_files:
                 attachments.append(
-                    {
-                        "file_id": file_id,
-                        "tools": recipient_tools or [{"type": "file_search"}],
-                    }
+                    Attachment(
+                        file_id=file_id,
+                        tools=recipient_tools or [{"type": "file_search"}],
+                    )
                 )
 
         return attachments
@@ -902,8 +902,8 @@ class Thread:
             return True
         else:
             # chain error
-            self._tracking_manager.on_chain_error(
-                error=Exception("OpenAI Run Failed. Error: " + error_message),
+            self._tracking_manager.track_chain_error(
+                error=Exception(f"OpenAI Run Failed. Error: {error_message}"),
                 run_id=self._run.id,
                 parent_run_id=parent_run_id,
             )
@@ -911,7 +911,7 @@ class Thread:
 
     def _on_run_incomplete(self, parent_run_id: str | None):
         """Handle incomplete runs by firing chain error callbacks and raising an exception."""
-        self._tracking_manager.on_chain_error(
+        self._tracking_manager.track_chain_error(
             error=Exception(
                 "OpenAI Run Incomplete. Details: " + str(self._run.incomplete_details)
             ),
