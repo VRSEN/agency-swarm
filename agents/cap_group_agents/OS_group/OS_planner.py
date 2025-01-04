@@ -50,5 +50,5 @@ def create_agent(*,
                  instructions=instuction,
                  files_folder=_file_folder,
                  temperature=0.5,
-                 response_format={"type": "json_object"},
+                 response_format='auto',
                  max_prompt_tokens=25000,)

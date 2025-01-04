@@ -3,13 +3,13 @@ from agents.cap_group_agents.manager_instruction import manager_instruction
 from agents.tools.read_json_file.ReadJsonFile import ReadJsonFile
 from agents.tools.write_json_file.WriteJsonFile import WriteJsonFile
 
-_name = "CES_manager"
+_name = "VPC_network_manager"
 
 _description = """
-负责云监控CES能力群的消息管理
+负责VPC网络管理能力群的消息管理
 """
 
-_group_name = "云监控CES能力群"
+_group_name = "VPC网络管理能力群"
 
 _superior_agent = "subtask_manager"
 

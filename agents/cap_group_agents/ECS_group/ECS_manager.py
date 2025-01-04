@@ -3,13 +3,13 @@ from agents.cap_group_agents.manager_instruction import manager_instruction
 from agents.tools.read_json_file.ReadJsonFile import ReadJsonFile
 from agents.tools.write_json_file.WriteJsonFile import WriteJsonFile
 
-_name = "CES_manager"
+_name = "ECS_manager"
 
 _description = """
-负责云监控CES能力群的消息管理
+负责弹性云服务器(ECS)管理能力群的消息管理
 """
 
-_group_name = "云监控CES能力群"
+_group_name = "弹性云服务器(ECS)管理能力群"
 
 _superior_agent = "subtask_manager"
 

@@ -5,7 +5,7 @@ from agents.tools.read_json_file.ReadJsonFile import ReadJsonFile
 _name = "ECS_planner"
 
 _description = """
-负责ECS能力群的步骤规划
+负责弹性云服务器(ECS)管理能力群的步骤规划
 """
 
 _group_name = "弹性云服务器(ECS)管理能力群"

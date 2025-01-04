@@ -1375,9 +1375,11 @@ class Agency:
         with open(file_path, "w") as f:
             pass
     
-    completed_subtask_path = "/root/agency-swarm/agents/tools/read_json_file/completed_sub_tasks.json"
-    completed_task_path = "/root/agency-swarm/agents/tools/read_json_file/completed_tasks.json"
-    context_path = "/root/agency-swarm/agents/tools/read_json_file/context.json"
+    files_path = "/root/agency-swarm-cover/agents/files/"
+    completed_steps_path = files_path + "completed_steps.json"
+    completed_subtask_path = files_path + "completed_sub_tasks.json"
+    completed_task_path = files_path + "completed_tasks.json"
+    context_path = files_path + "context.json"
 
     def init_file(self):
         self._init_file(self.completed_subtask_path)
