@@ -1,5 +1,5 @@
 from agency_swarm import Agent
-from agents.tools.read_json_file.ReadJsonFile import ReadJsonFile
+from agents.tools.read_json_file.read_json_file import ReadJsonFile
 _name = "scheduler"
 
 _description = """
