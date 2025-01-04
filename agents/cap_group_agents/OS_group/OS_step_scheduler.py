@@ -1,11 +1,15 @@
 from agency_swarm import Agent
 from agents.cap_group_agents.step_scheduler_instruction import step_scheduler_instruction
 from agents.tools.read_json_file.ReadJsonFile import ReadJsonFile
+
 _name = "OS_step_scheduler"
 
 _description = """
 职责是调度操作系统管理能力群的step，选出下一步可以执行的step
 """
+
+_group_name = "操作系统管理能力群"
+
 _input_format = """
 {
     "main_task": ...,
@@ -30,7 +34,7 @@ _output_format = """
 }
 """
 
-_instruction = step_scheduler_instruction(_input_format, _output_format)
+_instruction = step_scheduler_instruction(_group_name, _input_format, _output_format)
 
 _tools = [ReadJsonFile]
 

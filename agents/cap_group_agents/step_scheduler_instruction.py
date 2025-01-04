@@ -1,6 +1,6 @@
-def step_scheduler_instruction(_input_format, _output_format):
+def step_scheduler_instruction(_group_name, _input_format, _output_format):
     _instruction = f"""
-    作为调度者，你将接收到step流程和初始用户请求，输入格式如下:  
+    作为{_group_name}调度者，你将接收到step流程和初始用户请求，输入格式如下:  
     你将从task_planner那里收到一个 JSON 格式的step规划结果 <plan_graph> 和总任务描述 <main_task>。
     输入格式为:
     {_input_format}
