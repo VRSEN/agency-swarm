@@ -1,14 +1,17 @@
 from agency_swarm import Agent
+from agents.cap_group_agents.CES_group.cap_agents.monitor_alarm_history_agent.tools import (
+    read, rizhi
+)
 
-_name = "AKSK_agent"
+_name = "CES_alarm_rule_agent"
 
 _description = """
-职责是获取华为云账户AKSK
+负责华为云的告警规则管理任务，包括：查询告警规则列表、查询告警规则列表、查询单条告警规则信息、启停告警规则、批量启停告警规则、删除告警规则、批量删除告警规则、创建告警规则、创建告警规则。
 """
 
 _instruction = "./instructions.md"
 
-_tools = []
+_tools = [read, rizhi]
 
 _file_folder = ""
 

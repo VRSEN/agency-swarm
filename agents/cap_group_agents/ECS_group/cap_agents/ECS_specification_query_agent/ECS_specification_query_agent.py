@@ -1,14 +1,17 @@
 from agency_swarm import Agent
+from agents.cap_group_agents.CES_group.cap_agents.monitor_alarm_history_agent.tools import (
+    read, rizhi
+)
 
-_name = "AKSK_agent"
+_name = "ECS_specification_query_agent"
 
 _description = """
-职责是获取华为云账户AKSK
+负责华为云ECS规格信息查询任务，包括：查询规格详情和规格扩展信息列表，查询规格销售策略， 查询云服务器规格变更支持列表。
 """
 
 _instruction = "./instructions.md"
 
-_tools = []
+_tools = [read, rizhi]
 
 _file_folder = ""
 

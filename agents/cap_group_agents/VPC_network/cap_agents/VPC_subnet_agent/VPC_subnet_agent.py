@@ -1,14 +1,17 @@
 from agency_swarm import Agent
+from agents.cap_group_agents.CES_group.cap_agents.monitor_alarm_history_agent.tools import (
+    read, rizhi
+)
 
-_name = "AKSK_agent"
+_name = "VPC_subnet_agent"
 
 _description = """
-职责是获取华为云账户AKSK
+负责华为云子网管理任务，包括创建子网、查询子网、查询子网列表、更新子网、删除子网。
 """
 
 _instruction = "./instructions.md"
 
-_tools = []
+_tools = [read, rizhi]
 
 _file_folder = ""
 

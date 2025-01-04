@@ -1,14 +1,17 @@
 from agency_swarm import Agent
+from agents.cap_group_agents.CES_group.cap_agents.monitor_alarm_history_agent.tools import (
+    read, rizhi
+)
 
-_name = "AKSK_agent"
+_name = "CES_dashboard_agent"
 
 _description = """
-职责是获取华为云账户AKSK
+负责华为云的监控看板及视图管理管理任务，包括：创建监控看板、查询监控看板列表、修改监控看板、批量删除监控看板、创建监控视图、查询监控视图列表、查询监控视图、删除监控视图、批量更新监控视图。
 """
 
 _instruction = "./instructions.md"
 
-_tools = []
+_tools = [read, rizhi]
 
 _file_folder = ""
 

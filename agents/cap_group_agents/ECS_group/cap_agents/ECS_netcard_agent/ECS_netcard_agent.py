@@ -1,14 +1,17 @@
 from agency_swarm import Agent
+from agents.cap_group_agents.CES_group.cap_agents.monitor_alarm_history_agent.tools import (
+    read, rizhi
+)
 
-_name = "AKSK_agent"
+_name = "ECS_netcard_agent"
 
 _description = """
-职责是获取华为云账户AKSK
+负责华为云ECS网卡管理任务，包括：批量添加云服务器网卡、批量删除云服务器网卡，查询云服务器网卡信息，云服务器切换虚拟私有云，更新云服务器指定网卡属性。
 """
 
 _instruction = "./instructions.md"
 
-_tools = []
+_tools = [read, rizhi]
 
 _file_folder = ""
 

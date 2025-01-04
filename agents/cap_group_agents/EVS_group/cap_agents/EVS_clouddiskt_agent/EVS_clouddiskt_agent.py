@@ -1,14 +1,17 @@
 from agency_swarm import Agent
+from agents.cap_group_agents.CES_group.cap_agents.monitor_alarm_history_agent.tools import (
+    read, rizhi
+)
 
-_name = "AKSK_agent"
+_name = "EVS_clouddiskt_agent"
 
 _description = """
-职责是获取华为云账户AKSK
+负责华为云云硬盘管理任务，包括：创建云硬盘、更新云硬盘、查询所有云硬盘详情、查询单个云硬盘详情、扩容云硬盘、删除云硬盘。
 """
 
 _instruction = "./instructions.md"
 
-_tools = []
+_tools = [read, rizhi]
 
 _file_folder = ""
 
