@@ -1376,7 +1376,7 @@ class Agency:
             pass
     
     files_path = "/root/agency-swarm-cover/agents/files/"
-    completed_steps_path = files_path + "completed_steps.json"
+    completed_step_path = files_path + "completed_steps.json"
     completed_subtask_path = files_path + "completed_sub_tasks.json"
     completed_task_path = files_path + "completed_tasks.json"
     context_path = files_path + "context.json"
@@ -1386,7 +1386,21 @@ class Agency:
         self._init_file(self.completed_task_path)
         self._init_file(self.context_path)
 
-    def task_planning(self, plan_agents: Dict[str, Agent], cap_group_agents: Dict[str, Agent]):
+    def create_cap_group_agent_threads(self, cap_group_agents: Dict[str, List]):
+        capgroup_thread = {}
+        for key in cap_group_agents.keys():
+            capgroup_thread[key] = []
+            for agent in cap_group_agents[key]:
+                capgroup_thread[key].append(Thread(self.user, agent))
+        return cap_group_agents
+    
+    def create_cap_agent_thread(self, cap_group: str, cap_agents: Dict[str, List]):
+        cap_agent_thread = {}
+        for agent in cap_agents[cap_group]:
+            cap_agent_thread[agent.name] = Thread(self.user, agent)
+        return cap_agent_thread
+
+    def task_planning(self, plan_agents: Dict[str, Agent], cap_group_agents: Dict[str, List], cap_agents: Dict[str, List]):
         """
         用户请求 -> 事务*n1 -> 子任务*n2 -> 步骤*n3
         事务是不可分割（指完成过程中）的任务，如安装软件等，必须完成之后才能进行其他操作；
@@ -1412,112 +1426,153 @@ class Agency:
         inspector_thread = Thread(self.user, inspector)
         subplanner_thread = Thread(self.user, subtask_planner)
         sub_scheduler_thread = Thread(self.user, sub_scheduler)
-        capgroup_thread = {}
-        for key in cap_group_agents.keys():
-            capgroup_thread[key] = Thread(self.user, cap_group_agents[key])
+        
+        cap_group_thread = self.create_cap_group_agent_threads(cap_group_agents=cap_group_agents)
 
-        task_id = 0
+        cap_agents = {}
+        for key in cap_agents:
+            cap_agents[key] = self.create_cap_agent_thread(cap_group=key, cap_agents=cap_agents)
 
+        # task_id = 0
         context_id = 0
-        while True: # 拆分出任务（事务）流程图
-            task_id = task_id + 1
-            planmessage, plan_json = self.task_planning_layer(message=text, original_request=original_request, task_planner_thread=planner_thread, inspector_thread=inspector_thread, node_color='lightblue')
-            id2task = {}
-            planmessage_json = json.loads(planmessage)
-            for key in planmessage_json.keys():
-                task = planmessage_json[key]
-                id2task[task['id']] = task
-            while True: # 任务调度
-                schedulerres = self.scheduling_layer(scheduler_thread=scheduler_thread, message=json.dumps(plan_json))
-                schedulerres_json = json.loads(schedulerres)
 
-                # 任务拆分成子任务
-                task_list = schedulerres_json['next_tasks']
-                if not task_list:   # 当任务全部完成，退出
+        while True: # 拆分出任务（事务）流程图，id2task
+            # task_id = task_id + 1
+            task_graph, tasks_need_scheduled = self.planning_layer(message=text, original_request=original_request, task_planner_thread=planner_thread, inspector_thread=inspector_thread, node_color='lightblue')
+            
+            id2task = {}
+            task_graph_json = json.loads(task_graph)
+            for key in task_graph_json.keys():
+                task = task_graph_json[key]
+                id2task[task['id']] = task
+
+            while True: # 任务调度
+                tasks_scheduled = self.scheduling_layer(scheduler_thread=scheduler_thread, message=tasks_need_scheduled)
+                tasks_scheduled_json = json.loads(tasks_scheduled)
+                next_task_list = tasks_scheduled_json['next_tasks']
+                
+                if not next_task_list:   # 当任务全部完成，退出
                     break
-                for task_id in task_list:
-                    task = id2task[task_id]
-                    id2subtask = {}
-                    subtaskinput = {
-                        "title": task['title'],
-                        "description": task['description'],
+
+                for next_task_id in next_task_list: # 拆分出子任务（能力群相关）流程图，id2subtask
+                    next_task = id2task[next_task_id]
+                    subtask_input = {
+                        "title": next_task['title'],
+                        "description": next_task['description'],
                     }
-                    print(subtaskinput)
-                    subplanmessage, subplanjson = self.task_planning_layer(message=json.dumps(subtaskinput), original_request=task['description'], task_planner_thread=subplanner_thread, node_color='lightgreen')
-                    subplanmessage_json = json.loads(subplanmessage)
-                    for key in subplanmessage_json.keys():
-                        subtask = subplanmessage_json[key]
+                    print(f"The task:\n{subtask_input}need to be planned...")
+                    subtask_graph, subtasks_need_scheduled = self.planning_layer(message=json.dumps(subtask_input), original_request=next_task['description'], task_planner_thread=subplanner_thread, node_color='lightgreen')
+                    
+                    id2subtask = {}
+                    subtask_graph_json = json.loads(subtask_graph)
+                    for key in subtask_graph_json.keys():
+                        subtask = subtask_graph_json[key]
                         id2subtask[subtask['id']] = subtask
+                    
                     while True: # 子任务调度
-                        subschedulerres = self.scheduling_layer(scheduler_thread=sub_scheduler_thread, message=json.dumps(subplanjson))
-                        subschedulerres_json = json.loads(subschedulerres)
-                        subtask_list = subschedulerres_json['next_subtasks']
-                        if not subtask_list:    # 当子任务全部完成，退出
+                        subtasks_scheduled = self.scheduling_layer(scheduler_thread=sub_scheduler_thread, message=subtasks_need_scheduled)
+                        subtasks_scheduled_json = json.loads(subtasks_scheduled)
+                        next_subtask_list = subtasks_scheduled_json['next_subtasks']
+                        
+                        if not next_subtask_list:    # 当子任务全部完成，退出
                             break
-                        for subtask_id in subtask_list:
-                            subtask = id2subtask[subtask_id]
-                            stepsinput = {
-                                "title": subtask['title'],
-                                "description": subtask['description'],
+
+                        for next_subtask_id in next_subtask_list: # 拆分出步骤（能力相关）流程图，id2step
+                            next_subtask = id2subtask[next_subtask_id]
+                            steps_input = {
+                                "title": next_subtask['title'],
+                                "description": next_subtask['description'],
                             }
-                            print(stepsinput)
-                            stepsres = self.json_get_completion(capgroup_thread[subtask['capability_group']], json.dumps(stepsinput))
-                            print(f"{subtask['capability_group']} STEP PLANNING:\n" + stepsres)
-                            # 交给能力agent处理
-                            result, _new_context = self.capability_agents_processor(subtask['capability_group'], stepsres, simulator_thread)
-                            # 更新已完成子任务和context
-                            context_id = context_id + 1
-                            self.update_context(context_id, _new_context, task['title'], subtask['title'])
-                            self.update_completed_sub_task(subtask_id, subtask['title'])
-                        self.update_completed_task(task_id, task['title'])
+                            print(f"The subtask:\n{steps_input}need to be planned...")
+                            next_subtask_cap_group = next_subtask['capability_group']
+                            steps_graph, steps_need_scheduled = self.planning_layer(message=json.dumps(steps_input), original_request=next_subtask['description'], task_planner_thread=cap_group_thread[next_subtask_cap_group][0], node_color='lightred')
+
+                            id2step = {}
+                            steps_graph_json = json.loads(steps_graph)
+                            for key in steps_graph_json.keys():
+                                step = steps_graph_json[key]
+                                id2step[step['id']] = step
+
+                            while True: # 步骤调度
+                                steps_scheduled = self.scheduling_layer(scheduler_thread=cap_group_thread[next_subtask_cap_group][2], message=steps_need_scheduled)
+                                steps_scheduled_json = json.loads(steps_scheduled)
+                                next_step_list = steps_scheduled_json['next_steps']
+                                
+                                if not next_step_list:  # 当步骤全部完成，退出
+                                    break
+                                
+                                for next_step_id in next_step_list: # 执行任务
+                                    next_step = id2step[next_step_id]
+                                    result, new_context = self.capability_agents_processor(step=next_step, cap_group=next_subtask_cap_group, cap_agents=cap_agents)
+                                    if result == 'SUCCESS':
+                                        self.update_context(context_id=context_id, context=new_context, step=next_step)
+                                        self.update_completed_step(step_id=next_step_id, step=next_step)
+                                        # 更新已完成步骤和context
+                                        context_id = context_id + 1
+                            self.update_completed_sub_task(next_subtask_id, next_subtask)
+                        self.update_completed_task(next_task_id, next_task)
                 return
     
-    def update_context(self, context_id: int, context: str, task_title: str, subtask_title: str):
+    def update_context(self, context_id: int, context: str, step: dict):
         with open(self.context_path, 'r') as file:
             try:    # 尝试读取 JSON 数据
                 data = json.load(file)
             except json.JSONDecodeError:    # 如果文件为空或格式错误，则创建一个空字典
                 data = {}
         data[context_id] = {
-            "task_title": task_title,
-            "subtask_title": subtask_title,
+            "step": step,
             "context": context
         }
         with open(self.context_path, 'w') as file:
-            json.dump(data, file)
+            json.dump(data, file, indent=4)
 
-    def update_completed_sub_task(self, subtask_id: str, subtask_title: str):
+    def update_completed_step(self, step_id: str, step: dict):
+        with open(self.completed_step_path, 'r') as file:
+            try:    # 尝试读取 JSON 数据
+                data = json.load(file)
+            except json.JSONDecodeError:    # 如果文件为空或格式错误，则创建一个空字典
+                data = {}
+        data['step_id'] = {
+            "step": step
+        }
+        with open(self.completed_step_path, 'w') as file:
+            json.dump(data, file, indent=4)
+    
+    def update_completed_sub_task(self, subtask_id: str, subtask: dict):
         with open(self.completed_subtask_path, 'r') as file:
             try:    # 尝试读取 JSON 数据
                 data = json.load(file)
             except json.JSONDecodeError:    # 如果文件为空或格式错误，则创建一个空字典
                 data = {}
         data[subtask_id] = {
-            "subtask_title": subtask_title
+            "subtask": subtask
         }
         with open(self.completed_subtask_path, 'w') as file:
-            json.dump(data, file)
+            json.dump(data, file, indent=4)
 
-    def update_completed_task(self, task_id: str, task_title: str):
+    def update_completed_task(self, task_id: str, task: dict):
         with open(self.completed_task_path, 'r') as file:
             try:    # 尝试读取 JSON 数据
                 data = json.load(file)
             except json.JSONDecodeError:    # 如果文件为空或格式错误，则创建一个空字典
                 data = {}
         data[task_id] = {
-            "task_title": task_title
+            "task": task
         }
         with open(self.completed_task_path, 'w') as file:
-            json.dump(data, file)
+            json.dump(data, file, indent=4)
 
-    def capability_agents_processor(self, capability_group: str, stepsplan: str, simulator_thread: Thread = None):
-        result = True
-        new_context = ""
-        if simulator_thread:
-            context = self.json_get_completion(simulator_thread, stepsplan)
-            context_json = json.loads(context)
-            new_context = context_json['new_context']
-        return result, new_context
+    def capability_agents_processor(self, step: dict, cap_group: str, cap_agents: dict):
+        """能力agent执行任务，目前只考虑单个能力agent的情况"""
+        cap_agents = step['agent']
+        for agent_name in cap_agents:
+            cap_agent_thread = cap_agents[cap_group][agent_name]
+            cap_agent_result = self.json_get_completion(cap_agent_thread, json.dumps(step))
+            print(f"{agent_name} results of execution:\n{cap_agent_result}")
+            cap_agent_result_json = json.loads(cap_agent_result)
+        result = cap_agent_result_json['result']
+        context = cap_agent_result_json['context']
+        return result, context
 
     def scheduling_layer(self, message: str, scheduler_thread: Thread):
         console.rule()
@@ -1525,15 +1580,16 @@ class Agency:
         print(f"{scheduler_thread.recipient_agent.name} SCHEDULING:\n" + schedulerres)
         return schedulerres
 
-    def task_planning_layer(self, message: str, original_request:str, task_planner_thread: Thread, inspector_thread: Thread = None, node_color: str = 'lightblue'):
+    def planning_layer(self, message: str, original_request:str, task_planner_thread: Thread, inspector_thread: Thread = None, node_color: str = 'lightblue'):
+        """将返回1. 规划结果, 2. 对应scheduler的输入"""
         console.rule()
         while True:
             planmessage = self.json_get_completion(task_planner_thread, message)
             print(f"{task_planner_thread.recipient_agent.name} RESULT:\n" + planmessage)
             planmessage_json = json.loads(planmessage)
             plan_json = {}
-            plan_json['user_request'] = original_request
-            plan_json['task_graph'] = planmessage_json
+            plan_json['main_task'] = original_request
+            plan_json['plan_graph'] = planmessage_json
             if inspector_thread:
                 inspectreview = self.json_get_completion(inspector_thread, json.dumps(plan_json))
                 print(f"{inspector_thread.recipient_agent.name} REVIEW {inspectreview}")
@@ -1544,7 +1600,7 @@ class Agency:
                 break
             message = inspectreview
         self.json2graph(planmessage, "TASK_PLAN", node_color)
-        return planmessage, plan_json
+        return planmessage, plan_json.dumps()
 
     def json2graph(self, data, title, node_color: str = 'blue'):
         import networkx as nx
