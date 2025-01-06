@@ -16,16 +16,19 @@ def main(tracker: str):
     # 1. Create agents with different roles
     ceo = Agent(
         name="CEO",
+        instructions="You are the CEO.",
         description="Manages projects and coordinates between team members",
     )
 
     developer = Agent(
         name="Developer",
+        instructions="You are the Developer.",
         description="Implements technical solutions and writes code",
     )
 
     analyst = Agent(
         name="Data Analyst",
+        instructions="You are the Data Analyst.",
         description="Analyzes data and provides insights",
     )
 

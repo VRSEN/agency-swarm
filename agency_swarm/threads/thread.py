@@ -149,7 +149,7 @@ class Thread:
                     "text", self.agent.name, recipient_agent.name, message, message_obj
                 )
 
-        # 4. Create run (conversation block) and handle callbacks
+        # 4. Create run (conversation block)
         self._create_run(
             recipient_agent,
             additional_instructions,
@@ -250,13 +250,20 @@ class Thread:
                 full_message += last_message
 
                 if yield_messages:
-                    yield MessageOutput(
+                    message_output = MessageOutput(
                         "text",
                         recipient_agent.name,
                         self.agent.name,
                         last_message,
                         message_obj,
                     )
+
+                    self._tracking_manager.end_run(
+                        message_output=message_output,
+                        run_id=self._run.id,
+                        parent_run_id=parent_run_id,
+                    )
+                    yield message_output
 
                 result = self._validate_assistant_response(
                     recipient_agent,

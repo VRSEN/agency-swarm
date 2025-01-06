@@ -2,10 +2,12 @@ import json
 from typing import Any
 from uuid import uuid4
 
+from langchain_core.outputs import Generation, LLMResult
 from openai.types.beta.threads.message import Message
 from openai.types.beta.threads.run import RequiredActionFunctionToolCall, Run
 from openai.types.beta.threads.runs.tool_call import ToolCall
 
+from agency_swarm.messages.message_output import MessageOutput
 from agency_swarm.util.tracking import get_callback_handler
 from agency_swarm.util.tracking.langchain_types import AgentAction
 
@@ -134,7 +136,7 @@ class TrackingManager:
             parent_run_id=parent_run_id,
         )
 
-    def start_chain(self, message: str, chain_name: str) -> str | None:
+    def start_chain(self, message: str, chain_name: str) -> str:
         """Start tracking for a top-level chain (e.g. Agency.get_completion).
         Returns the run_id if tracking is enabled, None otherwise."""
         run_id = f"chain_{uuid4()}"
@@ -173,10 +175,10 @@ class TrackingManager:
         parent_run_id: str | None,
         message_obj: Message | None = None,
         temperature: float | None = None,
-    ) -> str | None:
+    ) -> None:
         """Track the start of a run."""
         if not self.callback_handler:
-            return None
+            return
 
         prompts = [str(m) for m in message] if isinstance(message, list) else [message]
 
@@ -205,4 +207,27 @@ class TrackingManager:
             invocation_params=invocation_params,
         )
 
-        return run_id
+    def end_run(
+        self,
+        message_output: MessageOutput,
+        run_id: str,
+        parent_run_id: str | None = None,
+    ) -> None:
+        """Track the end of a run with a message output."""
+        if not self.callback_handler:
+            return
+
+        generation = Generation(text=message_output.content)
+
+        result = LLMResult(generations=[[generation]])
+
+        metadata = {
+            "message_obj": message_output.obj.model_dump() if message_output.obj else {}
+        }
+
+        self.callback_handler.on_llm_end(
+            response=result,
+            run_id=run_id,
+            parent_run_id=parent_run_id,
+            metadata=metadata,
+        )

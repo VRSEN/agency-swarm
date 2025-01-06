@@ -1,6 +1,7 @@
 import hashlib
 from typing import Literal
 
+from openai.types.beta.threads.message import Message
 from rich.console import Console, Group
 from rich.live import Live
 from rich.markdown import Markdown
@@ -15,7 +16,7 @@ class MessageOutput:
         sender_name: str,
         receiver_name: str,
         content,
-        obj=None,
+        obj: Message | None = None,
     ):
         """Initialize a message object with sender, receiver, content and type.
 
