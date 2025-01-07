@@ -6,7 +6,10 @@ _description = """
 职责是获取华为云账户AKSK
 """
 
-_instruction = "./instructions.md"
+import os
+
+current_path = os.path.abspath(os.path.dirname(__file__))
+_instruction = current_path + "/instructions.md"
 
 _tools = []
 

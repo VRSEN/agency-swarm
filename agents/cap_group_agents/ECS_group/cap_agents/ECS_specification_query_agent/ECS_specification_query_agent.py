@@ -1,5 +1,5 @@
 from agency_swarm import Agent
-from agents.cap_group_agents.CES_group.cap_agents.monitor_alarm_history_agent.tools import (
+from agents.cap_group_agents.ECS_group.cap_agents.ECS_specification_query_agent.tools import (
     ReadLog, WriteLog
 )
 
@@ -9,7 +9,10 @@ _description = """
 负责华为云ECS规格信息查询任务，包括：查询规格详情和规格扩展信息列表，查询规格销售策略， 查询云服务器规格变更支持列表。
 """
 
-_instruction = "./instructions.md"
+import os
+
+current_path = os.path.abspath(os.path.dirname(__file__))
+_instruction = current_path + "/instructions.md"
 
 _tools = [ReadLog, WriteLog]
 

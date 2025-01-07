@@ -1,5 +1,5 @@
 from agency_swarm import Agent
-from agents.cap_group_agents.CES_group.cap_agents.monitor_alarm_history_agent.tools import (
+from agents.cap_group_agents.CES_group.cap_agents.CES_alarm_rule_agent.tools import (
     ReadLog, WriteLog
 )
 
@@ -9,7 +9,10 @@ _description = """
 负责华为云的告警规则管理任务，包括：查询告警规则列表、查询告警规则列表、查询单条告警规则信息、启停告警规则、批量启停告警规则、删除告警规则、批量删除告警规则、创建告警规则、创建告警规则。
 """
 
-_instruction = "./instructions.md"
+import os
+
+current_path = os.path.abspath(os.path.dirname(__file__))
+_instruction = current_path + "/instructions.md"
 
 _tools = [ReadLog, WriteLog]
 

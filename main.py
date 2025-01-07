@@ -76,7 +76,7 @@ CES_step_scheduler = CES_step_scheduler.create_agent()
 CES_alarm_history_agent = CES_alarm_history_agent.create_agent()
 CES_alarm_rule_agent = CES_alarm_rule_agent.create_agent()
 CES_dashboard_agent = CES_dashboard_agent.create_agent()
-CES_data_agent = CES_data_agent.create()
+CES_data_agent = CES_data_agent.create_agent()
 CES_event_agent = CES_event_agent.create_agent()
 CES_metric_agent = CES_metric_agent.create_agent()
 

@@ -1,5 +1,5 @@
 from agency_swarm import Agent
-from agents.cap_group_agents.CES_group.cap_agents.monitor_alarm_history_agent.tools import (
+from agents.cap_group_agents.EVS_group.cap_agents.EVS_snapshot_agent.tools import (
     ReadLog, WriteLog
 )
 
@@ -9,7 +9,10 @@ _description = """
 负责华为云云硬盘快照管理任务，包括：创建云硬盘快照、删除云硬盘快照、更新云硬盘快照、查询云硬盘快照详情列表、查询单个云硬盘快照详情、回滚快照到云硬盘。
 """
 
-_instruction = "./instructions.md"
+import os
+
+current_path = os.path.abspath(os.path.dirname(__file__))
+_instruction = current_path + "/instructions.md"
 
 _tools = [ReadLog, WriteLog]
 
