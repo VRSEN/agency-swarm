@@ -1,6 +1,6 @@
 from agency_swarm import Agent
 from agents.cap_group_agents.CES_group.cap_agents.monitor_alarm_history_agent.tools import (
-    read, rizhi
+    ReadLog, WriteLog
 )
 
 _name = "OS_agent"
@@ -10,7 +10,7 @@ OS_agent: 负责华为云ECS操作系统管理任务，包括重装弹性云服�
 
 _instruction = "./instructions.md"
 
-_tools = [read, rizhi]
+_tools = [ReadLog, WriteLog]
 
 _file_folder = ""
 

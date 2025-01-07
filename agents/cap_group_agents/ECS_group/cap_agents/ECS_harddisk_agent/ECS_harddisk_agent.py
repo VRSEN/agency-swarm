@@ -1,6 +1,6 @@
 from agency_swarm import Agent
 from agents.cap_group_agents.CES_group.cap_agents.monitor_alarm_history_agent.tools import (
-    read, rizhi
+    ReadLog, WriteLog
 )
 
 _name = "ECS_harddisk_agent"
@@ -11,7 +11,7 @@ _description = """
 
 _instruction = "./instructions.md"
 
-_tools = [read, rizhi]
+_tools = [ReadLog, WriteLog]
 
 _file_folder = ""
 
