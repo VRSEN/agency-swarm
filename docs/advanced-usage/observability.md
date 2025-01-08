@@ -83,7 +83,7 @@ A SQLite database will be created in the current directory. To specify a custom 
 ### Event Hierarchy
 ```
 Agency Chain
-├── Messages (tracked via MessageOutput)
+├── Messages
 │   ├── User messages
 │   ├── Assistant messages
 │   ├── Function calls
@@ -99,7 +99,6 @@ Agency Chain
 
 ### Key Components
 - `TrackingManager`: Central tracking coordinator
-- `MessageOutput`: Wrapper for all messages with metadata
 - `LocalCallbackHandler`: SQLite implementation of tracking callbacks
 - Langchain callbacks: Standardized event tracking interface
 
@@ -126,13 +125,3 @@ Agency Chain
 - Timestamps
 - Token usage
 - Error details
-
-### Example Message Object
-```python
-class MessageOutput:
-    msg_type: Literal["function", "function_output", "text", "system"]
-    sender_name: str
-    receiver_name: str
-    content: str
-    obj: Optional[Message | ToolCall]  # OpenAI object for additional metadata
-```
