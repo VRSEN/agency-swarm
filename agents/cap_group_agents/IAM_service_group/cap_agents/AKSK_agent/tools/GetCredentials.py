@@ -7,8 +7,8 @@ class GetCredentials(BaseTool):
 
     def run(self):
         AKSK = {
-            "AK": "",
-            "SK": ""
+            "AK": "SCARKXC0UUA3GH8QXRQJ",
+            "SK": "U3BdbkibZVo9Ycegotq1AtLjnxN7CRtUt8XLUc3z"
         }
         return AKSK
 
