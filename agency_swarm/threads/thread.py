@@ -388,7 +388,11 @@ class Thread:
                     self._run = stream.get_final_run()
 
     def cancel_run(self, thread_id=None, run_id=None, check_status=True):
-        if check_status and self._run.status in self.terminal_states and not run_id:
+        if (
+            check_status
+            and (not self._run or self._run.status in self.terminal_states)
+            and not run_id
+        ):
             return
 
         try:
@@ -580,6 +584,7 @@ class Thread:
     def _get_sync_async_tool_calls(self, tool_calls, recipient_agent):
         async_tool_calls = []
         sync_tool_calls = []
+
         for tool_call in tool_calls:
             if tool_call.function.name.startswith("SendMessage"):
                 sync_tool_calls.append(tool_call)
@@ -593,6 +598,12 @@ class Thread:
                 ),
                 None,
             )
+
+            if tool is None:
+                print(
+                    f"Tool {tool_call.function.name} not found in agent {recipient_agent.name}. Skipping."
+                )
+                continue
 
             if (
                 hasattr(tool.ToolConfig, "async_mode") and tool.ToolConfig.async_mode
