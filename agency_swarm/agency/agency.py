@@ -1392,7 +1392,7 @@ class Agency:
             capgroup_thread[key] = []
             for agent in cap_group_agents[key]:
                 capgroup_thread[key].append(Thread(self.user, agent))
-        return cap_group_agents
+        return capgroup_thread
     
     def create_cap_agent_thread(self, cap_group: str, cap_agents: Dict[str, List]):
         cap_agent_thread = {}
@@ -1460,7 +1460,7 @@ class Agency:
                         "title": next_task['title'],
                         "description": next_task['description'],
                     }
-                    print(f"The task:\n{subtask_input}need to be planned...")
+                    print(f"The task:\n{subtask_input}\nneed to be planned...")
                     subtask_graph, subtasks_need_scheduled = self.planning_layer(message=json.dumps(subtask_input), original_request=next_task['description'], task_planner_thread=subplanner_thread, node_color='lightgreen')
                     
                     id2subtask = {}
@@ -1483,9 +1483,9 @@ class Agency:
                                 "title": next_subtask['title'],
                                 "description": next_subtask['description'],
                             }
-                            print(f"The subtask:\n{steps_input}need to be planned...")
+                            print(f"The subtask:\n{steps_input}\nneed to be planned...")
                             next_subtask_cap_group = next_subtask['capability_group']
-                            steps_graph, steps_need_scheduled = self.planning_layer(message=json.dumps(steps_input), original_request=next_subtask['description'], task_planner_thread=cap_group_thread[next_subtask_cap_group][0], node_color='lightred')
+                            steps_graph, steps_need_scheduled = self.planning_layer(message=json.dumps(steps_input), original_request=next_subtask['description'], task_planner_thread=cap_group_thread[next_subtask_cap_group][0], node_color='white')
 
                             id2step = {}
                             steps_graph_json = json.loads(steps_graph)
@@ -1600,7 +1600,7 @@ class Agency:
                 break
             message = inspectreview
         self.json2graph(planmessage, "TASK_PLAN", node_color)
-        return planmessage, plan_json.dumps()
+        return planmessage, json.dumps(plan_json)
 
     def json2graph(self, data, title, node_color: str = 'blue'):
         import networkx as nx

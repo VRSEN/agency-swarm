@@ -14,7 +14,7 @@ import os
 current_path = os.path.abspath(os.path.dirname(__file__))
 _instruction = current_path + "/instructions.md"
 
-_tools = [ReadLog, WriteLog]
+_tools = [ReadLog.ReadLog, WriteLog.WriteLog]
 
 _file_folder = ""
 

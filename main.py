@@ -192,4 +192,4 @@ plan_agents = {
 }
 
 # agency.langgraph_test(repeater=repeater, rander=rander, palindromist=palindromist)
-agency.task_planning(plan_agents=plan_agents, cap_group_agents=cap_group_agents, cap_agent=cap_agents)
+agency.task_planning(plan_agents=plan_agents, cap_group_agents=cap_group_agents, cap_agents=cap_agents)
