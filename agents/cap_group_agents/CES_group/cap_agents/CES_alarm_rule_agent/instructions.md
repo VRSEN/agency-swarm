@@ -37,7 +37,7 @@
 根据 API agent 返回的需要参数，首先思考能否从CES_manager初始请求中提取参数内容。
 
 #### 4.2 读取日志预填参数：
-调用 `read_log()`，获得日志内容，查询日志中是否有能满足需求的参数信息。
+调用 `ReadLog()`，获得日志内容，查询日志中是否有能满足需求的参数信息。
 
 #### 4.3 初始参数确认:
 对于 4.1 和 4.2 步已获取的参数值向CES_manager进行确认。
@@ -57,7 +57,7 @@
 根据CES_manager提供的原始回复，判断参数有没有缺失，参数值是否符合参数数据类型要求，如果有问题则回到执行 4.3。
 
 #### 4.7 信息记录:
-调用 `write_log()`，记录：
+调用 `WriteLog()`，记录：
 - 初始CES_manager请求
 - 从日志中获取的参数值
 - 4.5 步中记忆的CES_manager提供的回复原文
@@ -76,7 +76,7 @@
 
 ### 6. 接收响应:
 #### 6.1 接收并记忆来自 API agent 的响应：
-调用 `write_log()` 将响应记录到日志中。
+调用 `WriteLog()` 将响应记录到日志中。
 
 #### 6.2 如果响应中有 "message" 字段：
 说明任务执行失败，必须按照以下 JSON 格式返回给CES_manager，例如：
@@ -107,10 +107,10 @@
 
 ### 7. 调用 check agent:
 #### 7.1 将 "project_id" 与 "job_id" 字段的内容以 JSON 格式传递给 check agent：
-如果你不知道这两个字段的内容，请调用 `read_log()` 获得日志，提取最新的 `project_id` 与 `job_id` 的值，整理后以 JSON 格式传递给 check agent。
+如果你不知道这两个字段的内容，请调用 `ReadLog()` 获得日志，提取最新的 `project_id` 与 `job_id` 的值，整理后以 JSON 格式传递给 check agent。
 
 #### 7.2 接收到 check agent 返回的响应后：
-调用 `write_log()` 将其记录。
+调用 `WriteLog()` 将其记录。
 
 #### 7.3 生成完整响应并返回给CES_manager：
 你必须将 6.1 步记录的来自 API agent 响应的参数内容，新加入 7.2 步记录的 check agent 响应的 "context" 字段，而不要覆盖其原有信息，获得完整响应。例如在 "context" 字段里把 API agent 响应的内容放入其原有内容的后面，不需要标注响应来源。将此完整响应返回给CES_manager。
