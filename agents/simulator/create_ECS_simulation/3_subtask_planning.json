@@ -1,0 +1,9 @@
+{
+    "step_1": {
+        "step_title": "获取访问密钥和安全密钥",
+        "id": "step_1",
+        "agent": ["Account Information Organization Agent"],
+        "description": "获取用户的访问密钥（AK）和安全密钥（SK）。",
+        "dep": []
+    }
+}

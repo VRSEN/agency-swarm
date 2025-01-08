@@ -1,0 +1,16 @@
+{
+    "step_1": {
+        "step_title": "创建VPC",
+        "id": "step_1",
+        "agent": ["Vpc Agent"],
+        "description": "使用获取的API访问凭证，通过华为云API创建一个新的VPC。",
+        "dep": []
+    },
+    "step_2": {
+        "step_title": "创建子网",
+        "id": "step_2",
+        "agent": ["Subnet Agent"],
+        "description": "在已创建的VPC中创建一个子网。需要在创建子网时指定VPC ID。",
+        "dep": ["step_1"]
+    }
+}
