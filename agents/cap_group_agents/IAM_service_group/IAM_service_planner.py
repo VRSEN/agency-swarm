@@ -18,7 +18,7 @@ _input_format = """
 """
 
 _agents = """
-1. **AKSK_Agent**: 负责华为云账户信息管理，包括获取AK和SK，用于身份验证和授权
+1. **AKSK_agent**: 负责华为云账户信息管理，包括获取AK和SK，用于身份验证和授权
 """
 
 _output_format = """

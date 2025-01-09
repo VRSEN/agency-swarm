@@ -12,7 +12,7 @@ class WriteJsonFile(BaseTool):
     )
 
     def run(self):
-        file_path = "/root/agency-swarm-cover/agents/files" + self.file_name
+        file_path = "/root/agency-swarm-cover/agents/files/" + self.file_name
         try:
             with open(file_path, 'r') as f:
                 existing_data = json.load(f)

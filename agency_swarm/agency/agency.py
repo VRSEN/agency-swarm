@@ -1416,34 +1416,34 @@ class Agency:
 
         self.init_file()
 
-        text = "在华为云北京、曼谷、开罗、上海可用区分别创建一个ecs，它们的规格任意"
+        text = "在华为云北京可用区创建一个ecs，规格任意"
         # text = "在北京可用区创建三个ecs，之后删除创建时间超过5分钟的ecs"
         # text = "在华为云ecs上部署mysql和postgresql，并用sysbench测试它们的性能"
         # text = input("👤 USER: ")
         original_request = text
         task_planner = plan_agents["task_planner"]
-        inspector = plan_agents["inspector"]
+        # inspector = plan_agents["inspector"]
         scheduler = plan_agents["scheduler"]
         subtask_planner = plan_agents["subtask_planner"]
         sub_scheduler = plan_agents["sub_scheduler"]
         planner_thread = Thread(self.user, task_planner)
         scheduler_thread = Thread(self.user, scheduler)
-        inspector_thread = Thread(self.user, inspector)
+        # inspector_thread = Thread(self.user, inspector)
         subplanner_thread = Thread(self.user, subtask_planner)
         sub_scheduler_thread = Thread(self.user, sub_scheduler)
         
         cap_group_thread = self.create_cap_group_agent_threads(cap_group_agents=cap_group_agents)
 
-        cap_agents = {}
+        cap_agent_threads = {}
         for key in cap_agents:
-            cap_agents[key] = self.create_cap_agent_thread(cap_group=key, cap_agents=cap_agents)
+            cap_agent_threads[key] = self.create_cap_agent_thread(cap_group=key, cap_agents=cap_agents)
 
         # task_id = 0
         context_id = 0
 
         while True: # 拆分出任务（事务）流程图，id2task
             # task_id = task_id + 1
-            task_graph, tasks_need_scheduled = self.planning_layer(message=text, original_request=original_request, task_planner_thread=planner_thread, inspector_thread=inspector_thread, node_color='lightblue')
+            task_graph, tasks_need_scheduled = self.planning_layer(message=text, original_request=original_request, task_planner_thread=planner_thread, node_color='lightblue')
             
             id2task = {}
             task_graph_json = json.loads(task_graph)
@@ -1508,15 +1508,14 @@ class Agency:
                                 
                                 for next_step_id in next_step_list: # 执行任务
                                     next_step = id2step[next_step_id]
-                                    result, new_context = self.capability_agents_processor(step=next_step, cap_group=next_subtask_cap_group, cap_agents=cap_agents)
+                                    result, new_context = self.capability_agents_processor(step=next_step, cap_group=next_subtask_cap_group, cap_agent_threads=cap_agent_threads)
                                     if result == 'SUCCESS':
                                         self.update_context(context_id=context_id, context=new_context, step=next_step)
                                         self.update_completed_step(step_id=next_step_id, step=next_step)
                                         # 更新已完成步骤和context
                                         context_id = context_id + 1
                             self.update_completed_sub_task(next_subtask_id, next_subtask)
-                        self.update_completed_task(next_task_id, next_task)
-                return
+                    self.update_completed_task(next_task_id, next_task)
     
     def update_context(self, context_id: int, context: str, step: dict):
         with open(self.context_path, 'r') as file:
@@ -1567,11 +1566,11 @@ class Agency:
         with open(self.completed_task_path, 'w') as file:
             json.dump(data, file, indent=4)
 
-    def capability_agents_processor(self, step: dict, cap_group: str, cap_agents: dict):
+    def capability_agents_processor(self, step: dict, cap_group: str, cap_agent_threads: dict):
         """能力agent执行任务，目前只考虑单个能力agent的情况"""
         cap_agents = step['agent']
         for agent_name in cap_agents:
-            cap_agent_thread = cap_agents[cap_group][agent_name]
+            cap_agent_thread = cap_agent_threads[cap_group][agent_name]
             cap_agent_result = self.json_get_completion(cap_agent_thread, json.dumps(step))
             print(f"{agent_name} results of execution:\n{cap_agent_result}")
             cap_agent_result_json = json.loads(cap_agent_result)
@@ -1650,6 +1649,7 @@ class Agency:
         while _ == False:
             res = thread.get_completion(message=message, response_format='auto')
             response_information = self.my_get_completion(res)
+            # print(response_information)
             _, json_res = self.get_json_from_str(message=response_information)
         return json_res
     

@@ -9,7 +9,7 @@ class ReadJsonFile(BaseTool):
     )
 
     def run(self):
-        file_path = "/root/agency-swarm-cover/agents/files" + self.file_name
+        file_path = "/root/agency-swarm-cover/agents/files/" + self.file_name
         print(file_path)
         with open(file_path, 'r') as file:
             json_data = json.load(file)

@@ -18,12 +18,6 @@ _input_format = """
 """
 
 _agents = """
-1. **ECS Agent**: 负责创建、删除、查询、修改、迁移、启动、停止、重启ECS实例；
-2. **Information Agent**: 负责查询华为云ECS相关的规格信息；
-3. **Netcard Agent**: 负责ECS网卡配置；
-4. **Harddisk Agent**: 负责ECS硬盘配置；
-5. **Recommend Agent**: 负责根据Information Agent查询结果，进行华为云ECS规格推荐；
-6. **Daemon Agent**: 负责对已创建华为云ECS进行信息管理，记录日志。
 """
 
 _output_format = """

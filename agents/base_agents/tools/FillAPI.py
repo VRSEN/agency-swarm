@@ -4,10 +4,10 @@ import pandas as pd
 import json
 import re
 
-from api_database import search_from_sqlite, API_DATABASE_FILE
-from utils import try_parse_json
+from agents.base_agents.tools.api_database import search_from_sqlite, API_DATABASE_FILE
+from agents.base_agents.tools.utils import try_parse_json
 
-from FillParamTable import FillParamTable
+from agents.base_agents.tools.FillParamTable import FillParamTable
 
 class FillAPI(BaseTool):
     '''

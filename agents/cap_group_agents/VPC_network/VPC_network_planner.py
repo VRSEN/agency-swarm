@@ -18,8 +18,9 @@ _input_format = """
 """
 
 _agents = """
-1. **Vpc Agent**: 负责增删改查VPC；
-2. ****: 负责增删改查子网；
+1. **VPC_secgroup_agent**: 负责华为云安全组管理任务，包括创建安全组、查询安全组、删除安全组，创建安全组规则、查询安全组规则、删除安全组规则；
+2. **VPC_subnet_agent**: 负责华为云子网管理任务，包括创建子网、查询子网、查询子网列表、更新子网、删除子网；
+3. **VPC_vpc_agent**：负责华为云VPC管理任务，包括创建VPC、查询VPC、查询VPC列表、更新VPC、删除VPC。
 """
 
 _output_format = """
