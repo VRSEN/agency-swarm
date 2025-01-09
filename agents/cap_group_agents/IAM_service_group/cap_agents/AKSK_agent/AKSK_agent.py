@@ -1,30 +1,28 @@
-from agency_swarm import Agent
+from agency_swarm.agents import Agent
+from agents.cap_group_agents.IAM_service_group.cap_agents.AKSK_agent.tools.GetCredentials import GetCredentials
 
-_name = "AKSK_agent"
+_name = "AKSK Agent"
 
-_description = """
-职责是获取华为云账户AKSK
-"""
+_description = "AKSK Agent 提供登录认证信息。"
 
-import os
+_instructions = """你的任务是**调用函数**`GetCredentials()`获取 access_key 和 secret_key，并以json格式输出。"""
 
-current_path = os.path.abspath(os.path.dirname(__file__))
-_instruction = current_path + "/instructions.md"
+_tools = [GetCredentials]
 
-_tools = []
+_files_folder = ""
 
-_file_folder = ""
-
-def create_agent(*, 
-                 description=_description, 
-                 instuction=_instruction, 
-                 tools=_tools, 
-                 files_folder=_file_folder):
-    return Agent(name=_name,
+def create_agent(*,
+                 name=_name,
+                 description=_description,
+                 instructions=_instructions,
+                 tools=_tools,
+                 files_folder=_files_folder):
+    return Agent(name=name,
                  tools=tools,
                  description=description,
-                 instructions=instuction,
-                 files_folder=_file_folder,
+                 instructions=instructions,
+                 files_folder=files_folder,
                  temperature=0.5,
-                 response_format='auto',
-                 max_prompt_tokens=25000,)
+                 response_format={'type': 'json_object'},
+                 max_prompt_tokens=25000,
+                 )
