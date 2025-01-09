@@ -13,7 +13,7 @@ from openai.types.beta.threads.message import Attachment
 
 from agency_swarm.agents import Agent
 from agency_swarm.messages import MessageOutput
-from agency_swarm.tools import CodeInterpreter, FileSearch
+from agency_swarm.tools import BaseTool, CodeInterpreter, FileSearch
 from agency_swarm.user import User
 from agency_swarm.util.oai import get_openai_client
 from agency_swarm.util.streaming import AgencyEventHandler
@@ -37,7 +37,7 @@ class Thread:
 
         return self._thread
 
-    def __init__(self, agent: Union[Agent, User], recipient_agent: Agent):
+    def __init__(self, agent: Union[Agent, User, BaseTool], recipient_agent: Agent):
         self.agent = agent
         self.recipient_agent = recipient_agent
 

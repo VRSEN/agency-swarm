@@ -15,6 +15,7 @@ from typing import (
     TypedDict,
     TypeVar,
     Union,
+    Tuple,
 )
 
 from openai.lib._parsing._completions import type_to_response_format_param
@@ -62,6 +63,7 @@ class Agency:
     def __init__(
         self,
         agency_chart: List,
+        thread_strategy: Dict[Literal["always_same", "always_new"], List[Tuple]] = {},
         shared_instructions: str = "",
         shared_files: Union[str, List[str]] = None,
         async_mode: Literal["threading", "tools_threading"] = None,
@@ -80,6 +82,7 @@ class Agency:
 
         Parameters:
             agency_chart: The structure defining the hierarchy and interaction of agents within the agency.
+            thread_strategy (Dict[Literal["always_same", "always_new"], List[Tuple]], optional): The strategy used for retrieving threads when starting a new conversation. Defaults to "always_same".
             shared_instructions (str, optional): A path to a file containing shared instructions for all agents. Defaults to an empty string.
             shared_files (Union[str, List[str]], optional): A path to a folder or a list of folders containing shared files for all agents. Defaults to None.
             async_mode (str, optional): Specifies the mode for asynchronous processing. In "threading" mode, all sub-agents run in separate threads. In "tools_threading" mode, all tools run in separate threads, but agents do not. Defaults to None.
@@ -102,6 +105,7 @@ class Agency:
         self.main_recipients = []
         self.main_thread = None
         self.recipient_agents = None  # for autocomplete
+        self.thread_strategy = thread_strategy
         self.shared_files = shared_files if shared_files else []
         self.async_mode = async_mode
         self.send_message_tool_class = send_message_tool_class
@@ -1002,6 +1006,7 @@ class Agency:
             if "temp_id" in agent.id:
                 agent.id = None
 
+            agent.agency = self
             agent.add_shared_instructions(self.shared_instructions)
             agent.settings_path = self.settings_path
 

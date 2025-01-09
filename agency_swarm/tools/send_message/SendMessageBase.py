@@ -27,6 +27,21 @@ class SendMessageBase(BaseTool, ABC):
         return value
 
     def _get_thread(self) -> Thread | ThreadAsync:
+        strategy = self._caller_agent.agency.thread_strategy
+        recipient_agent = self.get_agent_by_name(self.recipient.value)
+        # strategy example:
+        # {
+        #     "always_new": [
+        #         (some_agent_1, some_agent_2), # use instances for agents
+        #         (Tool_1, some_agent_3) # use classes for tools
+        #     ]
+        # }
+        if "always_new" in strategy and (
+            (isinstance(self._caller_agent, BaseTool) and (type(self._caller_agent), recipient_agent) in strategy["always_new"]) or
+            (isinstance(self._caller_agent, Agent) and (self._caller_agent, recipient_agent) in strategy["always_new"])
+        ):
+            return Thread(agent=self._caller_agent, recipient_agent=recipient_agent)
+        # default: "always_same"
         return self._agents_and_threads[self._caller_agent.name][self.recipient.value]
 
     def _get_main_thread(self) -> Thread | ThreadAsync:

@@ -837,10 +837,10 @@ class Agent:
             os.path.join(self.get_class_folder_path(), self.instructions)
         )
         if os.path.isfile(class_instructions_path):
-            with open(class_instructions_path, "r") as f:
+            with open(class_instructions_path, "r", encoding='utf-8') as f:
                 self.instructions = f.read()
         elif os.path.isfile(self.instructions):
-            with open(self.instructions, "r") as f:
+            with open(self.instructions, "r", encoding='utf-8') as f:
                 self.instructions = f.read()
         elif (
             "./instructions.md" in self.instructions
