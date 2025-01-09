@@ -1387,6 +1387,7 @@ class Agency:
     context_path = files_path + "context.json"
 
     def init_file(self):
+        self._init_file(self.completed_step_path)
         self._init_file(self.completed_subtask_path)
         self._init_file(self.completed_task_path)
         self._init_file(self.context_path)
