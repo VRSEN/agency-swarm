@@ -74,7 +74,8 @@ def insert_data():
         ("批量启动云服务器", "POST", "https://{endpoint}/v1/{project_id}/cloudservers/action", "根据给定的云服务器ID列表，批量启动云服务器，1分钟内最多可以处理1000台。"),
         ("批量关闭云服务器", "POST", "https://{endpoint}/v1/{project_id}/cloudservers/action", "根据给定的云服务器ID列表，批量关闭云服务器，1分钟内最多可以处理1000台。"),
         ("批量重启云服务器", "POST", "https://{endpoint}/v1/{project_id}/cloudservers/action", "根据给定的云服务器ID列表，批量重启云服务器，1分钟内最多可以处理1000台。"),
-        ("创建子网", "POST", "https://{endpoint}/v1/{project_id}/subnets", "创建子网。")
+        ("创建子网", "POST", "https://{endpoint}/v1/{project_id}/subnets", "创建子网。"),
+        ("查询规格详情和规格扩展信息列表", "GET", "https://{endpoint}/v1/{project_id}/cloudservers/flavors?availability_zone={availability_zone}", "查询云服务器规格详情信息和规格扩展信息列表。"),
     ]
 
     uri_parameters_data = [
@@ -117,6 +118,9 @@ def insert_data():
         ("批量重启云服务器", "project_id", True, None, "项目ID。获取方法请参见获取项目ID。"),
         ("创建子网", "endpoint", True, None, "指定承载REST服务端点的服务器域名或IP，不同服务不同区域的Endpoint不同，您可以从地区和终端节点获取。例如IAM服务在“华北-北京四”区域的Endpoint为“iam.cn-north-4.myhuaweicloud.com”。"),
         ("创建子网", "project_id", True, None, "项目ID，获取项目ID请参见获取项目ID。"),
+        ("查询规格详情和规格扩展信息列表", "endpoint", True, None, "指定承载REST服务端点的服务器域名或IP，不同服务不同区域的Endpoint不同，您可以从地区和终端节点获取。例如IAM服务在“华北-北京四”区域的Endpoint为“iam.cn-north-4.myhuaweicloud.com”。"),
+        ("查询规格详情和规格扩展信息列表", "project_id", True, None, "项目ID。获取方法请参见获取项目ID。"),
+        ("查询规格详情和规格扩展信息列表", "availability_zone", False, "String", "可用区，需要指定可用区（AZ）的名称，当此字段不为空时，只返回可使用（如：normal、obt、promotion等状态）的flavor列表。请参考地区和终端节点获取。"),
     ]
 
     request_parameters_data = [
