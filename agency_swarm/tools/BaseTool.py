@@ -14,10 +14,17 @@ class BaseTool(BaseModel, ABC):
     _event_handler: Any = None
     _tool_call: Any = None
 
-    def __init__(self, **kwargs):
+    def __init__(self, caller_tool = None, **kwargs):
         if not self.__class__._shared_state:
             self.__class__._shared_state = SharedState()
         super().__init__(**kwargs)
+
+        # initialize BaseTool if it's called by another BaseTool
+        if caller_tool:
+            assert isinstance(caller_tool, BaseTool)
+            self._caller_agent = caller_tool._caller_agent
+            self._event_handler = caller_tool._event_handler
+            self._tool_call = caller_tool._tool_call
 
         # Ensure all ToolConfig variables are initialized
         config_defaults = {
