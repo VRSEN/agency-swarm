@@ -1002,6 +1002,7 @@ class Agency:
             if "temp_id" in agent.id:
                 agent.id = None
 
+            agent.agency = self
             agent.add_shared_instructions(self.shared_instructions)
             agent.settings_path = self.settings_path
 
