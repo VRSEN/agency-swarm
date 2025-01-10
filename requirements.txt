@@ -7,3 +7,8 @@ termcolor==2.4.0
 python-dotenv==1.0.1
 rich==13.7.1
 jsonref==1.1.0
+selenium==4.27.1
+selenium-stealth==1.0.6
+gradio==4.44.1
+webdriver-manager==4.0.2
+
