@@ -5,7 +5,7 @@ import time
 import random
 
 
-class sleep(BaseTool):
+class Sleep(BaseTool):
 
     def run(self):
         for i in range(5):

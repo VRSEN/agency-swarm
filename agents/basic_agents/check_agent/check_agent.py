@@ -1,12 +1,10 @@
 from agency_swarm import Agent
-from agents.cap_group_agents.ECS_group.cap_agents.ECS_harddisk_agent.tools import (
-    ReadLog, WriteLog
-)
+from agents.basic_agents.check_agent.tools.Sleep import Sleep
 
 _name = "check_agent"
 
 _description = """
-
+check_agent负责查询任务执行进度。
 """
 
 import os
@@ -14,7 +12,7 @@ import os
 current_path = os.path.abspath(os.path.dirname(__file__))
 _instruction = current_path + "/instructions.md"
 
-_tools = [ReadLog.ReadLog, WriteLog.WriteLog]
+_tools = [Sleep]
 
 _file_folder = ""
 
