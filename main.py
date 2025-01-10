@@ -4,7 +4,7 @@ from agents.task_planner import (
     task_planner, scheduler, inspector
 )
 from agents.subtask_planner import (
-    subtask_planner, sub_scheduler
+    subtask_planner, subtask_manager, subtask_scheduler
 )
 from agents.cap_group_agents.CES_group import (
     CES_manager, CES_planner, CES_step_scheduler
@@ -20,6 +20,9 @@ from agents.cap_group_agents.Huawei_Cloud_API_group import (
 )
 from agents.cap_group_agents.IAM_service_group import (
     IAM_service_manager, IAM_service_planner, IAM_service_step_scheduler
+)
+from agents.cap_group_agents.IMS_group import (
+    IMS_manager, IMS_planner, IMS_step_scheduler
 )
 from agents.cap_group_agents.OS_group import (
     OS_manager, OS_planner, OS_step_scheduler
@@ -44,6 +47,8 @@ from agents.cap_group_agents.EVS_group.cap_agents.EVS_clouddiskt_agent import EV
 from agents.cap_group_agents.EVS_group.cap_agents.EVS_snapshot_agent import EVS_snapshot_agent
 
 from agents.cap_group_agents.IAM_service_group.cap_agents.AKSK_agent import AKSK_agent
+
+from agents.cap_group_agents.IMS_group.cap_agents.IMS_agent import IMS_agent
 
 from agents.cap_group_agents.OS_group.cap_agents.OS_agent import OS_agent
 
@@ -70,7 +75,8 @@ task_planner = task_planner.create_agent()
 # inspector = inspector.create_agent()
 scheduler = scheduler.create_agent()
 subtask_planner = subtask_planner.create_agent()
-sub_scheduler = sub_scheduler.create_agent()
+subtask_manager = subtask_manager.create_agent()
+subtask_scheduler = subtask_scheduler.create_agent()
 
 # repeater = repeater.create_agent()
 # rander = rander.create_agent()
@@ -103,10 +109,15 @@ ECS_specification_query_agent = ECS_specification_query_agent.create_agent()
 # EVS_clouddiskt_agent = EVS_clouddiskt_agent.create_agent()
 # EVS_snapshot_agent = EVS_snapshot_agent.create_agent()
 
-IAM_service_planner = IAM_service_planner.create_agent()
-IAM_service_manager = IAM_service_manager.create_agent()
-IAM_service_step_scheduler = IAM_service_step_scheduler.create_agent()
-AKSK_agent = AKSK_agent.create_agent()
+# IAM_service_planner = IAM_service_planner.create_agent()
+# IAM_service_manager = IAM_service_manager.create_agent()
+# IAM_service_step_scheduler = IAM_service_step_scheduler.create_agent()
+# AKSK_agent = AKSK_agent.create_agent()
+
+IMS_planner = IMS_planner.create_agent()
+IMS_manager = IMS_manager.create_agent()
+IMS_step_scheduler = IMS_step_scheduler.create_agent()
+IMS_agent = IMS_agent.create_agent()
 
 # Huawei_Cloud_API_planner = Huawei_Cloud_API_planner.create_agent()
 # Huawei_Cloud_API_manager = Huawei_Cloud_API_manager.create_agent()
@@ -133,14 +144,22 @@ param_filler = param_filler.create_agent()
 param_selector = param_selector.create_agent()
 
 chat_graph = [task_planner, scheduler,
-              subtask_planner, sub_scheduler,
+              subtask_planner, subtask_manager, subtask_scheduler, 
             #   CES_planner, CES_step_scheduler,
               ECS_planner, ECS_step_scheduler,
             #   EVS_planner, EVS_step_scheduler,
             #   Huawei_Cloud_API_planner, Huawei_Cloud_API_step_scheduler,
-              IAM_service_planner, IAM_service_step_scheduler,
+            #   IAM_service_planner, IAM_service_step_scheduler,
+              IMS_planner, IMS_step_scheduler,
             #   OS_planner, OS_step_scheduler,
               VPC_network_planner, VPC_network_step_scheduler,
+
+            #   [subtask_manager, CES_manager],
+              [subtask_manager, ECS_manager],
+            #   [subtask_manager, EVS_manager],
+              [subtask_manager, IMS_manager],
+            #   [subtask_manager, OS_manager],
+              [subtask_manager, VPC_network_manager],
 
             #   [CES_manager, CES_alarm_history_agent],
             #   [CES_manager, CES_alarm_rule_agent],
@@ -158,7 +177,9 @@ chat_graph = [task_planner, scheduler,
             #   [EVS_manager, EVS_clouddiskt_agent],
             #   [EVS_manager, EVS_snapshot_agent],
 
-              [IAM_service_manager, AKSK_agent],
+            #   [IAM_service_manager, AKSK_agent],
+
+              [IMS_manager, IMS_agent],
 
             #   [OS_manager, OS_agent],
 
@@ -220,29 +241,31 @@ plan_agents = {
     # "inspector": inspector,
     "scheduler": scheduler,
     "subtask_planner": subtask_planner,
-    "sub_scheduler": sub_scheduler,
+    "subtask_scheduler": subtask_scheduler,
     # "simulator": simulator
 }
 
 cap_group_agents = {
-    # "统一身份认证服务IAM能力群": [IAM_service_planner, IAM_service_manager, IAM_service_step_scheduler], 
-    # "华为云API处理能力群": [Huawei_Cloud_API_planner, Huawei_Cloud_API_manager, Huawei_Cloud_API_step_scheduler],
+    # "云监控CES能力群": [CES_planner, CES_manager, CES_step_scheduler], 
     "弹性云服务器(ECS)管理能力群": [ECS_planner, ECS_manager, ECS_step_scheduler],
+    # "云硬盘EVS管理能力群": [EVS_planner, EVS_manager, EVS_step_scheduler],
+    # "华为云API处理能力群": [Huawei_Cloud_API_planner, Huawei_Cloud_API_manager, Huawei_Cloud_API_step_scheduler],
+    # "统一身份认证服务IAM能力群": [IAM_service_planner, IAM_service_manager, IAM_service_step_scheduler],
+    "镜像管理能力群": [IMS_planner, IMS_manager, IMS_step_scheduler],
+    # "操作系统管理能力群": [OS_planner, OS_manager, OS_step_scheduler],
     "VPC网络管理能力群": [VPC_network_planner, VPC_network_manager, VPC_network_step_scheduler],
     # "华为云元信息管理能力群": [Huawei_meta_info_planner, ]
-    # "云硬盘EVS管理能力群": [EVS_planner, EVS_manager, EVS_step_scheduler],
-    # "云监控CES能力群": [CES_planner, CES_manager, CES_step_scheduler],
-    # "操作系统管理能力群": [OS_planner, OS_manager, OS_step_scheduler],
 }
 
 cap_agents = {
-    # "统一身份认证服务IAM能力群": [AKSK_agent],
-    # "华为云API处理能力群": [],
-    "弹性云服务器(ECS)管理能力群": [ECS_harddisk_agent, ECS_instance_agent, ECS_netcard_agent, ECS_recommend_agent, ECS_specification_query_agent],
-    "VPC网络管理能力群": [VPC_secgroup_agent, VPC_subnet_agent, VPC_vpc_agent],
-    # "云硬盘EVS管理能力群": [EVS_clouddiskt_agent, EVS_snapshot_agent],
     # "云监控CES能力群": [CES_alarm_history_agent, CES_alarm_rule_agent, CES_dashboard_agent, CES_data_agent, CES_metric_agent, CES_event_agent],
+    "弹性云服务器(ECS)管理能力群": [ECS_harddisk_agent, ECS_instance_agent, ECS_netcard_agent, ECS_recommend_agent, ECS_specification_query_agent],
+    # "云硬盘EVS管理能力群": [EVS_clouddiskt_agent, EVS_snapshot_agent],
+    # "华为云API处理能力群": [],
+    # "统一身份认证服务IAM能力群": [AKSK_agent],
+    "镜像管理能力群": [IMS_agent],
     # "操作系统管理能力群": [OS_agent],
+    "VPC网络管理能力群": [VPC_secgroup_agent, VPC_subnet_agent, VPC_vpc_agent],
 }
 
 # agency.langgraph_test(repeater=repeater, rander=rander, palindromist=palindromist)
