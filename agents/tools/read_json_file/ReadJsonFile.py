@@ -1,5 +1,6 @@
 from agency_swarm.tools import BaseTool
 import json
+import os
 from pydantic import Field
 
 class ReadJsonFile(BaseTool):
@@ -9,7 +10,8 @@ class ReadJsonFile(BaseTool):
     )
 
     def run(self):
-        file_path = "/root/agency-swarm-cover/agents/files/" + self.file_name
+        current_dir = "agents/files/"
+        file_path = current_dir + self.file_name
         print(file_path)
         with open(file_path, 'r') as file:
             json_data = json.load(file)

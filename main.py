@@ -224,17 +224,18 @@ plan_agents = {
 }
 
 cap_group_agents = {
-    "统一身份认证服务IAM能力群": [IAM_service_planner, IAM_service_manager, IAM_service_step_scheduler], 
+    # "统一身份认证服务IAM能力群": [IAM_service_planner, IAM_service_manager, IAM_service_step_scheduler], 
     # "华为云API处理能力群": [Huawei_Cloud_API_planner, Huawei_Cloud_API_manager, Huawei_Cloud_API_step_scheduler],
     "弹性云服务器(ECS)管理能力群": [ECS_planner, ECS_manager, ECS_step_scheduler],
     "VPC网络管理能力群": [VPC_network_planner, VPC_network_manager, VPC_network_step_scheduler],
+    # "华为云元信息管理能力群": [Huawei_meta_info_planner, ]
     # "云硬盘EVS管理能力群": [EVS_planner, EVS_manager, EVS_step_scheduler],
     # "云监控CES能力群": [CES_planner, CES_manager, CES_step_scheduler],
     # "操作系统管理能力群": [OS_planner, OS_manager, OS_step_scheduler],
 }
 
 cap_agents = {
-    "统一身份认证服务IAM能力群": [AKSK_agent],
+    # "统一身份认证服务IAM能力群": [AKSK_agent],
     # "华为云API处理能力群": [],
     "弹性云服务器(ECS)管理能力群": [ECS_harddisk_agent, ECS_instance_agent, ECS_netcard_agent, ECS_recommend_agent, ECS_specification_query_agent],
     "VPC网络管理能力群": [VPC_secgroup_agent, VPC_subnet_agent, VPC_vpc_agent],
