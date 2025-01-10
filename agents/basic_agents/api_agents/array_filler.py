@@ -1,5 +1,5 @@
 from agency_swarm.agents import Agent
-from agents.base_agents.tools.FillParamTable import FillParamTable
+from agents.basic_agents.api_agents.tools.FillParamTable import FillParamTable
 
 _name = "Array Filler"
 

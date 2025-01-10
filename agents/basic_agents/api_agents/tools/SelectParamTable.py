@@ -2,8 +2,8 @@ from agency_swarm.tools import BaseTool
 from pydantic import Field
 import json
 
-from agents.base_agents.tools.api_database import search_from_sqlite, API_DATABASE_FILE
-from agents.base_agents.tools.utils import try_parse_json, assert_list_of_dicts
+from agents.basic_agents.api_agents.tools.api_database import search_from_sqlite, API_DATABASE_FILE
+from agents.basic_agents.api_agents.tools.utils import try_parse_json, assert_list_of_dicts
 
 class SelectParamTable(BaseTool):
     '''
