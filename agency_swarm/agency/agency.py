@@ -1388,6 +1388,7 @@ class Agency:
     error_path = files_path + "error.json"
 
     def init_file(self):
+        self._init_file(self.error_path)
         self._init_file(self.completed_step_path)
         self._init_file(self.completed_subtask_path)
         self._init_file(self.completed_task_path)
@@ -1446,7 +1447,7 @@ class Agency:
         while True: # 拆分出任务（事务）流程图，id2task
             # task_id = task_id + 1
             task_graph, tasks_need_scheduled = self.planning_layer(message=text, original_request=original_request, task_planner_thread=planner_thread, node_color='lightblue')
-            
+            self._init_file(self.error_path)
             id2task = {}
             task_graph_json = json.loads(task_graph)
             for key in task_graph_json.keys():
@@ -1455,6 +1456,8 @@ class Agency:
 
             while True: # 任务调度
                 need_replan = False
+                error_id = 0
+
                 tasks_scheduled = self.scheduling_layer(scheduler_thread=scheduler_thread, message=tasks_need_scheduled)
                 tasks_scheduled_json = json.loads(tasks_scheduled)
                 next_task_list = tasks_scheduled_json['next_tasks']
@@ -1513,36 +1516,40 @@ class Agency:
                                     next_step = id2step[next_step_id]
                                     result, new_context = self.capability_agents_processor(step=next_step, cap_group=next_subtask_cap_group, cap_agent_threads=cap_agent_threads)
                                     if result == 'SUCCESS':
-                                        self.update_context(context_id=context_id, context=new_context, step=next_step)
-                                        self.update_completed_step(step_id=next_step_id, step=next_step)
                                         # 更新已完成步骤和context
                                         context_id = context_id + 1
+                                        self.update_context(context_id=context_id, context=new_context, step=next_step)
+                                        self.update_completed_step(step_id=next_step_id, step=next_step)
                                     elif result == 'FAIl':
-                                        self.update_error()
+                                        # 更新error
+                                        error_id = error_id + 1
+                                        self.update_error(error_id=error_id, error=new_context, step=next_step)
                                         need_replan = True
                                         break
+                            # 如果step全都正常完成，更新已完成子任务
                             if need_replan == False:
                                 self.update_completed_sub_task(next_subtask_id, next_subtask)
                             else:
                                 break
                             self._init_file(self.completed_step_path)
+                    # 如果子任务全都正常完成，更新已完成任务
                     if need_replan == False:
                         self.update_completed_task(next_task_id, next_task)
                     else:
                         break
                     self._init_file(self.completed_subtask_path)
     
-    def update_error(self, context_id: int, context: str, step: dict):
-        with open(self.context_path, 'r') as file:
+    def update_error(self, error_id: int, error: str, step: dict):
+        with open(self.error_path, 'r') as file:
             try:    # 尝试读取 JSON 数据
                 data = json.load(file)
             except json.JSONDecodeError:    # 如果文件为空或格式错误，则创建一个空字典
                 data = {}
-        data[context_id] = {
+        data[error_id] = {
             "step": step,
-            "context": context
+            "error": error
         }
-        with open(self.context_path, 'w') as file:
+        with open(self.error_path, 'w') as file:
             json.dump(data, file, indent=4)
     
     def update_context(self, context_id: int, context: str, step: dict):
