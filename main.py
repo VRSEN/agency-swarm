@@ -51,18 +51,19 @@ from agents.cap_group_agents.VPC_network.cap_agents.VPC_secgroup_agent import VP
 from agents.cap_group_agents.VPC_network.cap_agents.VPC_subnet_agent import VPC_subnet_agent
 from agents.cap_group_agents.VPC_network.cap_agents.VPC_vpc_agent import VPC_vpc_agent
 
-from agents.base_agents import (
+from agents.basic_agents.api_agents import (
     API_caller, API_filler, API_param_selector, array_filler, array_selector, param_filler, param_selector
 )
-from agents.base_agents.tools.SelectAPIParam import SelectAPIParam
-from agents.base_agents.tools.SelectParamTable import SelectParamTable
-from agents.base_agents.tools.FillAPI import FillAPI
-from agents.base_agents.tools.FillParamTable import FillParamTable
+from agents.basic_agents.check_agent import check_agent
+from agents.basic_agents.api_agents.tools.SelectAPIParam import SelectAPIParam
+from agents.basic_agents.api_agents.tools.SelectParamTable import SelectParamTable
+from agents.basic_agents.api_agents.tools.FillAPI import FillAPI
+from agents.basic_agents.api_agents.tools.FillParamTable import FillParamTable
 
 from agency_swarm import set_openai_key
-with open("/root/keys/OEPNAI_API_KEY.txt", 'r') as file:
-    api_key = file.read()
+import os
 
+api_key = os.getenv("OPENAI_API_KEY")
 set_openai_key(api_key)
 
 task_planner = task_planner.create_agent()
