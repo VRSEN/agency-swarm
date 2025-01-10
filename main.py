@@ -112,7 +112,7 @@ ECS_specification_query_agent = ECS_specification_query_agent.create_agent()
 # IAM_service_planner = IAM_service_planner.create_agent()
 # IAM_service_manager = IAM_service_manager.create_agent()
 # IAM_service_step_scheduler = IAM_service_step_scheduler.create_agent()
-# AKSK_agent = AKSK_agent.create_agent()
+AKSK_agent = AKSK_agent.create_agent()
 
 IMS_planner = IMS_planner.create_agent()
 IMS_manager = IMS_manager.create_agent()
