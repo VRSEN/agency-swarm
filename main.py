@@ -54,6 +54,7 @@ from agents.cap_group_agents.VPC_network.cap_agents.VPC_vpc_agent import VPC_vpc
 from agents.basic_agents.api_agents import (
     API_caller, API_filler, API_param_selector, array_filler, array_selector, param_filler, param_selector
 )
+from agents.basic_agents.check_agent import check_agent
 from agents.basic_agents.api_agents.tools.SelectAPIParam import SelectAPIParam
 from agents.basic_agents.api_agents.tools.SelectParamTable import SelectParamTable
 from agents.basic_agents.api_agents.tools.FillAPI import FillAPI
