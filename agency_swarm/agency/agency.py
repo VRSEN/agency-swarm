@@ -1380,7 +1380,7 @@ class Agency:
         with open(file_path, "w") as f:
             pass
     
-    files_path = "agency-swarm-cover/agents/files/"
+    files_path = "agents/files/"
     completed_step_path = files_path + "completed_steps.json"
     completed_subtask_path = files_path + "completed_sub_tasks.json"
     completed_task_path = files_path + "completed_tasks.json"

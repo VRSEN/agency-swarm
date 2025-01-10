@@ -1,5 +1,6 @@
 from agency_swarm.tools import BaseTool
 import json
+import os
 from pydantic import Field
 
 class WriteJsonFile(BaseTool):
@@ -12,7 +13,8 @@ class WriteJsonFile(BaseTool):
     )
 
     def run(self):
-        file_path = "/root/agency-swarm-cover/agents/files/" + self.file_name
+        current_dir = "agents/files/"
+        file_path = current_dir + self.file_name
         try:
             with open(file_path, 'r') as f:
                 existing_data = json.load(f)
