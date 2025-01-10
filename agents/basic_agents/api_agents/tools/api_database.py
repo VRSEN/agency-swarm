@@ -1,7 +1,9 @@
 import pandas as pd
 import sqlite3
+import os
 
-API_DATABASE_FILE = "api.sqlite"
+current_dir = os.path.dirname(os.path.abspath(__file__))
+API_DATABASE_FILE = os.path.join(current_dir, "api.sqlite")
 
 def save_df_to_sqlite(df: pd.DataFrame, database_path: str, table_name: str):
     conn = sqlite3.connect(database=database_path)
