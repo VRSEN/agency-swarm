@@ -9,8 +9,8 @@ _description = """
 
 _input_format = """
 {
-    "result": "SUCCESS"/"FAIL",
-    "context": <上下文信息或ERROR信息>
+    "result": "QUERY",
+    "context": <请求内容>
 }
 """
 
@@ -28,10 +28,9 @@ _output_format = """
 """
 
 _instruction = f"""
-作为子任务规划者，你将接收到来自能力群manager的消息
-
-能力群manager的消息可能是请求或者任务执行信息
-
+作为子任务规划者，你将接收到来自能力群manager的消息请求，请求格式如下:
+{_input_format}
+一步步思考，你应该根据请求内容选择合适的能力群manager进行询问并接受返回信息
 
 """
 

@@ -1380,11 +1380,12 @@ class Agency:
         with open(file_path, "w") as f:
             pass
     
-    files_path = "/root/agency-swarm-cover/agents/files/"
+    files_path = "agency-swarm-cover/agents/files/"
     completed_step_path = files_path + "completed_steps.json"
     completed_subtask_path = files_path + "completed_sub_tasks.json"
     completed_task_path = files_path + "completed_tasks.json"
     context_path = files_path + "context.json"
+    error_path = files_path + "error.json"
 
     def init_file(self):
         self._init_file(self.completed_step_path)
@@ -1417,7 +1418,7 @@ class Agency:
 
         self.init_file()
 
-        text = "在华为云北京可用区创建一个ecs，规格任意"
+        text = "在华为云北京\"cn-north-1\"可用区创建一个ecs，规格任意"
         # text = "在北京可用区创建三个ecs，之后删除创建时间超过5分钟的ecs"
         # text = "在华为云ecs上部署mysql和postgresql，并用sysbench测试它们的性能"
         # text = input("👤 USER: ")
@@ -1453,6 +1454,7 @@ class Agency:
                 id2task[task['id']] = task
 
             while True: # 任务调度
+                need_replan = False
                 tasks_scheduled = self.scheduling_layer(scheduler_thread=scheduler_thread, message=tasks_need_scheduled)
                 tasks_scheduled_json = json.loads(tasks_scheduled)
                 next_task_list = tasks_scheduled_json['next_tasks']
@@ -1515,8 +1517,33 @@ class Agency:
                                         self.update_completed_step(step_id=next_step_id, step=next_step)
                                         # 更新已完成步骤和context
                                         context_id = context_id + 1
-                            self.update_completed_sub_task(next_subtask_id, next_subtask)
-                    self.update_completed_task(next_task_id, next_task)
+                                    elif result == 'FAIl':
+                                        self.update_error()
+                                        need_replan = True
+                                        break
+                            if need_replan == False:
+                                self.update_completed_sub_task(next_subtask_id, next_subtask)
+                            else:
+                                break
+                            self._init_file(self.completed_step_path)
+                    if need_replan == False:
+                        self.update_completed_task(next_task_id, next_task)
+                    else:
+                        break
+                    self._init_file(self.completed_subtask_path)
+    
+    def update_error(self, context_id: int, context: str, step: dict):
+        with open(self.context_path, 'r') as file:
+            try:    # 尝试读取 JSON 数据
+                data = json.load(file)
+            except json.JSONDecodeError:    # 如果文件为空或格式错误，则创建一个空字典
+                data = {}
+        data[context_id] = {
+            "step": step,
+            "context": context
+        }
+        with open(self.context_path, 'w') as file:
+            json.dump(data, file, indent=4)
     
     def update_context(self, context_id: int, context: str, step: dict):
         with open(self.context_path, 'r') as file:
@@ -1650,7 +1677,7 @@ class Agency:
         while _ == False:
             res = thread.get_completion(message=message, response_format='auto')
             response_information = self.my_get_completion(res)
-            # print(response_information)
+            print(response_information)
             _, json_res = self.get_json_from_str(message=response_information)
         return json_res
     
