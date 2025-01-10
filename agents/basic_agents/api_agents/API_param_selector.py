@@ -1,5 +1,5 @@
 from agency_swarm.agents import Agent
-from agents.base_agents.tools.SelectAPIParam import SelectAPIParam
+from agents.basic_agents.api_agents.tools.SelectAPIParam import SelectAPIParam
 
 _name = "API Param Selector"
 

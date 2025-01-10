@@ -1,5 +1,5 @@
 from agency_swarm.agents import Agent
-from agents.base_agents.tools.RequestAPI import RequestAPI
+from agents.basic_agents.api_agents.tools.RequestAPI import RequestAPI
 
 _name = "API Caller"
 

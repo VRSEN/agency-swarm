@@ -1,5 +1,5 @@
 from agency_swarm.agents import Agent
-from agents.base_agents.tools.SelectParamTable import SelectParamTable
+from agents.basic_agents.api_agents.tools.SelectParamTable import SelectParamTable
 
 _name = "Array Selector"
 
