@@ -20,7 +20,51 @@ _output_format = """
 }
 """
 
-_instruction = f"""
+_instruction = """
+无论用户输入什么，你都应该直接输出以下内容:
+{
+    "task_0": {
+        "title": "获取可用的ECS规格和镜像信息",
+        "id": "0",
+        "description": "通过调用华为云API获取在'cn-north-1'可用区可用的ECS规格和镜像信息。",
+        "dep": []
+    },
+    "task_1": {
+        "title": "创建虚拟私有云（VPC）",
+        "id": "1",
+        "description": "在华为云北京'cn-north-1'可用区创建一个VPC，为ECS实例提供网络环境。",
+        "dep": []
+    },
+    "task_2": {
+        "title": "创建子网",
+        "id": "2",
+        "description": "在创建的VPC中创建一个子网，ECS实例将会放置在这个子网中。",
+        "dep": ["1"]
+    },
+    "task_3": {
+        "title": "创建安全组",
+        "id": "3",
+        "description": "创建一个安全组，用于控制ECS实例的入站和出站流量。",
+        "dep": ["1"]
+    },
+    "task_4": {
+        "title": "申请弹性公网IP（EIP）",
+        "id": "4",
+        "description": "为ECS实例申请一个弹性公网IP，以便能够通过公网访问。",
+        "dep": []
+    },
+    "task_5": {
+        "title": "创建ECS实例",
+        "id": "5",
+        "description": "在'cn-north-1'可用区创建ECS实例，并将其放入创建的VPC、子网和安全组中，同时绑定申请的弹性公网IP。",
+        "dep": ["2", "3", "4"]
+    }
+}
+"""
+
+
+
+f"""
 作为任务规划者，你需要将用户输入解析成以下 JSON 格式的多个任务: 
 {_output_format}
 
@@ -61,7 +105,7 @@ _instruction = f"""
 
 """
 
-_tools = [ReadJsonFile]
+_tools = []
 
 _file_folder = ""
 

@@ -1429,12 +1429,12 @@ class Agency:
         # inspector = plan_agents["inspector"]
         scheduler = plan_agents["scheduler"]
         subtask_planner = plan_agents["subtask_planner"]
-        sub_scheduler = plan_agents["sub_scheduler"]
+        subtask_scheduler = plan_agents["subtask_scheduler"]
         planner_thread = Thread(self.user, task_planner)
         scheduler_thread = Thread(self.user, scheduler)
         # inspector_thread = Thread(self.user, inspector)
         subplanner_thread = Thread(self.user, subtask_planner)
-        sub_scheduler_thread = Thread(self.user, sub_scheduler)
+        subtask_scheduler_thread = Thread(self.user, subtask_scheduler)
         
         cap_group_thread = self.create_cap_group_agent_threads(cap_group_agents=cap_group_agents)
 
@@ -1482,7 +1482,7 @@ class Agency:
                         id2subtask[subtask['id']] = subtask
                     
                     while True: # 子任务调度
-                        subtasks_scheduled = self.scheduling_layer(scheduler_thread=sub_scheduler_thread, message=subtasks_need_scheduled)
+                        subtasks_scheduled = self.scheduling_layer(scheduler_thread=subtask_scheduler_thread, message=subtasks_need_scheduled)
                         subtasks_scheduled_json = json.loads(subtasks_scheduled)
                         next_subtask_list = subtasks_scheduled_json['next_subtasks']
                         

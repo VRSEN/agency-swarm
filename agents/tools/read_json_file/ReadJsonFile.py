@@ -13,8 +13,10 @@ class ReadJsonFile(BaseTool):
         current_dir = "agents/files/"
         file_path = current_dir + self.file_name
         print(file_path)
-        with open(file_path, 'r') as file:
-            json_data = json.load(file)
-            json_txt = json.dumps(json_data)
-            return json_txt
+        try:
+            with open(file_path, 'r') as f:
+                existing_data = json.load(f)
+        except:
+            existing_data = []
+        return existing_data
         
