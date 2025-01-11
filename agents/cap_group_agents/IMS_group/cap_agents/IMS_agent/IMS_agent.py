@@ -6,7 +6,7 @@ from agents.cap_group_agents.ECS_group.cap_agents.ECS_specification_query_agent.
 _name = "IMS_agent"
 
 _description = """
-负责华为云镜像资源管理任务，包括: 查询镜像列表，更新镜像信息，制作镜像，镜像文件快速导入，使用外部镜像文件制作数据镜像，制作整机镜像，注册镜像，导出镜像，查询镜像支持的OS列表。
+负责华为云镜像资源管理任务，包括：查询镜像列表，更新镜像信息，制作镜像，镜像文件快速导入，使用外部镜像文件制作数据镜像，制作整机镜像，注册镜像，导出镜像，查询镜像支持的OS列表。
 """
 
 import os

@@ -142,22 +142,23 @@ class BaseTool(BaseModel, ABC):
         thread = Thread(agent=self, recipient_agent=recipient_agent)
 
         # print the message from tool
-        event_handler = self._event_handler
-        event_handler.set_agent(self)
-        event_handler.set_recipient_agent(recipient_agent)
+        if event_handler:
+            event_handler = self._event_handler
+            event_handler.set_agent(self)
+            event_handler.set_recipient_agent(recipient_agent)
 
-        event_handler_instance = event_handler()
-        content = TextContentBlock(text=Text(annotations=[], value=message), type="text")
-        fake_oai_message = Message(
-            id="fake-id",
-            content = [content],
-            created_at=0,
-            object="thread.message",
-            role="user",
-            status="completed",
-            thread_id="fake-id"
-        )
-        event_handler_instance.on_message_created(fake_oai_message)
+            event_handler_instance = event_handler()
+            content = TextContentBlock(text=Text(annotations=[], value=message), type="text")
+            fake_oai_message = Message(
+                id="fake-id",
+                content = [content],
+                created_at=0,
+                object="thread.message",
+                role="user",
+                status="completed",
+                thread_id="fake-id"
+            )
+            event_handler_instance.on_message_created(fake_oai_message)
 
         # send the message
         res = thread.get_completion(

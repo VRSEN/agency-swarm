@@ -5,6 +5,8 @@ def planner_instruction(_group_name, _input_format, _agents, _output_format):
     输入格式如下: 
     {_input_format}
 
+    其中，total_subtask_graph将描述所有子任务的规划图，包括子任务信息和依赖关系，保证你接下来的规划不要与已有子任务冲突或重叠
+    
     作为{_group_name}的步骤规划者，你所管理的能力群中每个能力都对应一个Agent，你的能力群中包含的能力Agent和它们的描述如下:    
     {_agents}
 

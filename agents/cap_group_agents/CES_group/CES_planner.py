@@ -12,6 +12,7 @@ _group_name = "云监控CES能力群"
 
 _input_format = """
 {
+    "total_subtask_graph": <所有子任务的规划图>,
     "title": <任务名称>,
     "description": <任务描述>,
 }
