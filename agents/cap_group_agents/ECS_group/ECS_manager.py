@@ -2,6 +2,7 @@ from agency_swarm import Agent
 from agents.cap_group_agents.manager_instruction import manager_instruction
 from agents.tools.read_json_file.ReadJsonFile import ReadJsonFile
 from agents.tools.write_json_file.WriteJsonFile import WriteJsonFile
+from agents.tools.send_message_to_user.SendMessageToUser import SendMessageToUser
 
 _name = "ECS_manager"
 
@@ -15,7 +16,7 @@ _superior_agent = "subtask_manager"
 
 _instruction = manager_instruction(_group_name, _superior_agent)
 
-_tools = [ReadJsonFile, WriteJsonFile]
+_tools = [ReadJsonFile, WriteJsonFile, SendMessageToUser]
 
 _file_folder = ""
 

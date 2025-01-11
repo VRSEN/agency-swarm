@@ -161,6 +161,10 @@ chat_graph = [task_planner, scheduler,
             #   [subtask_manager, OS_manager],
               [subtask_manager, VPC_network_manager],
 
+              [ECS_manager, subtask_manager],
+              [IMS_manager, subtask_manager],
+              [VPC_network_manager, subtask_manager],
+
             #   [CES_manager, CES_alarm_history_agent],
             #   [CES_manager, CES_alarm_rule_agent],
             #   [CES_manager, CES_dashboard_agent],
@@ -173,6 +177,12 @@ chat_graph = [task_planner, scheduler,
               [ECS_manager, ECS_netcard_agent],
               [ECS_manager, ECS_recommend_agent],
               [ECS_manager, ECS_specification_query_agent],
+              
+              [ECS_specification_query_agent, ECS_manager],
+              [ECS_recommend_agent, ECS_manager],
+              [ECS_netcard_agent, ECS_manager],
+              [ECS_instance_agent, ECS_manager],
+              [ECS_harddisk_agent, ECS_manager],
 
             #   [EVS_manager, EVS_clouddiskt_agent],
             #   [EVS_manager, EVS_snapshot_agent],
@@ -180,6 +190,8 @@ chat_graph = [task_planner, scheduler,
             #   [IAM_service_manager, AKSK_agent],
 
               [IMS_manager, IMS_agent],
+              
+              [IMS_agent, IMS_manager],
 
             #   [OS_manager, OS_agent],
 
@@ -187,6 +199,10 @@ chat_graph = [task_planner, scheduler,
               [VPC_network_manager, VPC_secgroup_agent],
               [VPC_network_manager, VPC_subnet_agent],
               [VPC_network_manager, VPC_vpc_agent],
+
+              [VPC_vpc_agent, VPC_network_manager],
+              [VPC_subnet_agent, VPC_network_manager],
+              [VPC_secgroup_agent, VPC_network_manager],
               
               [ECS_harddisk_agent, API_param_selector],
               [ECS_harddisk_agent, API_filler],

@@ -1826,7 +1826,7 @@ class Agency:
             return json.dumps(data, indent=4, ensure_ascii=False)
         
         console.rule()
-        text = text = input("👤 USER: ")       
+        text = input("👤 USER: ")       
         thread2str = {
             "task_planner": "THREAD:[ user -> task_planner ]: URL https://platform.openai.com/playground/assistants?assistant=asst_RqiQ4xwmfCvPW51CgZufHdRB&mode=assistant&thread=thread_psKMDuwLfiNEP0GP2aVH73nI",
             "scheduler":    "THREAD:[ user -> scheduler ]: URL https://platform.openai.com/playground/assistants?assistant=asst_0jtXxjnRzcL6NMumqb2GgFuB&mode=assistant&thread=thread_GnzV92GiWrWEVnr8T3ZJQvto",
