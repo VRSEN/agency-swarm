@@ -1426,13 +1426,13 @@ class Agency:
         # text = input("👤 USER: ")
         original_request = text
         task_planner = plan_agents["task_planner"]
-        # inspector = plan_agents["inspector"]
+        inspector = plan_agents["inspector"]
         scheduler = plan_agents["scheduler"]
         subtask_planner = plan_agents["subtask_planner"]
         subtask_scheduler = plan_agents["subtask_scheduler"]
         planner_thread = Thread(self.user, task_planner)
         scheduler_thread = Thread(self.user, scheduler)
-        # inspector_thread = Thread(self.user, inspector)
+        inspector_thread = Thread(self.user, inspector)
         subplanner_thread = Thread(self.user, subtask_planner)
         subtask_scheduler_thread = Thread(self.user, subtask_scheduler)
         
@@ -1447,7 +1447,7 @@ class Agency:
 
         while True: # 拆分出任务（事务）流程图，id2task
             # task_id = task_id + 1
-            task_graph, tasks_need_scheduled = self.planning_layer(message=text, original_request=original_request, task_planner_thread=planner_thread, node_color='lightblue')
+            task_graph, tasks_need_scheduled = self.planning_layer(message=text, original_request=original_request, task_planner_thread=planner_thread, inspector_thread=inspector_thread, node_color='lightblue')
             self._init_file(self.error_path)
             id2task = {}
             task_graph_json = json.loads(task_graph)
@@ -1473,7 +1473,7 @@ class Agency:
                         "description": next_task['description'],
                     }
                     print(f"The task:\n{subtask_input}\nneed to be planned...")
-                    subtask_graph, subtasks_need_scheduled = self.planning_layer(message=json.dumps(subtask_input), original_request=next_task['description'], task_planner_thread=subplanner_thread, node_color='lightgreen')
+                    subtask_graph, subtasks_need_scheduled = self.planning_layer(message=json.dumps(subtask_input, ensure_ascii=False), original_request=next_task['description'], task_planner_thread=subplanner_thread, node_color='lightgreen')
                     
                     id2subtask = {}
                     subtask_graph_json = json.loads(subtask_graph)
@@ -1497,7 +1497,7 @@ class Agency:
                             }
                             print(f"The subtask:\n{steps_input}\nneed to be planned...")
                             next_subtask_cap_group = next_subtask['capability_group']
-                            steps_graph, steps_need_scheduled = self.planning_layer(message=json.dumps(steps_input), original_request=next_subtask['description'], task_planner_thread=cap_group_thread[next_subtask_cap_group][0], node_color='white')
+                            steps_graph, steps_need_scheduled = self.planning_layer(message=json.dumps(steps_input, ensure_ascii=False), original_request=next_subtask['description'], task_planner_thread=cap_group_thread[next_subtask_cap_group][0], node_color='white')
 
                             id2step = {}
                             steps_graph_json = json.loads(steps_graph)
@@ -1607,7 +1607,7 @@ class Agency:
         cap_agents = step['agent']
         for agent_name in cap_agents:
             cap_agent_thread = cap_agent_threads[cap_group][agent_name]
-            cap_agent_result = self.json_get_completion(cap_agent_thread, json.dumps(step))
+            cap_agent_result = self.json_get_completion(cap_agent_thread, json.dumps(step, ensure_ascii=False))
             print(f"{agent_name} results of execution:\n{cap_agent_result}")
             cap_agent_result_json = json.loads(cap_agent_result)
         result = cap_agent_result_json['result']
@@ -1624,14 +1624,14 @@ class Agency:
         """将返回1. 规划结果, 2. 对应scheduler的输入"""
         console.rule()
         while True:
-            planmessage = self.json_get_completion(task_planner_thread, message)
+            planmessage = self.json_get_completion(task_planner_thread, message, inspector_thread)
             print(f"{task_planner_thread.recipient_agent.name} RESULT:\n" + planmessage)
             planmessage_json = json.loads(planmessage)
             plan_json = {}
             plan_json['main_task'] = original_request
             plan_json['plan_graph'] = planmessage_json
             if inspector_thread:
-                inspectreview = self.json_get_completion(inspector_thread, json.dumps(plan_json))
+                inspectreview = self.json_get_completion(inspector_thread, json.dumps(plan_json, ensure_ascii=False))
                 print(f"{inspector_thread.recipient_agent.name} REVIEW {inspectreview}")
                 inspectreview_json = json.loads(inspectreview)
                 if inspectreview_json['review'] == 'yes':
@@ -1640,7 +1640,7 @@ class Agency:
                 break
             message = inspectreview
         self.json2graph(planmessage, "TASK_PLAN", node_color)
-        return planmessage, json.dumps(plan_json)
+        return planmessage, json.dumps(plan_json, ensure_ascii=False)
 
     def json2graph(self, data, title, node_color: str = 'blue'):
         import networkx as nx
@@ -1679,14 +1679,14 @@ class Agency:
             print("WRONG FORMAT!")
             return
                 
-    def json_get_completion(self, thread: Thread, message: str):
+    def json_get_completion(self, thread: Thread, message: str, inspector_thread: Thread = None):
         _ = False
         json_res = ""
         while _ == False:
             res = thread.get_completion(message=message, response_format='auto')
             response_information = self.my_get_completion(res)
-            print(response_information)
-            _, json_res = self.get_json_from_str(message=response_information)
+            inspector_result = inspector_thread.get_completion(message=response_information, response_format='auto')
+            _, json_res = self.get_json_from_str(message=inspector_result)
         return json_res
     
     def get_json_from_str(self, message: str):

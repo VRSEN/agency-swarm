@@ -55,9 +55,10 @@ class RequestAPI(BaseTool):
         except Exception as e:
             print("Error signing API request: ", str(e))
         resp = requests.request(r.method, r.scheme + "://" + r.host + r.uri, headers=r.headers, data=r.body)
+        content = bytes.decode(resp.content)
         return_obj = {
             "status_code": resp.status_code,
             "reason": resp.reason,
-            "content": resp.content
+            "content": json.loads(content)
         }
         return json.dumps(return_obj, ensure_ascii=False)

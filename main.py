@@ -72,7 +72,7 @@ api_key = os.getenv("OPENAI_API_KEY")
 set_openai_key(api_key)
 
 task_planner = task_planner.create_agent()
-# inspector = inspector.create_agent()
+inspector = inspector.create_agent()
 scheduler = scheduler.create_agent()
 subtask_planner = subtask_planner.create_agent()
 subtask_manager = subtask_manager.create_agent()
@@ -143,7 +143,7 @@ array_selector = array_selector.create_agent()
 param_filler = param_filler.create_agent()
 param_selector = param_selector.create_agent()
 
-chat_graph = [task_planner, scheduler,
+chat_graph = [task_planner, scheduler, inspector,
               subtask_planner, subtask_manager, subtask_scheduler, 
             #   CES_planner, CES_step_scheduler,
               ECS_planner, ECS_step_scheduler,
@@ -254,7 +254,7 @@ agency = Agency(agency_chart=chat_graph,
 
 plan_agents = {
     "task_planner": task_planner,
-    # "inspector": inspector,
+    "inspector": inspector,
     "scheduler": scheduler,
     "subtask_planner": subtask_planner,
     "subtask_scheduler": subtask_scheduler,
