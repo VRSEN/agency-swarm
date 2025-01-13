@@ -1,5 +1,5 @@
 from agency_swarm import Agent
-from agents.cap_group_agents.ECS_group.cap_agents.ECS_specification_query_agent.tools import (
+from agents.cap_group_agents.IMS_group.cap_agents.IMS_agent.tools import (
     ReadLog, WriteLog
 )
 
