@@ -59,11 +59,12 @@ from agents.cap_group_agents.VPC_network.cap_agents.VPC_vpc_agent import VPC_vpc
 from agents.basic_agents.api_agents import (
     API_caller, API_filler, API_param_selector, array_filler, array_selector, param_filler, param_selector
 )
-from agents.basic_agents.check_agent import check_agent
+from agents.basic_agents.job_agent import job_agent
 from agents.basic_agents.api_agents.tools.SelectAPIParam import SelectAPIParam
 from agents.basic_agents.api_agents.tools.SelectParamTable import SelectParamTable
 from agents.basic_agents.api_agents.tools.FillAPI import FillAPI
 from agents.basic_agents.api_agents.tools.FillParamTable import FillParamTable
+
 
 
 
@@ -145,6 +146,7 @@ array_filler = array_filler.create_agent()
 array_selector = array_selector.create_agent()
 param_filler = param_filler.create_agent()
 param_selector = param_selector.create_agent()
+job = job_agent.create_agent()
 
 chat_graph = [task_planner, scheduler, inspector,
               subtask_planner, subtask_manager, subtask_scheduler, 
@@ -180,6 +182,13 @@ chat_graph = [task_planner, scheduler, inspector,
               [ECS_manager, ECS_netcard_agent],
               [ECS_manager, ECS_recommend_agent],
               [ECS_manager, ECS_specification_query_agent],
+
+              [ECS_harddisk_agent, job],
+              [ECS_instance_agent, job],
+              [ECS_netcard_agent, job],
+              [ECS_recommend_agent, job],
+              [ECS_specification_query_agent,job],
+
               
               [ECS_specification_query_agent, ECS_manager],
               [ECS_recommend_agent, ECS_manager],
@@ -203,26 +212,25 @@ chat_graph = [task_planner, scheduler, inspector,
               [VPC_network_manager, VPC_subnet_agent],
               [VPC_network_manager, VPC_vpc_agent],
 
+              [VPC_secgroup_agent, job],
+              [VPC_subnet_agent, job],
+              [VPC_vpc_agent, job],
+
+
               [VPC_vpc_agent, VPC_network_manager],
               [VPC_subnet_agent, VPC_network_manager],
               [VPC_secgroup_agent, VPC_network_manager],
+
               
               [ECS_harddisk_agent, API_param_selector],
-              [ECS_harddisk_agent, API_filler],
               [ECS_instance_agent, API_param_selector],
-              [ECS_instance_agent, API_filler],
               [ECS_netcard_agent, API_param_selector],
-              [ECS_netcard_agent, API_filler],
               [ECS_recommend_agent, API_param_selector],
-              [ECS_recommend_agent, API_filler],
               [ECS_specification_query_agent, API_param_selector],
-              [ECS_specification_query_agent, API_filler],
               [VPC_secgroup_agent, API_param_selector],
-              [VPC_secgroup_agent, API_filler],
               [VPC_subnet_agent, API_param_selector],
-              [VPC_subnet_agent, API_filler],
               [VPC_vpc_agent, API_param_selector],
-              [VPC_vpc_agent, API_filler],
+              [job, API_filler],
 
               [param_selector, array_selector],
               [API_filler, API_caller, AKSK_agent],

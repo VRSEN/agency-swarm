@@ -1,10 +1,10 @@
 from agency_swarm import Agent
-from agents.basic_agents.check_agent.tools.Sleep import Sleep
+from agents.basic_agents.job_agent.tools.Sleep import Sleep
 
-_name = "check_agent"
+_name = "job_agent"
 
 _description = """
-check_agent负责查询任务执行进度。
+job_agent负责查询任务执行状态。
 """
 
 import os
