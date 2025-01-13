@@ -66,9 +66,13 @@ from agents.basic_agents.api_agents.tools.FillAPI import FillAPI
 from agents.basic_agents.api_agents.tools.FillParamTable import FillParamTable
 
 from agency_swarm import set_openai_key
+
 import os
 
-api_key = os.getenv("OPENAI_API_KEY")
+api_key_path = os.path.join("..", "API_KEY.txt")
+
+with open(api_key_path, "r") as file:
+    api_key = file.read()
 set_openai_key(api_key)
 
 task_planner = task_planner.create_agent()
