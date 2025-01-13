@@ -7,8 +7,9 @@ from .APIGW_python_sdk_2_0_5.apig_sdk import signer
 
 class RequestAPI(BaseTool):
     '''
-    执行API请求并返回请求响应。
+    执行API请求并将请求响应保存在文件中。
     '''
+    _file_cnt = 0
 
     method: str = Field(
         ...,
@@ -56,9 +57,14 @@ class RequestAPI(BaseTool):
             print("Error signing API request: ", str(e))
         resp = requests.request(r.method, r.scheme + "://" + r.host + r.uri, headers=r.headers, data=r.body)
         content = bytes.decode(resp.content)
-        return_obj = {
+        result_json = {
             "status_code": resp.status_code,
             "reason": resp.reason,
             "content": json.loads(content)
         }
-        return json.dumps(return_obj, ensure_ascii=False)
+        self.__class__._file_cnt += 1
+        file_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "files")
+        result_file_path = os.path.join("api_results", f"{self.__class__._file_cnt}.json")
+        with open(os.path.join(file_dir, result_file_path), "w", encoding='utf-8') as f:
+            json.dump(result_json, f, ensure_ascii=False)
+        return f'{{"result_file_path":"{result_file_path}"}}'
