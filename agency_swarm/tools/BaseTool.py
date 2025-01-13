@@ -142,7 +142,7 @@ class BaseTool(BaseModel, ABC):
         thread = Thread(agent=self, recipient_agent=recipient_agent)
 
         # print the message from tool
-        if event_handler:
+        if self._event_handler:
             event_handler = self._event_handler
             event_handler.set_agent(self)
             event_handler.set_recipient_agent(recipient_agent)
