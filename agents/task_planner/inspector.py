@@ -21,7 +21,7 @@ _input_format = """
 
 _output_format = """
 {
-    "review": "yes"/"no",
+    "review": "YES"/"NO",
     "explain": <解释原因>
 }
 """

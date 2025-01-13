@@ -1380,12 +1380,12 @@ class Agency:
         with open(file_path, "w") as f:
             pass
     
-    files_path = "agents/files/"
-    completed_step_path = files_path + "completed_steps.json"
-    completed_subtask_path = files_path + "completed_sub_tasks.json"
-    completed_task_path = files_path + "completed_tasks.json"
-    context_path = files_path + "context.json"
-    error_path = files_path + "error.json"
+    files_path = os.path.join("agents", "files")
+    completed_step_path = os.path.join(files_path, "completed_steps.json")
+    completed_subtask_path = os.path.join(files_path, "completed_sub_tasks.json")
+    completed_task_path = os.path.join(files_path, "completed_tasks.json")
+    context_path = os.path.join(files_path, "context.json")
+    error_path = os.path.join(files_path, "error.json")
 
     def init_file(self):
         self._init_file(self.error_path)
@@ -1623,22 +1623,12 @@ class Agency:
     def planning_layer(self, message: str, original_request:str, task_planner_thread: Thread, inspector_thread: Thread = None, node_color: str = 'lightblue'):
         """将返回1. 规划结果, 2. 对应scheduler的输入"""
         console.rule()
-        while True:
-            planmessage = self.json_get_completion(task_planner_thread, message, inspector_thread)
-            print(f"{task_planner_thread.recipient_agent.name} RESULT:\n" + planmessage)
-            planmessage_json = json.loads(planmessage)
-            plan_json = {}
-            plan_json['main_task'] = original_request
-            plan_json['plan_graph'] = planmessage_json
-            if inspector_thread:
-                inspectreview = self.json_get_completion(inspector_thread, json.dumps(plan_json, ensure_ascii=False))
-                print(f"{inspector_thread.recipient_agent.name} REVIEW {inspectreview}")
-                inspectreview_json = json.loads(inspectreview)
-                if inspectreview_json['review'] == 'yes':
-                    break
-            else:
-                break
-            message = inspectreview
+        planmessage = self.json_get_completion(task_planner_thread, message, inspector_thread)
+        print(f"{task_planner_thread.recipient_agent.name} RESULT:\n" + planmessage)
+        planmessage_json = json.loads(planmessage)
+        plan_json = {}
+        plan_json['main_task'] = original_request
+        plan_json['plan_graph'] = planmessage_json
         self.json2graph(planmessage, "TASK_PLAN", node_color)
         return planmessage, json.dumps(plan_json, ensure_ascii=False)
 
@@ -1681,14 +1671,34 @@ class Agency:
                 
     def json_get_completion(self, thread: Thread, message: str, inspector_thread: Thread = None):
         _ = False
-        json_res = ""
-        while _ == False:
+        while True:
             res = thread.get_completion(message=message, response_format='auto')
             response_information = self.my_get_completion(res)
-            inspector_result = inspector_thread.get_completion(message=response_information, response_format='auto')
-            _, json_res = self.get_json_from_str(message=inspector_result)
-        return json_res
+            if inspector_thread:
+                inspector_res = inspector_thread.get_completion(message=response_information, response_format='auto')
+                inspector_result = self.my_get_completion(inspector_res)
+                print(inspector_result)
+                _ = self.get_inspector_review(inspector_result)
+                if _ == True:
+                    _, result = self.get_json_from_str(message=response_information)
+                    return result
+                message = message + inspector_result
+            _, result = self.get_json_from_str(message=response_information)
+            if _ == True:
+                return result
     
+    def get_inspector_review(self, message: str):
+        try:
+            json_res = json.loads(message)
+            return json_res['review'] == "YES"
+        except:
+            yes_str = "YES"
+            try:
+                yes_index = message.index(yes_str)
+                return True
+            except ValueError:
+                return False
+
     def get_json_from_str(self, message: str):
         try:
             json_res = json.loads(message)
@@ -1817,130 +1827,130 @@ class Agency:
                 break
 
 
-    def create_ECS_simulation(self):
-        import time
-        import random
-        def read_json_file(path):
-            with open("/root/agency-swarm/agents/simulator/create_ECS_simulation/" + path, 'r') as file:
-                data = json.load(file)
-            return json.dumps(data, indent=4, ensure_ascii=False)
+    # def create_ECS_simulation(self):
+    #     import time
+    #     import random
+    #     def read_json_file(path):
+    #         with open("/root/agency-swarm/agents/simulator/create_ECS_simulation/" + path, 'r') as file:
+    #             data = json.load(file)
+    #         return json.dumps(data, indent=4, ensure_ascii=False)
         
-        console.rule()
-        text = input("👤 USER: ")       
-        thread2str = {
-            "task_planner": "THREAD:[ user -> task_planner ]: URL https://platform.openai.com/playground/assistants?assistant=asst_RqiQ4xwmfCvPW51CgZufHdRB&mode=assistant&thread=thread_psKMDuwLfiNEP0GP2aVH73nI",
-            "scheduler":    "THREAD:[ user -> scheduler ]: URL https://platform.openai.com/playground/assistants?assistant=asst_0jtXxjnRzcL6NMumqb2GgFuB&mode=assistant&thread=thread_GnzV92GiWrWEVnr8T3ZJQvto",
-            "subtask_planner":  "THREAD:[ user -> subtask_planner ]: URL https://platform.openai.com/playground/assistants?assistant=asst_58LRf13piLRXt2nJBHI8QAeS&mode=assistant&thread=thread_vhxwe1iHw8mesFOqrzDkgPRa",
-            "sub_scheduler":    "THREAD:[ user -> sub_scheduler ]: URL https://platform.openai.com/playground/assistants?assistant=asst_yd8bfhNo0HPCakUBpwRuAMMH&mode=assistant&thread=thread_Yx8zSDhsAFAWID4shfSinc4l"
-        }
-        console.rule()
-        print(thread2str["task_planner"])
-        time.sleep(random.randint(10, 16))
-        print(f"TASK PLANNING:\n" + read_json_file("1_task_planning.json"))
+    #     console.rule()
+    #     text = input("👤 USER: ")       
+    #     thread2str = {
+    #         "task_planner": "THREAD:[ user -> task_planner ]: URL https://platform.openai.com/playground/assistants?assistant=asst_RqiQ4xwmfCvPW51CgZufHdRB&mode=assistant&thread=thread_psKMDuwLfiNEP0GP2aVH73nI",
+    #         "scheduler":    "THREAD:[ user -> scheduler ]: URL https://platform.openai.com/playground/assistants?assistant=asst_0jtXxjnRzcL6NMumqb2GgFuB&mode=assistant&thread=thread_GnzV92GiWrWEVnr8T3ZJQvto",
+    #         "subtask_planner":  "THREAD:[ user -> subtask_planner ]: URL https://platform.openai.com/playground/assistants?assistant=asst_58LRf13piLRXt2nJBHI8QAeS&mode=assistant&thread=thread_vhxwe1iHw8mesFOqrzDkgPRa",
+    #         "sub_scheduler":    "THREAD:[ user -> sub_scheduler ]: URL https://platform.openai.com/playground/assistants?assistant=asst_yd8bfhNo0HPCakUBpwRuAMMH&mode=assistant&thread=thread_Yx8zSDhsAFAWID4shfSinc4l"
+    #     }
+    #     console.rule()
+    #     print(thread2str["task_planner"])
+    #     time.sleep(random.randint(10, 16))
+    #     print(f"TASK PLANNING:\n" + read_json_file("1_task_planning.json"))
 
-        console.rule()
-        print(thread2str["scheduler"])
-        time.sleep(random.randint(5, 7))
-        print(f"TASK SCHEDULING Round 1:\n" + read_json_file("2_scheduler.json"))
+    #     console.rule()
+    #     print(thread2str["scheduler"])
+    #     time.sleep(random.randint(5, 7))
+    #     print(f"TASK SCHEDULING Round 1:\n" + read_json_file("2_scheduler.json"))
 
-        console.rule()
-        print(thread2str["subtask_planner"])
-        time.sleep(random.randint(10, 16))
-        print(f"SUBTASK task_1 PLANNING:\n" + read_json_file("3_subtask_planning.json"))
+    #     console.rule()
+    #     print(thread2str["subtask_planner"])
+    #     time.sleep(random.randint(10, 16))
+    #     print(f"SUBTASK task_1 PLANNING:\n" + read_json_file("3_subtask_planning.json"))
 
-        console.rule()
-        print(thread2str["sub_scheduler"])
-        time.sleep(random.randint(5, 7))
-        print(f"SUBTASK task_1 SCHEDULING round 1:\n" + read_json_file("4_sub_scheduler.json"))
+    #     console.rule()
+    #     print(thread2str["sub_scheduler"])
+    #     time.sleep(random.randint(5, 7))
+    #     print(f"SUBTASK task_1 SCHEDULING round 1:\n" + read_json_file("4_sub_scheduler.json"))
         
-        console.rule()
-        print("Execute steps_1...\n")
-        time.sleep(random.randint(20, 30))
-        print(f"RESULT:\n" + read_json_file("5_context.json"))
+    #     console.rule()
+    #     print("Execute steps_1...\n")
+    #     time.sleep(random.randint(20, 30))
+    #     print(f"RESULT:\n" + read_json_file("5_context.json"))
         
-        console.rule()
-        print(thread2str["sub_scheduler"])
-        time.sleep(random.randint(5, 7))
-        print(f"SUBTASK task_1 SCHEDULING round 2:\n" + read_json_file("6_sub_scheduler_1.json"))
+    #     console.rule()
+    #     print(thread2str["sub_scheduler"])
+    #     time.sleep(random.randint(5, 7))
+    #     print(f"SUBTASK task_1 SCHEDULING round 2:\n" + read_json_file("6_sub_scheduler_1.json"))
 
-        console.rule()
-        print(thread2str["scheduler"])
-        time.sleep(random.randint(5, 7))
-        print("TASK SCHEDULING Round 2\n" + read_json_file("7_scheduler_1.json"))
+    #     console.rule()
+    #     print(thread2str["scheduler"])
+    #     time.sleep(random.randint(5, 7))
+    #     print("TASK SCHEDULING Round 2\n" + read_json_file("7_scheduler_1.json"))
 
-        console.rule()
-        print(thread2str["subtask_planner"])
-        time.sleep(random.randint(10, 16))
-        print(f"SUBTASK task_2 PLANNING:\n" + read_json_file("8_subtask_planning_create_ecs.json"))
+    #     console.rule()
+    #     print(thread2str["subtask_planner"])
+    #     time.sleep(random.randint(10, 16))
+    #     print(f"SUBTASK task_2 PLANNING:\n" + read_json_file("8_subtask_planning_create_ecs.json"))
 
-        console.rule()
-        print(thread2str["sub_scheduler"])
-        time.sleep(random.randint(5, 7))
-        print(f"SUBTASK task_2 SCHEDULING round 1:\n" + read_json_file("9_sub_scheduler_create_ecs.json"))
+    #     console.rule()
+    #     print(thread2str["sub_scheduler"])
+    #     time.sleep(random.randint(5, 7))
+    #     print(f"SUBTASK task_2 SCHEDULING round 1:\n" + read_json_file("9_sub_scheduler_create_ecs.json"))
 
-        console.rule()
-        print("Execute steps_1...\n")
-        time.sleep(random.randint(20, 30))
-        print(f"RESULT:\n" + read_json_file("10_context_error.json"))
+    #     console.rule()
+    #     print("Execute steps_1...\n")
+    #     time.sleep(random.randint(20, 30))
+    #     print(f"RESULT:\n" + read_json_file("10_context_error.json"))
 
-        console.rule()
-        print("ERROR information From ECS_manager to subtask_planner...\n")
-        time.sleep(random.randint(3, 5))
-        print("ERROR information From subtask_planner to task_planner...\n")
-        time.sleep(random.randint(3, 5))
-        console.rule()
-        print(thread2str["task_planner"])
-        time.sleep(random.randint(10, 16))
-        print(f"RE TASK PLANNING:\n" + read_json_file("11_re_task_planning.json"))
+    #     console.rule()
+    #     print("ERROR information From ECS_manager to subtask_planner...\n")
+    #     time.sleep(random.randint(3, 5))
+    #     print("ERROR information From subtask_planner to task_planner...\n")
+    #     time.sleep(random.randint(3, 5))
+    #     console.rule()
+    #     print(thread2str["task_planner"])
+    #     time.sleep(random.randint(10, 16))
+    #     print(f"RE TASK PLANNING:\n" + read_json_file("11_re_task_planning.json"))
 
-        console.rule()
-        print(thread2str["scheduler"])
-        time.sleep(random.randint(5, 7))
-        print(f"TASK SCHEDULING Round 1:\n" + read_json_file("12_scheduler.json"))
+    #     console.rule()
+    #     print(thread2str["scheduler"])
+    #     time.sleep(random.randint(5, 7))
+    #     print(f"TASK SCHEDULING Round 1:\n" + read_json_file("12_scheduler.json"))
 
-        console.rule()
-        print(thread2str["subtask_planner"])
-        time.sleep(random.randint(10, 16))
-        print(f"SUBTASK task_2 PLANNING:\n" + read_json_file("13_subtask_planning.json"))
+    #     console.rule()
+    #     print(thread2str["subtask_planner"])
+    #     time.sleep(random.randint(10, 16))
+    #     print(f"SUBTASK task_2 PLANNING:\n" + read_json_file("13_subtask_planning.json"))
 
-        console.rule()
-        print(thread2str["sub_scheduler"])
-        time.sleep(random.randint(5, 7))
-        print(f"SUBTASK task_2 SCHEDULING round 1:\n" + read_json_file("14_sub_scheduler.json"))
+    #     console.rule()
+    #     print(thread2str["sub_scheduler"])
+    #     time.sleep(random.randint(5, 7))
+    #     print(f"SUBTASK task_2 SCHEDULING round 1:\n" + read_json_file("14_sub_scheduler.json"))
 
-        console.rule()
-        print("Execute steps_1...\n")
-        time.sleep(random.randint(20, 30))
-        print(f"RESULT:\n" + read_json_file("15_context.json"))
+    #     console.rule()
+    #     print("Execute steps_1...\n")
+    #     time.sleep(random.randint(20, 30))
+    #     print(f"RESULT:\n" + read_json_file("15_context.json"))
 
-        console.rule()
-        print(thread2str["sub_scheduler"])
-        time.sleep(random.randint(5, 7))
-        print(f"SUBTASK task_2 SCHEDULING round 2:\n" + read_json_file("16_sub_scheduler_1.json"))
+    #     console.rule()
+    #     print(thread2str["sub_scheduler"])
+    #     time.sleep(random.randint(5, 7))
+    #     print(f"SUBTASK task_2 SCHEDULING round 2:\n" + read_json_file("16_sub_scheduler_1.json"))
         
-        console.rule()
-        print("Execute steps_2...\n")
-        time.sleep(random.randint(20, 30))
-        print(f"RESULT:\n" + read_json_file("17_context.json"))
+    #     console.rule()
+    #     print("Execute steps_2...\n")
+    #     time.sleep(random.randint(20, 30))
+    #     print(f"RESULT:\n" + read_json_file("17_context.json"))
 
-        console.rule()
-        print(thread2str["scheduler"])
-        time.sleep(random.randint(5, 7))
-        print(f"TASK SCHEDULING Round 2:\n" + read_json_file("18_scheduler_1.json"))
+    #     console.rule()
+    #     print(thread2str["scheduler"])
+    #     time.sleep(random.randint(5, 7))
+    #     print(f"TASK SCHEDULING Round 2:\n" + read_json_file("18_scheduler_1.json"))
 
-        console.rule()
-        print(thread2str["subtask_planner"])
-        time.sleep(random.randint(10, 16))
-        print(f"SUBTASK task_3 PLANNING:\n" + read_json_file("19_subtask_planning_1.json"))
+    #     console.rule()
+    #     print(thread2str["subtask_planner"])
+    #     time.sleep(random.randint(10, 16))
+    #     print(f"SUBTASK task_3 PLANNING:\n" + read_json_file("19_subtask_planning_1.json"))
 
-        console.rule()
-        print(thread2str["sub_scheduler"])
-        time.sleep(random.randint(5, 7))
-        print(f"SUBTASK task_3 SCHEDULING round 1:\n" + read_json_file("20_sub_scheduler.json"))
+    #     console.rule()
+    #     print(thread2str["sub_scheduler"])
+    #     time.sleep(random.randint(5, 7))
+    #     print(f"SUBTASK task_3 SCHEDULING round 1:\n" + read_json_file("20_sub_scheduler.json"))
 
-        console.rule()
-        print("Execute steps_1...\n")
-        time.sleep(random.randint(10, 20))
+    #     console.rule()
+    #     print("Execute steps_1...\n")
+    #     time.sleep(random.randint(10, 20))
 
 
 
