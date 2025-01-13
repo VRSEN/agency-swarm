@@ -1,6 +1,6 @@
 from agency_swarm import Agent
 from agents.cap_group_agents.ECS_group.cap_agents.ECS_netcard_agent.tools import (
-    ReadLog, WriteLog
+    ReadAPI
 )
 
 _name = "ECS_netcard_agent"
@@ -14,7 +14,7 @@ import os
 current_path = os.path.abspath(os.path.dirname(__file__))
 _instruction = current_path + "/instructions.md"
 
-_tools = [ReadLog.ReadLog, WriteLog.WriteLog]
+_tools = [ReadAPI.ReadAPI]
 
 _file_folder = ""
 
