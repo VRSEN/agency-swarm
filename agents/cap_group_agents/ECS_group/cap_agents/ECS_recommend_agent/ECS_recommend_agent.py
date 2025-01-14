@@ -2,7 +2,7 @@ from agency_swarm import Agent
 from agents.cap_group_agents.ECS_group.cap_agents.ECS_recommend_agent.tools import (
     ReadAPI
 )
-from agents.cap_group_agents import cap_agent_instruction
+from agents.cap_group_agents.cap_agent_instruction import cap_agent_instruction
 
 _name = "ECS_recommend_agent"
 _manager_name = "ECS_manager"

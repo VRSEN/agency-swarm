@@ -2,7 +2,7 @@ from agency_swarm import Agent
 from agents.cap_group_agents.VPC_network.cap_agents.VPC_vpc_agent.tools import (
     ReadAPI
 )
-from agents.cap_group_agents import cap_agent_instruction
+from agents.cap_group_agents.cap_agent_instruction import cap_agent_instruction
 
 _name = "VPC_vpc_agent"
 _manager_name = "VPC_manager"
