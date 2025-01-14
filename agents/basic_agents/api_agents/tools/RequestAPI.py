@@ -62,7 +62,7 @@ class RequestAPI(BaseTool):
             "reason": resp.reason,
             "content": json.loads(content)
         }
-        self.__class__._file_cnt += 1
+        self.__class__._file_cnt = self.__class__._file_cnt + 1
         file_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "files")
         result_file_path = os.path.join("api_results", f"{self.__class__._file_cnt}.json")
         with open(os.path.join(file_dir, result_file_path), "w", encoding='utf-8') as f:
