@@ -4,7 +4,7 @@ from agents.task_planner import (
     task_planner, scheduler, inspector
 )
 from agents.subtask_planner import (
-    subtask_planner, subtask_manager, subtask_scheduler
+    subtask_planner, subtask_manager, subtask_scheduler, subtask_inspector
 )
 from agents.cap_group_agents.CES_group import (
     CES_manager, CES_planner, CES_step_scheduler
@@ -80,11 +80,13 @@ with open(api_key_path, "r") as file:
 set_openai_key(api_key)
 
 task_planner = task_planner.create_agent()
-inspector = inspector.create_agent()
 scheduler = scheduler.create_agent()
+inspector = inspector.create_agent()
+
 subtask_planner = subtask_planner.create_agent()
 subtask_manager = subtask_manager.create_agent()
 subtask_scheduler = subtask_scheduler.create_agent()
+subtask_inspector = subtask_inspector.create_agent()
 
 # repeater = repeater.create_agent()
 # rander = rander.create_agent()
@@ -153,7 +155,7 @@ param_selector = param_selector.create_agent()
 job = job_agent.create_agent()
 
 chat_graph = [task_planner, scheduler, inspector,
-              subtask_planner, subtask_manager, subtask_scheduler, 
+              subtask_planner, subtask_manager, subtask_scheduler, subtask_inspector,
             #   CES_planner, CES_step_scheduler,
               ECS_planner, ECS_step_scheduler,
             #   EVS_planner, EVS_step_scheduler,
@@ -273,6 +275,7 @@ plan_agents = {
     "scheduler": scheduler,
     "subtask_planner": subtask_planner,
     "subtask_scheduler": subtask_scheduler,
+    "subtask_inspector": subtask_inspector
     # "simulator": simulator
 }
 
