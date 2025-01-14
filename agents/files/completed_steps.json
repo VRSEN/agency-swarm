@@ -1,0 +1,13 @@
+{
+    "step_id": {
+        "step": {
+            "title": "\u67e5\u8be2ECS\u89c4\u683c\u8be6\u60c5\u548c\u89c4\u683c\u6269\u5c55\u4fe1\u606f\u5217\u8868",
+            "id": "step_1",
+            "agent": [
+                "ECS_specification_query_agent"
+            ],
+            "description": "\u8c03\u7528\u534e\u4e3a\u4e91API\uff0c\u67e5\u8be2'cn-north-4'\u53ef\u7528\u533a\u7684ECS\u89c4\u683c\u8be6\u60c5\u548c\u89c4\u683c\u6269\u5c55\u4fe1\u606f\u5217\u8868\u3002",
+            "dep": []
+        }
+    }
+}

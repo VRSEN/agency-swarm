@@ -3,14 +3,13 @@ from pydantic import Field
 import os
 import json
 import requests
+import datetime
 from .APIGW_python_sdk_2_0_5.apig_sdk import signer
 
 class RequestAPI(BaseTool):
     '''
     执行API请求并将请求响应保存在文件中。
     '''
-    _file_cnt = 0
-
     method: str = Field(
         ...,
         # description="API的请求方法，只能是如下之一：GET/PUT/POST/DELETE/HEAD/PATCH",
@@ -62,9 +61,13 @@ class RequestAPI(BaseTool):
             "reason": resp.reason,
             "content": json.loads(content)
         }
-        self.__class__._file_cnt = self.__class__._file_cnt + 1
+        now = datetime.datetime.now()
+        formatted_time = now.strftime("%Y%m%d_%H%M%S")
+        prefix = "context_"
+        suffix = ".json"
+        filename = f"{prefix}{formatted_time}{suffix}"
         file_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "files")
-        result_file_path = os.path.join("api_results", f"{self.__class__._file_cnt}.json")
+        result_file_path = os.path.join("api_results", filename)
         with open(os.path.join(file_dir, result_file_path), "w", encoding='utf-8') as f:
             json.dump(result_json, f, ensure_ascii=False)
         return f'{{"result_file_path":"{result_file_path}"}}'
