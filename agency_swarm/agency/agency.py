@@ -1420,7 +1420,7 @@ class Agency:
         self.init_file()
 
         print("Initialization Successful.\n")
-        text = "在华为云北京\"cn-north-1\"可用区创建一个ecs，规格任意"
+        text = "在华为云北京\"cn-north-4\"可用区创建一个ecs，规格任意"
         # text = "在北京可用区创建三个ecs，之后删除创建时间超过5分钟的ecs"
         # text = "在华为云ecs上部署mysql和postgresql，并用sysbench测试它们的性能"
         # text = input("👤 USER: ")
@@ -1673,22 +1673,35 @@ class Agency:
                 
     def json_get_completion(self, thread: Thread, message: str, inspector_thread: Thread = None):
         _ = False
+        original_message = message
         while True:
             res = thread.get_completion(message=message, response_format='auto')
             response_information = self.my_get_completion(res)
+            _, result = self.get_json_from_str(message=response_information)
+
             if inspector_thread:
-                inspector_res = inspector_thread.get_completion(message=response_information, response_format='auto')
+                if _ == True:
+                    inspect_query = {
+                        "user_request": original_message,
+                        "task_graph": json.loads(result)
+                    }
+                else:
+                    inspect_query = {
+                        "user_request": original_message,
+                        "task_graph": result
+                    }
+                inspector_res = inspector_thread.get_completion(message=json.dumps(inspect_query), response_format='auto')
                 inspector_result = self.my_get_completion(inspector_res)
                 print(inspector_result)
                 _ = self.get_inspector_review(inspector_result)
                 if _ == True:
-                    _, result = self.get_json_from_str(message=response_information)
                     return result
                 message = message + inspector_result
-            _, result = self.get_json_from_str(message=response_information)
-            if _ == True:
-                return result
-    
+            else:
+                if _ == True:
+                    return result
+                message = message + "\nYour output Format is Wrong.\n"
+                
     def get_inspector_review(self, message: str):
         try:
             json_res = json.loads(message)
@@ -1713,7 +1726,7 @@ class Agency:
                 end_index = message.index(end_str, start_index)
                 return True, message[start_index: end_index]
             except ValueError:
-                return False, ""
+                return False, message
     
     def my_get_completion(self, res):
         while True:

@@ -6,8 +6,8 @@ _description = """
 """
 _input_format = """
 {
-    "task_request": ...,
-    "subtask_graph"{
+    "user_request": ...,
+    "task_graph"{
         "subtask_1": {
             "title": 任务名称,
             "id": 任务ID, 
@@ -28,18 +28,18 @@ _output_format = """
 """
 
 _instruction = f"""
-作为审查者，你将从subtask_planner那里收到一个 JSON 格式的任务规划结果 <subtask_graph> 和原始任务请求 <task_request>。
+作为审查者，你将从subtask_planner那里收到一个 JSON 格式的任务规划结果 <task_graph> 和原始任务请求 <user_request>。
 输入格式为:
 {_input_format}
 
 请一步步思考: 
-0. 你需要确保发给你的任务规划结果 <subtask_graph> 是以上的 JSON 格式；
-1. 你需要检查<task_request>是否可以分解为<subtask_graph>，且确保<subtask_graph>任务的拆分和执行顺序合理；
-2. 确保<subtask_graph>中没有**不通过华为云API或ssh连接命令行指令或编写、运行脚本**实现的操作；
+0. 你需要确保发给你的任务规划结果 <task_graph> 是以上的 JSON 格式；
+1. 你需要检查<user_request>是否可以分解为<task_graph>，且确保<task_graph>任务的拆分和执行顺序合理；
+2. 确保<task_graph>中没有**不通过华为云API或ssh连接命令行指令或编写、运行脚本**实现的操作；
 3. 确保用户隐私，环境中已经有华为云访问认证等认证信息，且已经被所需agent得知，确保任务规划中没有获取访问凭证等类似步骤；
-4. 除非<task_request>有说明，否则任务执行环境最开始应该没有创建**任何资源**，确保任务所需资源已经在**前置任务**中创建；
+4. 除非<user_request>有说明，否则任务执行环境最开始应该没有创建**任何资源**，确保任务所需资源已经在**前置任务**中创建；
 5. 你需要保证任务规划中没有**多余**的确认或查询步骤；
-6. 确保<subtask_graph>中每个子任务的执行能力群"capability_group"名称正确且合理，所有能力群名称和介绍如下：
+6. 确保<task_graph>中每个子任务的执行能力群"capability_group"名称正确且合理，所有能力群名称和介绍如下：
     a. "操作系统管理能力群": 该操作系统管理能力群提供通过SSH远程连接ECS执行命令的能力；
     b. "弹性云服务器(ECS)管理能力群": ECS管理能力群提供全面的ECS实例管理功能，包括创建、删除、查询、修改、迁移、启动、停止、重启等核心操作，以及克隆、规格推荐、网卡和硬盘配置等扩展功能；
     c. "镜像管理能力群": 负责华为云镜像资源管理任务，包括：查询镜像列表，更新镜像信息，制作镜像，镜像文件快速导入，使用外部镜像文件制作数据镜像，制作整机镜像，注册镜像，导出镜像，查询镜像支持的OS列表。
