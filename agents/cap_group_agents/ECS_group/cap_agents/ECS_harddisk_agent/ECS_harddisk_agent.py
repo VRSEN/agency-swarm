@@ -2,17 +2,18 @@ from agency_swarm import Agent
 from agents.cap_group_agents.ECS_group.cap_agents.ECS_harddisk_agent.tools import (
     ReadAPI
 )
+from agents.cap_group_agents import cap_agent_instruction
 
 _name = "ECS_harddisk_agent"
 
 _description = """
 负责华为云ECS硬盘管理任务，包括：查询弹性云服务器单个磁盘信息、查询弹性云服务器挂载磁盘列表信息，查询弹性云服务器挂载磁盘列表详情信息，弹性云服务器挂载磁盘、弹性云服务器卸载磁盘，修改弹性云服务器挂载的单个磁盘信息。
 """
-
+_manager_name = "ECS_manager"
 import os
 
 current_path = os.path.abspath(os.path.dirname(__file__))
-_instruction = current_path + "/instructions.md"
+_instruction = cap_agent_instruction(_name, _description, _manager_name)
 
 _tools = [ReadAPI.ReadAPI]
 
