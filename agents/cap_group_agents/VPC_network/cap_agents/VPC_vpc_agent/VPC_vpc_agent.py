@@ -2,9 +2,10 @@ from agency_swarm import Agent
 from agents.cap_group_agents.VPC_network.cap_agents.VPC_vpc_agent.tools import (
     ReadAPI
 )
+from agents.cap_group_agents import cap_agent_instruction
 
 _name = "VPC_vpc_agent"
-
+_manager_name = "VPC_manager"
 _description = """
 负责华为云VPC管理任务，包括创建VPC、查询VPC、查询VPC列表、更新VPC、删除VPC。
 """
@@ -12,7 +13,8 @@ _description = """
 import os
 
 current_path = os.path.abspath(os.path.dirname(__file__))
-_instruction = current_path + "/instructions.md"
+_instruction = cap_agent_instruction(_name, _description, _manager_name)
+
 
 _tools = [ReadAPI.ReadAPI]
 

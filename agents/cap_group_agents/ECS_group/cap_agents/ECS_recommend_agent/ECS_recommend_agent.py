@@ -2,9 +2,10 @@ from agency_swarm import Agent
 from agents.cap_group_agents.ECS_group.cap_agents.ECS_recommend_agent.tools import (
     ReadAPI
 )
+from agents.cap_group_agents import cap_agent_instruction
 
 _name = "ECS_recommend_agent"
-
+_manager_name = "ECS_manager"
 _description = """
 负责华为云ECS规格推荐任务，包括：地域推荐。
 """
@@ -12,8 +13,7 @@ _description = """
 import os
 
 current_path = os.path.abspath(os.path.dirname(__file__))
-_instruction = current_path + "/instructions.md"
-
+_instruction = cap_agent_instruction(_name, _description, _manager_name)
 _tools = [ReadAPI.ReadAPI]
 
 _file_folder = ""
