@@ -1384,7 +1384,7 @@ class Agency:
     completed_step_path = os.path.join(files_path, "completed_steps.json")
     completed_subtask_path = os.path.join(files_path, "completed_sub_tasks.json")
     completed_task_path = os.path.join(files_path, "completed_tasks.json")
-    context_path = os.path.join(files_path, "context.json")
+    context_path = os.path.join(files_path, "context_index.json")
     error_path = os.path.join(files_path, "error.json")
 
     def init_file(self):
@@ -1430,11 +1430,13 @@ class Agency:
         scheduler = plan_agents["scheduler"]
         subtask_planner = plan_agents["subtask_planner"]
         subtask_scheduler = plan_agents["subtask_scheduler"]
+        subtask_inspector = plan_agents["subtask_inspector"]
         planner_thread = Thread(self.user, task_planner)
         scheduler_thread = Thread(self.user, scheduler)
         inspector_thread = Thread(self.user, inspector)
         subplanner_thread = Thread(self.user, subtask_planner)
         subtask_scheduler_thread = Thread(self.user, subtask_scheduler)
+        subtask_inspector_thread = Thread(self.user, subtask_inspector)
         
         cap_group_thread = self.create_cap_group_agent_threads(cap_group_agents=cap_group_agents)
 
@@ -1473,7 +1475,7 @@ class Agency:
                         "description": next_task['description'],
                     }
                     print(f"The task:\n{subtask_input}\nneed to be planned...")
-                    subtask_graph, subtasks_need_scheduled = self.planning_layer(message=json.dumps(subtask_input, ensure_ascii=False), original_request=next_task['description'], task_planner_thread=subplanner_thread, node_color='lightgreen')
+                    subtask_graph, subtasks_need_scheduled = self.planning_layer(message=json.dumps(subtask_input, ensure_ascii=False), original_request=next_task['description'], task_planner_thread=subplanner_thread, inspector_thread=subtask_inspector_thread, node_color='lightgreen')
                     
                     id2subtask = {}
                     subtask_graph_json = json.loads(subtask_graph)
