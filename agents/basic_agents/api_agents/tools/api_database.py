@@ -81,6 +81,10 @@ def insert_data():
         ("创建VPC", "POST", "https://{endpoint}/v1/{project_id}/vpcs", "创建虚拟私有云。"),
         ("查询镜像列表", "GET", "https://{endpoint}/v2/cloudimages{?__isregistered,__imagetype,__whole_image,__system__cmkid,protected,visibility,owner,id,status,name,flavor_id,container_format,disk_format,min_ram,min_disk,__os_bit,__platform,marker,limit,sort_key,sort_dir,__os_type,tag,member_status,__support_kvm,__support_xen,__support_largememory,__support_diskintensive,__support_highperformance,__support_xen_gpu_type,__support_kvm_gpu_type,__support_xen_hana,__support_kvm_infiniband,virtual_env_type,enterprise_project_id,created_at,updated_at,architecture}", "根据不同条件查询镜像列表信息。"),
         ("地域推荐", "POST", "https://{endpoint}/v1/{domain_id}/recommendations/ecs-supply", "对ECS的资源供给的地域和规格进行推荐，推荐结果以打分的形式呈现，分数越高推荐程度越高。"),
+        ("查询VPC列表", "GET", "https://{endpoint}/v1/{project_id}/vpcs", "查询虚拟私有云列表。"),
+        ("查询子网列表", "GET", "https://{endpoint}/v1/{project_id}/subnets", "查询子网列表。"),
+        ("查询安全组列表", "GET", "https://{endpoint}/v1/{project_id}/security-groups", "查询安全组列表。"),
+        ("创建安全组", "POST", "https://{endpoint}/v1/{project_id}/security-groups", "创建安全组。"),
     ]
 
     uri_parameters_data = [
@@ -167,9 +171,29 @@ def insert_data():
         ("查询镜像列表", "created_at", False, "String", "镜像创建时间。支持按照时间点过滤查询，取值格式为“操作符:UTC时间”。 其中操作符支持如下几种： gt：大于 gte：大于等于 lt：小于 lte：小于等于 eq：等于 neq：不等于 时间格式支持：yyyy-MM-ddThh:mm:ssZ或者yyyy-MM-dd hh:mm:ss 例如，查询创建时间在2018-10-28 10:00:00之前的镜像，可以通过如下条件过滤： created_at=lt:2018-10-28T10:00:00Z"),
         ("查询镜像列表", "updated_at", False, "String", "镜像修改时间。支持按照时间点过滤查询，取值格式为“操作符:UTC时间”。 其中操作符支持如下几种： gt：大于 gte：大于等于 lt：小于 lte：小于等于 eq：等于 neq：不等于 时间格式支持：yyyy-MM-ddThh:mm:ssZ或者yyyy-MM-dd hh:mm:ss 例如，查询修改时间在2018-10-28 10:00:00之前的镜像，可以通过如下条件过滤： updated_at=lt:2018-10-28T10:00:00Z"),
         ("查询镜像列表", "architecture", False, "String", "镜像架构类型。取值包括： x86 arm"),
-        # (api_name, parameter, mandatory, type, description)
         ("地域推荐", "endpoint", True, None, "指定承载REST服务端点的服务器域名或IP，不同服务不同区域的Endpoint不同，您可以从地区和终端节点获取。例如IAM服务在“华北-北京四”区域的Endpoint为“iam.cn-north-4.myhuaweicloud.com”。"),
         ("地域推荐", "domain_id", True, None, "租户域ID。"),
+        ("查询VPC列表", "endpoint", True, None, "指定承载REST服务端点的服务器域名或IP，不同服务不同区域的Endpoint不同，您可以从地区和终端节点获取。例如IAM服务在“华北-北京四”区域的Endpoint为“iam.cn-north-4.myhuaweicloud.com”。"),
+        ("查询VPC列表", "project_id", True, "String", "项目ID，获取项目ID请参见获取项目ID。"),
+        ("查询VPC列表", "id", False, "String", "按照VPC ID过滤查询。"),
+        ("查询VPC列表", "marker", False, "String", "分页查询的起始资源ID，表示从指定资源的下一条记录开始查询。 marker需要和limit配合使用： 若不传入marker和limit参数，查询结果返回第一页全部资源记录。 若不传入marker参数，limit为10，查询结果返回第1~10条资源记录。 若marker为第10条记录的资源ID，limit为10，查询结果返回第11~20条资源记录。 若marker为第10条记录的资源ID，不传入limit参数，查询结果返回第11~2000条（limit默认值2000）资源记录。"),
+        ("查询VPC列表", "limit", False, "Integer", "分页查询每页返回的记录个数，取值范围为0~intmax（2^31-1），默认值2000。 limit需要和marker配合使用，详细规则请见marker的参数说明。"),
+        ("查询VPC列表", "enterprise_project_id", False, "String", "功能说明：按照企业项目ID过滤查询，可以使用该字段过滤某个企业项目下的虚拟私有云。 取值范围：最大长度36字节，带“-”连字符的UUID格式，或者是字符串“0”。“0”表示默认企业项目。若需要查询当前用户所有企业项目绑定的虚拟私有云，请传参all_granted_eps。"),
+        ("查询子网列表", "endpoint", True, None, "指定承载REST服务端点的服务器域名或IP，不同服务不同区域的Endpoint不同，您可以从地区和终端节点获取。例如IAM服务在“华北-北京四”区域的Endpoint为“iam.cn-north-4.myhuaweicloud.com”。"),
+        ("查询子网列表", "project_id", True, "String", "项目ID，获取项目ID请参见获取项目ID。"),
+        ("查询子网列表", "marker", False, "String", "分页查询的起始资源ID，表示从指定资源的下一条记录开始查询。 marker需要和limit配合使用： 若不传入marker和limit参数，查询结果返回第一页全部资源记录。 若不传入marker参数，limit为10，查询结果返回第1~10条资源记录。 若marker为第10条记录的资源ID，limit为10，查询结果返回第11~20条资源记录。 若marker为第10条记录的资源ID，不传入limit参数，查询结果返回第11~2000条（limit默认值2000）资源记录。"),
+        ("查询子网列表", "limit", False, "Integer", "分页查询每页返回的记录个数，取值范围为0~intmax（2^31-1），默认值2000。 limit需要和marker配合使用，详细规则请见marker的参数说明。"),
+        ("查询子网列表", "vpc_id", False, "String", "按照子网所在VPC ID过滤查询。 企业项目细粒度授权场景下，该字段必传。"),
+        ("查询安全组列表", "endpoint", True, None, "指定承载REST服务端点的服务器域名或IP，不同服务不同区域的Endpoint不同，您可以从地区和终端节点获取。例如IAM服务在“华北-北京四”区域的Endpoint为“iam.cn-north-4.myhuaweicloud.com”。"),
+        ("查询安全组列表", "project_id", True, "String", "项目ID，获取项目ID请参见获取项目ID。"),
+        ("查询安全组列表", "marker", False, "String", "分页查询的起始资源ID，表示从指定资源的下一条记录开始查询。 marker需要和limit配合使用： 若不传入marker和limit参数，查询结果返回第一页全部资源记录。 若不传入marker参数，limit为10，查询结果返回第1~10条资源记录。 若marker为第10条记录的资源ID，limit为10，查询结果返回第11~20条资源记录。 若marker为第10条记录的资源ID，不传入limit参数，查询结果返回第11~2000条（limit默认值2000）资源记录。"),
+        ("查询安全组列表", "limit", False, "Integer", "分页查询每页返回的记录个数，取值范围为0~intmax（2^31-1），默认值2000。 limit需要和marker配合使用，详细规则请见marker的参数说明。"),
+        ("查询安全组列表", "vpc_id", False, "String", "按照vpc_id过滤查询。"),
+        ("查询安全组列表", "enterprise_project_id", False, "String", "功能说明：企业项目ID。可以使用该字段过滤某个企业项目下的安全组。 取值范围：最大长度36字节，带“-”连字符的UUID格式，或者是字符串“0”。“0”表示默认企业项目。若需要查询当前用户所有企业项目绑定的安全组，或者企业项目子账号需要进行安全组列表展示，请传参all_granted_eps。 说明： 关于企业项目ID的获取及企业项目特性的详细信息，请参见《企业管理用户指南》。"),
+        ("查询安全组列表", "remote_address_group_id", False, "String", "功能说明：远端IP地址组ID。您可以登录管理控制台，在IP地址组页面查看该ID。 约束：和remote_ip_prefix，remote_group_id功能互斥。"),
+        ("创建安全组", "endpoint", True, None, "指定承载REST服务端点的服务器域名或IP，不同服务不同区域的Endpoint不同，您可以从地区和终端节点获取。例如IAM服务在“华北-北京四”区域的Endpoint为“iam.cn-north-4.myhuaweicloud.com”。"),
+        ("创建安全组", "project_id", True, None, "项目ID，获取项目ID请参见获取项目ID。"),
+        # (api_name, parameter, mandatory, type, description)
     ]
 
     request_parameters_data = [
@@ -357,6 +381,11 @@ def insert_data():
         ("地域推荐", 8, "availability_zone_id", False, "String", "可用区ID。"),
         ("地域推荐", 9, "result_granularity", False, "String", "推荐结果的粒度。 BY_REGION：对每个区域打分，可使用多种规格满足需求。 BY_AZ：对每个可用区打分。 BY_FLAVOR：对每个规格打分，可使用多地域满足需求。 BY_FLAVOR_AND_REGION：对每个区域下的每个规格打分。 BY_FLAVOR_AND_AZ：对每个可用区下的每个规格打分。"),
         ("地域推荐", 9, "enable_spot", False, "Boolean", "是否推荐竞价实例。"),
+        ("创建安全组", 1, "security_group", True, "security_group object", "安全组对象，请参见表3。"),
+        ("创建安全组", 3, "name", True, "String", "功能说明：安全组名称。 取值范围：1-64个字符，支持数字、字母、中文字符、_(下划线)、-（中划线）、.（点）。"),
+        ("创建安全组", 3, "vpc_id", False, "String", "安全组所在的vpc的资源标识。 说明： 当前该参数只作提示用，不约束安全组在此vpc下，不建议继续使用。"),
+        ("创建安全组", 3, "enterprise_project_id", False, "String", "功能说明：企业项目ID。创建安全组时，给安全组绑定企业项目ID。 取值范围：最大长度36字节，带“-”连字符的UUID格式，或者是字符串“0”。“0”表示默认企业项目。 说明： 关于企业项目ID的获取及企业项目特性的详细信息，请参见《企业管理用户指南》。"),
+        # (api_name, table_id, parameter, mandatory, type, description)
     ]
 
     cursor.executemany('''
