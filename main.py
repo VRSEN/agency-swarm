@@ -30,6 +30,8 @@ from agents.cap_group_agents.OS_group import (
 from agents.cap_group_agents.VPC_network import (
     VPC_network_manager, VPC_network_planner, VPC_network_step_scheduler
 )
+from agents.cap_group_agents import step_inspector
+
 from agents.cap_group_agents.CES_group.cap_agents.CES_alarm_history_agent import CES_alarm_history_agent
 from agents.cap_group_agents.CES_group.cap_agents.CES_alarm_rule_agent import CES_alarm_rule_agent
 from agents.cap_group_agents.CES_group.cap_agents.CES_dashboard_agent import CES_dashboard_agent
@@ -83,6 +85,8 @@ subtask_planner = subtask_planner.create_agent()
 subtask_manager = subtask_manager.create_agent()
 subtask_scheduler = subtask_scheduler.create_agent()
 subtask_inspector = subtask_inspector.create_agent()
+
+step_inspector = step_inspector.create_agent()
 
 # repeater = repeater.create_agent()
 # rander = rander.create_agent()
@@ -148,10 +152,11 @@ array_filler = array_filler.create_agent()
 array_selector = array_selector.create_agent()
 param_filler = param_filler.create_agent()
 param_selector = param_selector.create_agent()
-job = job_agent.create_agent()
+job_agent = job_agent.create_agent()
 
 chat_graph = [task_planner, scheduler, inspector,
               subtask_planner, subtask_manager, subtask_scheduler, subtask_inspector,
+              step_inspector,
             #   CES_planner, CES_step_scheduler,
               ECS_planner, ECS_step_scheduler,
             #   EVS_planner, EVS_step_scheduler,
@@ -185,11 +190,11 @@ chat_graph = [task_planner, scheduler, inspector,
               [ECS_manager, ECS_recommend_agent],
               [ECS_manager, ECS_specification_query_agent],
 
-              [ECS_harddisk_agent, job],
-              [ECS_instance_agent, job],
-              [ECS_netcard_agent, job],
-              [ECS_recommend_agent, job],
-              [ECS_specification_query_agent,job],
+              [ECS_harddisk_agent, job_agent],
+              [ECS_instance_agent, job_agent],
+              [ECS_netcard_agent, job_agent],
+              [ECS_recommend_agent, job_agent],
+              [ECS_specification_query_agent,job_agent],
 
               
               [ECS_specification_query_agent, ECS_manager],
@@ -214,9 +219,9 @@ chat_graph = [task_planner, scheduler, inspector,
               [VPC_network_manager, VPC_subnet_agent],
               [VPC_network_manager, VPC_vpc_agent],
 
-              [VPC_secgroup_agent, job],
-              [VPC_subnet_agent, job],
-              [VPC_vpc_agent, job],
+              [VPC_secgroup_agent, job_agent],
+              [VPC_subnet_agent, job_agent],
+              [VPC_vpc_agent, job_agent],
 
 
               [VPC_vpc_agent, VPC_network_manager],
@@ -232,7 +237,7 @@ chat_graph = [task_planner, scheduler, inspector,
               [VPC_secgroup_agent, API_param_selector],
               [VPC_subnet_agent, API_param_selector],
               [VPC_vpc_agent, API_param_selector],
-              [job, API_filler],
+              [job_agent, API_filler],
 
               [param_selector, array_selector],
               [API_filler, API_caller, AKSK_agent],
@@ -271,7 +276,8 @@ plan_agents = {
     "scheduler": scheduler,
     "subtask_planner": subtask_planner,
     "subtask_scheduler": subtask_scheduler,
-    "subtask_inspector": subtask_inspector
+    "subtask_inspector": subtask_inspector,
+    "step_inspector": step_inspector
     # "simulator": simulator
 }
 

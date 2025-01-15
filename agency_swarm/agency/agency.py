@@ -1431,12 +1431,14 @@ class Agency:
         subtask_planner = plan_agents["subtask_planner"]
         subtask_scheduler = plan_agents["subtask_scheduler"]
         subtask_inspector = plan_agents["subtask_inspector"]
+        step_inspector = plan_agents["step_inspector"]
         planner_thread = Thread(self.user, task_planner)
         scheduler_thread = Thread(self.user, scheduler)
         inspector_thread = Thread(self.user, inspector)
         subplanner_thread = Thread(self.user, subtask_planner)
         subtask_scheduler_thread = Thread(self.user, subtask_scheduler)
         subtask_inspector_thread = Thread(self.user, subtask_inspector)
+        step_inspector_thread = Thread(self.user, step_inspector)
         
         cap_group_thread = self.create_cap_group_agent_threads(cap_group_agents=cap_group_agents)
 
@@ -1499,7 +1501,7 @@ class Agency:
                             }
                             print(f"The subtask:\n{steps_input}\nneed to be planned...")
                             next_subtask_cap_group = next_subtask['capability_group']
-                            steps_graph, steps_need_scheduled = self.planning_layer(message=json.dumps(steps_input, ensure_ascii=False), original_request=next_subtask['description'], task_planner_thread=cap_group_thread[next_subtask_cap_group][0], node_color='white')
+                            steps_graph, steps_need_scheduled = self.planning_layer(message=json.dumps(steps_input, ensure_ascii=False), original_request=next_subtask['description'], task_planner_thread=cap_group_thread[next_subtask_cap_group][0], inspector_thread=step_inspector_thread, node_color='white')
 
                             id2step = {}
                             steps_graph_json = json.loads(steps_graph)
