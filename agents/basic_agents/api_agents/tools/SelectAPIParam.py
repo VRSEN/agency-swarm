@@ -62,7 +62,7 @@ class SelectAPIParam(BaseTool):
                 selected_uri_params += selected
 
         # 3. Call SelectParamTable() to decide whether to select request parameters
-        select_param_table_instance = SelectParamTable(from_tool = self,
+        select_param_table_instance = SelectParamTable(caller_tool = self,
                                                        user_requirement = self.user_requirement,
                                                        api_name=self.api_name,
                                                        table_id=1) # assume root table is always table 1
