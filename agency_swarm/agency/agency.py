@@ -1420,7 +1420,7 @@ class Agency:
         self.init_file()
 
         print("Initialization Successful.\n")
-        text = "在华为云北京\"cn-north-4\"可用区创建一个ecs，规格任意"
+        text = "在华为云北京\"cn-north-4a\"可用区创建一个ecs，规格任意"
         # text = "在北京可用区创建三个ecs，之后删除创建时间超过5分钟的ecs"
         # text = "在华为云ecs上部署mysql和postgresql，并用sysbench测试它们的性能"
         # text = input("👤 USER: ")
@@ -1473,10 +1473,11 @@ class Agency:
                 for next_task_id in next_task_list: # 拆分出子任务（能力群相关）流程图，id2subtask
                     next_task = id2task[next_task_id]
                     subtask_input = {
+                        "total_task_graph": task_graph_json,
                         "title": next_task['title'],
                         "description": next_task['description'],
                     }
-                    print(f"The task:\n{subtask_input}\nneed to be planned...")
+                    print(f"The task:\n{next_task['title']}\nneed to be planned...")
                     subtask_graph, subtasks_need_scheduled = self.planning_layer(message=json.dumps(subtask_input, ensure_ascii=False), original_request=next_task['description'], task_planner_thread=subplanner_thread, inspector_thread=subtask_inspector_thread, node_color='lightgreen')
                     
                     id2subtask = {}
@@ -1496,10 +1497,11 @@ class Agency:
                         for next_subtask_id in next_subtask_list: # 拆分出步骤（能力相关）流程图，id2step
                             next_subtask = id2subtask[next_subtask_id]
                             steps_input = {
+                                "total_subtask_graph": subtask_graph_json,
                                 "title": next_subtask['title'],
                                 "description": next_subtask['description'],
                             }
-                            print(f"The subtask:\n{steps_input}\nneed to be planned...")
+                            print(f"The subtask:\n{next_subtask['title']}\nneed to be planned...")
                             next_subtask_cap_group = next_subtask['capability_group']
                             steps_graph, steps_need_scheduled = self.planning_layer(message=json.dumps(steps_input, ensure_ascii=False), original_request=next_subtask['description'], task_planner_thread=cap_group_thread[next_subtask_cap_group][0], inspector_thread=step_inspector_thread, node_color='white')
 
@@ -1692,7 +1694,7 @@ class Agency:
                         "user_request": original_message,
                         "task_graph": result
                     }
-                inspector_res = inspector_thread.get_completion(message=json.dumps(inspect_query), response_format='auto')
+                inspector_res = inspector_thread.get_completion(message=json.dumps(inspect_query, ensure_ascii=False), response_format='auto')
                 inspector_result = self.my_get_completion(inspector_res)
                 print(inspector_result)
                 _ = self.get_inspector_review(inspector_result)

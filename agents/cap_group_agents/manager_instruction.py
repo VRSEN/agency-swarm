@@ -31,7 +31,7 @@ def manager_instruction(_group_name, _superior_agent):
     输入消息格式如下:
     {_input_format}
     你需要一步步思考，对于输入中列出的每个所需参数，你需要通过`ReadContexts`从路径: api_results 中获取已有的信息，查找其中是否有相应的参数值；
-    对于没有找到值的参数，通过`AskUser`以以下json格式将这些缺失参数发送给用户:
+    对于没有找到值的参数，通过`AskUser`用以下json格式将这些缺失参数发送给用户:
     {_output_format}
     返回用户的回复结果
     """
