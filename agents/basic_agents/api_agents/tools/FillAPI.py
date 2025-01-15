@@ -50,7 +50,7 @@ class FillAPI(BaseTool):
                 uri_param_values[row["parameter"]] = try_parse_json(value_str)
 
         # 3. Call FillParamTable() to decide the value of all request parameters
-        fill_param_table_instance = FillParamTable(from_tool = self,
+        fill_param_table_instance = FillParamTable(caller_tool = self,
                                                    user_requirement=self.user_requirement,
                                                    api_name=self.api_name,
                                                    table_id=1) # assume root table is always table 1
