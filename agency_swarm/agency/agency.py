@@ -1382,7 +1382,10 @@ class Agency:
             pass
     def _init_dir(self, dir_path):
         import shutil
-        shutil.rmtree(dir_path)
+        try:
+            shutil.rmtree(dir_path)
+        except:
+            pass
         os.mkdir(dir_path)
     
     files_path = os.path.join("agents", "files")
