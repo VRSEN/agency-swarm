@@ -1380,20 +1380,25 @@ class Agency:
     def _init_file(self, file_path):
         with open(file_path, "w") as f:
             pass
+    def _init_dir(self, dir_path):
+        import shutil
+        shutil.rmtree(dir_path)
     
     files_path = os.path.join("agents", "files")
     completed_step_path = os.path.join(files_path, "completed_steps.json")
     completed_subtask_path = os.path.join(files_path, "completed_sub_tasks.json")
     completed_task_path = os.path.join(files_path, "completed_tasks.json")
-    context_path = os.path.join(files_path, "context_index.json")
+    context_index_path = os.path.join(files_path, "context_index.json")
+    contexts_path = os.path.join(files_path, "api_results")
     error_path = os.path.join(files_path, "error.json")
 
-    def init_file(self):
+    def init_files(self):
         self._init_file(self.error_path)
         self._init_file(self.completed_step_path)
         self._init_file(self.completed_subtask_path)
         self._init_file(self.completed_task_path)
-        self._init_file(self.context_path)
+        self._init_file(self.context_index_path)
+        self._init_dir(self.contexts_path)
 
     def create_cap_group_agent_threads(self, cap_group_agents: Dict[str, List]):
         capgroup_thread = {}
@@ -1571,7 +1576,7 @@ class Agency:
             json.dump(data, file, indent=4)
     
     def update_context(self, context_id: int, context: str, step: dict):
-        with open(self.context_path, 'r') as file:
+        with open(self.context_index_path, 'r') as file:
             try:    # 尝试读取 JSON 数据
                 data = json.load(file)
             except json.JSONDecodeError:    # 如果文件为空或格式错误，则创建一个空字典
@@ -1580,7 +1585,7 @@ class Agency:
             "task_information": step,
             "context_file_path": context
         }
-        with open(self.context_path, 'w') as file:
+        with open(self.context_index_path, 'w') as file:
             json.dump(data, file, indent=4)
 
     def update_completed_step(self, step_id: str, step: dict):
