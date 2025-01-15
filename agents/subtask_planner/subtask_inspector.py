@@ -37,7 +37,7 @@ _instruction = f"""
 你需要通过`ReadJsonFile`从context.json中读取已有环境中的上下文信息
 
 请一步步思考: 
-0. 你需要确保发给你的任务规划结果 <task_graph> 是以上的 JSON 格式；
+0. 你需要确保输入中的 <task_graph> 是JSON格式；
 1. 你需要检查<user_request>是否可以分解为<task_graph>，且确保<task_graph>任务的拆分和执行顺序合理；
 2. 确保<task_graph>中没有**不通过华为云API或ssh连接命令行指令或编写、运行脚本**实现的操作；
 3. 确保用户隐私，环境中已经有华为云访问认证等认证信息，且已经被所需agent得知，确保任务规划中没有获取访问凭证等类似步骤；
