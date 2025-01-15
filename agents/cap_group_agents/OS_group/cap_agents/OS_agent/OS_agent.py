@@ -1,19 +1,19 @@
 from agency_swarm import Agent
-from agents.cap_group_agents.OS_group.cap_agents.OS_agent.tools import (
-    ReadLog, WriteLog
+from agents.cap_group_agents.EVS_group.cap_agents.EVS_clouddiskt_agent.tools import (
+    ReadAPI
 )
-
+from agents.cap_group_agents.cap_agent_instruction import cap_agent_instruction
 _name = "OS_agent"
-
+_manager_name = "OS_manager"
 _description = """
 OS_agent: 负责华为云ECS操作系统管理任务，包括重装弹性云服务器操作系统（安装 Cloud-init）、切换弹性云服务器操作系统（安装 Cloud-init）、重装弹性云服务器操作系统（未安装 Cloud-init）、切换弹性云服务器操作系统（未安装 Cloud-init）。"""
 
 import os
 
 current_path = os.path.abspath(os.path.dirname(__file__))
-_instruction = current_path + "/instructions.md"
+_instruction = cap_agent_instruction(_name,_description,_manager_name)
 
-_tools = [ReadLog.ReadLog, WriteLog.WriteLog]
+_tools = [ReadAPI.ReadAPI]
 
 _file_folder = ""
 
