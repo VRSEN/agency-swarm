@@ -1139,6 +1139,7 @@ class Agency:
 
             elif isinstance(node, list):
                 for i, agent in enumerate(node):
+                    print(f"checking {agent.name}...")
                     if not isinstance(agent, Agent):
                         raise Exception("Invalid agency chart.")
 
@@ -1503,6 +1504,16 @@ class Agency:
                             }
                             print(f"The subtask:\n{next_subtask['title']}\nneed to be planned...")
                             next_subtask_cap_group = next_subtask['capability_group']
+                            if next_subtask_cap_group == "简单任务处理能力群":
+                                steps_input_simple = {
+                                    "user_request": original_request,
+                                    "title": next_subtask['title'],
+                                    "description": next_subtask['description'],
+                                }
+                                subtask_result_context = self.json_get_completion(cap_group_thread[next_subtask_cap_group], steps_input_simple)
+                                context_id = context_id + 1
+                                self.update_context(context_id=context_id, context=subtask_result_context, step=next_subtask)
+                                self.update_completed_sub_task(next_subtask_id, next_subtask)
                             steps_graph, steps_need_scheduled = self.planning_layer(message=json.dumps(steps_input, ensure_ascii=False), original_request=next_subtask['description'], task_planner_thread=cap_group_thread[next_subtask_cap_group][0], inspector_thread=step_inspector_thread, node_color='white')
 
                             id2step = {}
@@ -1565,9 +1576,9 @@ class Agency:
                 data = json.load(file)
             except json.JSONDecodeError:    # 如果文件为空或格式错误，则创建一个空字典
                 data = {}
-        data[context_id] = {
-            "step": step,
-            "context": context
+        data["index_" + str(context_id)] = {
+            "task_information": step,
+            "context_file_path": context
         }
         with open(self.context_path, 'w') as file:
             json.dump(data, file, indent=4)
@@ -1699,11 +1710,11 @@ class Agency:
                 __ = self.get_inspector_review(inspector_result)
                 if __ == True:
                     return result
-                message = message + inspector_result
+                message = inspector_result
             else:
                 if _ == True:
                     return result
-                message = message + "\nYour output Format is Wrong.\n"
+                message = "Your output Format is Wrong.\n"
                 
     def get_inspector_review(self, message: str):
         try:
