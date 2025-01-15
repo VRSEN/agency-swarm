@@ -1629,7 +1629,7 @@ class Agency:
     def planning_layer(self, message: str, original_request:str, task_planner_thread: Thread, inspector_thread: Thread = None, node_color: str = 'lightblue'):
         """将返回1. 规划结果, 2. 对应scheduler的输入"""
         console.rule()
-        planmessage = self.json_get_completion(task_planner_thread, message, inspector_thread)
+        planmessage = self.json_get_completion(task_planner_thread, message, original_request, inspector_thread)
         print(f"{task_planner_thread.recipient_agent.name} RESULT:\n" + planmessage)
         planmessage_json = json.loads(planmessage)
         plan_json = {}
@@ -1675,9 +1675,8 @@ class Agency:
             print("WRONG FORMAT!")
             return
                 
-    def json_get_completion(self, thread: Thread, message: str, inspector_thread: Thread = None):
+    def json_get_completion(self, thread: Thread, message: str, inspector_request: str = None, inspector_thread: Thread = None):
         _ = False
-        original_message = message
         while True:
             res = thread.get_completion(message=message, response_format='auto')
             response_information = self.my_get_completion(res)
@@ -1686,19 +1685,19 @@ class Agency:
             if inspector_thread:
                 if _ == True:
                     inspect_query = {
-                        "user_request": original_message,
+                        "user_request": inspector_request,
                         "task_graph": json.loads(result)
                     }
                 else:
                     inspect_query = {
-                        "user_request": original_message,
+                        "user_request": inspector_request,
                         "task_graph": result
                     }
                 inspector_res = inspector_thread.get_completion(message=json.dumps(inspect_query, ensure_ascii=False), response_format='auto')
                 inspector_result = self.my_get_completion(inspector_res)
                 print(inspector_result)
-                _ = self.get_inspector_review(inspector_result)
-                if _ == True:
+                __ = self.get_inspector_review(inspector_result)
+                if __ == True:
                     return result
                 message = message + inspector_result
             else:
