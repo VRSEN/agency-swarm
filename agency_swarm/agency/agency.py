@@ -1423,7 +1423,7 @@ class Agency:
         """
         self._setup_autocomplete()  # Prepare readline for autocomplete
 
-        self.init_file()
+        self.init_files()
 
         print("Initialization Successful.\n")
         text = "在华为云北京\"cn-north-4a\"可用区创建一个ecs，规格任意"
