@@ -1,10 +1,11 @@
 from agency_swarm import Agent
-from agents.cap_group_agents.EVS_group.cap_agents.EVS_snapshot_agent.tools import (
-    ReadLog, WriteLog
+from agents.cap_group_agents.EVS_group.cap_agents.EVS_clouddiskt_agent.tools import (
+    ReadAPI
 )
+from agents.cap_group_agents.cap_agent_instruction import cap_agent_instruction
 
 _name = "EVS_snapshot_agent"
-
+_manager_name = "EVS_manager"
 _description = """
 负责华为云云硬盘快照管理任务，包括：创建云硬盘快照、删除云硬盘快照、更新云硬盘快照、查询云硬盘快照详情列表、查询单个云硬盘快照详情、回滚快照到云硬盘。
 """
@@ -12,9 +13,10 @@ _description = """
 import os
 
 current_path = os.path.abspath(os.path.dirname(__file__))
-_instruction = current_path + "/instructions.md"
+_instruction = cap_agent_instruction(_name,_description,_manager_name)
 
-_tools = [ReadLog.ReadLog, WriteLog.WriteLog]
+_tools = [ReadAPI.ReadAPI]
+
 
 _file_folder = ""
 

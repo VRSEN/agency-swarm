@@ -1,10 +1,11 @@
 from agency_swarm import Agent
 from agents.cap_group_agents.EVS_group.cap_agents.EVS_clouddiskt_agent.tools import (
-    ReadLog, WriteLog
+    ReadAPI
 )
+from agents.cap_group_agents.cap_agent_instruction import cap_agent_instruction
 
 _name = "EVS_clouddiskt_agent"
-
+_manager_name = "EVS_manager"
 _description = """
 负责华为云云硬盘管理任务，包括：创建云硬盘、更新云硬盘、查询所有云硬盘详情、查询单个云硬盘详情、扩容云硬盘、删除云硬盘。
 """
@@ -12,9 +13,9 @@ _description = """
 import os
 
 current_path = os.path.abspath(os.path.dirname(__file__))
-_instruction = current_path + "/instructions.md"
+_instruction = cap_agent_instruction(_name,_description,_manager_name)
 
-_tools = [ReadLog.ReadLog, WriteLog.WriteLog]
+_tools = [ReadAPI.ReadAPI]
 
 _file_folder = ""
 
