@@ -65,10 +65,6 @@ from agents.basic_agents.api_agents.tools.SelectParamTable import SelectParamTab
 from agents.basic_agents.api_agents.tools.FillAPI import FillAPI
 from agents.basic_agents.api_agents.tools.FillParamTable import FillParamTable
 
-
-
-
-
 from agency_swarm import set_openai_key
 
 import os
