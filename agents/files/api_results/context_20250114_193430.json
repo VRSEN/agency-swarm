@@ -1,1 +1,0 @@
-{"status_code": 404, "reason": "Not Found", "content": {"error_msg": "The API does not exist or has not been published in the environment", "error_code": "APIGW.0101", "request_id": "6b62ed9cd25d575f41fe6874c9fd3f39"}}
