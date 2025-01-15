@@ -32,6 +32,10 @@ from agents.cap_group_agents.VPC_network import (
 )
 from agents.cap_group_agents import step_inspector
 
+from agents.cap_group_agents import (
+    basic_cap_solver, param_asker
+)
+
 from agents.cap_group_agents.CES_group.cap_agents.CES_alarm_history_agent import CES_alarm_history_agent
 from agents.cap_group_agents.CES_group.cap_agents.CES_alarm_rule_agent import CES_alarm_rule_agent
 from agents.cap_group_agents.CES_group.cap_agents.CES_dashboard_agent import CES_dashboard_agent
@@ -87,6 +91,9 @@ subtask_scheduler = subtask_scheduler.create_agent()
 subtask_inspector = subtask_inspector.create_agent()
 
 step_inspector = step_inspector.create_agent()
+
+basic_cap_solver = basic_cap_solver.create_agent()
+param_asker = param_asker.create_agent()
 
 # repeater = repeater.create_agent()
 # rander = rander.create_agent()
@@ -157,6 +164,7 @@ job_agent = job_agent.create_agent()
 chat_graph = [task_planner, scheduler, inspector,
               subtask_planner, subtask_manager, subtask_scheduler, subtask_inspector,
               step_inspector,
+              basic_cap_solver, param_asker,
             #   CES_planner, CES_step_scheduler,
               ECS_planner, ECS_step_scheduler,
             #   EVS_planner, EVS_step_scheduler,
@@ -244,6 +252,10 @@ chat_graph = [task_planner, scheduler, inspector,
               [param_filler, array_filler],
               [array_filler, param_filler],
 
+              [ECS_manager, param_asker],
+              [IMS_manager, param_asker],
+              [VPC_network_manager, param_asker],
+
               # [leader, simulator],
               # [leader, repeater],
               # [leader, rander],
@@ -291,6 +303,7 @@ cap_group_agents = {
     # "操作系统管理能力群": [OS_planner, OS_manager, OS_step_scheduler],
     "VPC网络管理能力群": [VPC_network_planner, VPC_network_manager, VPC_network_step_scheduler],
     # "华为云元信息管理能力群": [Huawei_meta_info_planner, ]
+    "简单任务处理能力群": [basic_cap_solver],
 }
 
 cap_agents = {
