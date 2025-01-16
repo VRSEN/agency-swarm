@@ -37,7 +37,7 @@ def cap_agent_instruction(_name, _description, _manager_name):
     当接收到{_manager_name}的回复时，你需要确认<param_list>中所有的必要参数是否都已经获取到，如果有参数值缺失，则重复step 2向{_manager_name}发送询问，直到没有参数值缺失为止
 
     ### step 3. 获取响应
-    你需要通过`SendMessage`按照以下json格式向job_agent发送信息:
+    你需要通过`SendMessage`按照以下json格式向job_agent或者jobs_agent发送信息，必须包含"user requirement"和"api name"两个字段:
     {{
         "user requirement": ...,
         "api name": <需要调用的api 名称>
