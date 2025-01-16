@@ -217,7 +217,7 @@ chat_graph = [task_planner, scheduler, inspector,
             #   [IAM_service_manager, AKSK_agent],
 
               [IMS_manager, IMS_agent],
-              
+              [IMS_agent, job_agent],
               [IMS_agent, IMS_manager],
 
             #   [OS_manager, OS_agent],
@@ -242,6 +242,7 @@ chat_graph = [task_planner, scheduler, inspector,
               [ECS_netcard_agent, API_param_selector],
               [ECS_recommend_agent, API_param_selector],
               [ECS_specification_query_agent, API_param_selector],
+              [IMS_agent, API_param_selector],
               [VPC_secgroup_agent, API_param_selector],
               [VPC_subnet_agent, API_param_selector],
               [VPC_vpc_agent, API_param_selector],
