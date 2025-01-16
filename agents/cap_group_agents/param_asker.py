@@ -49,6 +49,8 @@ _instruction = f"""
 如果没有，选择下一个index重复上述步骤。如果所有的context中都没有该参数的值，你需要使用`AskUser`用以下格式向用户询问该参数的值:
 {_input_format}
 
+如果用户返回值仍有缺失，请继续使用`AskUser`用以上json格式向用户询问
+
 最后，当你获得到所有未知参数值时，你应该用以下json格式返回结果:
 {_output_format}
 """

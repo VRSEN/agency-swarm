@@ -1701,6 +1701,10 @@ class Agency:
             res = thread.get_completion(message=message, response_format='auto')
             response_information = self.my_get_completion(res)
             _, result = self.get_json_from_str(message=response_information)
+            
+            if _ == False:
+                message = "Your output Format is Wrong.\n"
+                continue
 
             if inspector_thread:
                 if _ == True:
@@ -1720,10 +1724,9 @@ class Agency:
                 if __ == True:
                     return result
                 message = inspector_result
-            else:
-                if _ == True:
-                    return result
-                message = "Your output Format is Wrong.\n"
+                continue
+            
+            return result
                 
     def get_inspector_review(self, message: str):
         try:
