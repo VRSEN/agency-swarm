@@ -16,4 +16,3 @@ class ReadFile(BaseTool):
             file_content = file.read()
         
         return file_content
-  

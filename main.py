@@ -66,6 +66,7 @@ from agents.basic_agents.api_agents import (
     API_caller, API_filler, API_param_selector, array_filler, array_selector, param_filler, param_selector
 )
 from agents.basic_agents.job_agent import job_agent
+from agents.basic_agents.jobs_agent import jobs_agent
 from agents.basic_agents.api_agents.tools.SelectAPIParam import SelectAPIParam
 from agents.basic_agents.api_agents.tools.SelectParamTable import SelectParamTable
 from agents.basic_agents.api_agents.tools.FillAPI import FillAPI
@@ -160,6 +161,7 @@ array_selector = array_selector.create_agent()
 param_filler = param_filler.create_agent()
 param_selector = param_selector.create_agent()
 job_agent = job_agent.create_agent()
+jobs_agent = jobs_agent.create_agent()
 
 chat_graph = [task_planner, scheduler, inspector,
               subtask_planner, subtask_manager, subtask_scheduler, subtask_inspector,
@@ -198,9 +200,9 @@ chat_graph = [task_planner, scheduler, inspector,
               [ECS_manager, ECS_recommend_agent],
               [ECS_manager, ECS_specification_query_agent],
 
-              [ECS_harddisk_agent, job_agent],
-              [ECS_instance_agent, job_agent],
-              [ECS_netcard_agent, job_agent],
+              [ECS_harddisk_agent, jobs_agent],
+              [ECS_instance_agent, jobs_agent],
+              [ECS_netcard_agent, jobs_agent],
               [ECS_recommend_agent, job_agent],
               [ECS_specification_query_agent,job_agent],
 
@@ -247,6 +249,7 @@ chat_graph = [task_planner, scheduler, inspector,
               [VPC_subnet_agent, API_param_selector],
               [VPC_vpc_agent, API_param_selector],
               [job_agent, API_filler],
+              [jobs_agent, API_filler],
 
               [param_selector, array_selector],
               [API_filler, API_caller, AKSK_agent],

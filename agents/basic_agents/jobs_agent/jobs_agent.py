@@ -1,11 +1,11 @@
 from agency_swarm import Agent
-from agents.basic_agents.job_agent.tools import Sleep
-from agents.basic_agents.job_agent.tools import ReadFile
+from agents.basic_agents.jobs_agent.tools import Sleep
+from agents.basic_agents.jobs_agent.tools import ReadFile
 
-_name = "job_agent"
+_name = "jobs_agent"
 
 _description = """
-job_agent负责查询任务执行状态。
+jobs_agent负责查询任务执行状态。
 """
 
 import os
