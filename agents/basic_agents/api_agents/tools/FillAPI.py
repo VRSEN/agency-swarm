@@ -3,6 +3,7 @@ from pydantic import Field
 import pandas as pd
 import json
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from agents.basic_agents.api_agents.tools.api_database import search_from_sqlite, API_DATABASE_FILE
 from agents.basic_agents.api_agents.tools.utils import try_parse_json
@@ -17,6 +18,26 @@ class FillAPI(BaseTool):
     api_name: str = Field(..., description="目标API名")
     user_requirement: str = Field(..., description="用户需求")
 
+    def fill_uri_parameter(self, row):
+        # 1. construct the message
+        message_obj = {
+            "user_requirement": self.user_requirement,
+            "api_name": self.api_name,
+            "parameter": row["parameter"],
+            "description": row["description"],
+            "mandatory": row["mandatory"],
+        }
+        if row["type"] is not None:
+            message_obj["type"] = row["type"]
+        
+        # 2. send the message and handle response
+        value_str = self.send_message_to_agent(recipient_agent_name="Param Filler", message=json.dumps(message_obj, ensure_ascii=False))
+
+        if "不需要该参数" in value_str:
+            return None, None
+        else:
+            return row["parameter"], try_parse_json(value_str)
+
     def run(self):
 
         # 1. get general information about this API
@@ -29,25 +50,15 @@ class FillAPI(BaseTool):
         # 2. for each URI parameter, call Param Filler to decide its value
         uri_parameters_df = search_from_sqlite(database_path=API_DATABASE_FILE, table_name='uri_parameters', condition=f'api_name=\'{self.api_name}\'')
         uri_param_values = {}
-        for _, row in uri_parameters_df.iterrows():
-            # 2.1. construct the message
-            message_obj = {
-                "user_requirement": self.user_requirement,
-                "api_name": self.api_name,
-                "parameter": row["parameter"],
-                "description": row["description"],
-                "mandatory": row["mandatory"]
-            }
-            if row["type"] is not None:
-                message_obj["type"] = row["type"]
-            
-            # 2.2. send the message and handle response
-            value_str = self.send_message_to_agent(recipient_agent_name="Param Filler", message=json.dumps(message_obj, ensure_ascii=False))
 
-            if "不需要该参数" in value_str:
-                continue
-            else:
-                uri_param_values[row["parameter"]] = try_parse_json(value_str)
+        with ThreadPoolExecutor() as executor:
+            futures = []
+            for _, row in uri_parameters_df.iterrows():
+                futures.append(executor.submit(self.fill_uri_parameter, row))
+            for future in as_completed(futures):
+                key, value = future.result()
+                if value is not None:
+                    uri_param_values[key] = value
 
         # 3. Call FillParamTable() to decide the value of all request parameters
         fill_param_table_instance = FillParamTable(caller_tool = self,
