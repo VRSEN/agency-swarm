@@ -63,13 +63,21 @@ class RequestAPI(BaseTool):
             "reason": resp.reason,
             "content": json.loads(content)
         }
+
+        # name the result file
         now = datetime.datetime.now()
         formatted_time = now.strftime("%Y%m%d_%H%M%S")
         prefix = "context_"
         suffix = ".json"
         filename = f"{prefix}{formatted_time}{suffix}"
+
+        # save the result to it
         file_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "files")
-        result_file_path = os.path.join("api_results", filename)
-        with open(os.path.join(file_dir, result_file_path), "w", encoding='utf-8') as f:
+        relpath = os.path.join("api_results", filename)
+        abspath = os.path.abspath(os.path.join(file_dir, relpath))
+        os.makedirs(os.path.dirname(abspath), exist_ok=True)
+        with open(abspath, "w", encoding='utf-8') as f:
             json.dump(result_json, f, ensure_ascii=False)
-        return f'{{"result_file_path":"{result_file_path}"}}'
+
+        # return the relative file path
+        return f'{{"result_file_path":"{relpath}"}}'
