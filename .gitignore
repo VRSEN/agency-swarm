@@ -161,5 +161,8 @@ cython_debug/
 .idea/*
 settings.json
 .DS_Store
+
+# agency-swarm
 tests/test_agents/
 test_agents/
+agents/files/
