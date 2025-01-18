@@ -77,7 +77,7 @@ class RequestAPI(BaseTool):
         abspath = os.path.abspath(os.path.join(file_dir, relpath))
         os.makedirs(os.path.dirname(abspath), exist_ok=True)
         with open(abspath, "w", encoding='utf-8') as f:
-            json.dump(result_json, f, ensure_ascii=False)
+            json.dump(result_json, f, ensure_ascii=False, indent=4)
 
         # return the relative file path
         return f'{{"result_file_path":"{relpath}"}}'
