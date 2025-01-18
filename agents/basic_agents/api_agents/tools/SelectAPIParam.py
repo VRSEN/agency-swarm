@@ -1,6 +1,7 @@
 from agency_swarm.tools import BaseTool
 from pydantic import Field
 import json
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from agents.basic_agents.api_agents.tools.api_database import search_from_sqlite, API_DATABASE_FILE
 from agents.basic_agents.api_agents.tools.utils import try_parse_json, assert_list_of_dicts
@@ -15,6 +16,39 @@ class SelectAPIParam(BaseTool):
     api_name: str = Field(..., description="目标API名")
     user_requirement: str = Field(..., description="自然语言的用户需求")
 
+    def select_uri_parameter(self, row):
+        returned_keys = ["parameter", "description", "type"]
+        returned_info = {key: row[key] for key in returned_keys if key in row and row[key] is not None}
+        
+        # 1. add mandatory simple parameters by default
+        if row["mandatory"] == 1 and not ("type" in row and row["type"] is not None and ("array" in row["type"].lower() or "object" in row["type"].lower())):
+            return [returned_info]
+
+        # have to let agent decide
+        # 2. construct the message
+        message_obj = {
+            "user_requirement": self.user_requirement,
+            "api_name": self.api_name,
+            "parameter": row["parameter"],
+            "description": row["description"],
+        }
+        if row["type"] is not None:
+            message_obj["type"] = row["type"]
+        if row["mandatory"] == 1:
+            message_obj["mandatory"] = row["mandatory"]
+        
+        # 3. send the message and handle response
+        selected_str = self.send_message_to_agent(recipient_agent_name="Param Selector", message=json.dumps(message_obj, ensure_ascii=False))
+        
+        if "不需要该参数" in selected_str:
+            return []
+        elif "需要该参数" in selected_str:
+            return [returned_info]
+        else:
+            selected = try_parse_json(selected_str)
+            assert_list_of_dicts(selected)
+            return selected
+
     def run(self):
 
         # 1. get general information about this API
@@ -27,39 +61,13 @@ class SelectAPIParam(BaseTool):
         # 2. call Param Selector to decide whether to select URI parameters
         uri_parameters_df = search_from_sqlite(database_path=API_DATABASE_FILE, table_name='uri_parameters', condition=f'api_name=\'{self.api_name}\'')
         selected_uri_params = []
-        for _, row in uri_parameters_df.iterrows():
-            returned_keys = ["parameter", "description", "type"]
-            returned_info = {key: row[key] for key in returned_keys if key in row and row[key] is not None}
 
-            # 2.1. add mandatory simple parameters by default
-            if row["mandatory"] == 1 and not ("type" in row and row["type"] is not None and ("array" in row["type"].lower() or "object" in row["type"].lower())):
-                selected_uri_params.append(returned_info)
-                continue
-            
-            # have to let agent decide
-            # 2.2. construct the message
-            message_obj = {
-                "user_requirement": self.user_requirement,
-                "api_name": self.api_name,
-                "parameter": row["parameter"],
-                "description": row["description"]
-            }
-            if row["type"] is not None:
-                message_obj["type"] = row["type"]
-            if row["mandatory"] == 1:
-                message_obj["mandatory"] = row["mandatory"]
-            
-            # 2.3. send the message and handle response
-            selected_str = self.send_message_to_agent(recipient_agent_name="Param Selector", message=json.dumps(message_obj, ensure_ascii=False))
-
-            if "不需要该参数" in selected_str:
-                continue
-            elif "需要该参数" in selected_str:
-                selected_uri_params.append(returned_info)
-            else:
-                selected = try_parse_json(selected_str)
-                assert_list_of_dicts(selected)
-                selected_uri_params += selected
+        with ThreadPoolExecutor() as executor:
+            futures = []
+            for _, row in uri_parameters_df.iterrows():
+                futures.append(executor.submit(self.select_uri_parameter, row))
+            for future in as_completed(futures):
+                selected_uri_params += future.result()
 
         # 3. Call SelectParamTable() to decide whether to select request parameters
         select_param_table_instance = SelectParamTable(caller_tool = self,
