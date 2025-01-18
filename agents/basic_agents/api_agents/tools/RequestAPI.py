@@ -71,5 +71,5 @@ class RequestAPI(BaseTool):
         file_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "files")
         result_file_path = os.path.join("api_results", filename)
         with open(os.path.join(file_dir, result_file_path), "w", encoding='utf-8') as f:
-            json.dump(result_json, f, ensure_ascii=False)
+            json.dump(result_json, f, ensure_ascii=False, indent=4)
         return f'{{"result_file_path":"{result_file_path}"}}'
