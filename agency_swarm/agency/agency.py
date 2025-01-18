@@ -1721,7 +1721,7 @@ class Agency:
                 inspector_result = self.my_get_completion(inspector_res)
                 print(inspector_result)
                 __ = self.get_inspector_review(inspector_result)
-                user_advice = input("User:")
+                user_advice = input("User: [\"agree\": You agree with inspector.\n\"YES\": You agree with planner, and you should input your advice.\n\"NO\": You disagree with planner, and you should input your advice.]")
                 if user_advice != "agree":
                     explain = input()
                     inspector_result = json.dumps(
