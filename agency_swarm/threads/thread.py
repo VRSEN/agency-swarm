@@ -1,6 +1,7 @@
 import asyncio
 import inspect
 import json
+import logging
 import os
 import re
 import time
@@ -19,6 +20,8 @@ from agency_swarm.user import User
 from agency_swarm.util.oai import get_openai_client
 from agency_swarm.util.streaming.agency_event_handler import AgencyEventHandler
 from agency_swarm.util.tracking.tracking_manager import TrackingManager
+
+logger = logging.getLogger(__name__)
 
 
 class Thread:
@@ -600,7 +603,7 @@ class Thread:
             )
 
             if tool is None:
-                print(
+                logger.warning(
                     f"Tool {tool_call.function.name} not found in agent {recipient_agent.name}. Skipping."
                 )
                 continue
