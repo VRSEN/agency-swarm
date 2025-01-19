@@ -44,7 +44,7 @@ class ToolFactory:
             A BaseTool.
         """
         try:
-            from langchain.tools import format_tool_to_openai_function
+            from langchain_community.tools import format_tool_to_openai_function
         except ImportError:
             raise ImportError("You must install langchain to use this method.")
 

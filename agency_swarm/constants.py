@@ -1,0 +1,2 @@
+DEFAULT_MODEL = "gpt-4o-2024-08-06"
+DEFAULT_MODEL_MINI = "gpt-4o-mini"

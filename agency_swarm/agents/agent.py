@@ -9,6 +9,7 @@ from openai import NotFoundError
 from openai.lib._parsing._completions import type_to_response_format_param
 from openai.types.beta.assistant import ToolResources
 
+from agency_swarm.constants import DEFAULT_MODEL
 from agency_swarm.tools import (
     BaseTool,
     CodeInterpreter,
@@ -94,7 +95,7 @@ class Agent:
         api_params: Dict[str, Dict[str, str]] = None,
         file_ids: List[str] = None,
         metadata: Dict[str, str] = None,
-        model: str = "gpt-4o-2024-08-06",
+        model: str = DEFAULT_MODEL,
         validation_attempts: int = 1,
         max_prompt_tokens: int = None,
         max_completion_tokens: int = None,
@@ -283,7 +284,20 @@ class Agent:
                             continue
 
         # create assistant if settings.json does not exist or assistant with the same name does not exist
-        self.assistant = self.client.beta.assistants.create(
+        self.assistant = self._create_assistant()
+
+        if self.assistant.tool_resources:
+            self.tool_resources = self.assistant.tool_resources.model_dump()
+
+        self.id = self.assistant.id
+
+        self._save_settings()
+
+        return self
+
+    def _create_assistant(self):
+        """Creates a new OpenAI assistant with the agent's current configuration."""
+        return self.client.beta.assistants.create(
             model=self.model,
             name=self.name,
             description=self.description,
@@ -295,15 +309,6 @@ class Agent:
             top_p=self.top_p,
             response_format=self.response_format,
         )
-
-        if self.assistant.tool_resources:
-            self.tool_resources = self.assistant.tool_resources.model_dump()
-
-        self.id = self.assistant.id
-
-        self._save_settings()
-
-        return self
 
     def _update_assistant(self):
         """

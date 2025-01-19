@@ -41,11 +41,16 @@ class SendMessageBase(BaseTool, ABC):
         thread = self._get_thread()
 
         if self.ToolConfig.async_mode == "threading":
-            return thread.get_completion_async(message=message, **kwargs)
+            return thread.get_completion_async(
+                message=message,
+                parent_run_id=self._tool_call.id,
+                **kwargs,
+            )
         else:
             return thread.get_completion(
                 message=message,
                 event_handler=self._event_handler,
                 yield_messages=not self._event_handler,
+                parent_run_id=self._tool_call.id,
                 **kwargs,
             )
