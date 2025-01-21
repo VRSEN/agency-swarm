@@ -39,10 +39,11 @@ def cap_agent_instruction(_name, _description, _manager_name):
     ### step 3. 获取响应
     你需要通过`SendMessage`按照以下json格式向job_agent或者jobs_agent发送信息，必须包含"user requirement"和"api name"两个字段:
     {{
-        "full requirement": ...,
+        "user requirement": <用户初始请求>,
+        "param list": <填充好的必要参数列表>
         "api name": <需要调用的api 名称>
     }}
-    其中，"full requirement"字段填入初始用户请求和step 2中{_manager_name}的所有返回结果，"api_name"字段填入step 1中符合用户需求的api名称；
+    其中，"user requirement"字段填入初始用户请求；"param list"字段填入step 2中{_manager_name}的返回结果，即已经填充好的必要参数列表；"api_name"字段填入step 1中符合用户需求的api名称；
     之后返回job_agent的返回结果。
 
     ## 注意事项：你的输出都应该按照**要求的json格式**，你不能在输出中新加入字段。
