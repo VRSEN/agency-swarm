@@ -1701,7 +1701,7 @@ class Agency:
             res = thread.get_completion(message=message, response_format='auto')
             response_information = self.my_get_completion(res)
             _, result = self.get_json_from_str(message=response_information)
-            print(f"plan (isn't inspected):{result}")
+            print(f"{result}")
             if _ == False:
                 message = "Your output Format is Wrong.\n"
                 continue
