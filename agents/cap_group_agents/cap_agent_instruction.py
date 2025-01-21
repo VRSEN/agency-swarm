@@ -45,7 +45,7 @@ def cap_agent_instruction(_name, _description, _manager_name):
     其中，"full requirement"字段填入初始用户请求和step 2中{_manager_name}的所有返回结果，"api_name"字段填入step 1中符合用户需求的api名称；
     之后返回job_agent的返回结果。
 
-    ## 注意事项：你的输出都应该按照**要求的json格式**，不能新加入字段。
+    ## 注意事项：你的输出都应该按照**要求的json格式**，你不能在输出中新加入字段。
 
     """
 

@@ -5,14 +5,13 @@ import os
 
 class ReadFile(BaseTool):
 
-    response_info: str = Field(..., description="API Filler发来的信息")
+    read_file_path: str = Field(..., description="需要读取的文件的路径")
 
     def run(self):
-        result_dict = json.loads(self.response_info)
-        file_path = result_dict.get("result_file_path")
-        agents_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../'))
-        target_path = os.path.join(agents_dir, "files", file_path)
+        agents_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+        target_path = os.path.join(agents_dir, "files", self.read_file_path)
         with open(target_path, 'r', encoding='utf-8') as file:
             file_content = file.read()
         
         return file_content
+  

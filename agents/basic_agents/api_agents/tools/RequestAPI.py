@@ -80,4 +80,4 @@ class RequestAPI(BaseTool):
             json.dump(result_json, f, ensure_ascii=False, indent=4)
 
         # return the relative file path
-        return f'{{"result_file_path":"{relpath}"}}'
+        return relpath
