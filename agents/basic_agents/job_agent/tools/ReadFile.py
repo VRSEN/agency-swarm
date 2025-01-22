@@ -12,6 +12,7 @@ class ReadFile(BaseTool):
         target_path = os.path.join(agents_dir, "files", self.read_file_path)
         with open(target_path, 'r', encoding='utf-8') as file:
             file_content = file.read()
-        
+        if len(file_content) > 20000:
+            file_content = file_content[: 20000]
         return file_content
   

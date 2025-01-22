@@ -18,5 +18,8 @@ class ReadJsonFile(BaseTool):
                 existing_data = json.load(f)
         except:
             existing_data = []
-        return existing_data
+        existing_data_str = json.dumps(existing_data)
+        if len(existing_data_str) > 20000:
+            existing_data_str = existing_data_str[: 20000]
+        return {"file_path": file_path, "file_content": existing_data_str}
         
