@@ -1472,7 +1472,6 @@ class Agency:
             while True: # 任务调度
                 need_replan = False
                 error_id = 0
-
                 tasks_scheduled = self.scheduling_layer(scheduler_thread=scheduler_thread, message=tasks_need_scheduled)
                 tasks_scheduled_json = json.loads(tasks_scheduled)
                 next_task_list = tasks_scheduled_json['next_tasks']
@@ -1519,10 +1518,11 @@ class Agency:
                                     "title": next_subtask['title'],
                                     "description": next_subtask['description'],
                                 }
-                                subtask_result_context = self.json_get_completion(cap_group_thread[next_subtask_cap_group], steps_input_simple)
+                                subtask_result_context = self.json_get_completion(cap_group_thread[next_subtask_cap_group][0], steps_input_simple)
                                 context_id = context_id + 1
                                 self.update_context(context_id=context_id, context=subtask_result_context, step=next_subtask)
                                 self.update_completed_sub_task(next_subtask_id, next_subtask)
+                                continue
                             steps_graph, steps_need_scheduled = self.planning_layer(message=json.dumps(steps_input, ensure_ascii=False), original_request=next_subtask['description'], task_planner_thread=cap_group_thread[next_subtask_cap_group][0], inspector_thread=step_inspector_thread, node_color='white')
 
                             id2step = {}
@@ -1577,7 +1577,7 @@ class Agency:
             "error": error
         }
         with open(self.error_path, 'w') as file:
-            json.dump(data, file, indent=4)
+            json.dump(data, file, indent=4, ensure_ascii=False)
     
     def update_context(self, context_id: int, context: str, step: dict):
         with open(self.context_index_path, 'r') as file:
@@ -1590,7 +1590,7 @@ class Agency:
             "context_file_path": context
         }
         with open(self.context_index_path, 'w') as file:
-            json.dump(data, file, indent=4)
+            json.dump(data, file, indent=4, ensure_ascii=False)
 
     def update_completed_step(self, step_id: str, step: dict):
         with open(self.completed_step_path, 'r') as file:
@@ -1602,7 +1602,7 @@ class Agency:
             "step": step
         }
         with open(self.completed_step_path, 'w') as file:
-            json.dump(data, file, indent=4)
+            json.dump(data, file, indent=4, ensure_ascii=False)
     
     def update_completed_sub_task(self, subtask_id: str, subtask: dict):
         with open(self.completed_subtask_path, 'r') as file:
@@ -1614,7 +1614,7 @@ class Agency:
             "subtask": subtask
         }
         with open(self.completed_subtask_path, 'w') as file:
-            json.dump(data, file, indent=4)
+            json.dump(data, file, indent=4, ensure_ascii=False)
 
     def update_completed_task(self, task_id: str, task: dict):
         with open(self.completed_task_path, 'r') as file:
@@ -1626,7 +1626,7 @@ class Agency:
             "task": task
         }
         with open(self.completed_task_path, 'w') as file:
-            json.dump(data, file, indent=4)
+            json.dump(data, file, indent=4, ensure_ascii=False)
 
     def capability_agents_processor(self, step: dict, cap_group: str, cap_agent_threads: dict):
         """能力agent执行任务，目前只考虑单个能力agent的情况"""

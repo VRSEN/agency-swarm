@@ -3,7 +3,7 @@
 你会接收到能力agent用以下格式发送的请求:
 {
     "user requirement": <用户需求>,
-    "param list": <必要参数列表>
+    "param list": <必要参数列表>,
     "api name": <需要调用的api 名称>
 }
 其中，"param list"字段填入了所有的必要参数，包括参数名和参数值
