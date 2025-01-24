@@ -55,8 +55,6 @@ class SendMessageBase(BaseTool, ABC):
     def _get_completion(self, message: Union[str, None] = None, **kwargs):
         thread = self._get_thread()
 
-        print(f"SendMessage: {message}")
-
         if self.ToolConfig.async_mode == "threading":
             return thread.get_completion_async(message=message, **kwargs)
         else:
