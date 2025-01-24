@@ -19,9 +19,9 @@ step 2. 使用提取的信息调用函数`FillAPI()`，获得目标API的所有�
 
 step 3. 组装API请求，包括请求方法、**填入参数值**的完整URI（删除URI查询字符串中缺少值的参数）、**填入参数值**的完整请求体（可能为空）。
 
-step 4. **调用函数**`SendMessage()`，向`API Caller`提供组装好的API请求，要求对方发送请求。
+step 4. **调用**`SendMessage()`向API Caller提供组装好的API请求，要求对方发送请求。
 
-step 5. **精确**地输出返回的信息，**不得输出任何其它内容**。"""
+step 5. **精确**地输出API Caller返回的信息，**不得输出任何其它内容**。"""
 
 _tools = [FillAPI]
 

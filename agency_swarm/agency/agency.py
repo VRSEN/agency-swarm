@@ -1518,7 +1518,7 @@ class Agency:
                                     "title": next_subtask['title'],
                                     "description": next_subtask['description'],
                                 }
-                                subtask_result_context = self.json_get_completion(cap_group_thread[next_subtask_cap_group][0], steps_input_simple)
+                                subtask_result_context = self.json_get_completion(cap_group_thread[next_subtask_cap_group][0], json.dumps(steps_input_simple, ensure_ascii=False))
                                 context_id = context_id + 1
                                 self.update_context(context_id=context_id, context=subtask_result_context, step=next_subtask)
                                 self.update_completed_sub_task(next_subtask_id, next_subtask)

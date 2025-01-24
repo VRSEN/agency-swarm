@@ -26,29 +26,25 @@ _instruction = """
     "task_1": {
         "title": "选择ECS规格",
         "id": "task_1",
-        "description": "选择一个适用于ECS实例的规格，调用华为云API获取可用的ECS规
-格列表，并选择一个规格（例如：'s3.medium.1'）。",
+        "description": "选择一个适用于ECS实例的规格，调用华为云API获取cn-north-4a可用区的ECS规格列表，并选择一个规格（例如：'s3.medium.1'）。",
         "dep": []
     },
     "task_2": {
         "title": "创建虚拟私有云（VPC）及子网",
         "id": "task_2",
-        "description": "调用华为云API创建一个新的虚拟私有云（VPC）及其子网，指定 
-可用区为'cn-north-4a'。",
+        "description": "调用华为云API创建一个新的虚拟私有云（VPC）及其子网，指定 可用区为'cn-north-4a'。",
         "dep": []
     },
     "task_3": {
         "title": "创建安全组",
         "id": "task_3",
-        "description": "在创建VPC的同时，调用华为云API创建一个安全组，为ECS实例配
-置安全规则。",
+        "description": "在创建VPC的同时，调用华为云API创建一个安全组，为ECS实例配置安全规则。",
         "dep": ["task_2"]
     },
     "task_4": {
         "title": "创建ECS实例",
         "id": "task_4",
-        "description": "调用华为云API在'cn-north-4a'可用区创建一个ECS实例，使用选
-定的规格、创建的VPC、子网和安全组。",
+        "description": "调用华为云API在'cn-north-4a'可用区创建一个ECS实例，使用选定的规格、创建的VPC、子网和安全组。",
         "dep": ["task_1", "task_3"]
     }
 }

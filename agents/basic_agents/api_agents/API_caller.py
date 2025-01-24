@@ -11,9 +11,10 @@ _instructions = """你的任务是严格执行下列步骤：
 
 2. 调用函数`SendMessage()`，向`AKSK Agent`索要 access_key 和 secret_key，明确要求对方以json格式回复。
 
-3. 调用函数`RequestAPI()`，发送API请求。
+3. 调用`RequestAPI()`，发送API请求。
 
-4. **精确**地输出函数的返回值，**不得输出任何其它内容**。"""
+4. `RequestAPI()`返回会返回一个文件路径，你需要直接输出该文件路径，**不得输出任何其它内容**。
+"""
 
 _tools = [RequestAPI]
 
