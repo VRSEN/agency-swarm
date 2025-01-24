@@ -25,6 +25,7 @@ def cap_agent_instruction(_name, _description, _manager_name):
     {{
         "result": "QUERY",
         "context": {{
+            "user requirement": ..., 
             "param_1": {{
                 "name": ...,
                 "description": ...,
@@ -33,7 +34,7 @@ def cap_agent_instruction(_name, _description, _manager_name):
             ...
         }}
     }}
-    其中，"name"字段填入你所需要询问的参数名称，"description"字段填入你所需要询问参数的介绍，"type"字段填入你所需要询问参数的类型
+    其中，"user requirement"字段填入用户初始请求，"name"字段填入你所需要询问的参数名称，"description"字段填入你所需要询问参数的介绍，"type"字段填入你所需要询问参数的类型
     当接收到{_manager_name}的回复时，你需要确认<param_list>中所有的必要参数是否都已经获取到，如果有参数值缺失，则重复step 2向{_manager_name}发送询问，直到没有参数值缺失为止
 
     ### step 3. 获取响应

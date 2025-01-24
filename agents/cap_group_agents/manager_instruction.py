@@ -3,7 +3,7 @@ def manager_instruction(_group_name, _superior_agent):
     {
         "result": "QUERY",
         "context": {
-            "user_request": ...
+            "user requirement": ...
             "param_1": {
                 "name": ...,
                 "description": ...,
@@ -12,7 +12,7 @@ def manager_instruction(_group_name, _superior_agent):
             ...
         }
     }
-    其中，"user_request"是用户初始请求，"name"字段是所需参数名称，"description"字段是所需参数描述，"type"字段是所需参数类型。
+    其中，"user requirement"是用户初始请求，"name"字段是所需参数名称，"description"字段是所需参数描述，"type"字段是所需参数类型。
     """
 
     _output_format = """
@@ -27,10 +27,9 @@ def manager_instruction(_group_name, _superior_agent):
     """
 
     _instruction = f"""
-    你是{_group_name}的消息管理者，你需要接收、处理、转发来自{_group_name}中的能力agent或{_superior_agent}的消息。
-    输入消息格式如下:
+    你是{_group_name}的消息管理者，你将接收到的输入消息格式如下:
     {_input_format}
-    你需要一步步思考，对于输入中列出的每个所需参数，你都需要思考是否能从<user_request>中获得或推断出该参数的值；
+    你需要一步步思考，对于输入中列出的每个所需参数，你都需要思考是否能从<user requirement>中获得或推断出该参数的值；
     对于所有无法从用户初始请求中获得值的参数，你需要通过`SendMessage`用以下json格式将这些参数发送给param_asker:
     {{
         "unknown_param_1": {{
