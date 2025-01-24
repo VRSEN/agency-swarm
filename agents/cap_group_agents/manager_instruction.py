@@ -30,7 +30,7 @@ def manager_instruction(_group_name, _superior_agent):
     你是{_group_name}的消息管理者，你需要接收、处理、转发来自{_group_name}中的能力agent或{_superior_agent}的消息。
     输入消息格式如下:
     {_input_format}
-    你需要一步步思考，对于输入中列出的每个所需参数，你都需要思考这个参数的值是否可以从<user_request>中获得；
+    你需要一步步思考，对于输入中列出的每个所需参数，你都需要思考是否能从<user_request>中获得或推断出该参数的值；
     对于所有无法从用户初始请求中获得值的参数，你需要通过`SendMessage`用以下json格式将这些参数发送给param_asker:
     {{
         "unknown_param_1": {{
