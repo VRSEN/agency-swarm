@@ -47,6 +47,7 @@ class SendMessage(SendMessageBase):
         return self
 
     def run(self):
+        print(f"SendMessage:\nmy_primary_instructions: {self.my_primary_instructions}\nmessage: {self.message}\nadditional_instructions: {self.additional_instructions}")
         return self._get_completion(
             message=self.message,
             message_files=self.message_files,
