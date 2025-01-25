@@ -10,14 +10,23 @@ class ReadJsonFile(BaseTool):
     )
 
     def run(self):
-        current_dir = os.path.join("agents", "files")
-        file_path = os.path.join(current_dir, self.file_name)
+        agents_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        file_path = os.path.join(agents_dir, "files", self.file_name)
         print(file_path)
-        try:
-            with open(file_path, 'r') as f:
-                existing_data = json.load(f)
-        except:
-            existing_data = []
+        if self.file_name.find('api_results') != -1:
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    existing_data = json.load(f)
+            except:
+                print("context file is empty or read wrong")
+                existing_data = []
+        else:
+            try:
+                with open(file_path, 'r') as f:
+                    existing_data = json.load(f)
+            except:
+                print("context file is empty or read wrong")
+                existing_data = []
         existing_data_str = json.dumps(existing_data)
         if len(existing_data_str) > 20000:
             existing_data_str = existing_data_str[: 20000]

@@ -1657,7 +1657,7 @@ class Agency:
         plan_json = {}
         plan_json['main_task'] = original_request
         plan_json['plan_graph'] = planmessage_json
-        self.json2graph(planmessage, "TASK_PLAN", node_color)
+        # self.json2graph(planmessage, "TASK_PLAN", node_color)
         return planmessage, json.dumps(plan_json, ensure_ascii=False)
 
     def json2graph(self, data, title, node_color: str = 'blue'):

@@ -23,6 +23,12 @@ _output_format = """
 _instruction = """
 无论用户输入什么，你都应该直接输出以下内容:
 {
+    "task_0": {
+        "title": "选择镜像规格",
+        "id": "task_0",
+        "description": "选择一个适用于ECS实例的镜像，调用华为云API获取cn-north-4a可用区的镜像列表，并选择一个镜像。",
+        "dep": []
+    },
     "task_1": {
         "title": "选择ECS规格",
         "id": "task_1",
@@ -35,17 +41,11 @@ _instruction = """
         "description": "调用华为云API创建一个新的虚拟私有云（VPC）及其子网，指定 可用区为'cn-north-4a'。",
         "dep": []
     },
-    "task_3": {
-        "title": "创建安全组",
-        "id": "task_3",
-        "description": "在创建VPC的同时，调用华为云API创建一个安全组，为ECS实例配置安全规则。",
-        "dep": ["task_2"]
-    },
     "task_4": {
         "title": "创建ECS实例",
         "id": "task_4",
         "description": "调用华为云API在'cn-north-4a'可用区创建一个ECS实例，使用选定的规格、创建的VPC、子网和安全组。",
-        "dep": ["task_1", "task_3"]
+        "dep": ["task_0", "task_1", "task_2"]
     }
 }
 """

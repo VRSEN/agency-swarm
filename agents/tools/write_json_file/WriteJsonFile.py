@@ -13,8 +13,8 @@ class WriteJsonFile(BaseTool):
     )
 
     def run(self):
-        current_dir = os.path.join("agents", "files")
-        file_path = os.path.join(current_dir, self.file_name)
+        agents_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        file_path = os.path.join(agents_dir, "files", self.file_name)
         try:
             with open(file_path, 'r') as f:
                 existing_data = json.load(f)
