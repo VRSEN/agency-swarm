@@ -1519,8 +1519,10 @@ class Agency:
                                     "description": next_subtask['description'],
                                 }
                                 subtask_result_context = self.json_get_completion(cap_group_thread[next_subtask_cap_group][0], json.dumps(steps_input_simple, ensure_ascii=False))
+                                subtask_result_context_json = json.loads(subtask_result_context)
+                                context_file_path = subtask_result_context_json['context']
                                 context_id = context_id + 1
-                                self.update_context(context_id=context_id, context=subtask_result_context, step=next_subtask)
+                                self.update_context(context_id=context_id, context=context_file_path, step=next_subtask)
                                 self.update_completed_sub_task(next_subtask_id, next_subtask)
                                 continue
                             steps_graph, steps_need_scheduled = self.planning_layer(message=json.dumps(steps_input, ensure_ascii=False), original_request=next_subtask['description'], task_planner_thread=cap_group_thread[next_subtask_cap_group][0], inspector_thread=step_inspector_thread, node_color='white')
@@ -1721,9 +1723,9 @@ class Agency:
                 inspector_result = self.my_get_completion(inspector_res)
                 print(inspector_result)
                 __ = self.get_inspector_review(inspector_result)
-                user_advice = input("User: [\"agree\": You agree with inspector.\n\"YES\": You agree with planner, and you should input your advice.\n\"NO\": You disagree with planner, and you should input your advice.]")
+                user_advice = input("User: [\"agree\": You agree with inspector.\n\"YES\": You agree with planner, and you should input your advice.\n\"NO\": You disagree with planner, and you should input your advice.]\n")
                 if user_advice != "agree":
-                    explain = input()
+                    explain = input("explain: ")
                     inspector_result = json.dumps(
                         {
                             "review": user_advice,

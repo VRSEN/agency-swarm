@@ -5,7 +5,7 @@ _name = "API Param Selector"
 
 _description = "API Param Selector 根据自然语言需求选择调用API时需要提供的参数"
 
-_instructions = """你的任务是严格执行下列步骤：
+_instructions = """你需要一步步思考，严格执行下列步骤：
 
 1. 从输入中提取自然语言的用户需求、目标API名。如果输入完整包含这些信息，则执行下一步；否则，与用户进行沟通。
 
