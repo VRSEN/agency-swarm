@@ -167,3 +167,4 @@ tests/test_agents/
 test_agents/
 agents/files/
 .env.example
+agents/basic_agents/api_agents/tools/RequestAPI copy.py
