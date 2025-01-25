@@ -22,4 +22,4 @@ class CreateContext(BaseTool):
         file_path = os.path.join("agents", "files", "api_results", filename)
         with open(file_path, "w", encoding='utf-8') as f:
             json.dump(result_json, f, ensure_ascii=False)
-        return file_path
+        return os.path.join("api_results", filename)

@@ -1,5 +1,6 @@
 from agency_swarm import Agent
 from agents.tools.read_json_file.ReadJsonFile import ReadJsonFile
+from agents.tools.read_context_index.ReadContextIndex import ReadContextIndex
 
 _name = "subtask_planner"
 
@@ -68,7 +69,7 @@ _instruction = f"""
 """
 
 
-_tools = [ReadJsonFile]
+_tools = [ReadJsonFile, ReadContextIndex]
 
 _file_folder = ""
 
