@@ -19,7 +19,8 @@ class CreateContext(BaseTool):
         prefix = "context_"
         suffix = ".json"
         filename = f"{prefix}{formatted_time}{suffix}"
-        file_path = os.path.join("agents", "files", "api_results", filename)
+        agents_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        file_path = os.path.join(agents_dir, "files", "api_results", filename)
         with open(file_path, "w", encoding='utf-8') as f:
             json.dump(result_json, f, ensure_ascii=False)
         return os.path.join("api_results", filename)

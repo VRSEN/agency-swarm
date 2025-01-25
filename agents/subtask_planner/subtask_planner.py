@@ -35,7 +35,7 @@ _instruction = f"""
 输入格式如下: 
 {_input_format}
 
-其中，total_task_graph将描述所有任务的规划图，包括任务信息和依赖关系，保证你接下来的规划不要与已有任务冲突或重叠
+其中，"title"和"description"字段描述了本次需要规划的任务，"total_subtask_graph"将描述所有任务的规划图，包括任务信息和依赖关系，保证你接下来的规划不要与其他任务冲突或重叠
 
 同时，你需要从context_index.json中读取并更新你记忆中的已有环境中的上下文信息
 注意: 你每次接收到输入都需要读取一遍context_index.json
