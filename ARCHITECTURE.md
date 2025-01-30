@@ -1,7 +1,7 @@
-# Social Media Agency Architecture
+# System Architecture
 
-## System Overview
-The agency-swarm is a multi-agent system designed to automate the process of creating viral social media content from long-form videos. The system uses AI to identify high-impact moments, enhance them with creative elements, and optimize them for various social media platforms.
+## Overview
+Agency Swarm is a multi-agent system designed to automate the creation of viral social media content through AI-powered video processing and enhancement.
 
 ## Agent Hierarchy
 1. CEO Agent (AgencyCEO)
@@ -21,7 +21,10 @@ The agency-swarm is a multi-agent system designed to automate the process of cre
      - Supports automatic subtitle extraction
    
 3. Analysis Agent
-   - Tools: Whisper transcription, GPT-4-Temporal for video analysis
+   - Tools: 
+     - TranscriptionTool: Uses OpenAI Whisper for accurate transcription
+     - MomentDetectionTool: Identifies viral moments using keyword analysis
+     - EmotionAnalysisTool: Analyzes emotional intensity
    - Responsibilities: 
      - Identify high-impact moments using:
        - Emotional intensity detection
@@ -30,9 +33,17 @@ The agency-swarm is a multi-agent system designed to automate the process of cre
    - Implementation:
      - Uses OpenAI Whisper for accurate transcription
      - Implements custom scoring algorithms for moment detection
+     - Viral moment detection based on:
+       - Keyword presence
+       - Emotional intensity
+       - Narrative structure
      
 4. Creative Agent
-   - Tools: Runway ML, D-ID, ElevenLabs
+   - Tools: 
+     - VideoSplitterTool
+     - AnimationTool (Stable Diffusion)
+     - CaptionTool
+     - CompositionTool (FFmpeg)
    - Responsibilities:
      - Create animated versions of key moments
      - Generate side-by-side layouts with FFmpeg
@@ -96,16 +107,16 @@ The agency-swarm is a multi-agent system designed to automate the process of cre
    Selected Moments -> Enhancement -> Rendering -> Format Optimization -> Publishing
    ```
 
-### Storage
-1. Local Storage
-   - Downloaded videos
-   - Extracted subtitles
-   - Intermediate renders
+### Storage Structure
 
-2. State Management
-   - Agent states
-   - Processing progress
-   - Analytics data
+```
+downloads/
+├── videos/         # Original downloaded videos
+├── segments/       # Extracted viral moments
+├── animations/     # Generated AI frames
+├── captioned/      # Frames with captions
+└── final/         # Final compositions
+```
 
 ## Security Considerations
 1. API Key Management
@@ -143,4 +154,36 @@ The agency-swarm is a multi-agent system designed to automate the process of cre
 3. Platform Expansion
    - Additional social media platforms
    - Custom content optimization
-   - Cross-platform analytics 
+   - Cross-platform analytics
+
+## Testing Strategy
+- Unit tests for individual tools
+- Integration tests for agent interactions
+- End-to-end pipeline testing
+- Performance benchmarking
+
+## Monitoring and Analytics
+- Processing time tracking
+- Resource usage monitoring
+- Success/failure rates
+- Quality metrics tracking
+
+## Agent Communication Flow
+```
+[User] -> [Content Acquisition Agent]
+           |
+           v
+      [Analysis Agent]
+           |
+           v
+      [Creative Agent]
+           |
+           v
+[Final Video Output]
+```
+
+## Error Handling
+- Graceful failure recovery
+- Detailed error logging
+- Automatic retries for transient failures
+- Input validation at each stage

@@ -66,19 +66,19 @@ new_videos = await agent.monitor_channel('CHANNEL_ID')
 
 ```
 agency-swarm/
+├── docs/
+│   ├── ARCHITECTURE.md
+│   ├── CURRENT_STATE.md
+│   └── quick_start.md
 ├── src/
-│   ├── agents/
-│   │   ├── base_agent.py
-│   │   ├── content_acquisition_agent.py
-│   │   └── ...
-│   ├── utils/
-│   └── config/
-│       └── config.py
-├── downloads/
-├── requirements.txt
-├── .env
-└── README.md
-```
+│   └── agents/
+│       ├── content_acquisition_agent/
+│       │   └── tools/
+│       ├── analysis_agent/
+│       │   └── tools/
+│       └── creative_agent/
+│           └── tools/
+│               ├── Anim
 
 ## Contributing
 
