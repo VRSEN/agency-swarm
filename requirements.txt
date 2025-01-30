@@ -1,9 +1,23 @@
-openai>=1.55.3,<2.0.0
-docstring_parser==0.16
-pydantic==2.8.2
-datamodel-code-generator==0.26.1
-deepdiff==6.7.1
-termcolor==2.4.0
-python-dotenv==1.0.1
-rich==13.7.1
-jsonref==1.1.0
+# Core dependencies
+pydantic>=2.0.0
+python-dotenv>=1.0.0
+openai>=1.0.0
+langchain>=0.1.0
+
+# Content acquisition
+yt-dlp>=2023.12.30
+ffmpeg-python>=0.2.0
+
+# Testing
+pytest>=7.4.0
+pytest-cov>=4.1.0
+
+# Development
+black>=23.12.0
+isort>=5.13.0
+flake8>=6.1.0
+mypy>=1.8.0
+
+# Documentation
+mkdocs>=1.5.0
+mkdocs-material>=9.5.0
