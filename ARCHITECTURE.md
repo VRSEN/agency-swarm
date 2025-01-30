@@ -1,7 +1,7 @@
-# System Architecture
+# Social Media Agency Architecture
 
-## Overview
-Agency Swarm is a multi-agent system designed to automate the creation of viral social media content through AI-powered video processing and enhancement.
+## System Overview
+The agency-swarm is a multi-agent system designed to automate the process of creating viral social media content from long-form videos. The system uses AI to identify high-impact moments, enhance them with creative elements, and optimize them for various social media platforms.
 
 ## Agent Hierarchy
 1. CEO Agent (AgencyCEO)
@@ -21,10 +21,7 @@ Agency Swarm is a multi-agent system designed to automate the creation of viral 
      - Supports automatic subtitle extraction
    
 3. Analysis Agent
-   - Tools: 
-     - TranscriptionTool: Uses OpenAI Whisper for accurate transcription
-     - MomentDetectionTool: Identifies viral moments using keyword analysis
-     - EmotionAnalysisTool: Analyzes emotional intensity
+   - Tools: Whisper transcription, GPT-4-Temporal for video analysis
    - Responsibilities: 
      - Identify high-impact moments using:
        - Emotional intensity detection
@@ -33,17 +30,9 @@ Agency Swarm is a multi-agent system designed to automate the creation of viral 
    - Implementation:
      - Uses OpenAI Whisper for accurate transcription
      - Implements custom scoring algorithms for moment detection
-     - Viral moment detection based on:
-       - Keyword presence
-       - Emotional intensity
-       - Narrative structure
      
 4. Creative Agent
-   - Tools: 
-     - VideoSplitterTool
-     - AnimationTool (Stable Diffusion)
-     - CaptionTool
-     - CompositionTool (FFmpeg)
+   - Tools: Runway ML, D-ID, ElevenLabs
    - Responsibilities:
      - Create animated versions of key moments
      - Generate side-by-side layouts with FFmpeg
@@ -107,16 +96,16 @@ Agency Swarm is a multi-agent system designed to automate the creation of viral 
    Selected Moments -> Enhancement -> Rendering -> Format Optimization -> Publishing
    ```
 
-### Storage Structure
+### Storage
+1. Local Storage
+   - Downloaded videos
+   - Extracted subtitles
+   - Intermediate renders
 
-```
-downloads/
-├── videos/         # Original downloaded videos
-├── segments/       # Extracted viral moments
-├── animations/     # Generated AI frames
-├── captioned/      # Frames with captions
-└── final/         # Final compositions
-```
+2. State Management
+   - Agent states
+   - Processing progress
+   - Analytics data
 
 ## Security Considerations
 1. API Key Management
@@ -154,36 +143,4 @@ downloads/
 3. Platform Expansion
    - Additional social media platforms
    - Custom content optimization
-   - Cross-platform analytics
-
-## Testing Strategy
-- Unit tests for individual tools
-- Integration tests for agent interactions
-- End-to-end pipeline testing
-- Performance benchmarking
-
-## Monitoring and Analytics
-- Processing time tracking
-- Resource usage monitoring
-- Success/failure rates
-- Quality metrics tracking
-
-## Agent Communication Flow
-```
-[User] -> [Content Acquisition Agent]
-           |
-           v
-      [Analysis Agent]
-           |
-           v
-      [Creative Agent]
-           |
-           v
-[Final Video Output]
-```
-
-## Error Handling
-- Graceful failure recovery
-- Detailed error logging
-- Automatic retries for transient failures
-- Input validation at each stage
+   - Cross-platform analytics 

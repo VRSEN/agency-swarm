@@ -21,7 +21,7 @@ A powerful AI-driven social media content creation and management system that au
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/agency-swarm.git
+git clone https://github.com/jrcaranddang/agency-swarm.git
 cd agency-swarm
 ```
 
@@ -66,19 +66,19 @@ new_videos = await agent.monitor_channel('CHANNEL_ID')
 
 ```
 agency-swarm/
-├── docs/
-│   ├── ARCHITECTURE.md
-│   ├── CURRENT_STATE.md
-│   └── quick_start.md
 ├── src/
-│   └── agents/
-│       ├── content_acquisition_agent/
-│       │   └── tools/
-│       ├── analysis_agent/
-│       │   └── tools/
-│       └── creative_agent/
-│           └── tools/
-│               ├── Anim
+│   ├── agents/
+│   │   ├── base_agent.py
+│   │   ├── content_acquisition_agent.py
+│   │   └── ...
+│   ├── utils/
+│   └── config/
+│       └── config.py
+├── downloads/
+├── requirements.txt
+├── .env
+└── README.md
+```
 
 ## Contributing
 
