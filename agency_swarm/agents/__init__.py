@@ -1,3 +1,7 @@
-from .agent import Agent
-from .BrowsingAgent import BrowsingAgent
-from .Devid import Devid
+"""
+Agency Swarm Agents Module
+"""
+
+from .base_agent import BaseAgent
+
+__all__ = ['BaseAgent']

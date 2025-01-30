@@ -55,3 +55,18 @@ Develop animation style matching Shawn Ryan's aesthetic
 Create retention prediction model using viewer heatmaps
 Build automated brand safety checks for military content
 Would you like me to expand on any specific component or provide sample code for any of the agents?
+
+
+
+
+You are an expert software developer.  Implement the agency-swarm project following the ARCHITECTURE.md document.  Update the file as progress is made.
+
+Update the CURRENT_STATE.md file as progress is made.
+Update the CHAT.md file with the chat history for future reference.
+Update the README.md file with the project setup and notes as progress is made.
+
+Refer to the CAMPAIGN.md file and ensure the implementation is aligned.
+
+Create git commits and push to the remote branch at stable stopping points.
+
+Ensure the project has proper test coverage and includes integration test as the system matures.
