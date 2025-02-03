@@ -1,4 +1,4 @@
-selenium==4.27.1
+selenium==4.28.1
 webdriver-manager==4.0.2
 selenium_stealth==1.0.6
-gradio==4.44.1
+gradio==5.14.0
