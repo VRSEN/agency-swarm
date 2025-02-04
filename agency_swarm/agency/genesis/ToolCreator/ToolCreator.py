@@ -10,5 +10,6 @@ class ToolCreator(Agent):
             description="This agent is responsible for creating new tools for the agency using python code.",
             instructions="./instructions.md",
             tools=[CreateTool, TestTool],
-            temperature=0,
+            temperature=None,
+            model="o3-mini",
         )

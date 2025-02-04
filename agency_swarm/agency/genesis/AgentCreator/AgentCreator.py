@@ -11,5 +11,6 @@ class AgentCreator(Agent):
             description="This agent is responsible for creating new agents for the agency.",
             instructions="./instructions.md",
             tools=[ImportAgent, CreateAgentTemplate, ReadManifesto],
-            temperature=0.3,
+            temperature=None,
+            model="o3-mini",
         )

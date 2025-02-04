@@ -9,6 +9,9 @@ from .ToolCreator import ToolCreator
 
 class GenesisAgency(Agency):
     def __init__(self, with_browsing=True, **kwargs):
+        if "temperature" not in kwargs:
+            kwargs["temperature"] = None
+            
         if "max_prompt_tokens" not in kwargs:
             kwargs["max_prompt_tokens"] = 25000
 

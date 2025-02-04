@@ -53,7 +53,8 @@ class CreateAgencyFolder(BaseTool):
         # check that agency chart is valid
         if not self.agency_chart.startswith("[") or not self.agency_chart.endswith("]"):
             raise ValueError(
-                "Agency chart must be a list of lists, except for the first agents."
+                "Agency chart must be a list of lists, except for the first agents that can interact with the user. "
+                "It must look like this: [ceo, [ceo, dev], [ceo, va], [dev, va]]"
             )
 
         # add new lines after every comma, except for those inside second brackets
