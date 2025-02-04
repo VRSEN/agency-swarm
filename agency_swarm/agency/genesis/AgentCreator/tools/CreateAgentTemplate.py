@@ -5,7 +5,7 @@ from typing import List
 from pydantic import Field, model_validator
 
 from agency_swarm import BaseTool
-from agency_swarm.agency.genesis.util import check_agency_path
+from agency_swarm.agency.genesis.util import change_directory, check_agency_path
 from agency_swarm.util import create_agent_template
 
 allowed_tools: List = ["CodeInterpreter"]
@@ -64,39 +64,37 @@ class CreateAgentTemplate(BaseTool):
 
         self._shared_state.set("agent_name", self.agent_name)
 
-        os.chdir(self._shared_state.get("agency_path"))
+        with change_directory(self._shared_state.get("agency_path")):
+            # remove folder if it already exists
+            if os.path.exists(self.agent_name):
+                shutil.rmtree(self.agent_name)
 
-        # remove folder if it already exists
-        if os.path.exists(self.agent_name):
-            shutil.rmtree(self.agent_name)
+            create_agent_template(
+                self.agent_name,
+                self.agent_description,
+                instructions=self.instructions,
+                code_interpreter=True
+                if "CodeInterpreter" in self.default_tools
+                else None,
+                include_example_tool=False,
+            )
 
-        create_agent_template(
-            self.agent_name,
-            self.agent_description,
-            instructions=self.instructions,
-            code_interpreter=True if "CodeInterpreter" in self.default_tools else None,
-            include_example_tool=False,
-        )
+            # create or append to init file
+            class_name = self.agent_name.replace(" ", "").strip()
+            if not os.path.isfile("__init__.py"):
+                with open("__init__.py", "w") as f:
+                    f.write(f"from .{class_name} import {class_name}")
+            else:
+                with open("__init__.py", "a") as f:
+                    f.write(f"\nfrom .{class_name} import {class_name}")
 
-        # # create or append to init file
-        path = self._shared_state.get("agency_path")
-        class_name = self.agent_name.replace(" ", "").strip()
-        if not os.path.isfile("__init__.py"):
-            with open("__init__.py", "w") as f:
-                f.write(f"from .{class_name} import {class_name}")
-        else:
-            with open("__init__.py", "a") as f:
-                f.write(f"\nfrom .{class_name} import {class_name}")
+            # add agent on second line to agency.py
+            with open("agency.py", "r") as f:
+                lines = f.readlines()
+                lines.insert(1, f"from {class_name} import {class_name}\n")
 
-        # add agent on second line to agency.py
-        with open("agency.py", "r") as f:
-            lines = f.readlines()
-            lines.insert(1, f"from {class_name} import {class_name}\n")
-
-        with open("agency.py", "w") as f:
-            f.writelines(lines)
-
-        os.chdir(self._shared_state.get("default_folder"))
+            with open("agency.py", "w") as f:
+                f.writelines(lines)
 
         if "ceo" in self.agent_name.lower():
             return f"You can tell the user that the process of creating {self.agent_name} has been completed, because CEO agent does not need to utilizie any tools or APIs."

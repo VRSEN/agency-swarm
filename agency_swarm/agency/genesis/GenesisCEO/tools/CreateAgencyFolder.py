@@ -1,11 +1,10 @@
 import os
-import shutil
 from pathlib import Path
 
-from pydantic import Field, field_validator
+from pydantic import Field
 
-import agency_swarm.agency.genesis.GenesisAgency
 from agency_swarm import BaseTool
+from agency_swarm.agency.genesis.util import change_directory
 
 
 class CreateAgencyFolder(BaseTool):
@@ -34,21 +33,23 @@ class CreateAgencyFolder(BaseTool):
         if not self._shared_state.get("default_folder"):
             self._shared_state.set("default_folder", Path.cwd())
 
+        # Create or get agency path
         if self._shared_state.get("agency_name") is None:
             os.mkdir(self.agency_name)
-            os.chdir("./" + self.agency_name)
+            target_path = Path(f"./{self.agency_name}").resolve()
             self._shared_state.set("agency_name", self.agency_name)
-            self._shared_state.set("agency_path", Path("./").resolve())
+            self._shared_state.set("agency_path", target_path)
         elif self._shared_state.get(
             "agency_name"
         ) == self.agency_name and os.path.exists(self._shared_state.get("agency_path")):
-            os.chdir(self._shared_state.get("agency_path"))
-            for file in os.listdir():
-                if file != "__init__.py" and os.path.isfile(file):
-                    os.remove(file)
+            target_path = self._shared_state.get("agency_path")
+            with change_directory(target_path):
+                for file in os.listdir():
+                    if file != "__init__.py" and os.path.isfile(file):
+                        os.remove(file)
         else:
             os.mkdir(self._shared_state.get("agency_path"))
-            os.chdir("./" + self.agency_name)
+            target_path = Path(f"./{self.agency_name}").resolve()
 
         # check that agency chart is valid
         if not self.agency_chart.startswith("[") or not self.agency_chart.endswith("]"):
@@ -62,20 +63,19 @@ class CreateAgencyFolder(BaseTool):
         # to "[ceo, [ceo, dev],\n [ceo, va],\n [dev, va] ]"
         agency_chart = self.agency_chart.replace("],", "],\n")
 
-        # create init file
-        with open("__init__.py", "w") as f:
-            f.write("")
+        with change_directory(target_path):
+            # create init file
+            with open("__init__.py", "w") as f:
+                f.write("")
 
-        # create agency.py
-        with open("agency.py", "w") as f:
-            f.write(agency_py.format(agency_chart=agency_chart))
+            # create agency.py
+            with open("agency.py", "w") as f:
+                f.write(agency_py.format(agency_chart=agency_chart))
 
-        # write manifesto
-        path = os.path.join("agency_manifesto.md")
-        with open(path, "w") as f:
-            f.write(self.manifesto)
-
-        os.chdir(self._shared_state.get("default_folder"))
+            # write manifesto
+            path = os.path.join("agency_manifesto.md")
+            with open(path, "w") as f:
+                f.write(self.manifesto)
 
         return f"Agency folder has been created. You can now tell AgentCreator to create agents for {self.agency_name}.\n"
 

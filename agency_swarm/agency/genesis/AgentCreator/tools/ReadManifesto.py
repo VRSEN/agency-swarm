@@ -3,6 +3,7 @@ import os
 from pydantic import Field
 
 from agency_swarm import BaseTool
+from agency_swarm.agency.genesis.util import change_directory
 
 
 class ReadManifesto(BaseTool):
@@ -24,15 +25,15 @@ class ReadManifesto(BaseTool):
                 "Please specify the agency name. Ask user for clarification if needed."
             )
 
-        if self.agency_name:
-            os.chdir("./" + self.agency_name)
-        else:
-            os.chdir(self._shared_state.get("agency_path"))
+        target_path = (
+            self.agency_name
+            and f"./{self.agency_name}"
+            or self._shared_state.get("agency_path")
+        )
 
-        with open("agency_manifesto.md", "r") as f:
-            manifesto = f.read()
-
-        os.chdir(self._shared_state.get("default_folder"))
+        with change_directory(target_path):
+            with open("agency_manifesto.md", "r") as f:
+                manifesto = f.read()
 
         self._shared_state.set("manifesto_read", True)
 

@@ -1,8 +1,7 @@
-import os
-
 from pydantic import Field, model_validator
 
 from agency_swarm import BaseTool, get_openai_client
+from agency_swarm.agency.genesis.util import change_directory
 
 
 class FinalizeAgency(BaseTool):
@@ -16,38 +15,30 @@ class FinalizeAgency(BaseTool):
     )
 
     def run(self):
-        agency_path = None
-        if self._shared_state.get("agency_path"):
-            os.chdir(self._shared_state.get("agency_path"))
-            agency_path = self._shared_state.get("agency_path")
-        else:
-            os.chdir(self.agency_path)
-            agency_path = self.agency_path
-
+        target_path = self._shared_state.get("agency_path") or self.agency_path
         client = get_openai_client()
 
-        # read agency.py
-        with open("./agency.py", "r") as f:
-            agency_py = f.read()
-            f.close()
+        with change_directory(target_path):
+            # read agency.py
+            with open("./agency.py", "r") as f:
+                agency_py = f.read()
 
-        res = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=examples
-            + [
-                {"role": "user", "content": agency_py},
-            ],
-            temperature=0.0,
-        )
+            res = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=examples
+                + [
+                    {"role": "user", "content": agency_py},
+                ],
+                temperature=0.0,
+            )
 
-        message = res.choices[0].message.content
+            message = res.choices[0].message.content
 
-        # write agency.py
-        with open("./agency.py", "w") as f:
-            f.write(message)
-            f.close()
+            # write agency.py
+            with open("./agency.py", "w") as f:
+                f.write(message)
 
-        return f"Successfully finalized {agency_path} structure. You can now instruct the user to run the agency.py file."
+        return f"Successfully finalized {target_path} structure. You can now instruct the user to run the agency.py file."
 
     @model_validator(mode="after")
     def validate_agency_path(self):

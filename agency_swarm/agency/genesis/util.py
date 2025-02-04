@@ -1,4 +1,5 @@
 import os
+from contextlib import contextmanager
 from pathlib import Path
 
 
@@ -38,3 +39,16 @@ def check_agent_path(self):
         raise ValueError(
             f"Agent {self.agent_name} not found. Available agents are: {available_agents}"
         )
+
+
+@contextmanager
+def change_directory(target_dir: str | Path):
+    """
+    Context manager for temporarily changing the working directory.
+    """
+    original_dir = Path.cwd()
+    os.chdir(target_dir)
+    try:
+        yield
+    finally:
+        os.chdir(original_dir)

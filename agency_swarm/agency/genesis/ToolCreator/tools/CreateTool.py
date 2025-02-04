@@ -1,8 +1,8 @@
 import os
-from pathlib import Path
 
 from pydantic import Field
 
+from agency_swarm.agency.genesis.util import change_directory
 from agency_swarm.tools import BaseTool
 
 
@@ -27,18 +27,19 @@ class CreateTool(BaseTool):
 
     def run(self):
         try:
-            if self.agency_name:
-                os.chdir("./" + self.agency_name)
-            else:
-                os.chdir(self._shared_state.get("agency_path"))
-            os.chdir(self.agent_name)
-            file_path = os.path.join("tools", f"{self.tool_name}.py")
-            with open(file_path, "w") as file:
-                file.write(self.tool_code)
-            os.chdir(self._shared_state.get("default_folder"))
+            target_path = (
+                self.agency_name
+                and f"./{self.agency_name}"
+                or self._shared_state.get("agency_path")
+            )
+
+            with change_directory(target_path):
+                with change_directory(self.agent_name):
+                    file_path = os.path.join("tools", f"{self.tool_name}.py")
+                    with open(file_path, "w") as file:
+                        file.write(self.tool_code)
             return f"Tool code successfully written to {file_path}."
         except Exception as e:
-            os.chdir(self._shared_state.get("default_folder", Path.cwd()))
             return f"Error writing to file: {e}"
 
 
