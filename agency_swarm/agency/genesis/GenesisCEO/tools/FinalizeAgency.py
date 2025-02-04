@@ -1,10 +1,8 @@
 import os
-from typing import List
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, model_validator
 
 from agency_swarm import BaseTool, get_openai_client
-from agency_swarm.util import create_agent_template
 
 
 class FinalizeAgency(BaseTool):
@@ -34,7 +32,7 @@ class FinalizeAgency(BaseTool):
             f.close()
 
         res = client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model="gpt-4o-mini",
             messages=examples
             + [
                 {"role": "user", "content": agency_py},

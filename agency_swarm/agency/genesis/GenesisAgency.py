@@ -1,5 +1,4 @@
 from agency_swarm import Agency
-from agency_swarm.util.helpers import get_available_agent_descriptions
 
 from .AgentCreator import AgentCreator
 from .GenesisCEO import GenesisCEO
@@ -11,7 +10,7 @@ class GenesisAgency(Agency):
     def __init__(self, with_browsing=True, **kwargs):
         if "temperature" not in kwargs:
             kwargs["temperature"] = None
-            
+
         if "max_prompt_tokens" not in kwargs:
             kwargs["max_prompt_tokens"] = 25000
 

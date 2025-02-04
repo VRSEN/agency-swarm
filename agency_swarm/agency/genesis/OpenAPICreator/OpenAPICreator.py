@@ -9,4 +9,6 @@ class OpenAPICreator(Agent):
             description="This agent is responsible for creating new tools from an OpenAPI specifications.",
             instructions="./instructions.md",
             tools=[CreateToolsFromOpenAPISpec],
+            temperature=None,
+            model="o3-mini",
         )
