@@ -95,6 +95,7 @@ class Agent:
         file_ids: List[str] = None,
         metadata: Dict[str, str] = None,
         model: str = "gpt-4o-2024-08-06",
+        reasoning_effort: Literal["low", "medium", "high"] = "medium",
         validation_attempts: int = 1,
         max_prompt_tokens: int = None,
         max_completion_tokens: int = None,
@@ -124,6 +125,7 @@ class Agent:
             api_params (Dict[str, Dict[str, str]], optional): Extra params to be used for the openapi requests. Each key must be a full filename from schemas_folder. Defaults to an empty dictionary.
             metadata (Dict[str, str], optional): Metadata associated with the agent. Defaults to an empty dictionary.
             model (str, optional): The model identifier for the OpenAI API. Defaults to "gpt-4o".
+            reasoning_effort (Literal["low", "medium", "high"], optional): The reasoning effort for the model. Only for o-series models. Defaults to "medium".
             validation_attempts (int, optional): Number of attempts to validate the response with response_validator function. Defaults to 1.
             max_prompt_tokens (int, optional): Maximum number of tokens allowed in the prompt. Defaults to None.
             max_completion_tokens (int, optional): Maximum number of tokens allowed in the completion. Defaults to None.
@@ -156,6 +158,7 @@ class Agent:
         self.api_params = api_params if api_params else {}
         self.metadata = metadata if metadata else {}
         self.model = model
+        self.reasoning_effort = reasoning_effort
         self.validation_attempts = validation_attempts
         self.max_prompt_tokens = max_prompt_tokens
         self.max_completion_tokens = max_completion_tokens
@@ -283,17 +286,43 @@ class Agent:
                             continue
 
         # create assistant if settings.json does not exist or assistant with the same name does not exist
-        self.assistant = self.client.beta.assistants.create(
-            model=self.model,
-            name=self.name,
-            description=self.description,
-            instructions=self.instructions,
-            tools=self.get_oai_tools(),
-            tool_resources=self.tool_resources,
-            metadata=self.metadata,
-            temperature=self.temperature,
-            top_p=self.top_p,
-            response_format=self.response_format,
+        self.assistant = self._create_assistant()
+
+        if self.assistant.tool_resources:
+            self.tool_resources = self.assistant.tool_resources.model_dump()
+
+        self.id = self.assistant.id
+
+        self._save_settings()
+
+        return self
+
+    def _create_assistant(self):
+        """Creates a new OpenAI assistant with the agent's current configuration."""
+        params = {
+            "model": self.model,
+            "name": self.name,
+            "description": self.description,
+            "instructions": self.instructions,
+            "tools": self.get_oai_tools(),
+            "tool_resources": self.tool_resources,
+            "metadata": self.metadata,
+            "temperature": self.temperature,
+            "top_p": self.top_p,
+            "response_format": self.response_format,
+        }
+
+        extra_body = {}
+
+        # o-series models
+        if params['model'].startswith('o'):
+            params['temperature'] = None
+            params['top_p'] = None
+            extra_body['reasoning_effort'] = self.reasoning_effort
+
+        return self.client.beta.assistants.create(
+            **params,
+            extra_body=extra_body
         )
 
         if self.assistant.tool_resources:
@@ -331,11 +360,21 @@ class Agent:
             "metadata": self.metadata,
             "model": self.model,
         }
-        params = {k: v for k, v in params.items() if v}
+        
+        extra_body = {}
+
+        # o-series models
+        if params['model'].startswith('o'):
+            params['temperature'] = None 
+            params['top_p'] = None 
+            extra_body['reasoning_effort'] = self.reasoning_effort
+
         self.assistant = self.client.beta.assistants.update(
             self.id,
             **params,
+            extra_body=extra_body
         )
+        
         self._update_settings()
 
     def _upload_files(self):

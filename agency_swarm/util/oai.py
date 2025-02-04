@@ -23,7 +23,7 @@ def get_openai_client():
                 )
             client = openai.OpenAI(
                 api_key=api_key,
-                timeout=httpx.Timeout(60.0, read=40, connect=5.0),
+                timeout=httpx.Timeout(60, read=300, connect=5.0),
                 max_retries=10,
                 default_headers={"OpenAI-Beta": "assistants=v2"},
             )
