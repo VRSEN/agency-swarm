@@ -316,20 +316,11 @@ class Agent:
 
         # o-series models
         if params["model"].startswith("o"):
-            params["temperature"] = None
-            params["top_p"] = None
+            params.pop("temperature")
+            params.pop("top_p")
             extra_body["reasoning_effort"] = self.reasoning_effort
 
         return self.client.beta.assistants.create(**params, extra_body=extra_body)
-
-        if self.assistant.tool_resources:
-            self.tool_resources = self.assistant.tool_resources.model_dump()
-
-        self.id = self.assistant.id
-
-        self._save_settings()
-
-        return self
 
     def _update_assistant(self):
         """
@@ -365,6 +356,8 @@ class Agent:
             params["temperature"] = None
             params["top_p"] = None
             extra_body["reasoning_effort"] = self.reasoning_effort
+        else:
+            extra_body["reasoning_effort"] = None
 
         self.assistant = self.client.beta.assistants.update(
             self.id, **params, extra_body=extra_body
@@ -958,11 +951,10 @@ class Agent:
                 json.dump(settings, f, indent=4)
 
     def _clean_assistant_settings(self, settings_dict: dict) -> dict:
-        """
-        Removes o-series model specific parameters from the assistant settings if the model is an o-series.
-        """
-        if settings_dict.get("model", "").startswith("o"):
+        settings_dict["model"] = self.model
+        if self.model.startswith("o"):
             settings_dict.pop("temperature", None)
             settings_dict.pop("top_p", None)
+        else:
             settings_dict.pop("reasoning_effort", None)
         return settings_dict

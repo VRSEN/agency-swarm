@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from agency_swarm import Agent
 
 from .tools.CreateAgencyFolder import CreateAgencyFolder
