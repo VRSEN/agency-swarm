@@ -95,7 +95,7 @@ class Agent:
         file_ids: List[str] = None,
         metadata: Dict[str, str] = None,
         model: str = "gpt-4o-2024-08-06",
-        reasoning_effort: Literal["low", "medium", "high"] = "medium",
+        reasoning_effort: Literal["low", "medium", "high"] = "low",
         validation_attempts: int = 1,
         max_prompt_tokens: int = None,
         max_completion_tokens: int = None,
@@ -125,7 +125,7 @@ class Agent:
             api_params (Dict[str, Dict[str, str]], optional): Extra params to be used for the openapi requests. Each key must be a full filename from schemas_folder. Defaults to an empty dictionary.
             metadata (Dict[str, str], optional): Metadata associated with the agent. Defaults to an empty dictionary.
             model (str, optional): The model identifier for the OpenAI API. Defaults to "gpt-4o".
-            reasoning_effort (Literal["low", "medium", "high"], optional): The reasoning effort for the model. Only for o-series models. Defaults to "medium".
+            reasoning_effort (Literal["low", "medium", "high"], optional): The reasoning effort for the model. Only for o-series models. Defaults to "low".
             validation_attempts (int, optional): Number of attempts to validate the response with response_validator function. Defaults to 1.
             max_prompt_tokens (int, optional): Maximum number of tokens allowed in the prompt. Defaults to None.
             max_completion_tokens (int, optional): Maximum number of tokens allowed in the completion. Defaults to None.
@@ -315,15 +315,12 @@ class Agent:
         extra_body = {}
 
         # o-series models
-        if params['model'].startswith('o'):
-            params['temperature'] = None
-            params['top_p'] = None
-            extra_body['reasoning_effort'] = self.reasoning_effort
+        if params["model"].startswith("o"):
+            params["temperature"] = None
+            params["top_p"] = None
+            extra_body["reasoning_effort"] = self.reasoning_effort
 
-        return self.client.beta.assistants.create(
-            **params,
-            extra_body=extra_body
-        )
+        return self.client.beta.assistants.create(**params, extra_body=extra_body)
 
         if self.assistant.tool_resources:
             self.tool_resources = self.assistant.tool_resources.model_dump()
@@ -360,21 +357,19 @@ class Agent:
             "metadata": self.metadata,
             "model": self.model,
         }
-        
+
         extra_body = {}
 
         # o-series models
-        if params['model'].startswith('o'):
-            params['temperature'] = None 
-            params['top_p'] = None 
-            extra_body['reasoning_effort'] = self.reasoning_effort
+        if params["model"].startswith("o"):
+            params["temperature"] = None
+            params["top_p"] = None
+            extra_body["reasoning_effort"] = self.reasoning_effort
 
         self.assistant = self.client.beta.assistants.update(
-            self.id,
-            **params,
-            extra_body=extra_body
+            self.id, **params, extra_body=extra_body
         )
-        
+
         self._update_settings()
 
     def _upload_files(self):
@@ -793,29 +788,30 @@ class Agent:
 
     def _save_settings(self):
         path = self.get_settings_path()
-        # check if settings.json exists
+        assistant_settings = self._clean_assistant_settings(self.assistant.model_dump())
         if not os.path.isfile(path):
             with open(path, "w") as f:
-                json.dump([self.assistant.model_dump()], f, indent=4)
+                json.dump([assistant_settings], f, indent=4)
         else:
             settings = []
             with open(path, "r") as f:
                 settings = json.load(f)
-                settings.append(self.assistant.model_dump())
+            settings.append(assistant_settings)
             with open(path, "w") as f:
                 json.dump(settings, f, indent=4)
 
     def _update_settings(self):
         path = self.get_settings_path()
-        # check if settings.json exists
         if os.path.isfile(path):
             settings = []
             with open(path, "r") as f:
                 settings = json.load(f)
-                for i, assistant_settings in enumerate(settings):
-                    if assistant_settings["id"] == self.id:
-                        settings[i] = self.assistant.model_dump()
-                        break
+            for i, assistant_settings in enumerate(settings):
+                if assistant_settings["id"] == self.id:
+                    settings[i] = self._clean_assistant_settings(
+                        self.assistant.model_dump()
+                    )
+                    break
             with open(path, "w") as f:
                 json.dump(settings, f, indent=4)
 
@@ -960,3 +956,13 @@ class Agent:
                         break
             with open(path, "w") as f:
                 json.dump(settings, f, indent=4)
+
+    def _clean_assistant_settings(self, settings_dict: dict) -> dict:
+        """
+        Removes o-series model specific parameters from the assistant settings if the model is an o-series.
+        """
+        if settings_dict.get("model", "").startswith("o"):
+            settings_dict.pop("temperature", None)
+            settings_dict.pop("top_p", None)
+            settings_dict.pop("reasoning_effort", None)
+        return settings_dict
