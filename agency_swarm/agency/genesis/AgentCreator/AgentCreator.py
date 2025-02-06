@@ -6,7 +6,7 @@ from .tools.ReadManifesto import ReadManifesto
 
 
 class AgentCreator(Agent):
-    def __init__(self, model: str = "o3-mini"):
+    def __init__(self, model: str = "gpt-4o"):
         super().__init__(
             description="This agent is responsible for creating new agents for the agency.",
             instructions="./instructions.md",

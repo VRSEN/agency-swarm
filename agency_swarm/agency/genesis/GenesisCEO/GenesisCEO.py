@@ -14,4 +14,5 @@ class GenesisCEO(Agent):
             tools=[CreateAgencyFolder, FinalizeAgency, ReadRequirements],
             temperature=None,
             model=model,
+            reasoning_effort="high",
         )

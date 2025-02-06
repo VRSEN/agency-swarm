@@ -24,7 +24,7 @@ class GenesisAgency(Agency):
                 tool_creator,
                 agent_creator,
                 [genesis_ceo, agent_creator],
-                [agent_creator, tool_creator],
+                [genesis_ceo, tool_creator],
             ]
 
             if with_browsing:
