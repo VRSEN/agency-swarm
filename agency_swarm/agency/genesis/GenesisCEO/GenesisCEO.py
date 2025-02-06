@@ -6,12 +6,12 @@ from .tools.ReadRequirements import ReadRequirements
 
 
 class GenesisCEO(Agent):
-    def __init__(self):
+    def __init__(self, model: str = "o3-mini"):
         super().__init__(
             description="Acts as the overseer and communicator across the agency, ensuring alignment with the "
             "agency's goals.",
             instructions="./instructions.md",
             tools=[CreateAgencyFolder, FinalizeAgency, ReadRequirements],
             temperature=None,
-            model="o3-mini",
+            model=model,
         )

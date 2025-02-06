@@ -4,11 +4,11 @@ from .tools.CreateToolsFromOpenAPISpec import CreateToolsFromOpenAPISpec
 
 
 class OpenAPICreator(Agent):
-    def __init__(self):
+    def __init__(self, model: str = "o3-mini"):
         super().__init__(
             description="This agent is responsible for creating new tools from an OpenAPI specifications.",
             instructions="./instructions.md",
             tools=[CreateToolsFromOpenAPISpec],
             temperature=None,
-            model="o3-mini",
+            model=model,
         )

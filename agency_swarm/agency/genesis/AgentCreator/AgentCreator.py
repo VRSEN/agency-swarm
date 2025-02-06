@@ -6,11 +6,11 @@ from .tools.ReadManifesto import ReadManifesto
 
 
 class AgentCreator(Agent):
-    def __init__(self):
+    def __init__(self, model: str = "o3-mini"):
         super().__init__(
             description="This agent is responsible for creating new agents for the agency.",
             instructions="./instructions.md",
             tools=[ReadManifesto, ImportAgent, CreateAgentTemplate],
             temperature=None,
-            model="o3-mini",
+            model=model,
         )

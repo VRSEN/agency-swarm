@@ -7,7 +7,7 @@ from .ToolCreator import ToolCreator
 
 
 class GenesisAgency(Agency):
-    def __init__(self, with_browsing=True, **kwargs):
+    def __init__(self, with_browsing=True, model="o3-mini", **kwargs):
         if "temperature" not in kwargs:
             kwargs["temperature"] = None
 
@@ -15,10 +15,10 @@ class GenesisAgency(Agency):
             kwargs["max_prompt_tokens"] = 25000
 
         if "agency_chart" not in kwargs:
-            agent_creator = AgentCreator()
-            genesis_ceo = GenesisCEO()
-            tool_creator = ToolCreator()
-            openapi_creator = OpenAPICreator()
+            agent_creator = AgentCreator(model=model)
+            genesis_ceo = GenesisCEO(model=model)
+            tool_creator = ToolCreator(model=model)
+            openapi_creator = OpenAPICreator(model=model)
             kwargs["agency_chart"] = [
                 genesis_ceo,
                 tool_creator,

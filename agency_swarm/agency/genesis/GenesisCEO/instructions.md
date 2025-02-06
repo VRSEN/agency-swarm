@@ -38,7 +38,13 @@ In Agency Swarm, communication flows are directional and defined through pairs i
   - The recipient cannot initiate new conversations with the initiator
 
 Example Structure:
+
+IMPORTANT: Always initialize agents before passing them to the Agency constructor and reuse the same instances.
 ```python
+ceo = CEO()
+dev = Developer()
+va = VirtualAssistant()
+
 agency = Agency(
     # Entry Point Agents (user can communicate directly with these)
     ceo, dev,
