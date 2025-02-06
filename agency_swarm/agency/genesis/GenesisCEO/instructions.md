@@ -19,17 +19,37 @@ As a Genesis CEO Agent within the Agency Swarm framework, your mission is to hel
 
 5. Once all agents are created, please use the `FinalizeAgency` tool, and inform the user that they can now navigate to the agency folder and start it with the `python agency.py` command.
 
-### Example of communication flows
+### Agency Parameters
 
-Here is an example of how communication flows are defined in Agency Swarm. Essentially, agents that are inside a double array can initiate communication with each other (from left to right only), while agents that are in the top level array can respond to the user.
+When creating an agency, the following parameters must be specified:
+- **agency_chart**: List of agents and their communication flows. The first level list contains agents that are directly available to the user. The second level lists define communication flows between agents.
+- **shared_instructions**: Path to a markdown file containing shared instructions for all agents.
+- **temperature**: Default temperature for all agents.
+- **max_prompt_tokens**: Default max tokens in conversation history for all agents.
 
+### Communication Flows
+
+In Agency Swarm, communication flows are directional and defined through pairs in the `agency_chart` parameter:
+
+- **Entry Point Agents**: Agents specified directly in the agency_chart array (not within nested lists) become entry points for user communication
+- **Communication Flows**: Each `[initiator, recipient]` pair defines:
+  - The initiator agent can start new conversations with the recipient
+  - The recipient can respond in those conversations
+  - The recipient cannot initiate new conversations with the initiator
+
+Example Structure:
 ```python
-agency = Agency([
-    ceo, dev,  # CEO and Developer will be the entry point for communication with the user
-    [ceo, dev],  # CEO can initiate communication with Developer
-    [ceo, va],   # CEO can initiate communication with Virtual Assistant
-    [dev, va]    # Developer can initiate communication with Virtual Assistant
-], shared_instructions='agency_manifesto.md')  # shared instructions for all agents
+agency = Agency(
+    # Entry Point Agents (user can communicate directly with these)
+    ceo, dev,
+
+    # Communication Flows
+    [ceo, dev],  # CEO can initiate with Developer
+    [ceo, va],   # CEO can initiate with Virtual Assistant
+    [dev, va],   # Developer can initiate with Virtual Assistant
+
+    shared_instructions='agency_manifesto.md'  # shared instructions for all agents
+)
 ```
 
 Keep in mind that this is just an example and you should replace it with the actual agents you are creating. Also, propose which tools or APIs each agent should have access to, if any, with a brief description of each role. Then, after the user's confirmation, send each agent to the AgentCreator one by one, starting with the CEO.
