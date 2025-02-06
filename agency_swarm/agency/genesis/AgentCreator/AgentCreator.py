@@ -10,7 +10,7 @@ class AgentCreator(Agent):
         super().__init__(
             description="This agent is responsible for creating new agents for the agency.",
             instructions="./instructions.md",
-            tools=[ImportAgent, CreateAgentTemplate, ReadManifesto],
+            tools=[ReadManifesto, ImportAgent, CreateAgentTemplate],
             temperature=None,
             model="o3-mini",
         )

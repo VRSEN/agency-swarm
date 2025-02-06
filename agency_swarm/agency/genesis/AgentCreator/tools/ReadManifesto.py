@@ -20,16 +20,20 @@ class ReadManifesto(BaseTool):
         if not self._shared_state.get("default_folder"):
             self._shared_state.set("default_folder", os.getcwd())
 
-        if not self._shared_state.get("agency_path") and not self.agency_name:
+        if self._shared_state.get("agency_path"):
+            target_path = self._shared_state.get("agency_path")
+        elif self.agency_name:
+            target_path_candidate = f"./{self.agency_name}"
+            if os.path.isdir(target_path_candidate):
+                target_path = target_path_candidate
+            else:
+                raise FileNotFoundError(
+                    f"Directory {target_path_candidate} does not exist. Please create the agency folder or specify the correct agency_path in shared_state."
+                )
+        else:
             raise ValueError(
-                "Please specify the agency name. Ask user for clarification if needed."
+                "Please specify the agency name or set the agency_path in shared_state."
             )
-
-        target_path = (
-            self.agency_name
-            and f"./{self.agency_name}"
-            or self._shared_state.get("agency_path")
-        )
 
         with change_directory(target_path):
             with open("agency_manifesto.md", "r") as f:
