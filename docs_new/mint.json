@@ -101,7 +101,15 @@
             "/core-framework/tools/openapi-schemas"
           ]
         },
-        "core-framework/agents",
+        {
+          "group": "Agents",
+          "icon": "user",
+          "pages": [
+            "core-framework/agents/overview",
+            "core-framework/agents/built-in-tools",
+            "core-framework/agents/advanced-parameters"
+          ]
+        },
         "core-framework/agencies",
         "core-framework/state-management"
       ]
