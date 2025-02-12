@@ -68,7 +68,7 @@ ceo = Agent(name="ceo",
             # model = 'perplexity/llama-3-8b-instruct'
             # model = 'anthropic/claude-3-5-sonnet-20240620'
             # model = 'groq/mixtral-8x7b-32768'
-            # model = You can visit our website https://aimlapi.com and choose from over 200 models to suit your preferences.
+            # model = 'aiml/qwen-turbo'
             # model="gpt-4o",
             files_folder="path/to/your/files"
             )
