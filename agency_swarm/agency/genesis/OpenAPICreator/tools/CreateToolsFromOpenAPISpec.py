@@ -4,7 +4,11 @@ import os
 from pydantic import Field, field_validator, model_validator
 
 from agency_swarm import BaseTool
-from agency_swarm.agency.genesis.util import check_agency_path, check_agent_path
+from agency_swarm.agency.genesis.util import (
+    change_directory,
+    check_agency_path,
+    check_agent_path,
+)
 from agency_swarm.tools import ToolFactory
 from agency_swarm.util.openapi import validate_openapi_spec
 
@@ -34,41 +38,33 @@ class CreateToolsFromOpenAPISpec(BaseTool):
     )
 
     def run(self):
-        os.chdir(self._shared_state.get("agency_path"))
+        with change_directory(self._shared_state.get("agency_path")):
+            with change_directory(self.agent_name):
+                try:
+                    tools = ToolFactory.from_openapi_schema(self.openapi_spec)
+                except Exception as e:
+                    raise ValueError(f"Error creating tools from OpenAPI Spec: {e}")
 
-        os.chdir(self.agent_name)
+                if len(tools) == 0:
+                    return "No tools created. Please check the OpenAPI specification."
 
-        try:
-            try:
-                tools = ToolFactory.from_openapi_schema(self.openapi_spec)
-            except Exception as e:
-                raise ValueError(f"Error creating tools from OpenAPI Spec: {e}")
+                # save openapi spec
+                folder_path = "./" + self.agent_name + "/"
+                with change_directory(folder_path):
+                    api_name = json.loads(self.openapi_spec)["info"]["title"]
 
-            if len(tools) == 0:
-                return "No tools created. Please check the OpenAPI specification."
+                    api_name = api_name.replace("API", "Api").replace(" ", "")
 
-            tool_names = [tool.__name__ for tool in tools]
+                    api_name = "".join(
+                        ["_" + i.lower() if i.isupper() else i for i in api_name]
+                    ).lstrip("_")
 
-            # save openapi spec
-            folder_path = "./" + self.agent_name + "/"
-            os.chdir(folder_path)
+                    with open("schemas/" + api_name + ".json", "w") as f:
+                        f.write(self.openapi_spec)
 
-            api_name = json.loads(self.openapi_spec)["info"]["title"]
-
-            api_name = api_name.replace("API", "Api").replace(" ", "")
-
-            api_name = "".join(
-                ["_" + i.lower() if i.isupper() else i for i in api_name]
-            ).lstrip("_")
-
-            with open("schemas/" + api_name + ".json", "w") as f:
-                f.write(self.openapi_spec)
-
-            return "Successfully added OpenAPI Schema to " + self._shared_state.get(
-                "agent_name"
-            )
-        finally:
-            os.chdir(self._shared_state.get("default_folder"))
+        return "Successfully added OpenAPI Schema to " + self._shared_state.get(
+            "agent_name"
+        )
 
     @field_validator("openapi_spec", mode="before")
     @classmethod
@@ -84,5 +80,4 @@ class CreateToolsFromOpenAPISpec(BaseTool):
     @model_validator(mode="after")
     def validate_agent_name(self):
         check_agency_path(self)
-
         check_agent_path(self)

@@ -1,5 +1,4 @@
 from agency_swarm import Agency
-from agency_swarm.util.helpers import get_available_agent_descriptions
 
 from .AgentCreator import AgentCreator
 from .GenesisCEO import GenesisCEO
@@ -8,21 +7,24 @@ from .ToolCreator import ToolCreator
 
 
 class GenesisAgency(Agency):
-    def __init__(self, with_browsing=True, **kwargs):
+    def __init__(self, with_browsing=True, model="o3-mini", **kwargs):
+        if "temperature" not in kwargs:
+            kwargs["temperature"] = None
+
         if "max_prompt_tokens" not in kwargs:
             kwargs["max_prompt_tokens"] = 25000
 
         if "agency_chart" not in kwargs:
-            agent_creator = AgentCreator()
-            genesis_ceo = GenesisCEO()
-            tool_creator = ToolCreator()
-            openapi_creator = OpenAPICreator()
+            agent_creator = AgentCreator(model=model)
+            genesis_ceo = GenesisCEO(model=model)
+            tool_creator = ToolCreator(model=model)
+            openapi_creator = OpenAPICreator(model=model)
             kwargs["agency_chart"] = [
                 genesis_ceo,
                 tool_creator,
                 agent_creator,
                 [genesis_ceo, agent_creator],
-                [agent_creator, tool_creator],
+                [genesis_ceo, tool_creator],
             ]
 
             if with_browsing:

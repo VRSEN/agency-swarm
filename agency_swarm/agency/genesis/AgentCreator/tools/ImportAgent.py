@@ -3,6 +3,7 @@ import os
 from pydantic import Field, field_validator
 
 from agency_swarm import BaseTool
+from agency_swarm.agency.genesis.util import change_directory
 from agency_swarm.util.cli import import_agent
 from agency_swarm.util.helpers import (
     get_available_agent_descriptions,
@@ -28,22 +29,18 @@ class ImportAgent(BaseTool):
         if not self._shared_state.get("agency_path") and not self.agency_path:
             return "Error: You must set the agency_path."
 
-        if self._shared_state.get("agency_path"):
-            os.chdir(self._shared_state.get("agency_path"))
-        else:
-            os.chdir(self.agency_path)
+        target_path = self._shared_state.get("agency_path") or self.agency_path
 
-        import_agent(self.agent_name, "./")
+        with change_directory(target_path):
+            import_agent(self.agent_name, "./")
 
-        # add agent on second line to agency.py
-        with open("agency.py", "r") as f:
-            lines = f.readlines()
-            lines.insert(1, f"from {self.agent_name} import {self.agent_name}\n")
+            # add agent on second line to agency.py
+            with open("agency.py", "r") as f:
+                lines = f.readlines()
+                lines.insert(1, f"from {self.agent_name} import {self.agent_name}\n")
 
-        with open("agency.py", "w") as f:
-            f.writelines(lines)
-
-        os.chdir(self._shared_state.get("default_folder"))
+            with open("agency.py", "w") as f:
+                f.writelines(lines)
 
         return (
             f"Success. {self.agent_name} has been imported. "

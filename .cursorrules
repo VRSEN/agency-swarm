@@ -110,7 +110,7 @@ load_dotenv() # always load the environment variables
 
 #### 2. Define Your Tool Class and Docstring
 
-Create a new class that inherits from `BaseTool`. Write a clear docstring describing the tool’s purpose. This docstring is crucial as it helps agents understand how to use the tool. `BaseTool` extends `BaseModel` from pydantic.
+Create a new class that inherits from `BaseTool`. Write a clear docstring describing the tool's purpose. This docstring is crucial as it helps agents understand how to use the tool. `BaseTool` extends `BaseModel` from pydantic.
 
 ```python
 class MyCustomTool(BaseTool):
@@ -254,8 +254,7 @@ Each agent has it's own unique role and functionality and is designed to perform
    2. Step 2
    3. Step 3
    ```
-
-   Be conscience when creating the instructions, and avoid any speculation.
+   Be conscientious when creating the instructions, and avoid any speculation.
 
 #### Code Interpreter and FileSearch Options
 
@@ -297,10 +296,10 @@ Agencies are collections of agents that work together to achieve a common goal. 
    va = VirtualAssistant()
 
    agency = Agency([
-           ceo,  # CEO will be the entry point for communication with the user
-           [ceo, dev],  # CEO can initiate communication with Developer
-           [ceo, va],   # CEO can initiate communication with Virtual Assistant
-           [dev, va]    # Developer can initiate communication with Virtual Assistant
+           ceo, dev,  # Entry Point Agents
+           [ceo, dev],  # CEO can initiate with Developer
+           [ceo, va],   # CEO can initiate with Virtual Assistant
+           [dev, va]    # Developer can initiate with Virtual Assistant
            ],
            shared_instructions='agency_manifesto.md', #shared instructions for all agents
            temperature=0.5, # default temperature for all agents
@@ -313,9 +312,19 @@ Agencies are collections of agents that work together to achieve a common goal. 
 
    #### Communication Flows
 
-   In Agency Swarm, communication flows are directional, meaning they are established from left to right in the `agency_chart` definition. For instance, in the example above, the CEO can initiate a chat with the developer (dev), and the developer can respond in this chat. However, the developer cannot initiate a chat with the CEO. The developer can initiate a chat with the virtual assistant (va) and assign new tasks.
+   In Agency Swarm, communication flows are directional and defined through pairs in the `agency_chart` parameter:
 
-   To allow agents to communicate with each other, simply add them in the second level list inside the `agency_chart` like this: `[ceo, dev], [ceo, va], [dev, va]`. The agent on the left will be able to communicate with the agent on the right.
+   - **Entry Point Agents**: Agents specified directly in the agency_chart array (not within nested lists) become entry points for user communication
+   - **Communication Flows**: Each `[initiator, recipient]` pair defines:
+   - The initiator agent can start new conversations with the recipient
+   - The recipient can respond in those conversations
+   - The recipient cannot initiate new conversations with the initiator
+
+   Key principles:
+   1. User can only communicate directly with Entry Point Agents
+   2. Initiator agents (left side) can start new threads with recipients (right side)
+   3. Recipients can only respond to existing threads from initiators.
+
 
 2. **Define the `agency_manifesto.md` file.**
 
