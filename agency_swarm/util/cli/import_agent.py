@@ -8,7 +8,7 @@ def import_agent(agent_name, destination):
     Copies the specified agent files from the package to a specified destination directory,
     preserving the folder structure.
     """
-    package = 'agency_swarm.agents'
+    package = "agency_swarm.agents"
 
     # Construct the destination path for the agent
     agent_destination = os.path.join(destination, agent_name)
@@ -31,4 +31,6 @@ def import_agent(agent_name, destination):
 
         print(f"Agent '{agent_name}' copied to: {agent_destination}")
     except Exception as e:
-        print(f"Error importing agent '{agent_name}'. Most likely the agent name is wrong. Error: {e}")
+        print(
+            f"Error importing agent '{agent_name}'. Most likely the agent name is wrong. Error: {e}"
+        )

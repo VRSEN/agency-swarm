@@ -1,20 +1,33 @@
-from openai import OpenAI
 from typing import Callable
-from pydantic import Field, BaseModel
+
+from openai import OpenAI
+from pydantic import BaseModel, Field
+
 from agency_swarm.util.oai import get_openai_client
+
 
 class Validator(BaseModel):
     """
     Validate if an attribute is correct and if not,
     return a new value with an error message
     """
-    reason: str = Field(..., description="Step-by-step reasoning why the attribute could be valid or not with a conclussion at the end.")
-    is_valid: bool = Field(..., description="Whether the attribute is valid based on the requirements.")
-    fixed_value: str = Field(..., description="If the attribute is not valid, suggest a new value for the attribute. Otherwise, leave it empty.")
+
+    reason: str = Field(
+        ...,
+        description="Step-by-step reasoning why the attribute could be valid or not with a conclussion at the end.",
+    )
+    is_valid: bool = Field(
+        ..., description="Whether the attribute is valid based on the requirements."
+    )
+    fixed_value: str = Field(
+        ...,
+        description="If the attribute is not valid, suggest a new value for the attribute. Otherwise, leave it empty.",
+    )
+
 
 def llm_validator(
     statement: str,
-    client: OpenAI=None,
+    client: OpenAI = None,
     allow_override: bool = False,
     model: str = "gpt-4o-mini",
     temperature: float = 0,

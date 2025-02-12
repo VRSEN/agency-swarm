@@ -1,8 +1,8 @@
+import os
+import threading
+
 import httpx
 import openai
-import threading
-import os
-
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -16,13 +16,17 @@ def get_openai_client():
     with client_lock:
         if client is None:
             # Check if the API key is set
-            api_key = openai.api_key or os.getenv('OPENAI_API_KEY')
+            api_key = openai.api_key or os.getenv("OPENAI_API_KEY")
             if api_key is None:
-                raise ValueError("OpenAI API key is not set. Please set it using set_openai_key.")
-            client = openai.OpenAI(api_key=api_key,
-                                   timeout=httpx.Timeout(60.0, read=40, connect=5.0),
-                                   max_retries=10,
-                                   default_headers={"OpenAI-Beta": "assistants=v2"})
+                raise ValueError(
+                    "OpenAI API key is not set. Please set it using set_openai_key."
+                )
+            client = openai.OpenAI(
+                api_key=api_key,
+                timeout=httpx.Timeout(60, read=300, connect=5.0),
+                max_retries=10,
+                default_headers={"OpenAI-Beta": "assistants=v2"},
+            )
     return client
 
 

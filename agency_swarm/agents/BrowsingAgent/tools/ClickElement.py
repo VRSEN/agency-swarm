@@ -4,6 +4,7 @@ from pydantic import Field
 from selenium.webdriver.common.by import By
 
 from agency_swarm.tools import BaseTool
+
 from .util import get_web_driver, set_web_driver
 from .util.highlights import remove_highlight_and_labels
 
@@ -14,6 +15,7 @@ class ClickElement(BaseTool):
 
     Before using this tool make sure to highlight clickable elements on the page by outputting '[highlight clickable elements]' message.
     """
+
     element_number: int = Field(
         ...,
         description="The number of the element to click on. The element numbers are displayed on the page after highlighting elements.",
@@ -22,10 +24,12 @@ class ClickElement(BaseTool):
     def run(self):
         wd = get_web_driver()
 
-        if 'button' not in self._shared_state.get("elements_highlighted", ""):
-            raise ValueError("Please highlight clickable elements on the page first by outputting '[highlight clickable elements]' message. You must output just the message without calling the tool first, so the user can respond with the screenshot.")
+        if "button" not in self._shared_state.get("elements_highlighted", ""):
+            raise ValueError(
+                "Please highlight clickable elements on the page first by outputting '[highlight clickable elements]' message. You must output just the message without calling the tool first, so the user can respond with the screenshot."
+            )
 
-        all_elements = wd.find_elements(By.CSS_SELECTOR, '.highlighted-element')
+        all_elements = wd.find_elements(By.CSS_SELECTOR, ".highlighted-element")
 
         # iterate through all elements with a number in the text
         try:
@@ -36,7 +40,9 @@ class ClickElement(BaseTool):
                 all_elements[self.element_number - 1].click()
             except Exception as e:
                 if "element click intercepted" in str(e).lower():
-                    wd.execute_script("arguments[0].click();", all_elements[self.element_number - 1])
+                    wd.execute_script(
+                        "arguments[0].click();", all_elements[self.element_number - 1]
+                    )
                 else:
                     raise e
 

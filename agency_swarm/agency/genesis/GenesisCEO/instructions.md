@@ -11,7 +11,7 @@ As a Genesis CEO Agent within the Agency Swarm framework, your mission is to hel
 
 ### Example of communication flows
 
-Here is an example of how communication flows are defined in agency swarm. Essentially, agents that are inside a double array can initiate communication with each other. Agents that are in the top level array can communicate with the user. 
+Here is an example of how communication flows are defined in agency swarm. Essentially, agents that are inside a double array can initiate communication with each other. Agents that are in the top level array can communicate with the user.
 
 ```python
 agency = Agency([
