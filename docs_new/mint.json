@@ -145,10 +145,6 @@
       ]
     },
     {
-      "group": "API Reference",
-      "pages": ["api"]
-    },
-    {
       "group": "Contributing",
       "pages": ["contributing/contributing"]
     },

@@ -6,10 +6,6 @@ icon: "code-fork"
 
 We welcome contributions to Agency Swarm! By contributing, you help improve the framework for everyone. Here's how you can get involved:
 
-<Info>
-  Your contributions enable the development of a more robust and versatile Agency Swarm, benefiting all users.
-</Info>
-
 ## Setting Up Your Development Environment
 
 Follow these steps to set up your local development environment:
@@ -63,9 +59,9 @@ pre-commit install
 
 ## Running Tests
 
-<Note>
+<Tip>
   Testing ensures that your contributions work as intended and do not break existing functionality.
-</Note>
+</Tip>
 
 <Steps titleSize="h3">
 
@@ -98,106 +94,38 @@ pytest --cov=agency_swarm tests/
 
 </Steps>
 
-## Contributing Agents and Tools
-
-When contributing new agents or tools, adhere to the following guidelines to maintain consistency within the framework:
-
-<Steps titleSize="h3">
-
-<Step title="Agents" icon="user-secret" iconType="solid">
-  Place new agents in the appropriate category directory.
-</Step>
-
-<Step title="Tools" icon="wrench" iconType="solid">
-  Add new tools to the relevant category directory.
-</Step>
-
-</Steps>
-
-Ensure that each tool includes appropriate tests as outlined in the **Adding Tests** section.
-
-## Adding Tests
-
-<Note>
-  Thorough testing ensures that your contributions are reliable and integrate seamlessly with the existing framework.
-</Note>
-
-- **Location**: Place tests in the `agency_swarm/tests/` directory, specifically within `test_tools.py` or relevant test files based on the component.
-
-<CodeBlock title="Example Test">
-  ```python
-  def test_my_custom_tool():
-      tool = MyCustomTool(example_field="test value")
-      result = tool.run()
-      assert "expected_output" in result
-  ```
-</CodeBlock>
-
-Refer to existing tests for examples and adhere to the testing conventions used throughout the project.
-
 ## Submitting Changes
-
-Follow these steps to submit your contributions:
 
 <AccordionGroup>
 
-<Accordion title="1. Fork the Repository" icon="code-fork" iconType="solid">
-  Create a fork of the Agency Swarm repository on GitHub.
-</Accordion>
+  <Accordion title="Create Branch" icon="code-branch" iconType="solid">
+    Create a branch for your work:
+    ```bash
+    git checkout -b feature/your-feature-name
+    ```
+  </Accordion>
 
-<Accordion title="2. Create a Branch" icon="code-branch" iconType="solid">
-Work on a feature branch for your changes.
+  <Accordion title="Commit Changes" icon="git" iconType="solid">
+    Commit your updates:
+    ```bash
+    git add .
+    git commit -m "Add [feature]: Description"
+    ```
+  </Accordion>
 
-```bash
-git checkout -b feature/your-feature-name
-```
+  <Accordion title="Push Branch" icon="code-fork" iconType="solid">
+    Push your branch:
+    ```bash
+    git push origin feature/your-feature-name
+    ```
+  </Accordion>
 
-</Accordion>
-
-<Accordion title="3. Commit Your Changes" icon="git" iconType="solid">
-Commit your changes with clear and descriptive messages.
-
-```bash
-git add .
-git commit -m "Add [feature]: Description of the feature"
-```
-
-</Accordion>
-
-<Accordion title="4. Push to Your Fork" icon="code-fork" iconType="solid">
-Push your changes to your forked repository.
-
-```bash
-git push origin feature/your-feature-name
-```
-
-</Accordion>
-
-<Accordion title="5. Submit a Pull Request" icon="paper-plane" iconType="solid">
-Describe your changes and submit a pull request for review.
-
-```markdown
-- Provide a clear title and description for your pull request.
-- Reference any related issues.
-- Ensure all tests pass and coverage remains adequate.
-```
-
-</Accordion>
+  <Accordion title="Open PR" icon="paper-plane" iconType="solid">
+    Open a pull request on GitHub:
+    ```markdown
+    - Provide a concise title and description.
+    - Reference related issues.
+    ```
+  </Accordion>
 
 </AccordionGroup>
-
-<Check>
-
-**Guidelines:**
-
-- **Code Quality**: Follow PEP 8 style guidelines for Python code.
-
-- **Documentation**: Update or add documentation for your contributions to help others understand your work.
-
-- **Testing**: Ensure all new and existing tests pass before submitting your pull request.
-
-- **Commit Messages**: Write clear and descriptive commit messages.
-
-- **Branching**: Use meaningful branch names that reflect the purpose of the changes.
-
-</Check>
