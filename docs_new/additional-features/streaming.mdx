@@ -1,20 +1,16 @@
 ---
 title: "Streaming"
-description: "Implementing streaming responses in Agency Swarm."
+description: "Implementing streaming in Agency Swarm."
 icon: "ellipsis"
 ---
 
-Agency Swarm supports streaming responses from language models, providing real-time feedback during task execution. Streaming enables agents to process and respond to inputs immediately, creating a more interactive experience. You can customize how streaming outputs are handled and presented through event handlers.
+Streaming enables agents to return outputs immidiately, significantly improving user experience. Instead of waiting for the entire response to be generated, the user can see the response being generated in real-time.
 
 ## Streaming Responses
 
-To stream the conversation between agents, you can use the `get_completion_stream` method with your event handler. The process follows a similar pattern to the [official OpenAI documentation](https://platform.openai.com/docs/api-reference/assistants-streaming).
+To stream the conversation between agents, you can use the `get_completion_stream` method with your own event handler. The process follows a similar pattern to the [official OpenAI documentation](https://platform.openai.com/docs/api-reference/assistants-streaming).
 
-<Note>
-  The main difference is that you must extend the `AgencyEventHandler` class, which provides two additional properties:
-  `agent_name` and `recipient_agent_name`. These help identify the agents communicating with each other (see the
-  `on_text_created` method below).
-</Note>
+The only difference is that you must extend the `AgencyEventHandler` class, which has 2 additional properties: `agent_name` and `recipient_agent_name`, to get the names of the agents communicating with each other. (See the `on_text_created` below.)
 
 ```python
 from typing_extensions import override
