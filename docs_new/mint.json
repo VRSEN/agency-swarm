@@ -38,7 +38,7 @@
     "url": "https://github.com/VRSEN/agency-swarm"
   },
   "primaryTab": {
-    "name": "Docs"
+    "name": "Framework"
   },
   "tabs": [
     {
@@ -107,10 +107,19 @@
           "pages": [
             "core-framework/agents/overview",
             "core-framework/agents/built-in-tools",
-            "core-framework/agents/advanced-parameters"
+            "core-framework/agents/advanced-configuration"
           ]
         },
-        "core-framework/agencies",
+        {
+          "group": "Agencies",
+          "icon": "sitemap",
+          "pages": [
+            "core-framework/agencies/overview",
+            "core-framework/agencies/communication-flows",
+            "core-framework/agencies/agency-parameters",
+            "core-framework/agencies/running-agency"
+          ]
+        },
         "core-framework/state-management"
       ]
     },

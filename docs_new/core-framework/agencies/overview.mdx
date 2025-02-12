@@ -1,0 +1,77 @@
+---
+title: "Overview"
+description: "Understanding agencies in Agency Swarm."
+icon: "globe"
+---
+
+Agency in Agency Swarm is a collection of agents that can collaborate with one another.
+
+## Benefits of Using an Agency
+
+Utilizing an Agency consisting of multiple agents offers several benefits:
+
+<CardGroup cols={3}>
+<Card title="Fewer Hallucinations" icon="bug" iconType="solid">
+  Agents within an agency can supervise each other, reducing mistakes and handling unexpected scenarios more effectively.
+</Card>
+
+<Card title="Complex Tasks" icon="diagram-project" iconType="solid">
+  Adding more agents allows for longer sequences of actions, enabling the completion of more complex tasks before delivering results to the user.
+</Card>
+
+<Card title="Scalability" icon="arrow-up-right-dots" iconType="solid">
+  Agencies allow you to scale your solutions seamlessly by adding more agents, as the complexity of your system grows.
+</Card>
+</CardGroup>
+
+<Tip>
+  Start with a minimal number of agents. Fine-tune them to ensure they function correctly before adding more.
+  Introducing too many agents initially can make debugging and understanding interactions challenging.
+</Tip>
+
+
+
+## Agency Parameters
+
+Overview of parameters in `Agency` class:
+
+| Name | Parameter | Description |
+|------|-----------|-------------|
+| Agency Chart | `agency_chart` | A list that defines the hierarchy and interaction patterns between agents. It specifies:<br/>1. Individual agents that can interact with users<br/>2. Agent pairs that can communicate with each other<br/><br/>Example: `[agent1, [agent1, agent2]]`<br/>- `agent1` has user interaction permissions<br/>- `agent1` can communicate with `agent2` |
+| Shared Instructions *(optional)* | `shared_instructions` | Path to a file containing instructions shared across all agents. Can be a relative path from the agency's folder or an absolute path. Default: empty string |
+| Shared Files *(optional)* | `shared_files` | Path to a folder or list of folders containing files accessible by all agents. These files are added to each agent's files folder. Default: `None` |
+| Async Mode *(optional)* | `async_mode` | Specifies the asynchronous processing mode. Options:<br/>- `"threading"`: All sub-agents run in separate threads<br/>- `"tools_threading"`: All tools run in separate threads, but agents do not<br/>Default: `None` |
+| Settings Path *(optional)* | `settings_path` | Path to the JSON settings file for the agency. If file doesn't exist, it will be created. Default: `"./settings.json"` |
+| Settings Callbacks *(optional)* | `settings_callbacks` | Dictionary containing functions to load and save settings. Must include both `"load"` and `"save"` functions. Both functions must be defined. Default: `None` |
+| Threads Callbacks *(optional)* | `threads_callbacks` | Dictionary containing functions to load and save threads. Must include both `"load"` and `"save"` functions. Both functions must be defined. Default: `None` |
+| Temperature *(optional)* | `temperature` | Controls response randomness (0.0 to 1.0). Agent-specific values override this. Lower values make responses more focused and deterministic. Default: `0.3` |
+| Top P *(optional)* | `top_p` | Alternative to temperature for controlling response randomness (0.0 to 1.0). Agent-specific values override this. Default: `1.0` |
+| Max Prompt Tokens *(optional)* | `max_prompt_tokens` | Maximum tokens allowed in the prompt for each agent. Agent-specific values override this. Default: `None` |
+| Max Completion Tokens *(optional)* | `max_completion_tokens` | Maximum tokens allowed in the completion for each agent. Agent-specific values override this. Default: `None` |
+| Truncation Strategy *(optional)* | `truncation_strategy` | Dictionary configuring how to handle token limits. Agent-specific values override this. See [OpenAI documentation](https://platform.openai.com/docs/api-reference/runs/createRun#runs-createrun-truncation_strategy) for details. Default: `None` |
+
+## Example
+
+Quick example of how to create an agency with 3 agents:
+
+```python
+from agency_swarm import Agency
+from .ceo import CEO
+from .developer import Developer
+from .virtual_assistant import VirtualAssistant
+
+ceo = CEO()
+dev = Developer()
+va = VirtualAssistant()
+
+agency = Agency([
+    ceo, dev  # CEO and Developer will be the entry point for communication with the user
+    [ceo, dev],  # CEO can initiate communication with Developer
+    [ceo, va],   # CEO can initiate communication with Virtual Assistant
+    [dev, va]    # Developer can initiate communication with Virtual Assistant
+])
+```
+
+## Next Steps
+
+Make sure to learn more about [Communication Flows](/core-framework/agencies/communication-flows), [Agency Parameters](/core-framework/agencies/agency-parameters), and [Running an Agency](/core-framework/agencies/running-agency).
