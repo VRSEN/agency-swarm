@@ -45,6 +45,23 @@ pip install -r requirements-dev.txt
 
 </Step>
 
+<Step title="Install Documentation Tools" icon="book" iconType="solid">
+To work on the documentation, you'll need Mintlify CLI:
+
+```bash
+npm i -g mintlify
+```
+
+To preview documentation changes locally:
+
+```bash
+cd docs_new
+mintlify dev
+```
+
+The documentation will be available at http://localhost:3000
+</Step>
+
 <Step title="Install Pre-Commit Hooks" icon="check" iconType="solid">
 Install pre-commit hooks for code quality checks.
 
