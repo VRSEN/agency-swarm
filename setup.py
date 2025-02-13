@@ -6,7 +6,7 @@ with open("requirements.txt") as f:
 
 setup(
     name="agency-swarm",
-    version="0.4.1",
+    version="0.4.4",
     author="VRSEN",
     author_email="me@vrsen.ai",
     description="An opensource agent orchestration framework built on top of the latest OpenAI Assistants API.",
@@ -23,5 +23,5 @@ setup(
     entry_points={
         "console_scripts": ["agency-swarm=agency_swarm.cli:main"],
     },
-    python_requires=">=3.7",
+    python_requires=">=3.10",
 )
