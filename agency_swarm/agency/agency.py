@@ -1378,8 +1378,11 @@ class Agency:
             agent.delete()
     
     def _init_file(self, file_path):
-        with open(file_path, "w") as f:
-            pass
+        try:
+            with open(file_path, "w") as f:
+                pass
+        except Exception as e:
+            print(f"Creating {file_path}...")
     def _init_dir(self, dir_path):
         import shutil
         try:
@@ -1397,12 +1400,13 @@ class Agency:
     error_path = os.path.join(files_path, "error.json")
 
     def init_files(self):
+        self._init_dir(self.files_path)
+        self._init_dir(self.contexts_path)
         self._init_file(self.error_path)
         self._init_file(self.completed_step_path)
         self._init_file(self.completed_subtask_path)
         self._init_file(self.completed_task_path)
         self._init_file(self.context_index_path)
-        self._init_dir(self.contexts_path)
 
     def create_cap_group_agent_threads(self, cap_group_agents: Dict[str, List]):
         capgroup_thread = {}
