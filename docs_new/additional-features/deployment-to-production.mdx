@@ -3,7 +3,7 @@ title: "Deployment to Production"
 description: "Step-by-step guide for deploying your agency in a production environment."
 icon: "rocket-launch"
 ---
-To deploy your agency to production, you usually need to:
+To deploy your agency to production, typically the process is as follows:
 1. **Dynamically Load Conversation Threads**: Required to continue conversations from where they left off
 2. **Dynamically Load Assistant Settings**: Needed to make changes to your agent's settings persist even after redeployment
 3. **Deploy Agents and Tools on a Production Server**: Decide whether to deploy agents and tools together or separately
@@ -110,17 +110,17 @@ Depending on your needs, you can deploy your agents and tools together or separa
 
 </Accordion>
 
-Pick the option that best fits your needs:
-
 <Tabs>
 
 <Tab title="Option 1: Agents and Tools Together" defaultOpen={true}>
 
-This is the simplest deployment method. You can use the official Railway template to get your agency up and running quickly:
+This is the simplest deployment method. You can use the official Railway template to get your agency up and running quickly.
+
+Watch the video below for a detailed walkthrough:
+<iframe width="560" height="315" src="https://www.youtube.com/embed/53_e3lmk6Mo?si=kASCTtxfa6ljqGNy&amp;start=806" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
 
 <Card
   title="Railway Deployment Template"
-  color="#F3A78B"
   href="https://github.com/VRSEN/agency-swarm-api-railway-template"
   icon="train"
   iconType="duotone"
@@ -128,19 +128,9 @@ This is the simplest deployment method. You can use the official Railway templat
   Click here to open the template and follow the instructions provided.
 </Card>
 
-For detailed instructions, visit the link above and follow the instructions provided. A high-level overview of the steps:
-1. Clone the Template and Add Your Agency Code
-2. Configure Environment Variables
-3. Generate and Test `settings.json`
-4. Configure Railway and Deploy
-
-Watch the video below for a more detailed walkthrough:
-<iframe width="560" height="315" src="https://www.youtube.com/embed/53_e3lmk6Mo?si=kASCTtxfa6ljqGNy&amp;start=806" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
-
 <Note>
   The template includes a Gradio interface and REST API endpoints with proper authentication.
 </Note>
-
 
 </Tab>
 
@@ -151,7 +141,6 @@ Instead of deploying agents and tools together, you can host your tools separate
 You can use our Firebase template:
 <Card
   title="Firebase Deployment Template"
-  color="#F3A78B"
   href="https://github.com/vrsen-ai-solutions/agency-swarm-tools-template"
   icon="fire"
   iconType="duotone"
@@ -159,14 +148,8 @@ You can use our Firebase template:
   Click here to open the template and follow the instructions provided.
 </Card>
 
-Key steps include:
-1. Click "Use this template" and add your tools code in the `functions/tools/` folder
-2. Add yout project ID to the `.firebaserc` file
-3. Add `GOOGLE_CLOUD_PROD_CREDENTIALS` as a secret in the repository settings
-4. Your next push to the main branch will automatically deploy your tools to Firebase
-
 <Note>
-  When deploying tools separately, make sure there is proper authentication and secure communication between your agents and the tool APIs.
+  When deploying tools separately, shared state between calls will not be preserved.
 </Note>
 
 </Tab>
