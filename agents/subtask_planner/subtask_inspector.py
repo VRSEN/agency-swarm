@@ -34,7 +34,7 @@ _instruction = f"""
 输入格式为:
 {_input_format}
 
-你需要通过`ReadJsonFile`从context_index.json中读取已有环境中的上下文信息
+每次得到输入时，你都需要通过`ReadJsonFile`从completed_tasks.json读取已经完成的任务
 
 首先，你需要确保**输入中的 <task_graph> 是JSON格式**；
 
