@@ -1,29 +1,69 @@
 ---
 title: "Deployment to Production"
-description: "Step-by-step guide for deploying your agency smoothly."
+description: "Step-by-step guide for deploying your agency in a production environment."
 icon: "rocket-launch"
 ---
+To deploy your agency to production, you usually need to:
+1. **Dynamically Load Conversation Threads**: Required to continue conversations from where they left off
+2. **Dynamically Load Assistant Settings**: Needed to make changes to your agent's settings persist even after redeployment
+3. **Deploy Agents and Tools on a Production Server**: Decide whether to deploy agents and tools together or separately
 
-Deploying your Agency to a production environment can seem daunting, but with the right guidance, it's a straightforward process. This comprehensive guide will walk you through the essential steps to get your agency up and running in production effectively.
+<Note>
+  This guide assumes that you have already created an agency. If you haven't, check out the [Getting Started](/welcome/installation) guide.
+</Note>
 
-## Key Steps for Deployment
+<Warning>
+  Before deploying your agency, ensure you have thoroughly tested all tools and agents in isolation and in combination. Run the test cases in each tool file and verify the agency works end-to-end using the `run_demo()` or `demo_gradio` methods.
+</Warning>
 
-1. **Dynamic Loading of Agents and Threads**: Tailor your agency's behavior based on users or sessions by dynamically loading agents and conversation threads.
-2. **Deploy Agents and Tools on a Production Server**: Choose the deployment strategy that best fits your needs, whether deploying tools together with agents or as separate services.
+<Steps>
 
-## Step 1: Dynamically Loading Agents and Threads
+<Step title="Step 1: Dynamically Load Conversation Threads" icon="message-dots">
 
-To ensure your agency is responsive to different users or sessions, dynamically load agents and their conversation histories (threads). This guarantees each user has a personalized experience and that conversations persist across sessions.
+By default, every time you create a new `Agency()`, it starts a fresh conversation thread. However, in production environments, you typically need to pick up old conversations or handle multiple users at once.
 
-### Understanding Callbacks
+<Info>
+In Agency Swarm, threads are stored in a dictionary that contains all conversation thread IDs, including those between your agents.
+</Info>
 
-Agency Swarm provides `threads_callbacks` and `settings_callbacks` to manage the retrieval and storage of agents and threads dynamically. These callbacks are functions you define to interface with your chosen database or storage system.
+Loading threads from a database before processing a new request allows you to continue conversations from where they left off, even if you are using stateless backend.
 
-### Implementing Settings Callbacks
+<Info>
+Callbacks are functions that are called by the framework automatically when Agency is initialized.
+</Info>
 
-The **settings** represent the state of all agents in your agency. By implementing settings callbacks, you can load agent configurations specific to a user or session.
+Example threads callbacks:
 
-**Example:**
+```python
+def load_threads(chat_id):
+    # Load threads from your database using the chat_id
+    threads = load_threads_from_db(chat_id)
+    return threads
+
+def save_threads(new_threads):
+    # Save updated threads to your database
+    save_threads_to_db(new_threads)
+
+agency = Agency(
+    ...
+    threads_callbacks={
+        'load': lambda: load_threads(chat_id),
+        'save': lambda new_threads: save_threads(new_threads)
+    },
+)
+```
+
+</Step>
+
+<Step title="Step 2: Dynamically Load Assistant Settings" icon="gear">
+
+By default, agencies store assistant settings (such as name, description, instructions, tools, and model) in a local file defined in the `settings_path` parameter (`settings.json` by default). While this works well for development, in production environments, we recommend storing these settings in a database to persist changes between deployments.
+
+<Info>
+Settings is a list of dictionaries that contains settings of all agents. If a change is detected in the settings, the framework will automatically save the new settings to a local file and trigger the `save` callback.
+</Info>
+
+`settings_callbacks` are executed every time agent settings are loaded or saved. Just like `threads_callbacks`, you can use it to load or save agent configurations based on your identifier (e.g. user_id):
 
 ```python
 def load_settings(user_id):
@@ -32,98 +72,106 @@ def load_settings(user_id):
     return settings
 
 def save_settings(new_settings):
-    # Save the updated settings to your database
+    # Save updated settings to your database
     save_settings_to_db(new_settings)
-```
 
-### Implementing Threads Callbacks
-
-The **threads** contain the conversation histories between agents and users. Handling threads callbacks ensures users can seamlessly continue previous conversations.
-
-**Example:**
-
-```python
-def load_threads(chat_id):
-    # Load conversation threads from your database using the chat_id
-    threads = load_threads_from_db(chat_id)
-    return threads
-
-def save_threads(new_threads):
-    # Save the updated threads to your database
-    save_threads_to_db(new_threads)
-```
-
-> **Note:** Ensure that the data structures you load and save match the expected formats used by the agency.
-
-### Putting It All Together
-
-Initialize your agency by passing the defined callbacks. Include necessary identifiers like `user_id` or `chat_id` to fetch the correct data.
-
-**Example:**
-
-```python
 agency = Agency(
-    [ceo],  # Replace 'ceo' with your primary agent(s)
-    threads_callbacks={
-        'load': lambda: load_threads(chat_id),
-        'save': lambda new_threads: save_threads(new_threads)
-    },
+    ...
     settings_callbacks={
         'load': lambda: load_settings(user_id),
         'save': lambda new_settings: save_settings(new_settings)
     },
-    settings_path='my_settings.json'  # Optional path to save settings locally
 )
 ```
 
-With this setup, your agency will dynamically load user-specific agents and conversation histories, providing a tailored experience for each user.
+<Note>
+Make sure you load and return settings and threads in the exact same format as they are saved.
+</Note>
 
-## Step 2: Deploying Agents and Tools on a Production Server
+</Step>
 
-To streamline deployment, you have multiple options depending on your application's architecture and requirements.
 
-<Accordion title="Option 1: Deploy Agents Together with Tools" defaultOpen={true}>
+<Step title="Step 3: Deploying Agents and Tools on a Production Server" icon="rocket-launch">
 
-Simplify deployment by deploying your agents and tools together using our ready-made deployment template.
+Depending on your needs, you can deploy your agents and tools together or separately:
+1. **Agents Together with Tools**: This is the simplest method: your agents execute the tools directly, in the same environment.
+2. **Tools as Separate API Endpoints**: This is the most scalable method: multiple agents can reuse the same tools, and you can scale the tools independently.
 
-#### Use the Railway Deployment Template
+<Accordion title="Comparison Table" defaultOpen={true}>
 
-Leverage our Railway deployment template to quickly deploy your agency as a web service. Railway is a platform that simplifies deploying applications without the overhead of managing servers.
+| Feature               | Agents with Tools                     | Tools as Separate API Endpoints          |
+|-----------------------|----------------------------------------|-------------------------------------------|
+| **Setup Complexity**  | "One-click" deployment       | Additional setup required          |
+| **Scalability**       | Combined agency scaling               | Independent tool/agent scaling           |
+| **Tool Reusability**  | Limited to current agency             | Cross-project utilization                 |
+| **Cost Efficiency**   | Predictable resource allocation       | Optimized resource scaling                |
+| **Security**          | Internal tool access only             | API authentication required           |
+| **Best For**          | Small to medium projects              | Large-scale or multi-project environments |
+
+</Accordion>
+
+Pick the option that best fits your needs:
+
+<Tabs>
+
+<Tab title="Option 1: Agents and Tools Together" defaultOpen={true}>
+
+This is the simplest deployment method. You can use the official Railway template to get your agency up and running quickly:
 
 <Card
-  title="API Railway Template"
+  title="Railway Deployment Template"
   color="#F3A78B"
   href="https://github.com/VRSEN/agency-swarm-api-railway-template"
   icon="train"
   iconType="duotone"
 >
-  Click here to access the template and follow the instructions to get your agency deployed.
+  Click here to open the template and follow the instructions provided.
 </Card>
 
-Find more detailed instructions in the video below:
+For detailed instructions, visit the link above and follow the instructions provided. A high-level overview of the steps:
+1. Clone the Template and Add Your Agency Code
+2. Configure Environment Variables
+3. Generate and Test `settings.json`
+4. Configure Railway and Deploy
 
+Watch the video below for a more detailed walkthrough:
 <iframe width="560" height="315" src="https://www.youtube.com/embed/53_e3lmk6Mo?si=kASCTtxfa6ljqGNy&amp;start=806" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
 
-</Accordion>
-
-<Accordion title="Option 2: Deploy Tools as Separate API Endpoints" defaultOpen={false}>
-
-Alternatively, you can deploy your tools as separate API endpoints (e.g., serverless functions) and integrate them into your agents using [OpenAPI schemas](/additional-features/openapi-schemas). This method is ideal if you plan to reuse tools across different agents or services.
-
-Deploying tools separately provides flexibility and scalability. You can deploy individual tools as serverless functions on platforms like AWS Lambda, Google Cloud Functions, or Azure Functions. This ensures on-demand scaling and cost efficiency. Alternatively, you can host your tools as custom API endpoints using frameworks like FastAPI or Flask and deploy them on platforms such as Heroku, DigitalOcean, Railway, or your own servers.
-
 <Note>
-  When deploying tools separately, ensure proper authentication and secure communication between your agents and the
-  tool APIs.
+  The template includes a Gradio interface and REST API endpoints with proper authentication.
 </Note>
 
-</Accordion>
 
-### Choosing the Right Approach
+</Tab>
 
-Consider your application's requirements when choosing a deployment strategy:
+<Tab title="Option 2: Tools as Separate API Endpoints">
 
-- **Deploying Together**: Ideal for simpler deployments where all components are managed within the same environment.
-- **Deploying Separately**: Suitable for larger, modular applications needing flexibility, independent scaling, or sharing tools among multiple agents.
+Instead of deploying agents and tools together, you can host your tools separately as serverless functions or custom APIs, then connect them to your agents using [OpenAPI schemas](/core-framework/tools/openapi-schemas). This approach is useful if you want to reuse tools across different projects or scale them independently. You can also use OpenAPI schemas to connect third-party tools to your agency.
 
-By understanding these options, you can select the deployment method that best fits your project's needs.
+You can use our Firebase template:
+<Card
+  title="Firebase Deployment Template"
+  color="#F3A78B"
+  href="https://github.com/vrsen-ai-solutions/agency-swarm-tools-template"
+  icon="fire"
+  iconType="duotone"
+>
+  Click here to open the template and follow the instructions provided.
+</Card>
+
+Key steps include:
+1. Click "Use this template" and add your tools code in the `functions/tools/` folder
+2. Add yout project ID to the `.firebaserc` file
+3. Add `GOOGLE_CLOUD_PROD_CREDENTIALS` as a secret in the repository settings
+4. Your next push to the main branch will automatically deploy your tools to Firebase
+
+<Note>
+  When deploying tools separately, make sure there is proper authentication and secure communication between your agents and the tool APIs.
+</Note>
+
+</Tab>
+
+</Tabs>
+
+</Step>
+</Steps>

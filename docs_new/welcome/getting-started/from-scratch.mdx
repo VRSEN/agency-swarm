@@ -39,13 +39,13 @@ icon: "code"
     └── AgentName/                    # Directory for the specific agent
         ├── files/                    # Directory for files that will be uploaded to openai
         ├── schemas/                  # Directory for OpenAPI schemas to be converted into tools
-        ├── tools/                    # Directory for tools to be imported by default. 
+        ├── tools/                    # Directory for tools to be imported by default.
         ├── AgentName.py              # The main agent class file
         ├── __init__.py               # Initializes the agent folder as a Python package
         └── instructions.md or .txt   # Instruction document for the agent
     ```
 
-    This structure ensures that each agent has its dedicated space with all necessary files to start working on its specific tasks.  
+    This structure ensures that each agent has its dedicated space with all necessary files to start working on its specific tasks.
 
     **Agency Folder Structure:**
 
@@ -54,10 +54,10 @@ icon: "code"
     ```
     AgencyName/
     ├── AgentName/            # Agent folder created with the command above
-    ├── AnotherAgent/         # Another agent folder 
+    ├── AnotherAgent/         # Another agent folder
     ├── agency.py             # Main file where agents are imported and the agency is defined
     ├── agency_manifesto.md   # Shared instructions and guidelines for all agents
-    ├── requirements.txt      # File listing all dependencies 
+    ├── requirements.txt      # File listing all dependencies
     └── ...
     ```
 
@@ -115,7 +115,7 @@ icon: "code"
         def __init__(self):
             super().__init__(
                 name="Developer",
-                description="Responsible for executing tasks and providing feedback.",
+                description="Responsible for executing tasks.",
                 instructions="./instructions.md",
                 files_folder="./files",
                 schemas_folder="./schemas",
@@ -131,8 +131,17 @@ icon: "code"
     **instructions.md:**
 
     ```md
-    You must execute the tasks provided by the CEO and provide feedback.
+    You are a Developer agent responsible for executing tasks.
+
+    # Role
+    You are responsible for writing clean, efficient, and reusable code.
+
+    # Process
+    1. How to handle incoming requests
+    2. When and how to use available tools
+    3. How to collaborate with other agents
     ```
+
   </Step>
 
   <Step title="Create Agency">
@@ -166,7 +175,8 @@ icon: "code"
   </Step>
 
   <Step title="Run Demo">
-    Run the demo to see your agents in action!
+
+    There are three ways to run the demo. Add one of the following lines to your `agency.py` file:
 
     **Web Interface:**
 

@@ -22,13 +22,13 @@ agent = Agent(
 ```
 
 **When to use:**
-- Data analysis.
-- Handling structured files (CSV, Excel, etc.).
-- Running standalone code snippets in a remote environment.
+- To perform data analysis and precise calculations.
+- To handle structured files (CSV, Excel, etc.).
+- To run standalone code snippets in a remote environment.
 
 ## File Search
 
-File Search allows agents to search for files in a remote file system.
+File Search allows agents to search through their knowledge base to improve their responses. This tool uses a production-ready vector database provided by OpenAI.
 
 ```python
   from agency_swarm.tools import FileSearch
@@ -36,11 +36,18 @@ File Search allows agents to search for files in a remote file system.
   agent = Agent(
       name="Researcher",
       tools=[FileSearch],
+      # Optionally, you can specify your own vector store ID to use:
+      tool_resources={
+        "file_search": {
+          "vector_store_ids": ["vs_abc123"],
+        },
+      },
+      # More details can be found here: https://platform.openai.com/docs/api-reference/vector-stores/object
       # Other agent parameters
   )
   ```
 
 **When to use:**
-- Update your agent's knowledge.
-- Allow users to ask questions about their documents.
-- Retrieve context from text files (PDF, TXT, etc.).
+- To enrich your agent's knowledge about specific topics
+- To reduce hallucinations by grounding agent responses in your documents
+- To enable users to query their own documents
