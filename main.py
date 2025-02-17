@@ -79,6 +79,7 @@ import os
 
 load_dotenv()
 set_openai_key(os.getenv('OPENAI_API_KEY'))
+user_request = os.getenv('USER_REQUEST')
 
 task_planner = task_planner.create_agent()
 scheduler = scheduler.create_agent()
@@ -320,4 +321,4 @@ cap_agents = {
 }
 
 # agency.langgraph_test(repeater=repeater, rander=rander, palindromist=palindromist)
-agency.task_planning(plan_agents=plan_agents, cap_group_agents=cap_group_agents, cap_agents=cap_agents)
+agency.task_planning(plan_agents=plan_agents, cap_group_agents=cap_group_agents, cap_agents=cap_agents, user_request=user_request)
