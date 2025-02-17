@@ -1434,7 +1434,7 @@ class Agency:
         self.init_files()
 
         print("Initialization Successful.\n")
-        text = "在华为云北京\"cn-north-4a\"可用区创建一个ecs，规格任意"
+        text = "在华为云北京\"cn-north-4a\"可用区创建一个ecs，操作系统为linux，配置为2核4g"
         # text = "在北京可用区创建三个ecs，之后删除创建时间超过5分钟的ecs"
         # text = "在华为云ecs上部署mysql和postgresql，并用sysbench测试它们的性能"
         # text = input("👤 USER: ")
