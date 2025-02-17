@@ -168,3 +168,13 @@ test_agents/
 agents/files/
 .env.example
 agents/basic_agents/api_agents/tools/RequestAPI copy.py
+log/context_20250126_022639.json
+log/context_20250126_022803.json
+log/context_20250126_023542.json
+log/context_20250126_023728.json
+log/context_20250126_024350.json
+log/context_20250126_025109.json
+log/context_20250126_025549.json
+log/context_20250126_025931.json
+log/context_20250126_030558.json
+log/context_20250126_030955.json

@@ -1,0 +1,8 @@
+{
+    "status_code": 400,
+    "reason": "Bad Request",
+    "content": {
+        "code": "VPC.0201",
+        "message": "The opt_name must be 'ntp' or 'addresstime' or 'ipv6_addresstime' or 'domainname'."
+    }
+}
