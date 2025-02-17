@@ -1422,7 +1422,7 @@ class Agency:
             cap_agent_thread[agent.name] = Thread(self.user, agent)
         return cap_agent_thread
 
-    def task_planning(self, plan_agents: Dict[str, Agent], cap_group_agents: Dict[str, List], cap_agents: Dict[str, List]):
+    def task_planning(self, plan_agents: Dict[str, Agent], cap_group_agents: Dict[str, List], cap_agents: Dict[str, List], user_request: str):
         """
         用户请求 -> 事务*n1 -> 子任务*n2 -> 步骤*n3
         事务是不可分割（指完成过程中）的任务，如安装软件等，必须完成之后才能进行其他操作；
@@ -1434,7 +1434,8 @@ class Agency:
         self.init_files()
 
         print("Initialization Successful.\n")
-        text = "在华为云北京\"cn-north-4a\"可用区创建一个ecs，规格任意"
+        text = user_request
+        #"创建一个8核32g的ECS，操作系统选择为Ubuntu 20.04。"
         # text = "在北京可用区创建三个ecs，之后删除创建时间超过5分钟的ecs"
         # text = "在华为云ecs上部署mysql和postgresql，并用sysbench测试它们的性能"
         # text = input("👤 USER: ")
