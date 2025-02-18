@@ -18,21 +18,21 @@ agent = Agent(name='MyAgent', parallel_tool_calls=False)
 
 ### File Search Configuration
 
-File search configuration for the agent, as described in the [OpenAI documentation](https://platform.openai.com/docs/api-reference/assistants/createAssistant#assistants-createassistant-tools). 
+File search configuration for the agent, as described in the [OpenAI documentation](https://platform.openai.com/docs/api-reference/assistants/createAssistant#assistants-createassistant-tools).
 
 ```python
 from agency_swarm import Agent
 
 agent = Agent(
-    name='MyAgent', 
+    name='MyAgent',
     file_search={
-        'max_num_results': 25, 
+        'max_num_results': 25,
         'ranking_options': {
-            "score_threshold": 0.5, 
+            "score_threshold": 0.5,
             "ranker": "auto"
         }
     }
-) 
+)
 ```
 
 Parameters:
@@ -79,10 +79,7 @@ examples=[
 ]
 
 agent = Agent(
-    name='MyAgent', 
+    name='MyAgent',
     examples=examples
 )
 ```
-
-
-

@@ -15,7 +15,7 @@ from agency_swarm import SendMessageAsyncThreading
 from agency_swarm import Agency
 
 agency = Agency(agents=[ceo], send_message_tool_class=SendMessageAsyncThreading)
-``` 
+```
 
 With this mode, the caller agent does not receive an immediate reply. Instead, it first gets a system notification confirming that the message has been sent to the recipient agent. Later, the calling agent can retrieve the actual response from the recipient.
 

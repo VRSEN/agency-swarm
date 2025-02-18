@@ -203,7 +203,7 @@ Structure your content with headers:
 - **Bold**: `**text**` → **text**
 - *Italic*: `_text_` → _text_
 - ~~Strikethrough~~: `~text~` → ~~text~~
-  
+
 ### Links
 
 - **External**: `[Link Text](https://example.com)`
@@ -421,4 +421,3 @@ graph TD
 ---
 
 This cheatsheet provides practical guidance for using Mintlify to create documentation sites with various components and configurations.
-
