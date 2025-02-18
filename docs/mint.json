@@ -3,21 +3,21 @@
   "theme": "prism",
   "layout": "sidenav",
   "logo": {
-    "dark": "/images/agencii_logo_dark.svg",
-    "light": "/images/agencii_logo_light.svg",
+    "dark": "/images/agencii-logo.svg",
+    "light": "/images/agencii-logo.svg",
     "href": "https://github.com/VRSEN/agency-swarm"
   },
   "favicon": "/images/favicon.svg",
   "colors": {
-    "primary": "#0C102D",
-    "light": "#FCD53B",
+    "primary": "#fcd53b",
+    "light": "#fcd53b",
     "dark": "#B76E00",
     "anchors": {
       "from": "#737373",
       "to": "#D4B74E"
     },
     "background": {
-      "default": "#F9F9F9",
+      "default": "#f9f9f9",
       "dark": "#0C102D"
     }
   },
