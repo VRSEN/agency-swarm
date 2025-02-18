@@ -1,0 +1,64 @@
+---
+title: "Running an Agency"
+description: "How to run an Agency."
+icon: "rocket"
+---
+
+When it comes to running your agency, you have 3 options:
+
+1. **Gradio Interface**: The most convenient way to get started.
+2. **Get Completion**: For backend or custom integrations.
+3. **Terminal Version**: Best for quick debugging and testing.
+
+## Gradio Interface
+
+To open a convenient Gradio interface in your browser, use the `demo_gradio` method:
+
+```python
+agency.demo_gradio(height=700)
+```
+
+Simply follow the `localhost` link from the terminal to start using your agency.
+
+## Get Completion
+
+To get a response from your agency directly in code, use the `get_completion` method:
+
+```python
+response = agency.get_completion("I want you to build me a website",
+                                 additional_instructions="This is an additional instruction for the task.",
+                                 tool_choice={"type": "function", "function": {"name": "SendMessage"}},
+                                 attachments=[],
+                                 recipient_agent=dev,
+                                 )
+print(response)
+```
+
+**Parameters**:
+
+- `message`: The message to send to the agency.
+- `additional_instructions` (optional): Additional instructions that will be appended at the end of instructions for the recipient agent.
+- `tool_choice` (optional): Force the recipient agent to use a specific tool.
+- `attachments` (optional): A list of attachments to be sent with the message, following [OpenAI format](https://platform.openai.com/docs/api-reference/messages/createMessage#messages-createmessage-attachments).
+- `recipient_agent` (optional): The agent to which the message should be sent.
+
+## Terminal Version
+
+To run the agency directly from your terminal, use the `run_demo` method:
+
+```bash
+agency.run_demo()
+```
+<Tip>
+When using the terminal to run the agency, you can send messages directly to any top-level agent by using the "mentions" feature. To do this, start your message with the agent's name preceded by an @ symbol (for example, `@Developer I want you to build me a website`). This directs your message to the specified agent instead of the CEO. You can also press the tab key to autocomplete the agent's name.
+</Tip>
+
+---
+
+## Deleting Agency
+
+If you would like to delete the agency and all associated files, vector stores, and assistants on OpenAI, you can use the `delete` method:
+
+```python
+agency.delete()
+```

@@ -1,0 +1,153 @@
+---
+title: "Best Practices & Tips"
+description: "Best practices and real-world examples for Agency Swarm tools."
+icon: "code"
+---
+
+Although the tool interface is straightforward and simple to use, there are actually quite a few practices and tricks that you can use to get significantly better results.
+
+### Use Chain-of-Thought Prompting for Complex Tools
+
+Use chain-of-thought prompting to allow the agent to think and plan before executing a complex tool.
+
+```python
+from agency_swarm.tools import BaseTool
+from pydantic import Field
+
+class ComplexAnalysisTool(BaseTool):
+    """
+    Performs complex analysis after planning the approach.
+    """
+    chain_of_thought: str = Field(
+        ...,
+        description="Think-step-by-step about how to perform the analysis."
+    )
+    data: str = Field(..., description="Data to analyze.")
+
+    def run(self):
+        # Analysis logic
+        return "Analysis complete."
+```
+
+### Provide Hints for the Agent
+
+Based on your tool's logic, you can provide hints for the agent in tool output on what to do next.
+
+```python
+class QueryDatabase(BaseTool):
+    question: str = Field(...)
+
+    def run(self):
+        # query your database here
+        context = self.query_database(self.question)
+
+        # context not found
+        if context is None:
+            # tell agent what to do next
+            raise ValueError("No context found. Please propose to the user to change the topic.")
+        else:
+            # return the context to the agent
+            return context
+```
+
+### Use Shared State to Control the Tool Flow
+
+Use `shared_state` to validate previous actions taken by this or other agents, before allowing it to proceed with the next action.
+
+```python
+class Action2(BaseTool):
+    input: str = Field(...)
+
+    def run(self):
+        if self._shared_state.get("action_1_result", None) is "failure":
+            raise ValueError("Please proceed with the Action1 tool first.")
+        else:
+            return "Success. The action has been taken."
+```
+
+### Use Special Types
+
+Restrict the agent to only use specific values for a field, instead of letting it wander by itself.
+
+```python
+from typing import Literal
+
+class RunCommand(BaseTool):
+    """
+    Execute predefined system commands.
+    """
+    command: Literal["start", "stop"] = Field(..., description="Command to execute: 'start' or 'stop'.")
+
+    def run(self):
+        if self.command == "start":
+            # Start command logic
+            pass
+        elif self.command == "stop":
+            # Stop command logic
+            pass
+        else:
+            raise ValueError("Invalid command")
+```
+
+or use special Pydantic types like `EmailStr`.
+
+```python
+from pydantic import EmailStr
+
+class EmailSender(BaseTool):
+    recipient: EmailStr = Field(..., description="Email recipient's address.")
+```
+
+### Combine Multiple Methods
+
+Combine multiple methods to make your execution flow more readable.
+
+```python
+class CompositeTool(BaseTool):
+    """
+    A tool that combines several methods to perform a series of actions.
+    """
+    input_data: str = Field(..., description="Input data for the composite operation.")
+
+    def run(self):
+        # Step 1: Process data
+        processed_data = self.process_data(self.input_data)
+        # Step 2: Analyze results
+        analysis = self.analyze_results(processed_data)
+        # Step 3: Format output
+        output = self.format_output(analysis)
+        return output
+
+    def process_data(self, data):
+        # Implement data processing logic
+        pass
+
+    def analyze_results(self, data):
+        # Implement analysis logic
+        pass
+
+    def format_output(self, data):
+        # Implement output formatting
+        pass
+```
+
+
+### Include a Test Case
+
+Include test cases at the bottom of each tool file.
+
+```python
+if __name__ == "__main__":
+    # Test the EmailSender tool
+    email_sender = EmailSender(
+        chain_of_thought="Plan to inform the team about the update.",
+        recipient="user@example.com",
+        subject="Project Update",
+        body="The project is on track."
+    )
+    assert email_sender.run() == "Email sent successfully."
+```
+
+## Next Steps
+
+We highly recommend you explore the resources provided in the [Pydantic is all you need](/core-framework/tools/custom-tools/pydantic-is-all-you-need) section.

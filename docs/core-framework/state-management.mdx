@@ -1,0 +1,31 @@
+---
+title: "State Management"
+description: "Learn how Agency Swarm manages state across agents and sessions."
+icon: "database"
+---
+
+Agency Swarm conveniently manages the state of your agents and threads, simplifying the assistant creation and management process on [OpenAI's Assistants API](https://platform.openai.com/docs/assistants/deep-dive).
+
+## Agent State Management
+
+In OpenAI Assistants API, all agents need to be updated before they can be used. Agency Swarm manages this by maintaining a local `settings.json` file, and the comparing local settings with the ones stored on OpenAI's servers. If there are any differences, the Assistants are updated on OpenAI's servers. This ensures that the agents are only created once, and are only updated when needed.
+
+<img src="/images/state-management.png" alt="State Management" />
+
+## Thread State Management
+
+Additionally, OpenAI's Assistants API maages the conversation context through threads. A thread represents a persistent conversation between an assistant and a user, automatically handling the storage and truncation of messages to fit within the model's context window. This approach offloads the complexity of conversation state management to OpenAI, ensuring efficient and seamless context handling.
+
+<CardGroup cols={2}>
+  <Card title="Persistent Conversations" icon="messages">
+    Maintains ongoing conversations without manual history management.
+  </Card>
+  <Card title="Automatic Context Management" icon="scissors">
+    Handles message storage and truncation within token limits.
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+- [Read all available agent parameters](/core-framework/agents/overview)
+- [Learn how to manage your agents on a remote server](/additional-features/deployment-to-production)

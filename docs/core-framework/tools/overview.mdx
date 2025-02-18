@@ -1,0 +1,106 @@
+---
+title: "Overview"
+description: "Understanding Tools in Agentic Systems."
+icon: "globe"
+---
+
+Tools are the most important component of any Agentic system. In this guide, we'll cover the basics: what tools are, key characteristics, and the three primary ways you can build or import your own tools.
+
+## Key Characteristics of Tools
+
+Effective tools share the following characteristics:
+
+<CardGroup cols={3}>
+  <Card
+    title="Task-Specific"
+    icon="bullseye"
+  >
+    Each tool performs a single, well-defined task. They should not be focused on an API, but rather on whatever it takes to complete the task.
+  </Card>
+
+  <Card
+    title="Configurable"
+    icon="gear"
+  >
+    Tools can be configured to perform the same task in different ways. The agent must be able to adapt based on previous circumstances.
+  </Card>
+
+  <Card
+    title="Reusable"
+    icon="recycle"
+  >
+    Tools must be easily reusable not only by the same agent, but also across different agents. Each tool should have specific instructions on how to use it.
+  </Card>
+</CardGroup>
+
+## What are Tools?
+
+**At a high level, tools represent the capabilities that your agents have.**
+
+Tools enable your agents to perform specific tasks necessary to fulfill their designated roles. For instance, just as a real virtual assistant can search the web or send emails, the virtual assistant agent can be equipped with similar tools.
+
+Below are some more examples of tools:
+
+- **FileWriter:** A tool that allows an agent to write code or text to a file.
+- **CommandExecutor:** A tool that allows an agent to execute terminal commands.
+- **LeadUpdater:** A tool that allows an agent to update a lead in a CRM.
+- **LinkedInProfileScraper:** A tool that allows an agent to scrape a LinkedIn profile.
+- **FacebookAdCreator:** A tool that allows an agent to create a Facebook ad.
+
+
+<Tip>
+
+By themselves, each of these tools is not very useful, however in combination with each other, they allow agents to perform a much wider range of tasks.
+
+For example, `FileWriter` tool by itself can allow the developer agent to write code, however, in combination with the `CommandExecutor` tool, it can also run and test its own code, which instantly makes it more powerful. (We'll cover the key characteristics of tools in a bit.)
+</Tip>
+**At a low level, tools are essentially just code.**
+
+Whatever the tool you are creating, at the lowest level, it always comes down to code. The only difference is where this code is being executed. For instance, if you are making an API call, it will primarily be executed in the cloud, and if it's a file system tool, it will be executed on the same machine where the agent is running. **Even if you are using a no-code platform to build your tools, like n8n or zapier, at the lowest level, it all still comes down to code.**
+
+This means that agentic systems are much more similar to traditional software programs than you might think...
+
+![Tools Diagram](/images/agents-vs-programs.png)
+
+Just as in a standard program, we have functions that are executed in a loop, in an agentic system, we have tools that are executed by your agents.
+
+And what this allows you to do, is tackle significantly more complex tasks. Tasks where there are so many possible paths that you can't hard code all of the possible conditional logic in advance.
+
+Now, that we understand what tools are, let's cover how you can build your own tools.
+
+
+## 3 Ways to Build Tools
+
+When it comes to building your own tools, you have 3 primary options:
+
+<CardGroup cols={3}>
+
+  <Card
+    title="Custom Tools"
+    icon="hammer"
+    href="./custom-tools"
+  >
+    Build your own completely custom tools from scratch. (Recommended)
+  </Card>
+
+  <Card
+    title="Pre-Made Tools"
+    icon="box"
+    href="./tool-factory"
+  >
+    Import out-of-the-box pre-made tools from the special [agency-tools](https://github.com/VRSEN/agency-tools) open source repository.
+  </Card>
+
+  <Card
+    title="OpenAPI Schemas"
+    icon="file-code"
+    href="./openapi-schemas"
+  >
+    Use public OpenAPI schemas and convert them into tools.
+  </Card>
+
+</CardGroup>
+
+**It is recommended to start with custom tools**, as they give you the most flexibility and control. Even if you are connecting to external APIs, we still recommend creating custom tools, as they allow you to have more control over the tool's outputs.
+
+Click on the card of your choice to learn more about each one.

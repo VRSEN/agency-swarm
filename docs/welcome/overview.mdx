@@ -1,0 +1,32 @@
+---
+title: "Overview"
+description: "Welcome to **Agency Swarm**, an open-source agent orchestration framework built on top of the latest [OpenAI Assistants API](https://platform.openai.com/docs/assistants/overview/agents)."
+icon: "globe"
+---
+
+## What is Agency Swarm?
+
+Agency Swarm started as a desire and effort of Arsenii Shatokhin (aka VRSEN) to fully automate his AI Agency with AI. By building this framework, we aim to simplify the agent creation process and enable anyone to create collaborative swarms of agents (Agencies), each with distinct roles and capabilities. By thinking about automation in terms of real-world entities, such as agencies and specialized agent roles, we make it a lot more intuitive for both the agents and the users.
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Customizable Agent Roles" icon="user-gear">
+    Define roles like CEO, virtual assistant, developer, etc., and customize their functionalities with Assistants API.
+  </Card>
+  <Card title="Full Control Over Prompts" icon="sliders">
+    Avoid conflicts and restrictions of pre-defined prompts, allowing full customization.
+  </Card>
+  <Card title="Error Correction" icon="shield-check">
+    Prevent hallucinations with Pydantic-based type validation and error correction
+  </Card>
+  <Card title="Efficient Communication" icon="comments">
+    Agents communicate based on their own descriptions and nothing else.
+  </Card>
+  <Card title="State Management" icon="database">
+    Agency Swarm efficiently manages the state of your assistants on OpenAI, maintaining it in a special settings.json file.
+  </Card>
+  <Card title="Deployable in Production" icon="rocket">
+    Agency Swarm is designed to be reliable and easily deployable in production environments.
+  </Card>
+</CardGroup>

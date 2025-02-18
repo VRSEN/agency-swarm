@@ -1,0 +1,116 @@
+---
+title: "OpenAPI Schemas"
+description: "Convert OpenAPI schemas into tools."
+icon: "brackets-curly"
+---
+
+Agency allows you to easily convert OpenAPI schemas into tools so your agents can interact with any external APIs. For example, by adding the Google Calendar API schema, your agent will be able to create, update, delete, and retrieve events from Google Calendar.
+
+<Tip>
+It is still recommended to create custom tools and wrap each API call into a `BaseTool` class, even if you have the OpenAPI schema. OpenAPI schemas allow you to get started quickly, however, for production, you might want to add some custom data validation, error handling, data processing or even combine multiple API calls into a single tool.
+</Tip>
+
+## How to Find OpenAPI Schemas
+
+The recommended way to create OpenAPI schemas is to use [Actions GPT](https://chatgpt.com/g/g-TYEliDU6A-actionsgpt). Simply ask it to create a schema for the API you want to use and which actions you want to perform.
+
+**If your API is public and well known**, it should be able to create a schema for you on the first try, without any extra documentation.
+
+```
+Create a schema for the Google Calendar API and include the following actions: create, update, delete, and get events.
+```
+
+**If your API is public but not well known**, we recommend searching for the API documentation manually and then sending a link to your API into the prompt:
+
+```
+Create a schema for the following API: https://api.example.com/openapi.json and include the following actions: create, update, delete, and get events.
+```
+
+**If you your API is private**, you can attach your API documentation in a file:
+
+```
+Create a schema for the API documentation attached in the file. Include the following actions: create, update, delete, and get events.
+```
+
+## How to Use OpenAPI Schemas
+
+Below are the two ways to use OpenAPI schemas in your agents:
+
+#### Option 1: Using the `schemas_folder`
+
+The first way to integrate OpenAPI schemas is by placing all your OpenAPI schema files in a folder, and then initializing your agent with the `schemas_folder` parameter. Agency Swarm will then automatically scan this folder and convert any OpenAPI schemas it finds into `BaseTool` instances.
+
+```python
+from agency_swarm import Agent
+
+agent = Agent(
+    name='MyAgent',
+    schemas_folder='schemas',
+    api_params={'api_schema.json': {'param1': 'value1'}},
+    api_headers={'api_schema.json': {'Authorization': 'Bearer token'}}
+)
+```
+
+In this example:
+
+- `schemas_folder`: Directory where your OpenAPI schema files are stored.
+- `api_params`: Extra parameters for specific schemas.
+- `api_headers`: Custom headers for API calls, like authentication tokens.
+
+
+
+#### Option 2: Using the ToolFactory Class
+
+Alternatively, you can use the `ToolFactory` class to convert OpenAPI schemas from local files or URLs.
+
+```python
+from agency_swarm.tools import ToolFactory
+
+tools = ToolFactory.from_openapi_schema(
+    "<your OpenAPI schema here>",
+    headers={'api_schema.json': {'Authorization': 'Bearer token'}},
+    params={'api_schema.json': {'param1': 'value1'}},
+    strict=False
+)
+```
+
+<Accordion title="Converting from a Local Schema File">
+```python
+from agency_swarm.tools import ToolFactory
+
+with open("schemas/api_schema.json") as f:
+    tools = ToolFactory.from_openapi_schema(f.read())
+```
+</Accordion>
+
+<Accordion title="Converting from a Remote Schema URL">
+```python
+from agency_swarm.tools import ToolFactory
+import requests
+
+response = requests.get("https://api.example.com/openapi.json")
+tools = ToolFactory.from_openapi_schema(response.json())
+```
+</Accordion>
+
+Argument descriptions:
+
+- `schema`: The OpenAPI schema to convert.
+- `headers`: Custom headers for API calls, like authentication tokens.
+- `params`: Extra parameters for specific schemas.
+- `strict`: Whether to use strict OpenAI mode.
+
+To add your tools to your agent with the 2nd option, simply pass the `tools` list to your agent:
+
+```python
+agent = Agent(
+    name='MyAgent',
+    tools=tools
+)
+```
+
+With this approach, you have more control over the tools you are adding to your agent, and you can still modify the `ToolConfig` of each tool. See the [ToolConfig documentation](/core-framework/tools/custom-tools/configuration) for more information.
+
+<Info>
+With any of these methods, Agency still converts your schemas into PyDantic models, so your agents will perform type checking on all API parameters **before** making API calls, reducing errors and improving reliability.
+</Info>

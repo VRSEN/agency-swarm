@@ -1,0 +1,38 @@
+---
+title: "Asynchronous Execution"
+description: "Run your agents or tools asynchronously."
+icon: "bolt"
+---
+
+Asynchronous execution allows you to run your agents or tools asynchronously in separate threads. This can be useful for shortening response times for certain I/O-bound tasks.
+
+## Async Agents
+
+To run each agent in a separate thread, you need to use a special `SendMessageAsyncThreading` tool class. See [Custom Communicaiton Flows](/additional-features/custom-communication-flows) for more information.
+
+```python
+from agency_swarm import SendMessageAsyncThreading
+from agency_swarm import Agency
+
+agency = Agency(agents=[ceo], send_message_tool_class=SendMessageAsyncThreading)
+```
+
+With this mode, the caller agent does not receive an immediate reply. Instead, it first gets a system notification confirming that the message has been sent to the recipient agent. Later, the calling agent can retrieve the actual response from the recipient.
+
+## Async Tools
+
+To run each tool in a separate thread, you need to adjust the ToolConfig class for each tool that you want to run asynchronously. See [Custom Tools Configuration](/core-framework/tools/custom-tools/configuration) for more information.
+
+```python
+from agency_swarm import BaseTool
+
+class Tool(BaseTool):
+    # ...
+
+    class ToolConfig:
+        async_mode = "threading"
+
+    # ...
+```
+
+With this mode, the agent will still have to wait for the tool to finish before it can continue with the next step in the conversation. So, it only makes sense to use this mode with multiple tools for the same agent that are not dependent on each other.

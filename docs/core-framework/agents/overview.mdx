@@ -1,0 +1,100 @@
+---
+title: "Overview"
+description: "Understanding Agents in Agency Swarm."
+icon: "globe"
+---
+
+Agents are the core building blocks of the Agency Swarm framework. Each agent is specialized for a specific role and is designed to perform a specific set of processes within an agency.
+
+## Key Characteristics of Agents
+
+<CardGroup cols={3}>
+  <Card
+    title="Autonomous"
+    icon="robot"
+  >
+    Agents can determine the next best actions by themselves.
+  </Card>
+
+  <Card
+    title="Adaptive"
+    icon="bolt"
+  >
+    Agents adapt their course of action based on real-time feedback.
+  </Card>
+
+  <Card
+    title="Interactive"
+    icon="wrench"
+  >
+    Agents can manipulate their environment by using tools.
+  </Card>
+</CardGroup>
+
+## Agent Parameters
+
+From a technical perspective, in Agency Swarm, agents are essentially wrappers for [OpenAI Assistants](https://platform.openai.com/docs/assistants/deep-dive#creating-assistants). The `Agent` class includes convenience methods to help you manage the state of your assistant, upload files, attach tools, and more:
+
+| Name | Parameter | Description |
+|------|-----------|-------------|
+| ID *(optional)* | `id` | Loads the assistant from OpenAI assistant ID. Assistant will be created or loaded from settings if ID is not provided. Default: `None` |
+| Name *(optional)* | `name` | Name of the agent. Default: Uses the class name |
+| Description *(optional)* | `description` | A brief description of the agent's purpose. Default: `None` |
+| Instructions *(optional)* | `instructions` | Path to a file containing specific instructions for the agent. Default: Empty string |
+| Tools *(optional)* | `tools` | A list of tool classes that the agent can use (BaseTool, FileSearch, or CodeInterpreter). Default: `None` |
+| Tool Resources *(optional)* | `tool_resources` | Resources used by the assistant's tools. For example, code_interpreter requires file IDs, while file_search requires vector store IDs. Default: `None` |
+| Temperature *(optional)* | `temperature` | Controls randomness in the agent's responses. Lower values make responses more focused and deterministic. Default: `None` |
+| Top P *(optional)* | `top_p` | Alternative to temperature for controlling response randomness. Default: `None` |
+| Response Format *(optional)* | `response_format` | Specifies the format for agent responses. Can be a string, dict, or Pydantic BaseModel. Default: `"auto"` |
+| Tools Folder *(optional)* | `tools_folder` | Path to a directory containing tools. Each tool must be in a separate file named after the tool class. Default: `None` |
+| Files Folder *(optional)* | `files_folder` | Path or list of paths to directories containing files for the agent. Default: `None` |
+| Schemas Folder *(optional)* | `schemas_folder` | Path or list of paths to directories containing OpenAPI schemas. Default: `None` |
+| API Headers *(optional)* | `api_headers` | Headers for OpenAPI requests. Keys must match schema filenames. Default: Empty dict |
+| API Params *(optional)* | `api_params` | Extra parameters for OpenAPI requests. Keys must match schema filenames. Default: Empty dict |
+| Metadata *(optional)* | `metadata` | Additional metadata for the agent. Default: Empty dict |
+| Model *(optional)* | `model` | The OpenAI model to use. Default: `"gpt-4o-2024-08-06"` |
+| Validation Attempts *(optional)* | `validation_attempts` | Number of attempts to validate responses. Default: `1` |
+| Max Prompt Tokens *(optional)* | `max_prompt_tokens` | Maximum tokens allowed in the prompt. Default: `None` |
+| Max Completion Tokens *(optional)* | `max_completion_tokens` | Maximum tokens allowed in completions. Default: `None` |
+| Truncation Strategy *(optional)* | `truncation_strategy` | Strategy for handling token limits. Default: `None` |
+| Examples *(optional)* | `examples` | List of example messages for the agent. Default: `None` |
+| File Search *(optional)* | `file_search` | Configuration for the file search tool. Default: `None` |
+| Parallel Tool Calls *(optional)* | `parallel_tool_calls` | Whether to run tools in parallel. Default: `True` |
+| Refresh From ID *(optional)* | `refresh_from_id` | Whether to load and update the agent from OpenAI when an ID is provided. Default: `True` |
+
+<Warning>
+**Warning**: The `file_ids` parameter is deprecated. Use the `tool_resources` parameter instead.
+</Warning>
+
+## Agent Template
+
+It's recommended to create your agent in a seprate file. Your agent class should look like this:
+
+```python
+from agency_swarm import Agent
+
+class AgentName(Agent):
+    def __init__(self):
+        super().__init__(
+            name="agent_name",
+            description="agent_description",
+            instructions="./instructions.md",
+            files_folder="./files",
+            schemas_folder="./schemas",
+            tools_folder="./tools",
+            tools=[],
+            temperature=0.3,
+            max_prompt_tokens=25000,
+            examples=[]
+        )
+```
+
+You can add more parameters to the `__init__` method.
+
+To initialize the agent:
+
+```python
+from AgentName import AgentName
+
+agent = AgentName()
+```

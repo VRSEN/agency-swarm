@@ -1,0 +1,73 @@
+---
+title: "Agency Parameters"
+description: "Explanation of parameters in Agency class."
+icon: "sliders"
+---
+
+## Shared Instructions (Agency Manifesto)
+
+The `agency_manifesto.md` file contains instructions that will be shared among all agents in the agency.
+
+Here is a template to help get you started:
+
+```markdown
+# Agency Manifesto
+
+[Description of your agency]
+
+## Mission Statement
+
+[Your mission statement]
+
+## Operating Environment
+
+[Description of your operating environment]
+```
+
+To use the manifesto, simply specify the path to your manifesto in the `Agency` class.
+
+```python
+agency = Agency(
+    agency_chart=[...],
+    shared_instructions='agency_manifesto.md',
+    ...
+)
+```
+
+## Shared Files
+
+Shared files allow you to share certain files among all agents in the agency. All your agents will than be able to use these files with `FileSearch` and `CodeInterpreter` tools.
+
+To use shared files, simply put them in a folder and specify the folder path in a `shared_files` parameter.
+
+```python
+agency = Agency([ceo], shared_files='my_shared_files_folder')
+```
+
+## Default Parameters
+
+Some parametrs in `Agency` class mimic those in `Agent` class.
+
+**In case if the parameter is defined in both classes, the value from `Agent` class will be used.**
+
+```python
+agency = Agency([ceo], temperature=0.3, max_prompt_tokens=25000)
+```
+
+You can use the folloing parameters to set default values for the entire agency:
+
+- `temperature`
+- `top_p`
+- `max_completion_tokens`
+- `max_prompt_tokens`
+- `truncation_strategy`
+
+## Custom Settings Path
+
+By default, Agency Swarm keeps the state of your agents in a special `settings.json` file. If you would like to use a different file path for settings, you can specify a `settings_path` parameter:
+
+```python
+agency = Agency([ceo], settings_path='my_settings.json')
+```
+
+If this file does not exist, it will be created, along with new Assistants on your OpenAI account.
