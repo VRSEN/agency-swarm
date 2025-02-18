@@ -316,12 +316,11 @@ class Agency:
             else:
                 raise Exception("Failed to parse response: " + res)
 
-    def demo_gradio(self, height=450, dark_mode=True, **kwargs):
+    def demo_gradio(self, dark_mode=True, **kwargs):
         """
         Launches a Gradio-based demo interface for the agency chatbot.
 
         Parameters:
-            height (int, optional): The height of the chatbot widget in the Gradio interface. Default is 600.
             dark_mode (bool, optional): Flag to determine if the interface should be displayed in dark mode. Default is True.
             **kwargs: Additional keyword arguments to be passed to the Gradio interface.
         This method sets up and runs a Gradio interface, allowing users to interact with the agency's chatbot. It includes a text input for the user's messages and a chatbot interface for displaying the conversation. The method handles user input and chatbot responses, updating the interface dynamically.
@@ -351,9 +350,14 @@ class Agency:
         recipient_agent_names = [agent.name for agent in self.main_recipients]
         recipient_agent = self.main_recipients[0]
 
-        with gr.Blocks(js=js) as demo:
+        # Get the path to the CSS file
+        css_path = os.path.join(os.path.dirname(__file__), "styles", "chat.css")
+        with open(css_path, "r") as f:
+            custom_css = f.read()
+
+        with gr.Blocks(js=js, css=custom_css) as demo:
             chatbot_queue = queue.Queue()
-            chatbot = gr.Chatbot(height=height)
+            chatbot = gr.Chatbot()
             with gr.Row():
                 with gr.Column(scale=9):
                     dropdown = gr.Dropdown(
