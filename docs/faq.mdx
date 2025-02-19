@@ -26,11 +26,11 @@ load_dotenv()
 
 
 <Accordion title="What's the difference between using .cursorrules (with Cursor IDE) and 'agency-swarm genesis'?" icon="scale-unbalanced">
-There are two ways to create agents:
+There are two ways to create agents with AI:
 
-1. [**Genesis Agency**:](/welcome/getting-started/genesis-agency) A simple command-line tool that helps you create basic agents quickly. Great for getting started or simple use cases. Just run `agency-swarm genesis` and follow the prompts.
+1. [**Genesis Agency**:](/welcome/getting-started/genesis-agency) A simple command-line tool that helps you create basic agent structures. Great for getting started or simple use cases. Just run `agency-swarm genesis` and follow the prompts.
 
-2. [**Cursor AI Code Editor**](/welcome/getting-started/cursor-ide): Use the `.cursorrules` file in Cursor IDE to create agents. This is the best option for both beginners and experienced developers since it provides a more streamlined development experience.
+2. [**Cursor AI Code Editor**](/welcome/getting-started/cursor-ide): Use the `.cursorrules` file in Cursor IDE to create agents. This is the best option for both beginners and experienced developers since it gives you more control over the agent creation process.
 </Accordion>
 
 
@@ -40,7 +40,7 @@ Yes—you can use open source models for simple, non–mission-critical tasks (u
 
 
 <Accordion title="How do I save and continue conversations?" icon="messages">
-To persist threads between application restarts, implement thread callbacks that save and load thread IDs. For example, define your callback functions:
+To persist threads between application restarts, implement thread callbacks that save and load thread IDs from a local file. For example, define your callback functions:
 ```python
 import os
 import json
@@ -58,6 +58,8 @@ def save_threads(new_threads, chat_id):
 
 Then, pass these callbacks during your agency initialization to resume conversations:
 ```python
+from agency_swarm.agency.genesis import GenesisAgency
+
 agency = GenesisAgency(
     ...
     threads_callbacks={
@@ -67,27 +69,12 @@ agency = GenesisAgency(
 )
 ```
 
-This setup preserves your conversation context between runs. For more details, refer to our [Deployment to Production](/additional-features/deployment-to-production) guide.
+This setup preserves your conversation context between runs.
 </Accordion>
 
 
 <Accordion title="How do I manage multiple users with Agency Swarm?" icon="users">
-To support multiple users/chats, instantiate a separate agency per user. Ensure to check out our [Deployment to Production](/additional-features/deployment-to-production) guide for more information.
-</Accordion>
-
-
-<Accordion title="What is the agency_chart parameter?" icon="diagram-project">
-The `agency_chart` defines your agents and their communication flows. For example:
-
-```python
-agency_chart = [
-    ceo,              # Main user-facing agent
-    [ceo, developer], # CEO can delegate tasks to the Developer
-    [ceo, analyst]    # CEO can consult with the Analyst
-]
-```
-
-This structure controls which agents can talk to each other. For more details, refer to our [Communication Flows](/core-framework/agencies/communication-flows) guide.
+To support multiple users/chats, you need to load and save thread IDs in your database accordingly. Each chat/user should have unique thread IDs. Ensure to check out our [Deployment to Production](/additional-features/deployment-to-production) guide for more information.
 </Accordion>
 
 
