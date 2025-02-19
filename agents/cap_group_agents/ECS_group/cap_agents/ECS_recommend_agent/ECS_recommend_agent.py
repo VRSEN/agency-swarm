@@ -7,7 +7,7 @@ from agents.cap_group_agents.cap_agent_instruction import cap_agent_instruction
 _name = "ECS_recommend_agent"
 _manager_name = "ECS_manager"
 _description = """
-负责华为云ECS规格推荐任务，包括：地域推荐。
+负责华为云ECS规格推荐任务，即根据已有条件推荐满足条件的ECS规格。
 """
 
 import os
