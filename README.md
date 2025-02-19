@@ -46,7 +46,6 @@ Define your custom tools by extending the `BaseTool` class:
     class MyCustomTool(BaseTool):
         """
         A brief description of what the custom tool does.
-        A brief description of what the custom tool does.
         The docstring should clearly explain the tool's purpose and functionality.
         It will be used by the agent to determine when to use this tool.
         """
