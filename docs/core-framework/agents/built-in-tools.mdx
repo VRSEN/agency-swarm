@@ -1,0 +1,53 @@
+---
+title: "Built-in Tools"
+description: "Learn how to use built-in tools in Agency Swarm."
+icon: "wrench"
+---
+
+Each agent in Agency Swarm also with some built-in tools inherited from [OpenAI Assistants API](https://platform.openai.com/docs/api-reference/assistants/createAssistant#assistants-createassistant-tools).
+
+
+## Code Interpreter
+
+Code Interpreter allows agents to execute code within a remote Jupyter Notebook environment.
+
+```python
+from agency_swarm.tools import CodeInterpreter
+
+agent = Agent(
+    name="DataAnalyst",
+    tools=[CodeInterpreter],
+    # Other agent parameters
+)
+```
+
+**When to use:**
+- To perform data analysis and precise calculations.
+- To handle structured files (CSV, Excel, etc.).
+- To run standalone code snippets in a remote environment.
+
+## File Search
+
+File Search allows agents to search through their knowledge base to improve their responses. This tool uses a production-ready vector database provided by OpenAI.
+
+```python
+  from agency_swarm.tools import FileSearch
+
+  agent = Agent(
+      name="Researcher",
+      tools=[FileSearch],
+      # Optionally, you can specify your own vector store ID to use:
+      tool_resources={
+        "file_search": {
+          "vector_store_ids": ["vs_abc123"],
+        },
+      },
+      # More details can be found here: https://platform.openai.com/docs/api-reference/vector-stores/object
+      # Other agent parameters
+  )
+  ```
+
+**When to use:**
+- To enrich your agent's knowledge about specific topics
+- To reduce hallucinations by grounding agent responses in your documents
+- To enable users to query their own documents

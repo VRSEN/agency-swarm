@@ -1,0 +1,85 @@
+---
+title: "Advanced Configuration"
+description: "Learn advanced configuration options for your agents in Agency Swarm."
+icon: "gears"
+---
+
+All parameters inside the `Agent` class, follow the same structure as [OpenAI's Assistants API](https://platform.openai.com/docs/api-reference/assistants). However, there are a few advanced parameters that require more explanation.
+
+### Parallel Tool Calls
+
+Whether to run tools in parallel or sequentially. By default, this parameter is set to `True`.
+
+```python
+from agency_swarm import Agent
+
+agent = Agent(name='MyAgent', parallel_tool_calls=False)
+```
+
+### File Search Configuration
+
+File search configuration for the agent, as described in the [OpenAI documentation](https://platform.openai.com/docs/api-reference/assistants/createAssistant#assistants-createassistant-tools).
+
+```python
+from agency_swarm import Agent
+
+agent = Agent(
+    name='MyAgent',
+    file_search={
+        'max_num_results': 25,
+        'ranking_options': {
+            "score_threshold": 0.5,
+            "ranker": "auto"
+        }
+    }
+)
+```
+
+Parameters:
+- `max_num_results`: The maximum number of results the file search tool should output. The default is 20 for `gpt-4*` models and 5 for `gpt-3.5-turbo`. This number should be between 1 and 50 inclusive. Note that the file search tool may output fewer than `max_num_results` results.
+- `ranking_options`: The ranking options for the file search. If not specified, the file search tool will use the `auto` ranker and a score_threshold of 0. See the [file search tool documentation](https://platform.openai.com/docs/assistants/tools/file-search#customizing-file-search-settings) for more information.
+
+### Response Validator
+
+This is a special function that allows you to validate the response before sending it to the user or another agent. This function should raise an error if the response is invalid. The agent will then see this error as the user message and try correct itself accordingly.
+
+```python
+
+from agency_swarm import Agent
+
+class MyAgent(Agent):
+    def response_validator(self, message: str) -> str:
+        """This function is used to validate the response before sending it to the user or another agent."""
+        if "bad word" in message:
+            raise ValueError("Please don't use bad words.")
+
+        return message
+```
+
+### Few-Shot Examples
+
+Few-show examples help the agent to understand how to respond. The format for examples follows [message object format on OpenAI](https://platform.openai.com/docs/api-reference/messages/createMessage):
+
+```python
+from agency_swarm import Agent
+
+examples=[
+    {
+        "role": "user",
+        "content": "Hi!",
+        "attachments": [],
+        "metadata": {},
+    },
+    {
+        "role": "assistant",
+        "content": "Hi! I am the CEO. I am here to help you with your tasks. Please tell me what you need help with.",
+        "attachments": [],
+        "metadata": {},
+    }
+]
+
+agent = Agent(
+    name='MyAgent',
+    examples=examples
+)
+```

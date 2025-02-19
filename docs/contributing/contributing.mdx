@@ -1,0 +1,148 @@
+---
+title: "Contributing to Agency Swarm"
+description: "Learn how to contribute to Agency Swarm"
+icon: "code-fork"
+---
+
+We welcome contributions to Agency Swarm! By contributing, you help improve the framework for everyone. Here's how you can get involved:
+
+## Setting Up Your Development Environment
+
+Follow these steps to set up your local development environment:
+
+<Steps titleSize="h3">
+
+<Step title="Fork the Repository" icon="code-branch" iconType="solid">
+  Fork the Agency Swarm repository on GitHub to your own account.
+</Step>
+
+<Step title="Clone Your Fork" icon="arrow-down-to-line" iconType="solid">
+Clone your forked repository and navigate to the project directory.
+
+```bash
+git clone https://github.com/YOUR_USERNAME/agency-swarm.git
+cd agency-swarm
+```
+
+</Step>
+
+<Step title="Create a Virtual Environment" icon="laptop-code" iconType="solid">
+Create and activate a virtual environment.
+
+```bash
+python3 -m venv venv
+source venv/bin/activate  # On Windows use `venv\Scripts\activate`
+```
+
+</Step>
+
+<Step title="Install Dependencies" icon="download" iconType="solid">
+Install the required packages.
+
+```bash
+pip install -r requirements-dev.txt
+```
+
+</Step>
+
+<Step title="Install Documentation Tools" icon="book" iconType="solid">
+To work on the documentation, you'll need Mintlify CLI:
+
+```bash
+npm i -g mintlify
+```
+
+To preview documentation changes locally:
+
+```bash
+cd docs
+mintlify dev
+```
+
+The documentation will be available at http://localhost:3000
+</Step>
+
+<Step title="Install Pre-Commit Hooks" icon="check" iconType="solid">
+Install pre-commit hooks for code quality checks.
+
+```bash
+pip install pre-commit
+pre-commit install
+```
+
+</Step>
+
+</Steps>
+
+## Running Tests
+
+<Tip>
+  Testing ensures that your contributions work as intended and do not break existing functionality.
+</Tip>
+
+<Steps titleSize="h3">
+
+<Step title="Install Test Dependencies" icon="download" iconType="solid">
+Ensure all test dependencies are installed.
+
+```bash
+pip install -r requirements-dev.txt
+```
+
+</Step>
+
+<Step title="Run Tests" icon="play" iconType="solid">
+Run the test suite using Pytest.
+
+```bash
+pytest
+```
+
+</Step>
+
+<Step title="Check Test Coverage" icon="chart-bar" iconType="solid">
+Check the test coverage to ensure comprehensive testing.
+
+```bash
+pytest --cov=agency_swarm tests/
+```
+
+</Step>
+
+</Steps>
+
+## Submitting Changes
+
+<AccordionGroup>
+
+  <Accordion title="Create Branch" icon="code-branch" iconType="solid">
+    Create a branch for your work:
+    ```bash
+    git checkout -b feature/your-feature-name
+    ```
+  </Accordion>
+
+  <Accordion title="Commit Changes" icon="git" iconType="solid">
+    Commit your updates:
+    ```bash
+    git add .
+    git commit -m "Add [feature]: Description"
+    ```
+  </Accordion>
+
+  <Accordion title="Push Branch" icon="code-fork" iconType="solid">
+    Push your branch:
+    ```bash
+    git push origin feature/your-feature-name
+    ```
+  </Accordion>
+
+  <Accordion title="Open PR" icon="paper-plane" iconType="solid">
+    Open a pull request on GitHub:
+    ```markdown
+    - Provide a concise title and description.
+    - Reference related issues.
+    ```
+  </Accordion>
+
+</AccordionGroup>

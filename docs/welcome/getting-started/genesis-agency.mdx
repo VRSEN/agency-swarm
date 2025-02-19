@@ -1,0 +1,62 @@
+---
+title: "Genesis Agency"
+description: "Quick start guide using the Genesis Agency."
+icon: "wand-sparkles"
+---
+
+Genesis Agency is a special Agency within the framework that helps you to create your own AI Agencies faster. This agency consists of specialized agents that work together to:
+
+- Generate agent templates with appropriate folder structure
+- Create custom tools and connect APIs for each agent
+- Define your agency's manifesto and communication flows
+
+<Note>
+  **Genesis Agency is not perfect yet.**
+
+  Please note that the Genesis Agency will not be able to generate complex agencies. For more complex use cases, we recommend using [Cursor](./cursor-ide).
+</Note>
+
+## Use Genesis Agency
+
+<Steps>
+  <Step title="Run the `genesis` command">
+    Initialize the Genesis Agency in your terminal and generate your agent templates.
+
+    **Command Syntax:**
+
+    ```bash
+    agency-swarm genesis [--openai_key "YOUR_API_KEY"]
+    ```
+  </Step>
+
+  <Step title="Chat with Genesis CEO">
+    Provide comprehensive context to the Genesis Agency by including:
+    - **Your agency's mission and goals.**
+    - **The agents you wish to involve and their communication flows.**
+    - **Tools or APIs each agent should have access to, if any.**
+  </Step>
+
+  <Step title="Wait for Genesis to create your agents">
+    After executing the `genesis` command, specialized agents such as `GenesisCEO` and `ToolCreator` will begin constructing your agency's structure and developing the required tools.
+  </Step>
+
+  <Step title="Fine-Tune Your Agents and Tools">
+    Once Genesis has created your agents, you'll find all the agent folders in the directory where you ran the `genesis` command. Fine-tune the agents and tools as needed by following these steps:
+
+    1. **Adjust Tools**: Modify the tools in each agent's `tools` directory to meet your requirements.
+    2. **Adjust Instructions**: Update the agents and their instructions in each agent's folder.
+    3. **Run Agency**: Execute the `agency.py` file, send your tasks, and monitor performance.
+    4. **Repeat**: Continue refining until your agents perform consistently.
+
+    <Note>
+      **Agent Development is an Iterative Process**
+
+      Currently, agent development requires ongoing monitoring and adjustments to ensure desired performance. As larger and more advanced models become available, this process will become more streamlined.
+    </Note>
+  </Step>
+</Steps>
+
+## Next Steps
+
+- Learn the core concepts of [Tools](/core-framework/tools), [Agents](/core-framework/agents), and [Agencies](/core-framework/agencies).
+- Watch the [Deployment Tutorial](https://www.youtube.com/watch?v=53_e3lmk6Mo).

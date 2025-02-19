@@ -1,0 +1,36 @@
+---
+title: "Advanced Tool Configuration"
+description: "Advanced features and patterns for Agency Swarm tools."
+icon: "wand-magic-sparkles"
+---
+
+Besides standard Pydantic features, you can also use a special `ToolConfig` class to customize tool behavior within the framework:
+
+## Available `ToolConfig` Parameters
+
+Currently, the following parameters are supported:
+
+| Name               | Type    | Description                                                                                                      | When to Use                                                                                          | Default Value |
+|--------------------|---------|------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------|---------------|
+| `one_call_at_a_time` | `bool` | Prevents concurrent execution for a specific tool. To prevent the agent from executing **any** tools concurrently, set `parallel_tool_calls=False` in the Agent class. | Use for database operations, API calls with rate limits, or actions that depend on previous results. | `False`         |
+| `strict`             | `bool` | Enables strict mode, which ensures the agent will always provide **perfect** tool inputs that 100% match your schema. Has limitations. See [OpenAI Docs](https://platform.openai.com/docs/guides/structured-outputs#supported-schemas). | Use for mission-critical tools or tools that have nested Pydantic model schemas.                     | `False`         |
+| `async_mode`         | `str`  | When set to "threading," executes this tool in a separate thread.                                                  | Use when your agent needs to execute multiple tools or the same tool multiple times in a single message to decrease latency. Beware of resource allocation. | `None`          |
+| `output_as_result`   | `bool` | Forces the output of this tool as the final message from the agent that called it.                                     | Only recommended for very specific use cases and only if you know what you're doing.                 | `False`         |
+
+## Usage
+
+To use one of the available parameters, simply add a `class ToolConfig` block to your tool class:
+
+```python
+class MyCustomTool(BaseTool):
+    # ...
+
+    class ToolConfig:
+        one_call_at_a_time = True
+        strict = False
+        async_mode = "threading"
+        output_as_result = True
+
+    def run(self):
+        # ...
+```
