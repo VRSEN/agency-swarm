@@ -56,7 +56,7 @@ _instruction = f"""
 你应该按照以下json格式评估TASK: 
 {_output_format}
 
-如果任务拆分和流程合理，请在"review"字段填入"YES"；如果任务流程有问题，请在"review"字段填入"NO"，并在"explain"字段填入你觉得不合理的原因
+如果任务拆分和流程合理，请在"review"字段填入"YES"；如果任务拆分和流程有问题，请在"review"字段填入"NO"，并在"explain"字段填入你觉得不合理的原因
 
 """
 
