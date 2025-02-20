@@ -35,6 +35,8 @@ _instruction = f"""
 {_input_format}
 其中列出了所有未知参数的详细信息，包括参数名、参数描述和参数类型
 
+注意: 每次接受到上述参数列表时，你都需要**从头**进行以下步骤: 
+
 你需要通过`ReadContextIndex`中读取已有环境中的上下文信息，`ReadContextIndex`的返回格式如下:
 {{
     "index_1": {{
