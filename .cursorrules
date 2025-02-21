@@ -200,29 +200,24 @@ Remember, each tool code snippet you create must be fully ready to use. It must 
 
 ### Shared State in Tools
 
-Tools can access and modify a shared state that is available across the entire agency. This is useful for storing and sharing data between tools and agents without consuming extra tokens in agent conversations.
-
-To use shared state in your tools:
+Tools can access and modify a global state across the agency to store and share data without using extra tokens in conversations.
 
 ```python
 def run(self):
-    # Set data in shared state
-    self._shared_state.set("my_key", "my_value")
-    
-    # Get data from shared state with optional default value
-    data = self._shared_state.get("my_key", "default_value")
+    self._shared_state.set("my_key", "my_value")  # Store data
+    data = self._shared_state.get("my_key", "default_value")  # Retrieve data with a default
 ```
 
-The shared state is particularly useful for:
-- Storing large data structures that would be expensive to pass between agents
-- Maintaining state across multiple tool invocations
-- Sharing data between different tools and agents in the agency
+Use this for:
+- Large data structures expensive to pass between agents
+- Maintaining state across multiple tool calls
+- Sharing data among tools and agents
 
-Best Practices:
+Best Practices
 - Use descriptive keys to avoid conflicts
-- Consider using prefixes for different tools/agents
-- Set default values when getting data to handle missing keys
-- Clean up temporary data when no longer needed
+- Provide default values when retrieving
+- Clean up unneeded data
+
 
 # Step 4: Agent Creation
 
