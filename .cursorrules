@@ -110,7 +110,7 @@ load_dotenv() # always load the environment variables
 
 #### 2. Define Your Tool Class and Docstring
 
-Create a new class that inherits from `BaseTool`. Write a clear docstring describing the tool’s purpose. This docstring is crucial as it helps agents understand how to use the tool. `BaseTool` extends `BaseModel` from pydantic.
+Create a new class that inherits from `BaseTool`. Write a clear docstring describing the tool's purpose. This docstring is crucial as it helps agents understand how to use the tool. `BaseTool` extends `BaseModel` from pydantic.
 
 ```python
 class MyCustomTool(BaseTool):
@@ -197,6 +197,27 @@ if __name__ == "__main__":
 ```
 
 Remember, each tool code snippet you create must be fully ready to use. It must not contain any mocks, placeholders or hypothetical examples. Ask user for clarification if needed.
+
+### Shared State in Tools
+
+Tools can access and modify a global state across the agency to store and share data without using extra tokens in conversations.
+
+```python
+def run(self):
+    self._shared_state.set("my_key", "my_value")  # Store data
+    data = self._shared_state.get("my_key", "default_value")  # Retrieve data with a default
+```
+
+Use this for:
+- Large data structures expensive to pass between agents
+- Maintaining state across multiple tool calls
+- Sharing data among tools and agents
+
+Best Practices
+- Use descriptive keys to avoid conflicts
+- Provide default values when retrieving
+- Clean up unneeded data
+
 
 # Step 4: Agent Creation
 
