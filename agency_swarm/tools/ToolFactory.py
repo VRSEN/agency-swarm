@@ -149,49 +149,14 @@ class ToolFactory:
         tools = []
         headers = headers or {}
         headers = {k: v for k, v in headers.items() if v is not None}
+
         for path, methods in openapi_spec["paths"].items():
             for method, spec_with_ref in methods.items():
-
-                async def callback(self):
-                    url = openapi_spec["servers"][0]["url"] + path
-                    parameters = self.model_dump().get("parameters", {})
-                    # replace all parameters in url
-                    for param, value in parameters.items():
-                        if "{" + str(param) + "}" in url:
-                            url = url.replace(f"{{{param}}}", str(value))
-                            parameters[param] = None
-                    url = url.rstrip("/")
-                    parameters = {k: v for k, v in parameters.items() if v is not None}
-                    parameters = {**parameters, **params} if params else parameters
-                    async with httpx.AsyncClient(
-                        timeout=90
-                    ) as client:  # Set custom read timeout to 10 seconds
-                        if method == "get":
-                            response = await client.get(
-                                url, params=parameters, headers=headers
-                            )
-                        elif method == "post":
-                            response = await client.post(
-                                url,
-                                params=parameters,
-                                json=self.model_dump().get("requestBody", None),
-                                headers=headers,
-                            )
-                        elif method == "put":
-                            response = await client.put(
-                                url,
-                                params=parameters,
-                                json=self.model_dump().get("requestBody", None),
-                                headers=headers,
-                            )
-                        elif method == "delete":
-                            response = await client.delete(
-                                url,
-                                params=parameters,
-                                json=self.model_dump().get("requestBody", None),
-                                headers=headers,
-                            )
-                        return response.json()
+                # Use the callback factory to create a unique callback for each path/method
+                # This ensures each callback captures the correct path value
+                callback = ToolFactory._create_callback_for_path(
+                    path, method, openapi_spec, params, headers
+                )
 
                 # 1. Resolve JSON references.
                 spec = jsonref.replace_refs(spec_with_ref)
@@ -252,6 +217,64 @@ class ToolFactory:
                 tools.append(ToolFactory.from_openai_schema(function, callback))
 
         return tools
+
+    @staticmethod
+    def _create_callback_for_path(path, method, openapi_spec, params, headers):
+        """
+        Creates a callback function for a specific path and method.
+        This is a factory function that captures the current values of path and method.
+
+        Parameters:
+            path: The path to create the callback for.
+            method: The HTTP method to use.
+            openapi_spec: The OpenAPI specification.
+            params: Additional parameters to include in the request.
+            headers: Headers to include in the request.
+
+        Returns:
+            An async callback function that makes the appropriate HTTP request.
+        """
+
+        async def callback(self):
+            url = openapi_spec["servers"][0]["url"] + path
+            parameters = self.model_dump().get("parameters", {})
+            # replace all parameters in url
+            for param, value in parameters.items():
+                if "{" + str(param) + "}" in url:
+                    url = url.replace(f"{{{param}}}", str(value))
+                    parameters[param] = None
+            url = url.rstrip("/")
+            parameters = {k: v for k, v in parameters.items() if v is not None}
+            parameters = {**parameters, **params} if params else parameters
+            async with httpx.AsyncClient(
+                timeout=90
+            ) as client:  # Set custom read timeout to 10 seconds
+                if method == "get":
+                    response = await client.get(url, params=parameters, headers=headers)
+                elif method == "post":
+                    response = await client.post(
+                        url,
+                        params=parameters,
+                        json=self.model_dump().get("requestBody", None),
+                        headers=headers,
+                    )
+                elif method == "put":
+                    response = await client.put(
+                        url,
+                        params=parameters,
+                        json=self.model_dump().get("requestBody", None),
+                        headers=headers,
+                    )
+                elif method == "delete":
+                    response = await client.delete(
+                        url,
+                        params=parameters,
+                        json=self.model_dump().get("requestBody", None),
+                        headers=headers,
+                    )
+                return response.json()
+
+        return callback
 
     @staticmethod
     def from_file(file_path: str) -> Type[BaseTool]:
