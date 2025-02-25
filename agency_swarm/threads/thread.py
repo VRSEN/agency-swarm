@@ -455,7 +455,7 @@ class Thread:
         tool_choice,
         temperature=None,
         response_format: Optional[dict] = None,
-    ):
+    ) -> None:
         try:
             if event_handler:
                 with self.client.beta.threads.runs.stream(
@@ -503,19 +503,29 @@ class Thread:
                     run_id=match.groups()[1],
                     check_status=False,
                 )
+                # Reattempt creating a new run after cancellation.
+                return self._create_run(
+                    recipient_agent,
+                    additional_instructions,
+                    event_handler,
+                    tool_choice,
+                    temperature=temperature,
+                    response_format=response_format,
+                )
             elif (
                 "The server had an error processing your request" in e.message
                 and self._num_run_retries < 3
             ):
                 time.sleep(1)
-                self._create_run(
+                self._num_run_retries += 1
+                return self._create_run(
                     recipient_agent,
                     additional_instructions,
                     event_handler,
                     tool_choice,
+                    temperature=temperature,
                     response_format=response_format,
                 )
-                self._num_run_retries += 1
             else:
                 raise e
 
@@ -634,7 +644,7 @@ class Thread:
 
         if not tool:
             return (
-                f"Error: Function {tool_call.function.name} not found. Available functions: {[func.__name__ for func in funcs]}",
+                f"Error: Function {tool_name} not found. Available functions: {[func.__name__ for func in funcs]}",
                 False,
             )
 
@@ -645,8 +655,8 @@ class Thread:
             tool = tool(**args)
 
             # check if the tool is already called
-            for tool_name in [name for name, _ in tool_outputs_and_names]:
-                if tool_name == tool_name and (
+            for output_tool_name in [name for name, _ in tool_outputs_and_names]:
+                if output_tool_name == tool_name and (
                     hasattr(tool, "ToolConfig")
                     and hasattr(tool.ToolConfig, "one_call_at_a_time")
                     and tool.ToolConfig.one_call_at_a_time
