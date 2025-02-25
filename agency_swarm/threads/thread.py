@@ -565,14 +565,20 @@ class Thread:
             return
 
         try:
+            actual_thread_id = thread_id or self.id
+            actual_run_id = run_id or (self._run.id if self._run else None)
+
+            if not actual_run_id:
+                return  # Can't cancel without a run ID
+
             self._run = self.client.beta.threads.runs.cancel(
-                thread_id=self.id, run_id=self._run.id
+                thread_id=actual_thread_id, run_id=actual_run_id
             )
         except BadRequestError as e:
             if "Cannot cancel run with status" in e.message:
                 self._run = self.client.beta.threads.runs.poll(
-                    thread_id=thread_id or self.id,
-                    run_id=run_id or self._run.id,
+                    thread_id=actual_thread_id,
+                    run_id=actual_run_id,
                     poll_interval_ms=500,
                 )
             else:
