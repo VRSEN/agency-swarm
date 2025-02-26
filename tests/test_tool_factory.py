@@ -21,7 +21,7 @@ class ToolFactoryTest(unittest.TestCase):
 
     def test_move_file_tool(self):
         tool = ToolFactory.from_langchain_tool(MoveFileTool())
-        print(json.dumps(tool.openai_schema, indent=4))
+        # print(json.dumps(tool.openai_schema, indent=4))
         print(tool)
 
         tool = tool(
@@ -29,7 +29,7 @@ class ToolFactoryTest(unittest.TestCase):
             source_path="Move a file from one folder to another",
         )
 
-        print(tool.model_dump())
+        # print(tool.model_dump())
 
         tool.run()
 
@@ -77,7 +77,7 @@ class ToolFactoryTest(unittest.TestCase):
                 title="Relationship Type",
             )
 
-        print("schema", json.dumps(UserRelationships.openai_schema, indent=4))
+        # print("schema", json.dumps(UserRelationships.openai_schema, indent=4))
 
         # print("ref", json.dumps(reference_schema(deref_schema), indent=4))
 
@@ -85,7 +85,7 @@ class ToolFactoryTest(unittest.TestCase):
             UserRelationships.openai_schema, lambda x: x
         )
 
-        print(json.dumps(tool.openai_schema, indent=4))
+        # print(json.dumps(tool.openai_schema, indent=4))
         user_detail_instance = {
             "id": 1,
             "age": 20,
@@ -114,9 +114,9 @@ class ToolFactoryTest(unittest.TestCase):
 
         cleaned_schema = remove_empty_fields(user_relationships_schema)
 
-        print("clean schema", json.dumps(cleaned_schema, indent=4))
+        # print("clean schema", json.dumps(cleaned_schema, indent=4))
 
-        print("tool schema", json.dumps(tool.openai_schema, indent=4))
+        # print("tool schema", json.dumps(tool.openai_schema, indent=4))
 
         tool_schema = tool.openai_schema
 
@@ -149,7 +149,7 @@ class ToolFactoryTest(unittest.TestCase):
 
         tool2 = ToolFactory.from_openai_schema(schema, lambda x: x)
 
-        print(json.dumps(tool.openai_schema, indent=4))
+        # print(json.dumps(tool.openai_schema, indent=4))
 
         tool = tool(query="John Doe")
 
@@ -167,7 +167,7 @@ class ToolFactoryTest(unittest.TestCase):
 
         self.assertFalse(tools[0].openai_schema.get("strict", False))
 
-        print(json.dumps(tools[0].openai_schema, indent=4))
+        # print(json.dumps(tools[0].openai_schema, indent=4))
 
     def test_relevance_openapi_schema(self):
         with open("./data/schemas/relevance.json", "r") as f:
@@ -175,7 +175,7 @@ class ToolFactoryTest(unittest.TestCase):
                 f.read(), {"Authorization": os.environ.get("TEST_SCHEMA_API_KEY")}
             )
 
-        print(json.dumps(tools[0].openai_schema, indent=4))
+        # print(json.dumps(tools[0].openai_schema, indent=4))
 
         async def gather_output():
             output = await tools[0](requestBody={"text": "test"}).run()
@@ -209,7 +209,7 @@ class ToolFactoryTest(unittest.TestCase):
         with open("./data/schemas/ga4.json", "r") as f:
             tools = ToolFactory.from_openapi_schema(f.read(), {})
 
-        print(json.dumps(tools[0].openai_schema, indent=4))
+        # print(json.dumps(tools[0].openai_schema, indent=4))
 
     def test_import_from_file(self):
         tool = ToolFactory.from_file("./data/tools/ExampleTool1.py")
