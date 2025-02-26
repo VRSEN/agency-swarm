@@ -34,7 +34,7 @@ _instruction = f"""
 输入格式为:
 {_input_format}
 
-你需要通过`ReadJsonFile`从context_index.json中读取已有环境中的上下文信息
+注意：每次得到输入时，你都需要通过`ReadJsonFile`从completed_sub_tasks.json读取已完成的子任务，从context_index.json中读取已完成任务产生的环境信息
 
 请一步步思考: 
 0. 你需要确保输入中的 <task_graph> 是JSON格式；
@@ -47,7 +47,7 @@ _instruction = f"""
 你应该按照以下json格式评估TASK: 
 {_output_format}
 
-如果任务拆分和流程合理，请在"review"字段填入"YES"；如果任务流程有问题，请在"review"字段填入"NO"，并在"explain"字段填入你觉得不合理的原因
+如果任务拆分和流程合理，请在"review"字段填入"YES"；如果任务拆分和流程有问题，请在"review"字段填入"NO"，并在"explain"字段填入你觉得不合理的原因
 
 """
 
