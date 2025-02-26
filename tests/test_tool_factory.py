@@ -185,10 +185,7 @@ class ToolFactoryTest(unittest.TestCase):
 
         print(output)
 
-        # Since the OpenAPI schema doesn't specify the exact response format,
-        # we should only verify that we got a valid JSON response
-        self.assertIsInstance(output, dict)
-        self.assertTrue(len(output) > 0, "Expected non-empty response")
+        assert output["output"]["transformed"]["data"] == "test complete."
 
     def test_get_headers_openapi_schema(self):
         with open("./data/schemas/get-headers-params.json", "r") as f:
