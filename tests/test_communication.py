@@ -46,12 +46,13 @@ class TestSendMessage(unittest.TestCase):
 
     def test_send_message_swarm(self):
         response = self.agency.get_completion(
-            "Hello, can you send me to customer support? If tool responds says that you have NOT been rerouted, or if there is another error, please say 'error'"
+            "Hello, can you send me to customer support? If tool responds says that you have NOT been rerouted, or if there is another error, please say 'error'",
+            yield_messages=False,
         )
         self.assertFalse(
             "error" in response.lower(), self.agency.main_thread.thread_url
         )
-        response = self.agency.get_completion("Who are you?")
+        response = self.agency.get_completion("Who are you?", yield_messages=False)
         self.assertTrue(
             "customer support" in response.lower(), self.agency.main_thread.thread_url
         )
@@ -62,8 +63,9 @@ class TestSendMessage(unittest.TestCase):
         self.assertEqual(main_thread.recipient_agent, self.customer_support)
 
         # check if all messages in the same thread (this is how Swarm works)
+        messages = main_thread.get_messages()
         self.assertTrue(
-            len(main_thread.get_messages()) >= 4
+            len(messages) >= 4
         )  # sometimes run does not cancel immediately, so there might be 5 messages
 
     def test_send_message_double_recepient_error(self):
