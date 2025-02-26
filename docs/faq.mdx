@@ -1,0 +1,126 @@
+---
+title: "FAQ"
+description: "Find answers to common questions about Agency Swarm."
+icon: "question"
+---
+
+<AccordionGroup defaultOpen={true}>
+
+
+<Accordion title="How do I set my OpenAI API key in my project?" icon="key">
+Set your API key in your code:
+```python
+from agency_swarm import set_openai_key
+set_openai_key("YOUR_API_KEY")
+```
+Or use a `.env` file:
+```env
+OPENAI_API_KEY=sk-1234...
+```
+Then load it with:
+```python
+from dotenv import load_dotenv
+load_dotenv()
+```
+</Accordion>
+
+
+<Accordion title="What's the difference between using .cursorrules (with Cursor IDE) and 'agency-swarm genesis'?" icon="scale-unbalanced">
+There are two ways to create agents with AI:
+
+1. [**Genesis Agency**:](/welcome/getting-started/genesis-agency) A simple command-line tool that helps you create basic agent structures. Great for getting started or simple use cases. Just run `agency-swarm genesis` and follow the prompts.
+
+2. [**Cursor AI Code Editor**](/welcome/getting-started/cursor-ide): Use the `.cursorrules` file in Cursor IDE to create agents. This is the best option for both beginners and experienced developers since it gives you more control over the agent creation process.
+</Accordion>
+
+
+<Accordion title="Can I use open source models with Agency Swarm?" icon="code-fork">
+Yes—you can use open source models for simple, non–mission-critical tasks (usually one or two tools per agent). See [Open Source Models](/additional-features/open-source-models) for more information. Keep in mind that many open source models currently struggle with function calling.
+</Accordion>
+
+
+<Accordion title="How do I save and continue conversations?" icon="messages">
+To persist threads between application restarts, implement thread callbacks that save and load thread IDs from a local file. For example, define your callback functions:
+```python
+import os
+import json
+
+def load_threads(chat_id):
+    if os.path.exists(f"{chat_id}_threads.json"):
+        with open(f"{chat_id}_threads.json", "r") as file:
+            return json.load(file)
+    return []
+
+def save_threads(new_threads, chat_id):
+    with open(f"{chat_id}_threads.json", "w") as file:
+        json.dump(new_threads, file)
+```
+
+Then, pass these callbacks during your agency initialization to resume conversations:
+```python
+from agency_swarm.agency.genesis import GenesisAgency
+
+agency = GenesisAgency(
+    ...
+    threads_callbacks={
+        'load': lambda: load_threads(chat_id),
+        'save': lambda new_threads: save_threads(new_threads, chat_id)
+    }
+)
+```
+
+This setup preserves your conversation context between runs.
+</Accordion>
+
+
+<Accordion title="How do I manage multiple users with Agency Swarm?" icon="users">
+To support multiple users/chats, you need to load and save thread IDs in your database accordingly. Each chat/user should have unique thread IDs. Ensure to check out our [Deployment to Production](/additional-features/deployment-to-production) guide for more information.
+</Accordion>
+
+
+<Accordion title="How can I transfer data between tools and agents?" icon="upload">
+There are two ways to transfer data between tools and agents:
+1. Use shared state inside your tools. Read more: [Shared State](/additional-features/shared-state)
+2. Create a tool (or modify an existing one) that uploads files to storage and outputs the file ID. This file ID can then be used by other tools or agents.
+</Accordion>
+
+
+<Accordion title="Why is the CodeInterpreter tool automatically added?" icon="code">
+When file types like `.json`, `.docx`, or `.pptx` are uploaded, CodeInterpreter is auto-added to process them. To change the agent's behavior, update its instructions or create a custom file-handling tool.
+</Accordion>
+
+
+<Accordion title="How can I serve an Agency as an API using FastAPI?" icon="book">
+Embed your agency within a FastAPI endpoint. For example:
+```python
+@app.post("/chat")
+async def chat(user_request: UserRequest):
+    chat_id = user_request.chat_id or str(uuid4())
+    agency = Agency([...],
+        threads_callbacks={
+            'load': lambda: load_threads(chat_id),
+            'save': lambda new_threads: save_threads(new_threads, chat_id)
+        })
+    response = agency.get_completion(user_request.message)
+    return {"chat_id": chat_id, "response": response}
+```
+</Accordion>
+
+
+<Accordion title="How do I deploy my agency to production?" icon="rocket">
+Build a dedicated API backend (FastAPI is recommended) that manages authentication and persists thread state using callbacks. For more details, refer to our [Deployment to Production](/additional-features/deployment-to-production) guide.
+</Accordion>
+
+</AccordionGroup>
+
+
+## Getting Support
+
+<CardGroup cols={2}>
+  <Card title="Community Support" icon="discord" href="https://discord.gg/cw2xBaWfFM">
+    Join our Discord community for quick help and discussions.
+  </Card>
+  <Card title="Professional Services" icon="briefcase" href="https://agents.vrsen.ai/">
+    Get professional help with our Agents-as-a-Service subscription.
+  </Card>
+</CardGroup>

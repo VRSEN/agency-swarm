@@ -1,0 +1,205 @@
+---
+title: "From Scratch"
+description: "Quick start guide to building an Agency from scratch."
+icon: "code"
+---
+
+<Steps>
+  <Step title="Set Your OpenAI Key">
+    Begin by setting your OpenAI API key.
+
+    ```python
+    from agency import set_openai_key
+    set_openai_key("YOUR_API_KEY")
+    ```
+
+    Alternatively, you can set the API key in the `.env` file.
+
+    ```
+    OPENAI_API_KEY=sk-...
+    ```
+
+  </Step>
+
+  <Step title="Create Project Structure">
+    Use the `create-agent-template` command to create the recommended directory structure for each agent.
+
+    **Command Syntax:**
+
+    ```bash
+    agency-swarm create-agent-template --name "AgentName" --description "Agent Description" [--path "/path/to/directory"] [--use_txt]
+    ```
+
+    **Agent Folder Structure:**
+
+    When you run the create-agent-template command, it creates the following folder structure for your agent:
+
+    ```
+    /your-agency-path/
+    └── AgentName/                    # Directory for the specific agent
+        ├── files/                    # Directory for files that will be uploaded to openai
+        ├── schemas/                  # Directory for OpenAPI schemas to be converted into tools
+        ├── tools/                    # Directory for tools to be imported by default.
+        ├── AgentName.py              # The main agent class file
+        ├── __init__.py               # Initializes the agent folder as a Python package
+        └── instructions.md or .txt   # Instruction document for the agent
+    ```
+
+    This structure ensures that each agent has its dedicated space with all necessary files to start working on its specific tasks.
+
+    **Agency Folder Structure:**
+
+    The full structure of the project will look like this:
+
+    ```
+    AgencyName/
+    ├── AgentName/            # Agent folder created with the command above
+    ├── AnotherAgent/         # Another agent folder
+    ├── agency.py             # Main file where agents are imported and the agency is defined
+    ├── agency_manifesto.md   # Shared instructions and guidelines for all agents
+    ├── requirements.txt      # File listing all dependencies
+    └── ...
+    ```
+
+  </Step>
+
+  <Step title="Create Tools">
+    Define your custom tools by extending the `BaseTool` class and implementing the `run` method.
+
+    **MyCustomTool.py:**
+
+    ```python
+    from agency_swarm.tools import BaseTool
+    from pydantic import Field
+
+    class MyCustomTool(BaseTool):
+        """
+        A brief description of what the custom tool does.
+        The docstring should clearly explain the tool's purpose and functionality.
+        It will be used by the agent to determine when to use this tool.
+        """
+
+        # Define the fields with descriptions using Pydantic Field
+        example_field: str = Field(
+            ..., description="Description of the example field, explaining its purpose and usage for the Agent."
+        )
+
+        # Additional Pydantic fields as required
+        # ...
+
+        def run(self):
+            """
+            The implementation of the run method, where the tool's main functionality is executed.
+            This method should utilize the fields defined above to perform the task.
+            Doc string is not required for this method and will not be used by your agent.
+            """
+
+            # Your custom tool logic goes here
+            do_something(self.example_field)
+
+            # Return the result of the tool's operation as a string
+            return "Result of MyCustomTool operation"
+    ```
+
+  </Step>
+
+  <Step title="Define Agent Roles">
+    Adjust the parameters and instructions for each agent.
+
+    **Developer.py:**
+
+    ```python
+    from agency_swarm import Agent
+
+    class Developer(Agent):
+        def __init__(self):
+            super().__init__(
+                name="Developer",
+                description="Responsible for executing tasks.",
+                instructions="./instructions.md",
+                files_folder="./files",
+                schemas_folder="./schemas",
+                tools_folder="./tools",
+                temperature=0.3,
+                max_prompt_tokens=25000,
+                examples=[]
+            )
+    ```
+
+    Tools will be imported automatically from the `tools` folder.
+
+    **instructions.md:**
+
+    ```md
+    You are a Developer agent responsible for executing tasks.
+
+    # Role
+    You are responsible for writing clean, efficient, and reusable code.
+
+    # Process
+    1. How to handle incoming requests
+    2. When and how to use available tools
+    3. How to collaborate with other agents
+    ```
+
+  </Step>
+
+  <Step title="Create Agency">
+    Import your agents and initialize the Agency class.
+
+    **agency.py:**
+
+    ```python
+    from agency_swarm import Agency
+    from .Developer import Developer
+    from .CEO import CEO
+
+    developer = Developer()
+    ceo = CEO()
+
+    agency = Agency(
+        [
+            ceo,  # CEO will be the entry point for communication with the user
+            [ceo, developer],  # CEO can initiate communication with Developer
+        ],
+        shared_instructions='./agency_manifesto.md'  # shared instructions for all agents
+    )
+    ```
+
+    Any agents that are listed in the same list (e.g., `[[ceo, developer]]`) can communicate with each other. The top-level list (`[ceo]`) defines agents that can communicate with the user.
+
+    <Note title="Note on Communication Flows">
+      In Agency Swarm, communication flows are directional, meaning they are established from left to right in the `agency_chart` definition. For instance, in the example above, the CEO can initiate a chat with the Developer (`developer`), and the Developer can respond in this chat. However, the Developer cannot initiate a chat with the CEO.
+    </Note>
+
+  </Step>
+
+  <Step title="Run Demo">
+
+    There are three ways to run the demo. Add one of the following lines to your `agency.py` file:
+
+    **Web Interface:**
+
+    ```python
+    agency.demo_gradio(height=900)
+    ```
+
+    **Terminal Version:**
+
+    ```python
+    agency.run_demo()
+    ```
+
+    **Backend Version:**
+
+    ```python
+    completion_output = agency.get_completion("Please create a new website for our client.", yield_messages=False)
+    ```
+
+  </Step>
+</Steps>
+
+## Next Steps
+
+- Learn the core concepts of Tools, Agents, and Agencies.
+- Watch the [Deployment Tutorial](https://www.youtube.com/watch?v=53_e3lmk6Mo).

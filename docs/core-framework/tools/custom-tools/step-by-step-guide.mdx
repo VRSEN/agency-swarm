@@ -1,0 +1,141 @@
+---
+title: "Step-by-Step Guide"
+description: "Learn how to create custom tools in Agency Swarm framework."
+icon: "map"
+---
+
+In Agency Swarm, tools are Python classes that inherit from `BaseTool`. They are defined using [Pydantic](https://docs.pydantic.dev/latest/), a data validation library. Each BaseTool must implement the `run` method, which is the main method that will be called when the tool is invoked by an agent.
+
+## Step-by-step Guide
+
+To create a custom tool, typically you need to follow these steps:
+
+<Steps>
+  <Step title="Add Import Statements">
+    On top of your tool file, import the necessary modules and classes.
+
+    ```python
+    from agency_swarm.tools import BaseTool
+    from pydantic import Field, model_validator
+    # ... other imports
+    ```
+  </Step>
+
+  <Step title="Define the Tool Class and Docstring">
+    Create a new class that inherits from `BaseTool`. Write a clear docstring describing the tool's purpose. **This docstring is crucial as it helps agents understand how to use the tool.**
+
+    ```python
+    class Calculator(BaseTool):
+        """
+        A simple calculator tool that evaluates mathematical expressions.
+        """
+    ```
+  </Step>
+
+  <Step title="Define Input Fields">
+    Use Pydantic fields to define the inputs your tool will accept.
+
+    ```python
+    expression: str = Field(..., description="The mathematical expression to evaluate.")
+    ```
+
+    <Accordion title="Custom Validation Logic (Optional)" icon="hammer">
+      You can use [Pydantic's validators](https://docs.pydantic.dev/latest/concepts/validators/) to verify the inputs. This can be extremely effective to avoid hallucinations or other errors in production.
+      ```python
+      @model_validator(mode="after")
+      def validate_expression(self):
+          if self.expression.endswith("/0"):
+              raise ValueError("Division by zero is not permitted")
+      ```
+    </Accordion>
+  </Step>
+
+  <Step title="Implement the run Method">
+    Add the functionality that will be executed when the tool is called.
+
+    ```python
+    def run(self):
+        # Implement the tool's functionality
+        result = eval(self.expression)
+        return str(result)
+    ```
+
+    The `run` method should return a string, which is the tool's output that the agent will see and use in its response.
+  </Step>
+
+  <Step title="Test the Tool Independently">
+    Test the tool independently to ensure it behaves as expected. We recommend adding a `if __name__ == "__main__":` block at the end of the tool file:
+
+    ```python
+    if __name__ == "__main__":
+        calc = Calculator(expression="2 + 2 * 3")
+        print(calc.run())  # Output should be '8'
+    ```
+  </Step>
+
+  <Step title="Add the Tool to an Agent">
+    After your tool works as expected, simply add it to an agent's list of `tools`.
+
+    ```python
+    from agency_swarm import Agent
+    from .tools.calculator import Calculator
+
+    agent = Agent(
+        name="MathAgent",
+        tools=[Calculator],
+        # Other agent parameters
+    )
+    ```
+
+    <Accordion title="Using tools folder" icon="folder">
+      Alternatively, you can simply place the tool file in the `tools_folder` directory and it will be automatically added to the agent.
+
+      ```python
+      from agency_swarm import Agent
+      agent = Agent(
+          name="MathAgent",
+          tools_folder="./tools",
+          # Other agent parameters
+      )
+      ```
+
+      <Note>
+        Each file in the `tools_folder` should contain a class that is named exactly the same as the file name. For example, `Calculator.py` should contain a `Calculator` class.
+      </Note>
+    </Accordion>
+  </Step>
+</Steps>
+
+## Full Code Example
+
+Below is the full code example for a calculator tool above.
+
+```python
+# calculator.py
+from agency_swarm.tools import BaseTool
+from pydantic import Field, model_validator
+
+class Calculator(BaseTool):
+    """
+    A simple calculator tool that evaluates mathematical expressions.
+    """
+    expression: str = Field(..., description="The mathematical expression to evaluate.")
+
+    @model_validator(mode="after")
+    def validate_expression(self):
+        if self.expression.endswith("/0"):
+            raise ValueError("Division by zero is not permitted")
+
+    def run(self):
+        result = eval(self.expression)
+        return str(result)
+
+if __name__ == "__main__":
+    calc = Calculator(expression="2 + 2 * 3")
+    print(calc.run())  # Output should be '8'
+```
+
+## Next Steps
+
+- Checkout [Best Practices & Tips](/core-framework/tools/custom-tools/best-practices)
+- Learn why [PyDantic is all you need](/core-framework/tools/custom-tools/pydantic-is-all-you-need)

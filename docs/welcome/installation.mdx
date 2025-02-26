@@ -1,0 +1,66 @@
+---
+title: "Installation"
+description: "Install Agency Swarm in just 2 simple steps."
+icon: "box"
+---
+
+## Installation
+<Accordion title="Step 1: Create a Python Virtual Environment" defaultOpen={false}>
+
+1. **Install Python**
+
+   Download and install the latest version of Python from the [official Python website](https://www.python.org/downloads/).
+
+2. **Create a Virtual Environment**
+
+   Navigate to your project directory and create a virtual environment using `venv`:
+
+   ```bash
+   python -m venv venv
+   ```
+
+3. **Activate the Virtual Environment**
+
+   On Mac or Linux:
+
+   ```bash
+   source venv/bin/activate
+   ```
+
+   On Windows:
+
+   ```bash
+   venv\Scripts\activate
+   ```
+
+</Accordion>
+<Accordion title="Step 2: Install the agency swarm package"  defaultOpen={true}>
+
+Simply run the following command:
+
+<Note>Make sure you are in the virtual environment before installing the package.</Note>
+
+```bash
+pip install agency-swarm
+```
+
+</Accordion>
+
+## Next Steps
+
+When it comes to building your first AI Agency, you have three options:
+
+<CardGroup cols={3}>
+  <Card title="From Scratch" icon="code" iconType="duotone" href="./getting-started/from-scratch">
+    Build your own agents and tools from the ground up. Perfect to understand the framework's structure and create a
+    fully customized solution.
+  </Card>
+  <Card title="Use Genesis Agency" icon="wand-sparkles" iconType="duotone" href="./getting-started/genesis-agency">
+    Let Genesis Agency create your agents for you. Best for simple use cases or for creating your initial agency
+    structure quickly.
+  </Card>
+  <Card title="Cursor (Recommended)" icon="cube" iconType="duotone" href="./getting-started/cursor-ide">
+    Use Cursor IDE to streamline the entire agent development process. Recommended for both beginners and advanced
+    developers.
+  </Card>
+</CardGroup>

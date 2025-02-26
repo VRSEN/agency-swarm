@@ -198,6 +198,27 @@ if __name__ == "__main__":
 
 Remember, each tool code snippet you create must be fully ready to use. It must not contain any mocks, placeholders or hypothetical examples. Ask user for clarification if needed.
 
+### Shared State in Tools
+
+Tools can access and modify a global state across the agency to store and share data without using extra tokens in conversations.
+
+```python
+def run(self):
+    self._shared_state.set("my_key", "my_value")  # Store data
+    data = self._shared_state.get("my_key", "default_value")  # Retrieve data with a default
+```
+
+Use this for:
+- Large data structures expensive to pass between agents
+- Maintaining state across multiple tool calls
+- Sharing data among tools and agents
+
+Best Practices
+- Use descriptive keys to avoid conflicts
+- Provide default values when retrieving
+- Clean up unneeded data
+
+
 # Step 4: Agent Creation
 
 Each agent has it's own unique role and functionality and is designed to perform specific tasks. To create an agent:

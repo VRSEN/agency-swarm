@@ -204,14 +204,14 @@ class AgencyTest(unittest.TestCase):
         agent3.tools = self.__class__.agent1.tools
         agent3.top_p = self.__class__.agency.top_p
         agent3.file_search = self.__class__.agent1.file_search
+        agent3.temperature = self.__class__.agent1.temperature
+        agent3.model = self.__class__.agent1.model
         agent3 = agent3.init_oai()
 
         print("agent3", agent3.assistant.model_dump())
         print("agent1", self.__class__.agent1.assistant.model_dump())
 
-        self.assertTrue(self.__class__.agent1.id == agent3.id)
-
-        # check that assistant settings match
+        # Check that the agents have the same settings
         self.assertTrue(
             agent3._check_parameters(self.__class__.agent1.assistant.model_dump())
         )

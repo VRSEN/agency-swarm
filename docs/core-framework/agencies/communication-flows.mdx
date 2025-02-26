@@ -1,0 +1,38 @@
+---
+title: "Communication Flows"
+description: "Understanding communication flows in Agency Swarm."
+icon: "comments"
+---
+
+Unlike all other frameworks, communication flows in Agency Swarm are **not hierarchical** or **sequential**. Instead, they are **uniform**, which means you can define them in any way you want.
+
+## Defining Your Own Communication Flows
+
+Communication flows in Agency Swarm are established from left to right inside the `agency_chart`. So, in the example below, the CEO can initiate communication and send tasks to the Developer and the Virtual Assistant, and it can respond back to him in the same thread, but the Developer or the VA cannot initiate a conversation and assign tasks to the CEO.
+
+```python
+from agency_swarm import Agency
+
+agency = Agency([
+    ceo, dev  # CEO and Developer will be the entry point for communication with the user
+    [ceo, dev],  # CEO can initiate communication with Developer
+    [ceo, va],   # CEO can initiate communication with Virtual Assistant
+    [dev, va]    # Developer can initiate communication with Virtual Assistant
+])
+```
+
+All agents added inside the top-level list of `agency_chart` (`ceo, dev`), can talk to the user.
+
+To allow Developer to initiate communication with the CEO, you need to simply add it to the `agency_chart` list:
+
+```python
+agency = Agency([
+    ceo, dev, [dev, ceo]  # Developer can initiate communication with the CEO
+])
+```
+
+You can add as many levels of communication as you want.
+
+## Under the Hood
+
+Agency Swarm uses a special `SendMessage` to allow agents to communicate with each other. By adding agents to the second-level list, it simply adds a new recipient to the `SendMessage` function. If you'd like to modify the behavior of this tool, you can do so by creating your own [Custom Communication Flows](/additional-features/custom-communication-flows/overview) (**Advanced**).

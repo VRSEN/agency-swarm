@@ -1,0 +1,136 @@
+---
+title: "Common Use Cases"
+description: "Explore common use cases for custom communication flows in Agency Swarm."
+icon: "code"
+---
+
+In the following sections, we'll look at some common use cases for extending the `SendMessageBase` tool and how to implement them, so you can learn how to create your own SendMessage tools and use them in your own applications.
+
+#### 1. Adjusting parameters and descriptions
+
+The most basic use case is if you want to use your own parameter descriptions, such as if you want to change the docstring or the description of the `message` parameter. This can help you better customize how the agents communicate with each other and what information they relay.
+
+Let's say that instead of sending messages, I want my agents to send tasks to each other. In this case, I can change the docstring and the `message` parameter to a `task` parameter to better fit the nature of my application.
+
+```python
+from pydantic import Field
+from agency_swarm.tools.send_message import SendMessageBase
+
+class SendMessageTask(SendMessageBase):
+    """Use this tool to send tasks to other agents within your agency."""
+    chain_of_thought: str = Field(
+        ...,
+        description="Please think step-by-step about how to solve your current task, provided by the user. Then, break down this task into smaller steps and issue each step individually to the recipient agent via the task parameter."
+    )
+    task: str = Field(
+        ...,
+        description="Specify the task required for the recipient agent to complete. Focus on clarifying what the task entails, rather than providing exact instructions. Make sure to include all the relevant information needed to complete the task."
+    )
+
+    def run(self):
+        return self._get_completion(message=self.task)
+```
+
+To remove the chain of thought, you can simply remove the `chain_of_thought` parameter.
+
+#### 2. Adding custom validation logic
+
+Now, let's say that I need to ensure that my message is sent to the correct recipient agent. (This is a very common hallucination in production.) In this case, I can add a custom validator to the `recipient` parameter, which is defined in the `SendMessageBase` class. Since I don't want to change any other parameters or descriptions, I can inherit the default `SendMessage` class and only add this new validation logic.
+
+```python
+from agency_swarm.tools.send_message import SendMessage
+from pydantic import model_validator
+
+class SendMessageValidation(SendMessage):
+    @model_validator(mode='after')
+    def validate_recipient(self):
+        if "customer support" not in self.message.lower() and self.recipient == "CustomerSupportAgent":
+            raise ValueError("Messages not related to customer support cannot be sent to the customer support agent.")
+        return self
+```
+
+You can, of course, also use GPT for this:
+
+```python
+from agency_swarm.tools.send_message import SendMessage
+from agency_swarm.util.validators import llm_validator
+from pydantic import model_validator
+
+class SendMessageLLMValidation(SendMessage):
+    @model_validator(mode='after')
+    def validate_recipient(self):
+        if self.recipient == "CustomerSupportAgent":
+            llm_validator(
+                statement="The message is related to customer support."
+            )(self.message)
+        return self
+```
+
+In this example, the `llm_validator` will throw an error if the message is not related to customer support. The caller agent will then have to fix the recipient or the message and send it again! This is extremely useful when you have a lot of agents.
+
+#### 3. Summarizing previous conversations with other agents and adding to context
+
+Sometimes, when using default `SendMessage`, the agents might not relay all the necessary details to the recipient agent, especially when the previous conversation is too long. In this case, you can summarize the previous conversation with GPT and add it to the context, instead of the additional instructions. I will extend the `SendMessageQuick` class, which already contains the `message` parameter, as I don't need chain of thought or files in this case.
+
+```python
+from agency_swarm.tools.send_message import SendMessageQuick
+from agency_swarm.util.oai import get_openai_client
+
+class SendMessageSummary(SendMessageQuick):
+    def run(self):
+        client = get_openai_client()
+        thread = self._get_main_thread() # get the main thread (conversation with the user)
+
+        # get the previous messages
+        previous_messages = thread.get_messages()
+        previous_messages_str = "\n".join([f"{m.role}: {m.content[0].text.value}" for m in previous_messages])
+
+        # summarize the previous conversation
+        summary = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "You are a world-class summarizer. Please summarize the following conversation in a few sentences:"},
+                {"role": "user", "content": previous_messages_str}
+            ]
+        )
+
+        # send the message with the summary
+        return self._get_completion(message=self.message, additional_instructions=f"\n\nPrevious conversation summary: '{summary.choices[0].message.content}'")
+```
+
+With this example, you can add your own custom logic to the `run` method. It does not have to be a summary; you can also use it to add any other information to the context. For example, you can even query a vector database or use an external API.
+
+#### 4. Running each agent in a separate API call
+
+If you are a PRO, and you have managed to deploy each agent in a separate API endpoint, instead of using `_get_completion()`, you can call your own API and let the agents communicate with each other over the internet.
+
+```python
+import requests
+from agency_swarm.tools.send_message import SendMessage
+
+class SendMessageAPI(SendMessage):
+    def run(self):
+        response = requests.post(
+            "https://your-api-endpoint.com/send-message",
+            json={"message": self.message, "recipient": self.recipient}
+        )
+        return response.json()["message"]
+```
+
+This is very powerful, as you can even allow your agents to collaborate with agents outside your system. More on this is coming soon!
+
+<Tip title="Contributing">
+  If you have any ideas for new communication flows, please either adjust this page in docs, or add your new send
+  message tool in the `agency_swarm/tools/send_message` folder and open a PR!
+</Tip>
+
+**After implementing your own `SendMessage` tool**, simply pass it into the `send_message_tool_class` parameter when initializing the `Agency` class:
+
+```python
+agency = Agency(
+    ...
+    send_message_tool_class=SendMessageAPI
+)
+```
+
+That's it! Now, your agents will use your own custom `SendMessageAPI` class for communication!

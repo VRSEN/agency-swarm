@@ -1,0 +1,87 @@
+---
+title: "Shared State"
+description: "Leveraging shared state across tools and agents."
+icon: "database"
+---
+
+`shared_state` is a centralized Python dictionary accessible by all tools and agents. It allows you to control execution flow, share data, and provide instructions to the agents based on certain conditions or actions performed by other agents.
+
+<Note>
+Shared state is only available when tools are deployed together with agents (see [Deployment to Production](/additional-features/deployment-to-production) guide). If tools are deployed as separate APIs, they won't share the same state, and you'll need to implement your own state management solution.
+</Note>
+
+## Understanding Shared State
+
+Shared state is particularly useful when your agents interact with multiple tools that need to exchange information. Here's why:
+
+- **Without Shared State**: Suppose `Tool A` collects data that `Tool B` needs. The agent must explicitly pass this data as a parameter to `Tool B`.
+
+![Without Shared State](/images/shared-state-without.png)
+
+- **With Shared State**: `Tool A` can store the required data in the shared state, and `Tool B` can get it without needing direct parameter passing. This approach reduces complexity and minimizes the risk of errors.
+
+![With Shared State](/images/shared-state-with.png)
+
+## Using Shared State
+
+The two basic operations are:
+- **Setting** a value in the shared state: `shared_state.set('key', value)`
+- **Getting** a value from the shared state: `shared_state.get('key')`
+
+You can use shared state in your tools and agents. Here's how:
+
+<Tabs>
+
+<Tab title="Within a Tool: Setting a value">
+  To set a value in the shared state within a tool, use the `self._shared_state.set` inside your tool. For example, you can store the context retrieved from a database in the shared state:
+    ```python
+    class QueryDatabase(BaseTool):
+        """
+        Retrieves data from the database and stores it in the shared state.
+        """
+        question: str = Field(..., description="The query to execute.")
+
+        def run(self):
+            # Fetch data based on the question
+            context = query_database(self.question)
+            # Store the context in shared state
+            self._shared_state.set('context', context)
+            return "Context has been retrieved and stored successfully."
+    ```
+</Tab>
+
+<Tab title="Within a Tool: Using the value">
+  To get a value from the shared state within a tool, use `self._shared_state.get`. Continuing the previous example, you can ensure that the Agent has called the `QueryDatabase` tool before proceeding:
+    ```python
+    class AnswerQuestion(BaseTool):
+        """
+        Provides answers based on the context stored in shared state.
+        """
+        def run(self):
+            # Access the stored context
+            context = self._shared_state.get('context')
+            if not context:
+                return "Context is missing. Please call QueryDatabase tool first."
+            # Generate an answer using the context
+            answer = f"Answer derived from context: {context}"
+            return answer
+    ```
+</Tab>
+
+<Tab title="Within an Agent: Using the value">
+  You can use the shared state within your agent's `response_validator` method to validate responses. For example, you can verify if the agent's response matches content stored in the shared state:
+    ```python
+    class MyAgent(Agent):
+        """
+        An agent that utilizes shared state to validate responses.
+        """
+        def response_validator(self, message: str) -> str:
+            """Validate the response before returning it."""
+            context = self.shared_state.get('context')
+            if message not in context:
+                raise ValueError(f"Invalid response: {message} is not in context: {context}")
+            return message
+    ```
+</Tab>
+
+</Tabs>

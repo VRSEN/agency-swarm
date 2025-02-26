@@ -1,0 +1,45 @@
+---
+title: "Agency Swarm vs Other Frameworks"
+description: "Compare Agency Swarm with other multi-agent AI frameworks."
+icon: "scale-unbalanced"
+---
+
+## Summary
+
+In summary, Agency Swarm is the only framework that has:
+
+<CardGroup cols={3}>
+  <Card title="No Predefined Prompts" icon="message-code">
+    It doesn't write prompts for you, giving you full control over agent behavior.
+  </Card>
+  <Card title="Automatic Error Correction" icon="shield-check">
+    Prevents hallucinations with automatic type checking and error correction.
+  </Card>
+  <Card title="Uniform Communication Flows" icon="diagram-project">
+    Allows you to define communication flows in any way you want.
+  </Card>
+</CardGroup>
+
+## Detailed Comparison
+
+Here's how Agency Swarm compares to 2 other most popular multi-agent frameworks.
+
+| **Criteria**                       | **Agency Swarm**                                                                                                                                            | **AutoGen**                                                                                                             | **CrewAI**                                                                                                                  |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| **Origins** 🏁                     | ✅ Originated from a real AI agency building AI agents for clients worldwide.                                                                                | ✅ Originated as a research experiment.                                                                                  | ❌ Originated as a funding vehicle, rather than a real production framework.                                                     |
+| **Design & Architecture** 🏗️      | ✅ Super lightweight framework with minimal abstractions. Built on top of the OpenAI Assistants API.                                                         | ✅ Event-driven architecture with support for both ChatCompletions and Assistants API.                                   | ❌ Lacks a clear architectural design. Built on top of LangChain with numerous unnecessary abstractions.                    |
+| **Reliability** 🔍                 | ✅ Robust type checking and validation for all tools with Pydantic.                                                                                           | ❌ Type hints but no validation.                                                                                         | ❌ Some validation is possible when using BaseTool, although the interface is not convenient to use.                         |
+| **Flexibility** 🔄                 | ✅ No predefined prompts. Uniform communication.                                                                                                             | ❌ Contains predefined prompts. Limited, but customizable communication flows.                                           | ❌ Numerous predefined prompts. Only two ways of communication.                                                             |
+| **Scalability** 📈                | ✅ Easily scalable. Adding another agent only requires placing it in the agency chart.                                                                        | ❌ Although it's simple to add an agent into teams, it's almost impossible to define custom communication between them. | ❌ Although it's easy to add agents into crews, it's not possible to create custom communication between them.               |
+| **Deployability** 🚀               | ✅ Easily deployable with special callback functions. Offers open-source templates and tutorials.                                                            | ✅ Deployment with AutoGen studio.                                                                                       | ❌ Deployment via enterprise platform. No open-source deployment guides.                                                    |
+| **Open Source Model Support** 🌐   | ⚠️ [Limited support](/additional-features/open-source-models) with Astra Assistants API.                                                                                                                | ✅ Moderate open-source model support.                                                                                   | ✅ Full open-source model support.                                                                                           |
+
+<Note>
+  If you want to challange any of these claims, or if some of the issues disappear as frameworks mature, please open an issue on [GitHub](https://github.com/agenty/swarm).
+</Note>
+
+## Summary
+
+- **Agency Swarm** - best for **real business-oriented use cases**.
+- **AutoGen** - best for **research, experimentation and novel AI applications**.
+- **CrewAI** - best for **local development and playgrounds** with open-source models.

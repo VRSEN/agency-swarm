@@ -76,7 +76,7 @@ class Agent:
         self,
         id: str = None,
         name: str = None,
-        description: str = None,
+        description: str = "",
         instructions: str = "",
         tools: List[
             Union[
@@ -85,7 +85,7 @@ class Agent:
         ] = None,
         tool_resources: ToolResources = None,
         temperature: float = None,
-        top_p: float = None,
+        top_p: float = 1.0,
         response_format: Union[str, dict, type] = "auto",
         tools_folder: str = None,
         files_folder: Union[List[str], str] = None,
@@ -111,12 +111,12 @@ class Agent:
         Parameters:
             id (str, optional): Loads the assistant from OpenAI assistant ID. Assistant will be created or loaded from settings if ID is not provided. Defaults to None.
             name (str, optional): Name of the agent. Defaults to the class name if not provided.
-            description (str, optional): A brief description of the agent's purpose. Defaults to None.
+            description (str, optional): A brief description of the agent's purpose. Defaults to empty string.
             instructions (str, optional): Path to a file containing specific instructions for the agent. Defaults to an empty string.
             tools (List[Union[Type[BaseTool], Type[Retrieval], Type[CodeInterpreter]]], optional): A list of tools (as classes) that the agent can use. Defaults to an empty list.
             tool_resources (ToolResources, optional): A set of resources that are used by the assistant's tools. The resources are specific to the type of tool. For example, the code_interpreter tool requires a list of file IDs, while the file_search tool requires a list of vector store IDs. Defaults to None.
             temperature (float, optional): The temperature parameter for the OpenAI API. Defaults to None.
-            top_p (float, optional): The top_p parameter for the OpenAI API. Defaults to None.
+            top_p (float, optional): The top_p parameter for the OpenAI API. Defaults to 1.0.
             response_format (Union[str, Dict, type], optional): The response format for the OpenAI API. If BaseModel is provided, it will be converted to a response format. Defaults to None.
             tools_folder (str, optional): Path to a directory containing tools associated with the agent. Each tool must be defined in a separate file. File must be named as the class name of the tool. Defaults to None.
             files_folder (Union[List[str], str], optional): Path or list of paths to directories containing files associated with the agent. Defaults to None.
@@ -223,7 +223,7 @@ class Agent:
                 if self.temperature is None
                 else self.temperature
             )
-            self.top_p = self.top_p or self.assistant.top_p
+            self.top_p = self.top_p if self.top_p is not None else self.assistant.top_p
             self.response_format = (
                 self.response_format or self.assistant.response_format
             )

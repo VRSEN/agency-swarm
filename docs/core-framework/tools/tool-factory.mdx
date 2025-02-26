@@ -1,0 +1,47 @@
+---
+title: "Tool Factory"
+description: "Creating tools from different sources in Agency Swarm."
+icon: "industry"
+---
+
+The `ToolFactory` class allows you to create tools from different sources, such as Langchain tools or OpenAPI schemas. However, implementing tools from scratch using `BaseTool` provides greater control and is generally recommended.
+
+<Accordion title="Import from Langchain (Not Recommended)">
+
+```python
+from langchain.tools import YouTubeSearchTool
+from agency_swarm.tools import ToolFactory
+
+LangchainTool = ToolFactory.from_langchain_tool(YouTubeSearchTool)
+```
+
+</Accordion>
+
+<Accordion title="Convert from OpenAPI Schemas">
+
+```python
+import requests
+from agency_swarm.tools import ToolFactory
+
+# Using a local OpenAPI schema file
+with open("schemas/your_schema.json") as f:
+    tools = ToolFactory.from_openapi_schema(f.read())
+
+# Using an OpenAPI schema from a URL
+tools = ToolFactory.from_openapi_schema(
+    requests.get("https://api.example.com/openapi.json").json()
+)
+```
+
+</Accordion>
+
+## Conclusion
+
+By leveraging the `ToolFactory`, you can streamline the process of integrating external tools into your agents. This feature allows for flexibility and rapid development, although creating tools directly with `BaseTool` is often preferable for more control and customization.
+
+<Check>
+Remember to:
+- **Consider Direct Implementation:** Use `BaseTool` for greater control.
+- **Use ToolFactory for Quick Integration:** Ideal for rapid prototyping and integration.
+</Check>
+```

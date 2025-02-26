@@ -1,0 +1,117 @@
+---
+title: "Output Validation"
+description: "Implementing validators for agents and tools."
+icon: "shield-check"
+---
+
+Validating the outputs of agents and tools is crucial for building reliable and secure AI agents. Validators help ensure data integrity and handle LLM hallucinations.
+
+## Validators
+
+There are 4 different validators in Agency Swarm:
+
+- Tool validators:
+  - `field_validator`: Validate individual fields independently.
+  - `model_validator`: Perform complex checks involving multiple fields.
+- Agent validators:
+  - `response_validator`: Validate the response before sending it to the user or other agents.
+- Universal validators:
+  - `llm_validator`: Validate outputs against specified natural language rules.
+
+### Agent Response Validator
+
+You can define a `response_validator` method inside your Agent class to validate responses before sending them to the user or other agents. This method should raise an error if the response is invalid, allowing the agent to handle the error and generate a corrected response.
+
+**Example:**
+
+```python
+from agency_swarm import Agent
+
+class CustomerSupportAgent(Agent):
+    def response_validator(self, message: str) -> str:
+        """Validate the response before sending it."""
+        if "bad word" in message.lower():
+            raise ValueError("Please avoid using inappropriate language.")
+        return message
+```
+
+In this example, `CustomerSupportAgent` checks the response for the presence of "bad word" and raises a `ValueError` if it is found. The error is passed to the Agent to generate a corrected response.
+
+### Tool Validators
+
+When defining tools, you can use Pydantic validators to prevent invalid data from being passed to the tool by the calling agent.
+
+There are 2 types of validators used specifically in tools: field-level and model-level validators. Here is the comparison table to help you understand the difference between them:
+
+| Type   | Purpose                                                        | Usage                                                                                                                |
+|------------------|----------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------|
+| **Field Validators** | Validate individual fields independently.                      | Use the `@field_validator` decorator on methods, specifying the field(s) to validate.                                |
+| **Model Validators** | Validate the entire model, allowing checks involving multiple fields. | Use the `@model_validator` decorator on methods.                                                                   |
+
+<Tabs>
+<Tab title="Field Validators" defaultOpen={true}>
+This example ensures that the `username` field does not contain spaces using a field validator:
+
+```python
+from pydantic import field_validator
+from agency_swarm import BaseTool
+
+class User(BaseTool):
+    username: str
+
+    @field_validator('username')
+    @classmethod
+    def validate_username(cls, value):
+        if ' ' in value:
+            raise ValueError('Username must not contain spaces.')
+        return value
+```
+</Tab>
+
+<Tab title="Model Validators">
+This example, a model validator checks that `password` and `confirm_password` match, which requires access to multiple fields:
+```python
+from pydantic import model_validator
+from agency_swarm import BaseTool
+
+class User(BaseTool):
+    password: str
+    confirm_password: str
+
+    @model_validator(mode='after')
+    def check_passwords_match(self):
+        if self.password != self.confirm_password:
+            raise ValueError('Passwords do not match.')
+        return self
+```
+</Tab>
+</Tabs>
+
+### LLM Validator
+
+The `llm_validator` is a powerful way to validate outputs against specified natural language rules.
+
+**Example:**
+
+```python
+from agency_swarm.tools.send_message import SendMessage
+from agency_swarm.util.validators import llm_validator
+from pydantic import model_validator
+
+class SendMessageLLMValidation(SendMessage):
+    @model_validator(mode='after')
+    def validate_recipient(self):
+        if self.recipient == "CustomerSupportAgent":
+            llm_validator(
+                statement="The message is related to customer support."
+            )(self.message)
+        return self
+```
+
+In this example, the `llm_validator` will throw an error if the message is not related to customer support. The caller agent will then have to fix the recipient or the message and send it again.
+
+<Note>
+Since `llm_validator` uses LLMs for validation, it may incur additional costs and latency due to extra API calls. Use it for fields that require complex validation beyond simple checks.
+</Note>
+
+By combining all the validators described above, you can create robust validation logic to ensure your agents and tools perform reliably.

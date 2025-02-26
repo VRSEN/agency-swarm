@@ -1,0 +1,73 @@
+---
+title: "Few-Shot Examples"
+description: "Guide agent responses using few-shot prompting."
+icon: "clone"
+---
+
+**Few-shot prompting** is a powerful technique where you provide a small number of sample interactions (typically 2 to 5) to guide your agent's behavior. This method helps the agent understand the desired output format and task requirements by learning from the given examples, thereby improving performance without writing extensive instructions.
+
+## Crafting Effective Examples
+
+- **Provide Task Demonstrations**: Use examples that clearly illustrate the tasks that your agents will perform.
+- **Use Realistic Scenarios**: Include interactions that mirror actual conversations that your agent will handle.
+- **Use Preferred Tone and Style**: Ensure the agent's replies in your examples match your desired brand voice.
+
+## Defining Few-Shot Examples
+
+In the **Agency Swarm** framework, few-shot examples are structured using the [OpenAI message object format](https://platform.openai.com/docs/api-reference/messages/createMessage), including the `role` and `content` fields.
+
+**Example**: Technical Support Agent:
+
+```python
+examples = [
+    {
+        "role": "user",
+        "content": "My device won't turn on.",
+    },
+    {
+        "role": "assistant",
+        "content": "I'm sorry to hear that. Let's try some troubleshooting steps. First, please press and hold the power button for at least 10 seconds.",
+    },
+    {
+        "role": "user",
+        "content": "I tried that, but it still won't turn on.",
+    },
+    {
+        "role": "assistant",
+        "content": "Thank you for trying that. Please connect your device to a charger and check if any lights appear. Let me know what you observe.",
+    }
+]
+```
+
+The optional fields `attachments` and `metadata` can be included if needed but are not required for basic examples.
+
+## Using Few-Shot Examples
+
+You can add few-shot examples to your agent either during initialization or afterward:
+
+<Tabs>
+    <Tab title="During Initialization">
+
+    ```python
+    from agency_swarm import Agent
+
+    agent = Agent(
+        name="CustomerSupportAgent",
+        description="Assists customers with inquiries and provides detailed information.",
+        examples=examples
+    )
+    ```
+
+    </Tab>
+    <Tab title="After Initialization">
+
+    ```python
+    agent = Agent(name="CustomerSupportAgent")
+    agent.examples = examples
+    ```
+
+    </Tab>
+
+</Tabs>
+
+See more advanced features in [Agent Class](/core-framework/agents/advanced-configuration)
