@@ -22,3 +22,18 @@ THREAD:[ FillAPI -> Param Filler ]: URL https://platform.openai.com/playground/a
 THREAD:[ FillAPI -> Param Filler ]: URL https://platform.openai.com/playground/assistants?assistant=asst_D8jC7NnpHsRM78QFPPywH7Xu&mode=assistant&thread=thread_33PH5Q1VRdtpSCVwNkPZqDYD
 THREAD:[ API Filler -> API Caller ]: URL https://platform.openai.com/playground/assistants?assistant=asst_IJxr44VODSDv8OTKwTleyjFs&mode=assistant&thread=thread_97Hi41OLVXD6oGNyRYrnogNU
 THREAD:[ API Caller -> AKSK_agent ]: URL https://platform.openai.com/playground/assistants?assistant=asst_CDUqFi6kAExdAasE8Z0XviNh&mode=assistant&thread=thread_ZYx8aeRYxPcbQ7NOb6iguRFK
+
+Traceback (most recent call last):
+  File "D:\agency-swarm-main\agency-swarm-cover\main.py", line 323, in <module>
+    agency.task_planning(plan_agents=plan_agents, cap_group_agents=cap_group_agents, cap_agents=cap_agents)
+  File "D:\agency-swarm-main\agency-swarm-cover\agency_swarm\agency\agency.py", line 1521, in task_planning
+    subtask_result_context = self.json_get_completion(cap_group_thread[next_subtask_cap_group][0], json.dumps(steps_input_simple, ensure_ascii=False))
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\agency-swarm-main\agency-swarm-cover\agency_swarm\agency\agency.py", line 1704, in json_get_completion
+    response_information = self.my_get_completion(res)
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\agency-swarm-main\agency-swarm-cover\agency_swarm\agency\agency.py", line 1772, in my_get_completion
+    next(res)
+  File "D:\agency-swarm-main\agency-swarm-cover\agency_swarm\threads\thread.py", line 372, in get_completion
+    raise Exception(
+Exception: ('OpenAI Run Failed. Error: ', 'Rate limit reached for gpt-4o in organization org-uZHhHGrOQ9R3LAXNa2fitQml on tokens per min (TPM): Limit 30000, Used 8220, Requested 25598. Please try again in 7.636s. Visit https://platform.openai.com/account/rate-limits to learn more.')

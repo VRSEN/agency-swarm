@@ -62,6 +62,13 @@ from agents.cap_group_agents.VPC_network.cap_agents.VPC_secgroup_agent import VP
 from agents.cap_group_agents.VPC_network.cap_agents.VPC_subnet_agent import VPC_subnet_agent
 from agents.cap_group_agents.VPC_network.cap_agents.VPC_vpc_agent import VPC_vpc_agent
 
+#from agents.cap_group_agents.CLUSTER_group.cap_agents.CLUSTER_lifecycle_agent import CLUSTER_lifecycle_agent
+#from agents.cap_group_agents.CLUSTER_group.cap_agents.CLUSTER_specification_change_agent import CLUSTER_specification_change_agent
+
+#from agents.cap_group_agents.NODE_group.cap_agents.NODE_lifecycle_agent import NODE_lifecycle_agent
+#from agents.cap_group_agents.NODE_group.cap_agents.NODE_pool_agent import NODE_pool_agent
+#from agents.cap_group_agents.NODE_group.cap_agents.NODE_scaling_protect_agent import NODE_scaling_protect_agent
+
 from agents.basic_agents.api_agents import (
     API_caller, API_filler, API_param_selector, array_filler, array_selector, param_filler, param_selector
 )
