@@ -41,7 +41,7 @@ class RequestAPI(BaseTool):
         description="secret_key"
     )
 
-    def real_run(self):
+    def run(self):
         now = datetime.datetime.now()
         formatted_time = now.strftime("%Y%m%d_%H%M%S")
         debug = os.getenv("DEBUG_REQUESTAPI") # set this in .env
