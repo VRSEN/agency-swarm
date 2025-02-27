@@ -1,8 +1,0 @@
-{
-    "status_code": 400,
-    "reason": "Bad Request",
-    "content": {
-        "code": "VPC.0201",
-        "message": "VPC ID is invalid."
-    }
-}

@@ -1,8 +1,6 @@
 from agency_swarm.tools import BaseTool
 from pydantic import Field
-import pandas as pd
 import json
-import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from agents.basic_agents.api_agents.tools.api_database import search_from_sqlite, API_DATABASE_FILE
@@ -41,14 +39,16 @@ class FillAPI(BaseTool):
     def run(self):
 
         # 1. get general information about this API
-        api_info_df = search_from_sqlite(database_path=API_DATABASE_FILE, table_name='api_info', condition=f'name=\'{self.api_name}\'')
-        assert len(api_info_df) == 1, "api_name should have exactly 1 match"
-        api_info = api_info_df.iloc[0]
-        method = api_info.loc["method"]     # assume no parameters
-        uri = api_info.loc["uri"]           # assume some parameters
+        apis_df = search_from_sqlite(database_path=API_DATABASE_FILE, table_name='apis', condition=f'name=\'{self.api_name}\'')
+        assert len(apis_df) == 1, f"API '{self.api_name}' does not exist or has duplicates."
+        api_row = apis_df.iloc[0]
+        method = api_row.loc["method"]
+        uri = api_row.loc["uri"]
+        api_id = api_row.loc["id"]
+        root_table_id = api_row.loc["root_table_id"]
 
         # 2. for each URI parameter, call Param Filler to decide its value
-        uri_parameters_df = search_from_sqlite(database_path=API_DATABASE_FILE, table_name='uri_parameters', condition=f'api_name=\'{self.api_name}\'')
+        uri_parameters_df = search_from_sqlite(database_path=API_DATABASE_FILE, table_name='uri_parameters', condition=f'api_id=\'{api_id}\'')
         uri_param_values = {}
 
         with ThreadPoolExecutor() as executor:
@@ -64,7 +64,7 @@ class FillAPI(BaseTool):
         fill_param_table_instance = FillParamTable(caller_tool = self,
                                                    user_requirement=self.user_requirement,
                                                    api_name=self.api_name,
-                                                   table_id=1) # assume root table is always table 1
+                                                   table_id=root_table_id)
         request_param_values_str = fill_param_table_instance.run()
         request_param_values = try_parse_json(request_param_values_str)
 

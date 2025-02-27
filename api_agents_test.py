@@ -58,5 +58,5 @@ agency = Agency(
     max_prompt_tokens=25000
 )
 
-agency.run_demo()
+agency.demo_gradio()
 # agency.run_demo()

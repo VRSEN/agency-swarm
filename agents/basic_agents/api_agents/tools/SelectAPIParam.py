@@ -52,14 +52,14 @@ class SelectAPIParam(BaseTool):
     def run(self):
 
         # 1. get general information about this API
-        api_info_df = search_from_sqlite(database_path=API_DATABASE_FILE, table_name='api_info', condition=f'name=\'{self.api_name}\'')
-        assert len(api_info_df) == 1, "api_name should have exactly 1 match"
-        api_info = api_info_df.iloc[0]
-        method = api_info.loc["method"]     # assume no parameters
-        uri = api_info.loc["uri"]           # assume some parameters
+        apis_df = search_from_sqlite(database_path=API_DATABASE_FILE, table_name='apis', condition=f'name=\'{self.api_name}\'')
+        assert len(apis_df) == 1, f"API '{self.api_name}' does not exist or has duplicates."
+        api_row = apis_df.iloc[0]
+        api_id = api_row.loc["id"]
+        root_table_id = api_row.loc["root_table_id"]
 
         # 2. call Param Selector to decide whether to select URI parameters
-        uri_parameters_df = search_from_sqlite(database_path=API_DATABASE_FILE, table_name='uri_parameters', condition=f'api_name=\'{self.api_name}\'')
+        uri_parameters_df = search_from_sqlite(database_path=API_DATABASE_FILE, table_name='uri_parameters', condition=f'api_id=\'{api_id}\'')
         selected_uri_params = []
 
         with ThreadPoolExecutor() as executor:
@@ -73,7 +73,7 @@ class SelectAPIParam(BaseTool):
         select_param_table_instance = SelectParamTable(caller_tool = self,
                                                        user_requirement = self.user_requirement,
                                                        api_name=self.api_name,
-                                                       table_id=1) # assume root table is always table 1
+                                                       table_id=root_table_id)
         selected_request_params_str = select_param_table_instance.run()
         selected_request_params = try_parse_json(selected_request_params_str)
         assert_list_of_dicts(selected_request_params)
