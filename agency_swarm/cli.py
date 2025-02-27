@@ -36,6 +36,9 @@ def main():
         "--openai_key", default=None, type=str, help="OpenAI API key."
     )
     genesis_parser.add_argument(
+        "--model", default="o3-mini", type=str, help="OpenAI model to use."
+    )
+    genesis_parser.add_argument(
         "--with_browsing",
         default=False,
         action="store_true",
@@ -83,7 +86,7 @@ def main():
 
         from agency_swarm.agency.genesis import GenesisAgency
 
-        agency = GenesisAgency(with_browsing=args.with_browsing)
+        agency = GenesisAgency(with_browsing=args.with_browsing, model=args.model)
         agency.run_demo()
     elif args.command == "import-agent":
         from agency_swarm.util import import_agent

@@ -1,9 +1,10 @@
 import os
+from pathlib import Path
 from typing import Optional
 
 from pydantic import Field, model_validator
 
-from agency_swarm.agency.genesis.util import check_agency_path
+from agency_swarm.agency.genesis.util import change_directory, check_agency_path
 from agency_swarm.tools import BaseTool, ToolFactory
 
 
@@ -30,34 +31,33 @@ class TestTool(BaseTool):
     )
 
     def run(self):
-        if self.agency_name:
-            os.chdir("./" + self.agency_name)
-        else:
-            os.chdir(self._shared_state.get("agency_path"))
-        os.chdir(self.agent_name)
+        target_dir = (
+            Path(self.agency_name)
+            if self.agency_name
+            else Path(self._shared_state.get("agency_path"))
+        )
+        target_dir = target_dir / self.agent_name
 
-        # import tool by self.tool_name from local tools.py file
-        try:
-            tool = ToolFactory.from_file(f"./tools/{self.tool_name}.py")
-        except Exception as e:
-            raise ValueError(f"Error importing tool {self.tool_name}: {e}")
-        finally:
-            os.chdir(self._shared_state.get("default_folder"))
+        with change_directory(target_dir):
+            try:
+                # Import tool by self.tool_name from local tools.py file
+                tool = ToolFactory.from_file(f"./tools/{self.tool_name}.py")
+            except Exception as e:
+                raise ValueError(f"Error importing tool {self.tool_name}: {e}")
 
-        try:
-            if not self.arguments:
-                output = tool().run()
-            else:
-                output = tool(**eval(self.arguments)).run()
-        except Exception as e:
-            raise ValueError(f"Error running tool {self.tool_name}: {e}")
-        finally:
-            os.chdir(self._shared_state.get("default_folder"))
+            try:
+                if not self.arguments:
+                    output = tool().run()
+                else:
+                    output = tool(**eval(self.arguments)).run()
 
-        if not output:
-            raise ValueError(f"Tool {self.tool_name} did not return any output.")
+            except Exception as e:
+                raise ValueError(f"Error running tool {self.tool_name}: {e}")
 
-        return f"Successfully initialized and ran tool. Output: '{output}'"
+            if not output:
+                raise ValueError(f"Tool {self.tool_name} did not return any output.")
+
+            return f"Successfully initialized and ran tool. Output: '{output}'"
 
     @model_validator(mode="after")
     def validate_tool_name(self):
