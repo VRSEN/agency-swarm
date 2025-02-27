@@ -50,8 +50,14 @@ class SelectParamTable(BaseTool):
 
     def run(self):
 
-        # 1. for each parameter in this table, call Param Selector to decide whether to select it.
-        param_table_df = search_from_sqlite(database_path=API_DATABASE_FILE, table_name='request_parameters', condition=f"api_name='{self.api_name}' AND table_id='{self.table_id}'")
+        # 1. get ID of this API
+        apis_df = search_from_sqlite(database_path=API_DATABASE_FILE, table_name='apis', condition=f'name=\'{self.api_name}\'')
+        assert len(apis_df) == 1, f"API '{self.api_name}' does not exist or has duplicates."
+        api_row = apis_df.iloc[0]
+        api_id = api_row.loc["id"]
+
+        # 2. for each parameter in this table, call Param Selector to decide whether to select it.
+        param_table_df = search_from_sqlite(database_path=API_DATABASE_FILE, table_name='request_parameters', condition=f"api_id='{api_id}' AND table_id='{self.table_id}'")
         selected_params = []
 
         with ThreadPoolExecutor() as executor:
