@@ -30,6 +30,12 @@ from agents.cap_group_agents.OS_group import (
 from agents.cap_group_agents.VPC_network import (
     VPC_network_manager, VPC_network_planner, VPC_network_step_scheduler
 )
+from agents.cap_group_agents.CLUSTER_group import (
+    CLUSTER_manager, CLUSTER_planner, CLUSTER_step_scheduler
+)
+from agents.cap_group_agents.NODE_group import (
+    NODE_manager, NODE_planner, NODE_step_scheduler
+)
 from agents.cap_group_agents import step_inspector
 
 from agents.cap_group_agents import (
@@ -62,12 +68,12 @@ from agents.cap_group_agents.VPC_network.cap_agents.VPC_secgroup_agent import VP
 from agents.cap_group_agents.VPC_network.cap_agents.VPC_subnet_agent import VPC_subnet_agent
 from agents.cap_group_agents.VPC_network.cap_agents.VPC_vpc_agent import VPC_vpc_agent
 
-#from agents.cap_group_agents.CLUSTER_group.cap_agents.CLUSTER_lifecycle_agent import CLUSTER_lifecycle_agent
-#from agents.cap_group_agents.CLUSTER_group.cap_agents.CLUSTER_specification_change_agent import CLUSTER_specification_change_agent
+from agents.cap_group_agents.CLUSTER_group.cap_agents.CLUSTER_lifecycle_agent import CLUSTER_lifecycle_agent
+from agents.cap_group_agents.CLUSTER_group.cap_agents.CLUSTER_specification_change_agent import CLUSTER_specification_change_agent
 
-#from agents.cap_group_agents.NODE_group.cap_agents.NODE_lifecycle_agent import NODE_lifecycle_agent
-#from agents.cap_group_agents.NODE_group.cap_agents.NODE_pool_agent import NODE_pool_agent
-#from agents.cap_group_agents.NODE_group.cap_agents.NODE_scaling_protect_agent import NODE_scaling_protect_agent
+from agents.cap_group_agents.NODE_group.cap_agents.NODE_lifecycle_agent import NODE_lifecycle_agent
+from agents.cap_group_agents.NODE_group.cap_agents.NODE_pool_agent import NODE_pool_agent
+from agents.cap_group_agents.NODE_group.cap_agents.NODE_scaling_protect_agent import NODE_scaling_protect_agent
 
 from agents.basic_agents.api_agents import (
     API_caller, API_filler, API_param_selector, array_filler, array_selector, param_filler, param_selector
@@ -158,6 +164,19 @@ VPC_secgroup_agent = VPC_secgroup_agent.create_agent()
 VPC_subnet_agent = VPC_subnet_agent.create_agent()
 VPC_vpc_agent = VPC_vpc_agent.create_agent()
 
+CLUSTER_planner = CLUSTER_planner.create_agent()
+CLUSTER_manager = CLUSTER_manager.create_agent()
+CLUSTER_step_scheduler = CLUSTER_step_scheduler.create_agent()
+CLUSTER_lifecycle_agent = CLUSTER_lifecycle_agent.create_agent()
+CLUSTER_specification_change_agent = CLUSTER_specification_change_agent.create_agent()
+
+NODE_planner = NODE_planner.create_agent()
+NODE_manager = NODE_manager.create_agent()
+NODE_step_scheduler = NODE_step_scheduler.create_agent()
+NODE_lifecycle_agent = NODE_lifecycle_agent.create_agent()
+NODE_pool_agent = NODE_pool_agent.create_agent()
+NODE_scaling_protect_agent = NODE_scaling_protect_agent.create_agent()
+
 API_caller = API_caller.create_agent()
 API_filler = API_filler.create_agent()
 API_param_selector = API_param_selector.create_agent()
@@ -180,6 +199,8 @@ chat_graph = [task_planner, scheduler, inspector,
               IMS_planner, IMS_step_scheduler,
             #   OS_planner, OS_step_scheduler,
               VPC_network_planner, VPC_network_step_scheduler,
+              CLUSTER_planner, CLUSTER_step_scheduler,
+              NODE_planner, NODE_step_scheduler,
 
             #   [subtask_manager, CES_manager],
               # [subtask_manager, ECS_manager],
@@ -242,6 +263,27 @@ chat_graph = [task_planner, scheduler, inspector,
               [VPC_vpc_agent, VPC_network_manager],
               [VPC_subnet_agent, VPC_network_manager],
               [VPC_secgroup_agent, VPC_network_manager],
+
+              [CLUSTER_manager, CLUSTER_lifecycle_agent],
+              [CLUSTER_manager, CLUSTER_specification_change_agent],
+
+              [CLUSTER_lifecycle_agent, job_agent],
+              [CLUSTER_specification_change_agent, job_agent],
+
+              [CLUSTER_lifecycle_agent, CLUSTER_manager],
+              [CLUSTER_specification_change_agent, CLUSTER_manager],
+
+              [NODE_manager, NODE_lifecycle_agent],
+              [NODE_manager, NODE_pool_agent],
+              [NODE_manager, NODE_scaling_protect_agent],
+
+              [NODE_lifecycle_agent, job_agent],
+              [NODE_pool_agent, job_agent],
+              [NODE_scaling_protect_agent, job_agent],
+              
+              [NODE_lifecycle_agent, NODE_manager],
+              [NODE_pool_agent, NODE_manager],
+              [NODE_scaling_protect_agent, NODE_manager],
 
               
               [ECS_harddisk_agent, API_param_selector],
@@ -312,6 +354,8 @@ cap_group_agents = {
     # "操作系统管理能力群": [OS_planner, OS_manager, OS_step_scheduler],
     "VPC网络管理能力群": [VPC_network_planner, VPC_network_manager, VPC_network_step_scheduler],
     # "华为云元信息管理能力群": [Huawei_meta_info_planner, ]
+    "集群管理能力群": [CLUSTER_planner, CLUSTER_manager, CLUSTER_step_scheduler],
+    "节点管理能力群": [NODE_planner, NODE_manager, NODE_step_scheduler],
     "简单任务处理能力群": [basic_cap_solver],
 }
 
@@ -324,6 +368,8 @@ cap_agents = {
     "镜像管理能力群": [IMS_agent],
     # "操作系统管理能力群": [OS_agent],
     "VPC网络管理能力群": [VPC_secgroup_agent, VPC_subnet_agent, VPC_vpc_agent],
+    "集群管理能力群": [CLUSTER_lifecycle_agent, CLUSTER_specification_change_agent],
+    "节点管理能力群": [NODE_lifecycle_agent, NODE_pool_agent, NODE_scaling_protect_agent],
 }
 
 # agency.langgraph_test(repeater=repeater, rander=rander, palindromist=palindromist)
