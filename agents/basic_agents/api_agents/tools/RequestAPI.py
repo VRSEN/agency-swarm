@@ -81,7 +81,7 @@ class RequestAPI(BaseTool):
                 "reason": resp.reason,
                 "content": json.loads(content)
             }
-            result_str = json.dumps(result_json, f, ensure_ascii=False, indent=4)
+            result_str = json.dumps(result_json, ensure_ascii=False, indent=4)
 
             # name the result file
             prefix = "context_"
