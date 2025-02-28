@@ -78,7 +78,7 @@ def insert_data():
     conn = sqlite3.connect(API_DATABASE_FILE)
     cursor = conn.cursor()
 
-    api_info_data = [
+    apis_data = [
         # (name, method, uri, description, root_table_id, doc_page)
         ("创建云服务器", "POST", "https://{endpoint}/v1.1/{project_id}/cloudservers", "创建一台或多台云服务器。", 1, "https://support.huaweicloud.com/api-ecs/ecs_02_0101.html"),
         ("删除云服务器", "POST", "https://{endpoint}/v1/{project_id}/cloudservers/delete", "根据指定的云服务器ID列表，删除云服务器。", 1, "https://support.huaweicloud.com/api-ecs/ecs_02_0103.html"),
@@ -99,6 +99,7 @@ def insert_data():
         ("查询子网列表", "GET", "https://{endpoint}/v1/{project_id}/subnets", "查询子网列表。", 1, "https://support.huaweicloud.com/api-vpc/vpc_subnet01_0003.html"),
         ("查询安全组列表", "GET", "https://{endpoint}/v1/{project_id}/security-groups", "查询安全组列表。", 1, "https://support.huaweicloud.com/api-vpc/vpc_sg01_0003.html"),
         ("创建安全组", "POST", "https://{endpoint}/v1/{project_id}/security-groups", "创建安全组。", 1, "https://support.huaweicloud.com/api-vpc/vpc_sg01_0001.html"),
+        ('创建集群', 'POST', 'https://{endpoint}/api/v3/projects/{project_id}/clusters', '#### 功能介绍\n该API用于创建一个空集群（即只有控制节点Master，没有工作节点Node）。请在调用本接口完成集群创建之后，通过创建节点添加节点。\n- 集群管理的URL格式为：https://Endpoint/uri。其中uri为资源路径，也即API访问的路径。\n- 调用该接口创建集群时，默认不安装ICAgent，若需安装ICAgent，可在请求Body参数的annotations中加入"cluster.install.addons.external/install":"[{"addonTemplateName":"icagent"}]"的集群注解，将在创建集群时自动安装ICAgent。ICAgent是应用性能管理APM的采集代理，运行在应用所在的服务器上，用于实时采集探针所获取的数据，安装ICAgent是使用应用性能管理APM的前提。', 3, 'https://support.huaweicloud.com/api-cce/cce_02_0236.html'),
     ]
 
     uri_parameters_data = [
@@ -207,6 +208,8 @@ def insert_data():
         ("查询安全组列表", "remote_address_group_id", False, "String", "功能说明：远端IP地址组ID。您可以登录管理控制台，在IP地址组页面查看该ID。 约束：和remote_ip_prefix，remote_group_id功能互斥。"),
         ("创建安全组", "endpoint", True, None, "指定承载REST服务端点的服务器域名或IP，不同服务不同区域的Endpoint不同，您可以从地区和终端节点获取。例如IAM服务在“华北-北京四”区域的Endpoint为“iam.cn-north-4.myhuaweicloud.com”。"),
         ("创建安全组", "project_id", True, None, "项目ID，获取项目ID请参见获取项目ID。"),
+        ('创建集群', 'endpoint', True, 'String', '指定承载REST服务端点的服务器域名或IP，不同服务不同区域的Endpoint不同，您可以从地区和终端节点获取。\n例如IAM服务在“华北-北京四”区域的Endpoint为“iam.cn-north-4.myhuaweicloud.com”。'),
+        ('创建集群', 'project_id', True, 'String', '**参数解释：**\n项目ID，获取方式请参见如何获取接口URI中参数。\n**约束限制：**\n不涉及\n**取值范围：**\n账号的项目ID\n**默认取值：**\n不涉及'),
     ]
 
     request_parameters_data = [
@@ -398,11 +401,101 @@ def insert_data():
         ("创建安全组", 3, "name", True, "String", "功能说明：安全组名称。 取值范围：1-64个字符，支持数字、字母、中文字符、_(下划线)、-（中划线）、.（点）。", None),
         ("创建安全组", 3, "vpc_id", False, "String", "安全组所在的vpc的资源标识。 说明： 当前该参数只作提示用，不约束安全组在此vpc下，不建议继续使用。", None),
         ("创建安全组", 3, "enterprise_project_id", False, "String", "功能说明：企业项目ID。创建安全组时，给安全组绑定企业项目ID。 取值范围：最大长度36字节，带“-”连字符的UUID格式，或者是字符串“0”。“0”表示默认企业项目。 说明： 关于企业项目ID的获取及企业项目特性的详细信息，请参见《企业管理用户指南》。", None),
+        ('创建集群', 3, 'apiVersion', True, 'String', '**参数解释：**\nAPI版本。\n**约束限制：**\n该值不可修改\n**取值范围：**\n- v3\n**默认取值：**\n不涉及', None),
+        ('创建集群', 3, 'kind', True, 'String', '**参数解释：**\nAPI类型。\n**约束限制：**\n该值不可修改\n**取值范围：**\n- Cluster\n- cluster\n**默认取值：**\n不涉及', None),
+        ('创建集群', 3, 'metadata', True, 'ClusterMetadata object', '**参数解释：**\n集群的基本信息，为集合类的元素类型，包含一组由不同名称定义的属性。\n**约束限制：**\n不涉及\n\n详情请参见表4\n\n详情请参见表4', 4),
+        ('创建集群', 3, 'spec', True, 'ClusterSpec object', '**参数解释：**\nspec是集合类的元素类型，您对需要管理的集群对象进行详细描述的主体部分都在spec中给出。CCE通过spec的描述来创建或更新对象。\n**约束限制：**\n不涉及\n\n详情请参见表5\n\n详情请参见表5', 5),
+        ('创建集群', 4, 'alias', False, 'String', '**参数解释：**\n集群显示名，用于在 CCE 界面显示，该名称创建后可修改。显示名和其他集群的名称、显示名不可以重复。\n**约束限制：**\n在创建集群、更新集群请求体中，集群显示名alias未指定或取值为空，表示与集群名称name一致。在创建集群等响应体中，集群显示名alias未配置时将不返回。\n**取值范围：**\n以中文或英文字符开头，由数字、中文、英文字符、中划线（-）组成，长度范围 4-128位，且不能以中划线（-）开头和结尾。\n**默认取值：**\n不涉及', None),
+        ('创建集群', 4, 'annotations', False, 'Map<String,String>', '**参数解释：**\n集群注解，由key/value组成：\n"annotations": {\n"key1" : "value1",\n"key2" : "value2"\n}\n**约束限制：**\n该字段不会被数据库保存，当前仅用于指定集群待安装插件。\n**取值范围：**\n不涉及\n**默认取值：**\n不涉及\n说明：\n- Annotations不用于标识和选择对象。Annotations中的元数据可以是small或large，structured或unstructured，并且可以包括标签不允许使用的字符。\n- 可通过加入"cluster.install.addons.external/install":"[{"addonTemplateName":"icagent"}]"的键值对在创建集群时安装ICAgent。', None),
+        ('创建集群', 4, 'creationTimestamp', False, 'String', '**参数解释：**\n集群创建时间。\n**约束限制：**\n不涉及\n**取值范围：**\n不涉及\n**默认取值：**\n不涉及', None),
+        ('创建集群', 4, 'labels', False, 'Map<String,String>', '**参数解释：**\n集群标签，key/value对格式。\n**约束限制：**\n该字段值由系统自动生成，用于升级时前端识别集群支持的特性开关，用户指定无效。\n**取值范围：**\n不涉及\n**默认取值：**\n不涉及', None),
+        ('创建集群', 4, 'name', True, 'String', '**参数解释：**\n集群名称。\n**约束限制：**\n不涉及\n**取值范围：**\n以小写字母开头，由小写字母、数字、中划线(-)组成，长度范围4-128位，且不能以中划线(-)结尾。\n**默认取值：**\n不涉及', None),
+        ('创建集群', 4, 'timezone', False, 'String', '**参数解释：**\n集群时区。\n**约束限制：**\n不涉及\n**取值范围：**\n不涉及\n**默认取值：**\n不涉及', None),
+        ('创建集群', 4, 'uid', False, 'String', '**参数解释：**\n集群ID，资源唯一标识。\n**约束限制：**\n创建成功后自动生成，填写无效。在创建包周期集群时，响应体不返回集群ID。\n**取值范围：**\n不涉及\n**默认取值：**\n不涉及', None),
+        ('创建集群', 4, 'updateTimestamp', False, 'String', '**参数解释：**\n集群更新时间。\n**约束限制：**\n不涉及\n**取值范围：**\n不涉及\n**默认取值：**\n不涉及', None),
+        ('创建集群', 5, 'authentication', False, 'Authentication object', '**参数解释：**\n集群认证方式相关配置。\n**约束限制：**\n不涉及\n\n详情请参见表13', 13),
+        ('创建集群', 5, 'az', False, 'String', '**参数解释：**\n可用区（仅查询返回字段）。\nCCE支持的可用区请参考地区和终端节点。\n**约束限制：**\n不涉及', None),
+        ('创建集群', 5, 'billingMode', False, 'Integer', '**参数解释：**\n集群的计费方式。\n**约束限制：**\n不涉及\n**取值范围：**\n- 0: 按需计费\n- 1: 包周期\n**默认取值：**\n默认0。', None),
+        ('创建集群', 5, 'category', False, 'String', '**参数解释：**\n集群类别。\n**约束限制：**\n不涉及\n**取值范围：**\n- CCE：CCE集群\nCCE集群支持虚拟机与裸金属服务器混合、GPU、NPU等异构节点的混合部署，基于高性能网络模型提供全方位、多场景、安全稳定的容器运行环境。\n- Turbo: CCE Turbo集群。\n全面基于云原生基础设施构建的云原生2.0的容器引擎服务，具备软硬协同、网络无损、安全可靠、调度智能的优势，为用户提供一站式、高性价比的全新容器服务体验。\n**默认取值：**\n容器网络参数设置非eni模式时，默认为CCE\n容器网络参数设置为eni模式时，默认为Turbo', None),
+        ('创建集群', 5, 'clusterOps', False, 'ClusterOps object', '**参数解释：**\n集群运维相关配置。\n**约束限制：**\n不涉及\n\n详情请参见表20', 20),
+        ('创建集群', 5, 'clusterTags', False, 'Array of ResourceTag objects', '**参数解释：**\n集群资源标签。\n**约束限制：**\n不涉及\n\n详情请参见表16', 16),
+        ('创建集群', 5, 'configurationsOverride', False, 'Array of PackageConfiguration objects', '**参数解释：**\n覆盖集群默认组件配置。\n当前支持的可配置组件及其参数详见配置管理。\n**约束限制：**\n若指定了不支持的组件或组件不支持的参数，该配置项将被忽略。\n\n详情请参见表18', 18),
+        ('创建集群', 5, 'containerNetwork', True, 'ContainerNetwork object', '**参数解释：**\n容器网络参数，包含了容器网络类型和容器网段的信息。\n**约束限制：**\n不涉及\n\n详情请参见表7', 7),
+        ('创建集群', 5, 'customSan', False, 'Array of strings', '**参数解释：**\n集群的API Server服务端证书中的自定义SAN（Subject Alternative Name）字段，遵从SSL标准X509定义的格式规范。\n**约束限制：**\n不允许出现同名重复。\n**取值范围：**\n格式符合IP和域名格式。\n**默认取值：**\n不涉及\n示例:\nSAN 1: DNS Name=example.com\nSAN 2: DNS Name=www.example.com\nSAN 3: DNS Name=example.net\nSAN 4: IP Address=93.184.216.34', None),
+        ('创建集群', 5, 'deletionProtection', False, 'Boolean', '**参数解释：**\n集群删除保护，如果开启后用户将无法删除该集群。\n**约束限制：**\n不涉及。\n**取值范围：**\n- true: 开启集群删除保护\n- false: 关闭集群删除保护\n**默认取值：**\n默认false', None),
+        ('创建集群', 5, 'description', False, 'String', '**参数解释：**\n集群描述，对于集群使用目的的描述，可根据实际情况自定义，默认为空。集群创建成功后可通过接口更新指定的集群来做出修改，也可在CCE控制台中对应集群的“集群详情”下的“描述”处进行修改。\n**约束限制：**\n仅支持utf-8编码。\n**取值范围：**\n不涉及\n**默认取值：**\n不涉及', None),
+        ('创建集群', 5, 'enableAutopilot', False, 'Boolean', '**参数解释：**\n是否为Autopilot集群。\n**约束限制：**\n不涉及\n**取值范围：**\n- true: 创建Autopilot类型集群\n- false: 创建CCE/Turbo类型集群\n**默认取值：**\n默认false', None),
+        ('创建集群', 5, 'enableDistMgt', False, 'Boolean', '**参数解释：**\n集群开启对分布式云支持。\n**约束限制：**\n目前只有Turbo集群支持。\n**取值范围：**\n- true: 开启对分布式云支持\n- false: 关闭对分布式云支持\n**默认取值：**\n默认false', None),
+        ('创建集群', 5, 'encryptionConfig', False, 'EncryptionConfig object', '**参数解释** ：\nsecret资源落盘加密配置，当前仅支持配置一种加密方式。默认使用cce托管密钥（用户侧不感知该密钥）进行加密。\n**约束限制** ：\n不涉及\n**取值范围** ：\n不涉及\n**默认取值** ：\n不涉及\n\n详情请参见表22', 22),
+        ('创建集群', 5, 'eniNetwork', False, 'EniNetwork object', '**参数解释：**\n云原生网络2.0网络配置，创建CCE Turbo集群时指定。\n**约束限制：**\n不涉及\n\n详情请参见表9', 9),
+        ('创建集群', 5, 'extendParam', False, 'ClusterExtendParam object', '**参数解释：**\n集群扩展字段，可配置多可用区集群、专属CCE集群，以及将集群创建在特定的企业项目下等。\n**约束限制：**\n不涉及\n\n详情请参见表17', 17),
+        ('创建集群', 5, 'flavor', True, 'String', '**参数解释：**\n集群规格，当集群为v1.15及以上版本时支持创建后变更，详情请参见变更集群规格。请按实际业务需求进行选择\n**约束限制：**\n不涉及\n**取值范围：**\n- cce.s1.small: 小规模单控制节点CCE集群（最大50节点）\n- cce.s1.medium: 中等规模单控制节点CCE集群（最大200节点）\n- cce.s2.small: 小规模三控制节点CCE集群（最大50节点）\n- cce.s2.medium: 中等规模三控制节点CCE集群（最大200节点）\n- cce.s2.large: 大规模三控制节点CCE集群（最大1000节点）\n- cce.s2.xlarge: 超大规模三控制节点CCE集群（最大2000节点）\n**默认取值：**\n不涉及\n说明：\n关于规格参数中的字段说明如下：\n- s1：单控制节点的集群，控制节点数为1。单控制节点故障后，集群将不可用，但已运行工作负载不受影响。\n- s2：三控制节点的集群，即高可用集群，控制节点数为3。当某个控制节点故障时，集群仍然可用。\n- dec：表示专属云的CCE集群规格。例如cce.dec.s1.small表示小规模单控制节点的专属云CCE集群（最大50节点）。\n- small：表示集群支持管理的最大节点规模为50节点。\n- medium：表示集群支持管理的最大节点规模为200节点。\n- large：表示集群支持管理的最大节点规模为1000节点。\n- xlarge：表示集群支持管理的最大节点规模为2000节点。', None),
+        ('创建集群', 5, 'hostNetwork', True, 'HostNetwork object', '**参数解释：**\n节点网络参数，包含了虚拟私有云VPC和子网的ID信息，而VPC是集群内节点之间的通信依赖，所以是必选的参数集。\n**约束限制：**\n不涉及\n\n详情请参见表6', 6),
+        ('创建集群', 5, 'ipv6enable', False, 'Boolean', '**参数解释：**\n集群是否使用IPv6模式，1.15版本及以上支持。\n**约束限制：**\n开启IPv6后不支持iptables转发模式；VPC网络模式不支持IPv4/IPv6双栈网络。\n**取值范围：**\n- true: 开启IPv4/IPv6双栈模式\n- false: 仅使用IPv4模式\n**默认取值：**\nfalse', None),
+        ('创建集群', 5, 'kubeProxyMode', False, 'String', '**参数解释：**\n服务转发模式。\n**约束限制：**\n不涉及\n**取值范围：**\n- iptables：社区传统的kube-proxy模式，完全以iptables规则的方式来实现service负载均衡。该方式最主要的问题是在服务多的时候产生太多的iptables规则，非增量式更新会引入一定的时延，大规模情况下有明显的性能问题。\n- ipvs：主导开发并在社区获得广泛支持的kube-proxy模式，采用增量式更新，吞吐更高，速度更快，并可以保证service更新期间连接保持不断开，适用于大规模场景。\n**默认取值：**\n默认使用iptables转发模式。', None),
+        ('创建集群', 5, 'kubernetesSvcIpRange', False, 'String', '**参数解释：**\n服务网段参数，kubernetes clusterIP取值范围，1.11.7版本及以上支持。创建集群时如若未传参，默认为"10.247.0.0/16"。该参数废弃中，推荐使用新字段serviceNetwork，包含IPv4服务网段。\n**约束限制：**\n不涉及\n**取值范围：**\n不涉及\n**默认取值：**\n不涉及', None),
+        ('创建集群', 5, 'legacyVersion', False, 'String', '**参数解释：**\nCCE集群旧版本（已废弃），无实际功能，仅用于集群version与platformVersion组合展示，该版本号全局内唯一。如集群version为va.b, platformVersion为cce.X.Y，则legacyVersion值为va.b.X-rY。\n**约束限制：**\n不涉及\n**取值范围：**\n不涉及\n**默认取值：**\n不涉及', None),
+        ('创建集群', 5, 'masters', False, 'Array of MasterSpec objects', '**参数解释：**\n控制节点的高级配置。\n**约束限制：**\n该参数未配置时将不返回。\n\n详情请参见表15', 15),
+        ('创建集群', 5, 'platformVersion', False, 'String', '**参数解释：**\nCCE集群平台版本号，表示集群版本(version)下的内部版本。用于跟踪某一集群版本内的迭代，集群版本内唯一，跨集群版本重新计数。\n**约束限制：**\n不支持用户指定，集群创建时自动选择对应集群版本的最新平台版本。\n**取值范围：**\nplatformVersion格式为：cce.X.Y\n- X: 表示内部特性版本。集群版本中特性或者补丁修复，或者OS支持等变更场景。其值从1开始单调递增。\n- Y: 表示内部特性版本的补丁版本。仅用于特性版本上线后的软件包更新，不涉及其他修改。其值从0开始单调递增。\n**默认取值：**\n不涉及', None),
+        ('创建集群', 5, 'publicAccess', False, 'PublicAccess object', '**参数解释：**\n集群API访问控制。\n**约束限制：**\n不涉及\n\n详情请参见表12', 12),
+        ('创建集群', 5, 'serviceNetwork', False, 'ServiceNetwork object', '**参数解释：**\n服务网段参数，包含IPv4 CIDR。\n**约束限制：**\n不涉及\n\n详情请参见表11', 11),
+        ('创建集群', 5, 'supportIstio', False, 'Boolean', '**参数解释：**\n支持Istio。\n**约束限制：**\n不涉及\n**取值范围：**\n- true: 支持istio\n- false: 不支持istio\n**默认取值：**\n默认true', None),
+        ('创建集群', 5, 'type', False, 'String', '**参数解释：**\n集群Master节点架构\n**约束限制：**\n不涉及\n**取值范围：**\n- VirtualMachine：Master节点为x86架构服务器\n- ARM64: Master节点为鲲鹏（ARM架构）服务器\n**默认取值：**\nVirtualMachine', None),
+        ('创建集群', 5, 'version', False, 'String', '**参数解释：**\n集群版本，与Kubernetes社区基线版本保持一致，建议选择最新版本。\n在CCE控制台支持创建三种最新版本的集群。可登录CCE控制台创建集群，在“版本”处获取到集群版本。\n其它集群版本，当前仍可通过api创建，但后续会逐渐下线，具体下线策略请关注CCE官方公告。\n**约束限制：**\n不涉及\n**取值范围：**\n不涉及\n**默认取值：**\n- 若不配置，默认创建最新版本的集群。\n- 若指定集群基线版本但是不指定具体r版本，则系统默认选择对应集群版本的最新r版本。建议不指定具体r版本由系统选择最新版本。\n说明：\n- Turbo集群支持1.19及以上版本商用。', None),
+        ('创建集群', 6, 'SecurityGroup', False, 'String', '**参数解释：**\n集群默认的Node节点安全组ID。\n**约束限制：**\n不涉及\n**取值范围：**\n不涉及\n**默认取值：**\n- 不指定该字段系统将自动为用户创建默认Node节点安全组。\n- 指定该字段时集群将绑定指定的安全组。\n说明：\n指定Node节点安全组需要放通部分端口来保证正常通信。详细设置请参考集群安全组规则配置。', None),
+        ('创建集群', 6, 'controlPlaneSecurityGroup', False, 'String', '**参数解释：**\n集群控制面节点安全组ID。\n**约束限制：**\n创建成功后自动生成，填写无效。\n**取值范围：**\n不涉及\n**默认取值：**\n不涉及', None),
+        ('创建集群', 6, 'subnet', True, 'String', '**参数解释：**\n用于创建控制节点的subnet的网络ID。\n**约束限制：**\n不涉及\n**取值范围：**\n不涉及\n**默认取值：**\n不涉及\n获取方法如下：\n- 方法1：登录虚拟私有云服务的控制台界面，单击VPC下的子网，进入子网详情页面，查找网络ID。\n- 方法2：通过虚拟私有云服务的查询子网列表接口查询。\n链接请参见查询子网列表。', None),
+        ('创建集群', 6, 'vpc', True, 'String', '**参数解释：**\n用于创建控制节点的VPC的ID。\n**约束限制：**\n不涉及\n**取值范围：**\n不涉及\n**默认取值：**\n不涉及\n获取方法如下：\n- 方法1：登录虚拟私有云服务的控制台界面，在虚拟私有云的详情页面查找VPC ID。\n- 方法2：通过虚拟私有云服务的API接口查询。\n链接请参见查询VPC列表。', None),
+        ('创建集群', 7, 'cidr', False, 'String', '**参数解释：**\n容器网络网段，建议使用网段10.0.0.0/12~19，172.16.0.0/16~19，192.168.0.0/16~19，如存在网段冲突，将会报错。\n**约束限制：**\n此参数在集群创建后不可更改，请谨慎选择。（已废弃，如填写cidrs将忽略该cidr）\nvpc网络模式的集群在创建后可以新增网段参数，不可修改已有网段参数，需要重新创建集群才能调整。\n**取值范围：**\n满足IPv4 CIDR格式\n**默认取值：**\n不填此参数时，将从172.(16 ~ 31).0.0/16、10.(0 | 16 | 32 | 48 | 64 | 80 | 96 | 112).0.0/12中随机分配一个不冲突的网段供用户使用。', None),
+        ('创建集群', 7, 'cidrs', False, 'Array of ContainerCIDR objects', '**参数解释：**\n容器网络网段列表。1.21及新版本集群使用cidrs字段，当集群网络类型为vpc-router类型时，支持多个容器网段，最多配置20个；1.21之前版本若使用cidrs字段，则取值cidrs数组中的第一个cidr元素作为容器网络网段地址。\n**约束限制：**\n容器隧道网络模式的集群在创建之后，无法修改网段参数；\nvpc网络模式的集群在创建后可以新增网段参数，不可修改已有网段参数，需要重新创建集群才能调整。\n\n详情请参见表8', 8),
+        ('创建集群', 7, 'mode', True, 'String', '**参数解释：**\n容器网络类型。\n**约束限制：**\n只可选择一个容器网络类型。\n**取值范围：**\n- overlay_l2：容器隧道网络，通过OVS（OpenVSwitch）为容器构建的overlay_l2网络。\n- vpc-router：VPC网络，使用ipvlan和自定义VPC路由为容器构建的Underlay的l2网络。\n- eni：云原生网络2.0，深度整合VPC原生ENI弹性网卡能力，采用VPC网段分配容器地址，支持ELB直通容器，享有高性能，创建CCE Turbo集群时指定。\n**默认取值：**\n不涉及', None),
+        ('创建集群', 8, 'cidr', True, 'String', '**参数解释：**\n容器网络网段，建议使用网段10.0.0.0/12~19，172.16.0.0/16~19，192.168.0.0/16~19。\n**约束限制：**\n如存在网段冲突，将会报错。\n**取值范围：**\n不涉及\n**默认取值：**\n不涉及', None),
+        ('创建集群', 9, 'eniSubnetCIDR', False, 'String', '**参数解释：**\nENI子网CIDR。\n**约束限制：**\n废弃中，推荐使用新字段subnets。\n**取值范围：**\n不涉及\n**默认取值：**\n不涉及', None),
+        ('创建集群', 9, 'eniSubnetId', True, 'String', '**参数解释：**\nENI所在子网的IPv4子网ID。\n**约束限制：**\n暂不支持IPv6,废弃中，推荐使用新字段subnets。\n**取值范围：**\n不涉及\n**默认取值：**\n不涉及\n获取方法如下：\n- 方法1：登录虚拟私有云服务的控制台界面，单击VPC下的子网，进入子网详情页面，查找IPv4子网ID。\n- 方法2：通过虚拟私有云服务的查询子网列表接口查询。\n链接请参见查询子网列表。', None),
+        ('创建集群', 9, 'subnets', True, 'Array of NetworkSubnet objects', '**参数解释：**\nIPv4子网ID列表。\n**约束限制：**\n不涉及\n\n详情请参见表10', 10),
+        ('创建集群', 10, 'subnetID', True, 'String', '**参数解释：**\n用于创建控制节点的subnet的IPv4子网ID。\n**约束限制：**\n暂不支持IPv6\n**取值范围：**\n不涉及\n**默认取值：**\n不涉及\n获取方法如下：\n- 方法1：登录虚拟私有云服务的控制台界面，单击VPC下的子网，进入子网详情页面，查找IPv4子网ID。\n- 方法2：通过虚拟私有云服务的查询子网列表接口查询。\n链接请参见查询子网列表。', None),
+        ('创建集群', 11, 'IPv4CIDR', False, 'String', '**参数解释：**\nkubernetes clusterIP IPv4 CIDR取值范围。\n**约束限制：**\n不涉及\n**取值范围：**\n不涉及\n**默认取值：**\n默认为"10.247.0.0/16"。', None),
+        ('创建集群', 11, 'IPv6CIDR', False, 'String', '**参数解释：**\nkubernetes clusterIP IPv6 CIDR取值范围。\n**约束限制：**\n仅开启IPV6双栈的Turbo集群支持配置IPv6服务网段。\n**取值范围：**\n不涉及\n**默认取值：**\nTurbo集群默认为"fc00::/112"\nCCE集群默认为"fd00:1234::/120"', None),
+        ('创建集群', 12, 'cidrs', False, 'Array of strings', '**参数解释：**\n允许访问集群API的白名单网段列表，建议对VPC网段、容器网段放通。\n**约束限制：**\n该字段仅支持创建集群时传入，更新时指定无效\n**取值范围：**\n不涉及\n**默认取值：**\n默认无白名单配置，为["0.0.0.0/0"]。', None),
+        ('创建集群', 13, 'authenticatingProxy', False, 'AuthenticatingProxy object', '**参数解释：**\nauthenticatingProxy模式相关配置。\n**约束限制：**\n认证模式为authenticating_proxy时必选。\n\n详情请参见表14', 14),
+        ('创建集群', 13, 'mode', False, 'String', '**参数解释：**\n集群认证模式。\n**约束限制：**\n不涉及\n**取值范围：**\n- kubernetes 1.11及之前版本的集群支持“x509”、“rbac”和“authenticating_proxy”，默认取值为“x509”。\n- kubernetes 1.13及以上版本的集群支持“rbac”和“authenticating_proxy”，默认取值为“rbac”。\n**默认取值：**\n- kubernetes 1.11及之前版本的集群默认取值为“x509”。\n- kubernetes 1.13及以上版本的集群默认取值为“rbac”。', None),
+        ('创建集群', 14, 'ca', False, 'String', '**参数解释：**\nauthenticating_proxy模式配置的x509格式CA证书(base64编码)。\n**约束限制：**\n当集群认证模式为authenticating_proxy时，此项必须填写。\n**取值范围：**\n最大长度：1M。\n**默认取值：**\n不涉及', None),
+        ('创建集群', 14, 'cert', False, 'String', '**参数解释：**\nauthenticating_proxy模式配置的x509格式CA证书签发的客户端证书，用于kube-apiserver到扩展apiserver的认证。(base64编码)。\n**约束限制：**\n当集群认证模式为authenticating_proxy时，此项必须填写。\n**取值范围：**\n最大长度：1M。\n**默认取值：**\n不涉及', None),
+        ('创建集群', 14, 'privateKey', False, 'String', '**参数解释：**\nauthenticating_proxy模式配置的x509格式CA证书签发的客户端证书时对应的私钥，用于kube-apiserver到扩展apiserver的认证。Kubernetes集群使用的私钥尚不支持密码加密，请使用未加密的私钥。(base64编码)。\n**约束限制：**\n当集群认证模式为authenticating_proxy时，此项必须填写。\n**取值范围：**\n最大长度：1M。\n**默认取值：**\n不涉及', None),
+        ('创建集群', 15, 'availabilityZone', False, 'String', '**参数解释：**\n可用区。\n**约束限制：**\n不涉及\n**取值范围：**\n不涉及\n**默认取值：**\n不涉及', None),
+        ('创建集群', 16, 'key', False, 'String', '**参数解释：**\nKey值。\n**约束限制：**\n不涉及\n**取值范围：**\n- 不能为空且首尾不能包含空格，最多支持128个字符\n- 可用UTF-8格式表示的汉字、字母、数字和空格\n- 支持部分特殊字符：_.:=+-@\n- 不能以"_sys_"开头\n**默认取值：**\n不涉及', None),
+        ('创建集群', 16, 'value', False, 'String', '**参数解释：**\nValue值。\n**约束限制：**\n不涉及\n**取值范围：**\n- 可以为空但不能缺省，最多支持255个字符\n- 可用UTF-8格式表示的汉字、字母、数字和空格\n- 支持部分特殊字符：_.:/=+-@\n**默认取值：**\n不涉及', None),
+        ('创建集群', 17, 'alpha.cce/fixPoolMask', False, 'String', '**参数解释：**\n容器网络固定IP池掩码位数，该参数决定节点可分配容器IP数量，与创建节点时设置的maxPods参数共同决定节点最多可以创建多少个Pod，\n具体请参见节点可创建的最大Pod数量说明。\n**约束限制：**\n仅vpc-router网络支持。\n**取值范围：**\n整数字符串取值范围: 24 ~ 28\n**默认取值：**\n默认值24', None),
+        ('创建集群', 17, 'clusterAZ', False, 'String', '**参数解释：**\n集群控制节点可用区配置。\nCCE支持的可用区请参考地区和终端节点。\n**约束限制：**\n不涉及\n**取值范围：**\n- 指定局点支持可用区。\n- multi_az：多可用区，可选。仅使用多控制节点集群时才可以配置多可用区。\n- 专属云计算池可用区：用于指定专属云可用区部署集群控制节点。如果需配置专属CCE集群，该字段为必选。\n**默认取值：**\n不指定默认随机分配可用区。', None),
+        ('创建集群', 17, 'clusterExternalIP', False, 'String', '**参数解释：**\nmaster 弹性公网IP\n**约束限制：**\n不涉及\n**取值范围：**\n不涉及\n**默认取值：**\n不涉及', None),
+        ('创建集群', 17, 'decMasterFlavor', False, 'String', '**参数解释：**\n专属CCE集群指定可控制节点的规格。\n**约束限制：**\n不涉及\n**取值范围：**\n不涉及\n**默认取值：**\n不涉及', None),
+        ('创建集群', 17, 'dockerUmaskMode', False, 'String', '**参数解释：**\n集群默认Docker的UmaskMode配置。\n**约束限制：**\n不涉及\n**取值范围：**\n- secure\n- normal\n**默认取值：**\n默认normal', None),
+        ('创建集群', 17, 'dssMasterVolumes', False, 'String', '**参数解释：**\n用于指定控制节点的系统盘和数据盘使用专属分布式存储，未指定或者值为空时，默认使用EVS云硬盘。\n**约束限制：**\n如果配置专属CCE集群，该字段为必选，请按照如下格式设置：\n<rootVol.dssPoolID>.<rootVol.volType>;<dataVol.dssPoolID>.<dataVol.volType>\n字段说明：\n- rootVol为系统盘；dataVol为数据盘；\n- dssPoolID为专属分布式存储池ID；\n- volType为专属分布式存储池的存储类型，如SAS、SSD、SATA、ESSD、GPSSD、ESSD2、GPSSD2\n**取值范围：**\n不涉及\n**默认取值：**\n不涉及\n样例：c950ee97-587c-4f24-8a74-3367e3da570f.sas;6edbc2f4-1507-44f8-ac0d-eed1d2608d38.ssd\n说明：\n非专属CCE集群不支持配置该字段。', None),
+        ('创建集群', 17, 'enterpriseProjectId', False, 'String', '**参数解释：**\n集群所属的企业项目ID。\n**约束限制：**\n需要开通企业项目功能后才可配置企业项目。\n**取值范围：**\n不涉及\n**默认取值：**\n不涉及', None),
+        ('创建集群', 17, 'isAutoPay', False, 'String', '**参数解释：**\n是否自动扣款。\n**约束限制：**\nbillingMode为1时生效。\n**取值范围：**\n- "true"：自动扣款\n- "false"：不自动扣款\n**默认取值：**\n默认false', None),
+        ('创建集群', 17, 'isAutoRenew', False, 'String', '**参数解释：**\n是否自动续订\n**约束限制：**\nbillingMode为1时生效。\n**取值范围：**\n- "true"：自动续订\n- "false"：不自动续订\n**默认取值：**\n默认false', None),
+        ('创建集群', 17, 'kubeProxyMode', False, 'String', '**参数解释：**\n服务转发模式，支持以下两种实现：\n**约束限制：**\n此参数已废弃，若同时指定此参数和ClusterSpec下的kubeProxyMode，以ClusterSpec下的为准。\n**取值范围：**\n- iptables：社区传统的kube-proxy模式，完全以iptables规则的方式来实现service负载均衡。该方式最主要的问题是在服务多的时候产生太多的iptables规则，非增量式更新会引入一定的时延，大规模情况下有明显的性能问题\n- ipvs：主导开发并在社区获得广泛支持的kube-proxy模式，采用增量式更新，吞吐更高，速度更快，并可以保证service更新期间连接保持不断开，适用于大规模场景。\n**默认取值：**\n默认iptables。', None),
+        ('创建集群', 17, 'kubernetes.io/cpuManagerPolicy', False, 'String', '**参数解释：**\n集群CPU管理策略。\n**约束限制：**\n不涉及\n**取值范围：**\n- none(或空值)：关闭工作负载实例独占CPU核的功能，优点是CPU共享池的可分配核数较多\n- static：支持给节点上的工作负载实例配置CPU独占，适用于对CPU缓存和调度延迟敏感的工作负载，Turbo集群下仅对普通容器节点有效，安全容器节点无效。\n**默认取值：**\n默认none', None),
+        ('创建集群', 17, 'orderID', False, 'String', '**参数解释：**\n订单ID。\n**约束限制：**\n集群付费类型为自动付费包周期类型时，响应中会返回此字段(仅创建场景涉及)。\n**取值范围：**\n不涉及\n**默认取值：**\n不涉及', None),
+        ('创建集群', 17, 'periodNum', False, 'Integer', '**参数解释：**\n订购周期数\n**约束限制：**\n作为请求参数，billingMode为1时生效，且为必选。\n作为响应参数，仅在创建包周期集群时返回。\n**取值范围：**\n- periodType=month（周期类型为月）时，取值为[1-9]。\n- periodType=year（周期类型为年）时，取值为[1-3]。\n**默认取值：**\n不涉及', None),
+        ('创建集群', 17, 'periodType', False, 'String', '**参数解释：**\n订购周期单位。\n**约束限制：**\n作为请求参数，billingMode为1（包周期）时生效，且为必选。\n作为响应参数，仅在创建包周期集群时返回。\n**取值范围：**\n- month：月\n- year：年\n**默认取值：**\n不涉及', None),
+        ('创建集群', 17, 'upgradefrom', False, 'String', '**参数解释：**\n记录集群通过何种升级方式升级到当前版本。\n**约束限制：**\n不涉及\n**取值范围：**\n不涉及\n**默认取值：**\n不涉及', None),
+        ('创建集群', 18, 'configurations', False, 'Array of ConfigurationItem objects', '**参数解释：**\n组件配置项。\n**约束限制：**\n不涉及\n\n详情请参见表19', 19),
+        ('创建集群', 18, 'name', False, 'String', '**参数解释：**\n组件名称。\n**约束限制：**\n不涉及\n**取值范围：**\n不涉及\n**默认取值：**\n不涉及', None),
+        ('创建集群', 19, 'name', False, 'String', '**参数解释：**\n覆盖集群默认组件配置。\n当前支持的可配置组件及其参数详见配置管理。\n**约束限制：**\n若指定了不支持的组件或组件不支持的参数，该配置项将被忽略。\n**取值范围：**\n不涉及\n**默认取值：**\n不涉及', None),
+        ('创建集群', 19, 'value', False, 'AnyType', '**参数解释：**\n覆盖集群默认组件配置。\n当前支持的可配置组件及其参数详见配置管理。\n**约束限制：**\n若指定了不支持的组件或组件不支持的参数，该配置项将被忽略。\n**取值范围：**\n不涉及\n**默认取值：**\n不涉及', None),
+        ('创建集群', 20, 'alarm', True, 'AlarmInfo object', '**参数解释：**\n告警助手参数配置。基于AOM服务的告警能力实现，提供集群内的告警快速检索、告警快速配置的能力，告警中心的指标类告警规则依赖云原生监控插件上报数据到AOM实例。\n**约束限制：**\n不涉及\n\n详情请参见表21', 21),
+        ('创建集群', 21, 'alarmRuleTemplateId', False, 'String', '**参数解释：**\n开启告警助手时传入告警模板ID。默认采用容器场景下的告警规则模板。\n**约束限制：**\n不涉及\n**取值范围：**\n不涉及\n**默认取值：**\n不涉及', None),
+        ('创建集群', 21, 'promEnterpriseProjectID', False, 'String', '**参数解释：**\n开启告警助手时传入AOM普罗实例的企业项目id。若未安装普罗插件或者未对接AOM实例，此参数无需指定，告警中心将不会创建指标类告警规则。\n**约束限制：**\n不涉及\n**取值范围：**\n不涉及\n**默认取值：**\n不涉及', None),
+        ('创建集群', 21, 'promInstanceID', False, 'String', '**参数解释：**\n开启告警助手时传入AOM普罗实例的id。若未安装普罗插件或者未对接AOM实例，此参数无需指定，告警中心将不会创建指标类告警规则。\n**约束限制：**\n不涉及\n**取值范围：**\n不涉及\n**默认取值：**\n不涉及', None),
+        ('创建集群', 21, 'topics', True, 'Array of strings', '**参数解释：**\n联系组列表。填写SMN主题名称，通过配置告警联系组，分组管理订阅终端，接收告警信息。\n**约束限制：**\n不涉及', None),
+        ('创建集群', 22, 'kmsKeyID', False, 'String', '**参数解释** ：\nkms密钥ID\n- 集群创建API中，如果mode字段设置为Default，无需填写该字段；如果mode字段设置为KMS，则支持填写该字段。若字段为空，则默认使用KMS默认密钥进行填充，默认密钥不存在时云服务将自动为用户创建cce/default默认密钥。 用户需使用真实存在的KMS密钥，并且在集群生命周期结束前，禁止删除、禁用密钥等操作，防止集群功能异常（集群设置该密钥后不允许修改）。\n- 集群查询API中，如果mode字段设置为Default，则该字段返回为空；若mode字段设置为KMS，则该字段为具体的密钥ID。\n**约束限制** ：\n不涉及\n**取值范围** ：\n不涉及\n**默认取值** ：\n不涉及', None),
+        ('创建集群', 22, 'mode', False, 'String', '**参数解释** ：\n加密模式，可以配置为使用cce本地密钥加密或KMS加密。\n**约束限制** ：\n不涉及\n**取值范围** ：\n- Default：使用cce本地密钥加密\n- KMS：使用KMS加密模式\n**默认取值** ：\nDefault', None),
     ]
 
     cursor.executemany('''
         INSERT INTO apis (name, method, uri, description, root_table_id, doc_page)
-        VALUES (?, ?, ?, ?, ?, ?)''', api_info_data)
+        VALUES (?, ?, ?, ?, ?, ?)''', apis_data)
     
     def find_api_id_from_name (cursor: sqlite3.Cursor, api_name: str) -> int:
         # find apis.id from name
