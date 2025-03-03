@@ -9,6 +9,7 @@ from typing import (
     Any,
     Callable,
     Dict,
+    Generator,
     List,
     Literal,
     Type,
@@ -18,21 +19,13 @@ from typing import (
 )
 
 from openai.lib._parsing._completions import type_to_response_format_param
-from openai.types.beta.threads import Message
-from openai.types.beta.threads.runs import RunStep
-from openai.types.beta.threads.runs.tool_call import (
-    CodeInterpreterToolCall,
-    FileSearchToolCall,
-    FunctionToolCall,
-    ToolCall,
-)
-from pydantic import BaseModel, Field, field_validator, model_validator
+from openai.types.beta import AssistantToolChoice
+from openai.types.beta.threads.message import Attachment
+from pydantic import BaseModel, Field, field_validator
 from rich.console import Console
-from typing_extensions import override
 
 from agency_swarm.agents import Agent
-from agency_swarm.messages import MessageOutput
-from agency_swarm.messages.message_output import MessageOutputLive
+from agency_swarm.messages.message_output import MessageOutput
 from agency_swarm.threads import Thread
 from agency_swarm.threads.thread_async import ThreadAsync
 from agency_swarm.tools import BaseTool, CodeInterpreter, FileSearch
@@ -41,10 +34,14 @@ from agency_swarm.user import User
 from agency_swarm.util.errors import RefusalError
 from agency_swarm.util.files import get_file_purpose, get_tools
 from agency_swarm.util.shared_state import SharedState
-from agency_swarm.util.streaming import AgencyEventHandler
+from agency_swarm.util.streaming import (
+    AgencyEventHandler,
+    create_gradio_handler,
+    create_term_handler,
+)
+from agency_swarm.util.tracking.tracking_manager import TrackingManager
 
 console = Console()
-
 T = TypeVar("T", bound=BaseModel)
 
 
@@ -70,7 +67,7 @@ class Agency:
         settings_callbacks: SettingsCallbacks = None,
         threads_callbacks: ThreadsCallbacks = None,
         temperature: float = 0.3,
-        top_p: float = None,
+        top_p: float = 1.0,
         max_prompt_tokens: int = None,
         max_completion_tokens: int = None,
         truncation_strategy: dict = None,
@@ -160,84 +157,101 @@ class Agency:
         self._create_special_tools()
         self._init_agents()
 
+        self.tracking_manager = TrackingManager()
+
     def get_completion(
         self,
         message: str,
-        message_files: List[str] = None,
+        message_files: list[str] | None = None,
         yield_messages: bool = False,
-        recipient_agent: Agent = None,
-        additional_instructions: str = None,
-        attachments: List[dict] = None,
-        tool_choice: dict = None,
+        recipient_agent: Agent | None = None,
+        additional_instructions: str | None = None,
+        attachments: list[Attachment] | None = None,
+        tool_choice: AssistantToolChoice | None = None,
         verbose: bool = False,
-        response_format: dict = None,
-    ):
+        response_format: dict | None = None,
+    ) -> Generator[MessageOutput, None, str] | str:
         """
         Retrieves the completion for a given message from the main thread.
 
         Parameters:
             message (str): The message for which completion is to be retrieved.
             message_files (list, optional): A list of file ids to be sent as attachments with the message. When using this parameter, files will be assigned both to file_search and code_interpreter tools if available. It is recommended to assign files to the most sutiable tool manually, using the attachments parameter.  Defaults to None.
-            yield_messages (bool, optional): Flag to determine if intermediate messages should be yielded. Defaults to True.
+            yield_messages (bool, optional): Flag to determine if intermediate messages should be yielded. Defaults to False.
             recipient_agent (Agent, optional): The agent to which the message should be sent. Defaults to the first agent in the agency chart.
             additional_instructions (str, optional): Additional instructions to be sent with the message. Defaults to None.
             attachments (List[dict], optional): A list of attachments to be sent with the message, following openai format. Defaults to None.
             tool_choice (dict, optional): The tool choice for the recipient agent to use. Defaults to None.
-            parallel_tool_calls (bool, optional): Whether to enable parallel function calling during tool use. Defaults to True.
             verbose (bool, optional): Whether to print the intermediary messages in console. Defaults to False.
             response_format (dict, optional): The response format to use for the completion.
 
         Returns:
-            Generator or final response: Depending on the 'yield_messages' flag, this method returns either a generator yielding intermediate messages or the final response from the main thread.
+            Generator or final response: Depending on the 'yield_messages' flag, this method returns either a generator yielding intermediate messages (when yield_messages=True) or the final response from the main thread.
         """
         if verbose and yield_messages:
             raise Exception("Verbose mode is not compatible with yield_messages=True")
 
-        res = self.main_thread.get_completion(
-            message=message,
-            message_files=message_files,
-            attachments=attachments,
-            recipient_agent=recipient_agent,
-            additional_instructions=additional_instructions,
-            tool_choice=tool_choice,
-            yield_messages=yield_messages or verbose,
-            response_format=response_format,
-        )
+        chain_id = self.tracking_manager.start_chain(message, "Agency: chain start")
 
-        if not yield_messages or verbose:
-            while True:
-                try:
-                    message = next(res)
-                    if verbose:
-                        message.cprint()
-                except StopIteration as e:
-                    return e.value
+        try:
+            res = self.main_thread.get_completion(
+                message=message,
+                message_files=message_files,
+                attachments=attachments,
+                recipient_agent=recipient_agent,
+                additional_instructions=additional_instructions,
+                tool_choice=tool_choice,
+                yield_messages=yield_messages or verbose,
+                response_format=response_format,
+                parent_run_id=chain_id,
+            )
 
-        return res
+            if not yield_messages and not verbose:
+                while True:
+                    try:
+                        message = next(res)
+                    except StopIteration as e:
+                        final_output = e.value
+                        self.tracking_manager.end_chain(final_output, chain_id)
+                        return final_output
+
+            def wrapped_generator():
+                while True:
+                    try:
+                        message = next(res)
+                        yield message
+                    except StopIteration as e:
+                        self.tracking_manager.end_chain(e.value, chain_id)
+                        return e.value
+
+            return wrapped_generator()
+
+        except Exception as e:
+            self.tracking_manager.track_chain_error(e, chain_id)
+            raise e
 
     def get_completion_stream(
         self,
         message: str,
-        event_handler: type(AgencyEventHandler),
-        message_files: List[str] = None,
-        recipient_agent: Agent = None,
-        additional_instructions: str = None,
-        attachments: List[dict] = None,
-        tool_choice: dict = None,
-        response_format: dict = None,
-    ):
+        event_handler: Type[AgencyEventHandler],
+        message_files: list[str] | None = None,
+        recipient_agent: Agent | None = None,
+        additional_instructions: str | None = None,
+        attachments: list[Attachment] | None = None,
+        tool_choice: dict | None = None,
+        response_format: dict | None = None,
+    ) -> str:
         """
         Generates a stream of completions for a given message from the main thread.
 
         Parameters:
             message (str): The message for which completion is to be retrieved.
-            event_handler (type(AgencyEventHandler)): The event handler class to handle the completion stream. https://github.com/openai/openai-python/blob/main/helpers.md
+            event_handler (Type[AgencyEventHandler]): The event handler class to handle the completion stream. https://github.com/openai/openai-python/blob/main/helpers.md
             message_files (list, optional): A list of file ids to be sent as attachments with the message. When using this parameter, files will be assigned both to file_search and code_interpreter tools if available. It is recommended to assign files to the most sutiable tool manually, using the attachments parameter.  Defaults to None.
             recipient_agent (Agent, optional): The agent to which the message should be sent. Defaults to the first agent in the agency chart.
             additional_instructions (str, optional): Additional instructions to be sent with the message. Defaults to None.
             attachments (List[dict], optional): A list of attachments to be sent with the message, following openai format. Defaults to None.
             tool_choice (dict, optional): The tool choice for the recipient agent to use. Defaults to None.
-            parallel_tool_calls (bool, optional): Whether to enable parallel function calling during tool use. Defaults to True.
 
         Returns:
             Final response: Final response from the main thread.
@@ -245,15 +259,18 @@ class Agency:
         if not inspect.isclass(event_handler):
             raise Exception("Event handler must not be an instance.")
 
+        chain_id = self.tracking_manager.start_chain(message, "Agency: chain start")
+
         res = self.main_thread.get_completion_stream(
             message=message,
-            message_files=message_files,
             event_handler=event_handler,
+            message_files=message_files,
             attachments=attachments,
             recipient_agent=recipient_agent,
             additional_instructions=additional_instructions,
             tool_choice=tool_choice,
             response_format=response_format,
+            parent_run_id=chain_id,
         )
 
         while True:
@@ -261,8 +278,12 @@ class Agency:
                 next(res)
             except StopIteration as e:
                 event_handler.on_all_streams_end()
+                self.tracking_manager.end_chain(e.value, chain_id)
 
                 return e.value
+            except Exception as e:
+                self.tracking_manager.track_chain_error(e, chain_id)
+                raise e
 
     def get_completion_parse(
         self,
@@ -280,7 +301,7 @@ class Agency:
 
         Parameters:
             message (str): The message for which completion is to be retrieved.
-            response_format (type(BaseModel)): The response format to use for the completion.
+            response_format (Type[BaseModel]): The response format to use for the completion.
             message_files (list, optional): A list of file ids to be sent as attachments with the message. When using this parameter, files will be assigned both to file_search and code_interpreter tools if available. It is recommended to assign files to the most sutiable tool manually, using the attachments parameter.  Defaults to None.
             recipient_agent (Agent, optional): The agent to which the message should be sent. Defaults to the first agent in the agency chart.
             additional_instructions (str, optional): Additional instructions to be sent with the message. Defaults to None.
@@ -321,7 +342,7 @@ class Agency:
         Launches a Gradio-based demo interface for the agency chatbot.
 
         Parameters:
-            height (int, optional): The height of the chatbot widget in the Gradio interface. Default is 600.
+            height (int, optional): The height of the chatbot widget in the Gradio interface. Default is 450.
             dark_mode (bool, optional): Flag to determine if the interface should be displayed in dark mode. Default is True.
             **kwargs: Additional keyword arguments to be passed to the Gradio interface.
         This method sets up and runs a Gradio interface, allowing users to interact with the agency's chatbot. It includes a text input for the user's messages and a chatbot interface for displaying the conversation. The method handles user input and chatbot responses, updating the interface dynamically.
@@ -333,10 +354,10 @@ class Agency:
             raise Exception("Please install gradio: pip install gradio")
 
         js = """function () {
-          gradioURL = window.location.href
-          if (!gradioURL.endsWith('?__theme={theme}')) {
-            window.location.replace(gradioURL + '?__theme={theme}');
-          }
+            gradioURL = window.location.href
+            if (!gradioURL.endsWith('?__theme={theme}')) {
+                window.location.replace(gradioURL + '?__theme={theme}');
+            }
         }"""
 
         if dark_mode:
@@ -351,8 +372,10 @@ class Agency:
         recipient_agent_names = [agent.name for agent in self.main_recipients]
         recipient_agent = self.main_recipients[0]
 
+        chatbot_queue = queue.Queue()
+        gradio_handler_class = create_gradio_handler(chatbot_queue=chatbot_queue)
+
         with gr.Blocks(js=js) as demo:
-            chatbot_queue = queue.Queue()
             chatbot = gr.Chatbot(height=height)
             with gr.Row():
                 with gr.Column(scale=9):
@@ -473,168 +496,12 @@ class Agency:
                         f"👤 User 🗣️ @{recipient_agent.name}:\n" + user_message.strip()
                     )
                 else:
-                    user_message = f"👤 User:" + user_message.strip()
+                    user_message = "👤 User:" + user_message.strip()
 
-                nonlocal message_file_names
                 if message_file_names:
                     user_message += "\n\n📎 Files:\n" + "\n".join(message_file_names)
 
                 return original_user_message, history + [[user_message, None]]
-
-            class GradioEventHandler(AgencyEventHandler):
-                message_output = None
-
-                @classmethod
-                def change_recipient_agent(cls, recipient_agent_name):
-                    nonlocal chatbot_queue
-                    chatbot_queue.put("[change_recipient_agent]")
-                    chatbot_queue.put(recipient_agent_name)
-
-                @override
-                def on_message_created(self, message: Message) -> None:
-                    if message.role == "user":
-                        full_content = ""
-                        for content in message.content:
-                            if content.type == "image_file":
-                                full_content += (
-                                    f"🖼️ Image File: {content.image_file.file_id}\n"
-                                )
-                                continue
-
-                            if content.type == "image_url":
-                                full_content += f"\n{content.image_url.url}\n"
-                                continue
-
-                            if content.type == "text":
-                                full_content += content.text.value + "\n"
-
-                        self.message_output = MessageOutput(
-                            "text",
-                            self.agent_name,
-                            self.recipient_agent_name,
-                            full_content,
-                        )
-
-                    else:
-                        self.message_output = MessageOutput(
-                            "text", self.recipient_agent_name, self.agent_name, ""
-                        )
-
-                    chatbot_queue.put("[new_message]")
-                    chatbot_queue.put(self.message_output.get_formatted_content())
-
-                @override
-                def on_text_delta(self, delta, snapshot):
-                    chatbot_queue.put(delta.value)
-
-                @override
-                def on_tool_call_created(self, tool_call: ToolCall):
-                    if isinstance(tool_call, dict):
-                        if "type" not in tool_call:
-                            tool_call["type"] = "function"
-
-                        if tool_call["type"] == "function":
-                            tool_call = FunctionToolCall(**tool_call)
-                        elif tool_call["type"] == "code_interpreter":
-                            tool_call = CodeInterpreterToolCall(**tool_call)
-                        elif (
-                            tool_call["type"] == "file_search"
-                            or tool_call["type"] == "retrieval"
-                        ):
-                            tool_call = FileSearchToolCall(**tool_call)
-                        else:
-                            raise ValueError(
-                                "Invalid tool call type: " + tool_call["type"]
-                            )
-
-                    # TODO: add support for code interpreter and retrieval tools
-                    if tool_call.type == "function":
-                        chatbot_queue.put("[new_message]")
-                        self.message_output = MessageOutput(
-                            "function",
-                            self.recipient_agent_name,
-                            self.agent_name,
-                            str(tool_call.function),
-                        )
-                        chatbot_queue.put(
-                            self.message_output.get_formatted_header() + "\n"
-                        )
-
-                @override
-                def on_tool_call_done(self, snapshot: ToolCall):
-                    if isinstance(snapshot, dict):
-                        if "type" not in snapshot:
-                            snapshot["type"] = "function"
-
-                        if snapshot["type"] == "function":
-                            snapshot = FunctionToolCall(**snapshot)
-                        elif snapshot["type"] == "code_interpreter":
-                            snapshot = CodeInterpreterToolCall(**snapshot)
-                        elif snapshot["type"] == "file_search":
-                            snapshot = FileSearchToolCall(**snapshot)
-                        else:
-                            raise ValueError(
-                                "Invalid tool call type: " + snapshot["type"]
-                            )
-
-                    self.message_output = None
-
-                    # TODO: add support for code interpreter and retrieval tools
-                    if snapshot.type != "function":
-                        return
-
-                    chatbot_queue.put(str(snapshot.function))
-
-                    if snapshot.function.name == "SendMessage":
-                        try:
-                            args = eval(snapshot.function.arguments)
-                            recipient = args["recipient"]
-                            self.message_output = MessageOutput(
-                                "text",
-                                self.recipient_agent_name,
-                                recipient,
-                                args["message"],
-                            )
-
-                            chatbot_queue.put("[new_message]")
-                            chatbot_queue.put(
-                                self.message_output.get_formatted_content()
-                            )
-                        except Exception as e:
-                            pass
-
-                    self.message_output = None
-
-                @override
-                def on_run_step_done(self, run_step: RunStep) -> None:
-                    if run_step.type == "tool_calls":
-                        for tool_call in run_step.step_details.tool_calls:
-                            if tool_call.type != "function":
-                                continue
-
-                            if tool_call.function.name == "SendMessage":
-                                continue
-
-                            self.message_output = None
-                            chatbot_queue.put("[new_message]")
-
-                            self.message_output = MessageOutput(
-                                "function_output",
-                                tool_call.function.name,
-                                self.recipient_agent_name,
-                                tool_call.function.output,
-                            )
-
-                            chatbot_queue.put(
-                                self.message_output.get_formatted_header() + "\n"
-                            )
-                            chatbot_queue.put(tool_call.function.output)
-
-                @override
-                @classmethod
-                def on_all_streams_end(cls):
-                    cls.message_output = None
-                    chatbot_queue.put("[end]")
 
             def bot(original_message, history, dropdown):
                 nonlocal attachments
@@ -689,7 +556,7 @@ class Agency:
                     target=self.get_completion_stream,
                     args=(
                         original_message,
-                        GradioEventHandler,
+                        gradio_handler_class,
                         [],
                         recipient_agent,
                         "",
@@ -767,20 +634,6 @@ class Agency:
         demo.launch(**kwargs)
         return demo
 
-    def _recipient_agent_completer(self, text, state):
-        """
-        Autocomplete completer for recipient agent names.
-        """
-        options = [
-            agent
-            for agent in self.recipient_agents
-            if agent.lower().startswith(text.lower())
-        ]
-        if state < len(options):
-            return options[state]
-        else:
-            return None
-
     def _setup_autocomplete(self):
         """
         Sets up readline with the completer function.
@@ -800,8 +653,22 @@ class Agency:
         if not readline:
             return
 
+        def recipient_agent_completer(text, state):
+            """
+            Autocomplete completer for recipient agent names.
+            """
+            options = [
+                agent
+                for agent in self.recipient_agents
+                if agent.lower().startswith(text.lower())
+            ]
+            if state < len(options):
+                return options[state]
+            else:
+                return None
+
         try:
-            readline.set_completer(self._recipient_agent_completer)
+            readline.set_completer(recipient_agent_completer)
             readline.parse_and_bind("tab: complete")
         except Exception as e:
             print(
@@ -812,129 +679,7 @@ class Agency:
         """
         Executes agency in the terminal with autocomplete for recipient agent names.
         """
-        outer_self = self
-        from agency_swarm import AgencyEventHandler
-
-        class TermEventHandler(AgencyEventHandler):
-            message_output = None
-
-            @override
-            def on_message_created(self, message: Message) -> None:
-                if message.role == "user":
-                    self.message_output = MessageOutputLive(
-                        "text", self.agent_name, self.recipient_agent_name, ""
-                    )
-                    self.message_output.cprint_update(message.content[0].text.value)
-                else:
-                    self.message_output = MessageOutputLive(
-                        "text", self.recipient_agent_name, self.agent_name, ""
-                    )
-
-            @override
-            def on_message_done(self, message: Message) -> None:
-                self.message_output = None
-
-            @override
-            def on_text_delta(self, delta, snapshot):
-                self.message_output.cprint_update(snapshot.value)
-
-            @override
-            def on_tool_call_created(self, tool_call):
-                if isinstance(tool_call, dict):
-                    if "type" not in tool_call:
-                        tool_call["type"] = "function"
-
-                    if tool_call["type"] == "function":
-                        tool_call = FunctionToolCall(**tool_call)
-                    elif tool_call["type"] == "code_interpreter":
-                        tool_call = CodeInterpreterToolCall(**tool_call)
-                    elif (
-                        tool_call["type"] == "file_search"
-                        or tool_call["type"] == "retrieval"
-                    ):
-                        tool_call = FileSearchToolCall(**tool_call)
-                    else:
-                        raise ValueError("Invalid tool call type: " + tool_call["type"])
-
-                # TODO: add support for code interpreter and retirieval tools
-
-                if tool_call.type == "function":
-                    self.message_output = MessageOutputLive(
-                        "function",
-                        self.recipient_agent_name,
-                        self.agent_name,
-                        str(tool_call.function),
-                    )
-
-            @override
-            def on_tool_call_delta(self, delta, snapshot):
-                if isinstance(snapshot, dict):
-                    if "type" not in snapshot:
-                        snapshot["type"] = "function"
-
-                    if snapshot["type"] == "function":
-                        snapshot = FunctionToolCall(**snapshot)
-                    elif snapshot["type"] == "code_interpreter":
-                        snapshot = CodeInterpreterToolCall(**snapshot)
-                    elif snapshot["type"] == "file_search":
-                        snapshot = FileSearchToolCall(**snapshot)
-                    else:
-                        raise ValueError("Invalid tool call type: " + snapshot["type"])
-
-                self.message_output.cprint_update(str(snapshot.function))
-
-            @override
-            def on_tool_call_done(self, snapshot):
-                self.message_output = None
-
-                # TODO: add support for code interpreter and retrieval tools
-                if snapshot.type != "function":
-                    return
-
-                if snapshot.function.name == "SendMessage" and not (
-                    hasattr(
-                        outer_self.send_message_tool_class.ToolConfig,
-                        "output_as_result",
-                    )
-                    and outer_self.send_message_tool_class.ToolConfig.output_as_result
-                ):
-                    try:
-                        args = eval(snapshot.function.arguments)
-                        recipient = args["recipient"]
-                        self.message_output = MessageOutputLive(
-                            "text", self.recipient_agent_name, recipient, ""
-                        )
-
-                        self.message_output.cprint_update(args["message"])
-                    except Exception as e:
-                        pass
-
-                self.message_output = None
-
-            @override
-            def on_run_step_done(self, run_step: RunStep) -> None:
-                if run_step.type == "tool_calls":
-                    for tool_call in run_step.step_details.tool_calls:
-                        if tool_call.type != "function":
-                            continue
-
-                        if tool_call.function.name == "SendMessage":
-                            continue
-
-                        self.message_output = None
-                        self.message_output = MessageOutputLive(
-                            "function_output",
-                            tool_call.function.name,
-                            self.recipient_agent_name,
-                            tool_call.function.output,
-                        )
-                        self.message_output.cprint_update(tool_call.function.output)
-
-                    self.message_output = None
-
-            @override
-            def on_end(self):
-                self.message_output = None
+        term_handler_class = create_term_handler(agency=self)
 
         self.recipient_agents = [str(agent.name) for agent in self.main_recipients]
 
@@ -967,7 +712,7 @@ class Agency:
 
             self.get_completion_stream(
                 message=text,
-                event_handler=TermEventHandler,
+                event_handler=term_handler_class,
                 recipient_agent=recipient_agent,
             )
 

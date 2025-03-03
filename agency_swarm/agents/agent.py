@@ -9,6 +9,7 @@ from openai import NotFoundError
 from openai.lib._parsing._completions import type_to_response_format_param
 from openai.types.beta.assistant import ToolResources
 
+from agency_swarm.constants import DEFAULT_MODEL
 from agency_swarm.tools import (
     BaseTool,
     CodeInterpreter,
@@ -94,7 +95,7 @@ class Agent:
         api_params: Dict[str, Dict[str, str]] = None,
         file_ids: List[str] = None,
         metadata: Dict[str, str] = None,
-        model: str = "gpt-4o-2024-08-06",
+        model: str = DEFAULT_MODEL,
         reasoning_effort: Literal["low", "medium", "high"] = "medium",
         validation_attempts: int = 1,
         max_prompt_tokens: int = None,
@@ -320,8 +321,16 @@ class Agent:
             "reasoning_effort": self.reasoning_effort,
         }
 
-        return self.client.beta.assistants.create(**params)
-    
+        extra_body = {}
+
+        # o-series models
+        if params["model"].startswith("o"):
+            params["temperature"] = None
+            params["top_p"] = None
+            extra_body["reasoning_effort"] = self.reasoning_effort
+
+        return self.client.beta.assistants.create(**params, extra_body=extra_body)
+
     def _update_assistant(self):
         """
         Updates the existing assistant's parameters on the OpenAI server.
@@ -350,9 +359,7 @@ class Agent:
             "reasoning_effort": self.reasoning_effort,
         }
 
-        self.assistant = self.client.beta.assistants.update(
-            self.id, **params
-        )
+        self.assistant = self.client.beta.assistants.update(self.id, **params)
 
         self._update_settings()
 
@@ -704,20 +711,16 @@ class Agent:
                 print("Assistant tools:", assistant_tools)
             return False
 
-        if (
-            self.temperature != assistant_settings["temperature"]
-            and not self.model.startswith("o")
-        ):
+        if self.temperature != assistant_settings[
+            "temperature"
+        ] and not self.model.startswith("o"):
             if debug:
                 print(
                     f"Temperature mismatch: {self.temperature} != {assistant_settings['temperature']}"
                 )
             return False
 
-        if (
-            self.top_p != assistant_settings["top_p"]
-            and not self.model.startswith("o")
-        ):
+        if self.top_p != assistant_settings["top_p"] and not self.model.startswith("o"):
             if debug:
                 print(f"Top_p mismatch: {self.top_p} != {assistant_settings['top_p']}")
             return False

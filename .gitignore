@@ -121,7 +121,7 @@ celerybeat.pid
 
 # Environments
 .env
-.venv
+.venv/
 env/
 venv/
 ENV/
@@ -160,3 +160,6 @@ settings.json
 .DS_Store
 tests/test_agents/
 test_agents/
+
+# SQLite
+*.db
