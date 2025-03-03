@@ -321,15 +321,7 @@ class Agent:
             "reasoning_effort": self.reasoning_effort,
         }
 
-        extra_body = {}
-
-        # o-series models
-        if params["model"].startswith("o"):
-            params["temperature"] = None
-            params["top_p"] = None
-            extra_body["reasoning_effort"] = self.reasoning_effort
-
-        return self.client.beta.assistants.create(**params, extra_body=extra_body)
+        return self.client.beta.assistants.create(**params)
 
     def _update_assistant(self):
         """
