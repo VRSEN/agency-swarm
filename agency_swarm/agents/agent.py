@@ -204,6 +204,13 @@ class Agent:
         # check if settings.json exists
         path = self.get_settings_path()
 
+        # o-series models
+        if self.model.startswith("o"):
+            self.temperature = None
+            self.top_p = None
+        else:
+            self.reasoning_effort = None
+
         # load assistant from id
         if self.id:
             if not self.refresh_from_id:
@@ -310,19 +317,11 @@ class Agent:
             "temperature": self.temperature,
             "top_p": self.top_p,
             "response_format": self.response_format,
+            "reasoning_effort": self.reasoning_effort,
         }
 
-        extra_body = {}
-
-        # o-series models
-        model_suffix = params["model"].split("/")[-1]
-        if model_suffix.startswith("o"):
-            params.pop("temperature", None)
-            params.pop("top_p", None)
-            extra_body["reasoning_effort"] = self.reasoning_effort
-
-        return self.client.beta.assistants.create(**params, extra_body=extra_body)
-
+        return self.client.beta.assistants.create(**params)
+    
     def _update_assistant(self):
         """
         Updates the existing assistant's parameters on the OpenAI server.
@@ -348,21 +347,11 @@ class Agent:
             "response_format": self.response_format,
             "metadata": self.metadata,
             "model": self.model,
+            "reasoning_effort": self.reasoning_effort,
         }
 
-        extra_body = {}
-
-        # o-series models
-        model_suffix = params["model"].split("/")[-1]
-        if model_suffix.startswith("o"):
-            params["temperature"] = None
-            params["top_p"] = None
-            extra_body["reasoning_effort"] = self.reasoning_effort
-        else:
-            extra_body["reasoning_effort"] = None
-
         self.assistant = self.client.beta.assistants.update(
-            self.id, **params, extra_body=extra_body
+            self.id, **params
         )
 
         self._update_settings()
@@ -715,14 +704,20 @@ class Agent:
                 print("Assistant tools:", assistant_tools)
             return False
 
-        if self.temperature != assistant_settings["temperature"]:
+        if (
+            self.temperature != assistant_settings["temperature"]
+            and not self.model.startswith("o")
+        ):
             if debug:
                 print(
                     f"Temperature mismatch: {self.temperature} != {assistant_settings['temperature']}"
                 )
             return False
 
-        if self.top_p != assistant_settings["top_p"]:
+        if (
+            self.top_p != assistant_settings["top_p"]
+            and not self.model.startswith("o")
+        ):
             if debug:
                 print(f"Top_p mismatch: {self.top_p} != {assistant_settings['top_p']}")
             return False
@@ -778,6 +773,17 @@ class Agent:
             if debug:
                 print(f"Response format mismatch: {response_format_diff}")
             return False
+
+        if self.model.startswith("o"):
+            reasoning_effort_diff = DeepDiff(
+                self.reasoning_effort,
+                assistant_settings["reasoning_effort"],
+                ignore_order=True,
+            )
+            if reasoning_effort_diff != {}:
+                if debug:
+                    print(f"Reasoning effort mismatch: {reasoning_effort_diff}")
+                return False
 
         return True
 
