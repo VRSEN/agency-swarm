@@ -96,6 +96,14 @@ We currently recommend [**Langfuse**](https://langfuse.com/) because it is fully
         init_tracking("agentops", api_key="your-agentops-api-key")
         ```
 
+        <Accordion title="Configuration (Optional)">
+          You can pass additional configuration options directly when initializing:
+
+          ```python
+          init_tracking("agentops", api_key="your-agentops-api-key", debug=True, user_id="user-123")
+          ```
+        </Accordion>
+
         <Note>AgentOps integration has limited support - not all messages are shown in the chat view.</Note>
       </Step>
       <Step title="Run and Monitor">
@@ -103,13 +111,7 @@ We currently recommend [**Langfuse**](https://langfuse.com/) because it is fully
         2. Visit [app.agentops.ai/drilldown](https://app.agentops.ai/drilldown) to observe your agent
         3. After the run, AgentOps prints a clickable URL in the console that takes you directly to your session
       </Step>
-      <Step title="Configuration (Optional)">
-        You can pass additional configuration options directly when initializing:
 
-        ```python
-        init_tracking("agentops", api_key="your-agentops-api-key", debug=True, user_id="user-123")
-        ```
-      </Step>
     </Steps>
   </Tab>
 
@@ -128,19 +130,21 @@ We currently recommend [**Langfuse**](https://langfuse.com/) because it is fully
         ```
 
         A SQLite database will be created in the current directory.
+
+        <Accordion title="Configuration (Optional)">
+          You can pass additional configuration options directly when initializing:
+
+          ```python
+          init_tracking("local", db_path="path/to/your/database.db", debug=True, user_id="user-123")
+          ```
+      </Accordion>
       </Step>
       <Step title="Custom Database Path (Optional)">
         ```python
         init_tracking("local", db_path="path/to/your/database.db")
         ```
       </Step>
-      <Step title="Configuration (Optional)">
-        You can pass additional configuration options directly when initializing:
 
-        ```python
-        init_tracking("local", db_path="path/to/your/database.db", debug=True, user_id="user-123")
-        ```
-      </Step>
     </Steps>
   </Tab>
 
