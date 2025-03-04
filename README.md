@@ -42,14 +42,12 @@ Define your custom tools by extending the `BaseTool` class:
     from agency_swarm.tools import BaseTool
     from pydantic import Field
 
-
     class MyCustomTool(BaseTool):
         """
         A brief description of what the custom tool does.
         The docstring should clearly explain the tool's purpose and functionality.
         It will be used by the agent to determine when to use this tool.
         """
-
 
         # Define the fields with descriptions using Pydantic Field
         example_field: str = Field(
@@ -58,7 +56,6 @@ Define your custom tools by extending the `BaseTool` class:
         # Additional fields as required
         # ...
 
-
         def run(self):
             """
             The implementation of the run method, where the tool's main functionality is executed.
@@ -66,14 +63,11 @@ Define your custom tools by extending the `BaseTool` class:
             # Your custom tool logic goes here
             do_something(self.example_field)
 
-
             # Return the result of the tool's operation
             return "Result of MyCustomTool operation"
     ```
 
-
     or convert from OpenAPI schemas:
-
 
     ```python
     from agency_swarm.tools import ToolFactory
@@ -82,7 +76,6 @@ Define your custom tools by extending the `BaseTool` class:
         tools = ToolFactory.from_openapi_schema(
             f.read(),
         )
-
 
     # using requests
     tools = ToolFactory.from_openapi_schema(
@@ -114,11 +107,9 @@ Define your custom tools by extending the `BaseTool` class:
    agency-swarm import-agent --name "Devid" --destination "./"
    ```
 
-
    This will import Devid (Software Developer) Agent locally, including all source code files, so you have full control over your system. Currently, available agents are: `Devid`, `BrowsingAgent`.
 
 
-4. **Define Agency Communication Flows**:
 4. **Define Agency Communication Flows**:
 Establish how your agents will communicate with each other.
 
@@ -128,10 +119,8 @@ Establish how your agents will communicate with each other.
     from Developer import Developer
     from VirtualAssistant import VirtualAssistant
 
-
     dev = Developer()
     va = VirtualAssistant()
-
 
     agency = Agency([
             ceo,  # CEO will be the entry point for communication with the user
@@ -148,9 +137,7 @@ Establish how your agents will communicate with each other.
      In Agency Swarm, communication flows are directional, meaning they are established from left to right in the agency_chart definition. For instance, in the example above, the CEO can initiate a chat with the developer (dev), and the developer can respond in this chat. However, the developer cannot initiate a chat with the CEO. The developer can initiate a chat with the virtual assistant (va) and assign new tasks.
 
 5. **Run Demo**:
-5. **Run Demo**:
 Run the demo to see your agents in action!
-
 
     Web interface:
 
@@ -158,17 +145,13 @@ Run the demo to see your agents in action!
     agency.demo_gradio(height=900)
     ```
 
-
     Terminal version:
-
 
     ```python
     agency.run_demo()
     ```
 
-
     Backend version:
-
 
     ```python
     completion_output = agency.get_completion("Please create a new website for our client.")
@@ -225,12 +208,10 @@ When you run the `create-agent-template` command, it creates the following folde
     ├── files/                  # Directory for files that will be uploaded to openai
     ├── schemas/                # Directory for OpenAPI schemas to be converted into tools
     ├── tools/                  # Directory for tools to be imported by default.
-    ├── tools/                  # Directory for tools to be imported by default.
     ├── AgentName.py            # The main agent class file
     ├── __init__.py             # Initializes the agent folder as a Python package
     ├── instructions.md or .txt # Instruction document for the agent
     └── tools.py                # Custom tools specific to the agent
-
 
 ```
 

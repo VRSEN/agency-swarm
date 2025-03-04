@@ -2,7 +2,6 @@ import inspect
 import json
 import os
 import sys
-from importlib import import_module
 from typing import Any, Dict, List, Type, Union
 
 import httpx
@@ -44,7 +43,7 @@ class ToolFactory:
             A BaseTool.
         """
         try:
-            from langchain.tools import format_tool_to_openai_function
+            from langchain_community.tools import format_tool_to_openai_function
         except ImportError:
             raise ImportError("You must install langchain to use this method.")
 
@@ -99,13 +98,16 @@ class ToolFactory:
 
         result = parser.parse()
 
-        # # Execute the result to extract the model
+        # Execute the result to extract the model
         exec_globals = {}
         exec(result, exec_globals)
         model = exec_globals.get("Model")
 
         if not model:
             raise ValueError(f"Could not extract model from schema {schema['name']}")
+
+        # Rebuild the model to ensure it's fully defined
+        model.model_rebuild()
 
         class ToolConfig:
             strict: bool = schema.get("strict", False)

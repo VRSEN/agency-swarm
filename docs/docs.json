@@ -91,7 +91,8 @@
               },
               "additional-features/azure-openai",
               "additional-features/open-source-models",
-              "additional-features/deployment-to-production"
+              "additional-features/deployment-to-production",
+              "additional-features/observability"
             ]
           },
           {

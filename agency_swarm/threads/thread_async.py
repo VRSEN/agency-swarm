@@ -23,6 +23,7 @@ class ThreadAsync(Thread):
         recipient_agent=None,
         additional_instructions: str = None,
         tool_choice: AssistantToolChoice = None,
+        parent_run_id: str | None = None,
     ):
         self.async_mode = False
 
@@ -33,6 +34,7 @@ class ThreadAsync(Thread):
             recipient_agent=recipient_agent,
             additional_instructions=additional_instructions,
             tool_choice=tool_choice,
+            parent_run_id=parent_run_id,
         )
 
         while True:
@@ -54,6 +56,7 @@ class ThreadAsync(Thread):
         recipient_agent=None,
         additional_instructions: str = None,
         tool_choice: AssistantToolChoice = None,
+        parent_run_id: str | None = None,
     ):
         if self.pythread and self.pythread.is_alive():
             return "System Notification: 'Agent is busy, so your message was not received. Please always use 'GetResponse' tool to check for status first, before using 'SendMessage' tool again for the same agent.'"
@@ -76,6 +79,7 @@ class ThreadAsync(Thread):
                 recipient_agent,
                 additional_instructions,
                 tool_choice,
+                parent_run_id,
             ),
         )
 
