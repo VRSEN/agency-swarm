@@ -1,8 +1,14 @@
 ---
 title: "Observability"
-description: "Track and analyze agent behavior and performance through Langchain callbacks"
+description: "Track and analyze your agent performance and behavior by connecting with third party observability tools."
 icon: "eyes"
 ---
+
+Agency Swarm uses Langchain callbacks to connect with third party observability tools.
+
+<Info>
+  Although we strongly discourage using Langchain for agent development due to its numerous unnecessary abstractions, it currently has the widest support among third-party observability tools. For this reason, we have adopted its callback structure. However, no Langchain code is used within Agency Swarm.
+</Info>
 
 <Accordion title="Prerequisites" defaultOpen={true}>
   To get started with observability features, install the Langchain package:
@@ -12,13 +18,15 @@ icon: "eyes"
   ```
 </Accordion>
 
-Agency Swarm supports agent tracking through Langchain callbacks, helping you monitor and analyze agent behavior and performance.
+## Observability Platforms
+
+When it comes to choosing your observability platform, there are a few options:
 
 <CardGroup cols={2}>
   <Card title="Langfuse" icon="chart-line" href="#langfuse">
     Advanced tracing, metrics, and debugging tools
   </Card>
-  <Card title="AgentOps" icon="gauge-high" href="#agentops-wip">
+  <Card title="AgentOps" icon="gauge-high" href="#agentops">
     Platform for managing and tracking your agents
   </Card>
   <Card title="Local Tracking" icon="database" href="#local">
@@ -29,10 +37,12 @@ Agency Swarm supports agent tracking through Langchain callbacks, helping you mo
   </Card>
 </CardGroup>
 
-## Langfuse
+We currently recommend [**Langfuse**](https://langfuse.com/) because it is fully open source, easy to use, and offers the most comprehensive set of features and support.
+
+![Langfuse dashboard](/images/observability-langfuse.png)
 
 <Tabs>
-  <Tab title="Setup">
+  <Tab title="Langfuse">
     <Steps>
       <Step title="Install Package">
         ```bash
@@ -51,149 +61,164 @@ Agency Swarm supports agent tracking through Langchain callbacks, helping you mo
         from agency_swarm import init_tracking
         init_tracking("langfuse")
         ```
+        <Accordion title="Configuration (Optional)">
+          You can pass additional configuration options:
+
+          ```python
+          # Using environment variables with additional options
+          init_tracking("langfuse", debug=True, host="custom-host", user_id="user-123")
+
+          # Direct API key passing (useful for multi-user applications)
+          init_tracking("langfuse", public_key="your-public-key", secret_key="your-secret-key")
+          ```
+      </Accordion>
+          For more information, see the [Langfuse Documentation](https://langfuse.com/docs/integrations/langchain/tracing#add-langfuse-to-your-langchain-application).
+      </Step>
+
+    </Steps>
+  </Tab>
+
+  <Tab title="AgentOps (Limited Support)">
+    <Steps>
+      <Step title="Install Dependencies">
+        ```bash
+        pip install agentops
+        ```
+      </Step>
+      <Step title="Set API Key">
+        Either add to your `.env` file:
+        ```bash
+        AGENTOPS_API_KEY=<YOUR API KEY>
+        ```
+
+        Or pass directly when initializing (for multi-user applications):
+        ```python
+        init_tracking("agentops", api_key="your-agentops-api-key")
+        ```
+
+        <Note>AgentOps integration has limited support - not all messages are shown in the chat view.</Note>
+      </Step>
+      <Step title="Run and Monitor">
+        1. Run your agent
+        2. Visit [app.agentops.ai/drilldown](https://app.agentops.ai/drilldown) to observe your agent
+        3. After the run, AgentOps prints a clickable URL in the console that takes you directly to your session
+      </Step>
+      <Step title="Configuration (Optional)">
+        You can pass additional configuration options directly when initializing:
+
+        ```python
+        init_tracking("agentops", api_key="your-agentops-api-key", debug=True, user_id="user-123")
+        ```
       </Step>
     </Steps>
   </Tab>
-  <Tab title="Configuration">
-    You can pass additional configuration options:
 
-    ```python
-    # Using environment variables with additional options
-    init_tracking("langfuse", debug=True, host="custom-host", user_id="user-123")
+  <Tab title="Local">
+    Local SQLite implementation:
+    <Steps>
+      <Step title="Install Dependencies">
+        ```bash
+        pip install tiktoken
+        ```
+      </Step>
+      <Step title="Initialize Tracking">
+        ```python
+        from agency_swarm import init_tracking
+        init_tracking("local")
+        ```
 
-    # Direct API key passing (useful for multi-user applications)
-    init_tracking("langfuse", public_key="your-public-key", secret_key="your-secret-key")
-    ```
+        A SQLite database will be created in the current directory.
+      </Step>
+      <Step title="Custom Database Path (Optional)">
+        ```python
+        init_tracking("local", db_path="path/to/your/database.db")
+        ```
+      </Step>
+      <Step title="Configuration (Optional)">
+        You can pass additional configuration options directly when initializing:
+
+        ```python
+        init_tracking("local", db_path="path/to/your/database.db", debug=True, user_id="user-123")
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="Custom Implementation">
+    <Accordion title="Event Hierarchy" defaultOpen="true">
+      ```
+      Agency Chain
+      ├── Messages
+      │   ├── User messages
+      │   ├── Assistant messages
+      │   ├── Function calls
+      │   └── Function outputs
+      └── Errors
+          ├── Chain errors (in agency.py)
+          │   └── Generator errors
+          └── Tool errors (in thread.py)
+              ├── Validation errors
+              ├── Execution errors
+              └── Tool-specific errors
+      ```
+    </Accordion>
+
+    <Accordion title="Key Components">
+      <ResponseField name="TrackingManager" type="class">
+        Central tracking coordinator
+      </ResponseField>
+      <ResponseField name="LocalCallbackHandler" type="class">
+        SQLite implementation of tracking callbacks
+      </ResponseField>
+      <ResponseField name="Langchain callbacks" type="interface">
+        Standardized event tracking interface
+      </ResponseField>
+    </Accordion>
+
+    <Accordion title="Event Types">
+      <Expandable title="Chain Events" defaultOpen="true">
+        <ResponseField name="Agency runs" type="event">Start/end of agency runs</ResponseField>
+        <ResponseField name="Relationships" type="metadata">Parent-child relationships</ResponseField>
+        <ResponseField name="Errors" type="event">Error tracking</ResponseField>
+      </Expandable>
+
+      <Expandable title="Message Events">
+        <ResponseField name="User/assistant messages" type="event">Communication between user and assistant</ResponseField>
+        <ResponseField name="Tool calls" type="event">Function calls and outputs</ResponseField>
+        <ResponseField name="Metadata" type="metadata">Run IDs and related information</ResponseField>
+      </Expandable>
+
+      <Expandable title="Tool Events">
+        <ResponseField name="Execution" type="event">Tool execution start/end</ResponseField>
+        <ResponseField name="Errors" type="event">Tool errors and validation</ResponseField>
+        <ResponseField name="File operations" type="event">File search and retrieval</ResponseField>
+      </Expandable>
+    </Accordion>
+
+    <Accordion title="Metadata Tracked">
+      <ResponseField name="Run IDs" type="string">
+        Unique identifiers for each run
+      </ResponseField>
+      <ResponseField name="Relationships" type="object">
+        Parent-child relationships between runs
+      </ResponseField>
+      <ResponseField name="Agent info" type="object">
+        Agent names and roles
+      </ResponseField>
+      <ResponseField name="Model info" type="object">
+        Information about the models used
+      </ResponseField>
+      <ResponseField name="Timestamps" type="datetime">
+        When events occurred
+      </ResponseField>
+      <ResponseField name="Token usage" type="object">
+        Information about token consumption
+      </ResponseField>
+      <ResponseField name="Error details" type="object">
+        Detailed error information when failures occur
+      </ResponseField>
+    </Accordion>
   </Tab>
 </Tabs>
 
-For more information, see the [Langfuse Documentation](https://langfuse.com/docs/integrations/langchain/tracing#add-langfuse-to-your-langchain-application).
 
-![Langfuse dashboard](/images/observability-langfuse.png)
-
-## AgentOps [limited support]
-
-<Steps>
-  <Step title="Install Dependencies">
-    ```bash
-    pip install agentops
-    ```
-  </Step>
-  <Step title="Set API Key">
-    Either add to your `.env` file:
-    ```bash
-    AGENTOPS_API_KEY=<YOUR API KEY>
-    ```
-
-    Or pass directly when initializing (for multi-user applications):
-    ```python
-    init_tracking("agentops", api_key="your-agentops-api-key")
-    ```
-
-    <Note>AgentOps integration has limited support - not all messages are shown in the chat view.</Note>
-  </Step>
-  <Step title="Run and Monitor">
-    1. Run your agent
-    2. Visit [app.agentops.ai/drilldown](https://app.agentops.ai/drilldown) to observe your agent
-    3. After the run, AgentOps prints a clickable URL in the console that takes you directly to your session
-  </Step>
-</Steps>
-
-## Local
-
-<Steps>
-  <Step title="Install Dependencies">
-    ```bash
-    pip install tiktoken
-    ```
-  </Step>
-  <Step title="Initialize Tracking">
-    ```python
-    from agency_swarm import init_tracking
-    init_tracking("local")
-    ```
-
-    A SQLite database will be created in the current directory.
-  </Step>
-  <Step title="Custom Database Path (Optional)">
-    ```python
-    init_tracking("local", db_path="path/to/your/database.db")
-    ```
-  </Step>
-</Steps>
-
-## Implementation Details
-
-<Accordion title="Event Hierarchy" defaultOpen="true">
-  ```
-  Agency Chain
-  ├── Messages
-  │   ├── User messages
-  │   ├── Assistant messages
-  │   ├── Function calls
-  │   └── Function outputs
-  └── Errors
-      ├── Chain errors (in agency.py)
-      │   └── Generator errors
-      └── Tool errors (in thread.py)
-          ├── Validation errors
-          ├── Execution errors
-          └── Tool-specific errors
-  ```
-</Accordion>
-
-<Accordion title="Key Components">
-  <ResponseField name="TrackingManager" type="class">
-    Central tracking coordinator
-  </ResponseField>
-  <ResponseField name="LocalCallbackHandler" type="class">
-    SQLite implementation of tracking callbacks
-  </ResponseField>
-  <ResponseField name="Langchain callbacks" type="interface">
-    Standardized event tracking interface
-  </ResponseField>
-</Accordion>
-
-<Accordion title="Event Types">
-  <Expandable title="Chain Events" defaultOpen="true">
-    <ResponseField name="Agency runs" type="event">Start/end of agency runs</ResponseField>
-    <ResponseField name="Relationships" type="metadata">Parent-child relationships</ResponseField>
-    <ResponseField name="Errors" type="event">Error tracking</ResponseField>
-  </Expandable>
-
-  <Expandable title="Message Events">
-    <ResponseField name="User/assistant messages" type="event">Communication between user and assistant</ResponseField>
-    <ResponseField name="Tool calls" type="event">Function calls and outputs</ResponseField>
-    <ResponseField name="Metadata" type="metadata">Run IDs and related information</ResponseField>
-  </Expandable>
-
-  <Expandable title="Tool Events">
-    <ResponseField name="Execution" type="event">Tool execution start/end</ResponseField>
-    <ResponseField name="Errors" type="event">Tool errors and validation</ResponseField>
-    <ResponseField name="File operations" type="event">File search and retrieval</ResponseField>
-  </Expandable>
-</Accordion>
-
-<Accordion title="Metadata Tracked">
-  <ResponseField name="Run IDs" type="string">
-    Unique identifiers for each run
-  </ResponseField>
-  <ResponseField name="Relationships" type="object">
-    Parent-child relationships between runs
-  </ResponseField>
-  <ResponseField name="Agent info" type="object">
-    Agent names and roles
-  </ResponseField>
-  <ResponseField name="Model info" type="object">
-    Information about the models used
-  </ResponseField>
-  <ResponseField name="Timestamps" type="datetime">
-    When events occurred
-  </ResponseField>
-  <ResponseField name="Token usage" type="object">
-    Information about token consumption
-  </ResponseField>
-  <ResponseField name="Error details" type="object">
-    Detailed error information when failures occur
-  </ResponseField>
-</Accordion>
