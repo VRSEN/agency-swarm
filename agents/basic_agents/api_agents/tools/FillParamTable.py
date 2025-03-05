@@ -1,5 +1,6 @@
 from agency_swarm.tools import BaseTool
 from pydantic import Field
+import os
 import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -26,7 +27,19 @@ class FillParamTable(BaseTool):
         }
         if row["type"] is not None:
             message_obj["type"] = row["type"]
-        
+
+        # search upwards for all parents of this parameter, add their descriptions to message
+        parent_ref_table_id = row["table_id"]
+        while parent_ref_table_id is not None:
+            parent_df = search_from_sqlite(database_path=API_DATABASE_FILE, table_name='request_parameters', condition=f"api_id={row['api_id']} AND ref_table_id={parent_ref_table_id}")
+            if len(parent_df) == 0:
+                break
+            parent_row = parent_df.iloc[0]
+            if "parents_description" not in message_obj:
+                message_obj["parents_description"] = {}
+            message_obj["parents_description"][parent_row["parameter"]] = parent_row["description"]
+            parent_ref_table_id = parent_row["table_id"]
+
         # 2. send the message and handle response
         value_str = self.send_message_to_agent(recipient_agent_name="Param Filler", message=json.dumps(message_obj, ensure_ascii=False))
 
@@ -36,6 +49,7 @@ class FillParamTable(BaseTool):
             return row["parameter"], try_parse_json(value_str)
 
     def run(self):
+        debug_parallel = os.getenv("DEBUG_API_AGENTS_PARALLEL")
 
         # 1. get ID of this API
         apis_df = search_from_sqlite(database_path=API_DATABASE_FILE, table_name='apis', condition=f'name=\'{self.api_name}\'')
@@ -47,13 +61,20 @@ class FillParamTable(BaseTool):
         param_table_df = search_from_sqlite(database_path=API_DATABASE_FILE, table_name='request_parameters', condition=f"api_id='{api_id}' AND table_id='{self.table_id}'")
         param_values = {}
         
-        with ThreadPoolExecutor() as executor:
-            futures = []
+        if debug_parallel is not None and debug_parallel.lower() == "true":
             for _, row in param_table_df.iterrows():
-                futures.append(executor.submit(self.fill_parameter, row))
-            for future in as_completed(futures):
-                key, value = future.result()
+                key, value = self.fill_parameter(row)
                 if value is not None:
                     param_values[key] = value
+
+        else:
+            with ThreadPoolExecutor() as executor:
+                futures = []
+                for _, row in param_table_df.iterrows():
+                    futures.append(executor.submit(self.fill_parameter, row))
+                for future in as_completed(futures):
+                    key, value = future.result()
+                    if value is not None:
+                        param_values[key] = value
 
         return json.dumps(param_values, ensure_ascii=False)

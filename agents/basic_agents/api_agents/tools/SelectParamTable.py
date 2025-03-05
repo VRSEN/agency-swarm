@@ -1,5 +1,6 @@
 from agency_swarm.tools import BaseTool
 from pydantic import Field
+import os
 import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -36,6 +37,21 @@ class SelectParamTable(BaseTool):
         if row["mandatory"] == 1:
             message_obj["mandatory"] = row["mandatory"]
         
+        # search upwards for all parents of this parameter, add their descriptions to message
+        parent_ref_table_id = row["table_id"]
+        while parent_ref_table_id is not None:
+            parent_df = search_from_sqlite(database_path=API_DATABASE_FILE, table_name='request_parameters', condition=f"api_id={row['api_id']} AND ref_table_id={parent_ref_table_id}")
+            if len(parent_df) == 0:
+                break
+            parent_row = parent_df.iloc[0]
+            if "parents_description" not in message_obj:
+                message_obj["parents_description"] = {}
+            message_obj["parents_description"][parent_row["parameter"]] = parent_row["description"]
+            parent_ref_table_id = parent_row["table_id"]
+        # add parents' description to returned_info too
+        if "parents_description" in message_obj:
+            returned_info["parents_description"] = message_obj["parents_description"]
+
         # 3. send the message and handle response
         selected_str = self.send_message_to_agent(recipient_agent_name="Param Selector", message=json.dumps(message_obj, ensure_ascii=False))
         
@@ -49,6 +65,7 @@ class SelectParamTable(BaseTool):
             return selected
 
     def run(self):
+        debug_parallel = os.getenv("DEBUG_API_AGENTS_PARALLEL")
 
         # 1. get ID of this API
         apis_df = search_from_sqlite(database_path=API_DATABASE_FILE, table_name='apis', condition=f'name=\'{self.api_name}\'')
@@ -60,11 +77,16 @@ class SelectParamTable(BaseTool):
         param_table_df = search_from_sqlite(database_path=API_DATABASE_FILE, table_name='request_parameters', condition=f"api_id='{api_id}' AND table_id='{self.table_id}'")
         selected_params = []
 
-        with ThreadPoolExecutor() as executor:
-            futures = []
+        if debug_parallel is not None and debug_parallel.lower() == "true":
             for _, row in param_table_df.iterrows():
-                futures.append(executor.submit(self.select_parameter, row))
-            for future in as_completed(futures):
-                selected_params += future.result()
+                selected_params += self.select_parameter(row)
+
+        else:
+            with ThreadPoolExecutor() as executor:
+                futures = []
+                for _, row in param_table_df.iterrows():
+                    futures.append(executor.submit(self.select_parameter, row))
+                for future in as_completed(futures):
+                    selected_params += future.result()
 
         return json.dumps(selected_params, ensure_ascii=False)
