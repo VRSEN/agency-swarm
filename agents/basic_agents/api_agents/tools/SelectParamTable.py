@@ -37,6 +37,21 @@ class SelectParamTable(BaseTool):
         if row["mandatory"] == 1:
             message_obj["mandatory"] = row["mandatory"]
         
+        # search upwards for all parents of this parameter, add their descriptions to message
+        parent_ref_table_id = row["table_id"]
+        while parent_ref_table_id is not None:
+            parent_df = search_from_sqlite(database_path=API_DATABASE_FILE, table_name='request_parameters', condition=f"api_id={row['api_id']} AND ref_table_id={parent_ref_table_id}")
+            if len(parent_df) == 0:
+                break
+            parent_row = parent_df.iloc[0]
+            if "parents_description" not in message_obj:
+                message_obj["parents_description"] = {}
+            message_obj["parents_description"][parent_row["parameter"]] = parent_row["description"]
+            parent_ref_table_id = parent_row["table_id"]
+        # add parents' description to returned_info too
+        if "parents_description" in message_obj:
+            returned_info["parents_description"] = message_obj["parents_description"]
+
         # 3. send the message and handle response
         selected_str = self.send_message_to_agent(recipient_agent_name="Param Selector", message=json.dumps(message_obj, ensure_ascii=False))
         
