@@ -1,5 +1,6 @@
 from agency_swarm.tools import BaseTool
 from pydantic import Field
+import os
 import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -50,6 +51,7 @@ class SelectAPIParam(BaseTool):
             return selected
 
     def run(self):
+        debug_parallel = os.getenv("DEBUG_API_AGENTS_PARALLEL")
 
         # 1. get general information about this API
         apis_df = search_from_sqlite(database_path=API_DATABASE_FILE, table_name='apis', condition=f'name=\'{self.api_name}\'')
@@ -62,12 +64,17 @@ class SelectAPIParam(BaseTool):
         uri_parameters_df = search_from_sqlite(database_path=API_DATABASE_FILE, table_name='uri_parameters', condition=f'api_id=\'{api_id}\'')
         selected_uri_params = []
 
-        with ThreadPoolExecutor() as executor:
-            futures = []
+        if debug_parallel is not None and debug_parallel.lower() == "true":
             for _, row in uri_parameters_df.iterrows():
-                futures.append(executor.submit(self.select_uri_parameter, row))
-            for future in as_completed(futures):
-                selected_uri_params += future.result()
+                selected_uri_params += self.select_uri_parameter(row)
+
+        else:
+            with ThreadPoolExecutor() as executor:
+                futures = []
+                for _, row in uri_parameters_df.iterrows():
+                    futures.append(executor.submit(self.select_uri_parameter, row))
+                for future in as_completed(futures):
+                    selected_uri_params += future.result()
 
         # 3. Call SelectParamTable() to decide whether to select request parameters
         select_param_table_instance = SelectParamTable(caller_tool = self,

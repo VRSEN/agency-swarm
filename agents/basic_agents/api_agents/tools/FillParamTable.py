@@ -1,5 +1,6 @@
 from agency_swarm.tools import BaseTool
 from pydantic import Field
+import os
 import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -36,6 +37,7 @@ class FillParamTable(BaseTool):
             return row["parameter"], try_parse_json(value_str)
 
     def run(self):
+        debug_parallel = os.getenv("DEBUG_API_AGENTS_PARALLEL")
 
         # 1. get ID of this API
         apis_df = search_from_sqlite(database_path=API_DATABASE_FILE, table_name='apis', condition=f'name=\'{self.api_name}\'')
@@ -47,13 +49,20 @@ class FillParamTable(BaseTool):
         param_table_df = search_from_sqlite(database_path=API_DATABASE_FILE, table_name='request_parameters', condition=f"api_id='{api_id}' AND table_id='{self.table_id}'")
         param_values = {}
         
-        with ThreadPoolExecutor() as executor:
-            futures = []
+        if debug_parallel is not None and debug_parallel.lower() == "true":
             for _, row in param_table_df.iterrows():
-                futures.append(executor.submit(self.fill_parameter, row))
-            for future in as_completed(futures):
-                key, value = future.result()
+                key, value = self.fill_parameter(row)
                 if value is not None:
                     param_values[key] = value
+
+        else:
+            with ThreadPoolExecutor() as executor:
+                futures = []
+                for _, row in param_table_df.iterrows():
+                    futures.append(executor.submit(self.fill_parameter, row))
+                for future in as_completed(futures):
+                    key, value = future.result()
+                    if value is not None:
+                        param_values[key] = value
 
         return json.dumps(param_values, ensure_ascii=False)

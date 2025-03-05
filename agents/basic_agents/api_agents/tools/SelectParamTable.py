@@ -1,5 +1,6 @@
 from agency_swarm.tools import BaseTool
 from pydantic import Field
+import os
 import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -49,6 +50,7 @@ class SelectParamTable(BaseTool):
             return selected
 
     def run(self):
+        debug_parallel = os.getenv("DEBUG_API_AGENTS_PARALLEL")
 
         # 1. get ID of this API
         apis_df = search_from_sqlite(database_path=API_DATABASE_FILE, table_name='apis', condition=f'name=\'{self.api_name}\'')
@@ -60,11 +62,16 @@ class SelectParamTable(BaseTool):
         param_table_df = search_from_sqlite(database_path=API_DATABASE_FILE, table_name='request_parameters', condition=f"api_id='{api_id}' AND table_id='{self.table_id}'")
         selected_params = []
 
-        with ThreadPoolExecutor() as executor:
-            futures = []
+        if debug_parallel is not None and debug_parallel.lower() == "true":
             for _, row in param_table_df.iterrows():
-                futures.append(executor.submit(self.select_parameter, row))
-            for future in as_completed(futures):
-                selected_params += future.result()
+                selected_params += self.select_parameter(row)
+
+        else:
+            with ThreadPoolExecutor() as executor:
+                futures = []
+                for _, row in param_table_df.iterrows():
+                    futures.append(executor.submit(self.select_parameter, row))
+                for future in as_completed(futures):
+                    selected_params += future.result()
 
         return json.dumps(selected_params, ensure_ascii=False)
