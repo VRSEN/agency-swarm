@@ -1434,7 +1434,7 @@ class Agency:
         self.init_files()
 
         print("Initialization Successful.\n")
-        text = "在北京cn-north-4a可用区创建一个CCE集群"
+        text = "在北京cn-north-4a可用区创建一个CCE集群,VPC id为4f490c15-d09a-4ae9-a893-37e69b8a025a，子网id为f7c1418b-8150-4d78-b107-9a4ef77d6379"
         # text = "在北京cn-north-4a可用区创建一个ECS，规格任意"
         # text = "创建一个8核32g的ECS，操作系统选择为Ubuntu 20.04。"
         # text = "在北京可用区创建三个ecs，之后删除创建时间超过5分钟的ecs"
@@ -1464,10 +1464,12 @@ class Agency:
 
         # task_id = 0
         context_id = 0
-
+        need_replan = False
+        error_message = ""
+        error_id = 0
         while True: # 拆分出任务（事务）流程图，id2task
             # task_id = task_id + 1
-            task_graph, tasks_need_scheduled = self.planning_layer(message=text, original_request=original_request, task_planner_thread=planner_thread, inspector_thread=inspector_thread, node_color='lightblue')
+            task_graph, tasks_need_scheduled = self.planning_layer(message=text, original_request=original_request, task_planner_thread=planner_thread, error_message=error_message, inspector_thread=inspector_thread, node_color='lightblue')
             self._init_file(self.error_path)
             id2task = {}
             task_graph_json = json.loads(task_graph)
@@ -1476,8 +1478,6 @@ class Agency:
                 id2task[task['id']] = task
 
             while True: # 任务调度
-                need_replan = False
-                error_id = 0
                 tasks_scheduled = self.scheduling_layer(scheduler_thread=scheduler_thread, message=tasks_need_scheduled)
                 tasks_scheduled_json = json.loads(tasks_scheduled)
                 next_task_list = tasks_scheduled_json['next_tasks']
@@ -1558,21 +1558,29 @@ class Agency:
                                     elif result == 'FAIl':
                                         # 更新error
                                         error_id = error_id + 1
-                                        self.update_error(error_id=error_id, error=new_context, step=next_step)
+                                        error_message = new_context
+                                        # self.update_error(error_id=error_id, error=new_context, step=next_step)
                                         need_replan = True
                                         break
+                                if need_replan == True:
+                                    break
                             # 如果step全都正常完成，更新已完成子任务
+                            self._init_file(self.completed_step_path)
                             if need_replan == False:
                                 self.update_completed_sub_task(next_subtask_id, next_subtask)
                             else:
                                 break
-                            self._init_file(self.completed_step_path)
+                        if need_replan == True:
+                            break
                     # 如果子任务全都正常完成，更新已完成任务
+                    self._init_file(self.completed_subtask_path)
                     if need_replan == False:
                         self.update_completed_task(next_task_id, next_task)
                     else:
                         break
-                    self._init_file(self.completed_subtask_path)
+                if need_replan == True:
+                    break
+                
     
     def update_error(self, error_id: int, error: str, step: dict):
         with open(self.error_path, 'r') as file:
@@ -1654,9 +1662,11 @@ class Agency:
         print(f"{scheduler_thread.recipient_agent.name} SCHEDULING:\n" + schedulerres)
         return schedulerres
 
-    def planning_layer(self, message: str, original_request:str, task_planner_thread: Thread, inspector_thread: Thread = None, node_color: str = 'lightblue'):
+    def planning_layer(self, message: str, original_request:str, task_planner_thread: Thread, error_message: str = None, inspector_thread: Thread = None, node_color: str = 'lightblue'):
         """将返回1. 规划结果, 2. 对应scheduler的输入"""
         console.rule()
+        if error_message != None:
+            message = message + "The error that occurred in the previous plan: \n" + error_message
         planmessage = self.json_get_completion(task_planner_thread, message, original_request, inspector_thread)
         print(f"{task_planner_thread.recipient_agent.name} RESULT:\n" + planmessage)
         planmessage_json = json.loads(planmessage)
