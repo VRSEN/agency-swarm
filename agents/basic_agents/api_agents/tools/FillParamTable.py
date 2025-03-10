@@ -53,6 +53,7 @@ class FillParamTable(BaseTool):
 
         # 1. get ID of this API
         apis_df = search_from_sqlite(database_path=API_DATABASE_FILE, table_name='apis', condition=f'name=\'{self.api_name}\'')
+        print(f"api_name: {self.api_name}")
         assert len(apis_df) == 1, f"API '{self.api_name}' does not exist or has duplicates."
         api_row = apis_df.iloc[0]
         api_id = api_row.loc["id"]
@@ -65,7 +66,10 @@ class FillParamTable(BaseTool):
             for _, row in param_table_df.iterrows():
                 key, value = self.fill_parameter(row)
                 if value is not None:
-                    param_values[key] = value
+                    if value == "true":
+                        param_values[key] = True
+                    else:
+                        param_values[key] = value
 
         else:
             with ThreadPoolExecutor() as executor:
@@ -75,6 +79,9 @@ class FillParamTable(BaseTool):
                 for future in as_completed(futures):
                     key, value = future.result()
                     if value is not None:
-                        param_values[key] = value
+                        if value == "true":
+                            param_values[key] = True
+                        else:
+                            param_values[key] = value
 
         return json.dumps(param_values, ensure_ascii=False)
