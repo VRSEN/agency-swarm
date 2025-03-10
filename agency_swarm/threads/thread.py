@@ -111,6 +111,7 @@ class Thread:
         tool_choice: AssistantToolChoice = None,
         yield_messages: bool = False,
         response_format: Optional[dict] = None,
+        parameter: str = None
     ):
         self.init_thread()
 
@@ -143,7 +144,7 @@ class Thread:
         # Determine the sender's name based on the agent type
         sender_name = "user" if isinstance(self.agent, User) else self.agent.name
         print(
-            f"THREAD:[ {sender_name} -> {recipient_agent.name} ]: URL {self.thread_url}"
+            f"THREAD:[ {parameter if parameter else ''} {sender_name} -> {recipient_agent.name} ]: URL {self.thread_url}"
         )
 
         # send message
