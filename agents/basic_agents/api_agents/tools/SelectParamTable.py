@@ -53,6 +53,7 @@ class SelectParamTable(BaseTool):
             returned_info["parents_description"] = message_obj["parents_description"]
 
         # 3. send the message and handle response
+        print(f"parameter: {message_obj['parameter']}")
         selected_str = self.send_message_to_agent(recipient_agent_name="Param Selector", message=json.dumps(message_obj, ensure_ascii=False))
         
         if "不需要该参数" in selected_str:
@@ -69,6 +70,7 @@ class SelectParamTable(BaseTool):
 
         # 1. get ID of this API
         apis_df = search_from_sqlite(database_path=API_DATABASE_FILE, table_name='apis', condition=f'name=\'{self.api_name}\'')
+        print(f"api_name: {self.api_name}")
         assert len(apis_df) == 1, f"API '{self.api_name}' does not exist or has duplicates."
         api_row = apis_df.iloc[0]
         api_id = api_row.loc["id"]

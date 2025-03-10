@@ -55,6 +55,7 @@ class SelectAPIParam(BaseTool):
 
         # 1. get general information about this API
         apis_df = search_from_sqlite(database_path=API_DATABASE_FILE, table_name='apis', condition=f'name=\'{self.api_name}\'')
+        print(f"api_name: {self.api_name}")
         assert len(apis_df) == 1, f"API '{self.api_name}' does not exist or has duplicates."
         api_row = apis_df.iloc[0]
         api_id = api_row.loc["id"]
