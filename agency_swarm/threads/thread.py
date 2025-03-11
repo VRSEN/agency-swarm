@@ -591,10 +591,13 @@ class Thread:
             )
 
             if tool is None:
-                logger.warning(
-                    f"Tool {tool_call.function.name} not found in agent {recipient_agent.name}. Skipping."
+                error_message = (
+                    f"Tool {tool_call.function.name} not found in agent {recipient_agent.name}. "
+                    "Cancelling run."
                 )
-                continue
+                logger.error(error_message)
+                self.cancel_run()
+                raise Exception(error_message)
 
             if (
                 hasattr(tool.ToolConfig, "async_mode") and tool.ToolConfig.async_mode
