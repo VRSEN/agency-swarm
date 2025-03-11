@@ -6,6 +6,8 @@ import sys
 import time
 import unittest
 
+import httpx
+
 sys.path.insert(0, "../agency-swarm")
 
 from openai.types.beta.threads import Text
@@ -164,7 +166,7 @@ class AgencyTest(unittest.TestCase):
             "type": "json_object",
         }
 
-        cls.agent2.model = "gpt-4o-2024-08-06"
+        cls.agent2.model = "gpt-4o"
 
         cls.ceo = CEO()
         cls.ceo.examples = [
@@ -588,25 +590,62 @@ class AgencyTest(unittest.TestCase):
 
     def test_10_concurrent_API_calls(self):
         """it should execute API calls concurrently with asyncio"""
-        tools = []
-        with open("./data/schemas/get-headers-params.json", "r") as f:
-            tools = ToolFactory.from_openapi_schema(f.read(), {})
 
-        ceo = Agent(
-            name="CEO",
-            tools=tools,
-            instructions="You are an agent that tests concurrent API calls. You must say 'success' if the output contains headers, and 'error' if it does not and **nothing else**.",
-        )
+        # Create a mock client that will be used instead of httpx
+        class MockClient:
+            def __init__(self, **kwargs):
+                self.timeout = kwargs.get("timeout", None)
 
-        agency = Agency([ceo], temperature=0)
+            async def __aenter__(self):
+                return self
 
-        result = agency.get_completion(
-            "Please call PrintHeaders tool TWICE at the same time in a single message. If any of the function outputs do not contains headers, please say 'error'."
-        )
+            async def __aexit__(self, exc_type, exc_val, exc_tb):
+                pass
 
-        self.assertTrue(
-            result.lower().count("error") == 0, agency.main_thread.thread_url
-        )
+            async def get(self, url, params=None, headers=None):
+                # Verify that the domain parameter is correctly set in the URL
+                if "print-headers-gntxktyfsq-uc.a.run.app" in url:
+
+                    class MockResponse:
+                        def json(self):
+                            return {"headers": {"test": "success"}}
+
+                        def raise_for_status(self):
+                            pass
+
+                    return MockResponse()
+                raise ValueError(f"Invalid URL: {url}")
+
+            async def aclose(self):
+                pass
+
+        # Patch httpx.AsyncClient with our mock
+        original_client = httpx.AsyncClient
+        httpx.AsyncClient = MockClient
+
+        try:
+            tools = []
+            with open("./data/schemas/get-headers-params.json", "r") as f:
+                tools = ToolFactory.from_openapi_schema(f.read(), {})
+
+            ceo = Agent(
+                name="CEO",
+                tools=tools,
+                instructions="""You are an agent that tests concurrent API calls. You must say 'success' if the output contains headers, and 'error' if it does not and **nothing else**.""",
+            )
+
+            agency = Agency([ceo], temperature=0)
+
+            result = agency.get_completion(
+                "Please call PrintHeaders tool TWICE at the same time in a single message with domain='print-headers' and query='test'. If any of the function outputs do not contain headers, please say 'error'."
+            )
+
+            self.assertTrue(
+                result.lower().count("error") == 0, agency.main_thread.thread_url
+            )
+        finally:
+            # Restore original client
+            httpx.AsyncClient = original_client
 
     def test_11_structured_outputs(self):
         class MathReasoning(BaseModel):

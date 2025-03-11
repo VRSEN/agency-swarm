@@ -80,7 +80,8 @@ class ToolFactory:
             A BaseTool.
         """
         data_model_types = get_data_model_types(
-            DataModelType.PydanticV2BaseModel, target_python_version=PythonVersion.PY_37
+            DataModelType.PydanticV2BaseModel,
+            target_python_version=PythonVersion.PY_310,
         )
 
         parser = JsonSchemaParser(
