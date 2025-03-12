@@ -3,17 +3,20 @@ import logging
 from dotenv import load_dotenv
 
 from agency_swarm import Agency, Agent
-from agency_swarm.util import init_tracking
+from agency_swarm.util import init_tracking, stop_tracking
 
-load_dotenv()
+# Configure logging
+logging.basicConfig(level=logging.DEBUG)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("openai").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
+# Load environment variables
+load_dotenv()
 
-def main(tracker: str):
-    # Initialize tracking based on the selected tracker
-    init_tracking(tracker)
 
-    # 1. Create agents with different roles
+def setup_agency():
+    """Create agents and configure the agency with communication flows"""
     ceo = Agent(
         name="CEO",
         instructions="You are the CEO.",
@@ -32,8 +35,7 @@ def main(tracker: str):
         description="Analyzes data and provides insights",
     )
 
-    # 2. Define the communication flows within the agency
-    agency = Agency(
+    return Agency(
         [
             ceo,  # CEO is the entry point
             [ceo, developer],  # CEO can communicate with Developer
@@ -43,25 +45,22 @@ def main(tracker: str):
         temperature=0.01,
     )
 
-    # 3. Test the agency
-    output = agency.get_completion("send a test message to Developer")
-    logger.info(f"final output: {str(output)}")
 
-    # 4. Run the demo with Gradio interface
-    try:
-        agency.demo_gradio()
-    except KeyboardInterrupt:
-        pass
+def run_demo():
+    """Run the observability demo"""
+    init_tracking("langfuse")
+    init_tracking("local")
 
-    # 5. Run the CLI demo
-    try:
-        agency.run_demo()
-    except KeyboardInterrupt:
-        pass
+    agency = setup_agency()
+
+    output = agency.get_completion("Send a test message to Developer")
+    logger.info(f"Response: {str(output)}")
+
+    stop_tracking()
+    print(
+        "\nDemo completed. Check Langfuse dashboard and local SQLite database for the results."
+    )
 
 
 if __name__ == "__main__":
-    trackers = ["langfuse", "agentops"]  # "local", "langfuse", "agentops"
-    for tracker in trackers:
-        print(f"Running demo with {tracker.upper()} tracker")
-        main(tracker)
+    run_demo()

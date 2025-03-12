@@ -20,7 +20,7 @@ Agency Swarm uses Langchain callbacks to connect with third party observability 
 
 ## Observability Platforms
 
-When it comes to choosing your observability platform, there are a few options:
+When it comes to choosing your observability platform, there are a few options. You can use one or multiple trackers simultaneously for comprehensive monitoring:
 
 <CardGroup cols={2}>
   <Card title="Langfuse" icon="chart-line" href="#langfuse">
@@ -37,7 +37,7 @@ When it comes to choosing your observability platform, there are a few options:
   </Card>
 </CardGroup>
 
-We currently recommend [**Langfuse**](https://langfuse.com/) because it is fully open source, easy to use, and offers the most comprehensive set of features and support.
+We currently recommend [**Langfuse**](https://langfuse.com/) because it is fully open source, easy to use, and offers the most comprehensive set of features and support. You can also combine it with other trackers for enhanced observability.
 
 ![Langfuse dashboard](/images/observability-langfuse.png)
 
@@ -59,7 +59,13 @@ We currently recommend [**Langfuse**](https://langfuse.com/) because it is fully
       <Step title="Initialize Tracking">
         ```python
         from agency_swarm import init_tracking
+
+        # Initialize single tracker
         init_tracking("langfuse")
+
+        # Or initialize multiple trackers
+        init_tracking("langfuse")
+        init_tracking("local")  # Add local tracking alongside Langfuse
         ```
         <Accordion title="Configuration (Optional)">
           You can pass additional configuration options:
@@ -224,5 +230,3 @@ We currently recommend [**Langfuse**](https://langfuse.com/) because it is fully
     </Accordion>
   </Tab>
 </Tabs>
-
-
