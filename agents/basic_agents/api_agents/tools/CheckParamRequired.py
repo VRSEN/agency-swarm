@@ -14,16 +14,10 @@ class CheckParamRequired(BaseTool):
     api_name: str = Field(..., description="调用的API名")
     parameter: str = Field(..., description="需要判断的参数名")
     description: str = Field(..., description="需要判断的参数描述")
+    # parents_description: dict = Field(..., description="需要判断的参数的前置参数描述，如果没有前置参数请填入\{\}")
     type: str = Field(..., description="需要判断的参数类型")
+    mandatory: int = Field(..., description="该参数是否必需")
 
-    def check_string_position(self, description: str, leftstring: str, rightstring: str):
-        try:
-            print(description, leftstring, rightstring)
-            start_index = description.index(leftstring) + len(leftstring)
-            end_index = description.index(rightstring, start_index)
-            return description[start_index: end_index]
-        except ValueError:
-            return "String"
     def run(self):
         typestring = self.type
         print(typestring)
@@ -33,9 +27,11 @@ class CheckParamRequired(BaseTool):
                 "api_name": self.api_name,
                 "parameter": self.parameter,
                 "description": self.description,
-                "type": typestring
+                # "parents_description": self.parents_description,
+                "type": typestring,
+                "mandatory": self.mandatory
             }
-            result = self.send_message_to_agent(recipient_agent_name="Array Selector", message=json.dumps(message_obj, ensure_ascii=False))
+            result = self.send_message_to_agent(recipient_agent_name="Array Selector", message=json.dumps(message_obj, ensure_ascii=False), parameter=self.parameter)
         elif typestring.find("object") != -1:
             tableids = re.findall(r'详情请参见表\d+', self.description)
             tableid = re.findall(r'\d+', tableids[0])

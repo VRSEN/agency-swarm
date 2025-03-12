@@ -17,9 +17,9 @@ class SelectParamTable(BaseTool):
     table_id: int = Field(default=0, description="表号，常见于“详情请参见表...”，默认值为0")
 
     def select_parameter(self, row):
-        returned_keys = ["parameter", "description", "type"]
+        returned_keys = ["parameter", "description", "type", "mandatory"]
         returned_info = {key: row[key] for key in returned_keys if key in row and row[key] is not None}
-        
+        print(f"parameter: {row['parameter']}")
         # 1. add mandatory simple parameters by default
         if row["mandatory"] == 1 and not ("type" in row and row["type"] is not None and ("array" in row["type"].lower() or "object" in row["type"].lower())):
             return [returned_info]
@@ -32,10 +32,8 @@ class SelectParamTable(BaseTool):
             "parameter": row["parameter"],
             "description": row["description"],
         }
-        if row["type"] is not None:
-            message_obj["type"] = row["type"]
-        if row["mandatory"] == 1:
-            message_obj["mandatory"] = row["mandatory"]
+        message_obj["type"] = row["type"] if row["type"] is not None else "String"
+        message_obj["mandatory"] = row["mandatory"] if row["mandatory"] == 1 else 0
         
         # search upwards for all parents of this parameter, add their descriptions to message
         parent_ref_table_id = row["table_id"]
@@ -53,8 +51,7 @@ class SelectParamTable(BaseTool):
             returned_info["parents_description"] = message_obj["parents_description"]
 
         # 3. send the message and handle response
-        print(f"parameter: {message_obj['parameter']}")
-        selected_str = self.send_message_to_agent(recipient_agent_name="Param Selector", message=json.dumps(message_obj, ensure_ascii=False))
+        selected_str = self.send_message_to_agent(recipient_agent_name="Param Selector", message=json.dumps(message_obj, ensure_ascii=False), parameter=message_obj["parameter"])
         
         if "不需要该参数" in selected_str:
             return []

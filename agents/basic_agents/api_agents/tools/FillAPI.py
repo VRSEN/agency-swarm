@@ -30,7 +30,7 @@ class FillAPI(BaseTool):
             message_obj["type"] = row["type"]
         
         # 2. send the message and handle response
-        value_str = self.send_message_to_agent(recipient_agent_name="Param Filler", message=json.dumps(message_obj, ensure_ascii=False))
+        value_str = self.send_message_to_agent(recipient_agent_name="Param Filler", message=json.dumps(message_obj, ensure_ascii=False), parameter=message_obj["parameter"])
 
         if "不需要该参数" in value_str:
             return None, None
