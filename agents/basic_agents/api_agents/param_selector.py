@@ -12,18 +12,9 @@ _input_format = """
    "api_name": <调用的API名称>,
    "parameter": <你需要判断的参数名>,
    "description": <参数描述>,
-   "type": "<数据类型（如果有）>",
+   "parents_description": <前置参数描述>
+   "type": "<数据类型>",
    "mandatory": <该参数是否必选>
-}
-"""
-
-_output_format = """
-{
-   "user_requirement": "<用户需求>",
-   "api_name": "<调用的API名>",
-   "parameter": "<你需要判断的参数名>",
-   "description": "<参数描述>",
-   "type": "<数据类型（如果有）>"
 }
 """
 
@@ -33,19 +24,19 @@ _instructions = f"""
 你将接收到如下json格式的输入：
 {_input_format}
 
-其中，"user_requirement"字段填入了用户需求，"api_name"字段填入了调用的api名称（你不能对api_name进行任何修改），"parameter"和"description"字段填入了你需要判断的参数名称和描述，"type"字段填入该参数的类型，"mandatory"字段为1说明该参数必选
+其中，"user_requirement"字段填入了用户需求，"api_name"字段填入了调用的api名称（你不能对api_name进行任何修改），"parameter"和"description"字段填入了你需要判断的参数名称和描述，"parents_description"字段填入了该参数的前置参数的描述（如果没有该字段说明该参数没有前置参数），"type"字段填入该参数的类型，"mandatory"字段为1说明该参数必选
 
 每次接收到新的输入时，你都需要**从头**按照以下步骤处理：
 
 你需要根据用户需求和参数信息，你需要一步步思考，专业且谨慎地判断该参数该怎么处理：
+
+如果该参数不是必选参数(即"mandatory"值为0)，并且该参数你通过一步步思考，通过**用户需求**和**参数信息**认为用户不需要该参数，你应该直接输出"不需要该参数"
 
 如果该参数为必选参数(即"mandatory"值为1)，则你需要使用`CheckParamRequired`进一步处理该参数；
 
 或者，虽然该参数不为必选参数，但该参数经过你一步步思考，通过**用户需求**和**参数信息**可以判断该参数是用户所需要的，则你也需要使用`CheckParamRequired`进一步处理该参数；
 
 # 注意：当你接收到`CheckParamRequired`的返回结果时，你需要**原封不动**地输出你接收到的返回结果，**不得增添其他任何内容**，**不得自行修改返回结果**；
-
-如果该参数不为必选参数，并且该参数你认为用户不需要，你应该直接输出"不需要该参数"
 
 """
 

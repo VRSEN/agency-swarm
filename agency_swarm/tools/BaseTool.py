@@ -123,7 +123,7 @@ class BaseTool(BaseModel, ABC):
                 return agent
         raise ValueError(f"Agent with name '{name}' not found")
 
-    def send_message_to_agent(self, recipient_agent_name: str, message: str, parameter: str=None, **kwargs) -> str:
+    def send_message_to_agent(self, recipient_agent_name: str, message: str, parameter: str=None) -> str:
         """
         Initiate a thread to another agent, then send a message and return the response.
 
@@ -166,7 +166,6 @@ class BaseTool(BaseModel, ABC):
             recipient_agent=recipient_agent,
             event_handler=self._event_handler,
             parameter=parameter
-            **kwargs
         )
 
         # generate next message until getting the response
