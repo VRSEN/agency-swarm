@@ -11,6 +11,9 @@ from typing import Any, Generator, Type, Union
 from openai import APIError, BadRequestError
 from openai.types.beta import AssistantToolChoice
 from openai.types.beta.threads.message import Attachment, Message
+from openai.types.beta.threads.required_action_function_tool_call import (
+    RequiredActionFunctionToolCall,
+)
 from openai.types.beta.threads.runs.tool_call import ToolCall
 
 from agency_swarm.agents import Agent
@@ -22,6 +25,12 @@ from agency_swarm.util.streaming.agency_event_handler import AgencyEventHandler
 from agency_swarm.util.tracking.tracking_manager import TrackingManager
 
 logger = logging.getLogger(__name__)
+
+
+class ToolNotFoundError(Exception):
+    """Raised when a tool is not found in an agent's functions."""
+
+    pass
 
 
 class Thread:
@@ -406,7 +415,10 @@ class Thread:
             actual_run_id = run_id or (self._run.id if self._run else None)
 
             if not actual_run_id:
-                return  # Can't cancel without a run ID
+                logger.warning(
+                    f"Can't cancel without a run ID: thread_id={actual_thread_id}"
+                )
+                return
 
             self._run = self.client.beta.threads.runs.cancel(
                 thread_id=actual_thread_id, run_id=actual_run_id
@@ -572,7 +584,9 @@ class Thread:
 
         return tool_outputs
 
-    def _get_sync_async_tool_calls(self, tool_calls, recipient_agent):
+    def _get_sync_async_tool_calls(
+        self, tool_calls: list[RequiredActionFunctionToolCall], recipient_agent: Agent
+    ):
         async_tool_calls = []
         sync_tool_calls = []
 
@@ -597,7 +611,7 @@ class Thread:
                 )
                 logger.error(error_message)
                 self.cancel_run()
-                raise Exception(error_message)
+                raise ToolNotFoundError(error_message)
 
             if (
                 hasattr(tool.ToolConfig, "async_mode") and tool.ToolConfig.async_mode

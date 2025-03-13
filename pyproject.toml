@@ -23,7 +23,7 @@ dependencies = [
     "pydantic==2.8.2",
     "python-dotenv==1.0.1",
     "rich==13.7.1",
-    "termcolor==2.4.0",
+    "termcolor>=2.3.0",
 ]
 requires-python = ">=3.10"
 urls = { homepage = "https://github.com/VRSEN/agency-swarm" }

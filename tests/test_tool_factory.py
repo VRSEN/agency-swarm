@@ -143,6 +143,13 @@ def test_custom_tool():
     assert tool2.openai_schema["strict"]
 
 
+def test_get_weather_openapi():
+    with open("./data/schemas/get-weather.json", "r") as f:
+        tools = ToolFactory.from_openapi_schema(f.read(), {})
+
+    assert not tools[0].openai_schema.get("strict", False)
+
+
 @pytest.mark.asyncio
 async def test_relevance_openapi_schema():
     with open("./data/schemas/relevance.json", "r") as f:
