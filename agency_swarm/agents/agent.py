@@ -853,7 +853,7 @@ class Agent:
                 vector_store_id = self.tool_resources[tool_resource][
                     "vector_store_ids"
                 ][0]
-                self.client.beta.vector_stores.file_batches.create(
+                self.client.vector_stores.file_batches.create(
                     vector_store_id=vector_store_id, file_ids=file_ids
                 )
         else:
@@ -923,13 +923,13 @@ class Agent:
                 "vector_store_ids", []
             )
             for vector_store_id in file_search_vector_store_ids:
-                files = self.client.beta.vector_stores.files.list(
+                files = self.client.vector_stores.files.list(
                     vector_store_id=vector_store_id, limit=100
                 )
                 for file in files:
                     file_ids.append(file.id)
 
-                self.client.beta.vector_stores.delete(vector_store_id)
+                self.client.vector_stores.delete(vector_store_id)
 
         for file_id in file_ids:
             self.client.files.delete(file_id)

@@ -179,7 +179,7 @@ class AgencyTest(unittest.TestCase):
 
         cls.ceo.max_completion_tokens = 100
 
-    def test_1_init_agency(self):
+    def test_01_init_agency(self):
         """it should initialize agency with agents"""
         self.__class__.agency = Agency(
             [
@@ -197,7 +197,7 @@ class AgencyTest(unittest.TestCase):
 
         self.check_all_agents_settings()
 
-    def test_2_load_agent(self):
+    def test_02_load_agent(self):
         """it should load existing assistant from settings"""
         from tests.test_agents.TestAgent1.TestAgent1 import TestAgent1
 
@@ -222,7 +222,7 @@ class AgencyTest(unittest.TestCase):
 
         self.check_agent_settings(agent3)
 
-    def test_3_load_agent_id(self):
+    def test_03_load_agent_id(self):
         """it should load existing assistant from id"""
         agent3 = Agent(id=self.__class__.agent1.id)
         agent3.tools = self.__class__.agent1.tools
@@ -241,7 +241,7 @@ class AgencyTest(unittest.TestCase):
 
         self.check_agent_settings(agent3)
 
-    def test_4_agent_communication(self):
+    def test_04_agent_communication(self):
         """it should communicate between agents"""
         print("TestAgent1 tools", self.__class__.agent1.tools)
         self.__class__.agent1.parallel_tool_calls = False
@@ -319,7 +319,7 @@ class AgencyTest(unittest.TestCase):
         except json.JSONDecodeError as e:
             self.assertTrue(False)
 
-    def test_5_agent_communication_stream(self):
+    def test_05_agent_communication_stream(self):
         """it should communicate between agents using streaming"""
         print("TestAgent1 tools", self.__class__.agent1.tools)
 
@@ -383,7 +383,7 @@ class AgencyTest(unittest.TestCase):
                 ]
             )
 
-    def test_6_load_from_db(self):
+    def test_06_load_from_db(self):
         """it should load agents from db"""
         # os.rename("settings.json", "settings2.json")
 
@@ -467,7 +467,7 @@ class AgencyTest(unittest.TestCase):
                 in [settings["id"] for settings in previous_loaded_agents_settings]
             )
 
-    def test_7_init_async_agency(self):
+    def test_07_init_async_agency(self):
         """it should initialize async agency with agents"""
         # reset loaded thread ids
         self.__class__.loaded_thread_ids = {}
@@ -494,7 +494,7 @@ class AgencyTest(unittest.TestCase):
 
         self.check_all_agents_settings(True)
 
-    def test_8_async_agent_communication(self):
+    def test_08_async_agent_communication(self):
         """it should communicate between agents asynchronously"""
         self.__class__.agency.get_completion(
             "Please tell TestAgent2 hello.",
@@ -557,7 +557,7 @@ class AgencyTest(unittest.TestCase):
                 ]
             )
 
-    def test_9_async_tool_calls(self):
+    def test_09_async_tool_calls(self):
         """it should execute tools asynchronously"""
 
         class PrintTool(BaseTool):
@@ -725,7 +725,7 @@ class AgencyTest(unittest.TestCase):
                 vector_store_id = assistant.tool_resources.model_dump()["file_search"][
                     "vector_store_ids"
                 ][0]
-                vector_store_files = agent.client.beta.vector_stores.files.list(
+                vector_store_files = agent.client.vector_stores.files.list(
                     vector_store_id=vector_store_id
                 )
 

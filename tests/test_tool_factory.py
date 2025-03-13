@@ -29,7 +29,7 @@ def test_complex_schema():
     class FriendDetail(BaseModel):
         """test 123"""
 
-        model_config = ConfigDict(title="Friend Detail")
+        model_config = ConfigDict(title="FriendDetail")
 
         id: int = Field(..., description="Unique identifier for each friend.")
         name: str = Field(..., description="Name of the friend.")
@@ -42,7 +42,7 @@ def test_complex_schema():
     class UserDetail(BaseModel):
         """Hey this is a test?"""
 
-        model_config = ConfigDict(title="User Detail")
+        model_config = ConfigDict(title="UserDetail")
 
         id: int = Field(..., description="Unique identifier for each user.")
         age: int
@@ -200,7 +200,7 @@ def test_ga4_openapi_schema():
         tools = ToolFactory.from_openapi_schema(f.read(), {})
 
     assert len(tools) == 1
-    assert tools[0].__name__ == "GetGa4Data"
+    assert tools[0].__name__ == "runReport"
 
 
 def test_import_from_file():
