@@ -67,7 +67,9 @@ def init_tracking(tracker_name: SUPPORTED_TRACKERS_TYPE, **kwargs):
         handler_class = LocalCallbackHandler
 
     elif tracker_name == "agentops":
-        from agentops import LangchainCallbackHandler
+        from agentops.partners.langchain_callback_handler import (
+            LangchainCallbackHandler,
+        )
 
         handler_class = LangchainCallbackHandler
 
