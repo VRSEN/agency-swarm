@@ -18,7 +18,7 @@ class SelectAPIParam(BaseTool):
     user_requirement: str = Field(..., description="自然语言的用户需求")
 
     def select_uri_parameter(self, row):
-        returned_keys = ["parameter", "description", "type", "mandatory"]
+        returned_keys = ["parameter", "id", "description", "type", "mandatory"]
         returned_info = {key: row[key] for key in returned_keys if key in row and row[key] is not None}
         print(f"parameter(0): {row['parameter']}")
         # 1. add mandatory simple parameters by default
@@ -31,6 +31,7 @@ class SelectAPIParam(BaseTool):
             "user_requirement": self.user_requirement,
             "api_name": self.api_name,
             "parameter": row["parameter"],
+            "id": row["id"],
             "description": row["description"],
         }
         message_obj["type"] = row["type"] if row["type"] is not None else "String"

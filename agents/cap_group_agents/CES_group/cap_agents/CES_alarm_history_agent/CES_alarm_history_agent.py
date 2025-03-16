@@ -2,6 +2,7 @@ from agency_swarm import Agent
 from agents.cap_group_agents.CES_group.cap_agents.CES_alarm_history_agent.tools import (
     ReadLog, WriteLog
 )
+from agents.basic_agents.job_agent.tools.CallAPI import CallAPI
 
 _name = "CES_alarm_history_agent"
 
@@ -14,7 +15,7 @@ import os
 current_path = os.path.abspath(os.path.dirname(__file__))
 _instruction = current_path + "/instructions.md"
 
-_tools = [ReadLog.ReadLog, WriteLog.WriteLog]
+_tools = [ReadLog.ReadLog, WriteLog.WriteLog, CallAPI]
 
 _file_folder = ""
 

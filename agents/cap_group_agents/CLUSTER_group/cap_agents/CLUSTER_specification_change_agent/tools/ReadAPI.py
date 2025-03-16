@@ -8,7 +8,7 @@ class ReadAPI(BaseTool):
     def run(self):
         api = [
             {
-                "api name": "变更集群规格",
+                "api_name": "变更集群规格",
                 "introduction": "变更一个指定集群的规格。"
             }
         ]

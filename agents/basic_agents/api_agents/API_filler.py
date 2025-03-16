@@ -12,10 +12,10 @@ _instructions = """
 step 1. 你将接收到如下json格式的输入:
 {
     "user requirment": <用户初始请求>,
-    "param list": <必要参数列表>,
-    "api name": <符合用户需求的api名称>
+    "param_list": <必要参数列表>,
+    "api_name": <符合用户需求的api名称>
 }
-其中，"param list"填入了必要的参数列表，包括参数名称和参数值，"api name"字段填入了你需要组装的api名称。
+其中，"param_list"填入了必要的参数列表，包括参数名称和参数值，"api_name"字段填入了你需要组装的api名称。
 
 step 2. 使用提取的信息调用函数`FillAPI()`，获得目标API的所有参数字段和参数值。
 

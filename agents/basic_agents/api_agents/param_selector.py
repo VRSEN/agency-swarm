@@ -11,6 +11,7 @@ _input_format = """
    "user_requirement": <用户需求>,
    "api_name": <调用的API名称>,
    "parameter": <你需要判断的参数名>,
+   "id": <你需要判断的参数编号>,
    "description": <参数描述>,
    "parents_description": <前置参数描述>
    "type": "<数据类型>",
@@ -24,7 +25,7 @@ _instructions = f"""
 你将接收到如下json格式的输入：
 {_input_format}
 
-其中，"user_requirement"字段填入了用户需求，"api_name"字段填入了调用的api名称（你不能对api_name进行任何修改），"parameter"和"description"字段填入了你需要判断的参数名称和描述，"parents_description"字段填入了该参数的前置参数的描述（如果没有该字段说明该参数没有前置参数），"type"字段填入该参数的类型，"mandatory"字段为1说明该参数必选
+其中，"user_requirement"字段填入了用户需求，"api_name"字段填入了调用的api名称（你不能对api_name进行任何修改），"parameter","id"和"description"字段填入了你需要判断的参数名称、编号和描述，"parents_description"字段填入了该参数的前置参数的描述（如果没有该字段说明该参数没有前置参数），"type"字段填入该参数的类型，"mandatory"字段为1说明该参数必选
 
 每次接收到新的输入时，你都需要**从头**按照以下步骤处理：
 

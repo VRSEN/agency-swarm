@@ -78,8 +78,11 @@ from agents.cap_group_agents.NODE_group.cap_agents.NODE_scaling_protect_agent im
 from agents.basic_agents.api_agents import (
     API_caller, API_filler, API_param_selector, array_filler, array_selector, param_filler, param_selector
 )
+from agents.basic_agents.job_agent import check_log_agent
 from agents.basic_agents.job_agent import job_agent
 from agents.basic_agents.jobs_agent import jobs_agent
+from agents.basic_agents.job_agent.tools.CheckLogForFailures import CheckLogForFailures
+from agents.basic_agents.api_agents.tools.CheckParamRequired import CheckParamRequired
 from agents.basic_agents.api_agents.tools.SelectAPIParam import SelectAPIParam
 from agents.basic_agents.api_agents.tools.SelectParamTable import SelectParamTable
 from agents.basic_agents.api_agents.tools.FillAPI import FillAPI
@@ -184,6 +187,7 @@ array_filler = array_filler.create_agent()
 array_selector = array_selector.create_agent()
 param_filler = param_filler.create_agent()
 param_selector = param_selector.create_agent()
+check_log_agent = check_log_agent.create_agent()
 job_agent = job_agent.create_agent()
 jobs_agent = jobs_agent.create_agent()
 
@@ -191,6 +195,8 @@ chat_graph = [task_planner, scheduler, inspector,
               subtask_planner, subtask_manager, subtask_scheduler, subtask_inspector,
               step_inspector,
               basic_cap_solver, param_asker,
+
+              check_log_agent,
             #   CES_planner, CES_step_scheduler,
               ECS_planner, ECS_step_scheduler,
             #   EVS_planner, EVS_step_scheduler,
@@ -229,8 +235,8 @@ chat_graph = [task_planner, scheduler, inspector,
               [ECS_harddisk_agent, jobs_agent],
               [ECS_instance_agent, jobs_agent],
               [ECS_netcard_agent, jobs_agent],
-              [ECS_recommend_agent, job_agent],
-              [ECS_specification_query_agent,job_agent],
+            #   [ECS_recommend_agent, job_agent],
+            #   [ECS_specification_query_agent,job_agent],
 
               
               [ECS_specification_query_agent, ECS_manager],
@@ -245,7 +251,7 @@ chat_graph = [task_planner, scheduler, inspector,
             #   [IAM_service_manager, AKSK_agent],
 
               [IMS_manager, IMS_agent],
-              [IMS_agent, job_agent],
+            #   [IMS_agent, job_agent],
               [IMS_agent, IMS_manager],
 
             #   [OS_manager, OS_agent],
@@ -255,9 +261,9 @@ chat_graph = [task_planner, scheduler, inspector,
               [VPC_network_manager, VPC_subnet_agent],
               [VPC_network_manager, VPC_vpc_agent],
 
-              [VPC_secgroup_agent, job_agent],
-              [VPC_subnet_agent, job_agent],
-              [VPC_vpc_agent, job_agent],
+            #   [VPC_secgroup_agent, job_agent],
+            #   [VPC_subnet_agent, job_agent],
+            #   [VPC_vpc_agent, job_agent],
 
 
               [VPC_vpc_agent, VPC_network_manager],
@@ -267,8 +273,8 @@ chat_graph = [task_planner, scheduler, inspector,
               [CLUSTER_manager, CLUSTER_lifecycle_agent],
               [CLUSTER_manager, CLUSTER_specification_change_agent],
 
-              [CLUSTER_lifecycle_agent, job_agent],
-              [CLUSTER_specification_change_agent, job_agent],
+            #   [CLUSTER_lifecycle_agent, job_agent],
+            #   [CLUSTER_specification_change_agent, job_agent],
 
               [CLUSTER_lifecycle_agent, CLUSTER_manager],
               [CLUSTER_specification_change_agent, CLUSTER_manager],
@@ -277,9 +283,9 @@ chat_graph = [task_planner, scheduler, inspector,
               [NODE_manager, NODE_pool_agent],
               [NODE_manager, NODE_scaling_protect_agent],
 
-              [NODE_lifecycle_agent, job_agent],
-              [NODE_pool_agent, job_agent],
-              [NODE_scaling_protect_agent, job_agent],
+            #   [NODE_lifecycle_agent, job_agent],
+            #   [NODE_pool_agent, job_agent],
+            #   [NODE_scaling_protect_agent, job_agent],
               
               [NODE_lifecycle_agent, NODE_manager],
               [NODE_pool_agent, NODE_manager],
@@ -301,8 +307,8 @@ chat_graph = [task_planner, scheduler, inspector,
               [NODE_pool_agent, API_param_selector],
               [NODE_scaling_protect_agent, API_param_selector],
 
-              [job_agent, API_filler],
-              [jobs_agent, API_filler],
+            #   [job_agent, API_filler],
+            #   [jobs_agent, API_filler],
 
               [param_selector, array_selector],
               [API_filler, API_caller, AKSK_agent],
@@ -329,10 +335,8 @@ thread_strategy = {
         (SelectAPIParam, param_selector),
         (SelectParamTable, param_selector),
         (param_selector, array_selector),
-        (FillAPI, param_filler),
-        (FillParamTable, param_filler),
-        (param_filler, array_filler),
-        (array_filler, param_filler),
+        (CheckParamRequired, array_selector),
+        (CheckLogForFailures, check_log_agent),
     ]
 }
 
