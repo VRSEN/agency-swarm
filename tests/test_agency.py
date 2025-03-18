@@ -6,6 +6,8 @@ import sys
 import time
 import unittest
 
+import httpx
+
 sys.path.insert(0, "../agency-swarm")
 
 from openai.types.beta.threads import Text
@@ -164,7 +166,7 @@ class AgencyTest(unittest.TestCase):
             "type": "json_object",
         }
 
-        cls.agent2.model = "gpt-4o-2024-08-06"
+        cls.agent2.model = "gpt-4o"
 
         cls.ceo = CEO()
         cls.ceo.examples = [
@@ -177,7 +179,7 @@ class AgencyTest(unittest.TestCase):
 
         cls.ceo.max_completion_tokens = 100
 
-    def test_1_init_agency(self):
+    def test_01_init_agency(self):
         """it should initialize agency with agents"""
         self.__class__.agency = Agency(
             [
@@ -195,7 +197,7 @@ class AgencyTest(unittest.TestCase):
 
         self.check_all_agents_settings()
 
-    def test_2_load_agent(self):
+    def test_02_load_agent(self):
         """it should load existing assistant from settings"""
         from tests.test_agents.TestAgent1.TestAgent1 import TestAgent1
 
@@ -220,7 +222,7 @@ class AgencyTest(unittest.TestCase):
 
         self.check_agent_settings(agent3)
 
-    def test_3_load_agent_id(self):
+    def test_03_load_agent_id(self):
         """it should load existing assistant from id"""
         agent3 = Agent(id=self.__class__.agent1.id)
         agent3.tools = self.__class__.agent1.tools
@@ -239,7 +241,7 @@ class AgencyTest(unittest.TestCase):
 
         self.check_agent_settings(agent3)
 
-    def test_4_agent_communication(self):
+    def test_04_agent_communication(self):
         """it should communicate between agents"""
         print("TestAgent1 tools", self.__class__.agent1.tools)
         self.__class__.agent1.parallel_tool_calls = False
@@ -317,7 +319,7 @@ class AgencyTest(unittest.TestCase):
         except json.JSONDecodeError as e:
             self.assertTrue(False)
 
-    def test_5_agent_communication_stream(self):
+    def test_05_agent_communication_stream(self):
         """it should communicate between agents using streaming"""
         print("TestAgent1 tools", self.__class__.agent1.tools)
 
@@ -381,7 +383,7 @@ class AgencyTest(unittest.TestCase):
                 ]
             )
 
-    def test_6_load_from_db(self):
+    def test_06_load_from_db(self):
         """it should load agents from db"""
         # os.rename("settings.json", "settings2.json")
 
@@ -465,7 +467,7 @@ class AgencyTest(unittest.TestCase):
                 in [settings["id"] for settings in previous_loaded_agents_settings]
             )
 
-    def test_7_init_async_agency(self):
+    def test_07_init_async_agency(self):
         """it should initialize async agency with agents"""
         # reset loaded thread ids
         self.__class__.loaded_thread_ids = {}
@@ -492,7 +494,7 @@ class AgencyTest(unittest.TestCase):
 
         self.check_all_agents_settings(True)
 
-    def test_8_async_agent_communication(self):
+    def test_08_async_agent_communication(self):
         """it should communicate between agents asynchronously"""
         self.__class__.agency.get_completion(
             "Please tell TestAgent2 hello.",
@@ -555,7 +557,7 @@ class AgencyTest(unittest.TestCase):
                 ]
             )
 
-    def test_9_async_tool_calls(self):
+    def test_09_async_tool_calls(self):
         """it should execute tools asynchronously"""
 
         class PrintTool(BaseTool):
@@ -588,25 +590,62 @@ class AgencyTest(unittest.TestCase):
 
     def test_10_concurrent_API_calls(self):
         """it should execute API calls concurrently with asyncio"""
-        tools = []
-        with open("./data/schemas/get-headers-params.json", "r") as f:
-            tools = ToolFactory.from_openapi_schema(f.read(), {})
 
-        ceo = Agent(
-            name="CEO",
-            tools=tools,
-            instructions="You are an agent that tests concurrent API calls. You must say 'success' if the output contains headers, and 'error' if it does not and **nothing else**.",
-        )
+        # Create a mock client that will be used instead of httpx
+        class MockClient:
+            def __init__(self, **kwargs):
+                self.timeout = kwargs.get("timeout", None)
 
-        agency = Agency([ceo], temperature=0)
+            async def __aenter__(self):
+                return self
 
-        result = agency.get_completion(
-            "Please call PrintHeaders tool TWICE at the same time in a single message. If any of the function outputs do not contains headers, please say 'error'."
-        )
+            async def __aexit__(self, exc_type, exc_val, exc_tb):
+                pass
 
-        self.assertTrue(
-            result.lower().count("error") == 0, agency.main_thread.thread_url
-        )
+            async def get(self, url, params=None, headers=None):
+                # Verify that the domain parameter is correctly set in the URL
+                if "print-headers-gntxktyfsq-uc.a.run.app" in url:
+
+                    class MockResponse:
+                        def json(self):
+                            return {"headers": {"test": "success"}}
+
+                        def raise_for_status(self):
+                            pass
+
+                    return MockResponse()
+                raise ValueError(f"Invalid URL: {url}")
+
+            async def aclose(self):
+                pass
+
+        # Patch httpx.AsyncClient with our mock
+        original_client = httpx.AsyncClient
+        httpx.AsyncClient = MockClient
+
+        try:
+            tools = []
+            with open("./data/schemas/get-headers-params.json", "r") as f:
+                tools = ToolFactory.from_openapi_schema(f.read(), {})
+
+            ceo = Agent(
+                name="CEO",
+                tools=tools,
+                instructions="""You are an agent that tests concurrent API calls. You must say 'success' if the output contains headers, and 'error' if it does not and **nothing else**.""",
+            )
+
+            agency = Agency([ceo], temperature=0)
+
+            result = agency.get_completion(
+                "Please call PrintHeaders tool TWICE at the same time in a single message with domain='print-headers' and query='test'. If any of the function outputs do not contain headers, please say 'error'."
+            )
+
+            self.assertTrue(
+                result.lower().count("error") == 0, agency.main_thread.thread_url
+            )
+        finally:
+            # Restore original client
+            httpx.AsyncClient = original_client
 
     def test_11_structured_outputs(self):
         class MathReasoning(BaseModel):
@@ -686,7 +725,7 @@ class AgencyTest(unittest.TestCase):
                 vector_store_id = assistant.tool_resources.model_dump()["file_search"][
                     "vector_store_ids"
                 ][0]
-                vector_store_files = agent.client.beta.vector_stores.files.list(
+                vector_store_files = agent.client.vector_stores.files.list(
                     vector_store_id=vector_store_id
                 )
 

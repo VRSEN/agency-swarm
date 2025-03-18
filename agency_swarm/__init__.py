@@ -6,7 +6,6 @@ from .util import (
     get_openai_client,
     init_tracking,
     llm_validator,
-    set_callback_handler,
     set_openai_client,
     set_openai_key,
 )
@@ -21,7 +20,6 @@ __all__ = [
     "get_openai_client",
     "init_tracking",
     "llm_validator",
-    "set_callback_handler",
     "set_openai_client",
     "set_openai_key",
 ]

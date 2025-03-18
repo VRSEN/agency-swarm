@@ -57,7 +57,7 @@ When a user asks to be connected to customer support or mentions needing help wi
         while time.time() - start_time < timeout:
             try:
                 response = self.agency.get_completion(
-                    "Hello, can you send me to customer support? If tool responds says that you have NOT been rerouted, or if there is another error, please say 'error'"
+                    "Hello, can you send me to customer support? If tool response says that you have NOT been rerouted, or if there is another error, please say 'error'"
                 )
                 break
             except Exception as e:
