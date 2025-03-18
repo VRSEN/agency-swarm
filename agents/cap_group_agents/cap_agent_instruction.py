@@ -27,7 +27,11 @@ def cap_agent_instruction(_name, _description, _manager_name):
 
     ### step 2. 补充参数信息:
     
-    根据API Param Selector返回的必要参数列表<param_list>，你需要首先思考能否从用户初始请求中获得某些必要参数的值。
+    根据API Param Selector返回的必要参数列表<param_list>，你需要首先使用`GetEndPointAndProjectID`来获取其中endpoint和project id的值
+    
+    然后，你需要一步步思考，能否从用户初始请求中获得某些必要参数的值。
+    
+    # 注意，你必须仔细思考参数的描述信息，确保参数和值能对应，
     
     对于不能从用户初始请求中获取的参数，你需要使用`SendMessage`向{_manager_name}发送信息来询问这些参数，按照json格式：
     

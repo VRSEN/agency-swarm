@@ -35,7 +35,7 @@ class CheckParamRequired(BaseTool):
             }
             result = self.send_message_to_agent(recipient_agent_name="Array Selector", message=json.dumps(message_obj, ensure_ascii=False), parameter=self.parameter)
         elif typestring.find("object") != -1:
-            tableids = re.findall(r'详情请参见表\d+', self.description)
+            tableids = re.findall(r'见表\d+', self.description)
             tableid = re.findall(r'\d+', tableids[0])
             SelectParamTabletool = SelectParamTable(caller_tool=self, user_requirement=self.user_requirement, api_name=self.api_name, table_id=tableid[0])
             result = SelectParamTabletool.run()

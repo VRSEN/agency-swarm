@@ -65,8 +65,8 @@ class Thread:
         self._called_recepients = []
         self._num_run_retries = 0
 
-        if self.id:
-            return
+        # if self.id:
+        #    return
 
         self._thread = self.client.beta.threads.create()
         self.id = self._thread.id
