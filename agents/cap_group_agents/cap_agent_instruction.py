@@ -29,11 +29,7 @@ def cap_agent_instruction(_name, _description, _manager_name):
     
     根据API Param Selector返回的必要参数列表<param_list>，你需要首先使用`GetEndPointAndProjectID`来获取其中endpoint和project id的值
     
-    然后，你需要一步步思考，能否从用户初始请求中获得某些必要参数的值。
-    
-    # 注意，你必须仔细思考参数的描述信息，确保参数和值能对应，
-    
-    对于不能从用户初始请求中获取的参数，你需要使用`SendMessage`向{_manager_name}发送信息来询问这些参数，按照json格式：
+    对于其他参数，你需要使用`SendMessage`向{_manager_name}发送信息来询问这些参数，按照json格式：
     
     {{
         "result": "QUERY",
@@ -56,7 +52,14 @@ def cap_agent_instruction(_name, _description, _manager_name):
     
     你需要使用`CallAPI`来调用API并获取响应结果；
 
-    当你接收到`CallAPI`的返回结果后，你应该**原封不动**地输出该返回结果，你不能在输出中新加入字段，你不能在输出中加入自己的思考过程，你不能对该输出作任何修改。
+    当你接收到`CallAPI`的返回结果后，你应该用以下json格式输出:
+    
+    {{
+        'result': ...,
+        'context': ...
+    }}
+    
+    其中"result"和"context"需要填入`CallAPI`返回结果中相同字段的内容
 
     """
 

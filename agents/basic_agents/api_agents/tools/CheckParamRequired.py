@@ -3,6 +3,7 @@ from pydantic import Field
 import os
 import json
 import re
+from agents.basic_agents.api_agents.tools.api_database import search_from_sqlite, API_DATABASE_FILE
 from agents.basic_agents.api_agents.tools.SelectParamTable import SelectParamTable
 
 class CheckParamRequired(BaseTool):
@@ -35,9 +36,10 @@ class CheckParamRequired(BaseTool):
             }
             result = self.send_message_to_agent(recipient_agent_name="Array Selector", message=json.dumps(message_obj, ensure_ascii=False), parameter=self.parameter)
         elif typestring.find("object") != -1:
-            tableids = re.findall(r'见表\d+', self.description)
-            tableid = re.findall(r'\d+', tableids[0])
-            SelectParamTabletool = SelectParamTable(caller_tool=self, user_requirement=self.user_requirement, api_name=self.api_name, table_id=tableid[0])
+            param_df = search_from_sqlite(database_path=API_DATABASE_FILE, table_name='request_parameters', condition=f"id={self.id}")
+            param_row = param_df.iloc[0]
+            tableid = param_row.loc["ref_table_id"]
+            SelectParamTabletool = SelectParamTable(caller_tool=self, user_requirement=self.user_requirement, api_name=self.api_name, table_id=tableid)
             result = SelectParamTabletool.run()
         else:
             result = "需要该参数"

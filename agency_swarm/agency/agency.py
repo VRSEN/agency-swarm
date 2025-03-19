@@ -1662,11 +1662,11 @@ class Agency:
         print(f"{scheduler_thread.recipient_agent.name} SCHEDULING:\n" + schedulerres)
         return schedulerres
 
-    def planning_layer(self, message: str, original_request:str, task_planner_thread: Thread, error_message: str = None, inspector_thread: Thread = None, node_color: str = 'lightblue'):
+    def planning_layer(self, message: str, original_request:str, task_planner_thread: Thread, error_message: str = "", inspector_thread: Thread = None, node_color: str = 'lightblue'):
         """将返回1. 规划结果, 2. 对应scheduler的输入"""
         console.rule()
-        if error_message != None:
-            message = message + "The error that occurred in the previous plan: \n" + error_message
+        if error_message != "":
+            message = message + "\nThe error that occurred in the previous plan: \n" + error_message
         planmessage = self.json_get_completion(task_planner_thread, message, original_request, inspector_thread)
         print(f"{task_planner_thread.recipient_agent.name} RESULT:\n" + planmessage)
         planmessage_json = json.loads(planmessage)
@@ -1715,13 +1715,14 @@ class Agency:
                 
     def json_get_completion(self, thread: Thread, message: str, inspector_request: str = None, inspector_thread: Thread = None):
         _ = False
+        original_message = message
         while True:
             res = thread.get_completion(message=message, response_format='auto')
             response_information = self.my_get_completion(res)
             _, result = self.get_json_from_str(message=response_information)
             print(f"{result}")
             if _ == False:
-                message = "Your output Format is Wrong.\n"
+                message = "用户原始输入为: \n\{" + original_message + "\}\n" + "你之前的回答是:\n\{" + result + "\}\n" + "你之前的回答用户评价为: \n" + "{Your output Format is Wrong.}"
                 continue
 
             if inspector_thread:
@@ -1751,7 +1752,7 @@ class Agency:
                     __ = self.get_inspector_review(inspector_result)
                 if __ == True:
                     return result
-                message = inspector_result
+                message = "用户原始输入为: \n\{" + original_message + "\}\n" + "你之前的回答是:\n\{" + result + "\}\n" + "你之前的回答用户评价为: \n" + inspector_result
                 continue
             
             return result
@@ -1776,7 +1777,7 @@ class Agency:
             start_str = "```json\n"
             end_str = "\n```"
             try:
-                start_index = message.index(start_str) + len(start_str)
+                start_index = message.rfind(start_str) + len(start_str)
                 end_index = message.index(end_str, start_index)
                 return True, message[start_index: end_index]
             except ValueError:

@@ -64,7 +64,8 @@ class Thread:
     def init_thread(self):
         self._called_recepients = []
         self._num_run_retries = 0
-
+        
+        # 每次调用重置thread
         # if self.id:
         #    return
 
