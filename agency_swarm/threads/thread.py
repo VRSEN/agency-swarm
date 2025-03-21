@@ -64,9 +64,10 @@ class Thread:
     def init_thread(self):
         self._called_recepients = []
         self._num_run_retries = 0
-
-        if self.id:
-            return
+        
+        # 每次调用重置thread
+        # if self.id:
+        #    return
 
         self._thread = self.client.beta.threads.create()
         self.id = self._thread.id

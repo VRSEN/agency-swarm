@@ -1434,8 +1434,8 @@ class Agency:
         self.init_files()
 
         print("Initialization Successful.\n")
-        text = "在北京cn-north-4a可用区创建一个CCE集群，已有vpc和子网，VPC id为4f490c15-d09a-4ae9-a893-37e69b8a025a，子网id为f7c1418b-8150-4d78-b107-9a4ef77d6379"
-        # text = "在北京cn-north-4a可用区创建一个ECS，规格任意"
+        text = "在cn-north-4a可用区创建一个名为ccetest的CCE集群，最小规格；未创建vpc和子网，需要创建名为vpc111的vpc和名为subnet111的子网，vpc的cidr为192.168.0.0/24，网关ip为192.168.0.1"
+        # text = "在北京cn-north-4a可用区创建一个最低规格的CCE，名为'ccetest'，已有vpc和子网，VPC id为4f490c15-d09a-4ae9-a893-37e69b8a025a，子网id为f7c1418b-8150-4d78-b107-9a4ef77d6379"
         # text = "创建一个8核32g的ECS，操作系统选择为Ubuntu 20.04。"
         # text = "在北京可用区创建三个ecs，之后删除创建时间超过5分钟的ecs"
         # text = "在华为云ecs上部署mysql和postgresql，并用sysbench测试它们的性能"
@@ -1662,11 +1662,11 @@ class Agency:
         print(f"{scheduler_thread.recipient_agent.name} SCHEDULING:\n" + schedulerres)
         return schedulerres
 
-    def planning_layer(self, message: str, original_request:str, task_planner_thread: Thread, error_message: str = None, inspector_thread: Thread = None, node_color: str = 'lightblue'):
+    def planning_layer(self, message: str, original_request:str, task_planner_thread: Thread, error_message: str = "", inspector_thread: Thread = None, node_color: str = 'lightblue'):
         """将返回1. 规划结果, 2. 对应scheduler的输入"""
         console.rule()
-        if error_message != None:
-            message = message + "The error that occurred in the previous plan: \n" + error_message
+        if error_message != "":
+            message = message + "\nThe error that occurred in the previous plan: \n" + error_message
         planmessage = self.json_get_completion(task_planner_thread, message, original_request, inspector_thread)
         print(f"{task_planner_thread.recipient_agent.name} RESULT:\n" + planmessage)
         planmessage_json = json.loads(planmessage)
@@ -1715,13 +1715,14 @@ class Agency:
                 
     def json_get_completion(self, thread: Thread, message: str, inspector_request: str = None, inspector_thread: Thread = None):
         _ = False
+        original_message = message
         while True:
             res = thread.get_completion(message=message, response_format='auto')
             response_information = self.my_get_completion(res)
             _, result = self.get_json_from_str(message=response_information)
             print(f"{result}")
             if _ == False:
-                message = "Your output Format is Wrong.\n"
+                message = "用户原始输入为: \n\{" + original_message + "\}\n" + "你之前的回答是:\n\{" + result + "\}\n" + "你之前的回答用户评价为: \n" + "{Your output Format is Wrong.}"
                 continue
 
             if inspector_thread:
@@ -1751,7 +1752,7 @@ class Agency:
                     __ = self.get_inspector_review(inspector_result)
                 if __ == True:
                     return result
-                message = inspector_result
+                message = "用户原始输入为: \n\{" + original_message + "\}\n" + "你之前的回答是:\n\{" + result + "\}\n" + "你之前的回答用户评价为: \n" + inspector_result
                 continue
             
             return result
@@ -1776,7 +1777,7 @@ class Agency:
             start_str = "```json\n"
             end_str = "\n```"
             try:
-                start_index = message.index(start_str) + len(start_str)
+                start_index = message.rfind(start_str) + len(start_str)
                 end_index = message.index(end_str, start_index)
                 return True, message[start_index: end_index]
             except ValueError:
