@@ -1,6 +1,7 @@
 import logging
 import threading
 from typing import Any, Dict, Literal, Optional
+from agency_swarm.util.tracking.custom_agentops_callback import AgentOpsCallbackHandler
 
 # Dictionary to store handlers keyed by tracker name.
 _callback_handlers: Dict[str, Any] = {}
@@ -67,11 +68,11 @@ def init_tracking(tracker_name: SUPPORTED_TRACKERS_TYPE, **kwargs):
         handler_class = LocalCallbackHandler
 
     elif tracker_name == "agentops":
-        from agentops.partners.langchain_callback_handler import (
-            LangchainCallbackHandler,
-        )
+        # Their docs say to `pip install agentops[langchain]` but I don't see that..
+        # Making custom handler for now
+        from langchain.callbacks.base import BaseCallbackHandler
 
-        handler_class = LangchainCallbackHandler
+        handler_class = AgentOpsCallbackHandler
 
     elif tracker_name == "langfuse":
         from langfuse.callback import CallbackHandler
