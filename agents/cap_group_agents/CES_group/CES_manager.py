@@ -1,10 +1,10 @@
 from agency_swarm import Agent
 from agents.cap_group_agents.manager_instruction import manager_instruction
 
-_name = "CLUSTER_manager"
+_name = "CES_manager"
 
 _description = """
-负责集群管理能力群的消息管理
+负责CES监控管理能力群的消息管理
 """
 
 _group_name = "集群管理能力群"

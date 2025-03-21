@@ -1434,8 +1434,8 @@ class Agency:
         self.init_files()
 
         print("Initialization Successful.\n")
-        text = "在北京cn-north-4a可用区创建一个名为ccetest的CCE集群，最小规格；未创建vpc和子网，需要创建名为vpc111的vpc和名为subnet111的子网，vpc的cidr为192.168.0.0/24，网关ip为192.168.0.1"
-        # text = "在北京cn-north-4a可用区创建一个ECS，规格任意，已有vpc和子网，，VPC id为4f490c15-d09a-4ae9-a893-37e69b8a025a，子网id为f7c1418b-8150-4d78-b107-9a4ef77d6379"
+        text = "在cn-north-4a可用区创建一个名为ccetest的CCE集群，最小规格；未创建vpc和子网，需要创建名为vpc111的vpc和名为subnet111的子网，vpc的cidr为192.168.0.0/24，网关ip为192.168.0.1"
+        # text = "在北京cn-north-4a可用区创建一个最低规格的CCE，名为'ccetest'，已有vpc和子网，VPC id为4f490c15-d09a-4ae9-a893-37e69b8a025a，子网id为f7c1418b-8150-4d78-b107-9a4ef77d6379"
         # text = "创建一个8核32g的ECS，操作系统选择为Ubuntu 20.04。"
         # text = "在北京可用区创建三个ecs，之后删除创建时间超过5分钟的ecs"
         # text = "在华为云ecs上部署mysql和postgresql，并用sysbench测试它们的性能"

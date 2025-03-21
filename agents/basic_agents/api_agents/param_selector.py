@@ -1,5 +1,4 @@
 from agency_swarm.agents import Agent
-from agents.basic_agents.api_agents.tools.SelectParamTable import SelectParamTable
 from agents.basic_agents.api_agents.tools.CheckParamRequired import CheckParamRequired
 
 _name = "Param Selector"
@@ -66,7 +65,7 @@ _instructions = f"""
 2.4. 该参数**用户需求中需要**，且属于Object类型，有若干子参数：需参考另一张参数表。**调用函数**`SelectParamTable()`，并**精确**输出该函数的返回值，**不得输出任何其它内容**。
 """
 
-_tools = [SelectParamTable, CheckParamRequired]
+_tools = [CheckParamRequired]
 
 _files_folder = ""
 

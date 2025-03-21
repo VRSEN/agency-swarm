@@ -32,16 +32,13 @@ def cap_agent_instruction(_name, _description, _manager_name):
     对于其他参数，你需要使用`SendMessage`向{_manager_name}发送信息来询问这些参数，按照json格式：
     
     {{
-        "result": "QUERY",
-        "context": {{
-            "user_requirement": ..., 
-            "param_list": [{{
-                "parameter": ...,
-                "id": ...,
-                "description": ...,
-                "type": ...
-            }}, ...]
-        }}
+        "user_requirement": ..., 
+        "param_list": [{{
+            "parameter": ...,
+            "id": ...,
+            "description": ...,
+            "type": ...
+        }}, ...]
     }}
     
     其中，"user_requirement"字段填入用户初始请求；"param_list"字段是一个列表，列表的每一项中，"parameter"字段填入你所需要询问的参数名称，"id"字段填入你所需要询问的参数编号，"description"字段填入你所需要询问参数的介绍，"type"字段填入你所需要询问参数的类型
