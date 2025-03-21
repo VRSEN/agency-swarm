@@ -2,6 +2,11 @@ datamodel-code-generator==0.28.3
 deepdiff==6.7.1
 docstring_parser==0.16
 jsonref==1.1.0
+agentops>=0.3.26
+langchain>=0.3.13
+langchain-community>=0.3.13
+langfuse>=2.59.7
+tiktoken
 openai>=1.66.0,<2.0.0
 pydantic==2.8.2
 python-dotenv==1.0.1
