@@ -167,3 +167,4 @@ tests/test_agents/
 test_agents/
 agents/files/
 .env.example
+log.txt
