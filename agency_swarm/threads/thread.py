@@ -423,6 +423,12 @@ class Thread:
             self._run = self.client.beta.threads.runs.cancel(
                 thread_id=actual_thread_id, run_id=actual_run_id
             )
+            
+            self._run = self.client.beta.threads.runs.poll(
+                thread_id=actual_thread_id,
+                run_id=actual_run_id,
+                poll_interval_ms=500,
+            )
         except BadRequestError as e:
             if "Cannot cancel run with status" in e.message:
                 self._run = self.client.beta.threads.runs.poll(
