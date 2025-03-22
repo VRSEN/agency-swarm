@@ -1,27 +1,31 @@
-import json
+import logging
 import os
+import shutil
 import sys
-from uuid import uuid4
 
 import gradio as gr
 from dotenv import load_dotenv
 
-# Add the project root to the Python path
 sys.path.insert(0, os.path.abspath("."))
 
 from agency_swarm import Agency, Agent, set_openai_key
 from agency_swarm.tools import FileSearch
+from agency_swarm.util import init_tracking
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("openai").setLevel(logging.WARNING)
+logger = logging.getLogger(__name__)
 
 # Load environment variables
 load_dotenv()
 
-# Set OpenAI key
 openai_key = os.getenv("OPENAI_API_KEY")
 if not openai_key:
     raise ValueError("OPENAI_API_KEY not found in environment variables")
 set_openai_key(openai_key)
 
-# Demo data - simple product list
 PRODUCTS = [
     {
         "name": "Sony WH-1000XM4",
@@ -86,136 +90,149 @@ PRODUCTS = [
 ]
 
 
-# Simple agent definitions with minimal instructions
-class ProductExpertAgent(Agent):
-    def __init__(self):
-        super().__init__(
-            name="ProductExpert",
-            description="Technical product expert with deep knowledge of specifications and features",
-            instructions="""You are a Product Expert with technical knowledge.
-1. Focus on technical specifications and factual product information
-2. Provide objective comparisons between products
-3. Explain technical features without making personal recommendations
-Be precise and technical but understandable.""",
-            tools=[FileSearch],
-        )
-
-
 class CustomerAdvisorAgent(Agent):
     def __init__(self):
         super().__init__(
             name="CustomerAdvisor",
-            description="Customer-focused advisor who understands user needs",
-            instructions="""You are a Customer Advisor focused on user needs.
-1. Understand what the customer is looking for and why
-2. Consult with the Product Expert when you need technical information
-3. Make personalized recommendations that match customer needs
-4. Explain benefits in customer-friendly language
-Be empathetic, helpful, and focused on customer satisfaction.""",
-            tools=[FileSearch],
+            description="Friendly advisor who understands customer needs and use cases",
+            instructions="""You are a Customer Advisor focused on understanding people.
+1. Understand the customer's lifestyle and needs
+2. Ask about their use cases and requirements
+3. Translate technical features into real-world benefits
+4. Consult the Product Expert when technical details are needed
+5. Make recommendations based on how people will actually use the product
+Be friendly and focus on real-world usage scenarios.""",
         )
 
 
-class SmartShopperAgency:
+class ProductExpertAgent(Agent):
     def __init__(self):
-        # Initialize agents
-        self.advisor = CustomerAdvisorAgent()
-        self.expert = ProductExpertAgent()
-
-        # Create agency with communication flows
-        self.agency = Agency(
-            [
-                self.advisor,  # Entry point - customer talks to advisor first
-                [self.advisor, self.expert],  # Advisor can consult the product expert
-            ],
-            shared_instructions="""Help customers find the right products through natural collaboration.
-The Customer Advisor understands customer needs and makes personalized recommendations.
-The Product Expert provides technical details and specifications when needed.""",
+        super().__init__(
+            name="ProductExpert",
+            description="Technical product expert who provides accurate specifications and comparisons",
+            instructions="""You are a Product Expert focused on technical accuracy.
+1. Provide detailed technical specifications when asked
+2. Make objective product comparisons based on features
+3. Explain technical terms in clear language
+4. Focus on facts and specifications, not personal opinions
+Be precise and technical, but explain things clearly.""",
+            tools=[FileSearch],
+            files_folder="./product_data",
         )
-
-    def get_response(self, message, user_id=None):
-        """Process message and return response"""
-        if user_id:
-            message = f"[User: {user_id}] {message}"
-
-        response = self.agency.get_completion(message)
-        return response
 
 
 def main():
-    """Run the Smart Shopper demo"""
+    # Setup product data
+    if os.path.exists("product_data"):
+        shutil.rmtree("product_data")
+    os.makedirs("product_data")
 
-    # Create temporary product data file in current directory
-    with open("products.json", "w") as f:
-        json.dump(PRODUCTS, f, indent=2)
-    print(f"Created products.json with {len(PRODUCTS)} products")
+    # Create products.txt file with basic product information
+    with open("product_data/products.txt", "w") as f:
+        for product in PRODUCTS:
+            f.write(f"Product: {product['name']}\n")
+            f.write(f"Category: {product['category']}\n")
+            f.write(f"Price: ${product['price']}\n")
+            f.write(f"Features: {', '.join(product['features'])}\n")
+            f.write("\n")
+    print(f"Created products.txt with {len(PRODUCTS)} products")
 
-    # Create agency
-    agency = SmartShopperAgency()
+    # Initialize observability tracking
+    init_tracking("langfuse")  # Initialize Langfuse tracking
+    init_tracking(
+        "local", db_path="smart_shopper.db"
+    )  # Initialize local tracking with custom db path
 
-    # Create simple Gradio interface
-    with gr.Blocks(theme=gr.themes.Soft(primary_hue="blue")) as demo:
-        gr.Markdown("# 🛍️ Smart Shopper Virtual Assistant")
-        gr.Markdown("""Ask about products and get personalized recommendations from our virtual shopping assistants.
+    try:
+        # Create agents
+        advisor = CustomerAdvisorAgent()
+        expert = ProductExpertAgent()
 
-Our system combines:
-- A **Customer Advisor** who understands your needs
-- A **Product Expert** who provides technical details
-
-Together, they help you find the perfect product!""")
-
-        # User ID for context
-        user_id = gr.Textbox(
-            label="Your name (optional)",
-            placeholder="Enter your name or leave blank",
-            value="customer_" + str(uuid4())[:4],
+        # Create agency with clear role distinction
+        agency = Agency(
+            [
+                advisor,
+                [advisor, expert],
+            ],
+            shared_instructions="""Work together to help customers find the right products:
+- Customer Advisor: Understand needs and translate them into product requirements
+- Product Expert: Provide accurate technical information when needed
+Use the products.txt file to access the product catalog.""",
         )
 
-        # Chat interface
-        chatbot = gr.Chatbot(height=500, type="messages")
+        with gr.Blocks(theme=gr.themes.Soft(primary_hue="blue")) as demo:
+            gr.Markdown("# 🛍️ Smart Shopper Virtual Assistant")
+            gr.Markdown("""Ask about products and get personalized recommendations from our virtual shopping assistants:
 
-        with gr.Row():
-            msg = gr.Textbox(
-                label="Your message",
-                placeholder="Tell us what you're looking for, e.g., 'I need durable headphones for my daily commute'",
-            )
-            send = gr.Button("Ask assistants")
+- A **Customer Advisor** who understands your needs and lifestyle
+- A **Product Expert** who knows all the technical details
 
-        def process_message(message, chat_history, user_id_val):
-            """Process user message and update chat history"""
-            if not message:
-                return "", chat_history
+Together, they combine understanding with expertise to help you find the perfect product!""")
 
-            # Get response
-            response = agency.get_response(
-                message=message, user_id=user_id_val if user_id_val.strip() else None
-            )
+            chatbot = gr.Chatbot(height=500, type="messages")
 
-            # Update chat history
-            chat_history.append({"role": "user", "content": message})
-            chat_history.append({"role": "assistant", "content": response})
+            with gr.Row():
+                with gr.Column(scale=8):
+                    msg = gr.Textbox(
+                        label="Your message",
+                        placeholder="Tell us what you're looking for, e.g., 'I need headphones for my daily commute' or 'Can you explain the camera specs of the iPhone 14 Pro?'",
+                        container=False,
+                    )
+                with gr.Column(scale=1):
+                    send = gr.Button("Ask assistants", size="lg", variant="primary")
 
-            return "", chat_history
+            # Add loading status text
+            status = gr.Markdown("", elem_id="status")
 
-        # Connect UI components
-        send.click(process_message, [msg, chatbot, user_id], [msg, chatbot])
-        msg.submit(process_message, [msg, chatbot, user_id], [msg, chatbot])
+            def process_message(message, chat_history):
+                if not message:
+                    yield "", chat_history, ""
+                    return
 
-    # Print instructions
-    print("\n🛍️ Smart Shopper Virtual Assistant")
-    print("\nExample questions:")
-    print("  - 'I'm looking for headphones for my daily commute on the subway'")
-    print("  - 'I need a smartphone with a great camera for social media'")
-    print("  - 'What laptop would be good for a design student on a budget?'")
+                # Immediately update the chat with the user's message and show thinking status
+                chat_history.append({"role": "user", "content": message})
+                yield "", chat_history, ""
 
-    # Launch demo
-    try:
+                try:
+                    # Get the response from the agency
+                    response = agency.get_completion(message)
+                    chat_history.append({"role": "assistant", "content": response})
+                except Exception as e:
+                    logger.error(f"Error processing message: {e}")
+                    chat_history.append(
+                        {
+                            "role": "assistant",
+                            "content": f"Sorry, an error occurred: {str(e)}",
+                        }
+                    )
+
+                yield "", chat_history, ""
+
+            # Update the click and submit handlers to include the status component
+            send.click(process_message, [msg, chatbot], [msg, chatbot, status])
+            msg.submit(process_message, [msg, chatbot], [msg, chatbot, status])
+
+        print("\n🛍️ Smart Shopper Virtual Assistant")
+        print("\nExample questions:")
+        print(
+            "  - 'I need headphones for my daily commute' (Customer Advisor will understand your needs)"
+        )
+        print(
+            "  - 'What's the battery life of the Sony WH-1000XM4?' (Product Expert will provide specs)"
+        )
+        print(
+            "  - 'I need a laptop for video editing' (Both agents will help - needs + specs)"
+        )
+        print("\nObservability:")
+        print("  - Check Langfuse dashboard for detailed analytics")
+        print("  - Local tracking data is stored in smart_shopper.db")
+
         demo.launch()
     finally:
-        # Clean up temporary file when done
-        if os.path.exists("products.json"):
-            os.remove("products.json")
-            print("Cleaned up products.json")
+        # Clean up resources
+        if os.path.exists("product_data"):
+            shutil.rmtree("product_data")
+            print("Cleaned up product_data directory")
 
 
 if __name__ == "__main__":
