@@ -163,3 +163,7 @@ test_agents/
 
 # SQLite
 *.db
+
+# Claude Code
+CLAUDE.md
+claude_ref_docs/

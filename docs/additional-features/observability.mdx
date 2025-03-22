@@ -11,10 +11,20 @@ Agency Swarm uses Langchain callbacks to connect with third party observability 
 </Info>
 
 <Accordion title="Prerequisites" defaultOpen={true}>
-  To get started with observability features, install the Langchain package:
+  To get started with observability features, install the necessary dependencies:
 
   ```bash
-  pip install langchain
+  # Base observability features
+  pip install "agency-swarm[observability]"
+  
+  # For AgentOps integration
+  pip install "agency-swarm[agentops]"
+  
+  # For Langfuse integration
+  pip install "agency-swarm[langfuse]"
+  
+  # Or install all observability tools
+  pip install "agency-swarm[agentops,langfuse]"
   ```
 </Accordion>
 
@@ -48,7 +58,7 @@ We currently recommend [**Langfuse**](https://langfuse.com/) because it is fully
     <Steps>
       <Step title="Install Package">
         ```bash
-        pip install langfuse==2.59.7
+        pip install "agency-swarm[langfuse]"
         ```
       </Step>
       <Step title="Set Environment Variables">
@@ -90,7 +100,7 @@ We currently recommend [**Langfuse**](https://langfuse.com/) because it is fully
     <Steps>
       <Step title="Install Dependencies">
         ```bash
-        pip install agentops==0.3.26
+        pip install "agency-swarm[agentops]"
         ```
       </Step>
       <Step title="Set API Key">
@@ -120,7 +130,7 @@ We currently recommend [**Langfuse**](https://langfuse.com/) because it is fully
     <Steps>
       <Step title="Install Dependencies">
         ```bash
-        pip install tiktoken
+        pip install "agency-swarm[observability]"
         ```
       </Step>
       <Step title="Initialize Tracking">
