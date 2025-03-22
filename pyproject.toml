@@ -30,18 +30,18 @@ urls = { homepage = "https://github.com/VRSEN/agency-swarm" }
 
 [project.optional-dependencies]
 observability = [
-    "langchain>=0.3.13",
-    "langchain-community>=0.3.13",
-    "tenacity>=8.0.0",
-    "tiktoken>=0.6.0"
+    "langchain>=0.3.21",
+    "langchain-community>=0.3.20",
+    "tenacity>=9.0.0",
+    "tiktoken>=0.9.0"
 ]
 agentops = [
     "observability",
-    "agentops>=0.9.0"
+    "agentops>=0.4.4"
 ]
 langfuse = [
     "observability",
-    "langfuse>=2.0.0"
+    "langfuse>=2.60.1"
 ]
 
 [project.scripts]
