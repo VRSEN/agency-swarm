@@ -69,8 +69,12 @@ def init_tracking(tracker_name: SUPPORTED_TRACKERS_TYPE, **kwargs):
     elif tracker_name == "agentops":
         # AgentOps seems to be continually changing how they import their callback handler
         # It's not clear in the docs and seems to be missing. Making custom handler for now.
-        from agency_swarm.util.tracking.custom_agentops_callback import AgentOpsCallbackHandler
-
+        from agency_swarm.util.tracking.custom_agentops_callback import AgentOpsCallbackHandler, AGENTOPS_AVAILABLE
+        
+        if not AGENTOPS_AVAILABLE:
+            logger.warning("AgentOps is not properly installed or is incompatible. " 
+                          "Check version compatibility and update custom_agentops_callback.py")
+        
         handler_class = AgentOpsCallbackHandler
 
     elif tracker_name == "langfuse":

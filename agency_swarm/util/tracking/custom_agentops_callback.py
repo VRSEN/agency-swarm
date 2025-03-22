@@ -12,9 +12,51 @@ from langchain_core.outputs import ChatGenerationChunk, GenerationChunk, LLMResu
 from langchain_core.callbacks.base import BaseCallbackHandler, AsyncCallbackHandler
 from langchain_core.messages import BaseMessage
 
-from agentops import Client as AOClient
-from agentops import ActionEvent, LLMEvent, ToolEvent, ErrorEvent
-from agentops.helpers import get_ISO_time, debug_print_function_params
+# NOTE: This handler needs to be updated to be compatible with agentops 0.4.4+
+# The current imports are based on an older version of agentops
+try:
+    from agentops import Client as AOClient
+    from agentops import ActionEvent, LLMEvent, ToolEvent, ErrorEvent
+    from agentops.helpers import get_ISO_time, debug_print_function_params
+    AGENTOPS_AVAILABLE = True
+except ImportError:
+    AGENTOPS_AVAILABLE = False
+    # Define stub classes/functions for when agentops is not available
+    class AOClient:
+        def __init__(self):
+            self.session_count = 0
+            self.is_initialized = False
+        def configure(self, **kwargs):
+            pass
+        def initialize(self):
+            pass
+        def record(self, *args, **kwargs):
+            pass
+        @property
+        def current_session_ids(self):
+            return []
+    
+    class ActionEvent:
+        def __init__(self, **kwargs):
+            pass
+    
+    class LLMEvent:
+        def __init__(self, **kwargs):
+            pass
+    
+    class ToolEvent:
+        def __init__(self, **kwargs):
+            pass
+    
+    class ErrorEvent:
+        def __init__(self, **kwargs):
+            pass
+    
+    def get_ISO_time():
+        return ""
+    
+    def debug_print_function_params(func):
+        return func
 
 logger = logging.getLogger(__name__)
 
