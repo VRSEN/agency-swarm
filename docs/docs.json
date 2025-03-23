@@ -92,7 +92,23 @@
               "additional-features/azure-openai",
               "additional-features/open-source-models",
               "additional-features/deployment-to-production",
-              "additional-features/observability"
+              "additional-features/observability",
+              "additional-features/additional-instructions",
+              {
+                "group": "Integrations",
+                "icon": "plug",
+                "pages": [
+                  "additional-features/integrations/slack-integration",
+                  "additional-features/integrations/whatsapp-integration"
+                ]
+              }
+            ]
+          },
+          {
+            "group": "References",
+            "pages": [
+              "references/api",
+              "references/web-api"
             ]
           },
           {
@@ -110,12 +126,12 @@
         ]
       },
       {
-        "tab": "Tutorials",
+        "tab": "Platform",
         "groups": [
           {
-            "group": "Tutorials",
+            "group": "Platform",
             "pages": [
-              "tutorials/tutorials"
+              "platform/platform"
             ]
           }
         ]
@@ -127,6 +143,12 @@
             "group": "Extras",
             "pages": [
               "extras/extras"
+            ]
+          },
+          {
+            "group": "Tutorials",
+            "pages": [
+              "tutorials/tutorials"
             ]
           }
         ]

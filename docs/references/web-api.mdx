@@ -1,0 +1,279 @@
+---
+title: "Web API Reference"
+description: "Gain a deeper understanding of the core classes and methods available in Agency Swarm."
+icon: "globe"
+---
+
+# WEB API Documentation
+
+web API Integrations provide a set of endpoints allowing you to run your agents on custom backends or on other unsupported channels.
+
+<aside>
+⚡ **Live Postman Example**
+[Go to Postman →](https://www.postman.com/vrsen-ai/agencii-api/overview)
+
+</aside>
+
+---
+
+## Authentication
+
+- **Note**: You can only use platform tokens for these endpoints. Find or create one inside **Profile Icon > API Keys**.
+- **Headers**:
+    - `Authorization`: `Bearer <your_token>`
+        - **Example**: `Bearer sk-agencii-H7sb111...`
+    - `Content-Type`: `application/json`
+
+---
+
+# Endpoints
+
+## POST `/get_completion`
+
+### URL:
+
+`https://agency-swarm-app-japboyzddq-uc.a.run.app/get_completion`
+
+### Request
+
+### Headers
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `Authorization` | `string` | Bearer token for platform authentication. Example: `Bearer <token>` |
+| `Content-Type` | `string` | Must be `application/json` |
+
+### Body Parameters
+
+### JSON Format
+
+```json
+{
+  "message": "Hey! How are you?",
+  "apiIntegrationId": "dpCD7snQ0tCWrdtp6UhZ",
+  "chatId": "plOQeH3hW7UKiACqEdAx",
+  "attachments": [
+    {
+      "file_id": "file-0SY0lLXWCSSBIOb2gu8UolxH",
+      "tools": [
+        {
+          "type": "file_search"
+        }
+      ]
+    }
+  ]
+}
+
+```
+
+### Parameter Details
+
+| Parameter | Type | Required | Description | Example |
+| --- | --- | --- | --- | --- |
+| `message` | `string` | **Yes** | The message to be processed. | `"Hey! How are you?"` |
+| `apiIntegrationId` | `string` | **Yes** | The unique identifier for the API integration. | `"dpCD7snQ0tCWrdtp6UhZ"` |
+| `chatId` | `string` | No | The unique identifier for the chat session. If provided, continues the chat with the previous context. | `"plOQeH3hW7UKiACqEdAx"` |
+| `attachments` | `array` | No | An array of attachment objects. See [Attachment Object](https://www.notion.so/PI-1815bd4b16a681b28d3ec84730547496?pvs=21). |  |
+| `additionalInstructions` | `string` | No | Appends additional instructions at the end of the instructions for the run. This is useful for modifying the behavior on a per-run basis without overriding other instructions.
+
+ |  |
+| `aliasChatId` | `string` | No | An alternative to `chatId` which allows to use custom identifiers for persisting chats through third party integrations | `custom-identifier` |
+
+### Attachment Object
+
+Each attachment object contains:
+
+| Parameter | Type | Required | Description | Example |
+| --- | --- | --- | --- | --- |
+| `file_id` | `string` | **Yes** | The unique identifier for the file. | `"file-0SY0lLXWCSSBIOb2gu8UolxH"` |
+| `tools` | `array` | **Yes** | An array of tool objects. See [Tool Object](https://www.notion.so/PI-1815bd4b16a681b28d3ec84730547496?pvs=21). |  |
+
+### Tool Object
+
+Each tool object contains:
+
+| Parameter | Type | Required | Description | Example |
+| --- | --- | --- | --- | --- |
+| `type` | `string` | **Yes** | The type of tool to be used. | `"file_search"` |
+
+### Response
+
+**Note**: The response format varies depending on the `textOnly` mode from the API Integration Document.
+
+### If `textOnly` is Enabled
+
+The response will be in `text/plain` format with the message content:
+
+```
+This is a final message response from the bot.
+
+```
+
+### If `textOnly` is Disabled
+
+The response will be in `application/json` format:
+
+```json
+{
+  "chatId": "FVfA971B3fnBH4S1OKlo",
+  "createdAt": "2024-08-06T02:02:37.533913",
+  "threadId": "thread_ruUj69CyW2STm8Zog0HXkvIJ",
+  "assistantId": "J3NQwdHxqm9jvWFpOwFk",
+  "name": "Test API Integration",
+  "message": {
+    "id": "msg_nH4zWgFW7dCUoNQ5msLJNBUd",
+    "content": "The secret phrase is: **papaya tangerine**.",
+    "role": "assistant",
+    "type": "text",
+    "createdAt": "2024-08-06T02:02:37.533913",
+    "references": [],
+    "fileIds": ["file-wRZy12uetHH9dVEpR6PhE92j"],
+    "assistantData": null,
+    "functions": null
+  },
+  "numMessages": 2
+}
+```
+
+### Response Fields
+
+| Field | Type | Description | Example |
+| --- | --- | --- | --- |
+| `chatId` | `string` | The unique identifier for the chat session. | `"FVfA971B3fnBH4S1OKlo"` |
+| `createdAt` | `string` | The timestamp when the response was created. | `"2024-08-06T02:02:37.533913"` |
+| `threadId` | `string` | The unique identifier for the thread. | `"thread_ruUj69CyW2STm8Zog0HXkvIJ"` |
+| `assistantId` | `string` | The unique identifier for the assistant. | `"J3NQwdHxqm9jvWFpOwFk"` |
+| `name` | `string` | The name of the API integration. | `"Test API Integration"` |
+| `message` | `object` | The message object containing the response details. | See [Message Object](https://www.notion.so/PI-1815bd4b16a681b28d3ec84730547496?pvs=21) |
+| `numMessages` | `integer` | The number of messages in the thread. | `2` |
+| `aliasChatId` | `string` | Identifier for persisting chats through third party integrations | `r14ud3CyX21Tm8Zog0HKJkvZJ` |
+
+### Message Object
+
+| Field | Type | Description | Example |
+| --- | --- | --- | --- |
+| `id` | `string` | The unique identifier for the message. | `"msg_nH4zWgFW7dCUoNQ5msLJNBUd"` |
+| `content` | `string` | The content of the message. | `"The secret phrase is: **papaya tangerine**."` |
+| `role` | `string` | The role of the message sender. | `"assistant"` |
+| `type` | `string` | The type of message. | `"text"` |
+| `createdAt` | `string` | The timestamp when the message was created. | `"2024-08-06T02:02:37.533913"` |
+| `references` | `array` | An array of references. | `[]` |
+| `fileIds` | `array` | An array of file IDs associated with the message. | `["file-wRZy12uetHH9dVEpR6PhE92j"]` |
+| `assistantData` | `object` | Additional assistant-related data. | `null` |
+| `functions` | `object` | Additional function-related data. | `null` |
+
+---
+
+## POST `/create_new_chat/`
+
+This endpoint is used to create a new chat instance for a user based on a provided API integration. The request must contain a valid platform token in the headers for authentication, as well as the required payload in the request body.
+
+### URL:
+
+`https://agency-swarm-app-japboyzddq-uc.a.run.app/create_new_chat/`
+
+### Request
+
+### Headers
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `Authorization` | `string` | Bearer token for platform authentication. Example: `Bearer <token>` |
+| `Content-Type` | `string` | Must be `application/json` |
+
+### Body Parameters
+
+The request body should be a JSON object containing the following field:
+
+| Parameter | Type | Required | Description | Example |
+| --- | --- | --- | --- | --- |
+| `apiIntegrationId` | `string` | **Yes** | The unique identifier of the API integration for the chat. | `"dpCD7snQ0tCWrdtp6UhZ"` |
+
+### Example Request Body
+
+```json
+{
+  "apiIntegrationId": "dpCD7snQ0tCWrdtp6UhZ"
+}
+
+```
+
+### Response
+
+- **Status**: `200 OK` if the chat creation is successful.
+- **Content-Type**: `application/json`
+
+### Response Body
+
+The response will be a JSON object containing the `chatId` of the newly created chat.
+
+| Name | Type | Description | Example |
+| --- | --- | --- | --- |
+| `chatId` | `string` | The unique identifier for the chat. | `"FVfA971B3fnBH4S1OKlo"` |
+
+### Example Response Body
+
+```json
+{
+  "chatId": "FVfA971B3fnBH4S1OKlo"
+}
+
+```
+
+### Errors
+
+If an error occurs, the API will return an appropriate HTTP status code and an error message.
+
+### 400 Bad Request
+
+Occurs if the request body is missing required fields or the JSON payload is malformed.
+
+### Example Response
+
+```json
+{
+  "detail": "Your JSON payload is missing required fields. Please consult the documentation."
+}
+
+```
+
+### 401 Unauthorized
+
+Occurs if the `Authorization` header is missing or contains an invalid token.
+
+### Example Response
+
+```json
+{
+  "detail": "Invalid or missing authorization token."
+}
+
+```
+
+### 500 Internal Server Error
+
+Occurs if there is an issue on the server side while processing the request.
+
+### Example Response
+
+```json
+{
+  "detail": "An unexpected error occurred while processing your request."
+}
+
+```
+
+### Summary
+
+This endpoint allows users to create new chats by providing the `apiIntegrationId`. It requires a valid authorization token to authenticate the user and validate the integration. If successful, the API returns the unique `chatId` for the new chat.
+
+---
+
+## Additional Notes
+
+- All timestamps are in ISO 8601 format.
+- Ensure that your `apiIntegrationId` is valid and corresponds to an existing integration.
+- Replace placeholder values with actual data when making requests.
+- The `attachments` parameter in `/get_completion` allows you to include files and specify tools for processing.
+
+---

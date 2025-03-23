@@ -1,0 +1,53 @@
+---
+title: "Slack Integration"
+description: "Learn how to integrate your agents with Slack"
+icon: "slack"
+---
+
+# Slack Integration
+
+### Feature Overview
+
+<aside>
+💡
+
+With Slack Integrations, you can create custom bots tailored to your workspace. These apps can be installed and managed within your workspace, enabling a wide range of automated functions and interactions.
+
+Currently, the Slack bots created via agencii can respond in:
+
+</aside>
+
+## Getting Started
+
+To integrate your agents with Slack:
+
+1. Create a new Slack app in your workspace
+2. Configure the necessary permissions and scopes
+3. Install the app to your workspace
+4. Set up the event subscriptions and bot token
+
+## Configuration
+
+You'll need to set up the following environment variables:
+
+```bash
+SLACK_BOT_TOKEN=xoxb-your-bot-token
+SLACK_SIGNING_SECRET=your-signing-secret
+SLACK_APP_TOKEN=xapp-your-app-token
+```
+
+## Usage
+
+Once configured, your agents can:
+
+- Respond to direct messages
+- Participate in channel conversations
+- Handle slash commands
+- Process interactive components
+
+## Best Practices
+
+1. Keep responses concise and relevant
+2. Use interactive components for complex interactions
+3. Implement proper error handling
+4. Follow Slack's design guidelines
