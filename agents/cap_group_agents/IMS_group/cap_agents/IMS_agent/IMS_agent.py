@@ -1,5 +1,7 @@
 from agency_swarm import Agent
-from agents.cap_group_agents.IMS_group.cap_agents.IMS_agent.tools import ReadAPI
+from agents.cap_group_agents.IMS_group.cap_agents.IMS_agent.tools import (
+    ReadAPI, GetEndPointAndProjectID
+)
 
 from agents.cap_group_agents.cap_agent_instruction import cap_agent_instruction
 from agents.basic_agents.job_agent.tools.CallAPI import CallAPI
@@ -17,7 +19,7 @@ import os
 current_path = os.path.abspath(os.path.dirname(__file__))
 _instruction = cap_agent_instruction(_name, _description, _manager_name)
 
-_tools = [ReadAPI.ReadAPI, CallAPI]
+_tools = [ReadAPI.ReadAPI, CallAPI, GetEndPointAndProjectID.GetEndPointAndProjectID]
 
 _file_folder = ""
 
