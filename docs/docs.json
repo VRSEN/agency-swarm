@@ -99,7 +99,8 @@
                 "icon": "plug",
                 "pages": [
                   "additional-features/integrations/slack-integration",
-                  "additional-features/integrations/whatsapp-integration"
+                  "additional-features/integrations/whatsapp-integration",
+                  "references/web-api"
                 ]
               }
             ]
