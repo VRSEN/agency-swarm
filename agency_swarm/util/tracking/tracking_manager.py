@@ -2,7 +2,6 @@ import json
 from typing import Any
 from uuid import uuid4
 
-from langchain_core.outputs import Generation, LLMResult
 from openai.types.beta.threads.message import Message
 from openai.types.beta.threads.run import RequiredActionFunctionToolCall, Run
 from openai.types.beta.threads.runs.tool_call import ToolCall
@@ -216,6 +215,8 @@ class TrackingManager:
         """Track the end of a run with a message output."""
         if not self.callback_handler:
             return
+
+        from langchain_core.outputs import Generation, LLMResult
 
         generation = Generation(text=message_output.content)
 

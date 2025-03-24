@@ -14,7 +14,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.13'
       - run: python3 -m pip install --upgrade build && python3 -m build
       - name: Publish package
         uses: pypa/gh-action-pypi-publish@release/v1
