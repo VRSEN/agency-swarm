@@ -77,6 +77,22 @@ readability_results = analyze_docs(docs_directory)
 df = pd.DataFrame(readability_results)
 print(df)
 
+# Define the threshold
+threshold = 15
+
+# Filter the DataFrame where any of the readability scores is above the threshold
+filtered_df = df[
+    (df["Flesch-Kincaid"] > threshold) |
+    (df["SMOG Index"] > threshold)|
+    (df["ARI Index"] > threshold)|
+    (df["Coleman-Liau"] > threshold)
+]
+
+# Extract the list of file names
+pages_above_threshold = filtered_df["File"].tolist()
+print("Pages with at least one readability score above", threshold, ":", pages_above_threshold)
+
+
 # Optionally, save the report to CSV for further analysis
 df.to_csv('readability_report.csv', index=False)
 
