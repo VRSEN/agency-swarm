@@ -29,11 +29,12 @@ _instructions = f"""你的任务是每当接收到输入时，都需要**从头*
 
 1. 如果该参数类型为"Array of strings"等简单类型的Array，你需要直接输出"需要该参数"；
 
-2. 如果参数类型为"Array of objects"，你需要从用户需求中判断该参数列表中有几个成员，并依次为每个成员提取对应的用户子需求；
+2. 如果参数类型为"Array of objects"，你需要从用户需求中判断该参数列表中有几个成员(如果无法判断，默认为1个成员)，并依次为每个成员提取对应的用户子需求；
 
 举例：如果参数类型为"Array of NetworkSubnet objects"，"user_requirement"为"查询子网ID为vpc_id1和vpc_id2的子网详细信息"，你得到的用户子需求为"查询子网ID为vpc_id1的子网详细信息"和"查询子网ID为vpc_id2的子网详细信息"。
 
-然后你需要对每个成员使用`SelectParamTable`进一步处理。所有成员都经过以上处理后，你需要将所有成员`SelectParamTable`的返回结果合并到一个JSON列表中，并输出该列表。
+然后你需要对每个成员使用`SelectParamTable`进一步处理。所有成员都经过以上处理后，你需要将所有成员`SelectParamTable`的返回结果（返回结果为json）合并到一个列表[]中，并输出该列表。
+
 """
 
 """

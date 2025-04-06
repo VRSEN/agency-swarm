@@ -54,14 +54,19 @@ class SelectParamTable(BaseTool):
         # 3. send the message and handle response
         selected_str = self.send_message_to_agent(recipient_agent_name="Param Selector", message=json.dumps(message_obj, ensure_ascii=False), parameter=message_obj["parameter"])
         
-        if "不需要该参数" in selected_str:
-            return []
-        elif "需要该参数" in selected_str:
-            return [returned_info]
-        else:
-            selected = try_parse_json(selected_str)
-            assert_list_of_dicts(selected)
-            return selected
+        selected = try_parse_json(selected_str)
+        if not (isinstance(selected, list) and all(isinstance(item, dict) for item in selected)):
+            input_message = selected_str
+            while True:
+                inspection = self.send_message_to_agent(recipient_agent_name="Param Inspector", message=input_message, parameter=message_obj["parameter"])
+                if "不需要该参数" in inspection:
+                    return []
+                elif "需要该参数" in inspection:
+                    return [returned_info]
+                input_message = json.dumps({"输入": selected_str, "你之前的回答": inspection, "回答中的问题": "没有输出'需要该参数'或者'不需要该参数'"})
+
+        assert_list_of_dicts(selected)
+        return selected
 
     def run(self):
         debug_parallel = os.getenv("DEBUG_API_AGENTS_PARALLEL")
