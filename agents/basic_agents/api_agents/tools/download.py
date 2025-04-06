@@ -110,7 +110,10 @@ def download_and_save_to_db(url: str, db_file: str | None = None, cursor: sqlite
         # this row used the wrong type
         if url == "https://support.huaweicloud.com/api-cce/cce_02_0356.html":
             html_content = re.sub(r"nodeNameTemplate.*?Object", lambda match: match.group(0).replace("Object", "Map<String,String>"), html_content, flags=re.DOTALL)
-
+        if url == "https://support.huaweicloud.com/api-cce/cce_02_0242.html":
+            html_content = re.sub(r"nodepoolScaleUp.*?否", lambda match: match.group(0).replace("否", "是"), html_content, flags=re.DOTALL)
+            html_content = re.sub(r"批量创建时节点的个数", lambda match: match.group(0).replace("批量创建时节点的个数", "一个或多个创建节点时的节点个数"), html_content, flags=re.DOTALL)
+        
         cursor.execute("""
             INSERT INTO pages (url, html)
             VALUES (?, ?)
