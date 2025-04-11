@@ -76,7 +76,7 @@ from agents.cap_group_agents.NODE_group.cap_agents.NODE_pool_agent import NODE_p
 from agents.cap_group_agents.NODE_group.cap_agents.NODE_scaling_protect_agent import NODE_scaling_protect_agent
 
 from agents.basic_agents.api_agents import (
-    API_caller, API_filler, API_param_selector, array_filler, array_selector, param_filler, param_selector
+    API_param_selector, array_selector, param_selector, param_inspector
 )
 from agents.basic_agents.job_agent import check_log_agent
 from agents.basic_agents.job_agent import job_agent
@@ -85,8 +85,6 @@ from agents.basic_agents.job_agent.tools.CheckLogForFailures import CheckLogForF
 from agents.basic_agents.api_agents.tools.CheckParamRequired import CheckParamRequired
 from agents.basic_agents.api_agents.tools.SelectAPIParam import SelectAPIParam
 from agents.basic_agents.api_agents.tools.SelectParamTable import SelectParamTable
-from agents.basic_agents.api_agents.tools.FillAPI import FillAPI
-from agents.basic_agents.api_agents.tools.FillParamTable import FillParamTable
 
 from agency_swarm import set_openai_key
 
@@ -180,13 +178,10 @@ NODE_lifecycle_agent = NODE_lifecycle_agent.create_agent()
 NODE_pool_agent = NODE_pool_agent.create_agent()
 NODE_scaling_protect_agent = NODE_scaling_protect_agent.create_agent()
 
-API_caller = API_caller.create_agent()
-API_filler = API_filler.create_agent()
 API_param_selector = API_param_selector.create_agent()
-array_filler = array_filler.create_agent()
 array_selector = array_selector.create_agent()
-param_filler = param_filler.create_agent()
 param_selector = param_selector.create_agent()
+param_inspector = param_inspector.create_agent()
 check_log_agent = check_log_agent.create_agent()
 job_agent = job_agent.create_agent()
 jobs_agent = jobs_agent.create_agent()
@@ -195,6 +190,8 @@ chat_graph = [task_planner, scheduler, inspector,
               subtask_planner, subtask_manager, subtask_scheduler, subtask_inspector,
               step_inspector,
               basic_cap_solver, param_asker,
+
+              param_inspector,
 
               check_log_agent,
             #   CES_planner, CES_step_scheduler,
@@ -311,9 +308,7 @@ chat_graph = [task_planner, scheduler, inspector,
             #   [jobs_agent, API_filler],
 
               [param_selector, array_selector],
-              [API_filler, API_caller, AKSK_agent],
-              [param_filler, array_filler],
-              [array_filler, param_filler],
+              [AKSK_agent],
 
               # [ECS_manager, param_asker],
               # [IMS_manager, param_asker],

@@ -1,15 +1,13 @@
 from agency_swarm import Agent, Agency
 
 from agents.basic_agents.api_agents import (
-    API_param_selector, param_selector, array_selector, API_filler, API_caller, param_filler, array_filler
+    API_param_selector, param_selector, array_selector, param_inspector
 )
 
 from agents.cap_group_agents.IAM_service_group.cap_agents.AKSK_agent import AKSK_agent
 
 from agents.basic_agents.api_agents.tools.SelectAPIParam import SelectAPIParam
 from agents.basic_agents.api_agents.tools.SelectParamTable import SelectParamTable
-from agents.basic_agents.api_agents.tools.FillAPI import FillAPI
-from agents.basic_agents.api_agents.tools.FillParamTable import FillParamTable
 
 from agency_swarm import set_openai_key
 
@@ -22,21 +20,16 @@ set_openai_key(os.getenv('OPENAI_API_KEY'))
 api_param_selector = API_param_selector.create_agent()
 param_selector = param_selector.create_agent()
 array_selector = array_selector.create_agent()
+param_inspector = param_inspector.create_agent()
 
-api_filler = API_filler.create_agent()
-api_caller = API_caller.create_agent()
 AKSK_agent = AKSK_agent.create_agent()
-param_filler = param_filler.create_agent()
-array_filler = array_filler.create_agent()
 
 chart_graph = [
     api_param_selector,
+    param_inspector,
     [param_selector, array_selector],
 
-    api_filler,
-    [api_filler, api_caller, AKSK_agent],
-    [param_filler, array_filler],
-    [array_filler, param_filler]
+    [AKSK_agent],
 ]
 
 thread_strategy = {
@@ -44,10 +37,6 @@ thread_strategy = {
         (SelectAPIParam, param_selector),
         (SelectParamTable, param_selector),
         (param_selector, array_selector),
-        (FillAPI, param_filler),
-        (FillParamTable, param_filler),
-        (param_filler, array_filler),
-        (array_filler, param_filler),
     ]
 }
 

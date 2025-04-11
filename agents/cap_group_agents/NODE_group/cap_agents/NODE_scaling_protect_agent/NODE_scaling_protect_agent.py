@@ -1,6 +1,9 @@
 from agency_swarm import Agent
-from agents.cap_group_agents.NODE_group.cap_agents.NODE_scaling_protect_agent.tools import (ReadAPI)
+from agents.cap_group_agents.NODE_group.cap_agents.NODE_scaling_protect_agent.tools import (
+    ReadAPI, GetEndPointAndProjectID
+)
 from agents.cap_group_agents.cap_agent_instruction import cap_agent_instruction
+from agents.basic_agents.job_agent.tools.CallAPI import CallAPI
 
 _name = "NODE_scaling_protect_agent"
 _manager_name = "NODE_manager"
@@ -13,7 +16,7 @@ import os
 current_path = os.path.abspath(os.path.dirname(__file__))
 _instruction = cap_agent_instruction(_name, _description, _manager_name)
 
-_tools = [ReadAPI.ReadAPI]
+_tools = [ReadAPI.ReadAPI, CallAPI, GetEndPointAndProjectID.GetEndPointAndProjectID]
 
 _file_folder = ""
 
