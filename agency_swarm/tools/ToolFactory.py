@@ -318,6 +318,91 @@ class ToolFactory:
         return imported_class
 
     @staticmethod
+    async def from_mcp(mcp_server):
+        """
+        Create a tool factory from an MCP server.
+        :param mcp_server: An MCP server instance.
+        :return: A list of tool factories.
+        """
+        try:
+            await mcp_server.connect()
+            tool_definitions = await mcp_server.list_tools()
+        finally:
+            await mcp_server.cleanup()
+        tools = []
+        
+        for definition in tool_definitions:
+            # Handle both dictionary and object formats
+            if isinstance(definition, dict):
+                name = definition.get("name")
+                description = definition.get("description", "")
+                parameters = definition.get("inputSchema", {})
+            else:
+                # Access attributes from object
+                name = getattr(definition, "name", "")
+                description = getattr(definition, "description", "")
+                parameters = getattr(definition, "inputSchema", {})
+                
+                # The returned object might have the parameters as a property or a method
+                if callable(parameters):
+                    parameters = parameters()
+
+            # Check if any parameter has a default value
+            has_default_values = False
+            if isinstance(parameters, dict) and 'properties' in parameters:
+                for param_props in parameters['properties'].values():
+                    if 'default' in param_props:
+                        has_default_values = True
+                        break
+            
+            # If any parameter has a default value, set strict to False
+            if has_default_values:
+                mcp_server._strict = False
+            
+            # Create a factory function to properly capture the tool name 
+            def create_callback(tool_name):
+                async def callback(self, **kwargs):
+                    # Extract arguments from the model_dump, excluding any internal attributes
+                    args = {k: v for k, v in self.model_dump().items() 
+                           if not k.startswith('_') and k != 'self'}
+                    
+                    # Call the tool with just the arguments, not the whole model
+                    try:
+                        await mcp_server.connect()
+                        result = await mcp_server.call_tool(tool_name, args)
+                    finally:
+                        await mcp_server.cleanup()
+                    
+                    if hasattr(result, 'content') and result.content:
+                        # Extract text from the first content item if it exists
+                        if len(result.content) > 0 and hasattr(result.content[0], 'text'):
+                            return result.content[0].text
+                        # Try to convert the content to a string
+                        return str(result.content)
+                    # Fallback: try to get the result attribute or convert the entire object to string
+                    if hasattr(result, 'result'):
+                        return result.result
+                    return str(result)
+                return callback
+            
+            # Get a callback specifically for this tool name
+            callback = create_callback(name)
+                
+            tool = ToolFactory.from_openai_schema(
+                {
+                    "name": name,
+                    "description": description,
+                    "parameters": parameters,
+                    "strict": mcp_server.strict if hasattr(mcp_server, "strict") else False
+                },
+                callback
+            )
+            
+            tools.append(tool)
+            
+        return tools
+
+    @staticmethod
     def get_openapi_schema(
         tools: List[Type[BaseTool]],
         url: str,

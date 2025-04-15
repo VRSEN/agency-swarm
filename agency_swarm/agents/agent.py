@@ -105,6 +105,7 @@ class Agent:
         file_search: FileSearchConfig = None,
         parallel_tool_calls: bool = True,
         refresh_from_id: bool = True,
+        mcp_servers: List = None,
     ):
         """
         Initializes an Agent with specified attributes, tools, and OpenAI client.
@@ -135,6 +136,7 @@ class Agent:
             file_search (FileSearchConfig, optional): A dictionary containing the file search tool configuration. Defaults to None.
             parallel_tool_calls (bool, optional): Whether to enable parallel function calling during tool use. Defaults to True.
             refresh_from_id (bool, optional): Whether to load and update the agent from the OpenAI assistant ID when provided. Defaults to True.
+            mcp_servers (List, optional): A list of MCP servers to use for tools. Defaults to None.
 
         This constructor sets up the agent with its unique properties, initializes the OpenAI client, reads instructions if provided, and uploads any associated files.
         """
@@ -168,6 +170,7 @@ class Agent:
         self.file_search = file_search
         self.parallel_tool_calls = parallel_tool_calls
         self.refresh_from_id = refresh_from_id
+        self.mcp_servers = mcp_servers if mcp_servers else []
 
         self.settings_path = "./settings.json"
 
@@ -189,9 +192,27 @@ class Agent:
 
         self._parse_schemas()
         self._parse_tools_folder()
+        
+    async def _process_mcp_servers_async(self):
+        """Process MCP servers and add their tools to the agent."""
+        if not self.mcp_servers:
+            return
+            
+        for server in self.mcp_servers:
+            try:
+                # Get tools from the MCP server
+                mcp_tools = await ToolFactory.from_mcp(server)
+                
+                # Add each tool to the agent
+                for tool in mcp_tools:
+                    self.add_tool(tool)
+                    
+                print(f"Added {len(mcp_tools)} tools from MCP server: {server.name}")
+            except Exception as e:
+                print(f"Error processing MCP server {server.name}: {e}")
 
     # --- OpenAI Assistant Methods ---
-
+                
     def init_oai(self):
         """
         Initializes the OpenAI assistant for the agent.
@@ -201,6 +222,16 @@ class Agent:
         Output:
             self: Returns the agent instance for chaining methods or further processing.
         """
+        # Process MCP servers synchronously if they exist
+        if self.mcp_servers:
+            import asyncio
+            try:
+                loop = asyncio.get_running_loop()
+                # If we're here, we're already in an event loop
+                loop.run_until_complete(self._process_mcp_servers_async())
+            except RuntimeError:
+                # Not in an event loop, so create one
+                asyncio.run(self._process_mcp_servers_async())
 
         # check if settings.json exists
         path = self.get_settings_path()
