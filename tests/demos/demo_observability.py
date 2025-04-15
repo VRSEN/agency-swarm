@@ -49,6 +49,7 @@ def setup_agency():
 def run_demo():
     """Run the observability demo"""
     init_tracking("langfuse")
+    init_tracking("agentops")
     init_tracking("local")
 
     agency = setup_agency()
@@ -58,7 +59,7 @@ def run_demo():
 
     stop_tracking()
     print(
-        "\nDemo completed. Check Langfuse dashboard and local SQLite database for the results."
+        "\nDemo completed. Check AgentOps/Langfuse dashboard and local SQLite database for the results."
     )
 
 
