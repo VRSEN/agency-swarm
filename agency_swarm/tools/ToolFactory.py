@@ -2,7 +2,11 @@ import inspect
 import json
 import os
 import sys
-from typing import Any, Dict, List, Type, Union
+from typing import Any, Dict, List, Literal, Set, Tuple, Type, Union, Optional, Callable
+from datetime import datetime, date
+
+from decimal import Decimal
+from enum import Enum
 
 import httpx
 import jsonref
@@ -95,21 +99,38 @@ class ToolFactory:
             use_schema_description=True,
             validation=False,
             class_name="Model",
+
             # custom_template_dir=Path('/Users/vrsen/Projects/agency-swarm/agency-swarm/agency_swarm/tools/data_schema_templates')
         )
 
         result = parser.parse()
 
-        # Execute the result to extract the model
-        exec_globals = {}
+        # Rebuild the model to ensure it's fully defined
+        result += "\n\nModel.model_rebuild()"
+
+        # Execute the result to extract the mode
+        exec_globals = {
+            "List": List,
+            "Dict": Dict,
+            "Type": Type,
+            "Union": Union,
+            "Optional": Optional,
+            "datetime": datetime,
+            "date": date,
+            "Set": Set,
+            "Tuple": Tuple,
+            "Any": Any,
+            "Callable": Callable,
+            "Decimal": Decimal,
+            "Literal": Literal,
+            "Enum": Enum,
+        }
+
         exec(result, exec_globals)
         model = exec_globals.get("Model")
 
         if not model:
             raise ValueError(f"Could not extract model from schema {schema['name']}")
-
-        # Rebuild the model to ensure it's fully defined
-        model.model_rebuild()
 
         class ToolConfig:
             strict: bool = schema.get("strict", False)
