@@ -41,8 +41,7 @@ def agency():
     git_server = MCPServerStdio(
         name="Git Server",
         params={
-            "command": "uvx",
-            "args": ["mcp-server-git"],
+            "command": "mcp-server-git",
             "strict": False,
         }
     )

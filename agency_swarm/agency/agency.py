@@ -2,6 +2,7 @@ import inspect
 import json
 import os
 import queue
+import asyncio
 import threading
 import uuid
 from enum import Enum
@@ -629,6 +630,14 @@ class Agency:
 
             # Enable queuing for streaming intermediate outputs
             demo.queue(default_concurrency_limit=10)
+            
+            # Workaround for bug caused by mcp tool usage
+            # TODO: Find the root cause and fix it
+            if hasattr(demo, "_queue"):
+                if getattr(demo._queue, "pending_message_lock", None) is None:
+                    demo._queue.pending_message_lock = asyncio.Lock()
+                if getattr(demo._queue, "delete_lock", None) is None:
+                    demo._queue.delete_lock = asyncio.Lock()
 
         # Launch the demo
         demo.launch(**kwargs)

@@ -7,5 +7,4 @@ pydantic>=2.8.2,<3
 python-dotenv==1.0.1
 rich==13.7.1
 termcolor>=2.3.0
-uvx<2.0
 openai-agents==0.0.9
