@@ -382,18 +382,19 @@ class ToolFactory:
             if has_default_values:
                 mcp_server._strict = False
             # Create a factory function to properly capture the tool name 
-            def create_sync_wrapper(tool_name, mcp_server_instance):
-                async def async_tool_executor(tool_instance, **kwargs):
+            def create_callback(tool_name):
+                async def callback(self, **kwargs):
                     # Extract arguments from the model_dump, excluding any internal attributes
-                    args = {k: v for k, v in tool_instance.model_dump().items()
-                            if not k.startswith('_') and k != 'self'}
+                    args = {k: v for k, v in self.model_dump().items() 
+                           if not k.startswith('_') and k != 'self'}
+
                     # Call the tool with just the arguments, not the whole model
                     try:
-                        await mcp_server_instance.connect()
-                        result = await mcp_server_instance.call_tool(tool_name, args)
+                        await mcp_server.connect()
+                        result = await mcp_server.call_tool(tool_name, args)
                     finally:
                         await mcp_server.cleanup()
-                    
+
                     if hasattr(result, 'content') and result.content:
                         # Extract text from the first content item if it exists
                         if len(result.content) > 0 and hasattr(result.content[0], 'text'):
@@ -404,11 +405,9 @@ class ToolFactory:
                     if hasattr(result, 'result'):
                         return result.result
                     return str(result)
-                def sync_run_wrapper(self, **kwargs):
-                    return run_async_sync(async_tool_executor, self, **kwargs)
-                return sync_run_wrapper
+                return callback
 
-            sync_wrapper = create_sync_wrapper(name, mcp_server)
+            callback = create_callback(name)
 
             tool = ToolFactory.from_openai_schema(
                 {
@@ -417,7 +416,7 @@ class ToolFactory:
                     "parameters": parameters,
                     "strict": mcp_server.strict if hasattr(mcp_server, "strict") else False
                 },
-                sync_wrapper
+                callback
             )
             tools.append(tool)
         return tools
