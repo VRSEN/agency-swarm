@@ -15,12 +15,12 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
 ]
 dependencies = [
-    "datamodel-code-generator==0.28.3",
+    "datamodel-code-generator==0.28.5",
     "deepdiff==6.7.1",
     "docstring_parser==0.16",
     "jsonref==1.1.0",
     "openai>=1.66.0,<2.0.0",
-    "pydantic==2.8.2",
+    "pydantic>=2.8.2,<3",
     "python-dotenv==1.0.1",
     "rich==13.7.1",
     "termcolor>=2.3.0",

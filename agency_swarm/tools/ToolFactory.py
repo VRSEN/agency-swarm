@@ -11,6 +11,7 @@ from datamodel_code_generator.model import get_data_model_types
 from datamodel_code_generator.parser.jsonschema import JsonSchemaParser
 
 from .BaseTool import BaseTool
+from agency_swarm.util.helpers import run_async_sync
 
 
 class ToolFactory:
@@ -318,19 +319,23 @@ class ToolFactory:
         return imported_class
 
     @staticmethod
-    async def from_mcp(mcp_server):
+    def from_mcp(mcp_server):
         """
-        Create a tool factory from an MCP server.
+        Synchronous wrapper for creating a tool factory from an MCP server.
         :param mcp_server: An MCP server instance.
-        :return: A list of tool factories.
+        :return: A list of tools
         """
+        return run_async_sync(ToolFactory.from_mcp_async, mcp_server)
+
+    @staticmethod
+    async def from_mcp_async(mcp_server):
         try:
             await mcp_server.connect()
             tool_definitions = await mcp_server.list_tools()
         finally:
             await mcp_server.cleanup()
         tools = []
-        
+
         for definition in tool_definitions:
             # Handle both dictionary and object formats
             if isinstance(definition, dict):
@@ -342,11 +347,9 @@ class ToolFactory:
                 name = getattr(definition, "name", "")
                 description = getattr(definition, "description", "")
                 parameters = getattr(definition, "inputSchema", {})
-                
                 # The returned object might have the parameters as a property or a method
                 if callable(parameters):
                     parameters = parameters()
-
             # Check if any parameter has a default value
             has_default_values = False
             if isinstance(parameters, dict) and 'properties' in parameters:
@@ -354,22 +357,19 @@ class ToolFactory:
                     if 'default' in param_props:
                         has_default_values = True
                         break
-            
             # If any parameter has a default value, set strict to False
             if has_default_values:
                 mcp_server._strict = False
-            
             # Create a factory function to properly capture the tool name 
-            def create_callback(tool_name):
-                async def callback(self, **kwargs):
+            def create_sync_wrapper(tool_name, mcp_server_instance):
+                async def async_tool_executor(tool_instance, **kwargs):
                     # Extract arguments from the model_dump, excluding any internal attributes
-                    args = {k: v for k, v in self.model_dump().items() 
-                           if not k.startswith('_') and k != 'self'}
-                    
+                    args = {k: v for k, v in tool_instance.model_dump().items()
+                            if not k.startswith('_') and k != 'self'}
                     # Call the tool with just the arguments, not the whole model
                     try:
-                        await mcp_server.connect()
-                        result = await mcp_server.call_tool(tool_name, args)
+                        await mcp_server_instance.connect()
+                        result = await mcp_server_instance.call_tool(tool_name, args)
                     finally:
                         await mcp_server.cleanup()
                     
@@ -383,11 +383,12 @@ class ToolFactory:
                     if hasattr(result, 'result'):
                         return result.result
                     return str(result)
-                return callback
-            
-            # Get a callback specifically for this tool name
-            callback = create_callback(name)
-                
+                def sync_run_wrapper(self, **kwargs):
+                    return run_async_sync(async_tool_executor, self, **kwargs)
+                return sync_run_wrapper
+
+            sync_wrapper = create_sync_wrapper(name, mcp_server)
+
             tool = ToolFactory.from_openai_schema(
                 {
                     "name": name,
@@ -395,11 +396,9 @@ class ToolFactory:
                     "parameters": parameters,
                     "strict": mcp_server.strict if hasattr(mcp_server, "strict") else False
                 },
-                callback
+                sync_wrapper
             )
-            
             tools.append(tool)
-            
         return tools
 
     @staticmethod

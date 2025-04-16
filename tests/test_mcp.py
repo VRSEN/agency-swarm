@@ -7,7 +7,7 @@ import pytest
 
 from agency_swarm.agents.agent import Agent
 from agency_swarm.agency import Agency
-from agency_swarm.tools.mcp_tool import MCPServerStdio, MCPServerSse
+from agency_swarm.tools.mcp import MCPServerStdio, MCPServerSse
 
 from dotenv import load_dotenv
 
@@ -34,7 +34,7 @@ def agency():
         params={
             "command": "npx",
             "args": ["-y", "@modelcontextprotocol/server-filesystem", samples_dir],
-            "strict": True,
+            "strict": False,
         }
     )
 
@@ -43,7 +43,7 @@ def agency():
         params={
             "command": "uvx",
             "args": ["mcp-server-git"],
-            "strict": True,
+            "strict": False,
         }
     )
 
@@ -51,7 +51,7 @@ def agency():
         name="SSE Python Server",
         params={
             "url": "http://localhost:8080/sse",
-            "strict": True
+            "strict": False
         }
     )
 
@@ -62,6 +62,9 @@ def agency():
         mcp_servers=[filesystem_server, git_server, sse_server],
         temperature=0
     )
+
+    print("tools", agent.tools)
+
     return Agency([agent])
 
 

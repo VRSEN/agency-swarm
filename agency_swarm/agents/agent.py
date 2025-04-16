@@ -192,24 +192,8 @@ class Agent:
 
         self._parse_schemas()
         self._parse_tools_folder()
-        
-    async def _process_mcp_servers_async(self):
-        """Process MCP servers and add their tools to the agent."""
-        if not self.mcp_servers:
-            return
-            
-        for server in self.mcp_servers:
-            try:
-                # Get tools from the MCP server
-                mcp_tools = await ToolFactory.from_mcp(server)
-                
-                # Add each tool to the agent
-                for tool in mcp_tools:
-                    self.add_tool(tool)
-                    
-                print(f"Added {len(mcp_tools)} tools from MCP server: {server.name}")
-            except Exception as e:
-                print(f"Error processing MCP server {server.name}: {e}")
+        if self.mcp_servers:
+            self._add_mcp_tools()
 
     # --- OpenAI Assistant Methods ---
                 
@@ -222,17 +206,6 @@ class Agent:
         Output:
             self: Returns the agent instance for chaining methods or further processing.
         """
-        # Process MCP servers synchronously if they exist
-        if self.mcp_servers:
-            import asyncio
-            try:
-                loop = asyncio.get_running_loop()
-                # If we're here, we're already in an event loop
-                loop.run_until_complete(self._process_mcp_servers_async())
-            except RuntimeError:
-                # Not in an event loop, so create one
-                asyncio.run(self._process_mcp_servers_async())
-
         # check if settings.json exists
         path = self.get_settings_path()
 
@@ -635,6 +608,24 @@ class Agent:
             )
 
         return ToolFactory.get_openapi_schema(self.tools, url)
+    
+    def _add_mcp_tools(self):
+        """Process MCP servers and add their tools to the agent."""
+        if not self.mcp_servers:
+            return
+            
+        for server in self.mcp_servers:
+            try:
+                # Get tools from the MCP server
+                mcp_tools = ToolFactory.from_mcp(server)
+                
+                # Add each tool to the agent
+                for tool in mcp_tools:
+                    self.add_tool(tool)
+                    
+                print(f"Added {len(mcp_tools)} tools from MCP server: {server.name}")
+            except Exception as e:
+                print(f"Error processing {server.name} MCP: {e}")
 
     # --- Settings Methods ---
 

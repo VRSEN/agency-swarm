@@ -13,7 +13,7 @@ from langchain_community.tools import MoveFileTool, YouTubeSearchTool
 from pydantic import BaseModel, ConfigDict, Field
 
 from agency_swarm.tools import BaseTool, ToolFactory
-from agency_swarm.tools.mcp_tool import MCPServerStdio, MCPServerSse
+from agency_swarm.tools.mcp import MCPServerStdio, MCPServerSse
 from agency_swarm.util import get_openai_client
 
 

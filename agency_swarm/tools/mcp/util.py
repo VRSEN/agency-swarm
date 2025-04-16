@@ -21,6 +21,14 @@ class MCPUtil:
     """Set of utilities for interop between MCP and Agents SDK tools."""
 
     @classmethod
+    async def get_all_function_schemas(cls, servers: list["MCPServer"]) -> list[dict]:
+        """Get all function schemas from a list of MCP servers."""
+        schemas = []
+        for server in servers:
+            schemas.extend(await server.list_tools())
+        return schemas  
+
+    @classmethod
     async def get_all_function_tools(
         cls, servers: list["MCPServer"], convert_schemas_to_strict: bool
     ) -> list[Tool]:
