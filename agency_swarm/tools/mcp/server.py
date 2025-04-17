@@ -1,20 +1,17 @@
-from __future__ import annotations
-
 import abc
 import asyncio
 from contextlib import AbstractAsyncContextManager, AsyncExitStack
 from pathlib import Path
 from typing import Any, Literal
 
+from agents.exceptions import UserError
+from agents.logger import logger
 from anyio.streams.memory import MemoryObjectReceiveStream, MemoryObjectSendStream
-from mcp import ClientSession, StdioServerParameters, Tool as MCPTool, stdio_client
+from mcp import ClientSession, StdioServerParameters, stdio_client
+from mcp import Tool as MCPTool
 from mcp.client.sse import sse_client
 from mcp.types import CallToolResult, JSONRPCMessage
 from typing_extensions import NotRequired, TypedDict
-
-
-from agents.exceptions import UserError
-from agents.logger import logger
 
 
 class MCPServer(abc.ABC):
@@ -53,7 +50,9 @@ class MCPServer(abc.ABC):
         pass
 
     @abc.abstractmethod
-    async def call_tool(self, tool_name: str, arguments: dict[str, Any] | None) -> CallToolResult:
+    async def call_tool(
+        self, tool_name: str, arguments: dict[str, Any] | None
+    ) -> CallToolResult:
         """Invoke a tool on the server."""
         pass
 
@@ -115,7 +114,9 @@ class _MCPServerWithClientSession(MCPServer, abc.ABC):
         try:
             transport = await self.exit_stack.enter_async_context(self.create_streams())
             read, write = transport
-            session = await self.exit_stack.enter_async_context(ClientSession(read, write))
+            session = await self.exit_stack.enter_async_context(
+                ClientSession(read, write)
+            )
             await session.initialize()
             self.session = session
         except Exception as e:
@@ -126,7 +127,9 @@ class _MCPServerWithClientSession(MCPServer, abc.ABC):
     async def list_tools(self) -> list[MCPTool]:
         """List the tools available on the server."""
         if not self.session:
-            raise UserError("Server not initialized. Make sure you call `connect()` first.")
+            raise UserError(
+                "Server not initialized. Make sure you call `connect()` first."
+            )
 
         # Return from cache if caching is enabled, we have tools, and the cache is not dirty
         if self.cache_tools_list and not self._cache_dirty and self._tools_list:
@@ -139,10 +142,14 @@ class _MCPServerWithClientSession(MCPServer, abc.ABC):
         self._tools_list = (await self.session.list_tools()).tools
         return self._tools_list
 
-    async def call_tool(self, tool_name: str, arguments: dict[str, Any] | None) -> CallToolResult:
+    async def call_tool(
+        self, tool_name: str, arguments: dict[str, Any] | None
+    ) -> CallToolResult:
         """Invoke a tool on the server."""
         if not self.session:
-            raise UserError("Server not initialized. Make sure you call `connect()` first.")
+            raise UserError(
+                "Server not initialized. Make sure you call `connect()` first."
+            )
 
         return await self.session.call_tool(tool_name, arguments)
 
@@ -183,7 +190,7 @@ class MCPServerStdioParams(TypedDict):
     See https://docs.python.org/3/library/codecs.html#codec-base-classes for
     explanations of possible values.
     """
-    
+
     strict: NotRequired[bool]
     """Whether to use strict mode when converting MCP tools to OpenAI tools. Defaults to `False`."""
 
@@ -229,7 +236,7 @@ class MCPServerStdio(_MCPServerWithClientSession):
         )
 
         self._name = name or f"stdio: {self.params.command}"
-        
+
     def create_streams(
         self,
     ) -> AbstractAsyncContextManager[
@@ -261,7 +268,7 @@ class MCPServerSseParams(TypedDict):
 
     sse_read_timeout: NotRequired[float]
     """The timeout for the SSE connection, in seconds. Defaults to 5 minutes."""
-    
+
     strict: NotRequired[bool]
     """Whether to use strict mode when converting MCP tools to OpenAI tools. Defaults to `False`."""
 
