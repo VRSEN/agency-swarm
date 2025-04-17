@@ -18,6 +18,10 @@ class MultiCallbackHandler:
     def __init__(self, handlers: Dict[str, Any]):
         self.handlers = handlers
 
+    def __bool__(self):
+        """Return True if there are handlers, False otherwise."""
+        return bool(self.handlers)
+
     def __getattr__(self, name):
         def method(*args, **kwargs):
             for tracker_name, handler in self.handlers.items():

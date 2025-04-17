@@ -1,15 +1,15 @@
 import os
+import signal
+import subprocess
 import sys
 import time
-import subprocess
 
 import pytest
-
-from agency_swarm.agents.agent import Agent
-from agency_swarm.agency import Agency
-from agency_swarm.tools.mcp import MCPServerStdio, MCPServerSse
-
 from dotenv import load_dotenv
+
+from agency_swarm.agency import Agency
+from agency_swarm.agents.agent import Agent
+from agency_swarm.tools.mcp import MCPServerSse, MCPServerStdio
 
 load_dotenv()
 
@@ -23,8 +23,19 @@ def start_server():
     process = subprocess.Popen([sys.executable, server_file])
     time.sleep(5)  # Give it time to start
     yield
-    process.terminate()
-    process.wait()
+    # Try sending SIGINT (Ctrl+C) for a cleaner shutdown
+    process.send_signal(signal.SIGINT)  # Use signal.SIGINT
+    try:
+        process.wait(timeout=10)  # Wait up to 10 seconds
+    except subprocess.TimeoutExpired:
+        print("Server did not terminate gracefully, sending SIGTERM")
+        process.terminate()
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            print("Server did not terminate after SIGTERM, sending SIGKILL")
+            process.kill()
+            process.wait()
 
 
 @pytest.fixture(scope="module")
@@ -35,7 +46,7 @@ def agency():
             "command": "npx",
             "args": ["-y", "@modelcontextprotocol/server-filesystem", samples_dir],
             "strict": False,
-        }
+        },
     )
 
     git_server = MCPServerStdio(
@@ -43,15 +54,12 @@ def agency():
         params={
             "command": "mcp-server-git",
             "strict": False,
-        }
+        },
     )
 
     sse_server = MCPServerSse(
         name="SSE Python Server",
-        params={
-            "url": "http://localhost:8080/sse",
-            "strict": False
-        }
+        params={"url": "http://localhost:8080/sse", "strict": False},
     )
 
     agent = Agent(
@@ -59,7 +67,7 @@ def agency():
         description="test",
         instructions="test",
         mcp_servers=[filesystem_server, git_server, sse_server],
-        temperature=0
+        temperature=0,
     )
 
     print("tools", agent.tools)
@@ -89,6 +97,5 @@ def test_get_secret_word(agency):
 
 if __name__ == "__main__":
     import pytest
+
     pytest.main(["-v", __file__])
-
-
