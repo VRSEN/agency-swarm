@@ -1,5 +1,7 @@
+import asyncio
 import inspect
 import json
+import logging
 import os
 import queue
 import threading
@@ -43,6 +45,8 @@ from agency_swarm.util.tracking.tracking_manager import TrackingManager
 
 console = Console()
 T = TypeVar("T", bound=BaseModel)
+
+logger = logging.getLogger(__name__)
 
 
 class SettingsCallbacks(TypedDict):
@@ -123,14 +127,14 @@ class Agency:
         if self.async_mode == "threading":
             from agency_swarm.tools.send_message import SendMessageAsyncThreading
 
-            print(
-                "Warning: 'threading' mode is deprecated. Please use send_message_tool_class = SendMessageAsyncThreading to use async communication."
+            logger.warning(
+                "'threading' mode is deprecated. Please use send_message_tool_class = SendMessageAsyncThreading to use async communication."
             )
             self.send_message_tool_class = SendMessageAsyncThreading
         elif self.async_mode == "tools_threading":
             Thread.async_mode = "tools_threading"
-            print(
-                "Warning: 'tools_threading' mode is deprecated. Use tool.ToolConfig.async_mode = 'threading' instead."
+            logger.warning(
+                "'tools_threading' mode is deprecated. Use tool.ToolConfig.async_mode = 'threading' instead."
             )
         elif self.async_mode is None:
             pass
@@ -428,10 +432,10 @@ class Agency:
                                 )
 
                             message_file_names.append(file.filename)
-                            print(f"Uploaded file ID: {file.id}")
+                            logger.info(f"Uploaded file ID: {file.id}")
                         return attachments
                     except Exception as e:
-                        print(f"Error: {e}")
+                        logger.error(f"Error: {e}", exc_info=True)
                         return str(e)
                     finally:
                         uploading_files = False
@@ -464,7 +468,7 @@ class Agency:
                                         recipient_agent.id,
                                         tools=recipient_agent.get_oai_tools(),
                                     )
-                                    print(
+                                    logger.info(
                                         "Added FileSearch tool to recipient agent to analyze the file."
                                     )
                             elif tool["type"] == "code_interpreter":
@@ -478,7 +482,7 @@ class Agency:
                                         recipient_agent.id,
                                         tools=recipient_agent.get_oai_tools(),
                                     )
-                                    print(
+                                    logger.info(
                                         "Added CodeInterpreter tool to recipient agent to analyze the file."
                                     )
                     return None
@@ -540,8 +544,8 @@ class Agency:
                         ),
                     )
 
-                print("Message files: ", attachments)
-                print("Images: ", images)
+                logger.info(f"Message files: {attachments}")
+                logger.info(f"Images: {images}")
 
                 if images and len(images) > 0:
                     original_message = [
@@ -630,6 +634,14 @@ class Agency:
             # Enable queuing for streaming intermediate outputs
             demo.queue(default_concurrency_limit=10)
 
+            # Workaround for bug caused by mcp tool usage
+            # TODO: Find the root cause and fix it
+            if hasattr(demo, "_queue"):
+                if getattr(demo._queue, "pending_message_lock", None) is None:
+                    demo._queue.pending_message_lock = asyncio.Lock()
+                if getattr(demo._queue, "delete_lock", None) is None:
+                    demo._queue.delete_lock = asyncio.Lock()
+
         # Launch the demo
         demo.launch(**kwargs)
         return demo
@@ -645,7 +657,7 @@ class Agency:
             try:
                 import pyreadline as readline
             except ImportError:
-                print(
+                logger.warning(
                     "Module 'readline' not found. Autocomplete will not work. If you are using Windows, try installing 'pyreadline3'."
                 )
                 return
@@ -671,8 +683,9 @@ class Agency:
             readline.set_completer(recipient_agent_completer)
             readline.parse_and_bind("tab: complete")
         except Exception as e:
-            print(
-                f"Error setting up autocomplete for agents in terminal: {e}. Autocomplete will not work."
+            logger.error(
+                f"Error setting up autocomplete for agents in terminal: {e}. Autocomplete will not work.",
+                exc_info=True,
             )
 
     def run_demo(self):
@@ -707,7 +720,9 @@ class Agency:
                     ][0]
                     recipient_agent = self._get_agent_by_name(recipient_agent)
                 except Exception as e:
-                    print(f"Recipient agent {recipient_agent} not found.")
+                    logger.error(
+                        f"Recipient agent {recipient_agent} not found.", exc_info=True
+                    )
                     continue
 
             self.get_completion_stream(

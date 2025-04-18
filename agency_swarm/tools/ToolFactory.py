@@ -2,13 +2,18 @@ import inspect
 import json
 import os
 import sys
-from typing import Any, Dict, List, Type, Union
+from datetime import date, datetime
+from decimal import Decimal
+from enum import Enum
+from typing import Any, Callable, Dict, List, Literal, Optional, Set, Tuple, Type, Union
 
 import httpx
 import jsonref
 from datamodel_code_generator import DataModelType, PythonVersion
 from datamodel_code_generator.model import get_data_model_types
 from datamodel_code_generator.parser.jsonschema import JsonSchemaParser
+
+from agency_swarm.util.helpers import run_async_sync
 
 from .BaseTool import BaseTool
 
@@ -99,16 +104,49 @@ class ToolFactory:
 
         result = parser.parse()
 
+        # Prepend necessary imports to the generated code string
+        imports_str = "from typing import List, Dict, Any, Optional, Union, Set, Tuple, Literal\nfrom enum import Enum\n"
+        result = imports_str + result
+
+        # --- FIX: Remove problematic __future__ import added by generator --- #
+        result = result.replace("from __future__ import annotations\n", "")
+        # --- END FIX --- #
+
+        # Rebuild the model to ensure it's fully defined
+        result += "\n\nModel.model_rebuild(force=True)"
+
         # Execute the result to extract the model
-        exec_globals = {}
+        exec_globals = {
+            # We might not strictly need all these in globals anymore if they are imported in the string,
+            # but keeping them shouldn't hurt.
+            "List": List,
+            "Dict": Dict,
+            "Type": Type,
+            "Union": Union,
+            "Optional": Optional,
+            "datetime": datetime,
+            "date": date,
+            "Set": Set,
+            "Tuple": Tuple,
+            "Any": Any,
+            "Callable": Callable,
+            "Decimal": Decimal,
+            "Literal": Literal,
+            "Enum": Enum,
+        }
+
         exec(result, exec_globals)
         model = exec_globals.get("Model")
 
         if not model:
             raise ValueError(f"Could not extract model from schema {schema['name']}")
 
-        # Rebuild the model to ensure it's fully defined
-        model.model_rebuild()
+        # --- FIX: Explicitly rebuild the generated model --- #
+        try:
+            model.model_rebuild(force=True)
+        except Exception as e:
+            print(f"Warning: Could not rebuild model {schema['name']} after exec: {e}")
+        # --- END FIX --- #
 
         class ToolConfig:
             strict: bool = schema.get("strict", False)
@@ -316,6 +354,97 @@ class ToolFactory:
             raise TypeError(f"Class {class_name} must be a subclass of BaseTool")
 
         return imported_class
+
+    @staticmethod
+    def from_mcp(mcp_server):
+        """
+        Synchronous wrapper for creating a tool factory from an MCP server.
+        :param mcp_server: An MCP server instance.
+        :return: A list of tools
+        """
+        return run_async_sync(ToolFactory.from_mcp_async, mcp_server)
+
+    @staticmethod
+    async def from_mcp_async(mcp_server):
+        try:
+            await mcp_server.connect()
+            tool_definitions = await mcp_server.list_tools()
+        finally:
+            await mcp_server.cleanup()
+        tools = []
+
+        for definition in tool_definitions:
+            # Handle both dictionary and object formats
+            if isinstance(definition, dict):
+                name = definition.get("name")
+                description = definition.get("description", "")
+                parameters = definition.get("inputSchema", {})
+            else:
+                # Access attributes from object
+                name = getattr(definition, "name", "")
+                description = getattr(definition, "description", "")
+                parameters = getattr(definition, "inputSchema", {})
+                # The returned object might have the parameters as a property or a method
+                if callable(parameters):
+                    parameters = parameters()
+            # Check if any parameter has a default value
+            has_default_values = False
+            if isinstance(parameters, dict) and "properties" in parameters:
+                for param_props in parameters["properties"].values():
+                    if "default" in param_props:
+                        has_default_values = True
+                        break
+            # If any parameter has a default value, set strict to False
+            if has_default_values:
+                mcp_server._strict = False
+
+            # Create a factory function to properly capture the tool name
+            def create_callback(tool_name):
+                async def callback(self, **kwargs):
+                    # Extract arguments from the model_dump, excluding any internal attributes
+                    args = {
+                        k: v
+                        for k, v in self.model_dump().items()
+                        if not k.startswith("_") and k != "self"
+                    }
+
+                    # Call the tool with just the arguments, not the whole model
+                    try:
+                        await mcp_server.connect()
+                        result = await mcp_server.call_tool(tool_name, args)
+                    finally:
+                        await mcp_server.cleanup()
+
+                    if hasattr(result, "content") and result.content:
+                        # Extract text from the first content item if it exists
+                        if len(result.content) > 0 and hasattr(
+                            result.content[0], "text"
+                        ):
+                            return result.content[0].text
+                        # Try to convert the content to a string
+                        return str(result.content)
+                    # Fallback: try to get the result attribute or convert the entire object to string
+                    if hasattr(result, "result"):
+                        return result.result
+                    return str(result)
+
+                return callback
+
+            callback = create_callback(name)
+
+            tool = ToolFactory.from_openai_schema(
+                {
+                    "name": name,
+                    "description": description,
+                    "parameters": parameters,
+                    "strict": mcp_server.strict
+                    if hasattr(mcp_server, "strict")
+                    else False,
+                },
+                callback,
+            )
+            tools.append(tool)
+        return tools
 
     @staticmethod
     def get_openapi_schema(

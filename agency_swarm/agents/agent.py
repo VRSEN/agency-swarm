@@ -1,6 +1,7 @@
 import copy
 import inspect
 import json
+import logging
 import os
 from typing import Any, Dict, List, Literal, Optional, Type, TypedDict, Union
 
@@ -21,6 +22,8 @@ from agency_swarm.tools.oai.FileSearch import FileSearchConfig
 from agency_swarm.util.oai import get_openai_client
 from agency_swarm.util.openapi import validate_openapi_spec
 from agency_swarm.util.shared_state import SharedState
+
+logger = logging.getLogger(__name__)
 
 
 class ExampleMessage(TypedDict):
@@ -105,6 +108,7 @@ class Agent:
         file_search: FileSearchConfig = None,
         parallel_tool_calls: bool = True,
         refresh_from_id: bool = True,
+        mcp_servers: List = None,
     ):
         """
         Initializes an Agent with specified attributes, tools, and OpenAI client.
@@ -135,6 +139,7 @@ class Agent:
             file_search (FileSearchConfig, optional): A dictionary containing the file search tool configuration. Defaults to None.
             parallel_tool_calls (bool, optional): Whether to enable parallel function calling during tool use. Defaults to True.
             refresh_from_id (bool, optional): Whether to load and update the agent from the OpenAI assistant ID when provided. Defaults to True.
+            mcp_servers (List, optional): A list of MCP servers to use for tools. Defaults to None.
 
         This constructor sets up the agent with its unique properties, initializes the OpenAI client, reads instructions if provided, and uploads any associated files.
         """
@@ -168,6 +173,7 @@ class Agent:
         self.file_search = file_search
         self.parallel_tool_calls = parallel_tool_calls
         self.refresh_from_id = refresh_from_id
+        self.mcp_servers = mcp_servers if mcp_servers else []
 
         self.settings_path = "./settings.json"
 
@@ -182,13 +188,15 @@ class Agent:
         # upload files
         self._upload_files()
         if file_ids:
-            print(
-                "Warning: 'file_ids' parameter is deprecated. Please use 'tool_resources' parameter instead."
+            logger.warning(
+                "'file_ids' parameter is deprecated. Please use 'tool_resources' parameter instead."
             )
             self.add_file_ids(file_ids, "file_search")
 
         self._parse_schemas()
         self._parse_tools_folder()
+        if self.mcp_servers:
+            self._add_mcp_tools()
 
     # --- OpenAI Assistant Methods ---
 
@@ -201,7 +209,6 @@ class Agent:
         Output:
             self: Returns the agent instance for chaining methods or further processing.
         """
-
         # check if settings.json exists
         path = self.get_settings_path()
 
@@ -261,6 +268,7 @@ class Agent:
 
             # update assistant if parameters are different
             if not self._check_parameters(self.assistant.model_dump()):
+                logger.info("Updating agent... " + self.name)
                 self._update_assistant()
 
             return self
@@ -280,7 +288,7 @@ class Agent:
 
                             # update assistant if parameters are different
                             if not self._check_parameters(self.assistant.model_dump()):
-                                print("Updating agent... " + self.name)
+                                logger.info("Updating agent... " + self.name)
                                 self._update_assistant()
 
                             if self.assistant.tool_resources:
@@ -416,12 +424,14 @@ class Agent:
                         f_path = f_path.strip()
                         file_id = get_id_from_file(f_path)
                         if file_id:
-                            print(
+                            logger.info(
                                 "File already uploaded. Skipping... "
                                 + os.path.basename(f_path)
                             )
                         else:
-                            print("Uploading new file... " + os.path.basename(f_path))
+                            logger.info(
+                                "Uploading new file... " + os.path.basename(f_path)
+                            )
                             with open(f_path, "rb") as f:
                                 file_id = (
                                     self.client.with_options(
@@ -438,20 +448,20 @@ class Agent:
                         else:
                             file_search_ids.append(file_id)
                 else:
-                    print(
+                    logger.warning(
                         f"Files folder '{f_path}' is not a directory. Skipping...",
                     )
             else:
-                print(
+                logger.warning(
                     "Files folder path must be a string or list of strings. Skipping... ",
                     files_folder,
                 )
 
         if FileSearch not in self.tools and file_search_ids:
-            print("Detected files without FileSearch. Adding FileSearch tool...")
+            logger.info("Detected files without FileSearch. Adding FileSearch tool...")
             self.add_tool(FileSearch)
         if CodeInterpreter not in self.tools and code_interpreter_ids:
-            print(
+            logger.info(
                 "Detected files without CodeInterpreter. Adding CodeInterpreter tool..."
             )
             self.add_tool(CodeInterpreter)
@@ -475,7 +485,7 @@ class Agent:
 
         if issubclass(tool, BaseTool):
             if tool.__name__ == "ExampleTool":
-                print("Skipping importing ExampleTool...")
+                logger.info("Skipping importing ExampleTool...")
                 return
             self.tools = [t for t in self.tools if t.__name__ != tool.__name__]
             self.tools.append(tool)
@@ -486,7 +496,7 @@ class Agent:
         tools = []
         for tool in self.tools:
             if not isinstance(tool, type):
-                print(tool)
+                logger.error(tool)
                 raise Exception("Tool must not be initialized.")
 
             if issubclass(tool, FileSearch):
@@ -532,7 +542,9 @@ class Agent:
                         try:
                             validate_openapi_spec(openapi_spec)
                         except Exception as e:
-                            print("Invalid OpenAPI schema: " + os.path.basename(f_path))
+                            logger.error(
+                                "Invalid OpenAPI schema: " + os.path.basename(f_path)
+                            )
                             raise e
                         try:
                             headers = None
@@ -545,19 +557,20 @@ class Agent:
                                 openapi_spec, headers=headers, params=params
                             )
                         except Exception as e:
-                            print(
+                            logger.error(
                                 "Error parsing OpenAPI schema: "
-                                + os.path.basename(f_path)
+                                + os.path.basename(f_path),
+                                exc_info=True,
                             )
                             raise e
                         for tool in tools:
                             self.add_tool(tool)
                 else:
-                    print(
+                    logger.warning(
                         "Schemas folder path is not a directory. Skipping... ", f_path
                     )
             else:
-                print(
+                logger.warning(
                     "Schemas folder path must be a string or list of strings. Skipping... ",
                     schemas_folder,
                 )
@@ -586,13 +599,16 @@ class Agent:
                         tool = ToolFactory.from_file(f_path)
                         self.add_tool(tool)
                     except Exception as e:
-                        print(
-                            f"Error parsing tool file {os.path.basename(f_path)}: {e}. Skipping..."
+                        logger.error(
+                            f"Error parsing tool file {os.path.basename(f_path)}: {e}. Skipping...",
+                            exc_info=True,
                         )
                 else:
-                    print("Items in tools folder must be files. Skipping... ", f_path)
+                    logger.warning(
+                        "Items in tools folder must be files. Skipping... ", f_path
+                    )
         else:
-            print(
+            logger.warning(
                 "Tools folder path is not a directory. Skipping... ", self.tools_folder
             )
 
@@ -604,6 +620,27 @@ class Agent:
             )
 
         return ToolFactory.get_openapi_schema(self.tools, url)
+
+    def _add_mcp_tools(self):
+        """Process MCP servers and add their tools to the agent."""
+        if not self.mcp_servers:
+            return
+
+        for server in self.mcp_servers:
+            try:
+                # Get tools from the MCP server
+                mcp_tools = ToolFactory.from_mcp(server)
+
+                logger.info(f"\n--- Adding Tools from MCP Server: {server.name} ---")
+                # Add each tool to the agent and print its name
+                for tool in mcp_tools:
+                    self.add_tool(tool)
+                    logger.info(f"  - Added MCP tool: {tool.__name__}")
+                logger.info(
+                    f"--- Finished adding {len(mcp_tools)} tools from {server.name} ---\n"
+                )
+            except Exception as e:
+                logger.error(f"Error processing {server.name} MCP: {e}", exc_info=True)
 
     # --- Settings Methods ---
 
@@ -622,19 +659,21 @@ class Agent:
         """
         if self.name != assistant_settings["name"]:
             if debug:
-                print(f"Name mismatch: {self.name} != {assistant_settings['name']}")
+                logger.debug(
+                    f"Name mismatch: {self.name} != {assistant_settings['name']}"
+                )
             return False
 
         if self.description != assistant_settings["description"]:
             if debug:
-                print(
+                logger.debug(
                     f"Description mismatch: {self.description} != {assistant_settings['description']}"
                 )
             return False
 
         if self.instructions != assistant_settings["instructions"]:
             if debug:
-                print(
+                logger.debug(
                     f"Instructions mismatch: {self.instructions} != {assistant_settings['instructions']}"
                 )
             return False
@@ -698,23 +737,25 @@ class Agent:
         tools_diff = DeepDiff(local_tools, assistant_tools, ignore_order=True)
         if tools_diff:
             if debug:
-                print(f"Tools mismatch: {tools_diff}")
-                print("Local tools:", local_tools)
-                print("Assistant tools:", assistant_tools)
+                logger.debug(f"Tools mismatch: {tools_diff}")
+                logger.debug(f"Local tools: {local_tools}")
+                logger.debug(f"Assistant tools: {assistant_tools}")
             return False
 
         if self.temperature != assistant_settings[
             "temperature"
         ] and not self.model.startswith("o"):
             if debug:
-                print(
+                logger.debug(
                     f"Temperature mismatch: {self.temperature} != {assistant_settings['temperature']}"
                 )
             return False
 
         if self.top_p != assistant_settings["top_p"] and not self.model.startswith("o"):
             if debug:
-                print(f"Top_p mismatch: {self.top_p} != {assistant_settings['top_p']}")
+                logger.debug(
+                    f"Top_p mismatch: {self.top_p} != {assistant_settings['top_p']}"
+                )
             return False
 
         # adjust differences between local and assistant tool resources
@@ -741,9 +782,11 @@ class Agent:
         )
         if tool_resources_diff != {}:
             if debug:
-                print(f"Tool resources mismatch: {tool_resources_diff}")
-                print("Local tool resources:", tool_resources_settings)
-                print("Assistant tool resources:", assistant_settings["tool_resources"])
+                logger.debug(f"Tool resources mismatch: {tool_resources_diff}")
+                logger.debug(f"Local tool resources: {tool_resources_settings}")
+                logger.debug(
+                    f"Assistant tool resources: {assistant_settings['tool_resources']}"
+                )
             return False
 
         metadata_diff = DeepDiff(
@@ -751,12 +794,14 @@ class Agent:
         )
         if metadata_diff != {}:
             if debug:
-                print(f"Metadata mismatch: {metadata_diff}")
+                logger.debug(f"Metadata mismatch: {metadata_diff}")
             return False
 
         if self.model != assistant_settings["model"]:
             if debug:
-                print(f"Model mismatch: {self.model} != {assistant_settings['model']}")
+                logger.debug(
+                    f"Model mismatch: {self.model} != {assistant_settings['model']}"
+                )
             return False
 
         response_format_diff = DeepDiff(
@@ -766,7 +811,7 @@ class Agent:
         )
         if response_format_diff != {}:
             if debug:
-                print(f"Response format mismatch: {response_format_diff}")
+                logger.debug(f"Response format mismatch: {response_format_diff}")
             return False
 
         if self.model.startswith("o"):
@@ -777,7 +822,7 @@ class Agent:
             )
             if reasoning_effort_diff != {}:
                 if debug:
-                    print(f"Reasoning effort mismatch: {reasoning_effort_diff}")
+                    logger.debug(f"Reasoning effort mismatch: {reasoning_effort_diff}")
                 return False
 
         return True

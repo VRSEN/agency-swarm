@@ -1,0 +1,117 @@
+---
+title: 'MCP Integration'
+description: 'Connect your agents to external tools and data using the Model Context Protocol (MCP).'
+icon: "plug"
+---
+import { Card, Accordion, Steps, Step } from "@mintlify/components";
+
+
+Agency Swarm agents can interact with a wider range of tools and data sources beyond their built-in capabilities by using the **Model Context Protocol (MCP)**. MCP is an open standard ([view specification](https://github.com/modelcontextprotocol/modelcontextprotocol)) that allows agents to communicate with external services like local file systems, databases, or custom APIs, as long as those services implement the protocol.
+
+Think of MCP as a universal translator that lets your agent talk to specialized external tools.
+
+## Why use MCP?
+
+*   **Access Local Resources:** Let agents read/write local files or run local commands.
+*   **Connect to Custom Services:** Integrate with proprietary APIs or internal tools without writing specific Agency Swarm tool wrappers for each one, provided an MCP server exists.
+*   **Leverage Existing MCP Tools:** Utilize third-party tools that already support MCP.
+
+## Supported MCP Server Types
+
+Agency Swarm provides helpers to connect to the two common MCP transport protocols. Choose the server type based on how your tool provider operates:
+
+<Accordion title="MCPServerStdio: For Command-Line Tools" icon="terminal">
+Use this if your tool server is a **command-line program or script**. Agency Swarm will start this program for you and communicate with it directly using its standard input/output.
+
+*   **When to use:** Your tool is a local script, an executable, or requires running a specific command to be activated (like the standard MCP filesystem server).
+</Accordion>
+
+<Accordion title="MCPServerSse: For Web Service Tools" icon="globe-pointer">
+Use this if your tool server is already **running as a web service** at a specific **HTTP URL**. Agency Swarm connects to this URL to access tools exposed via Server-Sent Events (SSE).
+
+*   **When to use:** Your tool is provided by a web API, a microservice, or any server accessible via an HTTP endpoint that speaks MCP+SSE (like the Python server in the demo).
+</Accordion>
+
+
+## Connecting Agents to MCP Servers
+
+To give an agent access to MCP tools, you define the server connections and pass them to the agent's `mcp_servers` list during initialization. Agency Swarm then automatically discovers the tools offered by the server and makes them available to the agent under the `name` you specified (e.g., `Filesystem_Server.list_files`).
+
+Follow these steps:
+
+<Accordion title="Step 1: Define Stdio Server Connection (e.g., Filesystem)">
+This example shows how to configure `MCPServerStdio` to run the standard MCP filesystem tool using `npx`.
+
+```python
+from agency_swarm.tools.mcp import MCPServerStdio
+
+filesystem_server = MCPServerStdio(
+    # This name determines how the agent accesses the tools (e.g., Filesystem_Server.list_files)
+    name="Filesystem_Server",
+    params={
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-filesystem", "."], # Run in current directory
+        # strict is checked within params for Stdio
+        strict=False,
+    },
+    # cache_tools_list is a direct argument for Stdio
+    cache_tools_list=False
+)
+```
+</Accordion>
+
+<Accordion title="Step 2: Define SSE Server Connection (Optional)">
+This example shows how to configure `MCPServerSse` to connect to a hypothetical web server running locally that provides tools via SSE.
+
+```python
+from agency_swarm.tools.mcp import MCPServerSse
+
+# Assumes your SSE server is running at this URL
+sse_server = MCPServerSse(
+    name="My_Custom_SSE_Server", # Tools will be accessed like My_Custom_SSE_Server.some_tool
+    params={
+        "url": "http://localhost:8080/sse",
+        strict=False,
+    },
+    cache_tools_list=False
+)
+```
+</Accordion>
+
+<Accordion title="Step 3: Initialize Agent with Servers">
+Pass the list of configured server connections to the `mcp_servers` parameter when creating your `Agent`.
+
+```python
+from agency_swarm import Agent
+
+# Assuming filesystem_server and sse_server are defined as above
+my_mcp_agent = Agent(
+    name="MCPAgent",
+    description="An agent that can use filesystem and custom SSE tools.",
+    instructions="Use the Filesystem_Server tools to manage files or My_Custom_SSE_Server tools for custom tasks.",
+    # Pass the list of configured servers here
+    mcp_servers=[filesystem_server, sse_server],
+    temperature=0,
+)
+
+# Agency Swarm automatically discovers tools from the connected servers.
+# Example: my_mcp_agent.tools will now include tools like
+# 'Filesystem_Server.read_file', 'My_Custom_SSE_Server.get_data', etc.
+```
+</Accordion>
+
+
+## Runnable Demo
+
+For a practical, runnable example using both `MCPServerStdio` and `MCPServerSse`, see the `demo_mcp.py` script located in the `tests/demos/` directory of the Agency Swarm repository.
+
+*   **Remember:** The demo requires you to run the example SSE server ([server.py](https://github.com/VRSEN/agency-swarm/blob/main/tests/scripts/server.py)) in a separate terminal first.
+
+## Key Takeaways
+
+*   MCP connects agents to external tools/data via standard protocols (Stdio, SSE).
+*   Use `MCPServerStdio` for command-line tool servers and `MCPServerSse` for URL-based tool servers.
+*   Define server connections using the appropriate class, providing `name`, `params`, and optionally configuring `strict` and `cache_tools_list`.
+*   Pass configured server instances to the `Agent`'s `mcp_servers` parameter during initialization.
+*   The `name` you give a server connection becomes the prefix for its tools (e.g., `MyServerName.tool_name`).
+*   External MCP servers (especially SSE ones) must be running separately for the agent to connect to them.
