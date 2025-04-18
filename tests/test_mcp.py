@@ -38,7 +38,7 @@ def start_server():
             process.wait()
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="function")
 def agency():
     filesystem_server = MCPServerStdio(
         name="Filesystem Server",
@@ -79,7 +79,7 @@ def agency():
 def test_read_filesystem(agency):
     result = agency.get_completion(f"read the contents of {samples_dir} folder")
     print(result)
-    assert "server.py" in result
+    assert "csv-test.csv" in result
 
 
 def test_read_git_commit(agency):
