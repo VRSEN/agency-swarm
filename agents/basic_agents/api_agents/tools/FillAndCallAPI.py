@@ -11,7 +11,7 @@ class FillAndCallAPI(BaseTool):
     '''
     根据用户需求，填写并返回一个 API 的所有参数值。
     '''
-    param_list: list = Field(..., description="目标API所需参数列表")
+    param_list: list = Field(..., description="目标API所需参数列表，其中每一项都需要包括\"parameter\", \"id\", \"description\", \"label\", \"type\", \"value\"")
     api_name: str = Field(..., description="目标API名")
 
     def filling_param(self, name, id, api_id):
@@ -26,6 +26,7 @@ class FillAndCallAPI(BaseTool):
         return [{"name": name, "type": param_row.loc["type"]}] + param_list
     
     def uri_replace_params(self, uri: str, uri_params: dict):
+        uri = uri.split('?', 1)[0]
         tail_params = uri_params.copy()
         for parameter, value in uri_params.items():
             if ('{' + parameter + '}') in uri:
@@ -36,12 +37,14 @@ class FillAndCallAPI(BaseTool):
                 uri = uri + "?"
             for parameter, value in tail_params.items():
                 if uri.endswith("?"):
-                    uri = uri + parameter + "=" + value
+                    uri = uri + parameter + "=" + str(value)
                 else:
-                    uri = uri + "&" + parameter + "=" + value
+                    uri = uri + "&" + parameter + "=" + str(value)
         return uri
     
-    def merge_dict(self, dict1, dict2):
+    def merge_dict(self, dict1: dict, dict2: dict) -> dict:
+        print("dict1:", dict1)
+        print("dict2:", dict2)
         merge_dict = dict1.copy()
         for key, value in dict2.items():
             if key in merge_dict:
@@ -95,9 +98,10 @@ class FillAndCallAPI(BaseTool):
         
         for _, row in uri_parameters_df.iterrows():
             key = row["parameter"]
-            value = name2parameter[key]["value"]
-            if value is not None:
-                uri_param_values[key] = value
+            if key in name2parameter:
+                value = name2parameter[key]["value"]
+                if value is not None and value != '':
+                    uri_param_values[key] = value
 
         request_param_values = {}
         for param in self.param_list:

@@ -14,7 +14,7 @@ class SelectParamTable(BaseTool):
 
     user_requirement: str = Field(..., description="自然语言的用户需求")
     api_name: str = Field(..., description="目标API名")
-    table_id: int = Field(default=0, description="表号，常见于“详情请参见表...”，默认值为0")
+    table_id: int = Field(..., description="表号，常见于“详情请参见表...”")
 
     def select_parameter(self, row):
         returned_keys = ["parameter", "id", "description", "type", "mandatory"]
