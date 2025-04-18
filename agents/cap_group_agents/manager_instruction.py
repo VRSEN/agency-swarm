@@ -6,6 +6,7 @@ def manager_instruction(_group_name, _superior_agent):
             "parameter": ...,
             "id": ...,
             "description": ...,
+            "label": [...],
             "type": ...
         }, ...]
     }
@@ -16,6 +17,7 @@ def manager_instruction(_group_name, _superior_agent):
         "parameter": ...,
         "id": ...,
         "description": ...,
+        "label": [...],
         "type": ...,
         "value": ...
     }, ...]
@@ -25,7 +27,7 @@ def manager_instruction(_group_name, _superior_agent):
     你是{_group_name}的消息管理者，你将接收到的输入消息格式如下:
     {_input_format}
 
-    其中，"user_requirement"是用户初始请求，"param_list"为所需参数列表，其中"parameter"字段是所需参数名称，"id"字段为所需参数编号，"description"字段是所需参数描述，"type"字段是所需参数类型。
+    其中，"user_requirement"是用户初始请求，"param_list"为所需参数列表，其中"parameter"字段是所需参数名称，"id"字段为所需参数编号，"description"字段是所需参数描述，"label"字段是所需参数的标识列表，"type"字段是所需参数类型。
 
     对于这些参数，你需要使用`GetParamValue`获取参数的值:
 
@@ -38,6 +40,7 @@ def manager_instruction(_group_name, _superior_agent):
         "parameter": "a",
         "id": 5,
         "description": "Example parameter 1",
+        "label": ["a1", "a2"],
         "type": "String",
         "value": "QAQ"
     }},
@@ -46,6 +49,7 @@ def manager_instruction(_group_name, _superior_agent):
         "parameter": "b",
         "id": 17,
         "description": "Example parameter 2",
+        "label": ["b1"],
         "type": "Intger",
         "value": 123
     }},
@@ -54,6 +58,7 @@ def manager_instruction(_group_name, _superior_agent):
         "parameter": "c",
         "id": 131,
         "description": "Example parameter 3",
+        "label": [],
         "type": "String",
         "value": "OvO"
     }}
@@ -62,6 +67,7 @@ def manager_instruction(_group_name, _superior_agent):
         "parameter": "a",
         "id": 5,
         "description": "Example parameter 1",
+        "label": ["a1", "a2"],
         "type": "String",
         "value": "QAQ"
     }},
@@ -69,6 +75,7 @@ def manager_instruction(_group_name, _superior_agent):
         "parameter": "b",
         "id": 17,
         "description": "Example parameter 2",
+        "label": ["b1"],
         "type": "Intger",
         "value": 123
     }},
@@ -76,6 +83,7 @@ def manager_instruction(_group_name, _superior_agent):
         "parameter": "c",
         "id": 131,
         "description": "Example parameter 3",
+        "label": [],
         "type": "String",
         "value": "OvO"
     }}]

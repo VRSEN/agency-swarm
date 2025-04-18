@@ -164,6 +164,8 @@ def get_doc_pages(leftmenu_url):
     api_ref_lis = api_ref_ul.find_all('li', recursive=False)
 
     api_li = find_li_by_name(api_ref_lis, "API")
+    if api_li is None:
+        api_li = find_li_by_name(api_ref_lis, "API V1/V2")
 
     def extract_from_li(li):
         if li.ul is None:
