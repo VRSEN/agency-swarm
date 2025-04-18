@@ -103,7 +103,7 @@ class FillAndCallAPI(BaseTool):
         for param in self.param_list:
             if uri_param_values.get(param["parameter"]) == None:
                 parent_param_list = self.filling_param(name=param["parameter"], id=param["id"], api_id=api_id)
-                labels = param["label"]
+                labels = param["label"] if "label" in param else []
                 value = {}
                 for parameter in parent_param_list:
                     if parameter["name"] == param["parameter"]:
@@ -120,6 +120,7 @@ class FillAndCallAPI(BaseTool):
                 request_param_values = self.merge_dict(request_param_values, value)
 
         request_param_values = self.flatten_dict(request_param_values)
+        print(request_param_values)
         # 4. assemble the information and return
         # info = {
         #     "method": method,
