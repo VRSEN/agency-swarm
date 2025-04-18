@@ -21,6 +21,36 @@ class CheckParamRequired(BaseTool):
     type: str = Field(..., description="需要判断的参数类型")
     mandatory: int = Field(..., description="该参数是否必需")
 
+    def extract_and_validate_json(text):
+        """
+        判断字符串是否能转成 JSON，并提取 ```json 块中的 JSON 内容。
+
+        Args:
+            text: 输入的字符串。
+
+        Returns:
+            如果整个字符串是有效的 JSON，则返回解析后的 JSON 对象。
+            如果字符串中包含 ```json 块，则返回解析后的块中的 JSON 对象。
+            如果无法解析为 JSON，则返回 None。
+        """
+        try:
+            # 尝试将整个字符串解析为 JSON
+            result_json = json.loads(text)
+            return result_json
+        except json.JSONDecodeError:
+            # 如果整个字符串不是 JSON，尝试查找 ```json 块
+            json_blocks = re.findall(r"```json\s*([\s\S]*?)\s*```", text)
+            if json_blocks:
+                # 如果找到 ```json 块，尝试解析第一个块中的内容
+                try:
+                    result_json = json.loads(json_blocks[0])
+                    return result_json
+                except json.JSONDecodeError:
+                    return None  # ```json 块中的内容也不是有效的 JSON
+            else:
+                return None  # 字符串中既不是完整的 JSON，也没有 ```json 块
+        
+
     def run(self):
         typestring = self.type
         typestring = typestring.lower()
@@ -37,16 +67,13 @@ class CheckParamRequired(BaseTool):
                 "mandatory": self.mandatory
             }
             result = self.send_message_to_agent(recipient_agent_name="Array Selector", message=json.dumps(message_obj, ensure_ascii=False), parameter=self.parameter)
-            try:
-                result_json = json.loads(result)
-                new_result_json = []
-                if isinstance(result_json, list):
-                    for param in result_json:
-                        param["label"] = (param["label"] if "label" in param else []) + [hashlib.md5(param["user_requirement"].encode()).hexdigest()]
-                        new_result_json.append(param)
+            result_json = self.extract_and_validate_json(result)
+            new_result_json = []
+            if isinstance(result_json, list):
+                for param in result_json:
+                    param["label"] = (param["label"] if "label" in param else []) + [hashlib.md5(param["user_requirement"].encode()).hexdigest()]
+                    new_result_json.append(param)
                 result = json.dumps(new_result_json, ensure_ascii=False, indent=4)
-            except:
-                return result
         elif typestring.find("object") != -1:
             param_df = search_from_sqlite(database_path=API_DATABASE_FILE, table_name='request_parameters', condition=f"id={self.id}")
             param_row = param_df.iloc[0]
