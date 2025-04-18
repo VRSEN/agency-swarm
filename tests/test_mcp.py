@@ -1,5 +1,6 @@
 import os
 import signal
+import platform
 import subprocess
 import sys
 import time
@@ -24,7 +25,10 @@ def start_server():
     time.sleep(5)  # Give it time to start
     yield
     # Try sending SIGINT (Ctrl+C) for a cleaner shutdown
-    process.send_signal(signal.SIGINT)  # Use signal.SIGINT
+    if platform.system() == "Windows":
+        process.terminate()
+    else:
+        process.send_signal(signal.SIGINT)
     try:
         process.wait(timeout=10)  # Wait up to 10 seconds
     except subprocess.TimeoutExpired:
