@@ -5,6 +5,7 @@ import json
 import requests
 import datetime
 from .APIGW_python_sdk_2_0_5.apig_sdk import signer
+from tools.utils import try_parse_json
 
 class RequestAPI(BaseTool):
     '''
@@ -51,7 +52,7 @@ class RequestAPI(BaseTool):
             result_json = {
                 "method": self.method,
                 "url": self.url,
-                "request_body": self.body,
+                "request_body": try_parse_json(self.body),
             }
             result_str = json.dumps(result_json, ensure_ascii=False, indent=4)
 
