@@ -46,7 +46,7 @@ class Thread:
         self.init_thread()
 
         if not self._thread:
-            print("retrieving thread", self.id)
+            logger.debug(f"Retrieving thread {self.id}")
             self._thread = self.client.beta.threads.retrieve(self.id)
 
         return self._thread
@@ -144,7 +144,7 @@ class Thread:
             attachments, message_files, recipient_agent
         )
 
-        # 2. Optionally set the event handler’s agent references
+        # 2. Optionally set the event handler's agent references
         if event_handler:
             event_handler.set_agent(self.agent)
             event_handler.set_recipient_agent(recipient_agent)
@@ -423,7 +423,7 @@ class Thread:
             self._run = self.client.beta.threads.runs.cancel(
                 thread_id=actual_thread_id, run_id=actual_run_id
             )
-            
+
             self._run = self.client.beta.threads.runs.poll(
                 thread_id=actual_thread_id,
                 run_id=actual_run_id,
@@ -894,7 +894,7 @@ class Thread:
         Determines the sender's name based on the agent type.
         """
         sender_name = "user" if isinstance(self.agent, User) else self.agent.name
-        print(
+        logger.info(
             f"THREAD:[ {sender_name} -> {recipient_agent.name} ]: URL {self.thread_url}"
         )
 

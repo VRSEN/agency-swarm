@@ -1,17 +1,11 @@
-try:
-    from .server import (
-        MCPServer,
-        MCPServerSse,
-        MCPServerStdio,
-    )
-except ImportError:
-    pass
-
-from .util import MCPUtil
+from .server import (
+    MCPServer,
+    MCPServerSse,
+    MCPServerStdio,
+)
 
 __all__ = [
     "MCPServer",
     "MCPServerSse",
     "MCPServerStdio",
-    "MCPUtil",
 ]

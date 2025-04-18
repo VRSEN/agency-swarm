@@ -48,7 +48,8 @@
                       "core-framework/tools/custom-tools/configuration"
                     ]
                   },
-                  "core-framework/tools/openapi-schemas"
+                  "core-framework/tools/openapi-schemas",
+                  "core-framework/tools/mcp-integration"
                 ]
               },
               {

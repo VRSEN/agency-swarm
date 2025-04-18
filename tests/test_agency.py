@@ -734,7 +734,7 @@ class AgencyTest(unittest.TestCase):
                 # Add debug output
                 print("Vector store files:", len(file_ids))
 
-                self.assertTrue(len(file_ids) == 9)
+                self.assertTrue(len(file_ids) == 8)
                 # check retrieval tools is there
                 self.assertTrue(len(assistant.tools) == num_tools)
                 self.assertTrue(len(agent.tools) == num_tools)

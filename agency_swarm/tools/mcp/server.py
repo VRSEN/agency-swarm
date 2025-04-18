@@ -1,17 +1,31 @@
 import abc
 import asyncio
+import logging
 from contextlib import AbstractAsyncContextManager, AsyncExitStack
 from pathlib import Path
 from typing import Any, Literal
 
-from agents.exceptions import UserError
-from agents.logger import logger
 from anyio.streams.memory import MemoryObjectReceiveStream, MemoryObjectSendStream
 from mcp import ClientSession, StdioServerParameters, stdio_client
 from mcp import Tool as MCPTool
 from mcp.client.sse import sse_client
 from mcp.types import CallToolResult, JSONRPCMessage
 from typing_extensions import NotRequired, TypedDict
+
+logger = logging.getLogger(__name__)
+
+
+class AgentsException(Exception):
+    """Base class for all exceptions in the Agents SDK."""
+
+
+class UserError(AgentsException):
+    """Exception raised when the user makes an error using the SDK."""
+
+    message: str
+
+    def __init__(self, message: str):
+        self.message = message
 
 
 class MCPServer(abc.ABC):
