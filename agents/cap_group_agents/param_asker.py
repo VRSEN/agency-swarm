@@ -15,6 +15,7 @@ _input_format = """
         "parameter": ...,
         "id": ...,
         "description": ...,
+        "label": [...],
         "type": ...
     }, ...]
 }
@@ -25,6 +26,7 @@ _output_format = """
     "parameter": ...,
     "id": ...,
     "description": ...,
+    "label": [...],
     "type": ...,
     "value": ...
 }, ...]
@@ -33,7 +35,7 @@ _output_format = """
 _instruction = f"""
 作为参数查询者，你将接收到一个未知参数列表，输入格式为:
 {_input_format}
-其中"user_requirement"为用户需求，"param_list"列出了所有未知参数的详细信息，包括参数名、参数编号、参数描述和参数类型
+其中"user_requirement"为用户需求，"param_list"列出了所有未知参数的详细信息，包括参数名、参数编号、参数描述、参数标识列表和参数类型
 
 请一步步思考，逐步进行下述操作：
 
@@ -70,6 +72,7 @@ _instruction = f"""
     "parameter": "a",
     "id": 5,
     "description": "Example parameter 1",
+    "label": ["a1", "a2"],
     "type": "String",
     "value": "QAQ"
 }},
@@ -78,6 +81,7 @@ _instruction = f"""
     "parameter": "b",
     "id": 17,
     "description": "Example parameter 2",
+    "label": ["b1"],
     "type": "Intger",
     "value": 123
 }}
@@ -86,12 +90,14 @@ _instruction = f"""
     "parameter": "a",
     "id": 5,
     "description": "Example parameter 1",
+    "label": ["a1", "a2"],
     "type": "String",
     "value": "QAQ"
 }},{{
     "parameter": "b",
     "id": 17,
     "description": "Example parameter 2",
+    "label": ["b1"],
     "type": "Intger",
     "value": 123
 }}]

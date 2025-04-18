@@ -48,15 +48,16 @@ class RequestAPI(BaseTool):
 
         if debug is not None and debug.lower() == "true":
             # do not send request, log the request instead
-            if self.body.strip() == "":
-                body_formatted = ""
-            else:
-                body_formatted = json.dumps( json.loads(self.body), indent=4, ensure_ascii=False)
-            result_str = self.method + " " + self.url + "\n\n" + body_formatted
+            result_json = {
+                "method": self.method,
+                "url": self.url,
+                "request_body": self.body,
+            }
+            result_str = json.dumps(result_json, ensure_ascii=False, indent=4)
 
             # name the result file
             prefix = "request_"
-            suffix = ".txt"
+            suffix = ".json"
             filename = f"{prefix}{formatted_time}{suffix}"
 
         else:

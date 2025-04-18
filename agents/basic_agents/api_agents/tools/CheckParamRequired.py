@@ -3,6 +3,7 @@ from pydantic import Field
 import os
 import json
 import re
+import hashlib
 from agents.basic_agents.api_agents.tools.api_database import search_from_sqlite, API_DATABASE_FILE
 from agents.basic_agents.api_agents.tools.SelectParamTable import SelectParamTable
 
@@ -22,8 +23,9 @@ class CheckParamRequired(BaseTool):
 
     def run(self):
         typestring = self.type
+        typestring = typestring.lower()
         print(typestring)
-        if typestring.find("Array") != -1:
+        if typestring.find("array") != -1:
             message_obj = {
                 "user_requirement": self.user_requirement,
                 "api_name": self.api_name,
@@ -35,6 +37,16 @@ class CheckParamRequired(BaseTool):
                 "mandatory": self.mandatory
             }
             result = self.send_message_to_agent(recipient_agent_name="Array Selector", message=json.dumps(message_obj, ensure_ascii=False), parameter=self.parameter)
+            try:
+                result_json = json.loads(result)
+                new_result_json = []
+                if isinstance(result_json, list):
+                    for param in result_json:
+                        param["label"] = (param["label"] if "label" in param else []) + [hashlib.md5(param["user_requirement"].encode()).hexdigest()]
+                        new_result_json.append(param)
+                result = json.dumps(new_result_json, ensure_ascii=False, indent=4)
+            except:
+                return result
         elif typestring.find("object") != -1:
             param_df = search_from_sqlite(database_path=API_DATABASE_FILE, table_name='request_parameters', condition=f"id={self.id}")
             param_row = param_df.iloc[0]

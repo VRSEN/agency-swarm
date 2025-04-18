@@ -8,7 +8,7 @@ class GetParamValue(BaseTool):
         ..., description="自然语言描述的用户需求"
     )
     param_list: list = Field(
-        ..., description="需要获取值的参数列表，其中每一项都需要包括\"parameter\", \"id\", \"description\", \"type\""
+        ..., description="需要获取值的参数列表，其中每一项都需要包括\"parameter\", \"id\", \"description\", \"type\", \"label\""
     )
 
     def run(self):

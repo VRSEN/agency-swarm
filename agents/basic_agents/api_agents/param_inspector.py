@@ -19,7 +19,7 @@ _instructions = f"""
 
 """
 
-_tools = [CheckParamRequired]
+_tools = []
 
 _files_folder = ""
 
