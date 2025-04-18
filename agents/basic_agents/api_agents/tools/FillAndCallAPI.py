@@ -20,14 +20,25 @@ class FillAndCallAPI(BaseTool):
         table_id = param_row.loc["table_id"]
         parent_df = search_from_sqlite(database_path=API_DATABASE_FILE, table_name='request_parameters', condition=f"api_id={api_id} AND ref_table_id={table_id}")
         if len(parent_df) == 0:
-            return [name]
+            return [{"name": name, "type": param_row.loc["type"]}]
         parent_row = parent_df.iloc[0]
         param_list = self.filling_param(name=parent_row.loc["parameter"], id=parent_row["id"], api_id=api_id)
-        return [name] + param_list
+        return [{"name": name, "type": param_row.loc["type"]}] + param_list
     
-    def uri_replace_params(self, uri, uri_params):
+    def uri_replace_params(self, uri: str, uri_params: dict):
+        tail_params = uri_params.copy()
         for parameter, value in uri_params.items():
-            uri = uri.replace('{' + parameter + '}', str(value))
+            if ('{' + parameter + '}') in uri:
+                uri = uri.replace('{' + parameter + '}', str(value))
+                del tail_params[parameter]
+        if tail_params:
+            if "?" not in uri:
+                uri = uri + "?"
+            for parameter, value in tail_params.items():
+                if uri.endswith("?"):
+                    uri = uri + parameter + "=" + value
+                else:
+                    uri = uri + "&" + parameter + "=" + value
         return uri
     
     def merge_dict(self, dict1, dict2):
@@ -36,9 +47,33 @@ class FillAndCallAPI(BaseTool):
             if key in merge_dict:
                 if isinstance(value, dict) and isinstance(merge_dict[key], dict):
                     merge_dict[key] = self.merge_dict(merge_dict[key], value)
+                elif isinstance(value, list) and isinstance(merge_dict[key], list):
+                    for param in value:
+                        label = param["label"]
+                        fl = False
+                        for i, param1 in zip(merge_dict[key]):
+                            if param1["label"] == label:
+                                fl = True
+                                merge_dict[key][i] = self.merge_dict(param1["value"], param["value"])
+                        if not fl:
+                            merge_dict[key].append(param)
             else:
                 merge_dict[key] = value
-        return merge_dict                   
+        return merge_dict
+    
+    def flatten_dict(self, request_params: dict) -> dict:
+        result_dict = {}
+        for key, value in request_params.items():
+            if isinstance(value, list):
+                new_list = []
+                for param in value:
+                    new_list.append(self.flatten_dict(param["value"]))
+                result_dict[key] = new_list
+            elif isinstance(value, dict):
+                result_dict[key] = self.flatten_dict(value)
+            else:
+                result_dict[key] = value
+        return result_dict
 
     def run(self):
         # 1. get general information about this API
@@ -68,14 +103,23 @@ class FillAndCallAPI(BaseTool):
         for param in self.param_list:
             if uri_param_values.get(param["parameter"]) == None:
                 parent_param_list = self.filling_param(name=param["parameter"], id=param["id"], api_id=api_id)
+                labels = param["label"]
                 value = {}
                 for parameter in parent_param_list:
-                    if parameter == param["parameter"]:
-                        value = {parameter: param["value"]}
+                    if parameter["name"] == param["parameter"]:
+                        value = {parameter["name"]: param["value"]}
                     else:
-                        value = {parameter: value}
+                        if "array" in parameter["type"].lower():
+                            value = [{
+                                "label": labels[0],
+                                "value": {parameter["name"]: value}
+                                }]
+                            labels = labels[1: ] if len(labels) > 1 else []
+                        else:
+                            value = {parameter["name"]: value}
                 request_param_values = self.merge_dict(request_param_values, value)
-                
+
+        request_param_values = self.flatten_dict(request_param_values)
         # 4. assemble the information and return
         # info = {
         #     "method": method,
