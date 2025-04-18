@@ -14,7 +14,7 @@ from agency_swarm.tools.mcp import MCPServerSse, MCPServerStdio
 load_dotenv()
 
 samples_dir = os.path.join(os.path.dirname(__file__), "data", "files")
-server_file = os.path.join(os.path.dirname(__file__), "data", "files", "server.py")
+server_file = os.path.join(os.path.dirname(__file__), "scripts", "server.py")
 
 
 @pytest.fixture(scope="module", autouse=True)

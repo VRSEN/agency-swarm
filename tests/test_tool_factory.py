@@ -1,9 +1,9 @@
+import asyncio
 import os
+import shutil
+import subprocess
 import sys
 import time
-import shutil
-import asyncio
-import subprocess
 from enum import Enum
 from typing import List, Optional
 
@@ -13,7 +13,7 @@ from langchain_community.tools import MoveFileTool, YouTubeSearchTool
 from pydantic import BaseModel, ConfigDict, Field
 
 from agency_swarm.tools import BaseTool, ToolFactory
-from agency_swarm.tools.mcp import MCPServerStdio, MCPServerSse
+from agency_swarm.tools.mcp import MCPServerSse, MCPServerStdio
 from agency_swarm.util import get_openai_client
 from agency_swarm.util.helpers.sync_async import run_async_sync
 
@@ -224,18 +224,20 @@ def test_import_from_file():
 
 
 def test_mcp_filesystem():
-    """Test the ToolFactory.from_mcp method with a filesystem MCP server"""    
+    """Test the ToolFactory.from_mcp method with a filesystem MCP server"""
     # Skip if npx is not installed
     if not shutil.which("npx"):
-        pytest.skip("npx is not installed. Please install it with `npm install -g npx`.")
-    
+        pytest.skip(
+            "npx is not installed. Please install it with `npm install -g npx`."
+        )
+
     # Get the sample files directory
     samples_dir = os.path.join(os.path.dirname(__file__), "data", "files")
-    
+
     # Skip if the test file doesn't exist
     test_file = "favorite_books.txt"
     file_path = os.path.join(samples_dir, test_file)
-    
+
     server_process = None
     try:
         # Create an MCP server for filesystem operations
@@ -248,25 +250,25 @@ def test_mcp_filesystem():
         )
 
         # Store server process for cleanup
-        if hasattr(server, '_process') and server._process:
+        if hasattr(server, "_process") and server._process:
             server_process = server._process
-            
+
         # Get tools from the MCP server
         tools = ToolFactory.from_mcp(server)
         assert len(tools) > 0, "No tools were created from MCP server"
-        
+
         # Find the read_file tool
         read_file_tool = None
         for tool in tools:
             if tool.__name__ == "read_file":
                 read_file_tool = tool
                 break
-                
+
         assert read_file_tool is not None, "read_file tool not found in created tools"
-        
+
         read_file_instance = read_file_tool(path=file_path)
         result = run_async_sync(read_file_instance.run)
-        
+
         # Verify the result
         assert isinstance(result, str), "Tool result is not a string"
         assert len(result) > 0, "Tool returned empty result"
@@ -281,19 +283,20 @@ def test_mcp_filesystem():
                 if server_process.poll() is None:
                     server_process.kill()
                     server_process.wait()
-        
+
         # Force garbage collection to clean up resources before event loop closes
         import gc
+
         gc.collect()
 
 
 def test_mcp_git():
     """Test the ToolFactory.from_mcp method with a Git MCP server"""
-    
+
     # Check if git is installed
     if not shutil.which("git"):
         pytest.skip("git is not installed")
-    
+
     # Try to install the MCP Git server Python package if not already installed
     install_process = None
     try:
@@ -303,7 +306,9 @@ def test_mcp_git():
         install_process.wait(timeout=30)
         print("Installed mcp-server-git Python package")
     except (subprocess.SubprocessError, subprocess.TimeoutExpired):
-        print("Note: Failed to install mcp-server-git package (may already be installed)")
+        print(
+            "Note: Failed to install mcp-server-git package (may already be installed)"
+        )
     finally:
         # Ensure process is terminated even if wait times out
         if install_process and install_process.poll() is None:
@@ -313,7 +318,7 @@ def test_mcp_git():
             except:
                 if install_process.poll() is None:
                     install_process.kill()
-    
+
     server_process = None
     try:
         # Create an MCP server for Git operations using Python's module system
@@ -322,40 +327,47 @@ def test_mcp_git():
             params={
                 "command": "mcp-server-git",
                 "strict": False,
-            }
+            },
         )
         # Store the server process for later cleanup
-        if hasattr(server, '_process') and server._process:
+        if hasattr(server, "_process") and server._process:
             server_process = server._process
-        
+
         # Get tools from the MCP server
         tools = ToolFactory.from_mcp(server)
         assert len(tools) > 0, "No Git tools were created"
-        
+
         # Verify that at least one tool has a git-related name
         git_tool_found = False
         for tool in tools:
-            if any(keyword in tool.__name__.lower() for keyword in ["git", "commit", "branch", "repo"]):
+            if any(
+                keyword in tool.__name__.lower()
+                for keyword in ["git", "commit", "branch", "repo"]
+            ):
                 git_tool_found = True
                 break
-        
+
         assert git_tool_found, "No Git-related tools were found"
-        
+
         # Find the git_status tool and test it
         git_status_tool = None
         for tool in tools:
             if tool.__name__ == "git_status":
                 git_status_tool = tool
                 break
-        
+
         if git_status_tool is not None:
             repo_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
             status_tool = git_status_tool(repo_path=repo_path)
-            
+
             status_result = run_async_sync(status_tool.run)
-            assert isinstance(status_result, str), "Expected string result from git tool"
+            assert isinstance(
+                status_result, str
+            ), "Expected string result from git tool"
             assert len(status_result) > 0, "Expected non-empty result from git tool"
-            assert "Repository status:" in status_result, "Expected 'Repository status:' in result"
+            assert (
+                "Repository status:" in status_result
+            ), "Expected 'Repository status:' in result"
         else:
             pytest.skip("No suitable git tool found")
     except asyncio.TimeoutError:
@@ -372,76 +384,78 @@ def test_mcp_git():
                 if server_process.poll() is None:
                     server_process.kill()
                     server_process.wait()
-        
+
         # Force garbage collection to clean up resources before event loop closes
         import gc
+
         gc.collect()
 
 
 @pytest.mark.asyncio
 async def test_mcp_sse():
     """Test the ToolFactory.from_mcp method with an SSE MCP server"""
-    
+
     # Skip if Python is not available
     if not shutil.which(sys.executable):
         pytest.skip("Python executable not found")
-    
+
     # Get the server file
-    server_file = os.path.join(os.path.dirname(__file__), "data", "files", "server.py")
-    
+    server_file = os.path.join(os.path.dirname(__file__), "scripts", "server.py")
+
     if not os.path.exists(server_file):
         pytest.skip(f"Test file {server_file} not found")
-    
+
     # Start the server process
     process = None
-    try:        
+    try:
         # Start the server using Python
         process = subprocess.Popen([sys.executable, server_file])
-        
+
         # Give it time to start
         time.sleep(5)
-        
+
         # Create an MCPServerSse instance
         async with MCPServerSse(
-            params={
-                "url": "http://localhost:8080/sse",
-                "strict": False
-            }
+            params={"url": "http://localhost:8080/sse", "strict": False}
         ) as server:
             # Get tools from the MCP server
             tools = await ToolFactory.from_mcp_async(server)
-            
+
             # Verify tools were created successfully
             assert len(tools) == 3, f"Expected 3 tools, got {len(tools)}"
-            
+
             # Get the add tool
             add_tool = next((tool for tool in tools if tool.__name__ == "add"), None)
             assert add_tool is not None, "add tool not found"
-            
+
             # Create an instance of the add tool
             add_instance = add_tool(a=7, b=22)
             result = await add_instance.run()
             assert str(result) == "29", f"Expected 29, got {result}"
-            
+
             # Get the weather tool
-            weather_tool = next((tool for tool in tools if tool.__name__ == "get_current_weather"), None)
+            weather_tool = next(
+                (tool for tool in tools if tool.__name__ == "get_current_weather"), None
+            )
             assert weather_tool is not None, "get_current_weather tool not found"
-            
+
             # Create an instance of the weather tool
             weather_instance = weather_tool(city="Tokyo")
             result = await weather_instance.run()
             assert "Weather report:" in result
-            
+
             # Get the secret word tool
-            secret_tool = next((tool for tool in tools if tool.__name__ == "get_secret_word"), None)
+            secret_tool = next(
+                (tool for tool in tools if tool.__name__ == "get_secret_word"), None
+            )
             assert secret_tool is not None, "get_secret_word tool not found"
-            
+
             # Create an instance of the secret word tool
             secret_instance = secret_tool()
             result = await secret_instance.run()
-            
+
             assert result.lower() in ["apple", "banana", "cherry", "strawberry"]
-    
+
     finally:
         # Clean up the server process
         if process:
@@ -451,9 +465,10 @@ async def test_mcp_sse():
             except subprocess.TimeoutExpired:
                 process.kill()
                 process.wait()
-            
+
         # Force garbage collection to clean up resources before event loop closes
         import gc
+
         gc.collect()
 
 

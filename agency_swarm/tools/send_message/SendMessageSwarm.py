@@ -1,4 +1,9 @@
+import logging
+from typing import Generator, Union
+
 from openai import BadRequestError
+
+from agency_swarm.messages.message_output import MessageOutput
 
 from .SendMessage import SendMessageBase
 
@@ -11,15 +16,22 @@ class SendMessageSwarm(SendMessageBase):
         output_as_result: bool = True
         one_call_at_a_time: bool = True
 
-    def run(self):
+    def run(self) -> Union[str, Generator[MessageOutput, None, None]]:
+        logging.debug("SendMessageSwarm.run: Starting execution")
+
         # get main thread
         thread = self._get_main_thread()
+        logging.debug(f"SendMessageSwarm.run: Got main thread: {thread}")
 
-        # get recipient agent from thread
+        # get recipient agent
         recipient_agent = self._get_recipient_agent()
+        logging.debug(
+            f"SendMessageSwarm.run: Got recipient agent: {recipient_agent.name}"
+        )
 
         # submit tool output
         try:
+            logging.debug("SendMessageSwarm.run: Submitting tool output")
             thread.submit_tool_outputs(
                 tool_outputs=[
                     {
@@ -31,24 +43,38 @@ class SendMessageSwarm(SendMessageBase):
                 ],
                 poll=False,
             )
+            logging.debug("SendMessageSwarm.run: Tool output submitted successfully")
         except BadRequestError as e:
+            logging.error(
+                f"SendMessageSwarm.run: BadRequestError while submitting tool output: {e}"
+            )
             raise Exception(
                 "You can only call this tool by itself. Do not use any other tools together with this tool."
             )
 
         try:
             # cancel run
+            logging.debug("SendMessageSwarm.run: Canceling current run")
             thread.cancel_run()
+            logging.debug("SendMessageSwarm.run: Run canceled successfully")
 
             # change recipient agent in thread
+            logging.debug(
+                f"SendMessageSwarm.run: Changing recipient agent to {recipient_agent.name}"
+            )
             thread.recipient_agent = recipient_agent
 
             # change recipient agent in gradio dropdown
             if self._event_handler:
+                logging.debug("SendMessageSwarm.run: Updating event handler")
                 if hasattr(self._event_handler, "change_recipient_agent"):
                     self._event_handler.change_recipient_agent(self.recipient.value)
+                    logging.debug("SendMessageSwarm.run: Event handler updated")
 
             # continue conversation with the new recipient agent
+            logging.debug(
+                "SendMessageSwarm.run: Getting completion from new recipient agent"
+            )
             message = thread.get_completion(
                 message=None,
                 recipient_agent=recipient_agent,
@@ -57,8 +83,15 @@ class SendMessageSwarm(SendMessageBase):
                 parent_run_id=self._tool_call.id,
             )
 
+            # Log only if message is a string (not a generator)
+            if isinstance(message, str):
+                logging.debug(
+                    f"SendMessageSwarm.run: Got completion response: {message[:100]}..."
+                )
+
             return message or ""
         except Exception as e:
-            # we need to catch errors beucase tool outputs are already submitted
+            # we need to catch errors because tool outputs are already submitted
+            logging.error(f"SendMessageSwarm.run: Error during execution: {e}")
             print("Error in SendMessageSwarm: ", e)
             return str(e)
