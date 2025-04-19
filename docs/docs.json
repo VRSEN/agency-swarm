@@ -149,9 +149,9 @@
     }
   },
   "logo": {
-    "light": "/images/agencii-logo.svg",
-    "dark": "/images/agencii-logo.svg",
-    "href": "https://github.com/VRSEN/agency-swarm"
+    "light": "/images/logo-light.svg",
+    "dark": "/images/logo-dark.svg",
+    "href": "https://agency-swarm.ai"
   },
   "appearance": {
     "default": "dark",
