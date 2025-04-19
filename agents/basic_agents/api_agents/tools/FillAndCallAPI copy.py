@@ -40,11 +40,11 @@ class FillAndCallAPI():
     },
     {"parameter": "sshKey", "id": 494, "description": "**参数解释** ：\n选择密钥对方式登录时的密钥对名称。\n**约束限制** ：\n不涉及\n**取值范围** ：\n不涉及\n**默认取值** ：\n不涉及", "type": "String", "value": "ccekey"
     },
-    {"parameter": "volumetype", "id": 515, "description": "**参数解释** ：\n磁盘类型，取值请参见创建云服务器 中“root_volume字段 数据结构说明”。\n**约束限制** ：\n不涉及\n**取值范围** ：\n- SAS：高IO，是指由SAS存储提供资源的磁盘类型。\n- SSD：超高IO，是指由SSD存储提供资源的磁 盘类型。\n- SATA：普通IO，是指由SATA存储提供资源的磁盘类型。EVS已下线SATA磁盘，仅存量节点有此类型的磁盘。\n- ESSD：极速型SSD云硬盘，是指由极速型SSD 存储提供资源的磁盘类型。\n- GPSSD：通用型SSD云硬盘，是指由通用型SSD存储提供资源的磁盘类型。\n- ESSD2：极速型SSD V2云硬盘，是指由极速型SSD V2存储提供资源的磁盘类型。\n- GPSSD2：通用型SSD V2云硬盘，是指由通用型SSD V2存储提供资源的磁盘类型。\n说明：\n了解不同磁盘类型的详细信息，链接请参见磁盘类型及性能介绍。\n**默认取值** ：\n不涉及", "type": "String", "value": "SSD"
+    {"parameter": "volumetype", "id": 515,"label": ["12312314"], "description": "**参数解释** ：\n磁盘类型，取值请参见创建云服务器 中“root_volume字段 数据结构说明”。\n**约束限制** ：\n不涉及\n**取值范围** ：\n- SAS：高IO，是指由SAS存储提供资源的磁盘类型。\n- SSD：超高IO，是指由SSD存储提供资源的磁 盘类型。\n- SATA：普通IO，是指由SATA存储提供资源的磁盘类型。EVS已下线SATA磁盘，仅存量节点有此类型的磁盘。\n- ESSD：极速型SSD云硬盘，是指由极速型SSD 存储提供资源的磁盘类型。\n- GPSSD：通用型SSD云硬盘，是指由通用型SSD存储提供资源的磁盘类型。\n- ESSD2：极速型SSD V2云硬盘，是指由极速型SSD V2存储提供资源的磁盘类型。\n- GPSSD2：通用型SSD V2云硬盘，是指由通用型SSD V2存储提供资源的磁盘类型。\n说明：\n了解不同磁盘类型的详细信息，链接请参见磁盘类型及性能介绍。\n**默认取值** ：\n不涉及", "type": "String", "value": "SSD"
     },
-    {"parameter": "size", "id": 514, "description": "**参数解释** ：\n磁盘大小 ，单位为GiB。\n**约束限制** ：\n不涉及\n**取值范围** ：\n- 系统盘取值范围：40~1024\n- 第一块数据盘取值范围：20~32768(当缺省磁盘初始化配置管理参数storage时，数据盘取值范围：100-32768)\n- 其他数据盘取值范围：10~32768(当缺省磁盘初始化配置管理参数storage时，数据盘取值范围：100-32768)\n**默认取值**  ：\n不涉及", "type": "Integer", "value": 100
+    {"parameter": "size", "id": 514, "label": ["12312314"], "description": "**参数解释** ：\n磁盘大小 ，单位为GiB。\n**约束限制** ：\n不涉及\n**取值范围** ：\n- 系统盘取值范围：40~1024\n- 第一块数据盘取值范围：20~32768(当缺省磁盘初始化配置管理参数storage时，数据盘取值范围：100-32768)\n- 其他数据盘取值范围：10~32768(当缺省磁盘初始化配置管理参数storage时，数据盘取值范围：100-32768)\n**默认取值**  ：\n不涉及", "type": "Integer", "value": 100
     },
-    {"parameter": "iops", "id": 516, "description": "**参数解释** ：\n给云硬盘配置iops。\n**约束限制** ：\n- 购买GPSSD2、ESSD2类型的云硬盘时必填，其他类型不能设置。\n- 只支持按需计费。\n**取值范围** ：\n了解GPSSD2、ESSD2类型的iops大小范围，请参见云硬盘类型及性能介绍里面的云硬盘性能数据表。\n**默认取值** ：\n不涉及", "type": "Integer", "value": 128000
+    {"parameter": "iops", "id": 516, "label": ["12312314"],"description": "**参数解释** ：\n给云硬盘配置iops。\n**约束限制** ：\n- 购买GPSSD2、ESSD2类型的云硬盘时必填，其他类型不能设置。\n- 只支持按需计费。\n**取值范围** ：\n了解GPSSD2、ESSD2类型的iops大小范围，请参见云硬盘类型及性能介绍里面的云硬盘性能数据表。\n**默认取值** ：\n不涉及", "type": "Integer", "value": 128000
     },
     {"parameter": "storageGroups", "id": 551, "description": "**参数解释** ：\n由多个存储设备组成的存储组，用于各个存储空间的划分。\n**约束限制** ：\n不涉及\n\n详情请参见表15", "type": "Array of StorageGroups objects", "value": None
     }
@@ -88,10 +88,13 @@ class FillAndCallAPI():
                     for param in value:
                         label = param["label"]
                         fl = False
-                        for i, param1 in zip(merge_dict[key]):
+                        for i, param1 in enumerate(merge_dict[key]):
                             if param1["label"] == label:
                                 fl = True
-                                merge_dict[key][i] = self.merge_dict(param1["value"], param["value"])
+                                merge_dict[key][i] = {
+                                    "label": label,
+                                    "value": self.merge_dict(param1["value"], param["value"])
+                                }
                         if not fl:
                             merge_dict[key].append(param)
             else:
@@ -147,17 +150,18 @@ class FillAndCallAPI():
                         value = {parameter["name"]: param["value"]}
                     else:
                         if "array" in parameter["type"].lower():
-                            value = [{
-                                "label": labels[0],
-                                "value": {parameter["name"]: value}
-                                }]
+                            value = {
+                                parameter["name"]: [{
+                                    "label": labels[0],
+                                    "value": value
+                                }]}
                             labels = labels[1: ] if len(labels) > 1 else []
                         else:
                             value = {parameter["name"]: value}
                 request_param_values = self.merge_dict(request_param_values, value)
 
         request_param_values = self.flatten_dict(request_param_values)
-        print(request_param_values)
+        print(json.dumps(request_param_values, ensure_ascii=False, indent=4))
         # 4. assemble the information and return
         # info = {
         #     "method": method,

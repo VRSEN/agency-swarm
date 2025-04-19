@@ -57,6 +57,10 @@ class SelectParamTable(BaseTool):
         selected = try_parse_json(selected_str)
         if not (isinstance(selected, list) and all(isinstance(item, dict) for item in selected)):
             input_message = selected_str
+            if "不需要该参数" in input_message:
+                return []
+            elif "需要该参数" in input_message:
+                return [returned_info]
             while True:
                 inspection = self.send_message_to_agent(recipient_agent_name="Param Inspector", message=input_message, parameter=message_obj["parameter"])
                 if "不需要该参数" in inspection:
