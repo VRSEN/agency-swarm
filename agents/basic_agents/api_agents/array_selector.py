@@ -1,5 +1,5 @@
 from agency_swarm.agents import Agent
-from agents.basic_agents.api_agents.tools.SelectParamTable import SelectParamTable
+from agents.basic_agents.api_agents.tools.SplitArray import SplitArray
 
 _name = "Array Selector"
 
@@ -29,15 +29,12 @@ _instructions = f"""你的任务是每当接收到输入时，都需要**从头*
 
 1. 如果该参数类型为"Array of strings"等简单类型的Array，你需要直接输出"需要该参数"；
 
-2. 如果参数类型为"Array of objects"，你需要从用户需求中判断该参数列表中有几个成员(如果无法判断，默认为1个成员)，并依次为每个成员提取对应的用户子需求；
+2. 如果参数类型为"Array of objects"，你需要使用`SplitArray`处理该参数，SplitArray会返回一个JSON列表，你需要**原封不动**地输出该JSON列表
 
-举例：如果参数类型为"Array of NetworkSubnet objects"，"user_requirement"为"查询子网ID为vpc_id1和vpc_id2的子网详细信息"，你得到的用户子需求为"查询子网ID为vpc_id1的子网详细信息"和"查询子网ID为vpc_id2的子网详细信息"。
-
-然后你需要对每个成员使用`SelectParamTable`进一步处理。所有成员都经过以上处理后，你需要将所有成员`SelectParamTable`的返回结果（返回结果为json）合并到一个列表[]中，并输出该列表。
-
+# 注意，你不得对返回结果有任何修改或遗漏信息
 """
 
-_tools = [SelectParamTable]
+_tools = [SplitArray]
 
 _files_folder = ""
 
@@ -49,6 +46,7 @@ def create_agent(*,
                  files_folder=_files_folder):
     return Agent(name=name,
                  tools=tools,
+                 # response_format=[],
                  description=description,
                  instructions=instructions,
                  files_folder=files_folder,

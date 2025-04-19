@@ -76,7 +76,7 @@ from agents.cap_group_agents.NODE_group.cap_agents.NODE_pool_agent import NODE_p
 from agents.cap_group_agents.NODE_group.cap_agents.NODE_scaling_protect_agent import NODE_scaling_protect_agent
 
 from agents.basic_agents.api_agents import (
-    API_param_selector, array_selector, param_selector, param_inspector
+    API_param_selector, array_selector, param_selector, param_inspector, array_splitter
 )
 from agents.basic_agents.job_agent import check_log_agent
 from agents.basic_agents.job_agent import job_agent
@@ -85,6 +85,7 @@ from agents.basic_agents.job_agent.tools.CheckLogForFailures import CheckLogForF
 from agents.basic_agents.api_agents.tools.CheckParamRequired import CheckParamRequired
 from agents.basic_agents.api_agents.tools.SelectAPIParam import SelectAPIParam
 from agents.basic_agents.api_agents.tools.SelectParamTable import SelectParamTable
+from agents.basic_agents.api_agents.tools.SplitArray import SplitArray
 
 from agency_swarm import set_openai_key
 
@@ -180,6 +181,7 @@ NODE_scaling_protect_agent = NODE_scaling_protect_agent.create_agent()
 
 API_param_selector = API_param_selector.create_agent()
 array_selector = array_selector.create_agent()
+array_splitter = array_splitter.create_agent()
 param_selector = param_selector.create_agent()
 param_inspector = param_inspector.create_agent()
 check_log_agent = check_log_agent.create_agent()
@@ -190,7 +192,7 @@ chat_graph = [task_planner, scheduler, inspector,
               subtask_planner, subtask_manager, subtask_scheduler, subtask_inspector,
               step_inspector,
               basic_cap_solver, param_asker,
-
+              array_splitter,
               param_inspector,
 
               check_log_agent,
@@ -308,6 +310,7 @@ chat_graph = [task_planner, scheduler, inspector,
             #   [jobs_agent, API_filler],
 
               [param_selector, array_selector],
+              [array_splitter],
               [AKSK_agent],
 
               # [ECS_manager, param_asker],
@@ -332,6 +335,7 @@ thread_strategy = {
         (param_selector, array_selector),
         (CheckParamRequired, array_selector),
         (CheckLogForFailures, check_log_agent),
+        (SplitArray, array_splitter)
     ]
 }
 
@@ -379,5 +383,20 @@ cap_agents = {
     "节点管理能力群": [NODE_lifecycle_agent, NODE_pool_agent, NODE_scaling_protect_agent],
 }
 
+step_json = {
+    "title": "创建节点",
+    "id": "step_1",
+    "agent": ["NODE_lifecycle_agent"],
+    "description": "使用API在cn-north-4a可用区的名为ccetest的CCE集群中创建一个新的节点。节点名称为node-1，集群ID为eeb8f029-1c4b-11f0-a423-0255ac100260。节点的规格为c6.large.2，系统盘和数据盘大小分别为50GB和100GB，磁盘类型为SSD。",
+    "dep": []
+}
+
+perpared = {
+    "cap_group": "节点管理能力群",
+    "step": step_json
+}
+
+agency.test_single_cap_agent(plan_agents=plan_agents, cap_group_agents=cap_group_agents, cap_agents=cap_agents, **perpared)
+
 # agency.langgraph_test(repeater=repeater, rander=rander, palindromist=palindromist)
-agency.task_planning(plan_agents=plan_agents, cap_group_agents=cap_group_agents, cap_agents=cap_agents)
+# agency.task_planning(plan_agents=plan_agents, cap_group_agents=cap_group_agents, cap_agents=cap_agents)

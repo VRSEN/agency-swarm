@@ -21,7 +21,7 @@ class CheckParamRequired(BaseTool):
     type: str = Field(..., description="需要判断的参数类型")
     mandatory: int = Field(..., description="该参数是否必需")
 
-    def extract_and_validate_json(text):
+    def extract_and_validate_json(self, text):
         """
         判断字符串是否能转成 JSON，并提取 ```json 块中的 JSON 内容。
 
@@ -35,6 +35,7 @@ class CheckParamRequired(BaseTool):
         """
         try:
             # 尝试将整个字符串解析为 JSON
+            text = re.sub(r"\s*'([^']*)'", r'"\1"', text)
             result_json = json.loads(text)
             return result_json
         except json.JSONDecodeError:
@@ -67,13 +68,11 @@ class CheckParamRequired(BaseTool):
                 "mandatory": self.mandatory
             }
             result = self.send_message_to_agent(recipient_agent_name="Array Selector", message=json.dumps(message_obj, ensure_ascii=False), parameter=self.parameter)
+            print(f"Array result: {result}")
             result_json = self.extract_and_validate_json(result)
-            new_result_json = []
+            print(f"Array: {result_json}")
             if isinstance(result_json, list):
-                for param in result_json:
-                    param["label"] = (param["label"] if "label" in param else []) + [hashlib.md5(param["user_requirement"].encode()).hexdigest()]
-                    new_result_json.append(param)
-                result = json.dumps(new_result_json, ensure_ascii=False, indent=4)
+                result = json.dumps(result_json, ensure_ascii=False, indent=4)
         elif typestring.find("object") != -1:
             param_df = search_from_sqlite(database_path=API_DATABASE_FILE, table_name='request_parameters', condition=f"id={self.id}")
             param_row = param_df.iloc[0]

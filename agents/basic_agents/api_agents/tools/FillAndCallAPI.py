@@ -99,9 +99,10 @@ class FillAndCallAPI(BaseTool):
         
         for _, row in uri_parameters_df.iterrows():
             key = row["parameter"]
-            value = name2parameter[key]["value"]
-            if value is not None:
-                uri_param_values[key] = value
+            if key in name2parameter:
+                value = name2parameter[key]["value"]
+                if value is not None and value != '':
+                    uri_param_values[key] = value
 
         request_param_values = {}
         for param in self.param_list:

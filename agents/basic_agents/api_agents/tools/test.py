@@ -1,0 +1,6 @@
+import json
+import re
+text = "[{'parameter': 'size', 'id': 514, 'description': '**参数解释** ：\n磁盘大小，单位为GiB。\n**约束限制** ：\n不涉及\n**取值范围** ：\n- 系统盘取值范围：40~1024\n- 第一块数据盘取值范围：20~32768(当缺省磁盘初始化配置管理参数storage时，数据盘取值范围：100-32768)\n- 其他数据盘取值范围：10~32768(当缺省磁盘初始化配置管理参数storage时，数据盘取值范围：100-32768)\n**默认取值** ：\n不涉及', 'type': 'Integer', 'mandatory': 1, 'label': ['ebc05f2bd2e4cd46837b25d3d94c5aa0']}]"#, {'parameter': 'volumetype', 'id': 515, 'description': '**参数解释** ：\n磁盘类型，取值请参见创建云服务器 中“root_volume字段数据结构说明”。\n**约束限制** ：\n不涉及\n**取值范围** ：\n- SAS：高IO，是指由SAS存储提供资源的磁盘类型。\n- SSD：超高IO，是指由SSD存储提供资源的磁盘类型。\n- SATA：普通IO，是指由SATA存储提供资源的磁盘类型。EVS已下线SATA 磁盘，仅存量节点有此类型的磁盘。\n- ESSD：极速型SSD云硬盘，是指由极速型SSD存储提供资源的磁盘类型。\n- GPSSD：通用型SSD云硬盘，是指由通用型SSD存储提供资源的磁盘类型。\n- ESSD2：极速型SSD V2云硬盘，是指由极速型SSD V2存储提供资源的磁盘类型。\n- GPSSD2：通用型SSD V2云硬盘，是指由通用型SSD V2存储提供资源的磁盘类型。\n说明：\n了解不同磁盘类型的详细信息，链接请参见磁盘类型及性能介绍。\n**默认取值** ：\n不涉及', 'type': 'String', 'mandatory': 1, 'label': ['ebc05f2bd2e4cd46837b25d3d94c5aa0']}]"
+text = re.sub(r"\s*'([^']*)'", r'"\1"', text)
+print(text)
+json.loads(text)
