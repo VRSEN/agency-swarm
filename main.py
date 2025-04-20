@@ -387,7 +387,7 @@ step_json = {
     "title": "创建节点",
     "id": "step_1",
     "agent": ["NODE_lifecycle_agent"],
-    "description": "使用API在cn-north-4a可用区的名为ccetest的CCE集群中创建一个新的节点。节点名称为node-1，集群ID为eeb8f029-1c4b-11f0-a423-0255ac100260。节点的规格为c6.large.2，系统盘和数据盘大小分别为50GB和100GB，磁盘类型为SSD。",
+    "description": "在cn-north-4a可用区中，名为ccetest的CCE集群中创建一个节点，节点名字为node-1，集群id为eeb8f029-1c4b-11f0-a423-0255ac100260，节点规格为c6.large.2，系统盘和数据盘大小分别为50GB和100GB，磁盘类型都为SSD，节点通过密码方式登录，用户名为'root', 密码为'JDYkc2FsdCR1SzEzUEgvMy9rOHZRQ0UzRFBEVzFiZm1UMmVZSnFEQjMydzFxOVY5WUt3M2ZmR0JTZWN1N2ZNZlkzYmY5Z2ZDNlJlTHp6NGl3anc3WHM5RDFUcmNuLg=='",
     "dep": []
 }
 

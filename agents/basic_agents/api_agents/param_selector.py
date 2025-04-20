@@ -13,7 +13,7 @@ _input_format = """
    "id": <你需要判断的参数编号>,
    "description": <参数描述>,
    "parents_description": <前置参数描述>,
-   "type": "<数据类型>",
+   "type": <数据类型>,
    "mandatory": <该参数是否必选>
 }
 """
