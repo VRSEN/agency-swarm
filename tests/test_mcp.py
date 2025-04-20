@@ -66,35 +66,41 @@ def agency():
         params={"url": "http://localhost:8080/sse", "strict": False},
     )
 
-    agent = Agent(
-        name="test",
-        description="test",
-        instructions="test",
-        mcp_servers=[filesystem_server, git_server, sse_server],
-        temperature=0,
-    )
+    # Serialize agent initialization
+    agents = []
+    for name, server in [
+        ("test1", filesystem_server),
+        ("test2", git_server),
+        ("test3", sse_server),
+    ]:
+        agent = Agent(
+            name=name,
+            description="test",
+            instructions="test",
+            mcp_servers=[server],
+            temperature=0,
+        )
+        agents.append(agent)
 
-    print("tools", agent.tools)
-
-    return Agency([agent])
+    return Agency(agents)
 
 
 # Might take a bit to process
 def test_read_filesystem(agency):
-    result = agency.get_completion(f"read the contents of {samples_dir} folder")
+    result = agency.get_completion(f"Use the list_directory tool to read the contents of {samples_dir} folder.", recipient_agent=agency.agents[0])
     print(result)
     assert "csv-test.csv" in result
 
 
 def test_read_git_commit(agency):
     root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-    result = agency.get_completion(f"read the last commit of the {root_dir} folder")
+    result = agency.get_completion(f"Read the last commit of the {root_dir} folder. Provide result in the exact same format as you receive it.", recipient_agent=agency.agents[1])
     print(result)
     assert "Author" in result
 
 
 def test_get_secret_word(agency):
-    result = agency.get_completion("get secret word")
+    result = agency.get_completion("Get secret word using get_secret_word tool.", recipient_agent=agency.agents[2])
     print(result)
     assert "strawberry" in result.lower()
 
