@@ -167,7 +167,14 @@ class MessageOutputLive(MessageOutput):
         )  # Update content with the latest snapshot
 
         header_text = self.formatted_header
-        md_content = Markdown(self.content)
+        try:
+            md_content = Markdown(self.content)
+        except Exception as e:
+            # prevent url markdown error
+            if "string index out of range" in str(e):
+                return
+            else:
+                raise e
 
         # Creating a group of renderables for the live display
         render_group = Group(header_text, md_content)
