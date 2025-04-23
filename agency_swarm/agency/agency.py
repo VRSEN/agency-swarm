@@ -43,6 +43,8 @@ from agency_swarm.util.streaming import (
 )
 from agency_swarm.util.tracking.tracking_manager import TrackingManager
 
+from dotenv import load_dotenv
+
 console = Console()
 T = TypeVar("T", bound=BaseModel)
 
@@ -96,6 +98,7 @@ class Agency:
 
         This constructor initializes various components of the Agency, including CEO, agents, threads, and user interactions. It parses the agency chart to set up the organizational structure and initializes the messaging tools, agents, and threads necessary for the operation of the agency. Additionally, it prepares a main thread for user interactions.
         """
+        load_dotenv()
         self.ceo = None
         self.user = User()
         self.agents = []
