@@ -93,23 +93,13 @@
               "additional-features/open-source-models",
               "additional-features/deployment-to-production",
               "additional-features/observability",
-              "additional-features/additional-instructions",
-              {
-                "group": "Integrations",
-                "icon": "plug",
-                "pages": [
-                  "additional-features/integrations/slack-integration",
-                  "additional-features/integrations/whatsapp-integration",
-                  "references/web-api"
-                ]
-              }
+              "additional-features/additional-instructions"
             ]
           },
           {
             "group": "References",
             "pages": [
-              "references/api",
-              "references/web-api"
+              "references/api"
             ]
           },
           {
@@ -132,7 +122,16 @@
           {
             "group": "Platform",
             "pages": [
-              "platform/platform"
+              "platform/overview"
+            ]
+          },
+          {
+            "group": "Integrations",
+            "icon": "plug",
+            "pages": [
+              "additional-features/integrations/slack-integration",
+              "additional-features/integrations/whatsapp-integration",
+              "references/web-api"
             ]
           }
         ]

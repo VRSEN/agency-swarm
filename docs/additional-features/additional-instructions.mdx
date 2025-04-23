@@ -3,7 +3,6 @@ title: "Additional Instructions"
 description: "Provide additional context and user information to your agents to enhance their responses."
 icon: "message"
 ---
-# Additional Instructions
 
 ## Overview
 
@@ -38,12 +37,12 @@ To use **additional instructions i**n widgets, simply add them in the **third pa
           chatContainer.id = "chat-container";
           document.body.appendChild(chatContainer);
         }
-				
+
         let additionalInstructions = "User's favorite city is Paris."
-        
+
         // userId should be defined somewhere in your application
-        //additionalInstructions = "The current user id is" + userId 
-        
+        //additionalInstructions = "The current user id is" + userId
+
         // Initialize the Chat component
         if (window.ChatComponent) {
           ChatComponent.init("<your-widget-id>", "#chat-container", additionalInstructions);
@@ -86,9 +85,9 @@ To use **additional instruction with CustomGPTs**, add a **script tag** to handl
         if (event.data === "iframe-ready" && event.origin === "https://agencii.ai") {
           // Get additional instructions from the HTML data attribute or use your own logic to set it
           let additionalInstructions = iframe.getAttribute("data-additional-instructions") || "";
-          
+
           // userEmail should be defined somewhere in your application
-          // additionalInstructions += "Current user's email is " + userEmail 
+          // additionalInstructions += "Current user's email is " + userEmail
 
           // Send the additional instructions to the iframe
           iframe.contentWindow.postMessage(

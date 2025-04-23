@@ -1,22 +1,18 @@
 ---
-title: "Web API Reference"
-description: "Gain a deeper understanding of the core classes and methods available in Agency Swarm."
+title: "Web API Documentation"
+description: "Reference documentation for the Agencii Platform Web API."
 icon: "globe"
 ---
 
-# WEB API Documentation
+API Integrations provide a set of endpoints allowing you to run your agents on custom backends or on other unsupported channels.
 
-web API Integrations provide a set of endpoints allowing you to run your agents on custom backends or on other unsupported channels.
-
-<aside>
-⚡ **Live Postman Example**
-[Go to Postman →](https://www.postman.com/vrsen-ai/agencii-api/overview)
-
-</aside>
+<Info>
+⚡ Live Postman Example: [Go to Postman →](https://www.postman.com/vrsen-ai/agencii-api/overview)
+</Info>
 
 ---
 
-## Authentication
+# Authentication
 
 - **Note**: You can only use platform tokens for these endpoints. Find or create one inside **Profile Icon > API Keys**.
 - **Headers**:
@@ -67,17 +63,14 @@ web API Integrations provide a set of endpoints allowing you to run your agents 
 ```
 
 ### Parameter Details
-
 | Parameter | Type | Required | Description | Example |
 | --- | --- | --- | --- | --- |
 | `message` | `string` | **Yes** | The message to be processed. | `"Hey! How are you?"` |
 | `apiIntegrationId` | `string` | **Yes** | The unique identifier for the API integration. | `"dpCD7snQ0tCWrdtp6UhZ"` |
 | `chatId` | `string` | No | The unique identifier for the chat session. If provided, continues the chat with the previous context. | `"plOQeH3hW7UKiACqEdAx"` |
-| `attachments` | `array` | No | An array of attachment objects. See [Attachment Object](https://www.notion.so/PI-1815bd4b16a681b28d3ec84730547496?pvs=21). |  |
-| `additionalInstructions` | `string` | No | Appends additional instructions at the end of the instructions for the run. This is useful for modifying the behavior on a per-run basis without overriding other instructions.
-
- |  |
-| `aliasChatId` | `string` | No | An alternative to `chatId` which allows to use custom identifiers for persisting chats through third party integrations | `custom-identifier` |
+| `attachments` | `array` | No | An array of attachment objects. See [Attachment Object](#attachment-object). | `[{"file_id": "file-123", "tools": [{"type": "file_search"}]}]` |
+| `additionalInstructions` | `string` | No | Appends additional instructions at the end of the instructions for the run. This is useful for modifying the behavior on a per-run basis without overriding other instructions. | `"User name: John Smith"` |
+| `aliasChatId` | `string` | No | An alternative to `chatId` which allows to use custom identifiers for persisting chats through third party integrations. | `"custom-identifier"` |
 
 ### Attachment Object
 
@@ -86,7 +79,7 @@ Each attachment object contains:
 | Parameter | Type | Required | Description | Example |
 | --- | --- | --- | --- | --- |
 | `file_id` | `string` | **Yes** | The unique identifier for the file. | `"file-0SY0lLXWCSSBIOb2gu8UolxH"` |
-| `tools` | `array` | **Yes** | An array of tool objects. See [Tool Object](https://www.notion.so/PI-1815bd4b16a681b28d3ec84730547496?pvs=21). |  |
+| `tools` | `array` | **Yes** | An array of tool objects. See [Tool Object](#tool-object). |  |
 
 ### Tool Object
 
@@ -144,7 +137,7 @@ The response will be in `application/json` format:
 | `threadId` | `string` | The unique identifier for the thread. | `"thread_ruUj69CyW2STm8Zog0HXkvIJ"` |
 | `assistantId` | `string` | The unique identifier for the assistant. | `"J3NQwdHxqm9jvWFpOwFk"` |
 | `name` | `string` | The name of the API integration. | `"Test API Integration"` |
-| `message` | `object` | The message object containing the response details. | See [Message Object](https://www.notion.so/PI-1815bd4b16a681b28d3ec84730547496?pvs=21) |
+| `message` | `object` | The message object containing the response details. | See [Message Object](#message-object) |
 | `numMessages` | `integer` | The number of messages in the thread. | `2` |
 | `aliasChatId` | `string` | Identifier for persisting chats through third party integrations | `r14ud3CyX21Tm8Zog0HKJkvZJ` |
 
@@ -217,7 +210,6 @@ The response will be a JSON object containing the `chatId` of the newly created 
 {
   "chatId": "FVfA971B3fnBH4S1OKlo"
 }
-
 ```
 
 ### Errors
@@ -234,7 +226,6 @@ Occurs if the request body is missing required fields or the JSON payload is mal
 {
   "detail": "Your JSON payload is missing required fields. Please consult the documentation."
 }
-
 ```
 
 ### 401 Unauthorized
@@ -247,7 +238,6 @@ Occurs if the `Authorization` header is missing or contains an invalid token.
 {
   "detail": "Invalid or missing authorization token."
 }
-
 ```
 
 ### 500 Internal Server Error
@@ -260,7 +250,6 @@ Occurs if there is an issue on the server side while processing the request.
 {
   "detail": "An unexpected error occurred while processing your request."
 }
-
 ```
 
 ### Summary
