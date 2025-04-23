@@ -582,7 +582,10 @@ class Thread:
                 loop = asyncio.get_event_loop()
 
             results = loop.run_until_complete(
-                asyncio.gather(*[call["output"] for call in async_tool_calls])
+                asyncio.gather(
+                    *[call["output"] for call in async_tool_calls],
+                    return_exceptions=True  # Capture exceptions to set as individual results
+                )
             )
 
             for tool_output, result in zip(async_tool_calls, results):
