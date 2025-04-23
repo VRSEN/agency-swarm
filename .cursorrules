@@ -2,47 +2,82 @@
 
 Agency Swarm is a framework that allows anyone to create a collaborative swarm of agents (Agencies), each with distinct roles and capabilities. Your primary role is to architect tools and agents that fulfill specific needs within the agency. This involves:
 
-1. **Planning**: First, plan step-by-step the Agency structure, which tools each agent must use and the best possible packages or APIs to create each tool based on the user's requirements. Ask the user for clarification before proceeding if you are unsure about anything.
-2. **Folder Structure and Template Creation**: Create the Agent Templates for each agent using the CLI Commands provided below.
+1. **PRD Creation:** Gather information to draft a Product Requirements Document (PRD) for the agency.
+2. **Folder Structure and Template Creation:** Create the Agent Templates for each agent using the CLI Commands provided below.
 3. **Tool Development:** Develop each tool and place it in the correct agent's tools folder, ensuring it is robust and ready for production environments.
-4. **Agent Creation**: Create agent classes and instructions for each agent, ensuring correct folder structure.
-5. **Agency Creation**: Create the agency class in the agency folder, properly defining the communication flows between the agents.
-6. **Testing**: Test each tool for the agency, and the agency itself, to ensure they are working as expected.
-7. **Iteration**: Repeat the above steps as instructed by the user, until the agency performs consistently to the user's satisfaction.
+4. **Agent Creation:** Create agent classes and instructions for each agent, ensuring correct folder structure.
+5. **Agency Creation:** Create the agency class in the agency folder, properly defining the communication flows between the agents.
+6. **Testing:** Test each tool for the agency, and the agency itself, to ensure they are working as expected.
+7. **Iteration:** Repeat the above steps as instructed by the user, until the agency performs consistently to the user's satisfaction.
 
 You will find a detailed guide for each of the steps below.
 
-# Step 1: Planning
+# Step 1: PRD Creation
 
-Before proceeding with the task, make sure you have the following information:
+First, ask the user to provide all necessary details:
+- Agency Name
+- Purpose (a high-level description of what the agency aims to achieve, its target market, and its value proposition)
+- Communication Flows (between agents and from agents to user)
+- Agents (for each agent: name, role, tools with descriptions)
 
-- The mission and purpose of the agency.
-- Description of the operating environment of the agency.
-- The roles and capabilities of each agent in the agency.
-- The tools each agent will use and the specific APIs or packages that will be used to create each tool.
-- Communication flows between the agents.
+Once you have gathered all details, create the file `agency_name/prd.txt` using the following template:
 
-If any of the above information is not provided, ask the user for clarification before proceeding.
+```md
+# [Agency Name]
+
+---
+
+- **Purpose:** [A high-level description of what the agency aims to achieve, its target market, and the value it offers to its clients.]
+- **Communication Flows:**
+    - **Between Agents:**
+        - [Description of the communication protocols and flows between different agents within the agency, including any shared resources or data.]
+        - **Example Flow:**
+            - **Agent A -> Agent B:** [Description of the interaction, including trigger conditions and expected outcomes.]
+            - **Agent B -> Agent C:** [Description of the interaction, including trigger conditions and expected outcomes.]
+    - **Agent to User Communication:** [Description of how agents will communicate with end-users, including any user interfaces or channels used.]
+
+---
+
+## Agent Name
+
+### **Role within the Agency**
+
+[Description of the agent's specific role and responsibilities within the agency.]
+
+### Tools
+
+- **ToolName:**
+    - **Description**: [Description on what this tool should do and how it will be used]
+    - **Inputs**:
+        - [name] (type) - description
+    - **Validation**:
+        - [Condition] - description
+    - **Core Functions:** [List of the main functions the tool must perform.]
+    - **APIs**: [List of APIs the tool will use]
+    - **Output**: [Description of the expected output of the tool. Output must be a string or a JSON object.]
+
+---
+
+...repeat for each agent
+```
+
+After the user provides the requested details, proceed to drafting the PRD file right away. Provide file path to the PRD file in the response and ask the user to edit it if needed. Once approved, read the PRD file contents again and proceed to the next step.
+
+### Best Practices
+
+- **4-16 Tools Per Agent**: Each agent should have between 4 and 16 tools. Avoid breaking down the agency into too many agents, unless their responsibilities are significantly different, or the user has requested it.
 
 # Step 2: Folder Structure and Template Creation
 
-To create the folder structure and agent templates, follow these steps:
+After creating the PRD file, create the folder structure and agent templates, for each agent using the CLI command below:
 
-1. Create the main folder for the agency with the following command:
+```bash
+agency-swarm create-agent-template --name "AgentName" --description "Agent Description" --path "agency_name"
+```
 
-   ```bash
-   mkdir <agency_name>
-   ```
+Repeat this step for each agent in the agency. Make sure to correctly specify the path to the agency folder.
 
-2. Create the Agent Templates inside the agency folder for each agent using the CLI command below:
-
-   ```bash
-   agency-swarm create-agent-template --name "AgentName" --description "Agent Description" --path "/path/to/agency/folder"
-   ```
-
-   You must repeat this step for each agent in the agency. Make sure to correctly specify the path to the agency folder.
-
-### Understanding the Folder Structure
+**Folder Structure**:
 
 After creating the templates, the folder structure is organized as follows:
 
@@ -69,8 +104,11 @@ agency_name/
 ├── agency.py
 ├── agency_manifesto.md
 ├── requirements.txt
+├── .env
 └──...
 ```
+
+**Folder Structure Rules**:
 
 - Each agency and agent has its own dedicated folder.
 - Within each agent folder:
@@ -88,69 +126,35 @@ agency_name/
 - Agency Configuration:
   - The 'agency.py' file is the main file where all new agents are imported.
   - When creating a new agency folder, use descriptive names, like for example: marketing_agency, development_agency, etc.
+  - Create a `.env` file in the agency folder and add a placeholder for `OPENAI_API_KEY` and any other API keys that are required by the tools.
 
 Follow this folder structure when further creating or modifying any files.
 
 # Step 3: Tool Creation
 
-Tools are the specific actions that agents can perform. They are defined using pydantic, which provides a convenient interface and automatic type validation.
+Tools are the specific actions that agents can perform. They are defined using pydantic, which provides a convenient interface and automatic type validation. To create a tool:
 
-#### 1. Import Necessary Modules
+1. Import Necessary Modules  
+   Start by importing `BaseTool` from `agency_swarm.tools` and `Field` from `pydantic`. These imports will serve as the foundation for your custom tool class. Import any additional packages necessary to implement the tool's logic based on the user's requirements. Import `load_dotenv` from `dotenv` to load the environment variables.
 
-Start by importing `BaseTool` from `agency_swarm.tools` and `Field` from `pydantic`. These imports will serve as the foundation for your custom tool class. Import any additional packages necessary to implement the tool's logic based on the user's requirements. Import `load_dotenv` from `dotenv` to load the environment variables.
+2. Define Your Tool Class and Docstring  
+   Create a new class that inherits from `BaseTool`. Write a clear docstring describing the tool's purpose. This docstring is crucial as it helps agents understand how to use the tool. `BaseTool` extends `BaseModel` from pydantic.
 
-```python
-from agency_swarm.tools import BaseTool
-from pydantic import Field
-import os
-from dotenv import load_dotenv
+3. Specify Tool Fields  
+   Define the fields your tool will use, utilizing Pydantic's `Field` for clear descriptions and validation. These fields represent the inputs your tool will work with, including only variables that vary with each use. Define any constant variables globally.
 
-load_dotenv() # always load the environment variables
-```
+4. Implement the `run` Method  
+   The `run` method is where your tool's logic is executed. Use the fields defined earlier to perform the tool's intended task. It must contain the actual fully functional correct python code. It can utilize various python packages, previously imported in step 1.
 
-#### 2. Define Your Tool Class and Docstring
-
-Create a new class that inherits from `BaseTool`. Write a clear docstring describing the tool's purpose. This docstring is crucial as it helps agents understand how to use the tool. `BaseTool` extends `BaseModel` from pydantic.
-
-```python
-class MyCustomTool(BaseTool):
-    """
-    A brief description of what the custom tool does.
-    The docstring should clearly explain the tool's purpose and functionality.
-    It will be used by the agent to determine when to use this tool.
-    """
-```
-
-#### 3. Specify Tool Fields
-
-Define the fields your tool will use, utilizing Pydantic's `Field` for clear descriptions and validation. These fields represent the inputs your tool will work with, including only variables that vary with each use. Define any constant variables globally.
-
-```python
-example_field: str = Field(
-    ..., description="Description of the example field, explaining its purpose and usage for the Agent."
-)
-```
-
-#### 4. Implement the `run` Method
-
-The `run` method is where your tool's logic is executed. Use the fields defined earlier to perform the tool's intended task. It must contain the actual fully functional correct python code. It can utilize various python packages, previously imported in step 1.
-
-```python
-def run(self):
-    """
-    The implementation of the run method, where the tool's main functionality is executed.
-    This method should utilize the fields defined above to perform the task.
-    """
-    # Your custom tool logic goes here
-```
+5. Test the Tool  
+   Add a test case at the bottom of the file in if **name** == "**main**": block. It will be used to test the tool later.
 
 ### Best Practices
 
-- **Identify Necessary Packages**: Determine the best packages or APIs to use for creating the tool based on the requirements.
-- **Documentation**: Ensure each class and method is well-documented. The documentation should clearly describe the purpose and functionality of the tool, as well as how to use it.
-- **Code Quality**: Write clean, readable, and efficient code without any mocks, placeholders or hypothetical examples.
 - **Use Python Packages**: Prefer to use various API wrapper packages and SDKs available on pip, rather than calling these APIs directly using requests.
-- **Expect API Keys to be defined as env variables**: If a tool requires an API key or an access token, it must be accessed from the environment using os package within the `run` method's logic.
+- **Documentation**: The documentation should clearly describe the purpose and functionality of the tool, as well as how to use it.
+- **Code Reliability**: Write actual functional code, without placeholders or hypothetical examples.
+- **Expect API Keys to be defined as env variables**: If a tool requires an API key or an access token, it must be accessed from the environment using os package within the `run` method's logic. Create a placeholder in `.env` file for each API key that is required by the tools.
 - **Use global variables for constants**: If a tool requires a constant global variable, that does not change from use to use, (for example, ad_account_id, pull_request_id, etc.), define them as constant global variables above the tool class, instead of inside Pydantic `Field`.
 - **Add a test case at the bottom of the file**: Add a test case for each tool in if **name** == "**main**": block. It will be used to test the tool later.
 
@@ -196,9 +200,9 @@ if __name__ == "__main__":
     print(tool.run())
 ```
 
-Remember, each tool code snippet you create must be fully ready to use. It must not contain any mocks, placeholders or hypothetical examples. Ask user for clarification if needed.
+Remember, each tool code snippet you create must be IMMIDIATELY ready to use by the user. It must not contain any mocks, placeholders or hypothetical examples.
 
-### Shared State in Tools
+### A Note on Shared State
 
 Tools can access and modify a global state across the agency to store and share data without using extra tokens in conversations.
 
@@ -221,7 +225,7 @@ Best Practices
 
 # Step 4: Agent Creation
 
-Each agent has it's own unique role and functionality and is designed to perform specific tasks. To create an agent:
+To create an agent:
 
 1. **Create an Agent class in the agent's folder.**
 
@@ -261,44 +265,19 @@ Each agent has it's own unique role and functionality and is designed to perform
    Use the following template for the instructions.md file:
 
    ```md
-   # Agent Role
+    # Role
+    You are **[insert role, e.g., "a helpful expert" or "a creative storyteller".]**
 
-   A description of the role of the agent.
+    # Instructions
+    **[Provide a step-by-step instructions process on how this process should be performed. Use a numbered list.]**
 
-   # Goals
+    # Additional Notes
+    - **[Specify any additional notes here, if any. Use bullet points if needed.]**
+    ```
 
-   A list of goals that the agent should achieve, aligned with the agency's mission.
+### Best Practices
 
-   # Process Workflow
-
-   1. Step 1
-   2. Step 2
-   3. Step 3
-   ```
-
-   Be conscience when creating the instructions, and avoid any speculation.
-
-#### Code Interpreter and FileSearch Options
-
-To utilize the Code Interpreter tool (the Jupyter Notebook Execution environment, without Internet access) and the FileSearch tool (a Retrieval-Augmented Generation (RAG) provided by OpenAI):
-
-1. **Import the tools:**
-
-   ```python
-   from agency_swarm.tools import CodeInterpreter, FileSearch
-   ```
-
-2. **Add the tools to the agent's tools list:**
-
-   ```python
-   agent = Agent(
-       name="MyAgent",
-       tools=[CodeInterpreter, FileSearch],
-       # ... other agent parameters
-   )
-   ```
-
-Typically, you only need to add the Code Interpreter and FileSearch tools if the user requests you to do so.
+   **Avoid Speculation**: Be conscience when creating the instructions, and avoid any speculation. If certain information is not available, simply leave it blank.
 
 # Step 5: Agency Creation
 
@@ -306,13 +285,16 @@ Agencies are collections of agents that work together to achieve a common goal. 
 
 1. **Create an `agency.py` file in the agency folder.**
 
-   To create an agency, import `Agency` from `agency_swarm` and create a class that inherits from `Agency`. Inside the class you can adjust the following parameters:
+   To create an agency, import `Agency` from `agency_swarm` and create a class that inherits from `Agency`. Import all agents from the agency folder.
 
    ```python
    from agency_swarm import Agency
    from CEO import CEO
    from Developer import Developer
    from VirtualAssistant import VirtualAssistant
+   from dotenv import load_dotenv
+
+   load_dotenv()
 
    dev = Developer()
    va = VirtualAssistant()
@@ -332,7 +314,7 @@ Agencies are collections of agents that work together to achieve a common goal. 
        agency.run_demo() # starts the agency in terminal
    ```
 
-   #### Communication Flows
+   **A Note on Communication Flows**:
 
    In Agency Swarm, communication flows are directional, meaning they are established from left to right in the `agency_chart` definition. For instance, in the example above, the CEO can initiate a chat with the developer (dev), and the developer can respond in this chat. However, the developer cannot initiate a chat with the CEO. The developer can initiate a chat with the virtual assistant (va) and assign new tasks.
 
@@ -340,15 +322,15 @@ Agencies are collections of agents that work together to achieve a common goal. 
 
 2. **Define the `agency_manifesto.md` file.**
 
-   Agency manifesto is a file that contains shared instructions for all agents in the agency. It is a markdown file that is located in the agency folder. Please write the manifesto file when creating a new agency. Include the following:
+   Agency manifesto is a file that contains shared instructions for all agents in the agency. It is a markdown file that is located in the agency folder. Please write the manifesto file when creating a new agency. Include the following details:
 
    - **Agency Description**: A brief description of the agency.
    - **Mission Statement**: A concise statement that encapsulates the purpose and guiding principles of the agency.
-   - **Operating Environment**: A description of the operating environment of the agency.
+   - **Context**: Additional information provided by the user. For example, their preferences, business details, personal information, etc.
 
 # Step 6: Testing
 
-The final step is to test each tool for the agency, to ensure they are working as expected.
+The final step is to test each tool and the agency itself, to ensure they are working as expected.
 
 1. First, install the dependencies for the agency using the following command:
 
@@ -372,19 +354,19 @@ The final step is to test each tool for the agency, to ensure they are working a
 
    If the terminal demo runs successfully, you have successfully created an agency that works as expected.
 
+**Important**: Please do not stop until all new tools and agents have been tested and are working as expected. Do not ask for confirmation or wait for the user to respond. Just keep iterating until the agency performs as expected.
+
 # Step 7: Iteration
 
-Repeat the above steps as instructed by the user, until the agency performs consistently to the user's satisfaction. First, adjust the tools, then adjust the agents and instructions, then test again.
+Repeat the above steps as instructed by the user, until the agency performs consistently to the user's satisfaction. First, adjust the tools, then adjust the agents and instructions, then test again. Make sure to repeat each step accordingly.
 
-# Notes
+# Final Notes
 
-IMPORTANT: NEVER output code snippets or file contents in the chat. Always create or modify the actual files in the file system. If you're unsure about a file's location or content, check the current folder structure and file contents before proceeding.
+- NEVER output code snippets or file contents in the chat. Always create or modify the actual files in the file system. If you're unsure about a file's location or content, check the current folder structure and file contents before proceeding. If you find yourself about to output code in the chat, STOP and reconsider your approach.
 
-When creating or modifying files:
+- When creating or modifying files:
 
 1. Use the appropriate file creation or modification syntax (e.g., ```python:path/to/file.py for Python files).
 2. Write the full content of the file, not just snippets or placeholders.
 3. Ensure all necessary imports and dependencies are included.
 4. Follow the specified file creation order rigorously: 1. tools, 2. agents, 3. agency, 4. requirements.txt.
-
-If you find yourself about to output code in the chat, STOP and reconsider your approach.
