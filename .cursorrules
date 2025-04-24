@@ -110,6 +110,7 @@ agency_name/
 
 **Folder Structure Rules**:
 
+- Agency folder must be named in lowercase, with underscores instead of spaces.
 - Each agency and agent has its own dedicated folder.
 - Within each agent folder:
 
@@ -154,7 +155,7 @@ Tools are the specific actions that agents can perform. They are defined using p
 - **Use Python Packages**: Prefer to use various API wrapper packages and SDKs available on pip, rather than calling these APIs directly using requests.
 - **Documentation**: The documentation should clearly describe the purpose and functionality of the tool, as well as how to use it.
 - **Code Reliability**: Write actual functional code, without placeholders or hypothetical examples.
-- **Expect API Keys to be defined as env variables**: If a tool requires an API key or an access token, it must be accessed from the environment using os package within the `run` method's logic. Create a placeholder in `.env` file for each API key that is required by the tools.
+- **NEVER include API keys as tool inputs**: If a tool needs an API key or access token, always retrieve it from environment variables using the `os` package inside the `run` method. Do not define API keys or tokens as input fields for the tool.
 - **Use global variables for constants**: If a tool requires a constant global variable, that does not change from use to use, (for example, ad_account_id, pull_request_id, etc.), define them as constant global variables above the tool class, instead of inside Pydantic `Field`.
 - **Add a test case at the bottom of the file**: Add a test case for each tool in if **name** == "**main**": block. It will be used to test the tool later.
 
@@ -168,9 +169,6 @@ import os
 from dotenv import load_dotenv
 
 load_dotenv() # always load the environment variables
-
-account_id = "MY_ACCOUNT_ID"
-api_key = os.getenv("MY_API_KEY") # or access_token = os.getenv("MY_ACCESS_TOKEN")
 
 class MyCustomTool(BaseTool):
     """
@@ -190,6 +188,8 @@ class MyCustomTool(BaseTool):
         """
         # Your custom tool logic goes here
         # Example:
+        # account_id = "MY_ACCOUNT_ID"
+        # api_key = os.getenv("MY_API_KEY") # or access_token = os.getenv("MY_ACCESS_TOKEN")
         # do_something(self.example_field, api_key, account_id)
 
         # Return the result of the tool's operation as a string
@@ -202,7 +202,7 @@ if __name__ == "__main__":
 
 Remember, each tool code snippet you create must be IMMIDIATELY ready to use by the user. It must not contain any mocks, placeholders or hypothetical examples.
 
-### A Note on Shared State
+### Shared State
 
 Tools can access and modify a global state across the agency to store and share data without using extra tokens in conversations.
 
@@ -217,11 +217,31 @@ Use this for:
 - Maintaining state across multiple tool calls
 - Sharing data among tools and agents
 
-Best Practices
+Best Practices:
 - Use descriptive keys to avoid conflicts
 - Provide default values when retrieving
 - Clean up unneeded data
 
+### MCP Integration
+
+Alternatively to creating custom tools, you can use special MCP servers which already contain predefined tools. In this case, you don't need to create custom tool files for the same functionality or add them to the PRD. You can use MCPs interchangeably with custom tools
+
+```python
+from agency_swarm.tools.mcp import MCPServerStdio
+
+filesystem_server = MCPServerStdio(
+    # This name determines how the agent accesses the tools (e.g., Filesystem_Server.list_files)
+    name="Filesystem_Server",
+    params={
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-filesystem", "."], 
+    },
+    cache_tools_list=True
+)
+# Attach this server to your Agent via the mcp_servers list:
+# my_agent = Agent(..., mcp_servers=[sse_server])
+# Reference: https://agency-swarm.ai/core-framework/tools/mcp-integration#step-2-define-sse-server-connection-optional
+```
 
 # Step 4: Agent Creation
 
