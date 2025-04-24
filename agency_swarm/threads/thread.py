@@ -37,6 +37,32 @@ class Thread:
     async_mode: str = None
     max_workers: int = 4
 
+    def _ensure_no_active_run(self, action: str = "wait") -> None:
+        """
+        Make sure the thread is in a safe state before any mutating call.
+
+        Parameters
+        ----------
+        action : {"wait", "cancel"}
+            "wait"   – block until the current run reaches a terminal state.
+            "cancel" – actively cancel the run, then wait until the
+                        cancellation is confirmed.
+        """
+        if not self._run or self._run.status in self.terminal_states:
+            return          # already safe
+
+        if action == "cancel":
+            self.cancel_run()          # poll() inside guarantees termination
+        else:
+            self._run_until_done()     # passive wait
+
+        # Defensive sanity-check
+        if self._run and self._run.status not in self.terminal_states:
+            raise RuntimeError(
+                f"Run {self._run.id} still active after _ensure_no_active_run "
+                f"(status={self._run.status})."
+            )
+
     @property
     def thread_url(self):
         return f"https://platform.openai.com/playground/assistants?assistant={self.recipient_agent.id}&mode=assistant&thread={self.id}"
@@ -303,6 +329,8 @@ class Thread:
         temperature: float | None = None,
         response_format: dict | None = None,
     ):
+        # Always start from a clean slate
+        self._ensure_no_active_run(action="cancel")
         try:
             if event_handler:
                 with self.client.beta.threads.runs.stream(
@@ -466,6 +494,8 @@ class Thread:
         role: str = "user",
         attachments: list[Attachment] | None = None,
     ) -> Message:
+        # Never post while a run is still alive
+        self._ensure_no_active_run(action="wait")
         try:
             return self.client.beta.threads.messages.create(
                 thread_id=self.id, role=role, content=message, attachments=attachments
