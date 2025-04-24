@@ -1,0 +1,113 @@
+---
+title: "Additional Instructions"
+description: "Provide additional context and user information to your agents to enhance their responses."
+icon: "message"
+---
+
+## Overview
+
+Additional instructions allow you to pass additional context to the agent at the time of the request. Typically, this is used to pass session or specific user data. For example, if user is already signed in on your application, and you know their email, there is no reason for the agent to as it again. So, you can simply add in additional instructions: "The current user's email is [myemail@example.com](mailto:myemail@example.com) please use this to submit all customer support tickets"
+
+## Usage
+
+### Widgets
+
+To use **additional instructions** in widgets, simply add them in the **third parameter** in the ChatComponent ****`init()` function like below.
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>My Travel Planner</title>
+  </head>
+  <body>
+    <script
+      defer
+      src="https://openai-widget.web.app/ChatComponent.bundle.js"
+    ></script>
+    <script>
+      document.addEventListener("DOMContentLoaded", function () {
+        // Check if the chat container exists
+        var chatContainer = document.getElementById("chat-container");
+        // If the chat container doesn't exist, create it
+        if (!chatContainer) {
+          chatContainer = document.createElement("div");
+          chatContainer.id = "chat-container";
+          document.body.appendChild(chatContainer);
+        }
+
+        let additionalInstructions = "User's favorite city is Paris."
+
+        // userId should be defined somewhere in your application
+        //additionalInstructions = "The current user id is" + userId
+
+        // Initialize the Chat component
+        if (window.ChatComponent) {
+          ChatComponent.init("<your-widget-id>", "#chat-container", additionalInstructions);
+        } else {
+          console.error("ChatComponent is not available");
+        }
+      });
+    </script>
+  </body>
+</html>
+```
+
+Here's an example of the **Widget** response based on this input:
+
+![widget-screenshot.png](/images/additional-instructions-example.webp)
+### CustomGPTs
+
+To use **additional instruction with CustomGPTs**, add a **script tag** to handle your instructions or dynamic data to the **Custom GPT**. Here's an example of how you can extend the above HTML code with a script:
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>My Travel Planner</title>
+  </head>
+  <body>
+    <iframe
+      src="https://agencii.ai/custom-gpt/<your-custom-gpt-id>"
+      width="800"
+      height="800"
+      id="custom-gpt-iframe"
+      data-additional-instructions="User wants to visit Paris."
+    ></iframe>
+    <script>
+      const iframe = document.getElementById("custom-gpt-iframe");
+
+      window.addEventListener("message", (event) => {
+        if (event.data === "iframe-ready" && event.origin === "https://agencii.ai") {
+          // Get additional instructions from the HTML data attribute or use your own logic to set it
+          let additionalInstructions = iframe.getAttribute("data-additional-instructions") || "";
+
+          // userEmail should be defined somewhere in your application
+          // additionalInstructions += "Current user's email is " + userEmail
+
+          // Send the additional instructions to the iframe
+          iframe.contentWindow.postMessage(
+            {
+              type: "additionalInstructions",
+              value: additionalInstructions,
+            },
+            "https://agencii.ai"
+          );
+        }
+      });
+    </script>
+  </body>
+</html>
+```
+
+Here's an example of the **Custom GPT's** response based on this input:
+
+
+![custom-gpt-screenshot.png](/images/custom-gpt-screenshot.webp)
+### API
+
+For web api, simply use `additionalInstructions` in `get_completion` POST endpoint. For more details, see: [API reference](/platform/integrations/api-gen/get-completion)

@@ -1,0 +1,226 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Agencii Platform API",
+    "version": "1.0.0",
+    "description": "Reference documentation for the Agencii Platform API. Provides endpoints allowing you to run your agents on custom backends or on other unsupported channels. ⚡ Live Postman Example: https://www.postman.com/vrsen-ai/agencii-api/overview"
+  },
+  "servers": [
+    {
+      "url": "https://agency-swarm-app-japboyzddq-uc.a.run.app",
+      "description": "Production server"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Platform token required for authentication. Find or create one inside Profile Icon > API Keys. Example: Bearer sk-agencii-..."
+      }
+    },
+    "schemas": {
+      "Attachment": {
+        "type": "object",
+        "description": "Object representing a file attachment.",
+        "properties": {
+          "file_id": { "type": "string", "description": "The unique identifier for the file. Example: file-0SY0lLXWCSSBIOb2gu8UolxH" },
+          "tools": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/Tool" },
+            "description": "An array of tool objects specifying tools to be used with the file. Example: [{ \"type\": \"file_search\" }]"
+          }
+        },
+        "required": ["file_id", "tools"]
+      },
+      "Tool": {
+        "type": "object",
+        "description": "Object representing a tool to be used.",
+        "properties": {
+          "type": { "type": "string", "description": "The type of tool to be used. Example: file_search" }
+        },
+        "required": ["type"]
+      },
+      "GetCompletionRequest": {
+        "type": "object",
+        "description": "Request body for the /get_completion endpoint.",
+        "properties": {
+          "message": { "type": "string", "description": "The message content to be processed by the agent. Example: \"Hey! How are you?\"" },
+          "apiIntegrationId": { "type": "string", "description": "The unique identifier for the API integration being used. Example: \"dpCD7snQ0tCWrdtp6UhZ\"" },
+          "chatId": { "type": "string", "description": "The unique identifier for the chat session. If provided, continues the chat with the previous context. Example: \"plOQeH3hW7UKiACqEdAx\"", "nullable": true },
+          "attachments": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/Attachment" },
+            "description": "An array of attachment objects to include files and specify tools for processing. Example: [{\"file_id\": \"file-123\", \"tools\": [{\"type\": \"file_search\"}]}]",
+            "nullable": true
+          },
+          "additionalInstructions": { "type": "string", "description": "Appends additional instructions at the end of the agent's instructions for the run. Useful for modifying behavior per-run. Example: \"User name: John Smith\"", "nullable": true },
+          "aliasChatId": { "type": "string", "description": "An alternative to chatId which allows using custom identifiers for persisting chats through third party integrations. Example: \"custom-identifier\"", "nullable": true }
+        },
+        "required": ["message", "apiIntegrationId"]
+      },
+      "GetCompletionResponse": {
+        "type": "object",
+        "description": "Response body for the /get_completion endpoint when textOnly mode is disabled.",
+        "properties": {
+          "chatId": { "type": "string", "description": "The unique identifier for the chat session. Example: \"FVfA971B3fnBH4S1OKlo\"" },
+          "createdAt": { "type": "string", "format": "date-time", "description": "The timestamp when the response was created (ISO 8601 format). Example: \"2024-08-06T02:02:37.533913\"" },
+          "threadId": { "type": "string", "description": "The unique identifier for the underlying thread. Example: \"thread_ruUj69CyW2STm8Zog0HXkvIJ\"" },
+          "assistantId": { "type": "string", "description": "The unique identifier for the assistant that responded. Example: \"J3NQwdHxqm9jvWFpOwFk\"" },
+          "name": { "type": "string", "description": "The name of the API integration used. Example: \"Test API Integration\"" },
+          "message": { "$ref": "#/components/schemas/Message", "description": "The message object containing the agent's response details." },
+          "numMessages": { "type": "integer", "description": "The total number of messages in the chat thread. Example: 2" },
+          "aliasChatId": { "type": "string", "description": "Alternative chat identifier used for persisting chats through third party integrations. Example: \"r14ud3CyX21Tm8Zog0HKJkvZJ\"" }
+        }
+      },
+      "Message": {
+        "type": "object",
+        "description": "Object representing a message within the chat.",
+        "properties": {
+          "id": { "type": "string", "description": "The unique identifier for the message. Example: \"msg_nH4zWgFW7dCUoNQ5msLJNBUd\"" },
+          "content": { "type": "string", "description": "The content of the message. Example: \"The secret phrase is: **papaya tangerine**.\"" },
+          "role": { "type": "string", "description": "The role of the message sender (e.g., 'assistant', 'user'). Example: \"assistant\"" },
+          "type": { "type": "string", "description": "The type of message (e.g., 'text'). Example: \"text\"" },
+          "createdAt": { "type": "string", "format": "date-time", "description": "The timestamp when the message was created (ISO 8601 format). Example: \"2024-08-06T02:02:37.533913\"" },
+          "references": { "type": "array", "items": { "type": "string" }, "description": "An array of references associated with the message." },
+          "fileIds": { "type": "array", "items": { "type": "string" }, "description": "An array of file IDs associated with the message. Example: [\"file-wRZy12uetHH9dVEpR6PhE92j\"]" },
+          "assistantData": { "type": "object", "nullable": true, "description": "Additional assistant-related data." },
+          "functions": { "type": "object", "nullable": true, "description": "Additional function-related data." }
+        }
+      },
+      "CreateNewChatRequest": {
+        "type": "object",
+        "description": "Request body for the /create_new_chat endpoint.",
+        "properties": {
+          "apiIntegrationId": { "type": "string", "description": "The unique identifier of the API integration for which to create the chat. Example: \"dpCD7snQ0tCWrdtp6UhZ\"" }
+        },
+        "required": ["apiIntegrationId"]
+      },
+      "CreateNewChatResponse": {
+        "type": "object",
+        "description": "Response body for the /create_new_chat endpoint.",
+        "properties": {
+          "chatId": { "type": "string", "description": "The unique identifier for the newly created chat. Example: \"FVfA971B3fnBH4S1OKlo\"" }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "description": "Standard error response format.",
+        "properties": {
+          "detail": { "type": "string", "description": "A detailed error message." }
+        }
+      }
+    }
+  },
+  "security": [ { "BearerAuth": [] } ],
+  "paths": {
+    "/create_new_chat": {
+      "post": {
+        "summary": "Create new chat",
+        "description": "Creates a new chat instance for a user based on a provided API integration. Requires a valid platform token in the headers for authentication. Ensure the apiIntegrationId corresponds to an existing integration.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateNewChatRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Chat created successfully. Returns the unique chatId for the new chat.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/CreateNewChatResponse" }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request. Occurs if the request body is missing required fields or the JSON payload is malformed.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+                "example": { "detail": "Your JSON payload is missing required fields. Please consult the documentation." }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized. Occurs if the Authorization header is missing or contains an invalid token.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+                "example": { "detail": "Invalid or missing authorization token." }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error. Occurs if there is an issue on the server side while processing the request.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+                "example": { "detail": "An unexpected error occurred while processing your request." }
+              }
+            }
+          }
+        },
+        "security": [ { "BearerAuth": [] } ]
+      }
+    },
+    "/get_completion": {
+      "post": {
+        "summary": "Get completion",
+        "description": "Processes a message using the specified API integration and returns a completion from the agent. Requires a valid platform token. Ensure the apiIntegrationId is valid. Supports continuing existing chats via chatId or aliasChatId and attaching files with tools.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/GetCompletionRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response. The format varies depending on the `textOnly` mode configured for the API Integration. If `textOnly` is enabled, the response is plain text. Otherwise, it's application/json.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/GetCompletionResponse" }
+              },
+              "text/plain": {
+                "schema": { "type": "string", "example": "This is a final message response from the bot." }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request. Occurs if the request body is missing required fields or the JSON payload is malformed.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+                "example": { "detail": "Your JSON payload is missing required fields. Please consult the documentation." }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized. Occurs if the Authorization header is missing or contains an invalid token.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+                "example": { "detail": "Invalid or missing authorization token." }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error. Occurs if there is an issue on the server side while processing the request.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+                "example": { "detail": "An unexpected error occurred while processing your request." }
+              }
+            }
+          }
+        },
+        "security": [ { "BearerAuth": [] } ]
+      }
+    }
+  }
+}

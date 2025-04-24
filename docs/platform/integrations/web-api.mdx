@@ -1,0 +1,56 @@
+---
+title: "API Integration"
+description: "Reference documentation for the Agencii Platform API."
+icon: "globe"
+---
+
+## Feature Overview
+
+API Integrations provide a set of endpoints allowing you to run your agents on custom backends or on other unsupported channels.
+
+<Info>
+⚡ Live Postman Example: [Go to Postman →](https://www.postman.com/vrsen-ai/agencii-api/overview)
+</Info>
+
+---
+
+## Authentication
+
+- **Note**: You can only use platform tokens for these endpoints. Find or create one inside **Profile Icon > API Keys**.
+- **Headers**:
+    - `Authorization`: `Bearer <your_token>`
+        - **Example**: `Bearer sk-agencii-H7sb111...`
+    - `Content-Type`: `application/json`
+
+---
+
+## Endpoints
+
+<CardGroup cols={2}>
+<Card
+  title="Create New Chat"
+  icon="plus"
+  href="/platform/integrations/api/create-new-chat"
+>
+  Start a new conversation session.
+</Card>
+
+<Card
+  title="Get Completion"
+  icon="bolt"
+  href="/platform/integrations/api/get-completion"
+>
+  Get a response from your agent.
+</Card>
+</CardGroup>
+
+---
+
+## Additional Notes
+
+- All timestamps are in ISO 8601 format.
+- Ensure that your `apiIntegrationId` is valid and corresponds to an existing integration.
+- Replace placeholder values with actual data when making requests.
+- The `attachments` parameter in `/get_completion` allows you to include files and specify tools for processing.
+
+---
