@@ -12,6 +12,20 @@
     "tabs": [
       {
         "tab": "Framework",
+        "global": {
+          "anchors": [
+            {
+              "anchor": "Discord Community",
+              "href": "https://discord.gg/cw2xBaWfFM",
+              "icon": "discourse"
+            },
+            {
+              "anchor": "Changelog",
+              "href": "https://github.com/VRSEN/agency-swarm/releases",
+              "icon": "timeline"
+            }
+          ]
+        },
         "groups": [
           {
             "group": "Welcome",
@@ -117,6 +131,20 @@
       },
       {
         "tab": "Platform",
+        "global": {
+          "anchors": [
+            {
+              "anchor": "Agencii Platform",
+              "href": "https://agencii.ai/signup/",
+              "icon": "globe"
+            },
+            {
+              "anchor": "Skool Community",
+              "href": "https://www.skool.com/agency-ai/about",
+              "icon": "users"
+            }
+          ]
+        },
         "groups": [
           {
             "group": "General",
@@ -143,7 +171,7 @@
         ],
         "openapi": {
           "source": "/openapi.json",
-          "directory": "platform/integrations/api-gen"
+          "directory": "platform/integrations/api"
         }
       },
       {
@@ -163,21 +191,7 @@
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Discord Community",
-          "href": "https://discord.gg/cw2xBaWfFM",
-          "icon": "discourse"
-        },
-        {
-          "anchor": "Changelog",
-          "href": "https://github.com/VRSEN/agency-swarm/releases",
-          "icon": "timeline"
-        }
-      ]
-    }
+    ]
   },
   "logo": {
     "light": "/images/agencii-logo.svg",
