@@ -139,16 +139,12 @@
             "pages": [
               "platform/additional-instructions"
             ]
-          },
-          {
-            "group": "Web API Reference",
-            "icon": "code",
-            "openapi": {
-              "source": "/openapi.json",
-              "directory": "platform/integrations/api-gen"
-            }
           }
-        ]
+        ],
+        "openapi": {
+          "source": "/openapi.json",
+          "directory": "platform/integrations/api-gen"
+        }
       },
       {
         "tab": "Extras",
