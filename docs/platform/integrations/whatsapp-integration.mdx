@@ -1,0 +1,79 @@
+---
+title: "WhatsApp Integration"
+description: "Learn how to integrate your agents with WhatsApp using Twilio"
+icon: "whatsapp"
+---
+
+## Feature Overview
+
+Seamlessly connect your **agents** to **WhatsApp** using **Twilio**, a messaging service that significantly simplifies WhatsApp Sender Business profile setup.
+
+![Screenshot 2025-02-17 at 13.24.37.png](/images/integrations/whatsapp-integration/Screenshot_2025-02-17_at_13.24.37.png)
+
+🔒 All chats, conversations and messages are not stored in our database to ensure your or your client’s privacy.
+
+---
+
+## Prerequisites
+
+- A verified **Twilio Account** ([Sign up here](https://login.twilio.com/u/signup)) with a provisioned phone number.
+- A verified **Facebook Business account** ([Learn more](https://www.facebook.com/business/help/1710077379203657)) and a verified **WhatsApp Business Portfolio** ([How to verify your WhatsApp Business Account](https://www.facebook.com/business/help/2087193751603668?id=2129163877102343)).
+
+## Creating a WhatsApp Agent via Twilio
+
+<Steps>
+  <Step title="Create a WhatsApp Sender via Twilio">
+    1. Go to [Twilio Console](https://console.twilio.com/us1/develop/sms/senders/whatsapp-senders) and click on the **'Create New Sender'** button to begin the setup.
+
+    ![Screenshot 2025-02-17 at 13.40.04.png](/images/integrations/whatsapp-integration/Screenshot_2025-02-17_at_13.40.04.png)
+
+    2. Follow all the necessary steps on **Twilio's** end to complete the integration.
+    Twilio has already documented the entire process, so you can refer to their official guides via this link: https://www.twilio.com/docs/whatsapp/self-sign-up
+
+    ![Screenshot 2025-02-17 at 13.48.59.png](/images/integrations/whatsapp-integration/Screenshot_2025-02-17_at_13.48.59.png)
+
+    3. Once you have a **verified** WhatsApp Sender with the status set to **Online**, you can proceed to the next steps.
+  </Step>
+
+  <Step title="Create a New WhatsApp Integration">
+    1. Go to https://agencii.ai/whatsapp/ and click on the **'Connect WhatsApp'** button to begin the setup.
+
+    2. Enter your Agent details
+
+    ![Screenshot 2025-02-17 at 14.51.15.png](/images/integrations/whatsapp-integration/Screenshot_2025-02-17_at_14.51.15.png)
+  </Step>
+
+  <Step title="Select or Create your Twilio Account">
+    1. **Select your Twilio account** from the dashboard.
+
+    ![Screenshot 2025-02-17 at 15.27.03.png](/images/integrations/whatsapp-integration/Screenshot_2025-02-17_at_15.27.03.png)
+
+    2. To add a new account, copy and paste your **Account SID** and **Auth Token** from the bottom of the Twilio dashboard.
+
+    ![Screenshot 2025-02-17 at 15.27.55.png](/images/integrations/whatsapp-integration/Screenshot_2025-02-17_at_15.27.55.png)
+
+    3. (Optional) If you have a Subaccount, paste the Subaccount SID as well.
+    4. Click **Create**
+  </Step>
+
+  <Step title="Add your WhatsApp Sender SID">
+    1. Find your WhatsApp Sender SID in the Twilio Console under **Messaging** → **Senders** → **WhatsApp Senders**, then copy it from the URL. Example: https://console.twilio.com/us1/develop/sms/senders/whatsapp-senders/details/XEXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+
+    ![Screenshot 2025-02-17 at 15.40.42.png](/images/integrations/whatsapp-integration/Screenshot_2025-02-17_at_15.40.42.png)
+
+    2. Add whatsapp sender on agencii
+
+    ![Screenshot 2025-02-17 at 15.29.05.png](/images/integrations/whatsapp-integration/Screenshot_2025-02-17_at_15.29.05.png)
+  </Step>
+
+  <Step title="Finalize Integration">
+    Copy each webhook integration URL and paste it into the **Twilio WhatsApp Sender configuration profile**, ensuring each URL is placed in the corresponding textbox.
+
+    ![Screenshot 2025-02-17 at 15.43.40.png](/images/integrations/whatsapp-integration/Screenshot_2025-02-17_at_15.43.40.png)
+
+    ![Screenshot 2025-02-17 at 15.42.34.png](/images/integrations/whatsapp-integration/Screenshot_2025-02-17_at_15.42.34.png)
+
+  </Step>
+</Steps>
+
+✅ **That's it!** Now you can chat with your Agent via WhatsApp.

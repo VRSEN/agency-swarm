@@ -12,6 +12,20 @@
     "tabs": [
       {
         "tab": "Framework",
+        "global": {
+          "anchors": [
+            {
+              "anchor": "Discord Community",
+              "href": "https://discord.gg/cw2xBaWfFM",
+              "icon": "discourse"
+            },
+            {
+              "anchor": "Changelog",
+              "href": "https://github.com/VRSEN/agency-swarm/releases",
+              "icon": "timeline"
+            }
+          ]
+        },
         "groups": [
           {
             "group": "Welcome",
@@ -97,6 +111,12 @@
             ]
           },
           {
+            "group": "References",
+            "pages": [
+              "references/api"
+            ]
+          },
+          {
             "group": "Contributing",
             "pages": [
               "contributing/contributing"
@@ -111,15 +131,49 @@
         ]
       },
       {
-        "tab": "Tutorials",
+        "tab": "Platform",
+        "global": {
+          "anchors": [
+            {
+              "anchor": "Agencii Platform",
+              "href": "https://agencii.ai/signup/",
+              "icon": "globe"
+            },
+            {
+              "anchor": "Skool Community",
+              "href": "https://www.skool.com/agency-ai/about",
+              "icon": "users"
+            }
+          ]
+        },
         "groups": [
           {
-            "group": "Tutorials",
+            "group": "General",
+            "icon": "globe",
             "pages": [
-              "tutorials/tutorials"
+              "platform/overview"
+            ]
+          },
+          {
+            "group": "Integrations",
+            "icon": "plug",
+            "pages": [
+              "platform/integrations/slack-integration",
+              "platform/integrations/whatsapp-integration",
+              "platform/integrations/web-api"
+            ]
+          },
+          {
+            "group": "Additional Features",
+            "pages": [
+              "platform/additional-instructions"
             ]
           }
-        ]
+        ],
+        "openapi": {
+          "source": "/openapi.json",
+          "directory": "platform/integrations/api"
+        }
       },
       {
         "tab": "Extras",
@@ -129,24 +183,16 @@
             "pages": [
               "extras/extras"
             ]
+          },
+          {
+            "group": "Tutorials",
+            "pages": [
+              "tutorials/tutorials"
+            ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Discord Community",
-          "href": "https://discord.gg/cw2xBaWfFM",
-          "icon": "discourse"
-        },
-        {
-          "anchor": "Changelog",
-          "href": "https://github.com/VRSEN/agency-swarm/releases",
-          "icon": "timeline"
-        }
-      ]
-    }
+    ]
   },
   "logo": {
     "light": "/images/logo-light.svg",

@@ -1,0 +1,107 @@
+---
+title: "Slack Integration"
+description: "Learn how to integrate your agents with Slack"
+icon: "slack"
+---
+
+## **Feature Overview:**
+
+With Slack Integrations, you can create custom bots tailored to your workspace. These apps can be installed and managed within your workspace, enabling a wide range of automated functions and interactions.
+
+Currently, the Slack bots created via agencii can respond in:
+
+- **Direct Messages (DMs):**
+
+    ![Screenshot of a bot responding to a Direct Message](/images/integrations/slack-integration/Screenshot_2024-09-13_at_10.33.06.png)
+
+- **Public Chats** when mentioned by name (e.g., `@BotName`):
+
+    ![Screenshot of a bot responding to a mention in a Public Chat](/images/integrations/slack-integration/Screenshot_2024-09-13_at_10.55.36.png)
+
+## Privacy Statement
+
+<Tip>
+When apps are created on our platform, we don't have access to your workspace or its members. The OAuth permissions requested are minimal and support only the app's core functions. You can revoke the OAuth token from Slack at any time. You retain ownership of the app and can distribute it freely, regardless of user growth. For your privacy, **messages are not stored in our database**.
+</Tip>
+
+---
+
+## **Creating a Custom Slack Bot**
+
+<Steps>
+  <Step title="Provide Basic Details">
+    1. **Select Your Agent:** Select the agent to be integrated into your slack app. This agent will be used to generate responses.
+
+    ![](/images/integrations/slack-integration/Screenshot_2024-09-13_at_11.12.23.png)
+
+    2. **Set the Integration Name:** This name refers to the bot's name, which will be used to mention it in public chats. Typically, you might want to set it to you agent name, although you can make it different if you wish.
+
+    ![](/images/integrations/slack-integration/Screenshot_2024-09-13_at_11.14.52.png)
+
+    3. **Provide an Integration Description:** This is a short description of your bot, used for reference only. (So you don't forget why you created it)
+
+    ![](/images/integrations/slack-integration/Screenshot_2024-09-13_at_11.18.46.png)
+  </Step>
+
+  <Step title="Create a Slack App">
+    1. **Click "Create Slack App":** This will redirect you to the Slack Developer portal (`api.slack.com`), where you will need to authenticate and select the correct workspace for your application.
+
+    ![](/images/integrations/slack-integration/Screenshot_2024-09-13_at_11.21.57.png)
+
+    2. **Select Your Workspace and Click "Next":** This workspace will be the owner of your application, although you can still allow other workspaces to install it on their side.
+
+    ![](/images/integrations/slack-integration/Screenshot_2024-09-13_at_11.23.37.png)
+
+    3. **Click "Create":** Simply click create to continue. The application will be pre-configured with all the necessary settings.
+
+    ![](/images/integrations/slack-integration/Screenshot_2024-09-13_at_11.27.25.png)
+
+    4. **Copy credentials:** Copy your client id, client secret and signing secret, and paste them into the corresponding fields
+
+    ![](/images/integrations/slack-integration/Screenshot_2024-09-13_at_11.29.41.png)
+
+    ![](/images/integrations/slack-integration/Screenshot_2024-09-13_at_11.32.02.png)
+
+    <Note>
+    Keep your credentials secure to prevent potential exposure of your app.
+    </Note>
+  </Step>
+
+  <Step title="Finish Your Installation">
+    1. **Install on Slack:** Click on the "Install on Slack" button to install your app.
+        <Tip>
+        Alternatively, you can copy an installation link and send it to your client, or another workspace owner.
+        </Tip>
+    2. **Grant Permission:** Slack will prompt you to grant permission to exchange the OAuth token. Click "Allow" to sync your app with the integration.
+
+    ![](/images/integrations/slack-integration/Screenshot_2024-09-13_at_11.35.52.png)
+  </Step>
+</Steps>
+
+✅ **That's it!** Now you can use your Agent in Slack!
+
+## Limitations
+
+- Files are currently **not supported**.
+
+<Tip>
+Apps created under the current limitations will receive full **future support**, as we ship any new features.
+</Tip>
+
+---
+
+## **Troubleshooting**
+
+If the automatic OAuth flow fails, you can manually install the app.
+
+1. Find your Bot User OAuth Token in your app on [api.slack.com](https://api.slack.com/).
+2. Click "Install to your workspace" to generate the necessary tokens.
+
+    ![](/images/integrations/slack-integration/Screenshot_2024-09-13_at_11.37.28.png)
+
+3. Copy and paste the token into the "Manual Slack Installation" dialog and click "Install."
+
+    ![](/images/integrations/slack-integration/Screenshot_2024-09-13_at_12.33.54.png)
+
+
+---
