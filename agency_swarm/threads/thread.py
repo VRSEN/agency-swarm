@@ -37,32 +37,6 @@ class Thread:
     async_mode: str = None
     max_workers: int = 4
 
-    def _ensure_no_active_run(self, action: str = "wait") -> None:
-        """
-        Make sure the thread is in a safe state before any mutating call.
-
-        Parameters
-        ----------
-        action : {"wait", "cancel"}
-            "wait"   – block until the current run reaches a terminal state.
-            "cancel" – actively cancel the run, then wait until the
-                        cancellation is confirmed.
-        """
-        if not self._run or self._run.status in self.terminal_states:
-            return          # already safe
-
-        if action == "cancel":
-            self.cancel_run()          # poll() inside guarantees termination
-        else:
-            self._run_until_done()     # passive wait
-
-        # Defensive sanity-check
-        if self._run and self._run.status not in self.terminal_states:
-            raise RuntimeError(
-                f"Run {self._run.id} still active after _ensure_no_active_run "
-                f"(status={self._run.status})."
-            )
-
     @property
     def thread_url(self):
         return f"https://platform.openai.com/playground/assistants?assistant={self.recipient_agent.id}&mode=assistant&thread={self.id}"
@@ -614,7 +588,7 @@ class Thread:
             results = loop.run_until_complete(
                 asyncio.gather(
                     *[call["output"] for call in async_tool_calls],
-                    return_exceptions=True  # Capture exceptions to set as individual results
+                    return_exceptions=True,  # Capture exceptions to set as individual results
                 )
             )
 
@@ -893,6 +867,32 @@ class Thread:
     # -----------------------------
     # Private helper methods
     # -----------------------------
+
+    def _ensure_no_active_run(self, action: str = "wait") -> None:
+        """
+        Make sure the thread is in a safe state before any mutating call.
+
+        Parameters
+        ----------
+        action : {"wait", "cancel"}
+            "wait"   – block until the current run reaches a terminal state.
+            "cancel" – actively cancel the run, then wait until the
+                        cancellation is confirmed.
+        """
+        if not self._run or self._run.status in self.terminal_states:
+            return  # already safe
+
+        if action == "cancel":
+            self.cancel_run()  # poll() inside guarantees termination
+        else:
+            self._run_until_done()  # passive wait
+
+        # Defensive sanity-check
+        if self._run and self._run.status not in self.terminal_states:
+            raise RuntimeError(
+                f"Run {self._run.id} still active after _ensure_no_active_run "
+                f"(status={self._run.status})."
+            )
 
     def _setup_attachments(
         self,
