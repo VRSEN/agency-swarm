@@ -31,12 +31,13 @@ def cap_agent_instruction(_name, _description):
             "parameter": ...,
             "id": ...,
             "description": ...,
-            "type": ...,
-            "label": [...]
+            "label": [...],
+            "type": ...
         }}, ...]
     }}
     
-    其中，"user_requirement"字段填入用户初始请求；"param_list"字段是一个列表，列表的每一项中，"parameter"字段填入你所需要询问的参数名称，"id"字段填入你所需要询问的参数编号，"description"字段填入你所需要询问参数的介绍，"type"字段填入你所需要询问参数的类型，"label"字段填入所需参数的标识列表
+    其中，"user_requirement"字段填入用户初始请求；"param_list"字段是一个列表，列表的每一项中，"parameter"字段填入你所需要询问的参数名称，"id"字段填入你所需要询问的参数编号，"description"字段填入你所需要询问参数的介绍，"label"字段（如果有）填入所需参数的标识列表，"type"字段填入你所需要询问参数的类型
+    # 注意: "param_list"列表中每个字段的值都应该与你之前接收到的必要参数列表中的对应项相同，你不允许缺漏任何参数
     
     当接收到param_asker的回复时，你需要确认<param_list>中所有的参数是否都已经获取到，无论mandatory是否为1。如果有参数值缺失，则重复step 2向param_asker发送询问，直到没有参数值缺失为止
 
