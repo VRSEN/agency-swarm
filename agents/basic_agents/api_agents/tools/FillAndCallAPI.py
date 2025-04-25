@@ -42,9 +42,7 @@ class FillAndCallAPI(BaseTool):
                     uri = uri + "&" + parameter + "=" + str(value)
         return uri
     
-    def merge_dict(self, dict1: dict, dict2: dict) -> dict:
-        print("dict1:", dict1)
-        print("dict2:", dict2)
+    def merge_dict(self, dict1, dict2):
         merge_dict = dict1.copy()
         for key, value in dict2.items():
             if key in merge_dict:
@@ -54,10 +52,13 @@ class FillAndCallAPI(BaseTool):
                     for param in value:
                         label = param["label"]
                         fl = False
-                        for i, param1 in zip(merge_dict[key]):
+                        for i, param1 in enumerate(merge_dict[key]):
                             if param1["label"] == label:
                                 fl = True
-                                merge_dict[key][i] = self.merge_dict(param1["value"], param["value"])
+                                merge_dict[key][i] = {
+                                    "label": label,
+                                    "value": self.merge_dict(param1["value"], param["value"])
+                                }
                         if not fl:
                             merge_dict[key].append(param)
             else:
@@ -107,23 +108,25 @@ class FillAndCallAPI(BaseTool):
         for param in self.param_list:
             if uri_param_values.get(param["parameter"]) == None:
                 parent_param_list = self.filling_param(name=param["parameter"], id=param["id"], api_id=api_id)
-                labels = param["label"]
+                labels = param["label"] if "label" in param else []
                 value = {}
                 for parameter in parent_param_list:
                     if parameter["name"] == param["parameter"]:
                         value = {parameter["name"]: param["value"]}
                     else:
                         if "array" in parameter["type"].lower():
-                            value = [{
-                                "label": labels[0],
-                                "value": {parameter["name"]: value}
-                                }]
+                            value = {
+                                parameter["name"]: [{
+                                    "label": labels[0],
+                                    "value": value
+                                }]}
                             labels = labels[1: ] if len(labels) > 1 else []
                         else:
                             value = {parameter["name"]: value}
                 request_param_values = self.merge_dict(request_param_values, value)
 
         request_param_values = self.flatten_dict(request_param_values)
+        print(json.dumps(request_param_values, ensure_ascii=False, indent=4))
         # 4. assemble the information and return
         # info = {
         #     "method": method,
@@ -140,4 +143,3 @@ class FillAndCallAPI(BaseTool):
         file_path = RequestAPItool.run()
 
         return file_path
-    

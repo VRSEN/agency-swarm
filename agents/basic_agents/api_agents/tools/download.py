@@ -111,8 +111,14 @@ def download_and_save_to_db(url: str, db_file: str | None = None, cursor: sqlite
         if url == "https://support.huaweicloud.com/api-cce/cce_02_0356.html":
             html_content = re.sub(r"nodeNameTemplate.*?Object", lambda match: match.group(0).replace("Object", "Map<String,String>"), html_content, flags=re.DOTALL)
         if url == "https://support.huaweicloud.com/api-cce/cce_02_0242.html":
+            print("#####")
+            with open("output.txt", 'w', encoding='utf-8') as file:
+                file.write(html_content)
+            print(re.search(r"作用于节点池时该项可以不填写", html_content))
             html_content = re.sub(r"nodepoolScaleUp.*?否", lambda match: match.group(0).replace("否", "是"), html_content, flags=re.DOTALL)
-            html_content = re.sub(r"批量创建时节点的个数", lambda match: match.group(0).replace("批量创建时节点的个数", "一个或多个创建节点时的节点个数"), html_content, flags=re.DOTALL)
+            html_content = re.sub(r"count.*?批量创建时节点的个数", lambda match: match.group(0).replace("批量创建时节点的个数", "需要创建的节点个数，包括创建一个或多个节点"), html_content, flags=re.DOTALL)
+            html_content = re.sub(r"作用于节点池时该项可以不填写", lambda match: match.group(0).replace("作用于节点池时该项可以不填写", "作用于节点池时该项可以不填写，其他情况必须填写"), html_content, flags=re.DOTALL)
+            # html_content = re.sub(r"count.*?否", lambda match: match.group(0).replace("否", "是"), html_content, flags=re.DOTALL)
         
         cursor.execute("""
             INSERT INTO pages (url, html)

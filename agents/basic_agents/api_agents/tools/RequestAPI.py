@@ -5,7 +5,7 @@ import json
 import requests
 import datetime
 from .APIGW_python_sdk_2_0_5.apig_sdk import signer
-from tools.utils import try_parse_json
+from agents.basic_agents.api_agents.tools.utils import try_parse_json
 
 class RequestAPI(BaseTool):
     '''
