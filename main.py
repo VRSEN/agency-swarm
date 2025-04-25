@@ -396,7 +396,15 @@ perpared = {
     "step": step_json
 }
 
-agency.test_single_cap_agent(plan_agents=plan_agents, cap_group_agents=cap_group_agents, cap_agents=cap_agents, **perpared)
+text = "在cn-north-4a可用区中，名为ccetest的CCE集群中加入一个节点，节点名字为node-1，集群id为eeb8f029-1c4b-11f0-a423-0255ac100260，节点规格为c6.large.2，系统盘和数据盘大小分别为50GB和100GB，磁盘类型都为SSD"
+# text = "在cn-north-4a可用区创建一个名为ccetest的CCE集群，最小规格；未创建vpc和子网，需要创建名为vpc111的vpc和名为subnet111的子网，vpc的cidr为192.168.0.0/24，网关ip为192.168.0.1; 之后你需要在该CCE集群中加入三个节点"
+# text = "在北京cn-north-4a可用区创建一个最低规格的CCE，名为'ccetest'，已有vpc和子网，VPC id为8bf558f4-2f96-4248-9cb0-fee7a2a6cebb，子网id为0519a325-6fa3-4f68-83ec-6f13263167d2"
+# text = "创建一个8核32g的ECS，操作系统选择为Ubuntu 20.04。"
+# text = "在北京可用区创建三个ecs，之后删除创建时间超过5分钟的ecs"
+# text = "在华为云ecs上部署mysql和postgresql，并用sysbench测试它们的性能"
+# text = input("👤 USER: ")
+
+# agency.test_single_cap_agent(plan_agents=plan_agents, cap_group_agents=cap_group_agents, cap_agents=cap_agents, **perpared)
 
 # agency.langgraph_test(repeater=repeater, rander=rander, palindromist=palindromist)
-# agency.task_planning(plan_agents=plan_agents, cap_group_agents=cap_group_agents, cap_agents=cap_agents)
+agency.task_planning(original_request=text, plan_agents=plan_agents, cap_group_agents=cap_group_agents, cap_agents=cap_agents)
