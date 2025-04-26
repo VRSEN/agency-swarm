@@ -11,6 +11,14 @@ from agents.k8s_group_agents.pod_manage_group import (
     pod_manage_manager, pod_manage_planner, pod_manage_step_scheduler
 )
 
+from agents.k8s_group_agents.pod_orchestration_scheduling_group import (
+    pod_orchestration_scheduling_manager,pod_orchestration_scheduling_planner,pod_orchestration_scheduling_step_scheduler
+)
+
+from agents.k8s_group_agents.config_manage_group import (
+    config_manage_manager, config_manage_planner, config_manage_step_scheduler
+)
+
 from agents.k8s_group_agents.storage_group import (
     storage_manager, storage_planner, storage_step_scheduler
 )
@@ -19,6 +27,16 @@ from agents.k8s_group_agents import step_inspector, basic_cap_solver
 
 from agents.k8s_group_agents.pod_manage_group.pod_manage_agent import pod_manage_agent
 from agents.k8s_group_agents.pod_manage_group.resource_grouping_agent import resource_grouping_agent
+
+from agents.k8s_group_agents.pod_orchestration_scheduling_group.stateful_workload_manage_agent import stateful_workload_manage_agent
+from agents.k8s_group_agents.pod_orchestration_scheduling_group.stateless_workload_manage_agent import stateless_workload_manage_agent
+from agents.k8s_group_agents.pod_orchestration_scheduling_group.task_manage_agent import task_manage_agent
+from agents.k8s_group_agents.pod_orchestration_scheduling_group.daemonSet_manage_agent import daemonSet_manage_agent
+from agents.k8s_group_agents.pod_orchestration_scheduling_group.affinity_antiAffinity_scheduling_agent import affinity_antiAffinity_scheduling_agent
+
+from agents.k8s_group_agents.config_manage_group.env_config_manage_agent import env_config_manage_agent
+from agents.k8s_group_agents.config_manage_group.privacy_manage_agent import privacy_manage_agent
+
 
 from agents.k8s_group_agents.storage_group.pv_agent import pv_agent
 from agents.k8s_group_agents.storage_group.pvc_agent import pvc_agent
@@ -57,6 +75,14 @@ def main():
     pod_manage_manager_instance = pod_manage_manager.create_agent() # ?
     pod_manage_planner_instance = pod_manage_planner.create_agent()
     pod_manage_step_scheduler_instance = pod_manage_step_scheduler.create_agent()
+    
+    pod_orchestration_scheduling_manager_instance = pod_orchestration_scheduling_manager.create_agent()
+    pod_orchestration_scheduling_planner_instance = pod_orchestration_scheduling_planner.create_agent()
+    pod_orchestration_scheduling_step_scheduler_instance = pod_orchestration_scheduling_step_scheduler.create_agent()
+    
+    config_manage_manager_instance = config_manage_manager.create_agent()
+    config_manage_planner_instance = config_manage_planner.create_agent()
+    config_manage_step_scheduler_instance = config_manage_step_scheduler.create_agent()
 
     storage_manager_instance = storage_manager.create_agent()
     storage_planner_instance = storage_planner.create_agent()
@@ -64,6 +90,15 @@ def main():
 
     pod_manage_agent_instance = pod_manage_agent.create_agent()
     resource_grouping_agent_instance = resource_grouping_agent.create_agent()
+    
+    stateful_workload_manage_agent_instance = stateful_workload_manage_agent.create_agent()
+    stateless_workload_manage_agent_instance = stateless_workload_manage_agent.create_agent()
+    task_manage_agent_instance = task_manage_agent.create_agent()
+    daemonSet_manage_agent_instance = daemonSet_manage_agent.create_agent()
+    affinity_antiAffinity_scheduling_agent_instance = affinity_antiAffinity_scheduling_agent.create_agent()
+    
+    env_config_manage_agent_instance = env_config_manage_agent.create_agent()
+    privacy_manage_agent_instance = privacy_manage_agent.create_agent()
 
     pv_agent_instance = pv_agent.create_agent()
     pvc_agent_instance = pvc_agent.create_agent()
@@ -93,11 +128,24 @@ def main():
 
         # 每个能力群的planner和step scheduler
         pod_manage_planner_instance, pod_manage_step_scheduler_instance,
+        pod_orchestration_scheduling_planner_instance, pod_orchestration_scheduling_step_scheduler_instance,
+        config_manage_planner_instance, config_manage_step_scheduler_instance,
         storage_planner_instance, storage_step_scheduler_instance,
 
         # pod管理能力 agent
         pod_manage_agent_instance,
         resource_grouping_agent_instance,
+        
+        # pod编排调度能力 agent
+        stateful_workload_manage_agent_instance,
+        stateless_workload_manage_agent_instance,
+        task_manage_agent_instance,
+        daemonSet_manage_agent_instance,
+        affinity_antiAffinity_scheduling_agent_instance,
+        
+        # 配置管理能力 agent
+        env_config_manage_agent_instance,
+        privacy_manage_agent_instance,
 
         # 存储能力 agent
         pv_agent_instance,
@@ -132,12 +180,16 @@ def main():
 
     cap_group_agents = {
         "pod管理能力群": [pod_manage_planner_instance, pod_manage_manager_instance, pod_manage_step_scheduler_instance],
+        "pod编排调度能力群": [pod_orchestration_scheduling_planner_instance, pod_orchestration_scheduling_manager_instance, pod_orchestration_scheduling_step_scheduler_instance],
+        "配置管理能力群": [config_manage_planner_instance, config_manage_manager_instance, config_manage_step_scheduler_instance],
         "存储能力群": [storage_planner_instance, storage_manager_instance, storage_step_scheduler_instance],
         "简单任务处理能力群": [basic_cap_solver_instance],
     }
 
     cap_agents = {
         "pod管理能力群": [pod_manage_agent_instance, resource_grouping_agent_instance,],
+        "pod编排调度能力群": [stateful_workload_manage_agent_instance, stateless_workload_manage_agent_instance, task_manage_agent_instance, daemonSet_manage_agent_instance, affinity_antiAffinity_scheduling_agent_instance],
+        "配置管理能力群": [env_config_manage_agent_instance, privacy_manage_agent_instance],
         "存储能力群": [pv_agent_instance, pvc_agent_instance, storageclass_agent_instance, csi_agent_instance, emptydir_agent_instance, hostpath_agent_instance, disk_agent_instance,],
     }
 

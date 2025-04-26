@@ -3,10 +3,10 @@ from agency_swarm import Agent
 from agents.k8s_group_agents.k8s_agent_instruction import k8s_agent_instruction
 from agents.k8s_group_agents.tools.ExecuteCommand import ExecuteCommand
 
-_name = "resource_grouping_agent"
-_manager_name = "pod_manage_manager"
+_name = "env_config_manage_agent"
+_manager_name = "config_manage_manager"
 _description = """
-负责k8s集群的pod资源分组任务，包括：1.Label管理。例如，按标签查询，为Pod分配合理的Label；2.Namespace管理。例如，创建、查询、删除Namespace，为Pod分配Namespace。
+负责k8s集群的环境配置管理(ConfigMap) ，包括：ConfigMap创建。例如，环境遍历或Volume中引用。
 """
 
 import os
