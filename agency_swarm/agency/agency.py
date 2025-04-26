@@ -1452,6 +1452,7 @@ class Agency:
         self._setup_autocomplete()  # Prepare readline for autocomplete
 
         self.init_files()
+        text = ""
 
         print("Initialization Successful.\n")
         task_planner = plan_agents["task_planner"]
@@ -1482,7 +1483,7 @@ class Agency:
         error_id = 0
         while True: # 拆分出任务（事务）流程图，id2task
             # task_id = task_id + 1
-            task_graph, tasks_need_scheduled = self.planning_layer(message=text, original_request=original_request, task_planner_thread=planner_thread, error_message=error_message, inspector_thread=inspector_thread, node_color='lightblue')
+            task_graph, tasks_need_scheduled = self.planning_layer(message=original_request, original_request=original_request, task_planner_thread=planner_thread, error_message=error_message, inspector_thread=inspector_thread, node_color='lightblue')
             self._init_file(self.error_path)
             id2task = {}
             task_graph_json = json.loads(task_graph)
