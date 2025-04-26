@@ -3,10 +3,10 @@ from agency_swarm import Agent
 from agents.k8s_group_agents.k8s_agent_instruction import k8s_agent_instruction
 from agents.k8s_group_agents.tools.ExecuteCommand import ExecuteCommand
 
-_name = "resource_grouping_agent"
-_manager_name = "pod_manage_manager"
+_name = "stateful_workload_manage_agent"
+_manager_name = "pod_orchestration_scheduling_manager"
 _description = """
-负责k8s集群的pod资源分组任务，包括：1.Label管理。例如，按标签查询，为Pod分配合理的Label；2.Namespace管理。例如，创建、查询、删除Namespace，为Pod分配Namespace。
+负责k8s集群的pod的有状态工作负载管理任务，包括：1.Stateful创建、查询、删除；2.Headless ServiceH创建；3.pod挂载存储管理
 """
 
 import os

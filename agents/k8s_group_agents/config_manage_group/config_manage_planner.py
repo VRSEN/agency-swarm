@@ -2,13 +2,13 @@ from agency_swarm import Agent
 from agents.k8s_group_agents.planner_instruction import planner_instruction
 from agents.tools.read_json_file.ReadJsonFile import ReadJsonFile
 
-_name = "pod_manage_planner"
+_name = "config_manage_planner"
 
 _description = """
-负责pod管理能力群的步骤规划
+负责配置管理能力群的步骤规划
 """
 
-_group_name = "pod管理能力群"
+_group_name = "配置管理能力群"
 
 _input_format = """
 {
@@ -20,8 +20,8 @@ _input_format = """
 
 # TODO
 _agents = """
-1. **pod_manage_agent**: 负责k8s集群的pod管理任务，包括：创建、查询、修改、停止、删除pod。例如，查询状态或配置。
-2. **resource_grouping_agent**: 负责k8s集群的pod资源分组任务，包括：1.Label管理。例如，按标签查询，为Pod分配合理的Label；2.Namespace管理。例如，创建、查询、删除Namespace，为Pod分配Namespace。
+1. **env_config_manage_agent**: 负责k8s集群的环境配置管理(ConfigMap) ，包括：ConfigMap创建。例如，环境遍历或Volume中引用。
+2. **privacy_manage_agent**: 负责k8s集群的隐私管理，包括：1.插入、修改隐私信息；2.查询隐私信息。
 """
 
 _output_format = """

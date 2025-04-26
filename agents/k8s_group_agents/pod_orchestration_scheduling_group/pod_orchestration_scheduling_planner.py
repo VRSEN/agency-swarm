@@ -2,13 +2,13 @@ from agency_swarm import Agent
 from agents.k8s_group_agents.planner_instruction import planner_instruction
 from agents.tools.read_json_file.ReadJsonFile import ReadJsonFile
 
-_name = "pod_manage_planner"
+_name = "pod_orchestration_scheduling_planner"
 
 _description = """
-负责pod管理能力群的步骤规划
+负责pod编排调度能力群的步骤规划
 """
 
-_group_name = "pod管理能力群"
+_group_name = "pod编排调度能力群"
 
 _input_format = """
 {
@@ -20,8 +20,11 @@ _input_format = """
 
 # TODO
 _agents = """
-1. **pod_manage_agent**: 负责k8s集群的pod管理任务，包括：创建、查询、修改、停止、删除pod。例如，查询状态或配置。
-2. **resource_grouping_agent**: 负责k8s集群的pod资源分组任务，包括：1.Label管理。例如，按标签查询，为Pod分配合理的Label；2.Namespace管理。例如，创建、查询、删除Namespace，为Pod分配Namespace。
+1. **stateless_workload_manage_agent**: 负责k8s集群的pod的无状态负载管理任务，包括：1.Deployment创建、查询、删除；2. ReplicaSer查询；3. 升级策略管理，例如RollingUpdate、Recreate等；4.回滚。
+2. **stateful_workload_manage_agent**: 负责k8s集群的pod的有状态工作负载管理任务，包括：1.Stateful创建、查询、删除；2.Headless ServiceH创建；3.pod挂载存储管理
+3. **task_manage_agent**: 负责k8s集群的pod的任务管理，包括：1.普通任务创建；2.CronJob创建，例如定时设置
+4. **daemonSet_manage_agent**: 负责k8s集群的pod的守护进程集管理，包括：1.DaemonSet创建、查询、删除；2.nodeSelector管理
+5. **affinity_antiAffinity_scheduling_agent**: 负责k8s集群的pod的亲和和反亲和调度，包括：1.强制选择；2.优先选择
 """
 
 _output_format = """

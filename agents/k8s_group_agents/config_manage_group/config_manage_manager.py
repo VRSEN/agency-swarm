@@ -1,20 +1,19 @@
 from agency_swarm import Agent
+from agents.k8s_group_agents.manager_instruction import manager_instruction
 
-from agents.k8s_group_agents.k8s_agent_instruction import k8s_agent_instruction
-from agents.k8s_group_agents.tools.ExecuteCommand import ExecuteCommand
+_name = "config_manage_manager"
 
-_name = "pod_manage_agent"
-_manager_name = "pod_manage_manager"
 _description = """
-负责k8s集群的pod管理任务，包括：创建、查询、修改、停止、删除pod。例如，查询状态或配置。
+负责配置管理能力群的消息管理
 """
 
-import os
+_group_name = "配置管理能力群"
 
-current_path = os.path.abspath(os.path.dirname(__file__))
-_instruction = k8s_agent_instruction(_name,_description,_manager_name)
+_superior_agent = "subtask_manager"
 
-_tools = [ExecuteCommand]
+_instruction = manager_instruction(_group_name, _superior_agent)
+
+_tools = []
 
 _file_folder = ""
 
