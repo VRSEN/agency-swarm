@@ -11,10 +11,22 @@ from agents.k8s_group_agents.pod_manage_group import (
     pod_manage_manager, pod_manage_planner, pod_manage_step_scheduler
 )
 
+from agents.k8s_group_agents.storage_group import (
+    storage_manager, storage_planner, storage_step_scheduler
+)
+
 from agents.k8s_group_agents import step_inspector, basic_cap_solver
 
 from agents.k8s_group_agents.pod_manage_group.pod_manage_agent import pod_manage_agent
 from agents.k8s_group_agents.pod_manage_group.resource_grouping_agent import resource_grouping_agent
+
+from agents.k8s_group_agents.storage_group.pv_agent import pv_agent
+from agents.k8s_group_agents.storage_group.pvc_agent import pvc_agent
+from agents.k8s_group_agents.storage_group.storageclass_agent import storageclass_agent
+from agents.k8s_group_agents.storage_group.csi_agent import csi_agent
+from agents.k8s_group_agents.storage_group.emptydir_agent import emptydir_agent
+from agents.k8s_group_agents.storage_group.hostpath_agent import hostpath_agent
+from agents.k8s_group_agents.storage_group.disk_agent import disk_agent
 
 from agents.k8s_group_agents import check_log_agent
 
@@ -46,8 +58,20 @@ def main():
     pod_manage_planner_instance = pod_manage_planner.create_agent()
     pod_manage_step_scheduler_instance = pod_manage_step_scheduler.create_agent()
 
+    storage_manager_instance = storage_manager.create_agent()
+    storage_planner_instance = storage_planner.create_agent()
+    storage_step_scheduler_instance = storage_step_scheduler.create_agent()
+
     pod_manage_agent_instance = pod_manage_agent.create_agent()
     resource_grouping_agent_instance = resource_grouping_agent.create_agent()
+
+    pv_agent_instance = pv_agent.create_agent()
+    pvc_agent_instance = pvc_agent.create_agent()
+    storageclass_agent_instance = storageclass_agent.create_agent()
+    csi_agent_instance = csi_agent.create_agent()
+    emptydir_agent_instance = emptydir_agent.create_agent()
+    hostpath_agent_instance = hostpath_agent.create_agent()
+    disk_agent_instance = disk_agent.create_agent()
 
     check_log_agent_instance = check_log_agent.create_agent()
 
@@ -69,10 +93,20 @@ def main():
 
         # 每个能力群的planner和step scheduler
         pod_manage_planner_instance, pod_manage_step_scheduler_instance,
+        storage_planner_instance, storage_step_scheduler_instance,
 
         # pod管理能力 agent
         pod_manage_agent_instance,
         resource_grouping_agent_instance,
+
+        # 存储能力 agent
+        pv_agent_instance,
+        pvc_agent_instance,
+        storageclass_agent_instance,
+        csi_agent_instance,
+        emptydir_agent_instance,
+        hostpath_agent_instance,
+        disk_agent_instance,
     ]
 
     thread_strategy = {
@@ -98,11 +132,13 @@ def main():
 
     cap_group_agents = {
         "pod管理能力群": [pod_manage_planner_instance, pod_manage_manager_instance, pod_manage_step_scheduler_instance],
+        "存储能力群": [storage_planner_instance, storage_manager_instance, storage_step_scheduler_instance],
         "简单任务处理能力群": [basic_cap_solver_instance],
     }
 
     cap_agents = {
         "pod管理能力群": [pod_manage_agent_instance, resource_grouping_agent_instance,],
+        "存储能力群": [pv_agent_instance, pvc_agent_instance, storageclass_agent_instance, csi_agent_instance, emptydir_agent_instance, hostpath_agent_instance, disk_agent_instance,],
     }
 
     # step_json = {
