@@ -19,6 +19,14 @@ from agents.k8s_group_agents.config_manage_group import (
     config_manage_manager, config_manage_planner, config_manage_step_scheduler
 )
 
+from agents.k8s_group_agents.monitor_group import (
+    monitor_manager, monitor_planner, monitor_step_scheduler
+)
+
+from agents.k8s_group_agents.software_manage_group import (
+    software_manage_manager, software_manage_planner, software_manage_step_scheduler
+)
+
 from agents.k8s_group_agents.storage_group import (
     storage_manager, storage_planner, storage_step_scheduler
 )
@@ -45,6 +53,13 @@ from agents.k8s_group_agents.storage_group.csi_agent import csi_agent
 from agents.k8s_group_agents.storage_group.emptydir_agent import emptydir_agent
 from agents.k8s_group_agents.storage_group.hostpath_agent import hostpath_agent
 from agents.k8s_group_agents.storage_group.disk_agent import disk_agent
+
+from agents.k8s_group_agents.monitor_group.monitor_configuration_agent import monitor_configuration_agent
+from agents.k8s_group_agents.monitor_group.monitor_observe_agent import monitor_observe_agent
+
+from agents.k8s_group_agents.software_manage_group.software_config_modify_agent import software_config_modify_agent
+from agents.k8s_group_agents.software_manage_group.software_install_agent import software_install_agent
+from agents.k8s_group_agents.software_manage_group.software_monitor_agent import software_monitor_agent
 
 from agents.k8s_group_agents import check_log_agent
 
@@ -88,9 +103,19 @@ def main():
     storage_planner_instance = storage_planner.create_agent()
     storage_step_scheduler_instance = storage_step_scheduler.create_agent()
 
+    monitor_manager_instance = monitor_manager.create_agent()
+    monitor_planner_instance = monitor_planner.create_agent()
+    monitor_step_scheduler_instance = monitor_step_scheduler.create_agent()
+
+    software_manage_manager_instance = software_manage_manager.create_agent()
+    software_manage_planner_instance = software_manage_planner.create_agent()
+    software_manage_step_scheduler_instance = software_manage_step_scheduler.create_agent()
+
     pod_manage_agent_instance = pod_manage_agent.create_agent()
     resource_grouping_agent_instance = resource_grouping_agent.create_agent()
     
+
+
     stateful_workload_manage_agent_instance = stateful_workload_manage_agent.create_agent()
     stateless_workload_manage_agent_instance = stateless_workload_manage_agent.create_agent()
     task_manage_agent_instance = task_manage_agent.create_agent()
@@ -99,6 +124,13 @@ def main():
     
     env_config_manage_agent_instance = env_config_manage_agent.create_agent()
     privacy_manage_agent_instance = privacy_manage_agent.create_agent()
+
+    monitor_configuration_agent_instance = monitor_configuration_agent.create_agent()
+    monitor_observe_agent_instance = monitor_observe_agent.create_agent()
+
+    software_config_modify_agent_instance = software_config_modify_agent.create_agent()
+    software_install_agent_instance = software_install_agent.create_agent()
+    software_monitor_agent_instance = software_monitor_agent.create_agent()
 
     pv_agent_instance = pv_agent.create_agent()
     pvc_agent_instance = pvc_agent.create_agent()
@@ -131,6 +163,8 @@ def main():
         pod_orchestration_scheduling_planner_instance, pod_orchestration_scheduling_step_scheduler_instance,
         config_manage_planner_instance, config_manage_step_scheduler_instance,
         storage_planner_instance, storage_step_scheduler_instance,
+        monitor_planner_instance, monitor_step_scheduler_instance,
+        software_manage_planner_instance, software_manage_step_scheduler_instance,
 
         # pod管理能力 agent
         pod_manage_agent_instance,
@@ -155,6 +189,15 @@ def main():
         emptydir_agent_instance,
         hostpath_agent_instance,
         disk_agent_instance,
+
+        # 监控能力 agent
+        monitor_configuration_agent_instance,
+        monitor_observe_agent_instance,
+
+        # 软件管理能力 agent
+        software_config_modify_agent_instance,
+        software_install_agent_instance,
+        software_monitor_agent_instance
     ]
 
     thread_strategy = {
@@ -183,6 +226,8 @@ def main():
         "pod编排调度能力群": [pod_orchestration_scheduling_planner_instance, pod_orchestration_scheduling_manager_instance, pod_orchestration_scheduling_step_scheduler_instance],
         "配置管理能力群": [config_manage_planner_instance, config_manage_manager_instance, config_manage_step_scheduler_instance],
         "存储能力群": [storage_planner_instance, storage_manager_instance, storage_step_scheduler_instance],
+        "监控能力群": [monitor_planner_instance, monitor_manager_instance,monitor_step_scheduler_instance],
+        "软件管理能力群": [software_manage_planner_instance, software_manage_manager_instance, software_manage_step_scheduler_instance],
         "简单任务处理能力群": [basic_cap_solver_instance],
     }
 
@@ -190,6 +235,8 @@ def main():
         "pod管理能力群": [pod_manage_agent_instance, resource_grouping_agent_instance,],
         "pod编排调度能力群": [stateful_workload_manage_agent_instance, stateless_workload_manage_agent_instance, task_manage_agent_instance, daemonSet_manage_agent_instance, affinity_antiAffinity_scheduling_agent_instance],
         "配置管理能力群": [env_config_manage_agent_instance, privacy_manage_agent_instance],
+        "监控能力群": [monitor_configuration_agent_instance, monitor_observe_agent_instance],
+        "软件管理能力群": [software_config_modify_agent_instance, software_install_agent_instance, software_monitor_agent_instance],
         "存储能力群": [pv_agent_instance, pvc_agent_instance, storageclass_agent_instance, csi_agent_instance, emptydir_agent_instance, hostpath_agent_instance, disk_agent_instance,],
     }
 

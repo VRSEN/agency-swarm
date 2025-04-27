@@ -2,7 +2,7 @@ from agency_swarm import Agent
 from agents.k8s_group_agents.step_scheduler_instruction import step_scheduler_instruction
 from agents.tools.read_json_file.ReadJsonFile import ReadJsonFile
 
-_name = "monitor_step_scheduler"
+_name = "software_manage_step_scheduler"
 
 _description = """
 职责是调度软件管理能力群的step，选出下一步可以执行的step
