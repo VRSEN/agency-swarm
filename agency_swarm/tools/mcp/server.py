@@ -386,14 +386,6 @@ class MCPServerManager:
       - List available tools and call tools on the server from any thread.
       - Ensure all async context manager operations (connect, call_tool, cleanup) are performed in the same Task, preventing Python async context errors.
       - Cleanly shut down the server and release resources at application exit.
-
-    This class is essential for integrating async MCP servers into synchronous Python applications or libraries.
-
-    Example:
-        manager = MCPServerManager(mcp_server)
-        tools = manager.list_tools()  # Get available tools
-        result = manager.call_tool("tool_name", {"arg": "value"})  # Call a tool
-        manager.shutdown()  # Cleanly shut down the server
     """
     def __init__(self, mcp_server):
         self.mcp_server = mcp_server
