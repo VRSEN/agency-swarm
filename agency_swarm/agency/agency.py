@@ -3,6 +3,7 @@ import inspect
 import json
 import logging
 import os
+import atexit
 import queue
 import threading
 import uuid
@@ -164,6 +165,8 @@ class Agency:
         self._init_threads()
         self._create_special_tools()
         self._init_agents()
+
+        atexit.register(self.mcp_cleanup)
 
         self.tracking_manager = TrackingManager()
 
@@ -1134,3 +1137,9 @@ class Agency:
         """
         for agent in self.agents:
             agent.delete()
+
+    def mcp_cleanup(self):
+        for agent in self.agents:
+            for server in reversed(agent._mcp_managers):
+                logger.info(f"Shutting down MCP server: {server.name}")
+                server.shutdown()

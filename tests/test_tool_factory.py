@@ -13,7 +13,7 @@ from langchain_community.tools import MoveFileTool, YouTubeSearchTool
 from pydantic import BaseModel, ConfigDict, Field
 
 from agency_swarm.tools import BaseTool, ToolFactory
-from agency_swarm.tools.mcp import MCPServerSse, MCPServerStdio
+from agency_swarm.tools.mcp import MCPServerSse, MCPServerStdio, MCPServerManager
 from agency_swarm.util import get_openai_client
 from agency_swarm.util.helpers.sync_async import run_async_sync
 
@@ -245,7 +245,6 @@ def test_mcp_filesystem():
             params={
                 "command": "npx",
                 "args": ["-y", "@modelcontextprotocol/server-filesystem", samples_dir],
-                "strict": False,
             }
         )
 
@@ -254,7 +253,8 @@ def test_mcp_filesystem():
             server_process = server._process
 
         # Get tools from the MCP server
-        tools = ToolFactory.from_mcp(server)
+        manager = MCPServerManager(server)
+        tools = ToolFactory.from_mcp(manager)
         assert len(tools) > 0, "No tools were created from MCP server"
 
         # Find the read_file tool
@@ -279,7 +279,7 @@ def test_mcp_filesystem():
             try:
                 server_process.terminate()
                 server_process.wait(timeout=5)
-            except:
+            except: #noqa
                 if server_process.poll() is None:
                     server_process.kill()
                     server_process.wait()
@@ -315,7 +315,7 @@ def test_mcp_git():
             try:
                 install_process.terminate()
                 install_process.wait(timeout=2)
-            except:
+            except: #noqa
                 if install_process.poll() is None:
                     install_process.kill()
 
@@ -326,15 +326,16 @@ def test_mcp_git():
             name="Git Server",
             params={
                 "command": "mcp-server-git",
-                "strict": False,
             },
+            strict=False,
         )
         # Store the server process for later cleanup
         if hasattr(server, "_process") and server._process:
             server_process = server._process
 
         # Get tools from the MCP server
-        tools = ToolFactory.from_mcp(server)
+        manager = MCPServerManager(server)
+        tools = ToolFactory.from_mcp(manager)
         assert len(tools) > 0, "No Git tools were created"
 
         # Verify that at least one tool has a git-related name
@@ -380,7 +381,7 @@ def test_mcp_git():
             try:
                 server_process.terminate()
                 server_process.wait(timeout=5)
-            except:
+            except: #noqa
                 if server_process.poll() is None:
                     server_process.kill()
                     server_process.wait()
@@ -416,10 +417,11 @@ async def test_mcp_sse():
 
         # Create an MCPServerSse instance
         async with MCPServerSse(
-            params={"url": "http://localhost:8080/sse", "strict": False}
+            params={"url": "http://localhost:8080/sse"}
         ) as server:
+            manager = MCPServerManager(server)
             # Get tools from the MCP server
-            tools = await ToolFactory.from_mcp_async(server)
+            tools = ToolFactory.from_mcp(manager)
 
             # Verify tools were created successfully
             assert len(tools) == 3, f"Expected 3 tools, got {len(tools)}"

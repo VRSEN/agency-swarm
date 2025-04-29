@@ -42,14 +42,13 @@ def start_server():
             process.wait()
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="module")
 def agency():
     filesystem_server = MCPServerStdio(
         name="Filesystem Server",
         params={
             "command": "npx",
             "args": ["-y", "@modelcontextprotocol/server-filesystem", samples_dir],
-            "strict": False,
         },
     )
 
@@ -57,13 +56,14 @@ def agency():
         name="Git Server",
         params={
             "command": "mcp-server-git",
-            "strict": False,
         },
     )
 
     sse_server = MCPServerSse(
         name="SSE Python Server",
-        params={"url": "http://localhost:8080/sse", "strict": False},
+        params={"url": "http://localhost:8080/sse"},
+        strict=True,
+        allowed_tools=["get_secret_word"]
     )
 
     # Serialize agent initialization

@@ -11,6 +11,9 @@ from mcp import Tool as MCPTool
 from mcp.client.sse import sse_client
 from mcp.types import CallToolResult, JSONRPCMessage
 from typing_extensions import NotRequired, TypedDict
+import threading
+from concurrent.futures import Future
+
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +51,7 @@ class MCPServer(abc.ABC):
     @property
     @abc.abstractmethod
     def strict(self) -> bool:
-        """Whether to use strict mode when converting MCP tools to OpenAI tools."""
+        """Use strict mode for the OpenAI's structured outputs."""
         pass
 
     @abc.abstractmethod
@@ -74,7 +77,7 @@ class MCPServer(abc.ABC):
 class _MCPServerWithClientSession(MCPServer, abc.ABC):
     """Base class for MCP servers that use a `ClientSession` to communicate with the server."""
 
-    def __init__(self, cache_tools_list: bool, strict: bool = False):
+    def __init__(self, cache_tools_list: bool, strict: bool = False, allowed_tools: list[str] | None = None):
         """
         Args:
             cache_tools_list: Whether to cache the tools list. If `True`, the tools list will be
@@ -84,13 +87,14 @@ class _MCPServerWithClientSession(MCPServer, abc.ABC):
             server will not change its tools list, because it can drastically improve latency
             (by avoiding a round-trip to the server every time).
             strict: Whether to use strict mode when converting MCP tools to OpenAI tools.
+            allowed_tools: Optional list of tool names to allow. Restricts the tools selection to the provided list.
         """
         self.session: ClientSession | None = None
         self.exit_stack: AsyncExitStack = AsyncExitStack()
         self._cleanup_lock: asyncio.Lock = asyncio.Lock()
         self.cache_tools_list = cache_tools_list
         self._strict = strict
-
+        self._allowed_tools = allowed_tools
         # The cache is always dirty at startup, so that we fetch tools at least once
         self._cache_dirty = True
         self._tools_list: list[MCPTool] | None = None
@@ -99,6 +103,18 @@ class _MCPServerWithClientSession(MCPServer, abc.ABC):
     def strict(self) -> bool:
         """Whether to use strict mode when converting MCP tools to OpenAI tools."""
         return self._strict
+
+    @strict.setter
+    def strict(self, value: bool):
+        self._strict = value
+
+    @property
+    def allowed_tools(self) -> list[str] | None:
+        return self._allowed_tools
+
+    @allowed_tools.setter
+    def allowed_tools(self, value: list[str] | None):
+        self._allowed_tools = value
 
     @abc.abstractmethod
     def create_streams(
@@ -144,17 +160,19 @@ class _MCPServerWithClientSession(MCPServer, abc.ABC):
             raise UserError(
                 "Server not initialized. Make sure you call `connect()` first."
             )
-
         # Return from cache if caching is enabled, we have tools, and the cache is not dirty
         if self.cache_tools_list and not self._cache_dirty and self._tools_list:
-            return self._tools_list
-
-        # Reset the cache dirty to False
-        self._cache_dirty = False
-
-        # Fetch the tools from the server
-        self._tools_list = (await self.session.list_tools()).tools
-        return self._tools_list
+            tools = self._tools_list
+        else:
+            # Reset the cache dirty to False
+            self._cache_dirty = False
+            # Fetch the tools from the server
+            self._tools_list = (await self.session.list_tools()).tools
+            tools = self._tools_list
+        # Filter tools if allowed_tools is set
+        if self.allowed_tools is not None:
+            tools = [tool for tool in tools if getattr(tool, 'name', None) in self.allowed_tools]
+        return tools
 
     async def call_tool(
         self, tool_name: str, arguments: dict[str, Any] | None
@@ -220,6 +238,8 @@ class MCPServerStdio(_MCPServerWithClientSession):
         params: MCPServerStdioParams,
         cache_tools_list: bool = False,
         name: str | None = None,
+        strict: bool = False,
+        allowed_tools: list[str] | None = None,
     ):
         """Create a new MCP server based on the stdio transport.
 
@@ -236,9 +256,15 @@ class MCPServerStdio(_MCPServerWithClientSession):
                 improve latency (by avoiding a round-trip to the server every time).
             name: A readable name for the server. If not provided, we'll create one from the
                 command.
+            strict: Use strict mode for the OpenAI's structured outputs. Defaults to `False`.
+            allowed_tools: Optional list of tool names to allow. Restricts the tools selection to the provided list.
         """
-        strict = params.pop("strict", False) if "strict" in params else False
-        super().__init__(cache_tools_list, strict=strict)
+        # For backwards compatibility, if strict is not provided, check if it's in the params
+        if not strict:
+            if "strict" in params:
+                print("Strict parameter is deprecated. Use the strict argument instead.")
+            strict = params.pop("strict", False)
+        super().__init__(cache_tools_list, strict=strict, allowed_tools=allowed_tools)
 
         self.params = StdioServerParameters(
             command=params["command"],
@@ -298,6 +324,8 @@ class MCPServerSse(_MCPServerWithClientSession):
         params: MCPServerSseParams,
         cache_tools_list: bool = False,
         name: str | None = None,
+        strict: bool = False,
+        allowed_tools: list[str] | None = None,
     ):
         """Create a new MCP server based on the HTTP with SSE transport.
 
@@ -315,9 +343,15 @@ class MCPServerSse(_MCPServerWithClientSession):
 
             name: A readable name for the server. If not provided, we'll create one from the
                 URL.
+            strict: Use strict mode for the OpenAI's structured outputs. Defaults to `False`.
+            allowed_tools: Optional list of tool names to allow. Restricts the tools selection to the provided list.
         """
-        strict = params.pop("strict", False) if "strict" in params else False
-        super().__init__(cache_tools_list, strict=strict)
+        # For backwards compatibility, if strict is not provided, check if it's in the params
+        if not strict:
+            if "strict" in params:
+                print("Strict parameter is deprecated. Use the strict argument instead.")
+            strict = params.pop("strict", False)
+        super().__init__(cache_tools_list, strict=strict, allowed_tools=allowed_tools)
 
         self.params = params
         self._name = name or f"sse: {self.params['url']}"
@@ -342,3 +376,84 @@ class MCPServerSse(_MCPServerWithClientSession):
     def name(self) -> str:
         """A readable name for the server."""
         return self._name
+
+class MCPServerManager:
+    """
+    Thread-safe manager for persistent MCP server connections, enabling synchronous access to asynchronous MCP tools.
+
+    MCPServerManager runs an MCP server in a dedicated background thread and asyncio event loop, allowing synchronous code to:
+      - Connect and maintain a persistent MCP server session.
+      - List available tools and call tools on the server from any thread.
+      - Ensure all async context manager operations (connect, call_tool, cleanup) are performed in the same Task, preventing Python async context errors.
+      - Cleanly shut down the server and release resources at application exit.
+
+    This class is essential for integrating async MCP servers into synchronous Python applications or libraries.
+
+    Example:
+        manager = MCPServerManager(mcp_server)
+        tools = manager.list_tools()  # Get available tools
+        result = manager.call_tool("tool_name", {"arg": "value"})  # Call a tool
+        manager.shutdown()  # Cleanly shut down the server
+    """
+    def __init__(self, mcp_server):
+        self.mcp_server = mcp_server
+        self.loop = asyncio.new_event_loop()
+        self.thread = threading.Thread(target=self._run_loop, daemon=True)
+        self.queue = asyncio.Queue()
+        self.shutdown_event = threading.Event()
+        self.ready_event = threading.Event()
+        self.thread.start()
+
+    @property
+    def name(self):
+        return getattr(self.mcp_server, 'name', None)
+
+    @property
+    def strict(self):
+        return getattr(self.mcp_server, 'strict', None)
+
+    @property
+    def params(self):
+        return getattr(self.mcp_server, 'params', None)
+
+    def __repr__(self):
+        return f"<MCPServerManager name={self.name} strict={self.strict} params={self.params}>"
+
+    def _run_loop(self):
+        asyncio.set_event_loop(self.loop)
+        self.loop.run_until_complete(self._main())
+
+    async def _main(self):
+        await self.mcp_server.connect()
+        self.ready_event.set()
+        try:
+            while True:
+                item = await self.queue.get()
+                if item == "SHUTDOWN":
+                    break
+                tool_name, args, result_future = item
+                try:
+                    result = await self.mcp_server.call_tool(tool_name, args)
+                    result_future.set_result(result)
+                except Exception as e:
+                    result_future.set_exception(e)
+        finally:
+            await self.mcp_server.cleanup()
+            self.shutdown_event.set()
+
+    def call_tool(self, tool_name, args):
+        self.ready_event.wait()
+        result_future = Future()
+        self.loop.call_soon_threadsafe(self.queue.put_nowait, (tool_name, args, result_future))
+        return result_future.result()  # blocks until result is ready
+
+    def shutdown(self):
+        self.loop.call_soon_threadsafe(self.queue.put_nowait, "SHUTDOWN")
+        self.shutdown_event.wait()
+        self.loop.call_soon_threadsafe(self.loop.stop)
+        self.thread.join()
+
+    def list_tools(self):
+        self.ready_event.wait()
+        coro = self.mcp_server.list_tools()
+        return asyncio.run_coroutine_threadsafe(coro, self.loop).result()
