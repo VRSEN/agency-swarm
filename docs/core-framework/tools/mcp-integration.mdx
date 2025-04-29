@@ -49,11 +49,13 @@ filesystem_server = MCPServerStdio(
     params={
         "command": "npx",
         "args": ["-y", "@modelcontextprotocol/server-filesystem", "."], # Run in current directory
-        # strict is checked within params for Stdio
-        strict=False,
     },
-    # cache_tools_list is a direct argument for Stdio
-    cache_tools_list=False
+    # cache_tools_list and strict are direct arguments for Stdio
+    cache_tools_list=False,
+    strict=False,
+
+    # You can restrict the agent to using specific tools from the server by providing allowed_tools list
+    allowed_tools = ["tool_1_name", "tool_2_name"]
 )
 ```
 </Accordion>
@@ -69,9 +71,11 @@ sse_server = MCPServerSse(
     name="My_Custom_SSE_Server", # Tools will be accessed like My_Custom_SSE_Server.some_tool
     params={
         "url": "http://localhost:8080/sse",
-        strict=False,
     },
-    cache_tools_list=False
+    cache_tools_list=False,
+    strict=False,
+
+    # Not providing allowed_tools will attach all available tools to the agent
 )
 ```
 </Accordion>

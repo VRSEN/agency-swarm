@@ -16,7 +16,8 @@ from agency_swarm.tools.mcp import MCPServerSse, MCPServerStdio
 # Define the SSE MCP Server connection
 sse_server = MCPServerSse(
     name="SSE_Python_Server",
-    params={"url": "http://localhost:8080/sse", "strict": False},
+    params={"url": "http://localhost:8080/sse"},
+    strict=False,
 )
 
 # Define an MCP server for filesystem access
@@ -25,8 +26,10 @@ filesystem_server = MCPServerStdio(
     params={
         "command": "npx",
         "args": ["-y", "@modelcontextprotocol/server-filesystem", "."],
-        "strict": False,
     },
+    strict=False,
+    # If you want to restrict agent to certain tools from the server, specify them in the allowed_tools
+    allowed_tools=["list_allowed_directories", "list_directory", "read_file"]
 )
 
 # Define an agent that uses both MCP servers
