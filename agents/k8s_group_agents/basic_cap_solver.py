@@ -7,7 +7,7 @@ from agents.tools.create_context.CreateContext import CreateContext
 _name = "basic_cap_solver"
 
 _description = """
-职责是处理简单任务
+职责是处理简单任务，如做出选择或决定
 """
 _input_format = """
 {

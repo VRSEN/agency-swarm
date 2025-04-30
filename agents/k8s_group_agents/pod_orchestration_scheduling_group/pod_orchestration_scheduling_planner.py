@@ -18,7 +18,6 @@ _input_format = """
 }
 """
 
-# TODO
 _agents = """
 1. **stateless_workload_manage_agent**: 负责k8s集群的pod的无状态负载管理任务，包括：1.Deployment创建、查询、删除；2. ReplicaSer查询；3. 升级策略管理，例如RollingUpdate、Recreate等；4.回滚。
 2. **stateful_workload_manage_agent**: 负责k8s集群的pod的有状态工作负载管理任务，包括：1.Stateful创建、查询、删除；2.Headless ServiceH创建；3.pod挂载存储管理

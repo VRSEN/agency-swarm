@@ -18,7 +18,6 @@ _input_format = """
 }
 """
 
-# TODO
 _agents = """
 1. **env_config_manage_agent**: 负责k8s集群的环境配置管理(ConfigMap) ，包括：ConfigMap创建。例如，环境遍历或Volume中引用。
 2. **privacy_manage_agent**: 负责k8s集群的隐私管理，包括：1.插入、修改隐私信息；2.查询隐私信息。

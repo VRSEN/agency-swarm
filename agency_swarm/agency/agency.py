@@ -1452,7 +1452,6 @@ class Agency:
         self._setup_autocomplete()  # Prepare readline for autocomplete
 
         self.init_files()
-        text = ""
 
         print("Initialization Successful.\n")
         task_planner = plan_agents["task_planner"]
@@ -1733,13 +1732,21 @@ class Agency:
         while True:
             res = thread.get_completion(message=message, response_format='auto')
             response_information = self.my_get_completion(res)
+
+            # try to extract json from str
             _, result = self.get_json_from_str(message=response_information)
             print(f"{result}")
             if _ == False:
+                # found no json, try to get completion again
                 message = "用户原始输入为: \n\{" + original_message + "\}\n" + "你之前的回答是:\n\{" + result + "\}\n" + "你之前的回答用户评价为: \n" + "{Your output Format is Wrong.}"
                 continue
 
-            if inspector_thread:
+            if inspector_thread is not None:
+                # seek for inspector's opinion
+                inspector_type = os.getenv("DEBUG_INSPECTOR_TYPE")
+                if inspector_type is not None and inspector_type == "off": # 不使用inspector
+                    return result
+
                 if _ == True:
                     inspect_query = {
                         "user_request": inspector_request,
@@ -1754,16 +1761,19 @@ class Agency:
                 inspector_result = self.my_get_completion(inspector_res)
                 print(inspector_result)
                 __ = self.get_inspector_review(inspector_result)
-                user_advice = input("User: [\"agree\": You agree with inspector.\n\"YES\": You agree with planner, and you should input your advice.\n\"NO\": You disagree with planner, and you should input your advice.]\n")
-                if user_advice != "agree":
-                    explain = input("explain: ")
-                    inspector_result = json.dumps(
-                        {
-                            "review": user_advice,
-                            "explain": explain
-                        }
-                    )
-                    __ = self.get_inspector_review(inspector_result)
+
+                if inspector_type is None or inspector_type == "user": # inspector回复后由用户决定
+                    user_advice = input("User: [\"agree\": You agree with inspector.\n\"YES\": You agree with planner, and you should input your advice.\n\"NO\": You disagree with planner, and you should input your advice.]\n")
+                    if user_advice != "agree":
+                        explain = input("explain: ")
+                        inspector_result = json.dumps(
+                            {
+                                "review": user_advice,
+                                "explain": explain
+                            }
+                        )
+                        __ = self.get_inspector_review(inspector_result)
+                
                 if __ == True:
                     return result
                 message = "用户原始输入为: \n\{" + original_message + "\}\n" + "你之前的回答是:\n\{" + result + "\}\n" + "你之前的回答用户评价为: \n" + inspector_result

@@ -1,5 +1,4 @@
 def step_scheduler_instruction(_group_name, _input_format, _output_format):
-    # TODO: 改instructions
     _instruction = f"""
     作为{_group_name}调度者，你将接收到step流程和初始用户请求，输入格式如下:  
     你将从task_planner那里收到一个 JSON 格式的step规划结果 <plan_graph> 和总任务描述 <main_task>。

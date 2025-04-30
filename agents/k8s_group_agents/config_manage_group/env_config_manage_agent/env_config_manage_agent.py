@@ -2,9 +2,9 @@ from agency_swarm import Agent
 
 from agents.k8s_group_agents.k8s_agent_instruction import k8s_agent_instruction
 from agents.k8s_group_agents.tools.ExecuteCommand import ExecuteCommand
+from agents.k8s_group_agents.tools.WriteFile import WriteFile
 
 _name = "env_config_manage_agent"
-_manager_name = "config_manage_manager"
 _description = """
 负责k8s集群的环境配置管理(ConfigMap) ，包括：ConfigMap创建。例如，环境遍历或Volume中引用。
 """
@@ -12,9 +12,9 @@ _description = """
 import os
 
 current_path = os.path.abspath(os.path.dirname(__file__))
-_instruction = k8s_agent_instruction(_name,_description,_manager_name)
+_instruction = k8s_agent_instruction(_name,_description)
 
-_tools = [ExecuteCommand]
+_tools = [ExecuteCommand, WriteFile]
 
 _file_folder = ""
 

@@ -2,9 +2,9 @@ from agency_swarm import Agent
 
 from agents.k8s_group_agents.k8s_agent_instruction import k8s_agent_instruction
 from agents.k8s_group_agents.tools.ExecuteCommand import ExecuteCommand
+from agents.k8s_group_agents.tools.WriteFile import WriteFile
 
 _name = "resource_grouping_agent"
-_manager_name = "pod_manage_manager"
 _description = """
 负责k8s集群的pod资源分组任务，包括：1.Label管理。例如，按标签查询，为Pod分配合理的Label；2.Namespace管理。例如，创建、查询、删除Namespace，为Pod分配Namespace。
 """
@@ -12,9 +12,9 @@ _description = """
 import os
 
 current_path = os.path.abspath(os.path.dirname(__file__))
-_instruction = k8s_agent_instruction(_name,_description,_manager_name)
+_instruction = k8s_agent_instruction(_name,_description)
 
-_tools = [ExecuteCommand]
+_tools = [ExecuteCommand, WriteFile]
 
 _file_folder = ""
 
