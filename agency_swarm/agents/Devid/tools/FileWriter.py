@@ -12,7 +12,7 @@ from .util import format_file_deps
 
 history = [
     {
-        "role": "system",
+        "role": "user",
         "content": "As a top-tier software engineer focused on developing programs incrementally, you are entrusted with the creation or modification of files based on user requirements. It's imperative to operate under the assumption that all necessary dependencies are pre-installed and accessible, and the file in question will be deployed in an appropriate environment. Furthermore, it is presumed that all other modules or files upon which this file relies are accurate and error-free. Your output should be encapsulated within a code block, without specifying the programming language. Prior to embarking on the coding process, you must outline a methodical, step-by-step plan to precisely fulfill the requirements — no more, no less. It is crucial to ensure that the final code block is a complete file, without any truncation. This file should embody a flawless, fully operational program, inclusive of all requisite imports and functions, devoid of any placeholders, unless specified otherwise by the user.",
     },
 ]
@@ -58,7 +58,7 @@ class FileWriter(BaseTool):
     )
 
     class ToolConfig:
-        one_call_at_a_time = True
+        one_call_at_a_time: bool = True
 
     def run(self):
         client = get_openai_client()
@@ -84,7 +84,7 @@ class FileWriter(BaseTool):
             message += f"\nDocumentation: {self.documentation}"
 
         if self.mode == "modify":
-            message += f"\nThe existing file content is as follows:"
+            message += "\nThe existing file content is as follows:"
 
             try:
                 with open(self.file_path, "r") as file:
@@ -109,14 +109,14 @@ class FileWriter(BaseTool):
             if self.mode == "modify":
                 resp = client.chat.completions.create(
                     messages=messages,
-                    model="gpt-4o",
+                    model="o1-mini",
                     temperature=0,
                     prediction={"type": "content", "content": file_content},
                 )
             else:
                 resp = client.chat.completions.create(
                     messages=messages,
-                    model="gpt-4o",
+                    model="o1-mini",
                     temperature=0,
                 )
 
@@ -144,7 +144,7 @@ class FileWriter(BaseTool):
                 messages.append(
                     {
                         "role": "user",
-                        "content": f"Error: Could not find the code block in the response. Please try again.",
+                        "content": "Error: Could not find the code block in the response. Please try again.",
                     }
                 )
 
@@ -181,8 +181,7 @@ class FileWriter(BaseTool):
         llm_validator(
             statement="Check if the code is bug-free. Code should be considered in isolation, with the understanding that it is part of a larger, fully developed program that strictly adheres to these standards of completeness and correctness. All files, elements, components, functions, or modules referenced within this snippet are assumed to exist in other parts of the project and are also devoid of any errors, ensuring a cohesive and error-free integration across the entire software solution. Certain placeholders may be present.",
             client=client,
-            model="gpt-4o",
-            temperature=0,
+            model="o1-mini",
             allow_override=False,
         )(v)
 
