@@ -1,5 +1,4 @@
 def planner_instruction(_group_name, _input_format, _agents, _output_format):
-    # TODO: 改 instructions
     _instruction = f"""
     你是{_group_name}的步骤规划者，你需要对接受到的任务根据你的能力范围规划出执行步骤。
 
@@ -20,7 +19,7 @@ def planner_instruction(_group_name, _input_format, _agents, _output_format):
     # 注意: 用户输入和context_index.json的所有信息都是默认无误的，你不需要规划出有确认信息是否正确的步骤；
     # 注意: 除非用户请求中或context的上下文信息中有提供环境条件的描述，初始环境中没有创建**任何资源**；确保你的规划有你步骤中**所需资源的创建**或**所需信息的获取**，否则请先完成它们；
     # 注意，你只能考虑**你的能力群内**包含的Agent；
-    # 注意，Agent只能通过调用api或ssh远程命令行连接或编写、运行脚本的方式进行操作
+    # 注意，Agent只能通过调用写文件或执行命令行的工具进行操作。
     # 注意: 为了防止用户隐私不被泄露，华为云认证信息已被执行任务的agent得知，你的任务规划中不需要获取华为云访问凭证等认证信息
 
 
@@ -35,7 +34,7 @@ def planner_instruction(_group_name, _input_format, _agents, _output_format):
 
     对于每个步骤，你需要在 "id" 字段中以"step_正整数"的形式为其分配一个单独的步骤ID，并在"agent"字段填入完成该步骤所需的所有能力agent名称列表 (注意**agent名称列表不应该为空，即每个step都至少需要一个agent**，所有用到的能力agent应该都在你能力范围之内)，并在 "description" 字段中描述步骤内容，并在 "dep" 字段中写入该步骤需要完成的前置步骤 ID 列表（如果没有前置步骤，则写入 []），允许环的构建，表示这些步骤需要多次迭代执行。
     确保你的规划结果应该尽可能可以并行执行。如果两个步骤可以同时开始执行而彼此不冲突，则可以并行执行。
-    请注意，无论步骤是什么，步骤执行过程中都只能通过调用api或ssh远程命令行连接或编写、运行脚本进行操作。
+    请注意，无论步骤是什么，步骤执行过程中都只能通过写文件或执行命令行进行操作。
 
     """
 

@@ -18,10 +18,9 @@ _input_format = """
 }
 """
 
-# TODO
 _agents = """
-1. **monitor_configuration_agent**: {{负责修改k8s集群的插件或配置文件。}}。
-2. **monitor_observe_agent**: {{负责对k8s集群的健康、监控、日志（LTS）、告警（AOM）进行观测。}}。
+1. **monitor_configuration_agent**: 负责修改k8s集群的插件或配置文件。
+2. **monitor_observe_agent**: 负责对k8s集群的健康、监控、日志（LTS）、告警（AOM）进行观测。
 """
 
 _output_format = """

@@ -2,9 +2,9 @@ from agency_swarm import Agent
 
 from agents.k8s_group_agents.k8s_agent_instruction import k8s_agent_instruction
 from agents.k8s_group_agents.tools.ExecuteCommand import ExecuteCommand
+from agents.k8s_group_agents.tools.WriteFile import WriteFile
 
 _name = "stateless_workload_manage_agent"
-_manager_name = "pod_orchestration_scheduling_manager"
 _description = """
 负责k8s集群的pod的无状态负载管理任务，包括：1.Deployment创建、查询、删除；2. ReplicaSer查询；3. 升级策略管理，例如RollingUpdate、Recreate等；4.回滚。
 """
@@ -12,9 +12,9 @@ _description = """
 import os
 
 current_path = os.path.abspath(os.path.dirname(__file__))
-_instruction = k8s_agent_instruction(_name,_description,_manager_name)
+_instruction = k8s_agent_instruction(_name,_description)
 
-_tools = [ExecuteCommand]
+_tools = [ExecuteCommand, WriteFile]
 
 _file_folder = ""
 

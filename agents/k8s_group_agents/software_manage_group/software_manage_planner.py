@@ -2,7 +2,7 @@ from agency_swarm import Agent
 from agents.k8s_group_agents.planner_instruction import planner_instruction
 from agents.tools.read_json_file.ReadJsonFile import ReadJsonFile
 
-_name = "monitor_planner"
+_name = "software_manage_planner"
 
 _description = """
 负责软件管理能力群的步骤规划
@@ -18,11 +18,10 @@ _input_format = """
 }
 """
 
-# TODO
 _agents = """
-1. **software_config_modify_agent**: {{负责对k8s集群中的软件配置进行修改。}}。
-2. **software_install_agent**: {{负责进行k8s集群中软件的安装。}}。
-3. **software_monitor_agent**: {{负责对k8s集群中的软件进行监控。}}。
+1. **software_config_modify_agent**: 负责对k8s集群中的软件配置进行修改。
+2. **software_install_agent**: 负责进行k8s集群中软件的安装。
+3. **software_monitor_agent**: 负责对k8s集群中的软件进行监控。
 """
 
 _output_format = """
