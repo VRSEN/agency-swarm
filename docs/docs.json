@@ -160,7 +160,8 @@
             "pages": [
               "platform/integrations/slack-integration",
               "platform/integrations/whatsapp-integration",
-              "platform/integrations/web-api"
+              "platform/integrations/web-api",
+              "platform/integrations/zapier-integration"
             ]
           },
           {
