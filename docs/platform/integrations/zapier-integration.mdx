@@ -1,14 +1,14 @@
 ---
 title: "Zapier Integration"
 description: "Learn how to integrate your agents with Zapier"
-icon: "zapier"
+icon: "fa-solid fa-square"
 ---
 
 ## Feature Overview
 
-Seamlessly connect your **agents** to **Zapier**, a platform that significantly simplifies Zapier Business profile setup.
+Seamlessly connect your **agents** to **Zapier**, a platform that gives you access to over 5000+ external integrations.
 
-![Screenshot 2025-02-17 at 13.24.37.png](/images/integrations/whatsapp-integration/Screenshot_2025-02-17_at_13.24.37.png)
+![Screenshot 2025-05-05 at 23.02.14.png](/images/integrations/zapier-integration/Screenshot_2025-05-05_at_23.02.14.png)
 
 🔒 All chats, conversations and messages are not stored in our database to ensure your or your client’s privacy.
 
@@ -16,57 +16,35 @@ Seamlessly connect your **agents** to **Zapier**, a platform that significantly 
 
 ## Prerequisites
 
-- A verified **Zapier Account** ([Sign up here](https://zapier.com/)) with a provisioned phone number.
+- **Platform API Key** – You can find it under **Settings → [API Keys](https://agencii.ai/settings/?tab=apiKeys)**.
+- **Zapier Account** ([Sign up](https://zapier.com/)).
 
-## Creating a Zapier Agent
+## Connecting your Agent to Zapier
 
 <Steps>
-  <Step title="Create a Zapier Agent">
-    1. Go to [Zapier](https://zapier.com/) and click on the **'Create New Agent'** button to begin the setup.
+  <Step title="Create a Zapier Integration">
+    1. Navigate to **Platforms** located in the sidebar and click on the **'New Platform'** button to begin the setup.
 
-    ![Screenshot 2025-02-17 at 13.40.04.png](/images/integrations/whatsapp-integration/Screenshot_2025-02-17_at_13.40.04.png)
+    ![Screenshot_2025-05-05_at_23.22.13.png](/images/integrations/zapier-integration/Screenshot_2025-05-05_at_23.22.13.png)
 
-    2. Follow all the necessary steps on **Twilio's** end to complete the integration.
-    Twilio has already documented the entire process, so you can refer to their official guides via this link: https://www.twilio.com/docs/whatsapp/self-sign-up
+    2. Configure the Zapier integration by providing the necessary details, such as the name of the integration, the associated agent, and the description.
 
-    ![Screenshot 2025-02-17 at 13.48.59.png](/images/integrations/whatsapp-integration/Screenshot_2025-02-17_at_13.48.59.png)
+    ![Screenshot_2025-05-05_at_23.23.19.png](/images/integrations/zapier-integration/Screenshot_2025-05-05_at_23.23.19.png)
+  </Step> 
 
-    3. Once you have a **verified** WhatsApp Sender with the status set to **Online**, you can proceed to the next steps.
+  <Step title="Install Zapier App on your workspace">
+    1. Currently, the Agencii zapier app is not available on the marketplace. You can install it by clicking on the **Install** button to receive early access.
+
+    ![Screenshot 2025-02-17 at 15.40.42.png](/images/integrations/zapier-integration/Screenshot_2025-05-05_at_23.26.27.png)
+
+    ![Screenshot 2025-02-17 at 15.29.05.png](/images/integrations/zapier-integration/Screenshot_2025-05-05_at_23.16.03.png)
   </Step>
 
-  <Step title="Create a New WhatsApp Integration">
-    1. Go to https://agencii.ai/whatsapp/ and click on the **'Connect WhatsApp'** button to begin the setup.
+  <Step title="Connection guide to Agencii app">
+    Agencii Zapier app currently supports the following actions:
 
-    2. Enter your Agent details
-
-    ![Screenshot 2025-02-17 at 14.51.15.png](/images/integrations/whatsapp-integration/Screenshot_2025-02-17_at_14.51.15.png)
-  </Step>
-
-  <Step title="Select or Create your Twilio Account">
-    1. **Select your Twilio account** from the dashboard.
-
-    ![Screenshot 2025-02-17 at 15.27.03.png](/images/integrations/whatsapp-integration/Screenshot_2025-02-17_at_15.27.03.png)
-
-    2. To add a new account, copy and paste your **Account SID** and **Auth Token** from the bottom of the Twilio dashboard.
-
-    ![Screenshot 2025-02-17 at 15.27.55.png](/images/integrations/whatsapp-integration/Screenshot_2025-02-17_at_15.27.55.png)
-
-    3. (Optional) If you have a Subaccount, paste the Subaccount SID as well.
-    4. Click **Create**
-  </Step>
-
-  <Step title="Add your WhatsApp Sender SID">
-    1. Find your WhatsApp Sender SID in the Twilio Console under **Messaging** → **Senders** → **WhatsApp Senders**, then copy it from the URL. Example: https://console.twilio.com/us1/develop/sms/senders/whatsapp-senders/details/XEXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-
-    ![Screenshot 2025-02-17 at 15.40.42.png](/images/integrations/whatsapp-integration/Screenshot_2025-02-17_at_15.40.42.png)
-
-    2. Add whatsapp sender on agencii
-
-    ![Screenshot 2025-02-17 at 15.29.05.png](/images/integrations/whatsapp-integration/Screenshot_2025-02-17_at_15.29.05.png)
-  </Step>
-
-  <Step title="Finalize Integration">
-    Copy each webhook integration URL and paste it into the **Twilio WhatsApp Sender configuration profile**, ensuring each URL is placed in the corresponding textbox.
+    - **Prompt**
+    
 
     ![Screenshot 2025-02-17 at 15.43.40.png](/images/integrations/whatsapp-integration/Screenshot_2025-02-17_at_15.43.40.png)
 
