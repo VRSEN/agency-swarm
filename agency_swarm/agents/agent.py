@@ -18,7 +18,6 @@ from agency_swarm.tools import (
     Retrieval,
     ToolFactory,
 )
-from agency_swarm.tools.mcp.server import MCPServerManager
 from agency_swarm.tools.oai.FileSearch import FileSearchConfig
 from agency_swarm.util.oai import get_openai_client
 from agency_swarm.util.openapi import validate_openapi_spec
@@ -180,7 +179,6 @@ class Agent:
         # private attributes
         self._assistant: Any = None
         self._shared_instructions = None
-        self._mcp_managers = []
 
         # init methods
         self.client = get_openai_client()
@@ -628,22 +626,20 @@ class Agent:
             return
 
         for server in self.mcp_servers:
-            manager = MCPServerManager(server)
             try:
                 # Get tools from the MCP server
-                mcp_tools = ToolFactory.from_mcp(manager)
+                mcp_tools = ToolFactory.from_mcp(server)
 
-                logger.info(f"\n--- Adding Tools from MCP Server: {manager.name} ---")
+                logger.info(f"\n--- Adding Tools from MCP Server: {server.name} ---")
                 # Add each tool to the agent and print its name
                 for tool in mcp_tools:
                     self.add_tool(tool)
                     logger.info(f"  - Added MCP tool: {tool.__name__}")
                 logger.info(
-                    f"--- Finished adding {len(mcp_tools)} tools from {manager.name} ---\n"
+                    f"--- Finished adding {len(mcp_tools)} tools from {server.name} ---\n"
                 )
-                self._mcp_managers.append(manager)
             except Exception as e:
-                logger.error(f"Error processing {manager.name} MCP: {e}", exc_info=True)
+                logger.error(f"Error processing {server.name} MCP: {e}", exc_info=True)
 
     # --- Settings Methods ---
 

@@ -13,7 +13,7 @@ from langchain_community.tools import MoveFileTool, YouTubeSearchTool
 from pydantic import BaseModel, ConfigDict, Field
 
 from agency_swarm.tools import BaseTool, ToolFactory
-from agency_swarm.tools.mcp import MCPServerSse, MCPServerStdio, MCPServerManager
+from agency_swarm.tools.mcp import MCPServerSse, MCPServerStdio
 from agency_swarm.util import get_openai_client
 from agency_swarm.util.helpers.sync_async import run_async_sync
 
@@ -253,8 +253,7 @@ def test_mcp_filesystem():
             server_process = server._process
 
         # Get tools from the MCP server
-        manager = MCPServerManager(server)
-        tools = ToolFactory.from_mcp(manager)
+        tools = ToolFactory.from_mcp(server)
         assert len(tools) > 0, "No tools were created from MCP server"
 
         # Find the read_file tool
@@ -334,8 +333,7 @@ def test_mcp_git():
             server_process = server._process
 
         # Get tools from the MCP server
-        manager = MCPServerManager(server)
-        tools = ToolFactory.from_mcp(manager)
+        tools = ToolFactory.from_mcp(server)
         assert len(tools) > 0, "No Git tools were created"
 
         # Verify that at least one tool has a git-related name
@@ -416,47 +414,46 @@ async def test_mcp_sse():
         time.sleep(5)
 
         # Create an MCPServerSse instance
-        async with MCPServerSse(
+        server = MCPServerSse(
             params={"url": "http://localhost:8080/sse"}
-        ) as server:
-            manager = MCPServerManager(server)
-            # Get tools from the MCP server
-            tools = ToolFactory.from_mcp(manager)
+        )
+        # Get tools from the MCP server
+        tools = ToolFactory.from_mcp(server)
 
-            # Verify tools were created successfully
-            assert len(tools) == 3, f"Expected 3 tools, got {len(tools)}"
+        # Verify tools were created successfully
+        assert len(tools) == 3, f"Expected 3 tools, got {len(tools)}"
 
-            # Get the add tool
-            add_tool = next((tool for tool in tools if tool.__name__ == "add"), None)
-            assert add_tool is not None, "add tool not found"
+        # Get the add tool
+        add_tool = next((tool for tool in tools if tool.__name__ == "add"), None)
+        assert add_tool is not None, "add tool not found"
 
-            # Create an instance of the add tool
-            add_instance = add_tool(a=7, b=22)
-            result = await add_instance.run()
-            assert str(result) == "29", f"Expected 29, got {result}"
+        # Create an instance of the add tool
+        add_instance = add_tool(a=7, b=22)
+        result = await add_instance.run()
+        assert str(result) == "29", f"Expected 29, got {result}"
 
-            # Get the weather tool
-            weather_tool = next(
-                (tool for tool in tools if tool.__name__ == "get_current_weather"), None
-            )
-            assert weather_tool is not None, "get_current_weather tool not found"
+        # Get the weather tool
+        weather_tool = next(
+            (tool for tool in tools if tool.__name__ == "get_current_weather"), None
+        )
+        assert weather_tool is not None, "get_current_weather tool not found"
 
-            # Create an instance of the weather tool
-            weather_instance = weather_tool(city="Tokyo")
-            result = await weather_instance.run()
-            assert "Weather report:" in result
+        # Create an instance of the weather tool
+        weather_instance = weather_tool(city="Tokyo")
+        result = await weather_instance.run()
+        assert "Weather report:" in result
 
-            # Get the secret word tool
-            secret_tool = next(
-                (tool for tool in tools if tool.__name__ == "get_secret_word"), None
-            )
-            assert secret_tool is not None, "get_secret_word tool not found"
+        # Get the secret word tool
+        secret_tool = next(
+            (tool for tool in tools if tool.__name__ == "get_secret_word"), None
+        )
+        assert secret_tool is not None, "get_secret_word tool not found"
 
-            # Create an instance of the secret word tool
-            secret_instance = secret_tool()
-            result = await secret_instance.run()
+        # Create an instance of the secret word tool
+        secret_instance = secret_tool()
+        result = await secret_instance.run()
 
-            assert result.lower() in ["apple", "banana", "cherry", "strawberry"]
+        assert result.lower() in ["apple", "banana", "cherry", "strawberry"]
 
     finally:
         # Clean up the server process
@@ -475,4 +472,4 @@ async def test_mcp_sse():
 
 
 if __name__ == "__main__":
-    pytest.main()
+    pytest.main(["-k", "test_mcp_filesystem", "-s"])

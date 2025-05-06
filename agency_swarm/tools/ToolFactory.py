@@ -356,8 +356,8 @@ class ToolFactory:
         return imported_class
 
     @staticmethod
-    def from_mcp(server_manager):
-        tool_definitions = server_manager.list_tools()
+    def from_mcp(server):
+        tool_definitions = server.list_tools()
         tools = []
 
         for definition in tool_definitions:
@@ -384,7 +384,7 @@ class ToolFactory:
             # If any parameter has a default value, set strict to False
             if has_default_values:
                 logger.warning("Non-supported tool parameter found, disabling strict mode.")
-                server_manager.mcp_server.strict = False
+                server.strict = False
 
             # Create a factory function to properly capture the tool name
             def create_callback(tool_name):
@@ -398,7 +398,7 @@ class ToolFactory:
                     }
 
                     # Call the tool with just the arguments, not the whole model
-                    result = server_manager.call_tool(tool_name, args)
+                    result = server.call_tool(tool_name, args)
 
                     if hasattr(result, "content") and result.content:
                         # Extract text from the first content item if it exists
@@ -423,7 +423,7 @@ class ToolFactory:
                     "name": name,
                     "description": description,
                     "parameters": parameters,
-                    "strict": server_manager.mcp_server.strict
+                    "strict": server.strict
                 },
                 callback,
             )

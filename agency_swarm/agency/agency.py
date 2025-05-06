@@ -1140,6 +1140,6 @@ class Agency:
 
     def mcp_cleanup(self):
         for agent in self.agents:
-            for server in reversed(agent._mcp_managers):
+            for server in reversed(agent.mcp_servers):
                 logger.info(f"Shutting down MCP server: {server.name}")
-                server.shutdown()
+                server.cleanup()

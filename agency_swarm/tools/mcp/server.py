@@ -98,6 +98,114 @@ class _MCPServerWithClientSession(MCPServer, abc.ABC):
         # The cache is always dirty at startup, so that we fetch tools at least once
         self._cache_dirty = True
         self._tools_list: list[MCPTool] | None = None
+        self._sync_manager = None
+        self._thread = threading.Thread(target=self._run_loop, daemon=True)
+        self._loop = asyncio.new_event_loop()
+        self._queue = asyncio.Queue()
+        self._shutdown_event = threading.Event()
+        self._ready_event = threading.Event()
+        self._thread.start()
+
+    def _run_loop(self):
+        asyncio.set_event_loop(self._loop)
+        self._loop.run_until_complete(self._main())
+
+    async def _main(self):
+        """
+        Main event loop for the background thread managing async MCP server operations.
+
+        Handles initial connection, dispatches synchronous method calls (connect, list_tools, call_tool, cleanup) to their async counterparts, maintains proper cleanup and shutdown.
+        """
+        await self._connect_async()
+        self._ready_event.set()
+        try:
+            while True:
+                item = await self._queue.get()
+                if item == "SHUTDOWN":
+                    break
+                method, args, result_future = item
+                try:
+                    coro = getattr(self, f"_{method}_async")(*args)
+                    result = await coro
+                    result_future.set_result(result)
+                except Exception as e:
+                    result_future.set_exception(e)
+        finally:
+            await self._cleanup_async()
+            self._shutdown_event.set()
+
+    def _call_in_loop(self, method, *args):
+        self._ready_event.wait()
+        result_future = Future()
+        self._loop.call_soon_threadsafe(self._queue.put_nowait, (method, args, result_future))
+        return result_future.result()  # blocks until result is ready
+
+    # Synchronous public methods
+    def connect(self):
+        print("connect")
+        return self._call_in_loop("connect")
+
+    def list_tools(self):
+        return self._call_in_loop("list_tools")
+
+    def call_tool(self, tool_name, arguments):
+        return self._call_in_loop("call_tool", tool_name, arguments)
+
+    def cleanup(self):
+        self._loop.call_soon_threadsafe(self._queue.put_nowait, "SHUTDOWN")
+        self._shutdown_event.wait()
+        self._loop.call_soon_threadsafe(self._loop.stop)
+        self._thread.join()
+
+    # Async implementations
+    async def _connect_async(self):
+        try:
+            transport = await self.exit_stack.enter_async_context(self.create_streams())
+            read, write = transport
+            session = await self.exit_stack.enter_async_context(
+                ClientSession(read, write)
+            )
+            await session.initialize()
+            self.session = session
+        except Exception as e:
+            logger.error(f"Error initializing MCP server: {e}")
+            await self.cleanup()
+            raise
+
+    async def _list_tools_async(self) -> list[MCPTool]:
+        if not self.session:
+            raise UserError(
+                "Server not initialized. Make sure you call `connect()` first."
+            )
+        # Return from cache if caching is enabled, we have tools, and the cache is not dirty
+        if self.cache_tools_list and not self._cache_dirty and self._tools_list:
+            tools = self._tools_list
+        else:
+            # Reset the cache dirty to False
+            self._cache_dirty = False
+            # Fetch the tools from the server
+            self._tools_list = (await self.session.list_tools()).tools
+            tools = self._tools_list
+        # Filter tools if allowed_tools is set
+        if self._allowed_tools is not None:
+            tools = [tool for tool in tools if getattr(tool, 'name', None) in self._allowed_tools]
+        return tools
+
+    async def _call_tool_async(self, tool_name: str, arguments: dict[str, Any] | None) -> CallToolResult:
+        if not self.session:
+            raise UserError(
+                "Server not initialized. Make sure you call `connect()` first."
+            )
+
+        return await self.session.call_tool(tool_name, arguments)
+
+    async def _cleanup_async(self):
+        async with self._cleanup_lock:
+            try:
+                await self.exit_stack.aclose()
+                self.session = None
+            except Exception as e:
+                logger.error(f"Error cleaning up server: {e}")
 
     @property
     def strict(self) -> bool:
@@ -128,71 +236,9 @@ class _MCPServerWithClientSession(MCPServer, abc.ABC):
         """Create the streams for the server."""
         pass
 
-    async def __aenter__(self):
-        await self.connect()
-        return self
-
-    async def __aexit__(self, exc_type, exc_value, traceback):
-        await self.cleanup()
-
     def invalidate_tools_cache(self):
         """Invalidate the tools cache."""
         self._cache_dirty = True
-
-    async def connect(self):
-        """Connect to the server."""
-        try:
-            transport = await self.exit_stack.enter_async_context(self.create_streams())
-            read, write = transport
-            session = await self.exit_stack.enter_async_context(
-                ClientSession(read, write)
-            )
-            await session.initialize()
-            self.session = session
-        except Exception as e:
-            logger.error(f"Error initializing MCP server: {e}")
-            await self.cleanup()
-            raise
-
-    async def list_tools(self) -> list[MCPTool]:
-        """List the tools available on the server."""
-        if not self.session:
-            raise UserError(
-                "Server not initialized. Make sure you call `connect()` first."
-            )
-        # Return from cache if caching is enabled, we have tools, and the cache is not dirty
-        if self.cache_tools_list and not self._cache_dirty and self._tools_list:
-            tools = self._tools_list
-        else:
-            # Reset the cache dirty to False
-            self._cache_dirty = False
-            # Fetch the tools from the server
-            self._tools_list = (await self.session.list_tools()).tools
-            tools = self._tools_list
-        # Filter tools if allowed_tools is set
-        if self.allowed_tools is not None:
-            tools = [tool for tool in tools if getattr(tool, 'name', None) in self.allowed_tools]
-        return tools
-
-    async def call_tool(
-        self, tool_name: str, arguments: dict[str, Any] | None
-    ) -> CallToolResult:
-        """Invoke a tool on the server."""
-        if not self.session:
-            raise UserError(
-                "Server not initialized. Make sure you call `connect()` first."
-            )
-
-        return await self.session.call_tool(tool_name, arguments)
-
-    async def cleanup(self):
-        """Cleanup the server."""
-        async with self._cleanup_lock:
-            try:
-                await self.exit_stack.aclose()
-                self.session = None
-            except Exception as e:
-                logger.error(f"Error cleaning up server: {e}")
 
 
 class MCPServerStdioParams(TypedDict):
@@ -264,8 +310,7 @@ class MCPServerStdio(_MCPServerWithClientSession):
             if "strict" in params:
                 print("Strict parameter is deprecated. Use the strict argument instead.")
             strict = params.pop("strict", False)
-        super().__init__(cache_tools_list, strict=strict, allowed_tools=allowed_tools)
-
+        
         self.params = StdioServerParameters(
             command=params["command"],
             args=params.get("args", []),
@@ -274,8 +319,8 @@ class MCPServerStdio(_MCPServerWithClientSession):
             encoding=params.get("encoding", "utf-8"),
             encoding_error_handler=params.get("encoding_error_handler", "strict"),
         )
-
         self._name = name or f"stdio: {self.params.command}"
+        super().__init__(cache_tools_list, strict=strict, allowed_tools=allowed_tools)
 
     def create_streams(
         self,
@@ -351,10 +396,10 @@ class MCPServerSse(_MCPServerWithClientSession):
             if "strict" in params:
                 print("Strict parameter is deprecated. Use the strict argument instead.")
             strict = params.pop("strict", False)
-        super().__init__(cache_tools_list, strict=strict, allowed_tools=allowed_tools)
 
         self.params = params
         self._name = name or f"sse: {self.params['url']}"
+        super().__init__(cache_tools_list, strict=strict, allowed_tools=allowed_tools)
 
     def create_streams(
         self,
@@ -376,76 +421,3 @@ class MCPServerSse(_MCPServerWithClientSession):
     def name(self) -> str:
         """A readable name for the server."""
         return self._name
-
-class MCPServerManager:
-    """
-    Thread-safe manager for persistent MCP server connections, enabling synchronous access to asynchronous MCP tools.
-
-    MCPServerManager runs an MCP server in a dedicated background thread and asyncio event loop, allowing synchronous code to:
-      - Connect and maintain a persistent MCP server session.
-      - List available tools and call tools on the server from any thread.
-      - Ensure all async context manager operations (connect, call_tool, cleanup) are performed in the same Task, preventing Python async context errors.
-      - Cleanly shut down the server and release resources at application exit.
-    """
-    def __init__(self, mcp_server):
-        self.mcp_server = mcp_server
-        self.loop = asyncio.new_event_loop()
-        self.thread = threading.Thread(target=self._run_loop, daemon=True)
-        self.queue = asyncio.Queue()
-        self.shutdown_event = threading.Event()
-        self.ready_event = threading.Event()
-        self.thread.start()
-
-    @property
-    def name(self):
-        return getattr(self.mcp_server, 'name', None)
-
-    @property
-    def strict(self):
-        return getattr(self.mcp_server, 'strict', None)
-
-    @property
-    def params(self):
-        return getattr(self.mcp_server, 'params', None)
-
-    def __repr__(self):
-        return f"<MCPServerManager name={self.name} strict={self.strict} params={self.params}>"
-
-    def _run_loop(self):
-        asyncio.set_event_loop(self.loop)
-        self.loop.run_until_complete(self._main())
-
-    async def _main(self):
-        await self.mcp_server.connect()
-        self.ready_event.set()
-        try:
-            while True:
-                item = await self.queue.get()
-                if item == "SHUTDOWN":
-                    break
-                tool_name, args, result_future = item
-                try:
-                    result = await self.mcp_server.call_tool(tool_name, args)
-                    result_future.set_result(result)
-                except Exception as e:
-                    result_future.set_exception(e)
-        finally:
-            await self.mcp_server.cleanup()
-            self.shutdown_event.set()
-
-    def call_tool(self, tool_name, args):
-        self.ready_event.wait()
-        result_future = Future()
-        self.loop.call_soon_threadsafe(self.queue.put_nowait, (tool_name, args, result_future))
-        return result_future.result()  # blocks until result is ready
-
-    def shutdown(self):
-        self.loop.call_soon_threadsafe(self.queue.put_nowait, "SHUTDOWN")
-        self.shutdown_event.wait()
-        self.loop.call_soon_threadsafe(self.loop.stop)
-        self.thread.join()
-
-    def list_tools(self):
-        self.ready_event.wait()
-        coro = self.mcp_server.list_tools()
-        return asyncio.run_coroutine_threadsafe(coro, self.loop).result()
