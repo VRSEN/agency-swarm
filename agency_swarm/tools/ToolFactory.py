@@ -5,6 +5,7 @@ import sys
 from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
+import logging
 from typing import Any, Callable, Dict, List, Literal, Optional, Set, Tuple, Type, Union
 
 import httpx
@@ -13,11 +14,9 @@ from datamodel_code_generator import DataModelType, PythonVersion
 from datamodel_code_generator.model import get_data_model_types
 from datamodel_code_generator.parser.jsonschema import JsonSchemaParser
 
-from agency_swarm.util.helpers import run_async_sync
-
 from .BaseTool import BaseTool
 
-
+logger = logging.getLogger(__name__)
 class ToolFactory:
     @staticmethod
     def from_langchain_tools(tools: List) -> List[Type[BaseTool]]:
@@ -99,6 +98,7 @@ class ToolFactory:
             use_schema_description=True,
             validation=False,
             class_name="Model",
+            strip_default_none=schema.get("strict", False), # default parameters are not supported in strict mode
             # custom_template_dir=Path('/Users/vrsen/Projects/agency-swarm/agency-swarm/agency_swarm/tools/data_schema_templates')
         )
 
@@ -356,21 +356,8 @@ class ToolFactory:
         return imported_class
 
     @staticmethod
-    def from_mcp(mcp_server):
-        """
-        Synchronous wrapper for creating a tool factory from an MCP server.
-        :param mcp_server: An MCP server instance.
-        :return: A list of tools
-        """
-        return run_async_sync(ToolFactory.from_mcp_async, mcp_server)
-
-    @staticmethod
-    async def from_mcp_async(mcp_server):
-        try:
-            await mcp_server.connect()
-            tool_definitions = await mcp_server.list_tools()
-        finally:
-            await mcp_server.cleanup()
+    def from_mcp(server):
+        tool_definitions = server.list_tools()
         tools = []
 
         for definition in tool_definitions:
@@ -396,11 +383,13 @@ class ToolFactory:
                         break
             # If any parameter has a default value, set strict to False
             if has_default_values:
-                mcp_server._strict = False
+                logger.warning("Non-supported tool parameter found, disabling strict mode.")
+                server.strict = False
 
             # Create a factory function to properly capture the tool name
             def create_callback(tool_name):
                 async def callback(self, **kwargs):
+
                     # Extract arguments from the model_dump, excluding any internal attributes
                     args = {
                         k: v
@@ -409,11 +398,7 @@ class ToolFactory:
                     }
 
                     # Call the tool with just the arguments, not the whole model
-                    try:
-                        await mcp_server.connect()
-                        result = await mcp_server.call_tool(tool_name, args)
-                    finally:
-                        await mcp_server.cleanup()
+                    result = server.call_tool(tool_name, args)
 
                     if hasattr(result, "content") and result.content:
                         # Extract text from the first content item if it exists
@@ -426,6 +411,7 @@ class ToolFactory:
                     # Fallback: try to get the result attribute or convert the entire object to string
                     if hasattr(result, "result"):
                         return result.result
+
                     return str(result)
 
                 return callback
@@ -437,13 +423,12 @@ class ToolFactory:
                     "name": name,
                     "description": description,
                     "parameters": parameters,
-                    "strict": mcp_server.strict
-                    if hasattr(mcp_server, "strict")
-                    else False,
+                    "strict": server.strict
                 },
                 callback,
             )
             tools.append(tool)
+
         return tools
 
     @staticmethod

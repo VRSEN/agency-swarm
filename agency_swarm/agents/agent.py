@@ -25,7 +25,6 @@ from agency_swarm.util.shared_state import SharedState
 
 logger = logging.getLogger(__name__)
 
-
 class ExampleMessage(TypedDict):
     role: Literal["user", "assistant"]
     content: str
