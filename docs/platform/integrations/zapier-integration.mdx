@@ -56,24 +56,25 @@ Supported actions:
   <p>The <strong>Prompt</strong> action enables your agent to generate responses based on given inputs. This action processes a prompt, context, or input data and returns a response that is relevant to the context. This can be used for automating conversations, supporting decision-making, and executing tasks intelligently within workflows.</p>
 
   <ResponseField name="Action Input Properties">
+    Understanding Action Input Properties is essential because they define how your agent will receive and interpret data from Zapier. Each property directly controls what the agent sees, what it responds to, and how it behaves in an automation.
     <Expandable title="properties" defaultOpen={true}>
       <ResponseField name="Integration ID" type="string" required>
-        The identifier for your zapier integration, found on the integration page.
+        The identifier for your zapier integration, found on the integration page. Example: "HVC7YxC1YBSuTtDwGK7a"
       </ResponseField>
 
       <ResponseField name="Message" type="string" required>
-        The text you want to send to the connected agent.
+        The text you want to send to the connected agent. Example: "Write a blog post with agent's knowledge"
       </ResponseField>
 
       <ResponseField name="Chat ID" type="string">
-        The identifier for an existing conversation. If not provided, the system will create a new chat.
+        The identifier for an existing conversation. If not provided, the system will create a new chat. 
       </ResponseField>
     </Expandable>
   </ResponseField>
   <ResponseField name="Action Output Properties">
     <Expandable title="properties" defaultOpen={true}>
       <ResponseField name="Integration ID" type="string">
-        The identifier of the zapier integration used.
+        The identifier of the zapier integration used. Example: "HVC7YxC1YBSuTtDwGK7a"
       </ResponseField>
 
       <ResponseField name="Answer" type="string">
