@@ -1,39 +1,147 @@
 [build-system]
-requires = ["setuptools>=61.0", "setuptools_scm>=8"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
 name = "agency-swarm"
-dynamic = ["version"]
-authors = [{ name = "VRSEN", email = "me@vrsen.ai" }]
-description = "An open source agent orchestration framework built on top of the latest OpenAI Assistants API."
+version = "1.0.0b1"
+description = "Agency Swarm framework"
 readme = "README.md"
-license = { file = "LICENSE" }
-classifiers = [
-    "Intended Audience :: Developers",
-    "Topic :: Software Development :: Build Tools",
-    "License :: OSI Approved :: MIT License",
-]
+requires-python = ">=3.10"
+license = "MIT"
+authors = [{ name = "Vrsen AI Solutions", email = "me@vrsen.ai" }]
 dependencies = [
+    "openai>=1.76.0",
+    "openai-agents==0.0.14",
+    "pydantic>=2.10, <3",
+    "griffe>=1.5.6, <2",
+    "typing-extensions>=4.12.2, <5",
+    "requests>=2.0, <3",
+    "types-requests>=2.0, <3",
+    "mcp>=1.6.0, <2; python_version >= '3.10'",
+    "docstring-parser>=0.16",
     "datamodel-code-generator==0.28.5",
     "deepdiff==6.7.1",
-    "docstring_parser==0.16",
     "jsonref==1.1.0",
-    "openai>=1.66.0,<2.0.0",
-    "pydantic>=2.8.2,<2.12.0",
     "python-dotenv==1.0.1",
-    "rich>=13.9.4",
     "termcolor>=2.3.0",
-    "mcp>=1.6.0"
 ]
-requires-python = ">=3.10"
-urls = { homepage = "https://github.com/VRSEN/agency-swarm" }
+classifiers = [
+    "Typing :: Typed",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "License :: OSI Approved :: MIT License",
+]
 
-[project.scripts]
-agency-swarm = "agency_swarm.cli:main"
+[project.urls]
+Homepage = "https://github.com/VRSEN/agency-swarm"
+Repository = "https://github.com/VRSEN/agency-swarm"
 
-[tool.setuptools_scm]
+[project.optional-dependencies]
+voice = ["numpy>=2.2.0, <3; python_version>='3.10'", "websockets>=15.0, <16"]
+viz = ["graphviz>=0.17"]
+litellm = ["litellm>=1.65.0, <2"]
+
+[dependency-groups]
+dev = [
+    "mypy",
+    "ruff==0.9.2",
+    "pytest",
+    "pytest-asyncio",
+    "pytest-mock>=3.14.0",
+    "rich>=13.1.0, <14",
+    "mkdocs>=1.6.0",
+    "mkdocs-material>=9.6.0",
+    "mkdocstrings[python]>=0.28.0",
+    "mkdocs-static-i18n",
+    "coverage>=7.6.12",
+    "playwright==1.50.0",
+    "inline-snapshot>=0.20.7",
+    "pynput",
+    "types-pynput",
+    "sounddevice",
+    "textual",
+    "websockets",
+    "graphviz",
+    "eval-type-backport>=0.2.2",
+    "fastapi >= 0.110.0, <1",
+    "langchain==0.3.13",
+    "langchain-community==0.3.13",
+    "mcp-server-git",
+]
+
+[tool.uv.workspace]
+members = ["agency_swarm"]
+
+[tool.uv.sources]
+agency_swarm = { workspace = true }
+mcp-server-git = { git = "https://example.com/path/to/mcp-server-git.git" }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agency_swarm"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "W",
+    "F",
+    "I",
+    "B",
+    "C4",
+    "UP",
+]
+isort = { combine-as-imports = true, known-first-party = ["agency_swarm"] }
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+"examples/**/*.py" = ["E501"]
+
+[tool.mypy]
+strict = true
+disallow_incomplete_defs = false
+disallow_untyped_defs = false
+disallow_untyped_calls = false
+
+[[tool.mypy.overrides]]
+module = "sounddevice.*"
+ignore_missing_imports = true
+
+[tool.coverage.run]
+source = ["tests", "src/agency_swarm"]
+
+[tool.coverage.report]
+show_missing = true
+sort = "-Cover"
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "@abc.abstractmethod",
+    "raise NotImplementedError",
+    "logger.debug",
+]
 
 [tool.pytest.ini_options]
-asyncio_mode = "strict"
-asyncio_default_fixture_loop_scope = "function"
+markers = [
+    "asyncio: mark test as asyncio",
+    "allow_call_model_methods: mark test as allowing calls to real model implementations",
+]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+filterwarnings = [
+    "ignore:coroutine 'test_async_input_filter_fails.<locals>.invalid_input_filter' was never awaited:RuntimeWarning",
+]
+
+[tool.inline-snapshot]
+format-command = "ruff format --stdin-filename {filename}"

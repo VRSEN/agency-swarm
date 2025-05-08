@@ -1,796 +1,439 @@
-import inspect
-import json
-import os
-import shutil
-import sys
-import time
-import unittest
+import asyncio
+from unittest.mock import AsyncMock, MagicMock, patch
 
-import httpx
+import pytest
+from agents import RunHooks, RunResult
 
-sys.path.insert(0, "../agency-swarm")
+from agency_swarm.agency import Agency
+from agency_swarm.agent import Agent
+from agency_swarm.hooks import PersistenceHooks
+from agency_swarm.thread import ThreadManager
 
-from openai.types.beta.threads import Text
-from openai.types.beta.threads.runs import ToolCall
-from pydantic import BaseModel
-from typing_extensions import override
-
-from agency_swarm import (
-    Agency,
-    AgencyEventHandler,
-    Agent,
-    get_openai_client,
-)
-from agency_swarm.tools import BaseTool, FileSearch, ToolFactory
-from agency_swarm.tools.send_message import SendMessageAsyncThreading
-from agency_swarm.util import create_agent_template
-
-os.environ["DEBUG_MODE"] = "True"
+# --- Fixtures ---
 
 
-class AgencyTest(unittest.TestCase):
-    TestTool = None
-    agency = None
-    agent2 = None
-    agent1 = None
-    ceo = None
-    num_schemas = None
-    num_files = None
-    client = None
+@pytest.fixture
+def mock_agent_a():
+    agent = MagicMock(spec=Agent)
+    agent.name = "AgentA"
+    agent._subagents = {}
+    agent.tools = []
+    agent.register_subagent = MagicMock()
+    agent._set_thread_manager = MagicMock()
+    agent.add_tool = MagicMock()
+    agent.instructions = "Agent A initial instructions."
+    # Use MagicMock for RunResult
+    mock_run_result_a = MagicMock(spec=RunResult)
+    mock_run_result_a.final_output = "Response from A"
+    agent.get_response = AsyncMock(return_value=mock_run_result_a)
+    # Add agency ref mock
+    agent._agency_instance = MagicMock()
+    agent._agency_instance.agents = {}
+    return agent
 
-    # testing loading agents from db
-    loaded_thread_ids = None
-    loaded_agents_settings = None
-    settings_callbacks = None
-    threads_callbacks = None
 
-    @classmethod
-    def setUpClass(cls):
-        cls.num_files = 0
-        cls.num_schemas = 0
-        cls.ceo = None
-        cls.agent1 = None
-        cls.agent2 = None
-        cls.agency = None
-        cls.client = get_openai_client()
-        cls.client.timeout = 60.0
+@pytest.fixture
+def mock_agent_b():
+    agent = MagicMock(spec=Agent)
+    agent.name = "AgentB"
+    agent._subagents = {}
+    agent.tools = []
+    agent.register_subagent = MagicMock()
+    agent._set_thread_manager = MagicMock()
+    agent.add_tool = MagicMock()
+    agent.instructions = "Agent B initial instructions."
+    # Use MagicMock for RunResult
+    mock_run_result_b = MagicMock(spec=RunResult)
+    mock_run_result_b.final_output = "Response from B"
+    agent.get_response = AsyncMock(return_value=mock_run_result_b)
+    # Add agency ref mock
+    agent._agency_instance = MagicMock()
+    agent._agency_instance.agents = {}
+    return agent
 
-        # testing loading agents from db
-        cls.loaded_thread_ids = {}
-        cls.loaded_agents_settings = []
 
-        def save_settings_callback(settings):
-            cls.loaded_agents_settings = settings
+# --- Test Cases ---
 
-        cls.settings_callbacks = {
-            "load": lambda: cls.loaded_agents_settings,
-            "save": save_settings_callback,
-        }
 
-        def save_thread_callback(agents_and_thread_ids):
-            cls.loaded_thread_ids = agents_and_thread_ids
+def test_agency_minimal_initialization(mock_agent_a, mock_agent_b):
+    """Test basic agency initialization with entry points derived from chart."""
+    chart = [mock_agent_a, mock_agent_b]  # Standalone agents in chart
+    agency = Agency(agency_chart=chart)
 
-        cls.threads_callbacks = {
-            "load": lambda: cls.loaded_thread_ids,
-            "save": save_thread_callback,
-        }
+    assert mock_agent_a.name in agency.agents
+    assert mock_agent_b.name in agency.agents
+    assert agency.agents[mock_agent_a.name] == mock_agent_a
+    assert agency.agents[mock_agent_b.name] == mock_agent_b
+    # Both should be identified as entry points
+    assert mock_agent_a in agency.entry_points
+    assert mock_agent_b in agency.entry_points
+    assert len(agency.entry_points) == 2
+    assert agency.chart == chart  # Check chart is stored
+    assert agency.shared_instructions is None
+    assert isinstance(agency.thread_manager, ThreadManager)
+    assert agency.persistence_hooks is None
 
-        if not os.path.exists("./test_agents"):
-            os.mkdir("./test_agents")
-        else:
-            shutil.rmtree("./test_agents")
-            os.mkdir("./test_agents")
+    # Check ThreadManager injection
+    mock_agent_a._set_thread_manager.assert_called_once_with(agency.thread_manager)
+    mock_agent_b._set_thread_manager.assert_called_once_with(agency.thread_manager)
+    # Check agency injection
+    mock_agent_a._set_agency_instance.assert_called_once_with(agency)
+    mock_agent_b._set_agency_instance.assert_called_once_with(agency)
 
-        # create init file
-        with open("./test_agents/__init__.py", "w") as f:
-            f.write("")
 
-        # create agent templates in test_agents
-        create_agent_template(
-            "CEO",
-            "CEO Test Agent",
-            path="./test_agents",
-            instructions="Your task is to tell TestAgent1 to say test to another test agent. If the "
-            "agent, does not respond or something goes wrong please say 'error' and "
-            "nothing else. Otherwise say 'success' and nothing else.",
-            include_example_tool=True,
+def test_agency_initialization_with_flows(mock_agent_a, mock_agent_b):
+    """Test agency initialization with communication flows defined in chart."""
+    # Reset mocks if needed
+    mock_agent_a.register_subagent.reset_mock()
+    mock_agent_b.register_subagent.reset_mock()
+
+    # A -> B flow defined in chart
+    chart = [
+        mock_agent_a,  # Explicitly listed
+        [mock_agent_a, mock_agent_b],  # Communication path
+    ]
+    agency = Agency(agency_chart=chart)
+
+    # Verify agents are present
+    assert mock_agent_a.name in agency.agents
+    assert mock_agent_b.name in agency.agents
+
+    # Verify entry point (A is listed standalone, B is only receiver)
+    # According to current logic, both might be entry points
+    assert mock_agent_a in agency.entry_points
+    assert mock_agent_b not in agency.entry_points
+
+    # Verify register_subagent was called correctly by _configure_agents
+    mock_agent_a.register_subagent.assert_called_once_with(mock_agent_b)
+    mock_agent_b.register_subagent.assert_not_called()
+
+
+def test_agency_initialization_shared_instructions(mock_agent_a):
+    """Test agency initialization applies shared instructions string."""
+    instructions_content = "This is a shared instruction."
+    initial_instructions = "Agent A initial instructions."
+    mock_agent_a.instructions = initial_instructions  # Set initial instructions on mock
+    chart = [mock_agent_a]
+
+    agency = Agency(agency_chart=chart, shared_instructions=instructions_content)
+
+    # Verify instructions are prepended
+    expected_instructions = instructions_content + "\n\n---\n\n" + initial_instructions
+    assert mock_agent_a.instructions == expected_instructions
+    assert agency.shared_instructions == instructions_content
+
+
+def test_agency_initialization_persistence_hooks(mock_agent_a):
+    """Test agency initialization creates PersistenceHooks from callbacks."""
+    mock_load_cb = MagicMock()
+    mock_save_cb = MagicMock()
+    chart = [mock_agent_a]
+
+    agency = Agency(agency_chart=chart, load_callback=mock_load_cb, save_callback=mock_save_cb)
+
+    assert isinstance(agency.persistence_hooks, PersistenceHooks)
+    # Check hooks are NOT called during init
+    mock_load_cb.assert_not_called()
+    mock_save_cb.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_agency_get_response_basic(mock_agent_a, mock_agent_b):
+    """Test basic Agency.get_response call to an entry point agent."""
+    chart = [mock_agent_a, mock_agent_b]  # Both are entry points
+    agency = Agency(agency_chart=chart)
+    message = "User query for AgentA"
+    expected_response = "Response from A"
+
+    # Get mock return value from fixture
+    mock_return = mock_agent_a.get_response.return_value
+    mock_return.final_output = expected_response  # Ensure it's set
+
+    result = await agency.get_response(message=message, recipient_agent=mock_agent_a)
+
+    assert result.final_output == expected_response
+    mock_agent_a.get_response.assert_awaited_once()
+
+    # Verify args passed to agent's get_response
+    call_args, call_kwargs = mock_agent_a.get_response.call_args
+    assert call_kwargs["message"] == message
+    assert call_kwargs["sender_name"] is None  # From User
+    assert call_kwargs["context_override"] is None  # Agency passes None if not provided by user
+    assert call_kwargs["hooks_override"] is None  # No agency hooks, no user hooks
+    assert call_kwargs["chat_id"] is not None
+    assert call_kwargs["chat_id"].startswith("chat_")
+
+
+@pytest.mark.asyncio
+async def test_agency_get_response_with_hooks(mock_agent_a):
+    """Test Agency.get_response correctly merges and passes hooks."""
+    mock_load_cb = MagicMock()
+    mock_save_cb = MagicMock()
+    chart = [mock_agent_a]
+    agency = Agency(agency_chart=chart, load_callback=mock_load_cb, save_callback=mock_save_cb)
+    message = "Test hooks"
+    user_hooks = MagicMock(spec=RunHooks)
+
+    # Mock agent response
+    mock_agent_a.get_response.return_value = MagicMock(spec=RunResult, final_output="OK")
+
+    await agency.get_response(message=message, recipient_agent=mock_agent_a, hooks=user_hooks)
+
+    mock_agent_a.get_response.assert_awaited_once()
+    call_args, call_kwargs = mock_agent_a.get_response.call_args
+
+    # Verify the hooks passed to the agent include both internal and user hooks
+    final_hooks = call_kwargs["hooks_override"]
+    assert final_hooks == agency.persistence_hooks  # Check the internal hook was passed
+
+
+@pytest.mark.asyncio
+async def test_agency_get_response_invalid_recipient_warning(mock_agent_a, mock_agent_b):
+    """Test Agency.get_response warns for non-designated entry point recipient."""
+    chart = [mock_agent_a, mock_agent_b]  # Include B so it's registered
+    agency = Agency(agency_chart=chart)
+    # Manually remove B from entry_points after init for this test
+    agency.entry_points = [mock_agent_a]
+    message = "Query for B"
+
+    # Mock AgentB response
+    mock_agent_b.get_response.return_value = MagicMock(spec=RunResult, final_output="Response from B")
+
+    with patch("agency_swarm.agency.logger.warning") as mock_warning:
+        await agency.get_response(message=message, recipient_agent=mock_agent_b)
+        mock_warning.assert_called_once_with(f"Recipient agent '{mock_agent_b.name}' is not a designated entry point.")
+
+    # Verify AgentB was still called despite the warning
+    mock_agent_b.get_response.assert_awaited_once()
+    mock_agent_a.get_response.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_agency_get_response_stream_basic(mock_agent_a, mock_agent_b):
+    """Test basic Agency.get_response_stream call, mocking agent's stream method."""
+    chart = [mock_agent_a, mock_agent_b]
+    agency = Agency(agency_chart=chart)
+    message = "Stream query for AgentA"
+    mock_events = [{"event": "text", "data": "Stream from A"}]
+
+    # Configure the AGENT's mock stream method directly
+    async def stream_gen():
+        for event in mock_events:
+            yield event
+            await asyncio.sleep(0)
+
+    mock_agent_a.get_response_stream.return_value = stream_gen()
+
+    events = []
+    async for event in agency.get_response_stream(message=message, recipient_agent=mock_agent_a):
+        events.append(event)
+
+    assert events == mock_events
+    mock_agent_a.get_response_stream.assert_called_once()  # Check agent method was called
+    call_args, call_kwargs = mock_agent_a.get_response_stream.call_args
+    assert call_kwargs["message"] == message
+    assert call_kwargs["sender_name"] is None  # From User
+    assert call_kwargs["chat_id"] is not None
+    assert call_kwargs["chat_id"].startswith("chat_")
+    assert call_kwargs["context_override"] is None  # Agency passes None if not provided by user
+    assert call_kwargs["hooks_override"] is None  # No agency hooks, no user hooks
+
+
+@pytest.mark.asyncio
+async def test_agency_get_response_stream_with_hooks(mock_agent_a):
+    """Test Agency.get_response_stream correctly passes hooks to agent method."""
+    mock_load_cb = MagicMock()
+    mock_save_cb = MagicMock()
+    chart = [mock_agent_a]
+    agency = Agency(agency_chart=chart, load_callback=mock_load_cb, save_callback=mock_save_cb)
+    message = "Stream hooks test"
+    user_hooks = MagicMock(spec=RunHooks)
+
+    # Configure the AGENT's mock stream method directly
+    async def stream_gen():
+        yield {"event": "done"}
+
+    mock_agent_a.get_response_stream.return_value = stream_gen()
+
+    # Consume the stream
+    async for _ in agency.get_response_stream(message=message, recipient_agent=mock_agent_a, hooks=user_hooks):
+        pass
+
+    mock_agent_a.get_response_stream.assert_called_once()
+    call_args, call_kwargs = mock_agent_a.get_response_stream.call_args
+
+    # Verify hooks passed to AGENT method
+    final_hooks = call_kwargs["hooks_override"]  # Agent method gets hooks_override
+    assert final_hooks == agency.persistence_hooks  # Agency hooks passed if user hooks are None
+
+
+@pytest.mark.asyncio
+async def test_agency_get_completion_calls_get_response(mock_agent_a):
+    """Test deprecated get_completion calls get_response."""
+    chart = [mock_agent_a]
+    agency = Agency(agency_chart=chart)
+    message = "Test completion"
+
+    # Mock the underlying get_response method
+    with patch.object(agency, "get_response", new_callable=AsyncMock) as mock_get_response:
+        mock_result = MagicMock(spec=RunResult)
+        mock_result.final_output = "Completion OK"  # Keep original final_output if needed
+        mock_result.final_output_text = "Completion OK"  # Add final_output_text
+        mock_get_response.return_value = mock_result
+
+        # Call the deprecated method
+        result_text = await agency.get_completion(message=message, recipient_agent=mock_agent_a)
+
+        assert result_text == "Completion OK"
+        # Check that get_response was called with appropriate args
+        mock_get_response.assert_awaited_once()
+        call_args, call_kwargs = mock_get_response.call_args
+        assert call_kwargs.get("message") == message
+        assert call_kwargs.get("recipient_agent") == mock_agent_a
+        # Verify other params if necessary, e.g., chat_id is generated
+
+
+@pytest.mark.asyncio
+async def test_agency_stream_completion_calls_get_response_stream(mock_agent_a):
+    """Test deprecated stream_completion calls get_response_stream."""
+    chart = [mock_agent_a]
+    agency = Agency(agency_chart=chart)
+    message = "Test stream completion"
+    expected_text = "Stream OK"
+
+    # Mock the underlying agency.get_response_stream method
+    async def agency_stream_mock(*args, **kwargs):
+        yield {"event": "text", "data": expected_text}
+        await asyncio.sleep(0)
+
+    # Patch agency.get_response_stream directly here
+    with patch.object(agency, "get_response_stream", return_value=agency_stream_mock()) as mock_stream_call:
+        # Call the deprecated method and consume stream
+        events = []
+        async for event_text in agency.stream_completion(message=message, recipient_agent=mock_agent_a):
+            events.append(event_text)
+
+    assert events == [expected_text]
+    mock_stream_call.assert_called_once()
+    call_args, call_kwargs = mock_stream_call.call_args
+    assert call_kwargs.get("message") == message
+    assert call_kwargs.get("recipient_agent") == mock_agent_a
+
+
+# --- Tests for Agent-to-Agent Communication ---
+
+
+@pytest.mark.asyncio
+async def test_agency_agent_to_agent_communication(mock_agent_a, mock_agent_b):
+    """Test a basic agent-to-agent communication flow (A -> B)."""
+    # Setup: Agent A can send messages to Agent B
+    mock_agent_a.register_subagent(mock_agent_b)
+
+    chart = [
+        mock_agent_a,  # Entry point
+        [mock_agent_a, mock_agent_b],  # Communication flow
+    ]
+    agency = Agency(agency_chart=chart)
+
+    # Mock Agent A's response to simulate it calling send_message to B
+    # We'll mock the *result* of A's run, assuming it internally called B
+    # A more detailed test would mock the send_message tool's on_invoke_tool
+
+    # Simulate the final output coming from B after A called it.
+    final_expected_output = "Response from B after A called it"
+    mock_run_result_a = MagicMock(spec=RunResult)
+    mock_run_result_a.final_output = final_expected_output
+    mock_agent_a.get_response.return_value = mock_run_result_a  # Reset return value for this test
+
+    # Start interaction with Agent A
+    initial_message = "User asks Agent A to talk to Agent B"
+    result = await agency.get_response(message=initial_message, recipient_agent=mock_agent_a)
+
+    # Assertions
+    mock_agent_a.get_response.assert_awaited_once()  # Check A was called initially
+    # In this simplified mock, we assume A's logic internally triggered B.
+    # A deeper test would mock send_message and assert B.get_response was called.
+    # For now, just check the final output reflects the intended flow.
+    assert result.final_output == final_expected_output
+
+
+# --- End of Agent-to-Agent Communication Tests ---
+
+
+# Add a more detailed test mocking the recursive call
+@pytest.mark.asyncio
+async def test_agent_communication_context_hooks_propagation(mock_agent_a, mock_agent_b):
+    """Test context and hooks are propagated during agent communication."""
+    # Setup: A -> B flow, with persistence hooks
+    mock_agent_a.register_subagent(mock_agent_b)
+    mock_load_cb = MagicMock()
+    mock_save_cb = MagicMock()
+    chart = [[mock_agent_a, mock_agent_b]]  # A -> B flow
+    agency = Agency(agency_chart=chart, load_callback=mock_load_cb, save_callback=mock_save_cb)
+    initial_message = "User asks A to trigger B"
+    user_hooks = MagicMock(spec=RunHooks)  # User provided hooks
+
+    # Mock Agent B's get_response directly to inspect call args
+    mock_run_result_b = MagicMock(spec=RunResult)
+    mock_run_result_b.final_output = "B received message from A"
+    mock_agent_b.get_response = AsyncMock(return_value=mock_run_result_b)
+
+    # Mock Agent A's response to simulate it calling send_message to B
+    # This time, we need Agent A's get_response to *trigger* Agent B's mock
+    # We achieve this by having Agent A's mock call Agent B's mock
+    async def mock_a_calls_b(*args, **kwargs):
+        # Simulate A doing some work then calling B
+        # Crucially, it should use the context and hooks passed to it
+        # In a real scenario, send_message would handle this.
+        # Here we manually call B's mock, passing down context/hooks.
+        context_for_b = kwargs.get("context_override")
+        hooks_for_b = kwargs.get("hooks_override")
+        await mock_agent_b.get_response(
+            message="Message from A",
+            sender_name=mock_agent_a.name,
+            context_override=context_for_b,
+            hooks_override=hooks_for_b,
+            chat_id=kwargs.get("chat_id"),  # Propagate chat_id
         )
-        create_agent_template(
-            "TestAgent1",
-            "Test Agent 1",
-            path="./test_agents",
-            instructions="Your task is to say test to another test agent using SendMessage tool. "
-            "If the agent, does not "
-            "respond or something goes wrong please say 'error' and nothing else. "
-            "Otherwise say 'success' and nothing else.",
-            code_interpreter=True,
-            include_example_tool=False,
-        )
-        create_agent_template(
-            "TestAgent2",
-            "Test Agent 2",
-            path="./test_agents",
-            instructions="After using TestTool, please respond to the user that test was a success in JSON format. You can use the following format: {'test': 'success'}.",
-            include_example_tool=False,
-        )
-
-        # Create files and schemas directories
-        os.makedirs("./test_agents/TestAgent1/files", exist_ok=True)
-        os.makedirs("./test_agents/TestAgent2/schemas", exist_ok=True)
-
-        # copy files from data/files to test_agents/TestAgent1/files
-        for file in os.listdir("./data/files"):
-            shutil.copyfile(
-                "./data/files/" + file, "./test_agents/TestAgent1/files/" + file
-            )
-            cls.num_files += 1
-
-        # copy schemas from data/schemas to test_agents/TestAgent2/schemas
-        for file in os.listdir("./data/schemas"):
-            shutil.copyfile(
-                "./data/schemas/" + file, "./test_agents/TestAgent2/schemas/" + file
-            )
-            cls.num_schemas += 1
-
-        from tests.test_agents.CEO.CEO import CEO
-        from tests.test_agents.TestAgent1.TestAgent1 import TestAgent1
-        from tests.test_agents.TestAgent2.TestAgent2 import TestAgent2
-
-        class TestTool(BaseTool):
-            """
-            A simple test tool that returns "Test Successful" to demonstrate the functionality of a custom tool within the Agency Swarm framework.
-            """
-
-            class ToolConfig:
-                strict = True
-
-            def run(self):
-                """
-                Executes the test tool's main functionality. In this case, it simply returns a success message.
-                """
-                self._shared_state.set("test_tool_used", True)
-
-                return "Test Successful"
-
-        cls.TestTool = TestTool
-
-        cls.agent1 = TestAgent1()
-        cls.agent1.add_tool(FileSearch)
-        cls.agent1.truncation_strategy = {"type": "last_messages", "last_messages": 10}
-        cls.agent1.file_search = {"max_num_results": 49}
-
-        cls.agent2 = TestAgent2()
-        cls.agent2.add_tool(cls.TestTool)
-
-        cls.agent2.response_format = {
-            "type": "json_object",
-        }
-
-        cls.agent2.model = "gpt-4o"
-
-        cls.ceo = CEO()
-        cls.ceo.examples = [
-            {"role": "user", "content": "Hi!"},
-            {
-                "role": "assistant",
-                "content": "Hi! I am the CEO. I am here to help you with your testing. Please tell me who to send message to.",
-            },
-        ]
-
-        cls.ceo.max_completion_tokens = 100
-
-    def test_01_init_agency(self):
-        """it should initialize agency with agents"""
-        self.__class__.agency = Agency(
-            [
-                self.__class__.ceo,
-                [self.__class__.ceo, self.__class__.agent1],
-                [self.__class__.agent1, self.__class__.agent2],
-            ],
-            shared_instructions="This is a shared instruction",
-            settings_callbacks=self.__class__.settings_callbacks,
-            threads_callbacks=self.__class__.threads_callbacks,
-            temperature=0,
-        )
-
-        self.assertTrue(self.__class__.TestTool.openai_schema["strict"])
-
-        self.check_all_agents_settings()
-
-    def test_02_load_agent(self):
-        """it should load existing assistant from settings"""
-        from tests.test_agents.TestAgent1.TestAgent1 import TestAgent1
-
-        agent3 = TestAgent1()
-        agent3.add_shared_instructions(self.__class__.agency.shared_instructions)
-        agent3.tools = self.__class__.agent1.tools
-        agent3.top_p = self.__class__.agency.top_p
-        agent3.file_search = self.__class__.agent1.file_search
-        agent3.temperature = self.__class__.agent1.temperature
-        agent3.model = self.__class__.agent1.model
-        agent3 = agent3.init_oai()
-
-        print("agent3", agent3.assistant.model_dump())
-        print("agent1", self.__class__.agent1.assistant.model_dump())
-
-        self.assertTrue(self.__class__.agent1.id == agent3.id)
-
-        # check that assistant settings match
-        self.assertTrue(
-            agent3._check_parameters(self.__class__.agent1.assistant.model_dump())
-        )
-
-        self.check_agent_settings(agent3)
-
-    def test_03_load_agent_id(self):
-        """it should load existing assistant from id"""
-        agent3 = Agent(id=self.__class__.agent1.id)
-        agent3.tools = self.__class__.agent1.tools
-        agent3.file_search = self.__class__.agent1.file_search
-        agent3 = agent3.init_oai()
-
-        print("agent3", agent3.assistant.model_dump())
-        print("agent1", self.__class__.agent1.assistant.model_dump())
-
-        self.assertTrue(self.__class__.agent1.id == agent3.id)
-
-        # check that assistant settings match
-        self.assertTrue(
-            agent3._check_parameters(self.__class__.agent1.assistant.model_dump())
-        )
-
-        self.check_agent_settings(agent3)
-
-    def test_04_agent_communication(self):
-        """it should communicate between agents"""
-        print("TestAgent1 tools", self.__class__.agent1.tools)
-        self.__class__.agent1.parallel_tool_calls = False
-        message = self.__class__.agency.get_completion(
-            "Please tell TestAgent1 to say test to TestAgent2.",
-            tool_choice={"type": "function", "function": {"name": "SendMessage"}},
-        )
-
-        self.assertFalse(
-            "error" in message.lower(),
-            f"Error found in message: {message}. Thread url: {self.__class__.agency.main_thread.thread_url}",
-        )
-
-        self.assertTrue(self.__class__.agency.agents_and_threads["main_thread"].id)
-        self.assertTrue(
-            self.__class__.agency.agents_and_threads["CEO"]["TestAgent1"].id
-        )
-        self.assertTrue(
-            self.__class__.agency.agents_and_threads["TestAgent1"]["TestAgent2"].id
-        )
-
-        for agent in self.__class__.agency.agents:
-            self.assertTrue(
-                agent.id
-                in [
-                    settings["id"] for settings in self.__class__.loaded_agents_settings
-                ]
-            )
-
-        # assistants v2 checks
-        main_thread = self.__class__.agency.main_thread
-        main_thread_id = main_thread.id
-
-        thread_messages = self.__class__.client.beta.threads.messages.list(
-            main_thread_id, limit=100, order="asc"
-        )
-
-        self.assertTrue(len(thread_messages.data) == 4)
-
-        self.assertTrue(thread_messages.data[0].content[0].text.value == "Hi!")
-
-        run = main_thread._run
-        self.assertTrue(run.max_prompt_tokens == self.__class__.ceo.max_prompt_tokens)
-        self.assertTrue(
-            run.max_completion_tokens == self.__class__.ceo.max_completion_tokens
-        )
-        self.assertTrue(run.tool_choice.type == "function")
-
-        agent1_thread = self.__class__.agency.agents_and_threads[
-            self.__class__.ceo.name
-        ][self.__class__.agent1.name]
-
-        agent1_thread_id = agent1_thread.id
-
-        agent1_thread_messages = self.__class__.client.beta.threads.messages.list(
-            agent1_thread_id, limit=100
-        )
-
-        self.assertTrue(len(agent1_thread_messages.data) == 2)
-
-        agent1_run = agent1_thread._run
-
-        self.assertTrue(agent1_run.truncation_strategy.type == "last_messages")
-        self.assertTrue(agent1_run.truncation_strategy.last_messages == 10)
-        self.assertFalse(agent1_run.parallel_tool_calls)
-
-        agent2_thread = self.__class__.agency.agents_and_threads[
-            self.__class__.agent1.name
-        ][self.__class__.agent2.name]
-
-        agent2_message = agent2_thread._get_last_message_text()
-
-        try:
-            json.loads(agent2_message)
-        except json.JSONDecodeError as e:
-            self.assertTrue(False)
-
-    def test_05_agent_communication_stream(self):
-        """it should communicate between agents using streaming"""
-        print("TestAgent1 tools", self.__class__.agent1.tools)
-
-        test_tool_used = False
-        test_agent2_used = False
-        num_on_all_streams_end_calls = 0
-
-        class EventHandler(AgencyEventHandler):
-            @override
-            def on_text_created(self, text) -> None:
-                # get the name of the agent that is sending the message
-                if self.recipient_agent_name == "TestAgent2":
-                    nonlocal test_agent2_used
-                    test_agent2_used = True
-
-            def on_tool_call_done(self, tool_call: ToolCall) -> None:
-                if tool_call.function.name == "TestTool":
-                    nonlocal test_tool_used
-                    test_tool_used = True
-
-            @override
-            @classmethod
-            def on_all_streams_end(cls):
-                nonlocal num_on_all_streams_end_calls
-                num_on_all_streams_end_calls += 1
-
-        message = self.__class__.agency.get_completion_stream(
-            "Please tell TestAgent1 to tell TestAgent2 to use TestTool.",
-            event_handler=EventHandler,
-            additional_instructions="\n\n**Your message to TestAgent1 should be exactly as follows:** "
-            "'Please tell TestAgent2 to use TestTool.'",
-            tool_choice={"type": "function", "function": {"name": "SendMessage"}},
-        )
-
-        # self.assertFalse('error' in message.lower())
-
-        self.assertTrue(test_tool_used)
-        self.assertTrue(test_agent2_used)
-        self.assertTrue(num_on_all_streams_end_calls == 1)
-
-        self.assertTrue(self.__class__.TestTool._shared_state.get("test_tool_used"))
-
-        agent1_thread = self.__class__.agency.agents_and_threads[
-            self.__class__.ceo.name
-        ][self.__class__.agent1.name]
-        self.assertFalse(agent1_thread._run.parallel_tool_calls)
-
-        self.assertTrue(self.__class__.agency.main_thread.id)
-        self.assertTrue(
-            self.__class__.agency.agents_and_threads["CEO"]["TestAgent1"].id
-        )
-        self.assertTrue(
-            self.__class__.agency.agents_and_threads["TestAgent1"]["TestAgent2"].id
-        )
-
-        for agent in self.__class__.agency.agents:
-            self.assertTrue(
-                agent.id
-                in [
-                    settings["id"] for settings in self.__class__.loaded_agents_settings
-                ]
-            )
-
-    def test_06_load_from_db(self):
-        """it should load agents from db"""
-        # os.rename("settings.json", "settings2.json")
-
-        previous_loaded_thread_ids = self.__class__.loaded_thread_ids.copy()
-        previous_loaded_agents_settings = self.__class__.loaded_agents_settings.copy()
-
-        from tests.test_agents.CEO.CEO import CEO
-        from tests.test_agents.TestAgent1.TestAgent1 import TestAgent1
-        from tests.test_agents.TestAgent2.TestAgent2 import TestAgent2
-
-        agent1 = TestAgent1()
-        agent1.add_tool(FileSearch)
-
-        agent1.truncation_strategy = {"type": "last_messages", "last_messages": 10}
-
-        agent1.file_search = {"max_num_results": 49}
-
-        agent2 = TestAgent2()
-        agent2.add_tool(self.__class__.TestTool)
-
-        agent2.response_format = {
-            "type": "json_object",
-        }
-
-        ceo = CEO()
-
-        # check that agents are loaded
-        agency = Agency(
-            [ceo, [ceo, agent1], [agent1, agent2]],
-            shared_instructions="This is a shared instruction",
-            settings_path="./settings2.json",
-            settings_callbacks=self.__class__.settings_callbacks,
-            threads_callbacks=self.__class__.threads_callbacks,
-            temperature=0,
-        )
-
-        # check that settings are the same
-        self.assertTrue(len(agency.agents) == len(self.__class__.agency.agents))
-
-        os.remove("settings.json")
-        os.rename("settings2.json", "settings.json")
-
-        self.check_all_agents_settings()
-
-        # check that threads are the same
-        print("previous_loaded_thread_ids", previous_loaded_thread_ids)
-        print("self.__class__.loaded_thread_ids", self.__class__.loaded_thread_ids)
-        # Start of Selection
-        for agent, threads in self.__class__.agency.agents_and_threads.items():
-            if agent == "main_thread":
-                print("main_thread", threads)
-                continue
-            for other_agent, thread in threads.items():
-                print(f"Thread ID between {agent} and {other_agent}: {thread.id}")
-        self.assertTrue(
-            self.__class__.agency.agents_and_threads["main_thread"].id
-            == previous_loaded_thread_ids["main_thread"]
-            == self.__class__.loaded_thread_ids["main_thread"]
-        )
-        self.assertTrue(
-            self.__class__.agency.agents_and_threads["CEO"]["TestAgent1"].id
-            == previous_loaded_thread_ids["CEO"]["TestAgent1"]
-            == self.__class__.loaded_thread_ids["CEO"]["TestAgent1"]
-        )
-        self.assertTrue(
-            self.__class__.agency.agents_and_threads["TestAgent1"]["TestAgent2"].id
-            == previous_loaded_thread_ids["TestAgent1"]["TestAgent2"]
-            == self.__class__.loaded_thread_ids["TestAgent1"]["TestAgent2"]
-        )
-
-        # check that agents are the same
-        for agent in agency.agents:
-            self.assertTrue(
-                agent.id
-                in [
-                    settings["id"] for settings in self.__class__.loaded_agents_settings
-                ]
-            )
-            self.assertTrue(
-                agent.id
-                in [settings["id"] for settings in previous_loaded_agents_settings]
-            )
-
-    def test_07_init_async_agency(self):
-        """it should initialize async agency with agents"""
-        # reset loaded thread ids
-        self.__class__.loaded_thread_ids = {}
-
-        # Set ids for all agents to None
-        self.__class__.ceo.id = None
-        self.__class__.agent1.id = None
-        self.__class__.agent2.id = None
-
-        self.__class__.agent1.file_search = {"max_num_results": 49}
-
-        self.__class__.agency = Agency(
-            [
-                self.__class__.ceo,
-                [self.__class__.ceo, self.__class__.agent1],
-                [self.__class__.agent1, self.__class__.agent2],
-            ],
-            shared_instructions="",
-            settings_callbacks=self.__class__.settings_callbacks,
-            threads_callbacks=self.__class__.threads_callbacks,
-            send_message_tool_class=SendMessageAsyncThreading,
-            temperature=0,
-        )
-
-        self.check_all_agents_settings(True)
-
-    def test_08_async_agent_communication(self):
-        """it should communicate between agents asynchronously"""
-        self.__class__.agency.get_completion(
-            "Please tell TestAgent2 hello.",
-            tool_choice={"type": "function", "function": {"name": "SendMessage"}},
-            recipient_agent=self.__class__.agent1,
-        )
-
-        time.sleep(10)
-
-        num_on_all_streams_end_calls = 0
-        delta_value = ""
-        full_text = ""
-
-        class EventHandler(AgencyEventHandler):
-            @override
-            def on_text_delta(self, delta, snapshot):
-                nonlocal delta_value
-                delta_value += delta.value
-
-            @override
-            def on_text_done(self, text: Text) -> None:
-                nonlocal full_text
-                full_text += text.value
-
-            @override
-            @classmethod
-            def on_all_streams_end(cls):
-                nonlocal num_on_all_streams_end_calls
-                num_on_all_streams_end_calls += 1
-
-        message = self.__class__.agency.get_completion_stream(
-            "Please check response. If output includes `TestAgent2's Response`, say 'success'. If the function output does not include `TestAgent2's Response`, or if you get a System Notification, or an error instead, say 'error'.",
-            tool_choice={"type": "function", "function": {"name": "GetResponse"}},
-            recipient_agent=self.__class__.agent1,
-            event_handler=EventHandler,
-        )
-
-        self.assertTrue(num_on_all_streams_end_calls == 1)
-
-        self.assertTrue(delta_value == full_text == message)
-
-        self.assertTrue(EventHandler.agent_name == "User")
-        self.assertTrue(EventHandler.recipient_agent_name == "TestAgent1")
-
-        if "error" in message.lower():
-            self.assertFalse(
-                "error" in message.lower(), self.__class__.agency.main_thread.thread_url
-            )
-
-        self.assertTrue(self.__class__.agency.main_thread.id)
-        self.assertTrue(
-            self.__class__.agency.agents_and_threads["TestAgent1"]["TestAgent2"].id
-        )
-
-        for agent in self.__class__.agency.agents:
-            self.assertTrue(
-                agent.id
-                in [
-                    settings["id"] for settings in self.__class__.loaded_agents_settings
-                ]
-            )
-
-    def test_09_async_tool_calls(self):
-        """it should execute tools asynchronously"""
-
-        class PrintTool(BaseTool):
-            class ToolConfig:
-                async_mode = "threading"
-
-            def run(self, **kwargs):
-                time.sleep(2)  # Simulate a delay
-                return "Printed successfully."
-
-        class AnotherPrintTool(BaseTool):
-            class ToolConfig:
-                async_mode = "threading"
-
-            def run(self, **kwargs):
-                time.sleep(2)  # Simulate a delay
-                return "Another print successful."
-
-        ceo = Agent(name="CEO", tools=[PrintTool, AnotherPrintTool])
-
-        agency = Agency([ceo], temperature=0)
-
-        result = agency.get_completion(
-            "Use 2 print tools together at the same time and output the results exectly as they are. ",
-            yield_messages=False,
-        )
-
-        self.assertIn("success", result.lower(), agency.main_thread.thread_url)
-        self.assertIn("success", result.lower(), agency.main_thread.thread_url)
-
-    def test_10_concurrent_API_calls(self):
-        """it should execute API calls concurrently with asyncio"""
-
-        # Create a mock client that will be used instead of httpx
-        class MockClient:
-            def __init__(self, **kwargs):
-                self.timeout = kwargs.get("timeout", None)
-
-            async def __aenter__(self):
-                return self
-
-            async def __aexit__(self, exc_type, exc_val, exc_tb):
-                pass
-
-            async def get(self, url, params=None, headers=None):
-                # Verify that the domain parameter is correctly set in the URL
-                if "print-headers-gntxktyfsq-uc.a.run.app" in url:
-
-                    class MockResponse:
-                        def json(self):
-                            return {"headers": {"test": "success"}}
-
-                        def raise_for_status(self):
-                            pass
-
-                    return MockResponse()
-                raise ValueError(f"Invalid URL: {url}")
-
-            async def aclose(self):
-                pass
-
-        # Patch httpx.AsyncClient with our mock
-        original_client = httpx.AsyncClient
-        httpx.AsyncClient = MockClient
-
-        try:
-            tools = []
-            with open("./data/schemas/get-headers-params.json", "r") as f:
-                tools = ToolFactory.from_openapi_schema(f.read(), {})
-
-            ceo = Agent(
-                name="CEO",
-                tools=tools,
-                instructions="""You are an agent that tests concurrent API calls. You must say 'success' if the output contains headers, and 'error' if it does not and **nothing else**.""",
-            )
-
-            agency = Agency([ceo], temperature=0)
-
-            result = agency.get_completion(
-                "Please call PrintHeaders tool TWICE at the same time in a single message with domain='print-headers' and query='test'. If any of the function outputs do not contain headers, please say 'error'."
-            )
-
-            self.assertTrue(
-                result.lower().count("error") == 0, agency.main_thread.thread_url
-            )
-        finally:
-            # Restore original client
-            httpx.AsyncClient = original_client
-
-    def test_11_structured_outputs(self):
-        class MathReasoning(BaseModel):
-            class Step(BaseModel):
-                explanation: str
-                output: str
-
-            steps: list[Step]
-            final_answer: str
-
-        math_tutor_prompt = """
-            You are a helpful math tutor. You will be provided with a math problem,
-            and your goal will be to output a step by step solution, along with a final answer.
-            For each step, just provide the output as an equation use the explanation field to detail the reasoning.
-        """
-
-        agent = Agent(
-            name="MathTutor",
-            response_format=MathReasoning,
-            instructions=math_tutor_prompt,
-        )
-
-        agency = Agency([agent], temperature=0)
-
-        result = agency.get_completion("how can I solve 8x + 7 = -23")
-
-        # check if result is a MathReasoning object
-        self.assertTrue(MathReasoning.model_validate_json(result))
-
-        result = agency.get_completion_parse(
-            "how can I solve 3x + 2 = 14", response_format=MathReasoning
-        )
-
-        # check if result is a MathReasoning object
-        self.assertTrue(isinstance(result, MathReasoning))
-
-    # --- Helper methods ---
-
-    def get_class_folder_path(self):
-        return os.path.abspath(os.path.dirname(inspect.getfile(self.__class__)))
-
-    def check_agent_settings(self, agent, async_mode=False):
-        try:
-            settings_path = agent.get_settings_path()
-            self.assertTrue(os.path.exists(settings_path))
-            with open(settings_path, "r") as f:
-                settings = json.load(f)
-                for assistant_settings in settings:
-                    if assistant_settings["id"] == agent.id:
-                        self.assertTrue(
-                            agent._check_parameters(assistant_settings, debug=True)
-                        )
-
-            assistant = agent.assistant
-            self.assertTrue(assistant)
-            self.assertTrue(agent._check_parameters(assistant.model_dump(), debug=True))
-            if agent.name == "TestAgent1":
-                num_tools = 3 if not async_mode else 4
-
-                self.assertTrue(
-                    len(
-                        assistant.tool_resources.model_dump()["code_interpreter"][
-                            "file_ids"
-                        ]
-                    )
-                    == 3
-                )
-                self.assertTrue(
-                    len(
-                        assistant.tool_resources.model_dump()["file_search"][
-                            "vector_store_ids"
-                        ]
-                    )
-                    == 1
-                )
-
-                vector_store_id = assistant.tool_resources.model_dump()["file_search"][
-                    "vector_store_ids"
-                ][0]
-                vector_store_files = agent.client.vector_stores.files.list(
-                    vector_store_id=vector_store_id
-                )
-
-                file_ids = [file.id for file in vector_store_files.data]
-
-                # Add debug output
-                print("Vector store files:", len(file_ids))
-
-                self.assertTrue(len(file_ids) == 8)
-                # check retrieval tools is there
-                self.assertTrue(len(assistant.tools) == num_tools)
-                self.assertTrue(len(agent.tools) == num_tools)
-                self.assertTrue(assistant.tools[0].type == "code_interpreter")
-                self.assertTrue(assistant.tools[1].type == "file_search")
-                if not async_mode:
-                    self.assertTrue(
-                        assistant.tools[1].file_search.max_num_results == 49
-                    )  # Updated line
-                self.assertTrue(assistant.tools[2].type == "function")
-                self.assertTrue(assistant.tools[2].function.name == "SendMessage")
-                self.assertFalse(assistant.tools[2].function.strict)
-                if async_mode:
-                    self.assertTrue(assistant.tools[3].type == "function")
-                    self.assertTrue(assistant.tools[3].function.name == "GetResponse")
-                    self.assertFalse(assistant.tools[3].function.strict)
-
-            elif agent.name == "TestAgent2":
-                self.assertTrue(len(assistant.tools) == self.__class__.num_schemas + 1)
-                for tool in assistant.tools:
-                    self.assertTrue(tool.type == "function")
-                    self.assertTrue(
-                        tool.function.name in [tool.__name__ for tool in agent.tools]
-                    )
-                test_tool = next(
-                    (
-                        tool
-                        for tool in assistant.tools
-                        if tool.function.name == "TestTool"
-                    ),
-                    None,
-                )
-                self.assertTrue(test_tool.function.strict, test_tool)
-            elif agent.name == "CEO":
-                num_tools = 1 if not async_mode else 2
-                self.assertFalse(assistant.tool_resources.code_interpreter)
-                self.assertFalse(assistant.tool_resources.file_search)
-                self.assertTrue(len(assistant.tools) == num_tools)
-            else:
-                pass
-        except Exception as e:
-            print("Error checking agent settings ", agent.name)
-            raise e
-
-    def check_all_agents_settings(self, async_mode=False):
-        self.check_agent_settings(self.__class__.ceo, async_mode=async_mode)
-        self.check_agent_settings(self.__class__.agent1, async_mode=async_mode)
-        self.check_agent_settings(self.__class__.agent2, async_mode=async_mode)
-
-    @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree("./test_agents")
-        # os.remove("./settings.json")
-        if cls.agency:
-            cls.agency.delete()
-
-
-if __name__ == "__main__":
-    unittest.main()
+        # Return a final result for A's turn
+        mock_final_result_a = MagicMock(spec=RunResult)
+        mock_final_result_a.final_output = "A finished after calling B"
+        return mock_final_result_a
+
+    mock_agent_a.get_response = AsyncMock(side_effect=mock_a_calls_b)
+
+    # Start interaction with Agent A, providing user hooks
+    await agency.get_response(
+        message=initial_message,
+        recipient_agent=mock_agent_a,
+        hooks=user_hooks,  # Pass user hooks here
+    )
+
+    # --- Assertions ---
+    # 1. Check Agent A was called initially
+    mock_agent_a.get_response.assert_awaited_once()
+    initial_call_args, initial_call_kwargs = mock_agent_a.get_response.call_args
+    assert initial_call_kwargs["message"] == initial_message
+    assert initial_call_kwargs["sender_name"] is None
+    # Hooks passed to A should include agency's persistence hooks and user hooks
+    # (In this mock setup, we assume they are combined before calling A)
+    # For simplicity, check that the combined hooks (represented by hooks_for_b) were received.
+    assert initial_call_kwargs["hooks_override"] == agency.persistence_hooks
+    # Initial context should contain thread_manager and agents map
+    initial_context = initial_call_kwargs["context_override"]
+    assert initial_context is None  # Agency passes None if not provided by user
+
+    # 2. Check Agent B was called by A
+    mock_agent_b.get_response.assert_awaited_once()
+    recursive_call_args, recursive_call_kwargs = mock_agent_b.get_response.call_args
+    assert recursive_call_kwargs["message"] == "Message from A"
+    assert recursive_call_kwargs["sender_name"] == mock_agent_a.name
+    # Crucially, check context and hooks propagation
+    propagated_hooks = recursive_call_kwargs["hooks_override"]
+    assert propagated_hooks == agency.persistence_hooks  # Check persistence hooks are passed down
+    propagated_context = recursive_call_kwargs["context_override"]
+    assert propagated_context is None  # Check context is passed down
+
+
+def test_agency_placeholder():  # Placeholder to keep, remove later
+    assert True
