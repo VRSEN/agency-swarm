@@ -142,7 +142,6 @@ class _MCPServerWithClientSession(MCPServer, abc.ABC):
 
     # Synchronous public methods
     def connect(self):
-        print("connect")
         return self._call_in_loop("connect")
 
     def list_tools(self):

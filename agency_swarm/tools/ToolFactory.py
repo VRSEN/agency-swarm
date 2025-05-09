@@ -382,7 +382,7 @@ class ToolFactory:
                         has_default_values = True
                         break
             # If any parameter has a default value, set strict to False
-            if has_default_values:
+            if has_default_values and server.strict:
                 logger.warning("Non-supported tool parameter found, disabling strict mode.")
                 server.strict = False
 
