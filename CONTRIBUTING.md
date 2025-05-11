@@ -25,10 +25,10 @@ To contribute to Agency Swarm, you'll need to set up your local development envi
 
 3. **Install Dependencies**
 
-   Install the required packages:
+   Install the required packages using the Makefile:
 
    ```bash
-   pip install -r requirements-dev.txt
+   make sync
    ```
 
 4. **Install Pre-Commit Hooks**
@@ -46,27 +46,25 @@ Ensure all tests pass before submitting your changes:
 
 1. **Install Test Dependencies**
 
-   Install test dependencies:
+   Ensure all test dependencies are installed (typically done via `make sync`):
 
    ```bash
-   pip install -r requirements-dev.txt
+   make sync
    ```
 
 2. **Run Tests**
 
-   Run the test suite:
+   Run the test suite with coverage using the Makefile:
 
    ```bash
-   pytest
+   make coverage
    ```
+
+   (This typically runs pytest and generates a coverage report.)
 
 3. **Check Test Coverage**
 
-   Check the test coverage:
-
-   ```bash
-   pytest --cov=agency_swarm tests/
-   ```
+   The `make coverage` command should output coverage information. Review it to ensure adequate test coverage.
 
 ## Folder Structure for Tools
 
@@ -98,27 +96,23 @@ Thank you for contributing to Agency Swarm! Your efforts help us build a more ro
 
 1. **Install Test Dependencies**
 
-   If there are any additional test dependencies, install them:
+   If there are any additional test dependencies, ensure they are installed (typically done via `make sync`):
 
    ```bash
-   pip install -r requirements-dev.txt
+   make sync
    ```
 
 2. **Run Tests with Pytest**
 
-   We use `pytest` for running tests.
+   Run tests with coverage using the Makefile:
 
    ```bash
-   pytest
+   make coverage
    ```
 
 3. **Check Test Coverage**
 
-   To check test coverage, run:
-
-   ```bash
-   pytest --cov=agency_swarm tests/
-   ```
+   The `make coverage` command should output coverage information.
 
 ## Folder Structure for Agents
 

@@ -1,3 +1,11 @@
+"""
+Defines the MasterContext dataclass for sharing state and resources across agents.
+
+This module provides the `MasterContext`, which is a central piece of the agent
+communication and execution flow, holding references to essential components like
+the `ThreadManager`, all active `Agent` instances, and any user-defined context.
+"""
+
 import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any

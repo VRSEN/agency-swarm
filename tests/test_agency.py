@@ -269,55 +269,143 @@ async def test_agency_get_response_stream_with_hooks(mock_agent_a):
 
 @pytest.mark.asyncio
 async def test_agency_get_completion_calls_get_response(mock_agent_a):
-    """Test deprecated get_completion calls get_response."""
+    """Test deprecated get_completion calls get_response, checks warnings and kwargs."""
     chart = [mock_agent_a]
     agency = Agency(agency_chart=chart)
     message = "Test completion"
+    chat_id_val = "test_chat_123"
+    context_override_val = {"user_key": "user_value"}
+    hooks_override_val = MagicMock(spec=RunHooks)
+    extra_kwarg_val = "extra_value"
 
     # Mock the underlying get_response method
     with patch.object(agency, "get_response", new_callable=AsyncMock) as mock_get_response:
         mock_result = MagicMock(spec=RunResult)
-        mock_result.final_output = "Completion OK"  # Keep original final_output if needed
-        mock_result.final_output_text = "Completion OK"  # Add final_output_text
+        mock_result.final_output = "Completion OK"
         mock_get_response.return_value = mock_result
 
-        # Call the deprecated method
-        result_text = await agency.get_completion(message=message, recipient_agent=mock_agent_a)
+        # Test with DeprecationWarning
+        with pytest.warns(DeprecationWarning, match="'get_completion' is deprecated"):
+            result_text = await agency.get_completion(
+                message=message,
+                recipient_agent=mock_agent_a,
+                chat_id=chat_id_val,
+                context_override=context_override_val,
+                hooks_override=hooks_override_val,  # Test passing RunHooks object
+                extra_param=extra_kwarg_val,
+            )
 
         assert result_text == "Completion OK"
-        # Check that get_response was called with appropriate args
         mock_get_response.assert_awaited_once()
         call_args, call_kwargs = mock_get_response.call_args
         assert call_kwargs.get("message") == message
         assert call_kwargs.get("recipient_agent") == mock_agent_a
-        # Verify other params if necessary, e.g., chat_id is generated
+        assert call_kwargs.get("chat_id") == chat_id_val
+        assert call_kwargs.get("context_override") == context_override_val
+        assert call_kwargs.get("hooks_override") == hooks_override_val
+        assert call_kwargs.get("extra_param") == extra_kwarg_val
+
+    # Test case for no output
+    with patch.object(agency, "get_response", new_callable=AsyncMock) as mock_get_response_no_output:
+        mock_result_no_output = MagicMock(spec=RunResult)
+        mock_result_no_output.final_output = None
+        mock_get_response_no_output.return_value = mock_result_no_output
+
+        with pytest.warns(DeprecationWarning):  # Simpler warning check for this case
+            result_text_no_output = await agency.get_completion(message="Test no output", recipient_agent=mock_agent_a)
+
+        assert result_text_no_output == "(No output from agent)"
+        mock_get_response_no_output.assert_awaited_once()
+
+    # Test error propagation
+    error_message = "Test error from get_response"
+    with patch.object(
+        agency, "get_response", new_callable=AsyncMock, side_effect=ValueError(error_message)
+    ) as mock_get_response_error:
+        with pytest.warns(DeprecationWarning):
+            with pytest.raises(ValueError, match=error_message):
+                await agency.get_completion(message="Test error", recipient_agent=mock_agent_a)
+        mock_get_response_error.assert_awaited_once()
 
 
 @pytest.mark.asyncio
-async def test_agency_stream_completion_calls_get_response_stream(mock_agent_a):
-    """Test deprecated stream_completion calls get_response_stream."""
+async def test_agency_get_completion_stream_calls_get_response_stream(mock_agent_a):
+    """Test deprecated get_completion_stream calls get_response_stream, checks warnings, kwargs, and item types."""
     chart = [mock_agent_a]
     agency = Agency(agency_chart=chart)
     message = "Test stream completion"
-    expected_text = "Stream OK"
+    chat_id_val = "test_chat_stream_123"
+    context_override_val = {"user_stream_key": "user_stream_value"}
+    hooks_override_val = MagicMock(spec=RunHooks)
+    extra_kwarg_val = "extra_stream_value"
 
-    # Mock the underlying agency.get_response_stream method
-    async def agency_stream_mock(*args, **kwargs):
-        yield {"event": "text", "data": expected_text}
-        await asyncio.sleep(0)
+    # Define mock stream items
+    # Simulate openai_agents.sdk.output_parser.ContentItem and ToolCallOutputItem structure
+    mock_content_item = MagicMock()
+    mock_content_item.text = "Hello from ContentItem"
+    mock_tool_call_output_item = MagicMock()
+    mock_tool_call_output_item.data = "Output from ToolCall"
+    # To ensure these are not the same object if __str__ is called on the mock itself
+    mock_tool_call_output_item.__str__ = lambda: "ToolCallOutputItem Str"
 
-    # Patch agency.get_response_stream directly here
-    with patch.object(agency, "get_response_stream", return_value=agency_stream_mock()) as mock_stream_call:
-        # Call the deprecated method and consume stream
-        events = []
-        async for event_text in agency.stream_completion(message=message, recipient_agent=mock_agent_a):
-            events.append(event_text)
+    mock_stream_items = [mock_content_item, mock_tool_call_output_item, {"type": "other", "data": "Some other data"}]
 
-    assert events == [expected_text]
-    mock_stream_call.assert_called_once()
-    call_args, call_kwargs = mock_stream_call.call_args
-    assert call_kwargs.get("message") == message
-    assert call_kwargs.get("recipient_agent") == mock_agent_a
+    async def mock_agency_get_response_stream(*args, **kwargs):
+        for item in mock_stream_items:
+            yield item
+            await asyncio.sleep(0)
+
+    # Patch agency.get_response_stream directly
+    with patch.object(
+        agency, "get_response_stream", side_effect=mock_agency_get_response_stream
+    ) as mock_get_response_stream_call:
+        # Test with DeprecationWarning
+        with pytest.warns(DeprecationWarning, match="'get_completion_stream' is deprecated"):
+            events = []
+            async for event_text in agency.get_completion_stream(
+                message=message,
+                recipient_agent=mock_agent_a,
+                chat_id=chat_id_val,
+                context_override=context_override_val,
+                hooks_override=hooks_override_val,
+                extra_param=extra_kwarg_val,
+            ):
+                events.append(event_text)
+
+        # Assertions for collected events
+        # Based on agency.py get_completion_stream logic:
+        # - if hasattr(item, 'text'): yield item.text
+        # - elif hasattr(item, 'data'): yield item.data
+        # - else: yield str(item)
+        expected_events = [
+            mock_content_item.text,
+            mock_tool_call_output_item.data,  # Direct data access
+            str(mock_stream_items[2]),  # Fallback to str(item)
+        ]
+        assert events == expected_events
+
+        mock_get_response_stream_call.assert_called_once()
+        call_args, call_kwargs = mock_get_response_stream_call.call_args
+        assert call_kwargs.get("message") == message
+        assert call_kwargs.get("recipient_agent") == mock_agent_a
+        assert call_kwargs.get("chat_id") == chat_id_val
+        assert call_kwargs.get("context_override") == context_override_val
+        assert call_kwargs.get("hooks_override") == hooks_override_val
+        assert call_kwargs.get("extra_param") == extra_kwarg_val
+
+    # Test error propagation
+    error_message = "Test error from get_response_stream"
+
+    async def error_stream_gen(*args, **kwargs):
+        raise ValueError(error_message)
+        yield  # Unreachable, but makes it an async generator
+
+    with patch.object(agency, "get_response_stream", side_effect=error_stream_gen) as mock_get_response_stream_error:
+        with pytest.warns(DeprecationWarning):
+            with pytest.raises(ValueError, match=error_message):
+                async for _ in agency.get_completion_stream(message="Test error stream", recipient_agent=mock_agent_a):
+                    pass  # pragma: no cover
+        mock_get_response_stream_error.assert_called_once()
 
 
 # --- Tests for Agent-to-Agent Communication ---

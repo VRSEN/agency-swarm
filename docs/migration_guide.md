@@ -178,7 +178,7 @@ async def main():
 
 ## Backward Compatibility
 
-Explain the deprecated `agency.get_completion()` and `agency.stream_completion()` methods.
+Explain the deprecated `agency.get_completion()` and `agency.get_completion_stream()` methods.
 These methods are now wrappers around the new `get_response`/`get_response_stream` methods.
 It is recommended to update your code to use the new methods for full functionality and clarity.
 
@@ -202,6 +202,6 @@ Highlight improvements:
 
 ## Links & Resources
 
-*   [Examples Directory](./examples/) (Link to actual examples)
-*   [Agency Swarm SDK Documentation](link-to-docs) <!-- TODO: Add actual link -->
-*   [OpenAI Agents SDK Documentation](link-to-openai-sdk-docs) <!-- TODO: Add actual link -->
+*   [Examples Directory](https://github.com/VRSEN/agency-swarm/tree/main/examples)
+*   [Agency Swarm Framework Documentation](https://agency-swarm.ai)
+*   [OpenAI Agents SDK Documentation](https://openai.github.io/openai-agents-python/)

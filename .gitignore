@@ -166,3 +166,7 @@ node_modules/
 # Task files
 tasks.json
 tasks/
+# Custom Ignores
+/.cursor/rules/
+/scripts/
+/references/

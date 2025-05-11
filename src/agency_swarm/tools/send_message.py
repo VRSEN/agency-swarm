@@ -1,3 +1,12 @@
+"""
+Defines the SendMessage tool used for direct communication between agents.
+
+This module provides the `SendMessage` class, a specialized `FunctionTool` that
+allows one agent to send a message to another registered agent within the
+Agency Swarm framework. The tool is dynamically configured with sender and
+recipient details.
+"""
+
 import logging
 from typing import TYPE_CHECKING
 
@@ -17,6 +26,11 @@ MESSAGE_PARAM = "message"
 class SendMessage(FunctionTool):
     """
     A dynamically created tool for an agent to send a message to a specific registered recipient agent.
+
+    This tool is instantiated by an agent to enable direct communication with another
+    specific agent. It leverages the `FunctionTool` infrastructure and is configured
+    at runtime with the sender, recipient, and a dynamically generated name and
+    description to reflect the communication channel.
     """
 
     # Store references to the sender and recipient agents
