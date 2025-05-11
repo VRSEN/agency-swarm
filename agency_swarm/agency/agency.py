@@ -1003,6 +1003,8 @@ class Agency:
                 json.dump(loaded_settings, f, indent=4)
 
         for agent in self.agents:
+            assert isinstance(agent, Agent)
+            print(f"Initializing agent... {agent.name}")
             if "temp_id" in agent.id:
                 agent.id = None
 
