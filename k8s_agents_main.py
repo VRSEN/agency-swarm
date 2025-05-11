@@ -64,7 +64,7 @@ from agents.k8s_group_agents.software_manage_group.software_monitor_agent import
 from agents.k8s_group_agents import check_log_agent
 
 from agents.k8s_group_agents.tools.ExecuteCommand import ExecuteCommand
-from agents.k8s_group_agents.tools.WriteFile import WriteFile
+
 
 from agency_swarm import set_openai_key
 
@@ -246,7 +246,7 @@ def main():
     # text = "在北京可用区创建三个ecs，之后删除创建时间超过5分钟的ecs"
     # text = "在华为云ecs上部署mysql和postgresql，并用sysbench测试它们的性能"
     # text = input("👤 USER: ")
-    text = "创建一个名为nginx的Pod，这个Pod中包含一个名为container-0的容器，使用nginx:alpine镜像，使用的资源为100m CPU、200Mi内存。"
+    text = "我需要在k8s集群上使用StatefulSet部署一个3节点MySQL集群，MySQL版本为8.0.34，包括一个主节点两个从节点，使用华为云的持久化存储卷EVS进行存储，每个节点分配10GB的存储空间。"
 
     agency.task_planning(original_request=text, plan_agents=plan_agents, cap_group_agents=cap_group_agents, cap_agents=cap_agents)
 

@@ -2,7 +2,7 @@ from agency_swarm import Agent
 
 from agents.k8s_group_agents.k8s_agent_instruction import k8s_agent_instruction
 from agents.k8s_group_agents.tools.ExecuteCommand import ExecuteCommand
-from agents.k8s_group_agents.tools.WriteFile import WriteFile
+
 
 _name = "disk_agent"
 _description = """
@@ -14,7 +14,7 @@ import os
 current_path = os.path.abspath(os.path.dirname(__file__))
 _instruction = k8s_agent_instruction(_name,_description)
 
-_tools = [ExecuteCommand, WriteFile]
+_tools = [ExecuteCommand]
 
 _file_folder = ""
 
