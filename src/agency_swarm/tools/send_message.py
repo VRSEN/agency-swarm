@@ -7,10 +7,11 @@ Agency Swarm framework. The tool is dynamically configured with sender and
 recipient details.
 """
 
+import json
 import logging
 from typing import TYPE_CHECKING
 
-from agents import FunctionTool, RunContextWrapper, RunResult
+from agents import FunctionTool, RunContextWrapper
 
 from ..context import MasterContext
 
@@ -19,21 +20,10 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Constant for the message parameter name
-MESSAGE_PARAM = "message"
-
 
 class SendMessage(FunctionTool):
-    """
-    A dynamically created tool for an agent to send a message to a specific registered recipient agent.
+    """Use this tool to facilitate direct, synchronous communication between specialized agents within your agency. When you send a message using this tool, you receive a response exclusively from the designated recipient agent. To continue the dialogue, invoke this tool again with the desired recipient agent and your follow-up message. Remember, communication here is synchronous; the recipient agent won't perform any tasks post-response. You are responsible for relaying the recipient agent's responses back to the user, as the user does not have direct access to these replies. Keep engaging with the tool for continuous interaction until the task is fully resolved. Do not send more than 1 message to the same recipient agent at the same time."""
 
-    This tool is instantiated by an agent to enable direct communication with another
-    specific agent. It leverages the `FunctionTool` infrastructure and is configured
-    at runtime with the sender, recipient, and a dynamically generated name and
-    description to reflect the communication channel.
-    """
-
-    # Store references to the sender and recipient agents
     sender_agent: "Agent"
     recipient_agent: "Agent"
 
@@ -42,37 +32,46 @@ class SendMessage(FunctionTool):
         sender_agent: "Agent",
         recipient_agent: "Agent",
         tool_name: str,
-        tool_description: str,
     ):
-        """
-        Initializes the specific send message tool.
-
-        Args:
-            sender_agent: The agent instance that owns this tool.
-            recipient_agent: The agent instance that this tool communicates with.
-            tool_name: The specific name for this tool (e.g., "send_message_to_RecipientAgent").
-            tool_description: The description for this tool, including context about the recipient.
-        """
         self.sender_agent = sender_agent
         self.recipient_agent = recipient_agent
 
-        # Define the JSON schema for the 'message' parameter
+        # Rich parameter schema incorporating all field descriptions
         params_schema = {
             "type": "object",
             "properties": {
-                MESSAGE_PARAM: {
+                "my_primary_instructions": {
                     "type": "string",
-                    "description": f"The message content to send to the {recipient_agent.name}.",
+                    "description": (
+                        "Please repeat your primary instructions step-by-step, including both completed "
+                        "and the following next steps that you need to perform. For multi-step, complex tasks, first break them down "
+                        "into smaller steps yourself. Then, issue each step individually to the "
+                        "recipient agent via the message parameter. Each identified step should be "
+                        "sent in a separate message. Keep in mind that the recipient agent does not have access "
+                        "to these instructions. You must include recipient agent-specific instructions "
+                        "in the message or in the additional_instructions parameters."
+                    ),
+                },
+                "message": {
+                    "type": "string",
+                    "description": "Specify the task required for the recipient agent to complete. Focus on clarifying what the task entails, rather than providing exact instructions. Make sure to include all the relevant information from the conversation needed to complete the task.",
+                },
+                "additional_instructions": {
+                    "type": "string",
+                    "description": "Optional. Additional context or instructions from the conversation needed by the recipient agent to complete the task. If not needed, provide an empty string.",
                 },
             },
-            "required": [MESSAGE_PARAM],
-            "additionalProperties": False,  # Enforce only the defined parameter
+            "required": ["my_primary_instructions", "message", "additional_instructions"],
+            "additionalProperties": False,
         }
 
-        # Initialize the FunctionTool base class
+        # Combine own rich docstring with the recipient-specific description part
+        recipient_role_description = getattr(self.recipient_agent, "description", "No description provided")
+        final_description = f"{self.__doc__}\n\nThis agent's role is: {recipient_role_description}"
+
         super().__init__(
             name=tool_name,
-            description=tool_description,
+            description=final_description,
             params_json_schema=params_schema,
             on_invoke_tool=self.on_invoke_tool,
         )
@@ -80,80 +79,67 @@ class SendMessage(FunctionTool):
             f"Initialized SendMessage tool: '{self.name}' for sender '{sender_agent.name}' -> recipient '{recipient_agent.name}'"
         )
 
-    async def on_invoke_tool(self, wrapper: RunContextWrapper[MasterContext], **kwargs: str) -> str:
+    async def on_invoke_tool(self, wrapper: RunContextWrapper[MasterContext], arguments_json_string: str) -> str:
         """
         Handles the invocation of this specific send message tool.
-
         Retrieves the message from kwargs, validates context, calls the recipient agent's
         get_response method, and returns the text result.
-
-        Args:
-            wrapper: The run context wrapper.
-            **kwargs: Must contain the 'message' parameter.
-
-        Returns:
-            A string containing the response from the recipient agent.
         """
-        master_context: MasterContext = wrapper.context
-        message_content = kwargs.get(MESSAGE_PARAM)
+        try:
+            kwargs = json.loads(arguments_json_string)
+        except json.JSONDecodeError as e:
+            logger.error(f"Tool '{self.name}' invoked with invalid JSON arguments: {arguments_json_string}. Error: {e}")
+            return f"Error: Invalid arguments format for tool {self.name}. Expected a valid JSON string."
 
+        message_content = kwargs.get("message")
+        my_primary_instructions = kwargs.get("my_primary_instructions")
+        additional_instructions = kwargs.get("additional_instructions", "")
+
+        # Validate that all newly required fields are present
         if not message_content:
-            logger.error(f"Tool '{self.name}' invoked without '{MESSAGE_PARAM}' parameter.")
-            # Return an error string
-            return f"Error: Missing required parameter '{MESSAGE_PARAM}' for tool {self.name}."
+            logger.error(f"Tool '{self.name}' invoked without 'message' parameter.")
+            return f"Error: Missing required parameter 'message' for tool {self.name}."
+        if not my_primary_instructions:
+            logger.error(f"Tool '{self.name}' invoked without 'my_primary_instructions' parameter.")
+            return f"Error: Missing required parameter 'my_primary_instructions' for tool {self.name}."
 
-        # Get chat_id from context
-        current_chat_id = master_context.chat_id
-        if not current_chat_id:
-            # This should ideally not happen if context is prepared correctly
+        master_context: MasterContext = wrapper.context
+        if not master_context.chat_id:
             logger.error(f"Tool '{self.name}' invoked without 'chat_id' in MasterContext.")
-            # Return an error string
-            return "Error: Internal context error. Missing chat_id for agent communication."
+            return f"Error: Internal context error. Missing chat_id for tool {self.name}."
 
-        sender_name = self.sender_agent.name
-        recipient_name = self.recipient_agent.name
+        current_chat_id = master_context.chat_id
+        sender_name_for_call = self.sender_agent.name
+        recipient_name_for_call = self.recipient_agent.name
 
         logger.info(
-            f"Agent '{sender_name}' invoking tool '{self.name}'. "
-            f"Recipient: '{recipient_name}', ChatID: {current_chat_id}, "
+            f"Agent '{sender_name_for_call}' invoking tool '{self.name}'. "
+            f"Recipient: '{recipient_name_for_call}', ChatID: {current_chat_id}, "
             f'Message: "{message_content[:50]}..."'
         )
 
         try:
-            # Call the recipient agent's get_response method directly
-            logger.debug(f"Calling target agent '{recipient_name}'.get_response...")
-
-            # --- IMPORTANT ---
-            # Pass the current chat_id and sender_name.
-            # Pass only the user_context part of the master context as context_override.
-            # The Runner within the recipient's get_response will handle history, hooks, etc.
-            sub_run_result: RunResult = await self.recipient_agent.get_response(
+            logger.debug(f"Calling target agent '{recipient_name_for_call}'.get_response...")
+            response = await self.recipient_agent.get_response(
                 message=message_content,
-                sender_name=sender_name,
-                chat_id=current_chat_id,
-                context_override=master_context.user_context,  # Pass only user context
-                # Do NOT pass hooks or run_config from here.
+                sender_name=self.sender_agent.name,
+                chat_id=master_context.chat_id,
+                context_override=master_context.user_context,
+                additional_instructions=additional_instructions,
             )
 
-            # Extract the final text output for the tool result
-            final_output_text = sub_run_result.final_output or "(No text output from recipient)"
+            final_output_text = response.final_output or "(No text output from recipient)"
+            if not isinstance(final_output_text, str):
+                final_output_text = str(final_output_text)
+
             logger.info(
-                f"Received response via tool '{self.name}' from '{recipient_name}': \"{final_output_text[:50]}...\""
+                f"Received response via tool '{self.name}' from '{recipient_name_for_call}': \"{final_output_text[:50]}...\""
             )
-
-            # The tool itself returns the raw output text
-            # The Runner will handle adding this as a ToolCallOutputItem
             return final_output_text
 
         except Exception as e:
             logger.error(
-                f"Error occurred during sub-call via tool '{self.name}' from '{sender_name}' to '{recipient_name}': {e}",
+                f"Error occurred during sub-call via tool '{self.name}' from '{sender_name_for_call}' to '{recipient_name_for_call}': {e}",
                 exc_info=True,
             )
-            # Return an error string
-            return f"Error: Failed to get response from agent '{recipient_name}'. Reason: {e}"
-
-
-# --- Remove the old generic tool export ---
-SEND_MESSAGE_TOOL_NAME = None
-send_message_tool = None
+            return f"Error: Failed to get response from agent '{recipient_name_for_call}'. Reason: {e}"

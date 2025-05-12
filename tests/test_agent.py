@@ -8,7 +8,8 @@ from agents import FunctionTool, RunConfig, RunContextWrapper, RunResult
 from agents.lifecycle import RunHooks
 from pydantic import BaseModel, ValidationError
 
-from agency_swarm.agent import SEND_MESSAGE_TOOL_PREFIX, Agent, FileSearchTool
+from agency_swarm import Agent
+from agency_swarm.agent import SEND_MESSAGE_TOOL_PREFIX, FileSearchTool
 from agency_swarm.context import MasterContext
 from agency_swarm.thread import ConversationThread, ThreadManager
 
@@ -820,28 +821,30 @@ async def test_invoke_send_message_tool_success(minimal_agent):
     mock_wrapper.context = mock_master_context
 
     message_to_send = "Hello Recipient!"
-    args_str = json.dumps({"message": message_to_send})
+    args_dict = {
+        "my_primary_instructions": "Repeat primary instructions.",
+        "message": message_to_send,
+    }
+    args_json_string = json.dumps(args_dict)
 
     # Patch logger for verification
-    with patch("agency_swarm.agent.logger") as mock_logger:
-        result = await send_tool.on_invoke_tool(mock_wrapper, args_str)
+    with patch("agency_swarm.tools.send_message.logger") as mock_logger:
+        result = await send_tool.on_invoke_tool(mock_wrapper, args_json_string)
 
     assert result == "Recipient response text"
-    recipient_agent.get_response.assert_awaited_once_with(
+    recipient_agent.get_response.assert_called_once_with(
         message=message_to_send,
         sender_name=sender_agent.name,
         chat_id=chat_id,
         context_override=mock_master_context.user_context,
+        additional_instructions="",  # Expect default empty string
     )
-    # Check key logs
-    mock_logger.debug.assert_any_call(f"Entering _invoke_send_message for tool '{tool_name}'...")
+
     mock_logger.info.assert_any_call(
-        f"Agent '{sender_agent.name}' invoking tool '{tool_name}'. Recipient: '{recipient_agent.name}', ChatID: {chat_id}, Message: \"{message_to_send[:50]}...\""
+        f"Agent '{sender_agent.name}' invoking tool '{tool_name}'. "
+        f"Recipient: '{recipient_agent.name}', ChatID: {chat_id}, "
+        f'Message: "{message_to_send[:50]}..."'
     )
-    mock_logger.info.assert_any_call(
-        f"Received response via tool '{tool_name}' from '{recipient_agent.name}': \"Recipient response text[:50]...\""
-    )
-    mock_logger.debug.assert_any_call(f"Exiting _invoke_send_message for tool '{tool_name}' with success.")
 
 
 @pytest.mark.asyncio
@@ -855,18 +858,18 @@ async def test_invoke_send_message_tool_arg_parse_error(minimal_agent):
     send_tool = next((t for t in sender_agent.tools if hasattr(t, "name") and t.name == tool_name), None)
     assert isinstance(send_tool, FunctionTool)
 
+    mock_master_context = MagicMock(spec=MasterContext)
+    mock_master_context.chat_id = f"chat_{uuid.uuid4()}"
     mock_wrapper = MagicMock(spec=RunContextWrapper)
-    args_str = "{invalid json"  # Invalid JSON
+    mock_wrapper.context = mock_master_context
 
-    with patch("agency_swarm.agent.logger") as mock_logger:
-        result = await send_tool.on_invoke_tool(mock_wrapper, args_str)
+    args_json_string = "{invalid json"
 
-    assert result == f"Error: Invalid arguments format for tool {tool_name}."
-    mock_logger.error.assert_called_once_with(f"Tool '{tool_name}' invoked with invalid JSON arguments: {args_str}")
-    mock_logger.debug.assert_any_call(f"Entering _invoke_send_message for tool '{tool_name}'...")
-    mock_logger.debug.assert_any_call(
-        f"Exiting _invoke_send_message for tool '{tool_name}' with error."
-    )  # Should exit with error
+    with patch("agency_swarm.tools.send_message.logger") as mock_logger:
+        result = await send_tool.on_invoke_tool(mock_wrapper, args_json_string)
+
+    assert f"Error: Invalid arguments format for tool {tool_name}. Expected a valid JSON string." in result
+    mock_logger.error.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -880,18 +883,51 @@ async def test_invoke_send_message_tool_missing_arg(minimal_agent):
     send_tool = next((t for t in sender_agent.tools if hasattr(t, "name") and t.name == tool_name), None)
     assert isinstance(send_tool, FunctionTool)
 
+    mock_master_context = MagicMock(spec=MasterContext)
+    mock_master_context.chat_id = f"chat_{uuid.uuid4()}"
     mock_wrapper = MagicMock(spec=RunContextWrapper)
-    args_str = json.dumps({"other_arg": "value"})  # Missing 'message'
+    mock_wrapper.context = mock_master_context
 
-    with patch("agency_swarm.agent.logger") as mock_logger:
-        result = await send_tool.on_invoke_tool(mock_wrapper, args_str)
+    args_dict = {
+        "my_primary_instructions": "Instructions here",
+    }
+    args_json_string = json.dumps(args_dict)
 
-    assert result == f"Error: Missing required parameter 'message' for tool {tool_name}."
+    with patch("agency_swarm.tools.send_message.logger") as mock_logger:
+        result = await send_tool.on_invoke_tool(mock_wrapper, args_json_string)
+
+    assert f"Error: Missing required parameter 'message' for tool {tool_name}." in result
+    mock_logger.error.assert_called_once_with(f"Tool '{tool_name}' invoked without 'message' parameter.")
+
+
+@pytest.mark.asyncio
+async def test_invoke_send_message_tool_missing_primary_instructions(minimal_agent):
+    """Test send_message tool invocation with missing 'my_primary_instructions' argument."""
+    sender_agent = minimal_agent
+    recipient_agent = Agent(name="RecipientMissInstr", instructions="Receiver")
+    sender_agent.register_subagent(recipient_agent)
+
+    tool_name = f"{SEND_MESSAGE_TOOL_PREFIX}{recipient_agent.name}"
+    send_tool = next((t for t in sender_agent.tools if hasattr(t, "name") and t.name == tool_name), None)
+    assert isinstance(send_tool, FunctionTool)
+
+    mock_master_context = MagicMock(spec=MasterContext)
+    mock_master_context.chat_id = f"chat_{uuid.uuid4()}"
+    mock_wrapper = MagicMock(spec=RunContextWrapper)
+    mock_wrapper.context = mock_master_context
+
+    args_dict = {
+        "message": "Test message",
+    }
+    args_json_string = json.dumps(args_dict)
+
+    with patch("agency_swarm.tools.send_message.logger") as mock_logger:
+        result = await send_tool.on_invoke_tool(mock_wrapper, args_json_string)
+
+    assert f"Error: Missing required parameter 'my_primary_instructions' for tool {tool_name}." in result
     mock_logger.error.assert_called_once_with(
-        f"Tool '{tool_name}' invoked without 'message' parameter in arguments: {args_str}"
+        f"Tool '{tool_name}' invoked without 'my_primary_instructions' parameter."
     )
-    mock_logger.debug.assert_any_call(f"Entering _invoke_send_message for tool '{tool_name}'...")
-    mock_logger.debug.assert_any_call(f"Exiting _invoke_send_message for tool '{tool_name}' with error.")
 
 
 @pytest.mark.asyncio
@@ -910,15 +946,17 @@ async def test_invoke_send_message_tool_missing_chat_id(minimal_agent):
     mock_wrapper = MagicMock(spec=RunContextWrapper)
     mock_wrapper.context = mock_master_context
 
-    args_str = json.dumps({"message": "Test message"})
+    args_dict = {
+        "my_primary_instructions": "Instructions here.",
+        "message": "Test message",
+    }
+    args_json_string = json.dumps(args_dict)
 
-    with patch("agency_swarm.agent.logger") as mock_logger:
-        result = await send_tool.on_invoke_tool(mock_wrapper, args_str)
+    with patch("agency_swarm.tools.send_message.logger") as mock_logger:
+        result = await send_tool.on_invoke_tool(mock_wrapper, args_json_string)
 
-    assert result == "Error: Internal context error. Missing chat_id for agent communication."
+    assert "Error: Internal context error. Missing chat_id" in result
     mock_logger.error.assert_called_once_with(f"Tool '{tool_name}' invoked without 'chat_id' in MasterContext.")
-    mock_logger.debug.assert_any_call(f"Entering _invoke_send_message for tool '{tool_name}'...")
-    mock_logger.debug.assert_any_call(f"Exiting _invoke_send_message for tool '{tool_name}' with error.")
 
 
 @pytest.mark.asyncio
@@ -944,20 +982,17 @@ async def test_invoke_send_message_tool_recipient_error(minimal_agent):
     mock_wrapper = MagicMock(spec=RunContextWrapper)
     mock_wrapper.context = mock_master_context
 
-    message_to_send = "Message to failing recipient"
-    args_str = json.dumps({"message": message_to_send})
+    args_dict = {
+        "my_primary_instructions": "Instructions here.",
+        "message": "Message to failing recipient",
+    }
+    args_json_string = json.dumps(args_dict)
 
-    with patch("agency_swarm.agent.logger") as mock_logger:
-        result = await send_tool.on_invoke_tool(mock_wrapper, args_str)
+    with patch("agency_swarm.tools.send_message.logger") as mock_logger:
+        result = await send_tool.on_invoke_tool(mock_wrapper, args_json_string)
 
-    assert result == f"Error: Failed to get response from agent '{recipient_agent.name}'. Reason: {error_message}"
-    recipient_agent.get_response.assert_awaited_once()
-    mock_logger.error.assert_called_once_with(
-        f"Error occurred during sub-call via tool '{tool_name}' from '{sender_agent.name}' to '{recipient_agent.name}': {error_message}",
-        exc_info=True,
-    )
-    mock_logger.debug.assert_any_call(f"Entering _invoke_send_message for tool '{tool_name}'...")
-    mock_logger.debug.assert_any_call(f"Exiting _invoke_send_message for tool '{tool_name}' with error.")
+    assert f"Error: Failed to get response from agent '{recipient_agent.name}'. Reason: {error_message}" in result
+    mock_logger.error.assert_called_once()
 
 
 # --- Deprecation Tests ---

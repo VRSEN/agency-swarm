@@ -7,14 +7,12 @@ import uuid
 import warnings
 from collections.abc import AsyncGenerator, Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 from agents import (
     Agent as BaseAgent,
     FileSearchTool,
-    FunctionTool,
     RunConfig,
-    RunContextWrapper,
     RunHooks,
     RunItem,
     Runner,
@@ -36,6 +34,7 @@ from openai.types.responses import ResponseFunctionToolCall
 
 from .context import MasterContext
 from .thread import ThreadManager
+from .tools.send_message import SendMessage
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +63,8 @@ AGENT_PARAMS = {
 # --- Constants for dynamic tool creation ---
 SEND_MESSAGE_TOOL_PREFIX = "send_message_to_"
 MESSAGE_PARAM = "message"
+
+T = TypeVar("T", bound="Agent")
 
 
 class Agent(BaseAgent[MasterContext]):
@@ -380,109 +381,15 @@ class Agent(BaseAgent[MasterContext]):
         # --- Dynamically create the specific send_message tool --- #
 
         tool_name = f"{SEND_MESSAGE_TOOL_PREFIX}{recipient_name}"
-        recipient_description = getattr(recipient_agent, "description", "No description provided")
-        tool_description = (
-            f"Send a message to the {recipient_name} agent. " f"This agent's role is: {recipient_description}"
-        )
 
-        # Define the schema for the tool's single parameter: 'message'
-        params_schema = {
-            "type": "object",
-            "properties": {
-                MESSAGE_PARAM: {
-                    "type": "string",
-                    "description": f"The message content to send to the {recipient_name} agent.",
-                }
-            },
-            "required": [MESSAGE_PARAM],
-            "additionalProperties": False,  # Enforce only the message parameter
-        }
-
-        # Define the async function that will handle the tool invocation
-        # This function captures `self` (the sender) and `recipient_agent`
-        async def _invoke_send_message(wrapper: RunContextWrapper[MasterContext], args_str: str) -> str:
-            logger.debug(f"Entering _invoke_send_message for tool '{tool_name}'...")
-            master_context: MasterContext = wrapper.context
-
-            # Parse the arguments string
-            try:
-                parsed_args = json.loads(args_str)
-                message_content = parsed_args.get(MESSAGE_PARAM)
-            except json.JSONDecodeError:
-                logger.error(f"Tool '{tool_name}' invoked with invalid JSON arguments: {args_str}")
-                return f"Error: Invalid arguments format for tool {tool_name}."
-            except Exception as e:
-                logger.error(
-                    f"Unexpected error parsing arguments for tool '{tool_name}': {e}\\nArguments received: {args_str}",
-                    exc_info=True,
-                )
-                return f"Error: Could not parse arguments for tool {tool_name}."
-
-            if not message_content:
-                logger.error(f"Tool '{tool_name}' invoked without '{MESSAGE_PARAM}' parameter in arguments: {args_str}")
-                return f"Error: Missing required parameter '{MESSAGE_PARAM}' for tool {tool_name}."
-
-            current_chat_id = master_context.chat_id
-            if not current_chat_id:
-                logger.error(f"Tool '{tool_name}' invoked without 'chat_id' in MasterContext.")
-                return "Error: Internal context error. Missing chat_id for agent communication."
-
-            sender_name = self.name  # Captured from outer scope
-
-            logger.info(
-                f"Agent '{sender_name}' invoking tool '{tool_name}'. "
-                f"Recipient: '{recipient_name}', ChatID: {current_chat_id}, "
-                f'Message: "{message_content[:50]}..."'
-            )
-
-            try:
-                # Call the recipient agent's get_response method directly
-                logger.debug(f"Calling target agent '{recipient_name}'.get_response...")
-                # Store the RunResult object
-                sub_run_result: RunResult = await recipient_agent.get_response(
-                    message=message_content,
-                    sender_name=sender_name,
-                    chat_id=current_chat_id,
-                    context_override=master_context.user_context,  # Pass only user context
-                    # Hooks/Config are managed by the Runner called within get_response
-                )
-
-                # Extract the final text output from the RunResult
-                final_output_text = sub_run_result.final_output or "(No text output from recipient)"
-                # Ensure it's a string before logging/returning
-                if not isinstance(final_output_text, str):
-                    final_output_text = str(final_output_text)
-
-                logger.info(
-                    f"Received response via tool '{tool_name}' from '{recipient_name}': \"{final_output_text[:50]}...\""
-                )
-                # Return the final output text directly as a string
-                logger.debug(f"Exiting _invoke_send_message for tool '{tool_name}' with success.")
-                return final_output_text
-
-            except Exception as e:
-                logger.error(
-                    f"Error occurred during sub-call via tool '{tool_name}' from '{sender_name}' to '{recipient_name}': {e}",
-                    exc_info=True,
-                )
-                # Return a formatted error string as the tool output
-                # The Runner will package this into a ToolCallOutputItem
-                error_message = f"Error: Failed to get response from agent '{recipient_name}'. Reason: {e}"
-                # Optionally, raise the exception if we want the Runner to handle it more explicitly
-                # raise agents.exceptions.ToolError(error_message) from e
-                logger.debug(f"Exiting _invoke_send_message for tool '{tool_name}' with error.")
-                return error_message  # Return error string for now
-
-        # Create the FunctionTool instance directly
-        specific_tool = FunctionTool(
-            name=tool_name,
-            description=tool_description,
-            params_json_schema=params_schema,
-            on_invoke_tool=_invoke_send_message,  # Pass the nested function
+        send_message_tool_instance = SendMessage(
+            tool_name=tool_name,
+            sender_agent=self,
+            recipient_agent=recipient_agent,
         )
 
         # Add the specific tool to this agent's tools
-        self.add_tool(specific_tool)
+        self.add_tool(send_message_tool_instance)
         logger.debug(f"Dynamically added tool '{tool_name}' to agent '{self.name}'.")
 
     # --- File Handling ---
@@ -773,10 +680,10 @@ class Agent(BaseAgent[MasterContext]):
                     item_dict = self._run_item_to_tresponse_input_item(run_item)
                     if item_dict:
                         items_to_save.append(item_dict)
-                        logger.debug(f"  Item {i+1}/{len(run_result.new_items)} converted for saving: {item_dict}")
+                        logger.debug(f"  Item {i + 1}/{len(run_result.new_items)} converted for saving: {item_dict}")
                     else:
                         logger.debug(
-                            f"  Item {i+1}/{len(run_result.new_items)} ({type(run_item).__name__}) skipped or failed conversion."
+                            f"  Item {i + 1}/{len(run_result.new_items)} ({type(run_item).__name__}) skipped or failed conversion."
                         )
 
                 if items_to_save:

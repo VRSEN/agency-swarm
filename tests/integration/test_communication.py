@@ -1,7 +1,7 @@
 import uuid
 
 import pytest
-from agents import RunResult
+from agents import ModelSettings, RunResult
 
 from agency_swarm import Agency, Agent
 
@@ -24,6 +24,7 @@ def planner_agent_instance():
         name="Planner",
         description="Plans the work.",
         instructions="Receive a task. Determine the steps. Delegate the execution step to the Worker agent using the send_message tool.",
+        model_settings=ModelSettings(temperature=0.0),
     )
 
 
@@ -33,6 +34,7 @@ def worker_agent_instance():
         name="Worker",
         description="Does the work.",
         instructions="Receive execution instructions from Planner. Perform the task (simulate by creating a result string like 'Work done for: [task]'). Send the result string to the Reporter agent using the send_message tool.",
+        model_settings=ModelSettings(temperature=0.0),
     )
 
 
@@ -42,6 +44,7 @@ def reporter_agent_instance():
         name="Reporter",
         description="Reports the results.",
         instructions="Receive results string from Worker. Format it into a final report string like 'Final Report: [results string]'.",
+        model_settings=ModelSettings(temperature=0.0),
     )
 
 

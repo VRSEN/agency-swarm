@@ -1,4 +1,5 @@
-from unittest.mock import AsyncMock, MagicMock
+import json
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from agents import RunContextWrapper, RunResult
@@ -6,7 +7,7 @@ from agents import RunContextWrapper, RunResult
 from agency_swarm import Agent
 from agency_swarm.context import MasterContext
 from agency_swarm.thread import ThreadManager
-from agency_swarm.tools.send_message import MESSAGE_PARAM, SendMessage
+from agency_swarm.tools.send_message import SendMessage
 
 # --- Fixtures ---
 
@@ -75,11 +76,11 @@ def mock_wrapper(mock_context, mock_sender_agent):
 
 @pytest.fixture
 def specific_send_message_tool(mock_sender_agent, mock_recipient_agent):
+    # Create an instance of SendMessage for testing its on_invoke_tool method directly
     return SendMessage(
+        tool_name=f"send_message_to_{mock_recipient_agent.name}",
         sender_agent=mock_sender_agent,
         recipient_agent=mock_recipient_agent,
-        tool_name="send_message_to_RecipientAgent",
-        tool_description="Send message to RecipientAgent.",
     )
 
 
@@ -89,44 +90,131 @@ def specific_send_message_tool(mock_sender_agent, mock_recipient_agent):
 @pytest.mark.asyncio
 async def test_send_message_success(specific_send_message_tool, mock_wrapper, mock_recipient_agent, mock_context):
     message_content = "Test message"
+    args_dict = {
+        "my_primary_instructions": "Primary instructions for test.",
+        "message": message_content,
+        "additional_instructions": "Additional instructions for test.",
+    }
+    args_json_string = json.dumps(args_dict)
 
-    result = await specific_send_message_tool.on_invoke_tool(wrapper=mock_wrapper, **{MESSAGE_PARAM: message_content})
+    result = await specific_send_message_tool.on_invoke_tool(
+        wrapper=mock_wrapper, arguments_json_string=args_json_string
+    )
 
     assert result == "Response from recipient"
-    mock_recipient_agent.get_response.assert_awaited_once_with(
+    mock_recipient_agent.get_response.assert_called_once_with(
         message=message_content,
-        sender_name="SenderAgent",
-        chat_id="test_chat_123",
+        sender_name=specific_send_message_tool.sender_agent.name,
+        chat_id=mock_context.chat_id,
         context_override=mock_context.user_context,
+        additional_instructions="Additional instructions for test.",
     )
 
 
 @pytest.mark.asyncio
-async def test_send_message_missing_message_param(specific_send_message_tool, mock_wrapper):
-    result = await specific_send_message_tool.on_invoke_tool(wrapper=mock_wrapper, **{})
+async def test_send_message_invalid_json(specific_send_message_tool, mock_wrapper):
+    args_json_string = "{invalid json string"
+    expected_error_message = (
+        f"Error: Invalid arguments format for tool {specific_send_message_tool.name}. Expected a valid JSON string."
+    )
 
-    assert f"Error: Missing required parameter '{MESSAGE_PARAM}'" in result
+    with patch("agency_swarm.tools.send_message.logger") as mock_module_logger:
+        result = await specific_send_message_tool.on_invoke_tool(
+            wrapper=mock_wrapper, arguments_json_string=args_json_string
+        )
+
+    assert result == expected_error_message
+    mock_module_logger.error.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_send_message_missing_required_param(specific_send_message_tool, mock_wrapper):
+    # Test missing 'message'
+    args_dict_missing_message = {
+        "my_primary_instructions": "Primary instructions.",
+        # "message" is missing
+    }
+    args_json_missing_message = json.dumps(args_dict_missing_message)
+    expected_error_missing_message = (
+        f"Error: Missing required parameter 'message' for tool {specific_send_message_tool.name}."
+    )
+
+    with patch("agency_swarm.tools.send_message.logger") as mock_module_logger:
+        result = await specific_send_message_tool.on_invoke_tool(
+            wrapper=mock_wrapper, arguments_json_string=args_json_missing_message
+        )
+    assert result == expected_error_missing_message
+    mock_module_logger.error.assert_called_once_with(
+        f"Tool '{specific_send_message_tool.name}' invoked without 'message' parameter."
+    )
+
+    mock_module_logger.reset_mock()
+
+    # Test missing 'my_primary_instructions'
+    args_dict_missing_instr = {
+        "message": "A message",
+        # my_primary_instructions is missing
+    }
+    args_json_missing_instr = json.dumps(args_dict_missing_instr)
+    expected_error_missing_instr = (
+        f"Error: Missing required parameter 'my_primary_instructions' for tool {specific_send_message_tool.name}."
+    )
+
+    with patch("agency_swarm.tools.send_message.logger") as mock_module_logger_instr:
+        result = await specific_send_message_tool.on_invoke_tool(
+            wrapper=mock_wrapper, arguments_json_string=args_json_missing_instr
+        )
+    assert result == expected_error_missing_instr
+    mock_module_logger_instr.error.assert_called_once_with(
+        f"Tool '{specific_send_message_tool.name}' invoked without 'my_primary_instructions' parameter."
+    )
 
 
 @pytest.mark.asyncio
 async def test_send_message_missing_chat_id(specific_send_message_tool, mock_wrapper):
     mock_wrapper.context.chat_id = None
     message_content = "Test message"
+    args_dict = {
+        "my_primary_instructions": "Primary instructions.",
+        "message": message_content,
+    }
+    args_json_string = json.dumps(args_dict)
+    expected_error_message = (
+        f"Error: Internal context error. Missing chat_id for tool {specific_send_message_tool.name}."
+    )
 
-    result = await specific_send_message_tool.on_invoke_tool(wrapper=mock_wrapper, **{MESSAGE_PARAM: message_content})
+    with patch("agency_swarm.tools.send_message.logger") as mock_module_logger:
+        result = await specific_send_message_tool.on_invoke_tool(
+            wrapper=mock_wrapper, arguments_json_string=args_json_string
+        )
 
-    assert "Error: Internal context error. Missing chat_id" in result
+    assert result == expected_error_message
+    mock_module_logger.error.assert_called_once_with(
+        f"Tool '{specific_send_message_tool.name}' invoked without 'chat_id' in MasterContext."
+    )
 
 
 @pytest.mark.asyncio
 async def test_send_message_target_agent_error(specific_send_message_tool, mock_wrapper, mock_recipient_agent):
-    mock_recipient_agent.get_response.side_effect = RuntimeError("Target agent failed")
+    error_text = "Target agent failed"
+    mock_recipient_agent.get_response.side_effect = RuntimeError(error_text)
     message_content = "Test message"
+    args_dict = {
+        "my_primary_instructions": "Primary instructions.",
+        "message": message_content,
+    }
+    args_json_string = json.dumps(args_dict)
+    expected_error_message = (
+        f"Error: Failed to get response from agent '{mock_recipient_agent.name}'. Reason: {error_text}"
+    )
 
-    result = await specific_send_message_tool.on_invoke_tool(wrapper=mock_wrapper, **{MESSAGE_PARAM: message_content})
+    with patch("agency_swarm.tools.send_message.logger") as mock_module_logger:
+        result = await specific_send_message_tool.on_invoke_tool(
+            wrapper=mock_wrapper, arguments_json_string=args_json_string
+        )
 
-    assert "Error: Failed to get response from agent 'RecipientAgent'. Reason: Target agent failed" in result
-    mock_recipient_agent.get_response.assert_awaited_once()
+    assert result == expected_error_message
+    mock_module_logger.error.assert_called_once()
 
 
 # TODO: Add tests for response validation aspects

@@ -314,7 +314,7 @@ async def test_agency_get_completion_calls_get_response(mock_agent_a):
         with pytest.warns(DeprecationWarning):  # Simpler warning check for this case
             result_text_no_output = await agency.get_completion(message="Test no output", recipient_agent=mock_agent_a)
 
-        assert result_text_no_output == "(No output from agent)"
+        assert result_text_no_output == ""
         mock_get_response_no_output.assert_awaited_once()
 
     # Test error propagation
@@ -339,16 +339,13 @@ async def test_agency_get_completion_stream_calls_get_response_stream(mock_agent
     hooks_override_val = MagicMock(spec=RunHooks)
     extra_kwarg_val = "extra_stream_value"
 
-    # Define mock stream items
-    # Simulate openai_agents.sdk.output_parser.ContentItem and ToolCallOutputItem structure
-    mock_content_item = MagicMock()
-    mock_content_item.text = "Hello from ContentItem"
-    mock_tool_call_output_item = MagicMock()
-    mock_tool_call_output_item.data = "Output from ToolCall"
-    # To ensure these are not the same object if __str__ is called on the mock itself
-    mock_tool_call_output_item.__str__ = lambda: "ToolCallOutputItem Str"
+    # Define mock stream items according to current get_completion_stream logic
+    mock_text_event_1 = {"event": "text", "data": "Hello from text event 1"}
+    mock_text_event_2 = {"event": "text", "data": "Another text event"}
+    mock_other_event = {"event": "other_type", "data": "Some other data"}  # This should be ignored
+    mock_non_dict_event = "Just a string"  # This should be ignored
 
-    mock_stream_items = [mock_content_item, mock_tool_call_output_item, {"type": "other", "data": "Some other data"}]
+    mock_stream_items = [mock_text_event_1, mock_other_event, mock_text_event_2, mock_non_dict_event]
 
     async def mock_agency_get_response_stream(*args, **kwargs):
         for item in mock_stream_items:
@@ -374,13 +371,10 @@ async def test_agency_get_completion_stream_calls_get_response_stream(mock_agent
 
         # Assertions for collected events
         # Based on agency.py get_completion_stream logic:
-        # - if hasattr(item, 'text'): yield item.text
-        # - elif hasattr(item, 'data'): yield item.data
-        # - else: yield str(item)
+        # - if isinstance(event, dict) and event.get("event") == "text": yield event.get("data")
         expected_events = [
-            mock_content_item.text,
-            mock_tool_call_output_item.data,  # Direct data access
-            str(mock_stream_items[2]),  # Fallback to str(item)
+            mock_text_event_1["data"],
+            mock_text_event_2["data"],
         ]
         assert events == expected_events
 

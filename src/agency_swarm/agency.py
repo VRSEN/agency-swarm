@@ -453,15 +453,21 @@ class Agency:
         **kwargs: Any,  # Pass through other args like chat_id, etc.
     ) -> str:
         """[DEPRECATED] Use get_response instead. Returns final text output."""
-        logger.warning("Method 'get_completion' is deprecated. Use 'get_response' instead.")
+        warnings.warn(
+            "Method 'get_completion' is deprecated. Use 'get_response' instead.", DeprecationWarning, stacklevel=2
+        )
         run_result = await self.get_response(message=message, recipient_agent=recipient_agent, **kwargs)
-        return run_result.final_output_text or ""
+        return str(run_result.final_output) if run_result.final_output is not None else ""
 
     async def get_completion_stream(
         self, message: str, recipient_agent: str | Agent, **kwargs: Any
     ) -> AsyncGenerator[str, None]:
         """[DEPRECATED] Use get_response_stream instead. Yields text chunks."""
-        logger.warning("Method 'get_completion_stream' is deprecated. Use 'get_response_stream' instead.")
+        warnings.warn(
+            "Method 'get_completion_stream' is deprecated. Use 'get_response_stream' instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         async for event in self.get_response_stream(message=message, recipient_agent=recipient_agent, **kwargs):
             # Yield only text events for backward compatibility
             if isinstance(event, dict) and event.get("event") == "text":
