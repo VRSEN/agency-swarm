@@ -1,16 +1,30 @@
+import os
 import json
-import threading
-from queue import Queue
-from typing import override
+from typing import Any
+from concurrent.futures import ThreadPoolExecutor, Future
 
 import anyio
+from anyio import (
+    EndOfStream,
+    create_memory_object_stream,
+    fail_after,
+)
+import asyncio
+from fastapi import Depends, HTTPException, Request
+from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from openai.types.beta import AssistantStreamEvent
-from fastapi import Depends, Request, HTTPException
-from fastapi.responses import StreamingResponse, JSONResponse
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from agency_swarm.util.streaming import AgencyEventHandler
 
+try:
+    from typing import override  # py >= 3.12
+except ImportError:  # pragma: no cover – fallback path
+    from typing_extensions import override  # type: ignore
+
+_n_cpus = os.cpu_count() or 1
+_MAX_WORKERS = max(1, int(os.getenv("STREAM_THREAD_POOL_SIZE", _n_cpus * 4)))
+_EXECUTOR: ThreadPoolExecutor = ThreadPoolExecutor(max_workers=_MAX_WORKERS)
 
 def get_verify_token(app_token):
     auto_error = app_token is not None and app_token != ""
@@ -23,12 +37,10 @@ def get_verify_token(app_token):
         return credentials.credentials
     return verify_token
 
+# Non‑streaming completion endpoint
 def make_completion_endpoint(request_model, current_agency, verify_token):
-    async def handler(
-        request: request_model,
-        token: str = Depends(verify_token),
-    ):
-        def run_sync():
+    async def handler(request: request_model, token: str = Depends(verify_token)):
+        def call_completion() -> Any:
             return current_agency.get_completion(
                 request.message,
                 message_files=request.message_files,
@@ -39,73 +51,86 @@ def make_completion_endpoint(request_model, current_agency, verify_token):
                 verbose=getattr(request, "verbose", False),
                 response_format=request.response_format,
             )
-        # Run in a thread to avoid event loop conflicts with mcp servers
-        response = await anyio.to_thread.run_sync(run_sync)
+
+        response = await anyio.to_thread.run_sync(call_completion, cancellable=True)
         return {"response": response}
 
     return handler
 
+# Streaming SSE endpoint
 def make_stream_endpoint(request_model, current_agency, verify_token):
-    async def handler(
-        request: request_model,
-        token: str = Depends(verify_token),
-    ):
-        queue = Queue()
+    """FastAPI SSE endpoint factory using AnyIO (handles back‑pressure)."""
+
+    async def handler(request: request_model, token: str = Depends(verify_token)):
+        # Async queue bridging producer thread → event‑loop
+        send_ch, recv_ch = create_memory_object_stream(256)
+
+        loop = asyncio.get_running_loop()  # capture once
+
+        def _threadsafe_send(item):
+            """Block the calling thread until the item is accepted."""
+            try:
+                asyncio.run_coroutine_threadsafe(send_ch.send(item), loop).result()
+            except RuntimeError:
+                # Event‑loop is closed (shutdown). Drop the message.
+                pass
 
         class StreamEventHandler(AgencyEventHandler):
             @override
             def on_event(self, event: AssistantStreamEvent) -> None:
-                queue.put(event.model_dump())
+                _threadsafe_send(event.model_dump())
 
             @classmethod
             def on_all_streams_end(cls):
-                queue.put("[DONE]")
+                _threadsafe_send("[DONE]")
 
             @classmethod
-            def on_exception(cls, exception: Exception):
-                # Store the actual exception
-                queue.put({"error": str(exception)})
+            def on_exception(cls, exc: Exception):
+                _threadsafe_send({"error": str(exc)})
 
+        def run_completion() -> None:
+            try:
+                current_agency.get_completion_stream(
+                    request.message,
+                    message_files=request.message_files,
+                    recipient_agent=request.recipient_agent,
+                    additional_instructions=request.additional_instructions,
+                    attachments=request.attachments,
+                    tool_choice=request.tool_choice,
+                    response_format=request.response_format,
+                    event_handler=StreamEventHandler,
+                )
+            except Exception as exc:
+                _threadsafe_send({"error": str(exc)})
+                raise
+
+        worker: Future = _EXECUTOR.submit(run_completion)
+
+        # ---------- Async generator consumed by StreamingResponse ----------
         async def generate_response():
             try:
-                def run_completion():
-                    try:
-                        current_agency.get_completion_stream(
-                            request.message,
-                            message_files=request.message_files,
-                            recipient_agent=request.recipient_agent,
-                            additional_instructions=request.additional_instructions,
-                            attachments=request.attachments,
-                            tool_choice=request.tool_choice,
-                            response_format=request.response_format,
-                            event_handler=StreamEventHandler
-                        )
-                    except Exception as e:
-                        # Send the actual exception
-                        queue.put({"error": str(e)})
-
-                thread = threading.Thread(target=run_completion)
-                thread.start()
-
                 while True:
                     try:
-                        event = queue.get(timeout=30)
-                        if event == "[DONE]":
-                            break
-                        # If it's an error event
-                        if isinstance(event, dict) and "error" in event:
-                            yield f"data: {json.dumps(event)}\n\n"
-                            break
-                        yield f"data: {json.dumps(event)}\n\n"
-                    except Queue.Empty:
-                        yield f"data: {json.dumps({'error': 'Request timed out'})}\n\n"
+                        with fail_after(30):
+                            event = await recv_ch.receive()
+                    except TimeoutError:
+                        yield "data: " + json.dumps({"error": "Request timed out"}) + "\n\n"
                         break
-                    except Exception as e:
-                        yield f"data: {json.dumps({'error': str(e)})}\n\n"
+                    except EndOfStream:
                         break
 
-            except Exception as e:
-                yield f"data: {json.dumps({'error': str(e)})}\n\n"
+                    if event == "[DONE]":
+                        break
+                    if isinstance(event, dict) and "error" in event:
+                        yield "data: " + json.dumps(event) + "\n\n"
+                        break
+
+                    yield "data: " + json.dumps(event) + "\n\n"
+            except anyio.get_cancelled_exc_class():
+                worker.cancel()  # cannot forcibly kill, but we stop reading
+                raise
+            finally:
+                send_ch.close()  # unblock producer if still running
 
         return StreamingResponse(
             generate_response(),
@@ -113,11 +138,13 @@ def make_stream_endpoint(request_model, current_agency, verify_token):
             headers={
                 "Cache-Control": "no-cache",
                 "Connection": "keep-alive",
-                "X-Accel-Buffering": "no"
-            }
+                "X-Accel-Buffering": "no",
+            },
         )
+
     return handler
 
+# Tool endpoint
 def make_tool_endpoint(tool, verify_token):
     async def handler(request: Request, token: str = Depends(verify_token)):
         try:

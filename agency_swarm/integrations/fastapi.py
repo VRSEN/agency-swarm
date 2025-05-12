@@ -1,5 +1,5 @@
 import os
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Type
 
 from agency_swarm.agents import Agent
 from agency_swarm.agency import Agency
@@ -12,7 +12,7 @@ load_dotenv()
 
 def run_fastapi(
     agencies: Optional[List[Agency]] = None,
-    tools: Optional[List[BaseTool]] = None,
+    tools: Optional[List[Type[BaseTool]]] = None,
     host: str = "0.0.0.0",
     port: int = 8000,
     app_token_env: str = "APP_TOKEN",
@@ -108,5 +108,5 @@ def run_fastapi(
     app.add_exception_handler(Exception, exception_handler)
 
     print(f"Starting FastAPI server at http://{host}:{port}")
-    print(f"Created endpoints:\n{'\n'.join(endpoints)}")
+    print("Created endpoints:\n" + "\n".join(endpoints))
     uvicorn.run(app, host=host, port=port)
