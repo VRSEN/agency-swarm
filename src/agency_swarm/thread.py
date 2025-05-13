@@ -2,7 +2,7 @@ import logging
 import uuid
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 from agents import RunResult, TResponseInputItem
 
@@ -102,7 +102,7 @@ class ConversationThread:
 
     def get_history(
         self,
-        perspective_agent: Optional["Agent"] = None,  # Kept for future use
+        perspective_agent: "Agent" | None = None,
         max_items: int | None = None,
     ) -> list[TResponseInputItem]:
         """Gets the message history, suitable for use by `agents.Runner`.
@@ -111,7 +111,7 @@ class ConversationThread:
         the history to the most recent `max_items`.
 
         Args:
-            perspective_agent (Optional[Agent], optional): Reserved for future use. Defaults to None.
+            perspective_agent ("Agent" | None, optional): Reserved for future use. Defaults to None.
             max_items (int | None, optional): The maximum number of recent items to return.
                                               If None, the full history is returned. Defaults to None.
 

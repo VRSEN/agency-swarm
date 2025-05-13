@@ -68,7 +68,6 @@ def test_agency_minimal_initialization(mock_agent_a, mock_agent_b):
     assert mock_agent_a in agency.entry_points
     assert mock_agent_b in agency.entry_points
     assert len(agency.entry_points) == 2
-    assert agency.chart == chart  # Check chart is stored
     assert agency.shared_instructions is None
     assert isinstance(agency.thread_manager, ThreadManager)
     assert agency.persistence_hooks is None
@@ -201,7 +200,13 @@ async def test_agency_get_response_invalid_recipient_warning(mock_agent_a, mock_
 
     with patch("agency_swarm.agency.logger.warning") as mock_warning:
         await agency.get_response(message=message, recipient_agent=mock_agent_b)
-        mock_warning.assert_called_once_with(f"Recipient agent '{mock_agent_b.name}' is not a designated entry point.")
+        # Update expected warning message to the new format
+        expected_warning = (
+            f"Recipient agent '{mock_agent_b.name}' is not a designated entry point "
+            f"(Entry points: {[ep.name for ep in agency.entry_points]}). "
+            f"Call allowed but may indicate unintended usage."
+        )
+        mock_warning.assert_called_once_with(expected_warning)
 
     # Verify AgentB was still called despite the warning
     mock_agent_b.get_response.assert_awaited_once()

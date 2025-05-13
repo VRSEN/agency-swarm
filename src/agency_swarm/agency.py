@@ -38,7 +38,7 @@ class Agency:
         agents (dict[str, Agent]): A dictionary mapping agent names to their instances.
         chart (AgencyChart): The structure defining agents and their communication paths.
         entry_points (list[Agent]): A list of agents identified as entry points for external interaction
-                                     (typically agents listed standalone in the chart).
+                                     (agents listed standalone in the chart).
         thread_manager (ThreadManager): The manager responsible for handling conversation threads.
         persistence_hooks (PersistenceHooks | None): Optional hooks for loading/saving thread state,
                                                     derived from `load_callback` and `save_callback`.
@@ -57,48 +57,50 @@ class Agency:
 
     def __init__(
         self,
-        agency_chart: AgencyChart,
+        *entry_points_args: Agent,
+        communication_flows: list[tuple[Agent, Agent]] | None = None,
+        agency_chart: AgencyChart | None = None,
         shared_instructions: str | None = None,
-        # shared_files_path: Optional[str] = None, # Keep internal name
         load_callback: ThreadLoadCallback | None = None,
         save_callback: ThreadSaveCallback | None = None,
         user_context: dict[str, Any] | None = None,
-        **kwargs: Any,  # Add kwargs catcher
+        **kwargs: Any,
     ):
         """
         Initializes the Agency object.
 
-        Sets up agents based on the `agency_chart`, initializes the `ThreadManager`,
-        configures persistence hooks if callbacks are provided, applies shared instructions,
-        and establishes communication pathways between agents.
-        Handles backward compatibility for deprecated parameters.
+        Sets up agents based on the provided structure (either new positional entry points
+        and keyword communication_flows, or the deprecated agency_chart), initializes the
+        `ThreadManager`, configures persistence hooks if callbacks are provided, applies
+        shared instructions, and establishes communication pathways between agents.
 
         Args:
-            agency_chart (AgencyChart): A list defining the agency structure. Entries can be
-                                        individual `Agent` instances (entry points) or lists
-                                        `[SenderAgent, ReceiverAgent]` defining communication paths.
+            *entry_points_args (Agent): Positional arguments representing Agent instances that
+                                         serve as entry points for external interaction.
+            communication_flows (Optional[list[tuple[Agent, Agent]]], optional):
+                                         Keyword argument defining allowed agent-to-agent
+                                         (sender, receiver) message paths. Defaults to None.
+            agency_chart (Optional[AgencyChart], optional): Deprecated keyword argument for defining
+                                                            the agency structure. If provided, it takes
+                                                            precedence over entry_points_args and
+                                                            communication_flows, issuing a warning.
+                                                            Defaults to None.
             shared_instructions (str | None, optional): Instructions prepended to all agents' system prompts.
             load_callback (ThreadLoadCallback | None, optional): A callable to load conversation threads.
-                                                                   Expected signature: `(chat_id: str) -> Optional[ConversationThread]`.
-                                                                   (Note: The signature in PersistenceHooks is different,
-                                                                    Agency init adapts this).
-            save_callback (ThreadSaveCallback | None, optional): A callable to save a conversation thread.
-                                                                   Expected signature: `(thread: ConversationThread) -> None`.
-                                                                   (Note: The signature in PersistenceHooks is different,
-                                                                    Agency init adapts this).
+            save_callback (ThreadSaveCallback | None, optional): A callable to save conversation threads.
             user_context (dict[str, Any] | None, optional): Initial shared context accessible to all agents.
-            **kwargs: Catches deprecated parameters like `threads_callbacks`, `shared_files`, etc.,
-                      issuing warnings if used.
+            **kwargs: Catches other deprecated parameters, issuing warnings if used.
 
         Raises:
-            ValueError: If the `agency_chart` is empty or contains invalid entries.
-            TypeError: If entries in `agency_chart` are not `Agent` instances or valid lists.
+            ValueError: If the agency structure is not defined (neither new nor deprecated methods used),
+                        or if agent names are duplicated, or chart contains invalid entries.
+            TypeError: If entries in the structure are not `Agent` instances or valid tuples/lists.
         """
         logger.info("Initializing Agency...")
 
-        # --- Handle Deprecated Args ---
+        # --- Handle Deprecated Args & New/Old Chart Logic ---
         deprecated_args_used = {}
-        # Handle thread callbacks mapping
+        # --- Handle Deprecated Thread Callbacks ---
         final_load_callback = load_callback
         final_save_callback = save_callback
         if "threads_callbacks" in kwargs:
@@ -115,8 +117,7 @@ class Agency:
                 if final_save_callback is None and "save" in threads_callbacks:
                     final_save_callback = threads_callbacks["save"]
             deprecated_args_used["threads_callbacks"] = threads_callbacks
-
-        # Handle other deprecated args
+        # --- Handle Other Deprecated Args ---
         if "shared_files" in kwargs:
             warnings.warn(
                 "'shared_files' parameter is deprecated and shared file handling is not currently implemented.",
@@ -124,7 +125,6 @@ class Agency:
                 stacklevel=2,
             )
             deprecated_args_used["shared_files"] = kwargs.pop("shared_files")
-            # self.shared_files_path = deprecated_args_used["shared_files"] # Store if needed for future impl.
         if "async_mode" in kwargs:
             warnings.warn(
                 "'async_mode' is deprecated. Asynchronous execution is handled by the underlying SDK.",
@@ -163,6 +163,45 @@ class Agency:
                 )
                 deprecated_args_used[param] = kwargs.pop(param)
 
+        # --- Logic for new vs. old chart/flow definition ---
+        _derived_entry_points: list[Agent] = []
+        _derived_communication_flows: list[tuple[Agent, Agent]] = []
+
+        if agency_chart is not None:
+            warnings.warn(
+                "'agency_chart' parameter is deprecated. "
+                "Use positional arguments for entry points and the 'communication_flows' keyword argument for defining communication paths.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            deprecated_args_used["agency_chart"] = agency_chart  # Log that it was used
+            if entry_points_args or communication_flows is not None:
+                logger.warning(
+                    "'agency_chart' was provided along with new 'entry_points_args' or 'communication_flows'. "
+                    "'agency_chart' will be used for backward compatibility, and the new parameters will be ignored."
+                )
+            # Parse the deprecated chart regardless if it was provided
+            _derived_entry_points, _derived_communication_flows = self._parse_deprecated_agency_chart(agency_chart)
+
+        elif entry_points_args or communication_flows is not None:
+            # Using new method
+            _derived_entry_points = list(entry_points_args)
+            _derived_communication_flows = communication_flows or []
+            # Validate inputs for new method
+            if not all(isinstance(ep, Agent) for ep in _derived_entry_points):
+                raise TypeError("All positional arguments (entry points) must be Agent instances.")
+            if not all(
+                isinstance(flow, tuple) and len(flow) == 2 and isinstance(flow[0], Agent) and isinstance(flow[1], Agent)
+                for flow in _derived_communication_flows
+            ):
+                raise TypeError("communication_flows must be a list of (SenderAgent, ReceiverAgent) tuples.")
+        else:
+            # Neither old nor new method provided chart/flows
+            raise ValueError(
+                "Agency structure not defined. Provide entry point agents as positional arguments and/or "
+                "use the 'communication_flows' keyword argument, or use the deprecated 'agency_chart' parameter."
+            )
+
         # Log if any deprecated args were used
         if deprecated_args_used:
             logger.warning(f"Deprecated Agency parameters used: {list(deprecated_args_used.keys())}")
@@ -170,148 +209,173 @@ class Agency:
         for key in kwargs:
             logger.warning(f"Unknown parameter '{key}' passed to Agency constructor.")
 
-        # --- Assign Core Attributes (Use potentially mapped callbacks) ---
-        self.chart = agency_chart
-        self.shared_instructions = shared_instructions  # Direct string, no file loading here
+        # --- Assign Core Attributes ---
+        self.shared_instructions = shared_instructions
         self.user_context = user_context or {}
 
-        # --- Initialize Core Components (Use potentially mapped callbacks) ---
+        # --- Initialize Core Components ---
         self.thread_manager = ThreadManager(load_callback=final_load_callback, save_callback=final_save_callback)
         self.persistence_hooks = None
         if final_load_callback and final_save_callback:
             self.persistence_hooks = PersistenceHooks(final_load_callback, final_save_callback)
             logger.info("Persistence hooks enabled.")
 
-        # --- Register Agents and Parse Chart ---
+        # --- Register Agents and Set Entry Points ---
         self.agents = {}
-        self.entry_points = []
-        self._parse_chart_and_register_agents(agency_chart)
+        self.entry_points = []  # Will be populated by _register_all_agents_and_set_entry_points
+        self._register_all_agents_and_set_entry_points(_derived_entry_points, _derived_communication_flows)
+
         if not self.agents:
-            raise ValueError("Agency chart must contain at least one agent.")
+            raise ValueError("Agency must contain at least one agent.")
         logger.info(f"Registered agents: {list(self.agents.keys())}")
+        logger.info(f"Designated entry points: {[ep.name for ep in self.entry_points]}")
 
         # --- Configure Agents & Communication ---
-        self._configure_agents()
-
-        # TODO: Re-evaluate shared file handling based on deprecated 'shared_files'? Maybe use files_folder?
-        # if self.shared_files_path: # Check internal var if set from deprecated param
-        #      logger.warning("Shared file handling is not yet implemented.")
+        # _configure_agents will now use _derived_communication_flows determined above
+        self._configure_agents(_derived_communication_flows)
 
         logger.info("Agency initialization complete.")
 
-    def _parse_chart_and_register_agents(self, chart: AgencyChart) -> None:
-        """Iterates through the chart, registers unique agents, and identifies entry points."""
-        registered_agent_ids = set()
+    def _parse_deprecated_agency_chart(self, chart: AgencyChart) -> tuple[list[Agent], list[tuple[Agent, Agent]]]:
+        """
+        Parses the deprecated agency_chart to extract entry points and communication flows.
+        This method is for backward compatibility.
+        Returns tuple of (entry_points_list, communication_flows_list)
+        """
+        temp_entry_points: list[Agent] = []
+        temp_comm_flows: list[tuple[Agent, Agent]] = []
+        all_agents_in_chart: dict[int, Agent] = {}  # Use id to track unique instances
 
         for entry in chart:
-            if isinstance(entry, list) and len(entry) >= 1:
-                # Communication path or group
-                sender_agent = entry[0]
-                if not isinstance(sender_agent, Agent):
-                    raise TypeError(f"Invalid sender type in chart entry: {type(sender_agent)}")
-                if id(sender_agent) not in registered_agent_ids:
-                    self._register_agent(sender_agent)
-                    registered_agent_ids.add(id(sender_agent))
-
-                # Register receivers if it's a pair
-                if len(entry) == 2:
-                    receiver_agent = entry[1]
-                    if not isinstance(receiver_agent, Agent):
-                        raise TypeError(f"Invalid receiver type in chart entry: {type(receiver_agent)}")
-                    if id(receiver_agent) not in registered_agent_ids:
-                        self._register_agent(receiver_agent)
-                        registered_agent_ids.add(id(receiver_agent))
+            if isinstance(entry, list) and len(entry) == 2:
+                sender, receiver = entry
+                if not (isinstance(sender, Agent) and isinstance(receiver, Agent)):
+                    raise TypeError(f"Invalid agent types in communication pair: {entry}")
+                temp_comm_flows.append((sender, receiver))
+                if id(sender) not in all_agents_in_chart:
+                    all_agents_in_chart[id(sender)] = sender
+                if id(receiver) not in all_agents_in_chart:
+                    all_agents_in_chart[id(receiver)] = receiver
             elif isinstance(entry, Agent):
-                # Standalone agent (potential entry point)
-                if id(entry) not in registered_agent_ids:
-                    self._register_agent(entry)
-                    registered_agent_ids.add(id(entry))
-                # Standalone agents are considered entry points
-                if entry not in self.entry_points:
-                    self.entry_points.append(entry)
-                    logger.info(f"Identified agent '{entry.name}' as an entry point.")
+                if entry not in temp_entry_points:  # Add unique instances to entry points
+                    temp_entry_points.append(entry)
+                if id(entry) not in all_agents_in_chart:
+                    all_agents_in_chart[id(entry)] = entry
             else:
                 raise ValueError(f"Invalid agency_chart entry: {entry}")
 
-        if not self.entry_points:
+        # Fallback for entry points if none were standalone
+        if not temp_entry_points and all_agents_in_chart:  # all_agents_in_chart implies temp_comm_flows is not empty
             logger.warning(
-                "No explicit entry points identified in the agency chart. Any agent might need to be callable."
+                "No explicit entry points (standalone agents) found in deprecated 'agency_chart'. "
+                "For backward compatibility, unique sender agents from communication pairs will be considered potential entry points."
             )
-            # If no clear entry points, maybe consider all agents as potential entry points?
-            self.entry_points = list(self.agents.values())
+            # Collect unique senders from communication flows as entry points
+            unique_senders_as_entry_points: dict[int, Agent] = {}
+            for sender_agent, _ in temp_comm_flows:
+                if id(sender_agent) not in unique_senders_as_entry_points:
+                    unique_senders_as_entry_points[id(sender_agent)] = sender_agent
+            temp_entry_points = list(unique_senders_as_entry_points.values())
+
+        return temp_entry_points, temp_comm_flows
+
+    def _register_all_agents_and_set_entry_points(
+        self, defined_entry_points: list[Agent], defined_communication_flows: list[tuple[Agent, Agent]]
+    ) -> None:
+        """
+        Registers all unique agents found in entry points and communication flows.
+        Sets self.entry_points based on defined_entry_points.
+        """
+        unique_agents_to_register: dict[int, Agent] = {}  # Use id for uniqueness
+
+        # Collect agents from defined entry points
+        for agent in defined_entry_points:
+            # Validation already done in __init__ for new method
+            if id(agent) not in unique_agents_to_register:
+                unique_agents_to_register[id(agent)] = agent
+
+        # Collect agents from communication flows
+        for sender, receiver in defined_communication_flows:
+            # Validation already done in __init__ for new method
+            if id(sender) not in unique_agents_to_register:
+                unique_agents_to_register[id(sender)] = sender
+            if id(receiver) not in unique_agents_to_register:
+                unique_agents_to_register[id(receiver)] = receiver
+
+        # Register them
+        for agent_instance in unique_agents_to_register.values():
+            self._register_agent(agent_instance)  # _register_agent handles name uniqueness
+
+        # Set self.entry_points - use the explicitly provided list
+        self.entry_points = defined_entry_points
+        if not self.entry_points and self.agents:
+            logger.warning(
+                "No explicit entry points provided (no positional Agent arguments). "
+                "To interact with the agency, you must use the agent's own get_response methods "
+                "or define entry points during Agency initialization if using agency.get_response."
+            )
+            # Note: self.entry_points remains empty if none were explicitly provided.
 
     def _register_agent(self, agent: Agent):
         """Adds a unique agent instance to the agency's agent map."""
         agent_name = agent.name
         if agent_name in self.agents:
-            # Should not happen if id check works in _parse_chart...
-            # but double-check name uniqueness.
             if id(self.agents[agent_name]) != id(agent):
-                raise ValueError(f"Duplicate agent name '{agent_name}' with different instances.")
-            return  # Already registered this instance
+                raise ValueError(
+                    f"Duplicate agent name '{agent_name}' with different instances found. "
+                    "Ensure agent names are unique or you are passing the same instance."
+                )
+            return
 
         logger.debug(f"Registering agent: {agent_name}")
         self.agents[agent_name] = agent
 
-    def _configure_agents(self) -> None:
-        """Injects agency refs, thread manager, shared instructions, and configures agent communication
-        by calling register_subagent for defined flows.
+    def _configure_agents(self, defined_communication_flows: list[tuple[Agent, Agent]]) -> None:
+        """
+        Injects agency refs, thread manager, shared instructions, and configures
+        agent communication by calling register_subagent based on defined_communication_flows.
         """
         logger.info("Configuring agents...")
-        # Build the communication map from the chart
+
+        # Build the communication map directly from defined_communication_flows
         communication_map: dict[str, list[str]] = {agent_name: [] for agent_name in self.agents}
-        for entry in self.chart:
-            if isinstance(entry, list) and len(entry) == 2:
-                sender, receiver = entry
-                # Ensure both are actual Agent instances before accessing name
-                if isinstance(sender, Agent) and isinstance(receiver, Agent):
-                    sender_name = sender.name
-                    receiver_name = receiver.name
-                    if sender_name in communication_map and receiver_name not in communication_map[sender_name]:
-                        communication_map[sender_name].append(receiver_name)
-                else:
-                    logger.warning(f"Invalid agent types found in communication chart entry: {entry}. Skipping.")
+        for sender, receiver in defined_communication_flows:
+            # Agents should already be validated and registered
+            sender_name = sender.name
+            receiver_name = receiver.name
+            if receiver_name not in communication_map[sender_name]:
+                communication_map[sender_name].append(receiver_name)
 
         # Configure each agent
         for agent_name, agent_instance in self.agents.items():
-            # Inject Agency reference (for access to full agents map) and ThreadManager
             agent_instance._set_agency_instance(self)
             agent_instance._set_thread_manager(self.thread_manager)
 
             # Apply shared instructions (prepend)
             if self.shared_instructions:
-                if agent_instance.instructions:
+                # Make instructions mutable if None
+                if agent_instance.instructions is None:
+                    agent_instance.instructions = ""
+                # Basic check to avoid re-prepending if somehow configured twice
+                if not agent_instance.instructions.startswith(self.shared_instructions):
                     agent_instance.instructions = self.shared_instructions + "\n\n---\n\n" + agent_instance.instructions
-                else:
-                    agent_instance.instructions = self.shared_instructions
                 logger.debug(f"Applied shared instructions to agent: {agent_name}")
 
-            # --- Register subagents based on the explicit communication map ---
-            # This will internally create the specific send_message_to_... tools
+            # Register subagents based on the explicit communication map
             allowed_recipients = communication_map.get(agent_name, [])
             if allowed_recipients:
                 logger.debug(f"Agent '{agent_name}' can send messages to: {allowed_recipients}")
                 for recipient_name in allowed_recipients:
-                    if recipient_name in self.agents:
-                        recipient_agent = self.agents[recipient_name]
-                        try:
-                            # Call the modified register_subagent
-                            agent_instance.register_subagent(recipient_agent)
-                        except Exception as e:
-                            logger.error(
-                                f"Error registering subagent '{recipient_name}' for sender '{agent_name}': {e}",
-                                exc_info=True,
-                            )
-                    else:
-                        # This should not happen if chart parsing is correct
-                        logger.warning(
-                            f"Recipient agent '{recipient_name}' defined in chart for sender '{agent_name}' but not found in registered agents."
+                    recipient_agent = self.agents[recipient_name]
+                    try:
+                        agent_instance.register_subagent(recipient_agent)
+                    except Exception as e:
+                        logger.error(
+                            f"Error registering subagent '{recipient_name}' for sender '{agent_name}': {e}",
+                            exc_info=True,
                         )
             else:
-                logger.debug(
-                    f"Agent '{agent_name}' has no explicitly defined outgoing communication paths in the chart."
-                )
-
+                logger.debug(f"Agent '{agent_name}' has no explicitly defined outgoing communication paths.")
         logger.info("Agent configuration complete.")
 
     # --- Agency Interaction Methods ---
@@ -319,7 +383,7 @@ class Agency:
         self,
         message: str | list[dict[str, Any]],
         recipient_agent: str | Agent,
-        chat_id: str | None = None,  # If None, a new chat ID is generated
+        chat_id: str | None = None,
         context_override: dict[str, Any] | None = None,
         hooks_override: RunHooks | None = None,
         **kwargs: Any,
@@ -353,23 +417,20 @@ class Agency:
             AgentsException: If errors occur during the underlying agent execution.
         """
         target_agent = self._resolve_agent(recipient_agent)
-        if target_agent not in self.entry_points:
-            logger.warning(f"Recipient agent '{target_agent.name}' is not a designated entry point.")
-            # Allow calling non-entry points? Or raise error?
-            # Let's allow it for now, but log a warning.
-            # raise ValueError(f"Recipient agent '{target_agent.name}' is not a designated entry point.")
-
-        effective_hooks = hooks_override or self.persistence_hooks  # Use agency persistence hooks by default
-
-        # Create or use provided chat_id
+        if not self.entry_points:
+            logger.warning("Agency has no designated entry points. Allowing call to any agent.")
+        elif target_agent not in self.entry_points:
+            logger.warning(
+                f"Recipient agent '{target_agent.name}' is not a designated entry point "
+                f"(Entry points: {[ep.name for ep in self.entry_points]}). Call allowed but may indicate unintended usage."
+            )
+        effective_hooks = hooks_override or self.persistence_hooks
         if not chat_id:
             chat_id = f"chat_{uuid.uuid4()}"
             logger.info(f"Initiating new chat with agent '{target_agent.name}', chat_id: {chat_id}")
-
-        # Delegate to the target agent's get_response method
         return await target_agent.get_response(
             message=message,
-            sender_name=None,  # Indicate message is from user/external
+            sender_name=None,
             chat_id=chat_id,
             context_override=context_override,
             hooks_override=effective_hooks,
@@ -409,16 +470,18 @@ class Agency:
             AgentsException: If errors occur during setup or execution.
         """
         target_agent = self._resolve_agent(recipient_agent)
-        if target_agent not in self.entry_points:
-            logger.warning(f"Recipient agent '{target_agent.name}' is not a designated entry point.")
-
+        if not self.entry_points:
+            logger.warning("Agency has no designated entry points. Allowing stream call to any agent.")
+        elif target_agent not in self.entry_points:
+            logger.warning(
+                f"Recipient agent '{target_agent.name}' is not a designated entry point "
+                f"(Entry points: {[ep.name for ep in self.entry_points]}). Stream call allowed but may indicate unintended usage."
+            )
         effective_hooks = hooks_override or self.persistence_hooks
-
         if not chat_id:
             chat_id = f"chat_{uuid.uuid4()}"
             logger.info(f"Initiating new stream chat with agent '{target_agent.name}', chat_id: {chat_id}")
 
-        # Delegate to the target agent's get_response_stream method
         async for event in target_agent.get_response_stream(
             message=message,
             sender_name=None,
@@ -432,7 +495,6 @@ class Agency:
     def _resolve_agent(self, agent_ref: str | Agent) -> Agent:
         """Helper to get an agent instance from a name or instance."""
         if isinstance(agent_ref, Agent):
-            # Ensure it's an agent managed by this agency instance
             if agent_ref.name in self.agents and id(self.agents[agent_ref.name]) == id(agent_ref):
                 return agent_ref
             else:
@@ -450,11 +512,13 @@ class Agency:
         self,
         message: str,
         recipient_agent: str | Agent,
-        **kwargs: Any,  # Pass through other args like chat_id, etc.
+        **kwargs: Any,
     ) -> str:
         """[DEPRECATED] Use get_response instead. Returns final text output."""
         warnings.warn(
-            "Method 'get_completion' is deprecated. Use 'get_response' instead.", DeprecationWarning, stacklevel=2
+            "Method 'get_completion' is deprecated. Use 'get_response' instead.",
+            DeprecationWarning,
+            stacklevel=2,
         )
         run_result = await self.get_response(message=message, recipient_agent=recipient_agent, **kwargs)
         return str(run_result.final_output) if run_result.final_output is not None else ""
@@ -469,25 +533,7 @@ class Agency:
             stacklevel=2,
         )
         async for event in self.get_response_stream(message=message, recipient_agent=recipient_agent, **kwargs):
-            # Yield only text events for backward compatibility
             if isinstance(event, dict) and event.get("event") == "text":
-                # Check for 'data' field for text events, fallback to 'content' if needed?
-                # For consistency with current Agent implementation (yielding {"event": "text", "data": ...})
-                # let's prioritize 'data'
                 data = event.get("data")
                 if data:
                     yield data
-
-    # --- Other Methods (Placeholder/Future) ---
-    def is_communication_allowed(self, sender_name: str, recipient_name: str) -> bool:
-        """Checks if direct communication is allowed based on the parsed chart."""
-        # This check is implicitly handled now by agent._subagents during send_message validation
-        # Kept here conceptually, but might not be needed externally.
-        allowed_recipients = []
-        for entry in self.chart:
-            if isinstance(entry, list) and len(entry) == 2:
-                if entry[0].name == sender_name:
-                    allowed_recipients.append(entry[1].name)
-        return recipient_name in allowed_recipients
-
-    # Add run_demo, demo_gradio later if needed

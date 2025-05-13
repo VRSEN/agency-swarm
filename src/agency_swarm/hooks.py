@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import logging
 from collections.abc import Callable
 
@@ -10,15 +8,14 @@ from .thread import ConversationThread
 
 logger = logging.getLogger(__name__)
 
-# --- Callback Type Hints ---
-# Load callback expects a thread ID string, returns Optional[ConversationThread]
+# Type Aliases for Callbacks
+# These should match ThreadManager's expectations
 ThreadLoadCallback = Callable[[str], ConversationThread | None]
-# Save callback expects the full dictionary of threads
-ThreadSaveCallback = Callable[[dict[str, ConversationThread]], None]
+ThreadSaveCallback = Callable[[ConversationThread], None]
 
 
 # --- Persistence Hooks ---
-class PersistenceHooks(RunHooks[MasterContext]):
+class PersistenceHooks(RunHooks[MasterContext]):  # type: ignore[misc]
     """Custom `RunHooks` implementation for loading and saving `ThreadManager` state.
 
     This class integrates with the `agents.Runner` lifecycle to automatically

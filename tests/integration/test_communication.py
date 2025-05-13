@@ -23,7 +23,7 @@ def planner_agent_instance():
     return PlannerAgent(
         name="Planner",
         description="Plans the work.",
-        instructions="Receive a task. Determine the steps. Delegate the execution step to the Worker agent using the send_message tool.",
+        instructions="You are a Planner. You will receive a task. Determine the steps. Delegate the execution step to the Worker agent using the send_message tool. Ensure your message to the Worker clearly includes the full and exact task description you received.",
         model_settings=ModelSettings(temperature=0.0),
     )
 
@@ -33,7 +33,7 @@ def worker_agent_instance():
     return WorkerAgent(
         name="Worker",
         description="Does the work.",
-        instructions="Receive execution instructions from Planner. Perform the task (simulate by creating a result string like 'Work done for: [task]'). Send the result string to the Reporter agent using the send_message tool.",
+        instructions="You are a Worker. You will receive execution instructions from the Planner including a task description. Perform the task (simulate by creating a result string like 'Work done for: [task description]'). Send the result string to the Reporter agent using the send_message tool. Ensure your message clearly references the specific task description you were given by the Planner.",
         model_settings=ModelSettings(temperature=0.0),
     )
 
@@ -43,7 +43,7 @@ def reporter_agent_instance():
     return ReporterAgent(
         name="Reporter",
         description="Reports the results.",
-        instructions="Receive results string from Worker. Format it into a final report string like 'Final Report: [results string]'.",
+        instructions="You are a Reporter. You will receive results from the Worker, which should reference a specific task description. Format this into a final report string. Ensure your final report clearly identifies the specific task description that was processed along with the results.",
         model_settings=ModelSettings(temperature=0.0),
     )
 

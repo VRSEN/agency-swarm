@@ -76,7 +76,8 @@ class SendMessage(FunctionTool):
             on_invoke_tool=self.on_invoke_tool,
         )
         logger.debug(
-            f"Initialized SendMessage tool: '{self.name}' for sender '{sender_agent.name}' -> recipient '{recipient_agent.name}'"
+            f"Initialized SendMessage tool: '{self.name}' "
+            f"for sender '{sender_agent.name}' -> recipient '{recipient_agent.name}'"
         )
 
     async def on_invoke_tool(self, wrapper: RunContextWrapper[MasterContext], arguments_json_string: str) -> str:
@@ -133,13 +134,15 @@ class SendMessage(FunctionTool):
                 final_output_text = str(final_output_text)
 
             logger.info(
-                f"Received response via tool '{self.name}' from '{recipient_name_for_call}': \"{final_output_text[:50]}...\""
+                f"Received response via tool '{self.name}' from '{recipient_name_for_call}': "
+                f'"{final_output_text[:50]}..."'
             )
             return final_output_text
 
         except Exception as e:
             logger.error(
-                f"Error occurred during sub-call via tool '{self.name}' from '{sender_name_for_call}' to '{recipient_name_for_call}': {e}",
+                f"Error occurred during sub-call via tool '{self.name}' "
+                f"from '{sender_name_for_call}' to '{recipient_name_for_call}': {e}",
                 exc_info=True,
             )
             return f"Error: Failed to get response from agent '{recipient_name_for_call}'. Reason: {e}"

@@ -46,7 +46,7 @@ Ensure all tests pass before submitting your changes:
 
 1. **Install Test Dependencies**
 
-   Ensure all test dependencies are installed (typically done via `make sync`):
+   Ensure all test dependencies are installed:
 
    ```bash
    make sync
@@ -60,7 +60,6 @@ Ensure all tests pass before submitting your changes:
    make coverage
    ```
 
-   (This typically runs pytest and generates a coverage report.)
 
 3. **Check Test Coverage**
 
@@ -96,7 +95,7 @@ Thank you for contributing to Agency Swarm! Your efforts help us build a more ro
 
 1. **Install Test Dependencies**
 
-   If there are any additional test dependencies, ensure they are installed (typically done via `make sync`):
+   If there are any additional test dependencies, ensure they are installed:
 
    ```bash
    make sync
