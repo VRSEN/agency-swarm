@@ -31,7 +31,7 @@ from agents.k8s_group_agents.storage_group import (
     storage_planner, storage_step_scheduler
 )
 
-from agents.k8s_group_agents import step_inspector, basic_cap_solver
+from agents.k8s_group_agents import step_inspector
 
 from agents.k8s_group_agents.pod_manage_group.pod_manage_agent import pod_manage_agent
 from agents.k8s_group_agents.pod_manage_group.resource_grouping_agent import resource_grouping_agent
@@ -85,8 +85,6 @@ def main():
 
     step_inspector_instance = step_inspector.create_agent()
 
-    basic_cap_solver_instance = basic_cap_solver.create_agent()
-
     pod_manage_planner_instance = pod_manage_planner.create_agent()
     pod_manage_step_scheduler_instance = pod_manage_step_scheduler.create_agent()
     pod_orchestration_scheduling_planner_instance = pod_orchestration_scheduling_planner.create_agent()
@@ -137,9 +135,6 @@ def main():
 
         # step
         step_inspector_instance,
-        
-        # 基本能力群
-        basic_cap_solver_instance,
         
         # check log
         check_log_agent_instance,
@@ -214,7 +209,6 @@ def main():
         "存储能力群": [storage_planner_instance, None, storage_step_scheduler_instance],
         "监控能力群": [monitor_planner_instance, None,monitor_step_scheduler_instance],
         "软件管理能力群": [software_manage_planner_instance, None, software_manage_step_scheduler_instance],
-        "简单任务处理能力群": [basic_cap_solver_instance],
     }
 
     cap_agents = {
