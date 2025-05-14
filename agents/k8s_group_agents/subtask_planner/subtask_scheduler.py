@@ -35,7 +35,7 @@ _instruction = f"""
 输入格式为:
 {_input_format}
 
-你需要从completed_sub_tasks.json中读取已完成的子任务，从context_index.json中读取之前子任务完成过程中的上下文信息，并结合总任务描述一步步思考接下来需要完成的子任务，保证推进总任务的完成
+你需要从completed_sub_tasks.json中读取已完成的子任务，从context_index.json中读取之前子任务完成过程中的上下文信息，并结合总任务描述一步步思考接下来需要完成的子任务，保证推进总任务的完成。
 
 注意: 你每次接收到输入时都应该读取一次completed_sub_tasks.json和context_index.json
 
@@ -44,7 +44,7 @@ _instruction = f"""
 你的最终调度结果应该为: 
 {_output_format}
 
-你需要在"reason"字段填入你选出这些子任务的原因
+你需要在"reason"字段填入你选出这些子任务的原因。
 """
 
 _tools = [ReadJsonFile]
