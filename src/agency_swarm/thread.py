@@ -102,7 +102,7 @@ class ConversationThread:
 
     def get_history(
         self,
-        perspective_agent: "Agent" | None = None,
+        # perspective_agent: "Agent" | None = None,
         max_items: int | None = None,
     ) -> list[TResponseInputItem]:
         """Gets the message history, suitable for use by `agents.Runner`.

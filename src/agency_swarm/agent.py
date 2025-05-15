@@ -641,7 +641,7 @@ class Agent(BaseAgent[MasterContext]):
             # Call Runner.run as a class method, passing the initial input
             run_result: RunResult = await Runner.run(
                 starting_agent=self,
-                input=message,  # Runner handles adding this initial input
+                input=thread.items,  # Runner handles adding this initial input
                 context=master_context,
                 hooks=hooks_to_use,
                 run_config=effective_run_config,
@@ -796,19 +796,22 @@ class Agent(BaseAgent[MasterContext]):
             # yield {"type": "error", "content": f"Error preparing context/hooks: {e}"}
             # return
 
+        print("Thread items:", thread.items)
+
         # Execute via Runner stream
         final_result_items = []  # To capture items for potential post-processing
         try:
             logger.debug(f"Calling Runner.run_streamed for agent '{self.name}'...")
-            async for event in Runner.run_streamed(
+            result = Runner.run_streamed(
                 starting_agent=self,
-                input=message if sender_name is None else [],  # Runner handles input logic from thread
+                input=thread.items if sender_name is None else [],  # Runner handles input logic from thread
                 context=master_context,
                 hooks=hooks_to_use,
                 run_config=effective_run_config,
                 max_turns=kwargs.get("max_turns", DEFAULT_MAX_TURNS),
                 previous_response_id=kwargs.get("previous_response_id"),
-            ):
+            )
+            async for event in result.stream_events():
                 yield event
                 # Collect RunItems from the stream events if needed
                 if isinstance(event, RunItemStreamEvent):
