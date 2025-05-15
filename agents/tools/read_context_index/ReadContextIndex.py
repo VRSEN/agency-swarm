@@ -4,7 +4,7 @@ import os
 from pydantic import Field
 
 class ReadContextIndex(BaseTool):
-    """Read context index"""
+    """Read context_index.json"""
 
     def run(self):
         agents_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -15,4 +15,4 @@ class ReadContextIndex(BaseTool):
                 existing_data = json.load(f)
         except:
             existing_data = []
-        return existing_data
+        return json.dumps(existing_data, ensure_ascii=False)

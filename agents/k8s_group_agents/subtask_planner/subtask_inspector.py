@@ -29,8 +29,7 @@ _output_format = """
 }
 """
 
-_instruction = f"""
-作为审查者，你将从subtask_planner那里收到一个 JSON 格式的任务规划结果 <task_graph> 和原始任务请求 <user_request>。
+_instruction = f"""作为审查者，你将从subtask_planner那里收到一个 JSON 格式的任务规划结果 <task_graph> 和原始任务请求 <user_request>。
 输入格式为:
 {_input_format}
 

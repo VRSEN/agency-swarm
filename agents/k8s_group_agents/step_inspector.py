@@ -29,25 +29,23 @@ _output_format = """
 }
 """
 
-_instruction = f"""
-作为审查者，你将从task_planner那里收到一个 JSON 格式的任务规划结果 <task_graph> 和原始用户请求 <user_request>。
+_instruction = f"""作为审查者，你将从task_planner那里收到一个 JSON 格式的任务规划结果 <task_graph> 和原始用户请求 <user_request>。
 输入格式为:
 {_input_format}
 
-注意：每次得到输入时，你都需要通过`ReadJsonFile`从completed_sub_tasks.json读取已完成的子任务，从context_index.json中读取已完成任务产生的环境信息
+同时，你需要先通过`ReadJsonFile`从completed_sub_tasks.json读取已完成的子任务，从context_index.json中读取已完成任务产生的环境信息。
 
-请一步步思考: 
-0. 你需要确保输入中的 <task_graph> 是JSON格式；
-1. 你需要检查<user_request>是否可以分解为<task_graph>，且确保<task_graph>任务的拆分和执行顺序合理；
-2. 确保<task_graph>中没有**不通过执行kubectl命令行**实现的操作；
-3. 环境中已经有华为云访问认证等认证信息，且已经被所需agent得知，确保任务规划中没有获取访问凭证等类似步骤；
+获得以上信息后，请谨慎专业地一步步思考: 
+1. 你需要确保输入中的 <task_graph> 是JSON格式；
+2. 你需要检查<user_request>是否可以分解为<task_graph>，且确保<task_graph>任务的拆分和执行顺序合理；
+3. 确保<task_graph>中所有操作都可通过**执行kubectl命令行**实现；
 4. 除非<user_request>或context_index.json中有说明，否则任务执行环境最开始应该没有创建**任何资源**，确保每个任务所需资源应该在**前置任务**中有所创建；
-5. 你需要保证任务规划中没有**多余**的确认或查询步骤
+5. 你需要保证任务规划中没有**多余**的确认或查询步骤。
 
-你应该按照以下json格式评估TASK: 
+你应该按照以下json格式评估<task_graph>: 
 {_output_format}
 
-如果任务拆分和流程合理，请在"review"字段填入"YES"；如果任务拆分和流程有问题，请在"review"字段填入"NO"，并在"explain"字段填入你觉得不合理的原因
+如果任务拆分和流程合理，请在"review"字段填入"YES"；如果任务拆分和流程有问题，请在"review"字段填入"NO"，并在"explain"字段填入你觉得不合理的原因。
 
 """
 

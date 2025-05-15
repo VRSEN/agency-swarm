@@ -1503,9 +1503,9 @@ class Agency:
                 for next_task_id in next_task_list: # 拆分出子任务（能力群相关）流程图，id2subtask
                     next_task = id2task[next_task_id]
                     subtask_input = {
-                        "total_task_graph": task_graph_json,
                         "title": next_task['title'],
                         "description": next_task['description'],
+                        "total_task_graph": task_graph_json,
                     }
                     print(f"The task:\n{next_task['title']}\nneed to be planned...")
                     subtask_graph, subtasks_need_scheduled = self.planning_layer(message=json.dumps(subtask_input, ensure_ascii=False), original_request=next_task['description'], task_planner_thread=subplanner_thread, inspector_thread=subtask_inspector_thread, node_color='lightgreen')
@@ -1527,9 +1527,9 @@ class Agency:
                         for next_subtask_id in next_subtask_list: # 拆分出步骤（能力相关）流程图，id2step
                             next_subtask = id2subtask[next_subtask_id]
                             steps_input = {
-                                "total_subtask_graph": subtask_graph_json,
                                 "title": next_subtask['title'],
                                 "description": next_subtask['description'],
+                                "total_subtask_graph": subtask_graph_json,
                             }
                             print(f"The subtask:\n{next_subtask['title']}\nneed to be planned...")
                             next_subtask_cap_group = next_subtask['capability_group']

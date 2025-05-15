@@ -94,7 +94,7 @@ class Agent:
         api_params: Dict[str, Dict[str, str]] = None,
         file_ids: List[str] = None,
         metadata: Dict[str, str] = None,
-        model: str = "gpt-4o-2024-08-06",
+        model: str = os.getenv("DEFAULT_MODEL") or "gpt-4o-2024-08-06",
         validation_attempts: int = 1,
         max_prompt_tokens: int = None,
         max_completion_tokens: int = None,
@@ -283,17 +283,26 @@ class Agent:
                             continue
 
         # create assistant if settings.json does not exist or assistant with the same name does not exist
+        params = {
+            "model": self.model,
+            "name": self.name,
+            "description": self.description,
+            "instructions": self.instructions,
+            "tools": self.get_oai_tools(),
+            "tool_resources": self.tool_resources,
+            "metadata": self.metadata,
+            "temperature": self.temperature,
+            "top_p": self.top_p,
+            "response_format": self.response_format,
+        }
+        if self.model.startswith("o"):
+            params["temperature"] = None
+            params["top_p"] = None
+            params["reasoning_effort"] = os.getenv("REASONING_EFFORT") or "medium"
+        else:
+            params["reasoning_effort"] = None
         self.assistant = self.client.beta.assistants.create(
-            model=self.model,
-            name=self.name,
-            description=self.description,
-            instructions=self.instructions,
-            tools=self.get_oai_tools(),
-            tool_resources=self.tool_resources,
-            metadata=self.metadata,
-            temperature=self.temperature,
-            top_p=self.top_p,
-            response_format=self.response_format,
+            **params
         )
 
         if self.assistant.tool_resources:
@@ -332,6 +341,12 @@ class Agent:
             "model": self.model,
         }
         params = {k: v for k, v in params.items() if v}
+        if self.model.startswith("o"):
+            params["temperature"] = None
+            params["top_p"] = None
+            params["reasoning_effort"] = os.getenv("REASONING_EFFORT") or "medium"
+        else:
+            params["reasoning_effort"] = None
         self.assistant = self.client.beta.assistants.update(
             self.id,
             **params,
@@ -686,14 +701,14 @@ class Agent:
                 print("Assistant tools:", assistant_tools)
             return False
 
-        if self.temperature != assistant_settings["temperature"]:
+        if self.temperature != assistant_settings["temperature"] and not self.model.startswith("o"):
             if debug:
                 print(
                     f"Temperature mismatch: {self.temperature} != {assistant_settings['temperature']}"
                 )
             return False
 
-        if self.top_p != assistant_settings["top_p"]:
+        if self.top_p != assistant_settings["top_p"] and not self.model.startswith("o"):
             if debug:
                 print(f"Top_p mismatch: {self.top_p} != {assistant_settings['top_p']}")
             return False

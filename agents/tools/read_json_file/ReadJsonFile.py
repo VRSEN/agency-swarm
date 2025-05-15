@@ -27,7 +27,7 @@ class ReadJsonFile(BaseTool):
             except:
                 print("context file is empty or read wrong")
                 existing_data = []
-        existing_data_str = json.dumps(existing_data)
+        existing_data_str = json.dumps(existing_data, ensure_ascii=False)
         if len(existing_data_str) > 20000:
             existing_data_str = existing_data_str[: 20000]
         return {"file_path": file_path, "file_content": existing_data_str}
