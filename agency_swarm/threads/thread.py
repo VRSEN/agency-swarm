@@ -4,6 +4,7 @@ import json
 import os
 import re
 import time
+from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Optional, Union
 
@@ -144,8 +145,9 @@ class Thread:
 
         # Determine the sender's name based on the agent type
         sender_name = "user" if isinstance(self.agent, User) else self.agent.name
+        now_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         print(
-            f"THREAD:[ {parameter if parameter else ''} {sender_name} -> {recipient_agent.name} ]: URL {self.thread_url}"
+            f"THREAD[{' ' + parameter if parameter else ''} {sender_name} -> {recipient_agent.name} {now_time} ]: {self.thread_url}"
         )
 
         # send message
@@ -378,6 +380,22 @@ class Thread:
                 raise Exception(
                     "OpenAI Run Incomplete. Details: ", self._run.incomplete_details
                 )
+            # expired, run again
+            elif self._run.status == "expired":
+                print("Run expired, running again...")
+                self.create_message(
+                    message="Continue.",
+                    role="user",
+                )
+
+                self._create_run(
+                    recipient_agent,
+                    additional_instructions,
+                    event_handler,
+                    tool_choice,
+                    response_format=response_format,
+                )
+                continue
             # return assistant message
             else:
                 message_obj = self._get_last_assistant_message()

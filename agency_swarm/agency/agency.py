@@ -1482,9 +1482,11 @@ class Agency:
         need_replan = False
         error_message = ""
         error_id = 0
-        while True: # 拆分出任务（事务）流程图，id2task
+        while True:
+            # 用户需求拆分task流程图，id2task
             # task_id = task_id + 1
             task_graph, tasks_need_scheduled = self.planning_layer(message=original_request, original_request=original_request, task_planner_thread=planner_thread, error_message=error_message, inspector_thread=inspector_thread, node_color='lightblue')
+            need_replan = False
             self._init_file(self.error_path)
             id2task = {}
             task_graph_json = json.loads(task_graph)
@@ -1492,22 +1494,25 @@ class Agency:
                 task = task_graph_json[key]
                 id2task[task['id']] = task
 
-            while True: # 任务调度
+            while True:
+                # task调度
                 tasks_scheduled = self.scheduling_layer(scheduler_thread=scheduler_thread, message=tasks_need_scheduled)
                 tasks_scheduled_json = json.loads(tasks_scheduled)
                 next_task_list = tasks_scheduled_json['next_tasks']
                 
-                if not next_task_list:   # 当任务全部完成，退出
+                if not next_task_list: # 当task全部完成，退出
                     return
 
-                for next_task_id in next_task_list: # 拆分出子任务（能力群相关）流程图，id2subtask
+                for next_task_id in next_task_list:
+                    # 一个task拆分出subtask（能力群相关）流程图，id2subtask
                     next_task = id2task[next_task_id]
                     subtask_input = {
                         "title": next_task['title'],
                         "description": next_task['description'],
                         "total_task_graph": task_graph_json,
                     }
-                    print(f"The task:\n{next_task['title']}\nneed to be planned...")
+                    console.rule()
+                    print(f"task planning: next task is task_{next_task_id}: {next_task['title']}")
                     subtask_graph, subtasks_need_scheduled = self.planning_layer(message=json.dumps(subtask_input, ensure_ascii=False), original_request=next_task['description'], task_planner_thread=subplanner_thread, inspector_thread=subtask_inspector_thread, node_color='lightgreen')
                     
                     id2subtask = {}
@@ -1516,22 +1521,24 @@ class Agency:
                         subtask = subtask_graph_json[key]
                         id2subtask[subtask['id']] = subtask
                     
-                    while True: # 子任务调度
+                    while True:
+                        # subtask调度
                         subtasks_scheduled = self.scheduling_layer(scheduler_thread=subtask_scheduler_thread, message=subtasks_need_scheduled)
                         subtasks_scheduled_json = json.loads(subtasks_scheduled)
                         next_subtask_list = subtasks_scheduled_json['next_subtasks']
                         
-                        if not next_subtask_list:    # 当子任务全部完成，退出
+                        if not next_subtask_list: # 当subtask全部完成，退出
                             break
 
-                        for next_subtask_id in next_subtask_list: # 拆分出步骤（能力相关）流程图，id2step
+                        for next_subtask_id in next_subtask_list:
+                            # 一个subtask拆分出step（能力相关）流程图，id2step
                             next_subtask = id2subtask[next_subtask_id]
                             steps_input = {
                                 "title": next_subtask['title'],
                                 "description": next_subtask['description'],
                                 "total_subtask_graph": subtask_graph_json,
                             }
-                            print(f"The subtask:\n{next_subtask['title']}\nneed to be planned...")
+                            print(f"task planning: next subtask is subtask_{next_task_id}: {next_subtask['title']}")
                             next_subtask_cap_group = next_subtask['capability_group']
                             if next_subtask_cap_group == "简单任务处理能力群":
                                 steps_input_simple = {
@@ -1554,19 +1561,21 @@ class Agency:
                                 step = steps_graph_json[key]
                                 id2step[step['id']] = step
 
-                            while True: # 步骤调度
+                            while True:
+                                # step调度
                                 steps_scheduled = self.scheduling_layer(scheduler_thread=cap_group_thread[next_subtask_cap_group][2], message=steps_need_scheduled)
                                 steps_scheduled_json = json.loads(steps_scheduled)
                                 next_step_list = steps_scheduled_json['next_steps']
                                 
-                                if not next_step_list:  # 当步骤全部完成，退出
+                                if not next_step_list:  # 当step全部完成，退出
                                     break
                                 
-                                for next_step_id in next_step_list: # 执行任务
+                                for next_step_id in next_step_list:
+                                    # 能力agent执行step
                                     next_step = id2step[next_step_id]
                                     result, new_context = self.capability_agents_processor(step=next_step, cap_group=next_subtask_cap_group, cap_agent_threads=cap_agent_threads)
                                     if result == 'SUCCESS':
-                                        # 更新已完成步骤和context
+                                        # 更新已完成step和context
                                         context_id = context_id + 1
                                         self.update_context(context_id=context_id, context=new_context, step=next_step)
                                         self.update_completed_step(step_id=next_step_id, step=next_step)
@@ -1579,7 +1588,11 @@ class Agency:
                                         break
                                 if need_replan == True:
                                     break
-                            # 如果step全都正常完成，更新已完成子任务
+                                # 本次step调度结束
+                            
+                            # 本subtask的所有step结束
+
+                            # 如果step全都正常完成，更新已完成subtask
                             self._init_file(self.completed_step_path)
                             if need_replan == False:
                                 self.update_completed_sub_task(next_subtask_id, next_subtask)
@@ -1587,7 +1600,11 @@ class Agency:
                                 break
                         if need_replan == True:
                             break
-                    # 如果子任务全都正常完成，更新已完成任务
+                        # 本次subtask调度结束
+                    
+                    # 本task的所有subtask结束
+
+                    # 如果subtask全都正常完成，更新已完成task
                     self._init_file(self.completed_subtask_path)
                     if need_replan == False:
                         self.update_completed_task(next_task_id, next_task)
@@ -1595,6 +1612,9 @@ class Agency:
                         break
                 if need_replan == True:
                     break
+                # 本次task调度结束
+            
+            # 本用户请求的所有task结束
                 
     
     def update_error(self, error_id: int, error: str, step: dict):
@@ -1618,7 +1638,7 @@ class Agency:
                 data = {}
         data["index_" + str(context_id)] = {
             "task_information": step,
-            "context_file_path": context
+            "context": context
         }
         with open(self.context_index_path, 'w') as file:
             json.dump(data, file, indent=4, ensure_ascii=False)
@@ -1673,8 +1693,8 @@ class Agency:
 
     def scheduling_layer(self, message: str, scheduler_thread: Thread):
         console.rule()
+        print(f"{scheduler_thread.recipient_agent.name} SCHEDULING...\n")
         schedulerres = self.json_get_completion(scheduler_thread, message)
-        print(f"{scheduler_thread.recipient_agent.name} SCHEDULING:\n" + schedulerres)
         return schedulerres
 
     def planning_layer(self, message: str, original_request:str, task_planner_thread: Thread, error_message: str = "", inspector_thread: Thread = None, node_color: str = 'lightblue'):
@@ -1682,8 +1702,8 @@ class Agency:
         console.rule()
         if error_message != "":
             message = message + "\nThe error that occurred in the previous plan: \n" + error_message
+        print(f"{task_planner_thread.recipient_agent.name} PLANNING...\n")
         planmessage = self.json_get_completion(task_planner_thread, message, original_request, inspector_thread)
-        print(f"{task_planner_thread.recipient_agent.name} RESULT:\n" + planmessage)
         planmessage_json = json.loads(planmessage)
         plan_json = {}
         plan_json['main_task'] = original_request
@@ -1737,7 +1757,7 @@ class Agency:
 
             # try to extract json from str
             _, result = self.get_json_from_str(message=response_information)
-            print(f"{result}")
+            print(f"THREAD output:\n{result}")
             if _ == False:
                 # found no json, try to get completion again
                 message = "用户原始输入为: \n\{" + original_message + "\}\n" + "你之前的回答是:\n\{" + result + "\}\n" + "你之前的回答用户评价为: \n" + "{Your output Format is Wrong.}"

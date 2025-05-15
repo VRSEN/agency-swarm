@@ -9,7 +9,7 @@ class ReadContextIndex(BaseTool):
     def run(self):
         agents_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
         index_path = os.path.join(agents_dir, "files", "context_index.json")
-        print(index_path)
+        print(f"ReadContextIndex: reading context_index.json")
         try:
             with open(index_path, 'r') as f:
                 existing_data = json.load(f)
