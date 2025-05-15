@@ -1512,7 +1512,7 @@ class Agency:
                         "total_task_graph": task_graph_json,
                     }
                     console.rule()
-                    print(f"task planning: next task is task_{next_task_id}: {next_task['title']}")
+                    print(f"task planning: next task is {next_task_id}: {next_task['title']}")
                     subtask_graph, subtasks_need_scheduled = self.planning_layer(message=json.dumps(subtask_input, ensure_ascii=False), original_request=next_task['description'], task_planner_thread=subplanner_thread, inspector_thread=subtask_inspector_thread, node_color='lightgreen')
                     
                     id2subtask = {}
@@ -1538,7 +1538,8 @@ class Agency:
                                 "description": next_subtask['description'],
                                 "total_subtask_graph": subtask_graph_json,
                             }
-                            print(f"task planning: next subtask is subtask_{next_task_id}: {next_subtask['title']}")
+                            console.rule()
+                            print(f"task planning: next subtask is {next_subtask_id}: {next_subtask['title']}")
                             next_subtask_cap_group = next_subtask['capability_group']
                             if next_subtask_cap_group == "简单任务处理能力群":
                                 steps_input_simple = {
@@ -1760,7 +1761,7 @@ class Agency:
             print(f"THREAD output:\n{result}")
             if _ == False:
                 # found no json, try to get completion again
-                message = "用户原始输入为: \n\{" + original_message + "\}\n" + "你之前的回答是:\n\{" + result + "\}\n" + "你之前的回答用户评价为: \n" + "{Your output Format is Wrong.}"
+                message = "用户原始输入为: \n```\n" + original_message + "\n```\n" + "你之前的回答是:\n```\n" + result + "\n```\n" + "你之前的回答用户评价为: \n```\n" + "Your output format is wrong." + "\n```\n"
                 continue
 
             if inspector_thread is not None:
@@ -1798,7 +1799,7 @@ class Agency:
                 
                 if __ == True:
                     return result
-                message = "用户原始输入为: \n\{" + original_message + "\}\n" + "你之前的回答是:\n\{" + result + "\}\n" + "你之前的回答用户评价为: \n" + inspector_result
+                message = "用户原始输入为: \n```\n" + original_message + "\n```\n" + "你之前的回答是:\n```\n" + result + "\n```\n" + "你之前的回答用户评价为: \n```\n" + inspector_result + "\n```\n"
                 continue
             
             return result
