@@ -245,4 +245,9 @@ def main():
     agency.task_planning(original_request=text, plan_agents=plan_agents, cap_group_agents=cap_group_agents, cap_agents=cap_agents)
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    finally: # 响铃
+        print('\a')
+        print('\a')
+        print('\a')
