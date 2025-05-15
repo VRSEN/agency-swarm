@@ -248,6 +248,11 @@ if __name__ == "__main__":
     try:
         main()
     finally: # 响铃
-        print('\a')
-        print('\a')
-        print('\a')
+        import winsound
+        import time
+        winsound.MessageBeep(winsound.MB_ICONEXCLAMATION)
+        time.sleep(1)
+        winsound.MessageBeep(winsound.MB_ICONEXCLAMATION)
+        time.sleep(1)
+        winsound.MessageBeep(winsound.MB_ICONEXCLAMATION)
+        time.sleep(1)
