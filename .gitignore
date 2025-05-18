@@ -168,3 +168,4 @@ test_agents/
 agents/files/
 .env.example
 log.txt
+log/

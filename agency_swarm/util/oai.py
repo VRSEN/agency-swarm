@@ -23,10 +23,11 @@ def get_openai_client():
                 )
             client = openai.OpenAI(
                 api_key=api_key,
-                base_url="https://api.zhec.moe/v1",
+                base_url="https://api2.zhec.moe/v1",
                 timeout=httpx.Timeout(600.0),
                 max_retries=10,
                 default_headers={"OpenAI-Beta": "assistants=v2"},
+                http_client=httpx.Client(proxy="http://127.0.0.1:7890")
             )
     return client
 

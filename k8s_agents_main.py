@@ -70,179 +70,220 @@ from agency_swarm import set_openai_key
 
 from dotenv import load_dotenv
 import os
+import sys
+import datetime
 
 load_dotenv()
 set_openai_key(os.getenv('OPENAI_API_KEY'))
 
 def main():
-    task_planner_instance = task_planner.create_agent()
-    scheduler_instance = scheduler.create_agent()
-    inspector_instance = inspector.create_agent()
-
-    subtask_planner_instance = subtask_planner.create_agent()
-    subtask_scheduler_instance = subtask_scheduler.create_agent()
-    subtask_inspector_instance = subtask_inspector.create_agent()
-
-    step_inspector_instance = step_inspector.create_agent()
-
-    pod_manage_planner_instance = pod_manage_planner.create_agent()
-    pod_manage_step_scheduler_instance = pod_manage_step_scheduler.create_agent()
-    pod_orchestration_scheduling_planner_instance = pod_orchestration_scheduling_planner.create_agent()
-    pod_orchestration_scheduling_step_scheduler_instance = pod_orchestration_scheduling_step_scheduler.create_agent()
-    config_manage_planner_instance = config_manage_planner.create_agent()
-    config_manage_step_scheduler_instance = config_manage_step_scheduler.create_agent()
-    storage_planner_instance = storage_planner.create_agent()
-    storage_step_scheduler_instance = storage_step_scheduler.create_agent()
-    monitor_planner_instance = monitor_planner.create_agent()
-    monitor_step_scheduler_instance = monitor_step_scheduler.create_agent()
-    software_manage_planner_instance = software_manage_planner.create_agent()
-    software_manage_step_scheduler_instance = software_manage_step_scheduler.create_agent()
-    pod_manage_agent_instance = pod_manage_agent.create_agent()
-    resource_grouping_agent_instance = resource_grouping_agent.create_agent()
+    # 添加日志功能：创建一个日志文件，用当前时间作为文件名
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_file_path = os.path.join("log", f"run_log_{timestamp}.txt")
     
-    stateful_workload_manage_agent_instance = stateful_workload_manage_agent.create_agent()
-    stateless_workload_manage_agent_instance = stateless_workload_manage_agent.create_agent()
-    task_manage_agent_instance = task_manage_agent.create_agent()
-    daemonSet_manage_agent_instance = daemonSet_manage_agent.create_agent()
-    affinity_antiAffinity_scheduling_agent_instance = affinity_antiAffinity_scheduling_agent.create_agent()
+    # 创建日志文件
+    log_file = open(log_file_path, 'w', encoding='utf-8', buffering=1)
     
-    env_config_manage_agent_instance = env_config_manage_agent.create_agent()
-    privacy_manage_agent_instance = privacy_manage_agent.create_agent()
+    # 创建自定义的输出类，同时将输出发送到文件和终端
+    class TeeOutput:
+        def __init__(self, file, terminal):
+            self.file = file
+            self.terminal = terminal
+            
+        def write(self, message):
+            self.terminal.write(message)
+            self.file.write(message)
+            
+        def flush(self):
+            self.terminal.flush()
+            self.file.flush()
+    
+    # 保存原始的stdout，并设置新的输出重定向
+    original_stdout = sys.stdout
+    sys.stdout = TeeOutput(log_file, original_stdout)
+    
+    try:
+        # 以下是日志功能更新前的代码
+        task_planner_instance = task_planner.create_agent()
+        scheduler_instance = scheduler.create_agent()
+        inspector_instance = inspector.create_agent()
 
-    monitor_configuration_agent_instance = monitor_configuration_agent.create_agent()
-    monitor_observe_agent_instance = monitor_observe_agent.create_agent()
+        subtask_planner_instance = subtask_planner.create_agent()
+        subtask_scheduler_instance = subtask_scheduler.create_agent()
+        subtask_inspector_instance = subtask_inspector.create_agent()
 
-    software_config_modify_agent_instance = software_config_modify_agent.create_agent()
-    software_install_agent_instance = software_install_agent.create_agent()
-    software_monitor_agent_instance = software_monitor_agent.create_agent()
+        step_inspector_instance = step_inspector.create_agent()
 
-    pv_agent_instance = pv_agent.create_agent()
-    pvc_agent_instance = pvc_agent.create_agent()
-    storageclass_agent_instance = storageclass_agent.create_agent()
-    csi_agent_instance = csi_agent.create_agent()
-    emptydir_agent_instance = emptydir_agent.create_agent()
-    hostpath_agent_instance = hostpath_agent.create_agent()
-    disk_agent_instance = disk_agent.create_agent()
-
-    check_log_agent_instance = check_log_agent.create_agent()
-
-    chat_graph = [
-        # task
-        task_planner_instance, scheduler_instance, inspector_instance,
-
-        # subtask
-        subtask_planner_instance, subtask_scheduler_instance, subtask_inspector_instance,
-
-        # step
-        step_inspector_instance,
+        pod_manage_planner_instance = pod_manage_planner.create_agent()
+        pod_manage_step_scheduler_instance = pod_manage_step_scheduler.create_agent()
+        pod_orchestration_scheduling_planner_instance = pod_orchestration_scheduling_planner.create_agent()
+        pod_orchestration_scheduling_step_scheduler_instance = pod_orchestration_scheduling_step_scheduler.create_agent()
+        config_manage_planner_instance = config_manage_planner.create_agent()
+        config_manage_step_scheduler_instance = config_manage_step_scheduler.create_agent()
+        storage_planner_instance = storage_planner.create_agent()
+        storage_step_scheduler_instance = storage_step_scheduler.create_agent()
+        monitor_planner_instance = monitor_planner.create_agent()
+        monitor_step_scheduler_instance = monitor_step_scheduler.create_agent()
+        software_manage_planner_instance = software_manage_planner.create_agent()
+        software_manage_step_scheduler_instance = software_manage_step_scheduler.create_agent()
+        pod_manage_agent_instance = pod_manage_agent.create_agent()
+        resource_grouping_agent_instance = resource_grouping_agent.create_agent()
         
-        # check log
-        check_log_agent_instance,
-
-        # 每个能力群的planner和step scheduler
-        pod_manage_planner_instance, pod_manage_step_scheduler_instance,
-        pod_orchestration_scheduling_planner_instance, pod_orchestration_scheduling_step_scheduler_instance,
-        config_manage_planner_instance, config_manage_step_scheduler_instance,
-        storage_planner_instance, storage_step_scheduler_instance,
-        monitor_planner_instance, monitor_step_scheduler_instance,
-        software_manage_planner_instance, software_manage_step_scheduler_instance,
-
-        # pod管理能力 agent
-        pod_manage_agent_instance,
-        resource_grouping_agent_instance,
+        stateful_workload_manage_agent_instance = stateful_workload_manage_agent.create_agent()
+        stateless_workload_manage_agent_instance = stateless_workload_manage_agent.create_agent()
+        task_manage_agent_instance = task_manage_agent.create_agent()
+        daemonSet_manage_agent_instance = daemonSet_manage_agent.create_agent()
+        affinity_antiAffinity_scheduling_agent_instance = affinity_antiAffinity_scheduling_agent.create_agent()
         
-        # pod编排调度能力 agent
-        stateful_workload_manage_agent_instance,
-        stateless_workload_manage_agent_instance,
-        task_manage_agent_instance,
-        daemonSet_manage_agent_instance,
-        affinity_antiAffinity_scheduling_agent_instance,
-        
-        # 配置管理能力 agent
-        env_config_manage_agent_instance,
-        privacy_manage_agent_instance,
+        env_config_manage_agent_instance = env_config_manage_agent.create_agent()
+        privacy_manage_agent_instance = privacy_manage_agent.create_agent()
 
-        # 存储能力 agent
-        pv_agent_instance,
-        pvc_agent_instance,
-        storageclass_agent_instance,
-        csi_agent_instance,
-        emptydir_agent_instance,
-        hostpath_agent_instance,
-        disk_agent_instance,
+        monitor_configuration_agent_instance = monitor_configuration_agent.create_agent()
+        monitor_observe_agent_instance = monitor_observe_agent.create_agent()
 
-        # 监控能力 agent
-        monitor_configuration_agent_instance,
-        monitor_observe_agent_instance,
+        software_config_modify_agent_instance = software_config_modify_agent.create_agent()
+        software_install_agent_instance = software_install_agent.create_agent()
+        software_monitor_agent_instance = software_monitor_agent.create_agent()
 
-        # 软件管理能力 agent
-        software_config_modify_agent_instance,
-        software_install_agent_instance,
-        software_monitor_agent_instance
-    ]
+        pv_agent_instance = pv_agent.create_agent()
+        pvc_agent_instance = pvc_agent.create_agent()
+        storageclass_agent_instance = storageclass_agent.create_agent()
+        csi_agent_instance = csi_agent.create_agent()
+        emptydir_agent_instance = emptydir_agent.create_agent()
+        hostpath_agent_instance = hostpath_agent.create_agent()
+        disk_agent_instance = disk_agent.create_agent()
 
-    thread_strategy = {
-        "always_new": [
-            (ExecuteCommand, check_log_agent),
+        check_log_agent_instance = check_log_agent.create_agent()
+
+        chat_graph = [
+            # task
+            task_planner_instance, scheduler_instance, inspector_instance,
+
+            # subtask
+            subtask_planner_instance, subtask_scheduler_instance, subtask_inspector_instance,
+
+            # step
+            step_inspector_instance,
+            
+            # check log
+            check_log_agent_instance,
+
+            # 每个能力群的planner和step scheduler
+            pod_manage_planner_instance, pod_manage_step_scheduler_instance,
+            pod_orchestration_scheduling_planner_instance, pod_orchestration_scheduling_step_scheduler_instance,
+            config_manage_planner_instance, config_manage_step_scheduler_instance,
+            storage_planner_instance, storage_step_scheduler_instance,
+            monitor_planner_instance, monitor_step_scheduler_instance,
+            software_manage_planner_instance, software_manage_step_scheduler_instance,
+
+            # pod管理能力 agent
+            pod_manage_agent_instance,
+            resource_grouping_agent_instance,
+            
+            # pod编排调度能力 agent
+            stateful_workload_manage_agent_instance,
+            stateless_workload_manage_agent_instance,
+            task_manage_agent_instance,
+            daemonSet_manage_agent_instance,
+            affinity_antiAffinity_scheduling_agent_instance,
+            
+            # 配置管理能力 agent
+            env_config_manage_agent_instance,
+            privacy_manage_agent_instance,
+
+            # 存储能力 agent
+            pv_agent_instance,
+            pvc_agent_instance,
+            storageclass_agent_instance,
+            csi_agent_instance,
+            emptydir_agent_instance,
+            hostpath_agent_instance,
+            disk_agent_instance,
+
+            # 监控能力 agent
+            monitor_configuration_agent_instance,
+            monitor_observe_agent_instance,
+
+            # 软件管理能力 agent
+            software_config_modify_agent_instance,
+            software_install_agent_instance,
+            software_monitor_agent_instance
         ]
-    }
 
-    agency = Agency(agency_chart=chat_graph,
-                    thread_strategy=thread_strategy,
-                    temperature=0.5,
-                    max_prompt_tokens=25000,)
+        thread_strategy = {
+            "always_new": [
+                (ExecuteCommand, check_log_agent),
+            ]
+        }
 
-    plan_agents = {
-        "task_planner": task_planner_instance,
-        "inspector": inspector_instance,
-        "scheduler": scheduler_instance,
-        "subtask_planner": subtask_planner_instance,
-        "subtask_scheduler": subtask_scheduler_instance,
-        "subtask_inspector": subtask_inspector_instance,
-        "step_inspector": step_inspector_instance
-    }
+        agency = Agency(agency_chart=chat_graph,
+                        thread_strategy=thread_strategy,
+                        temperature=0.5,
+                        max_prompt_tokens=25000,)
 
-    cap_group_agents = {
-        "pod管理能力群": [pod_manage_planner_instance, None, pod_manage_step_scheduler_instance],
-        "pod编排调度能力群": [pod_orchestration_scheduling_planner_instance, None, pod_orchestration_scheduling_step_scheduler_instance],
-        "配置管理能力群": [config_manage_planner_instance, None, config_manage_step_scheduler_instance],
-        "存储能力群": [storage_planner_instance, None, storage_step_scheduler_instance],
-        "监控能力群": [monitor_planner_instance, None,monitor_step_scheduler_instance],
-        "软件管理能力群": [software_manage_planner_instance, None, software_manage_step_scheduler_instance],
-    }
+        plan_agents = {
+            "task_planner": task_planner_instance,
+            "inspector": inspector_instance,
+            "scheduler": scheduler_instance,
+            "subtask_planner": subtask_planner_instance,
+            "subtask_scheduler": subtask_scheduler_instance,
+            "subtask_inspector": subtask_inspector_instance,
+            "step_inspector": step_inspector_instance
+        }
 
-    cap_agents = {
-        "pod管理能力群": [pod_manage_agent_instance, resource_grouping_agent_instance,],
-        "pod编排调度能力群": [stateful_workload_manage_agent_instance, stateless_workload_manage_agent_instance, task_manage_agent_instance, daemonSet_manage_agent_instance, affinity_antiAffinity_scheduling_agent_instance],
-        "配置管理能力群": [env_config_manage_agent_instance, privacy_manage_agent_instance],
-        "监控能力群": [monitor_configuration_agent_instance, monitor_observe_agent_instance],
-        "软件管理能力群": [software_config_modify_agent_instance, software_install_agent_instance, software_monitor_agent_instance],
-        "存储能力群": [pv_agent_instance, pvc_agent_instance, storageclass_agent_instance, csi_agent_instance, emptydir_agent_instance, hostpath_agent_instance, disk_agent_instance,],
-    }
+        cap_group_agents = {
+            "pod管理能力群": [pod_manage_planner_instance, None, pod_manage_step_scheduler_instance],
+            "pod编排调度能力群": [pod_orchestration_scheduling_planner_instance, None, pod_orchestration_scheduling_step_scheduler_instance],
+            "配置管理能力群": [config_manage_planner_instance, None, config_manage_step_scheduler_instance],
+            "存储能力群": [storage_planner_instance, None, storage_step_scheduler_instance],
+            "监控能力群": [monitor_planner_instance, None,monitor_step_scheduler_instance],
+            "软件管理能力群": [software_manage_planner_instance, None, software_manage_step_scheduler_instance],
+        }
 
-    # step_json = {
-    #     "title": "创建节点",
-    #     "id": "step_1",
-    #     "agent": ["NODE_lifecycle_agent"],
-    #     "description": "在cn-north-4a可用区中，名为ccetest的CCE集群中创建一个节点，节点名字为node-1，集群id为eeb8f029-1c4b-11f0-a423-0255ac100260，节点规格为c6.large.2，系统盘和数据盘大小分别为50GB和100GB，磁盘类型都为SSD，节点通过密码方式登录，用户名为'root', 密码为'JDYkc2FsdCR1SzEzUEgvMy9rOHZRQ0UzRFBEVzFiZm1UMmVZSnFEQjMydzFxOVY5WUt3M2ZmR0JTZWN1N2ZNZlkzYmY5Z2ZDNlJlTHp6NGl3anc3WHM5RDFUcmNuLg=='",
-    #     "dep": []
-    # }
-    # perpared = {
-    #     "cap_group": "节点管理能力群",
-    #     "step": step_json
-    # }
-    # agency.test_single_cap_agent(plan_agents=plan_agents, cap_group_agents=cap_group_agents, cap_agents=cap_agents, **perpared)
+        cap_agents = {
+            "pod管理能力群": [pod_manage_agent_instance, resource_grouping_agent_instance,],
+            "pod编排调度能力群": [stateful_workload_manage_agent_instance, stateless_workload_manage_agent_instance, task_manage_agent_instance, daemonSet_manage_agent_instance, affinity_antiAffinity_scheduling_agent_instance],
+            "配置管理能力群": [env_config_manage_agent_instance, privacy_manage_agent_instance],
+            "监控能力群": [monitor_configuration_agent_instance, monitor_observe_agent_instance],
+            "软件管理能力群": [software_config_modify_agent_instance, software_install_agent_instance, software_monitor_agent_instance],
+            "存储能力群": [pv_agent_instance, pvc_agent_instance, storageclass_agent_instance, csi_agent_instance, emptydir_agent_instance, hostpath_agent_instance, disk_agent_instance,],
+        }
 
-    # text = "在cn-north-4a可用区中，名为ccetest的CCE集群中加入一个节点，节点名字为node-1，集群id为eeb8f029-1c4b-11f0-a423-0255ac100260，节点规格为c6.large.2，系统盘和数据盘大小分别为50GB和100GB，磁盘类型都为SSD"
-    # text = "在cn-north-4a可用区创建一个名为ccetest的CCE集群，最小规格；未创建vpc和子网，需要创建名为vpc111的vpc和名为subnet111的子网，vpc的cidr为192.168.0.0/24，网关ip为192.168.0.1; 之后你需要在该CCE集群中加入三个节点"
-    # text = "在北京cn-north-4a可用区创建一个最低规格的CCE，名为'ccetest'，已有vpc和子网，VPC id为8bf558f4-2f96-4248-9cb0-fee7a2a6cebb，子网id为0519a325-6fa3-4f68-83ec-6f13263167d2"
-    # text = "创建一个8核32g的ECS，操作系统选择为Ubuntu 20.04。"
-    # text = "在北京可用区创建三个ecs，之后删除创建时间超过5分钟的ecs"
-    # text = "在华为云ecs上部署mysql和postgresql，并用sysbench测试它们的性能"
-    # text = input("👤 USER: ")
-    text = "我需要在k8s集群上使用StatefulSet部署一个3节点MySQL集群，MySQL版本为8.0.34，包括一个主节点两个从节点，使用华为云的持久化存储卷EVS进行存储，每个节点分配10GB的存储空间。"
+        # step_json = {
+        #     "title": "创建节点",
+        #     "id": "step_1",
+        #     "agent": ["NODE_lifecycle_agent"],
+        #     "description": "在cn-north-4a可用区中，名为ccetest的CCE集群中创建一个节点，节点名字为node-1，集群id为eeb8f029-1c4b-11f0-a423-0255ac100260，节点规格为c6.large.2，系统盘和数据盘大小分别为50GB和100GB，磁盘类型都为SSD，节点通过密码方式登录，用户名为'root', 密码为'JDYkc2FsdCR1SzEzUEgvMy9rOHZRQ0UzRFBEVzFiZm1UMmVZSnFEQjMydzFxOVY5WUt3M2ZmR0JTZWN1N2ZNZlkzYmY5Z2ZDNlJlTHp6NGl3anc3WHM5RDFUcmNuLg=='",
+        #     "dep": []
+        # }
+        # perpared = {
+        #     "cap_group": "节点管理能力群",
+        #     "step": step_json
+        # }
+        # agency.test_single_cap_agent(plan_agents=plan_agents, cap_group_agents=cap_group_agents, cap_agents=cap_agents, **perpared)
 
-    agency.task_planning(original_request=text, plan_agents=plan_agents, cap_group_agents=cap_group_agents, cap_agents=cap_agents)
+        # text = "在cn-north-4a可用区中，名为ccetest的CCE集群中加入一个节点，节点名字为node-1，集群id为eeb8f029-1c4b-11f0-a423-0255ac100260，节点规格为c6.large.2，系统盘和数据盘大小分别为50GB和100GB，磁盘类型都为SSD"
+        # text = "在cn-north-4a可用区创建一个名为ccetest的CCE集群，最小规格；未创建vpc和子网，需要创建名为vpc111的vpc和名为subnet111的子网，vpc的cidr为192.168.0.0/24，网关ip为192.168.0.1; 之后你需要在该CCE集群中加入三个节点"
+        # text = "在北京cn-north-4a可用区创建一个最低规格的CCE，名为'ccetest'，已有vpc和子网，VPC id为8bf558f4-2f96-4248-9cb0-fee7a2a6cebb，子网id为0519a325-6fa3-4f68-83ec-6f13263167d2"
+        # text = "创建一个8核32g的ECS，操作系统选择为Ubuntu 20.04。"
+        # text = "在北京可用区创建三个ecs，之后删除创建时间超过5分钟的ecs"
+        # text = "在华为云ecs上部署mysql和postgresql，并用sysbench测试它们的性能"
+        # text = input("👤 USER: ")
+        text = """我需要创建一个新的SFS文件系统，并通过CSI驱动的方式将其挂载到集群中的MySQL Pod`mysql-pod`上，挂载路径为`/data/mysql`。SFS的配置如下：
+
+                - 容量：100 GiB
+                - 区域：`cn-north-4a` （与MySQL Pod相同）
+                - 访问模式：ReadWriteMany (RWX)
+                - 性能等级：`Standard`
+                - 协议：NFS"""
+        
+        agency.task_planning(original_request=text, plan_agents=plan_agents, cap_group_agents=cap_group_agents, cap_agents=cap_agents)
+    
+    finally:
+        # 关闭日志文件和恢复标准输出
+        sys.stdout = original_stdout
+        log_file.close()
+        print(f"日志已保存到：{log_file_path}")
 
 if __name__ == "__main__":
     try:
