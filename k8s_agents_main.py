@@ -269,13 +269,7 @@ def main():
         # text = "在北京可用区创建三个ecs，之后删除创建时间超过5分钟的ecs"
         # text = "在华为云ecs上部署mysql和postgresql，并用sysbench测试它们的性能"
         # text = input("👤 USER: ")
-        text = """我需要创建一个新的SFS文件系统，并通过CSI驱动的方式将其挂载到集群中的MySQL Pod`mysql-pod`上，挂载路径为`/data/mysql`。SFS的配置如下：
-
-                - 容量：100 GiB
-                - 区域：`cn-north-4a` （与MySQL Pod相同）
-                - 访问模式：ReadWriteMany (RWX)
-                - 性能等级：`Standard`
-                - 协议：NFS"""
+        text ="""WARN: [K8s] Container CPU throttled - usage: 850m, limit: 1000m"""
         
         agency.task_planning(original_request=text, plan_agents=plan_agents, cap_group_agents=cap_group_agents, cap_agents=cap_agents)
     
