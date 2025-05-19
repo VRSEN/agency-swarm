@@ -1,4 +1,4 @@
-datamodel-code-generator==0.28.5
+datamodel-code-generator==0.30.1
 deepdiff==6.7.1
 docstring_parser==0.16
 jsonref==1.1.0
