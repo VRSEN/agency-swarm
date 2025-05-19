@@ -472,4 +472,4 @@ async def test_mcp_sse():
 
 
 if __name__ == "__main__":
-    pytest.main(["-k", "test_mcp_filesystem", "-s"])
+    pytest.main()
