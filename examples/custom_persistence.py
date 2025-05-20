@@ -9,9 +9,12 @@ import tempfile
 import uuid
 from pathlib import Path
 from typing import Any
+from dotenv import load_dotenv
+
+load_dotenv()   
 
 # Configure basic logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(level=logging.ERROR, format="%(asctime)s - %(levelname)s - %(message)s")
 
 script_dir = Path(__file__).parent
 project_root = script_dir.parent.parent
@@ -166,7 +169,7 @@ async def run_persistent_conversation():
 
         # --- Turn 2 (Using reloaded agency and original chat_id) ---
         print("\n--- Turn 2: User -> Agent1 -> Agent2 (using Reloaded Agency) ---")
-        user_message_2 = "Agent2, now please say 'Continuing conversation'."
+        user_message_2 = "Agent2, please repeat your last sentence."
         print(f"User message to Agent1: '{user_message_2}' (Chat ID: {chat_id})")
         response2 = await reloaded_agency.get_response(
             recipient_agent=agent1,  # Still send to the entry point
@@ -199,6 +202,22 @@ async def run_persistent_conversation():
         # Clean up temporary directory
         shutil.rmtree(PERSISTENCE_DIR)
         print("\nExample finished. Temporary files cleaned up.")
+
+async def check_persistence():
+    chat_id = f"chat_{uuid.uuid4()}"
+    response1 = await agency.get_response(
+            recipient_agent=agent1,  # Send to the entry point agent
+            message="what's 2+5?",
+            chat_id=chat_id,  # Use generated chat_id
+        )
+    print(response1)
+
+    response2 = await agency.get_response(
+            recipient_agent=agent2,  # Send to the entry point agent
+            message="Add 2 to your previous answer",
+            chat_id=chat_id,  # Use generated chat_id
+        )
+    print(response2)
 
 
 # --- Main Execution ---

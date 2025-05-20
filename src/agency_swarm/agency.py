@@ -60,6 +60,7 @@ class Agency:
         *entry_points_args: Agent,
         communication_flows: list[tuple[Agent, Agent]] | None = None,
         agency_chart: AgencyChart | None = None,
+        name: str | None = None,
         shared_instructions: str | None = None,
         load_callback: ThreadLoadCallback | None = None,
         save_callback: ThreadSaveCallback | None = None,
@@ -210,6 +211,7 @@ class Agency:
             logger.warning(f"Unknown parameter '{key}' passed to Agency constructor.")
 
         # --- Assign Core Attributes ---
+        self.name = name
         self.shared_instructions = shared_instructions
         self.user_context = user_context or {}
 
@@ -506,6 +508,13 @@ class Agency:
             return agent_instance
         else:
             raise TypeError("recipient_agent must be an Agent instance or agent name string.")
+        
+    def run_fastapi(self, host: str = "0.0.0.0", port: int = 8000, app_token_env: str = "APP_TOKEN"):
+        """
+        Launch a FastAPI server exposing the agency's completion and streaming endpoints using the shared integrations.fastapi.run_fastapi utility.
+        """
+        from agency_swarm.integrations.fastapi import run_fastapi
+        run_fastapi(agencies=[self], host=host, port=port, app_token_env=app_token_env)
 
     # --- Deprecated Methods ---
     async def get_completion(

@@ -796,8 +796,6 @@ class Agent(BaseAgent[MasterContext]):
             # yield {"type": "error", "content": f"Error preparing context/hooks: {e}"}
             # return
 
-        print("Thread items:", thread.items)
-
         # Execute via Runner stream
         final_result_items = []  # To capture items for potential post-processing
         try:
