@@ -1,5 +1,7 @@
 import os
 from typing import List, Optional, Dict, Type
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import asynccontextmanager
 
 from agency_swarm.agents import Agent
 from agency_swarm.agency import Agency
@@ -49,8 +51,29 @@ def run_fastapi(
         print(f"Warning: {app_token_env} is not set. Authentication will be disabled.")
     verify_token = get_verify_token(app_token)
 
-    app = FastAPI()
+    @asynccontextmanager
+    async def lifespan(app):
+        # Startup logic
+        global _EXECUTOR
+        from .fastapi_utils.endpoint_handlers import _MAX_WORKERS, _EXECUTOR
+        if _EXECUTOR is None:
+            print("Initializing ThreadPoolExecutor in FastAPI startup event")
+            _EXECUTOR = ThreadPoolExecutor(max_workers=_MAX_WORKERS)
+        else:
+            print("ThreadPoolExecutor already initialized")
+        try:
+            yield
+        finally:
+            # Shutdown logic
+            if _EXECUTOR is not None:
+                print("Shutting down ThreadPoolExecutor in FastAPI shutdown event")
+                _EXECUTOR.shutdown(wait=False, cancel_futures=True)
+                _EXECUTOR = None
+            else:
+                print("No ThreadPoolExecutor to shut down")
 
+    app = FastAPI(lifespan=lifespan)
+    
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],

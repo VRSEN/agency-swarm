@@ -1,6 +1,6 @@
 import os
 import json
-from typing import Any
+from typing import Any, Optional
 from concurrent.futures import ThreadPoolExecutor, Future
 
 import anyio
@@ -24,7 +24,16 @@ except ImportError:  # pragma: no cover – fallback path
 
 _n_cpus = os.cpu_count() or 1
 _MAX_WORKERS = max(1, int(os.getenv("STREAM_THREAD_POOL_SIZE", _n_cpus * 4)))
-_EXECUTOR: ThreadPoolExecutor = ThreadPoolExecutor(max_workers=_MAX_WORKERS)
+_EXECUTOR: Optional[ThreadPoolExecutor] = None
+
+def get_executor() -> ThreadPoolExecutor:
+    """Get the thread pool executor, ensuring it has been initialized."""
+    global _EXECUTOR
+    if _EXECUTOR is None:
+        # Fallback initialization if not created by FastAPI lifecycle hooks
+        print("WARNING: ThreadPoolExecutor not initialized by FastAPI lifecycle hooks. Creating now.")
+        _EXECUTOR = ThreadPoolExecutor(max_workers=_MAX_WORKERS)
+    return _EXECUTOR
 
 def get_verify_token(app_token):
     auto_error = app_token is not None and app_token != ""
@@ -104,7 +113,7 @@ def make_stream_endpoint(request_model, current_agency, verify_token):
                 _threadsafe_send({"error": str(exc)})
                 raise
 
-        worker: Future = _EXECUTOR.submit(run_completion)
+        worker: Future = get_executor().submit(run_completion)
 
         # ---------- Async generator consumed by StreamingResponse ----------
         async def generate_response():
@@ -160,4 +169,3 @@ async def exception_handler(request, exc):
     if isinstance(exc, tuple):
         error_message = str(exc[1]) if len(exc) > 1 else str(exc[0])
     return JSONResponse(status_code=500, content={"error": error_message})
-
