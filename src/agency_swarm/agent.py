@@ -1,3 +1,4 @@
+import asyncio
 import inspect
 import json
 import logging
@@ -29,11 +30,14 @@ from agents.items import (
 )
 from agents.run import DEFAULT_MAX_TURNS
 from agents.stream_events import RunItemStreamEvent
+from agents.strict_schema import ensure_strict_json_schema
+from agents.tool import FunctionTool
 from openai import AsyncOpenAI, NotFoundError
 from openai.types.responses import ResponseFunctionToolCall
 
 from .context import MasterContext
 from .thread import ThreadManager
+from .tools import BaseTool
 from .tools.send_message import SendMessage
 
 logger = logging.getLogger(__name__)
@@ -215,6 +219,17 @@ class Agent(BaseAgent[MasterContext]):
                 stacklevel=2,
             )
             deprecated_args_used["refresh_from_id"] = kwargs.pop("refresh_from_id")
+
+        if "tools" in kwargs:
+            tools_list = kwargs["tools"]
+            for i, tool in enumerate(tools_list):
+                if isinstance(tool, type) and issubclass(tool, BaseTool):
+                    warnings.warn(
+                        "'BaseTool' class is deprecated. Consider switching to FunctionTool.",
+                        DeprecationWarning,
+                        stacklevel=2,
+                    )
+                    tools_list[i] = self._adapt_legacy_tool(tool)
 
         # Log if any deprecated args were used
         if deprecated_args_used:
@@ -959,3 +974,55 @@ class Agent(BaseAgent[MasterContext]):
         if not hasattr(agency, "agents"):
             raise TypeError("Provided agency instance must have an 'agents' dictionary.")
         self._agency_instance = agency
+
+    def _adapt_legacy_tool(self, legacy_tool: type[BaseTool]):
+        """
+        Adapts a legacy BaseTool (class-based) to a FunctionTool (function-based).
+        Args:
+            legacy_tool: A class inheriting from BaseTool.
+        Returns:
+            A FunctionTool instance.
+        """
+        name = legacy_tool.__name__
+        description = legacy_tool.__doc__ or ""
+        if bool(getattr(legacy_tool, '__abstractmethods__', set())):
+            raise TypeError(f"Legacy tool '{name}' must implement all abstract methods.")
+        if description == "":
+            logger.warning(f"Warning: Tool {name} has no docstring.")
+        # Use the Pydantic model schema for parameters
+        params_json_schema = legacy_tool.model_json_schema()
+        if legacy_tool.ToolConfig.strict:
+            params_json_schema = ensure_strict_json_schema(params_json_schema)
+        # Remove title/description at the top level, keep only in properties
+        params_json_schema = {
+            k: v for k, v in params_json_schema.items() if k not in ("title", "description")
+        }
+        params_json_schema["additionalProperties"] = False
+
+        # The on_invoke_tool function
+        async def on_invoke_tool(ctx, input_json: str):
+            # Parse input_json to dict
+            import json
+            try:
+                args = json.loads(input_json) if input_json else {}
+            except Exception as e:
+                return f"Error: Invalid JSON input: {e}"
+            try:
+                # Instantiate the legacy tool with args
+                tool_instance = legacy_tool(**args)
+                if inspect.iscoroutinefunction(tool_instance.run):
+                    result = await tool_instance.run()
+                else:
+                    # Always run sync run() in a thread for async compatibility
+                    result = await asyncio.to_thread(tool_instance.run)
+                return str(result)
+            except Exception as e:
+                return f"Error running legacy tool: {e}"
+
+        return FunctionTool(
+            name=name,
+            description=description.strip(),
+            params_json_schema=params_json_schema,
+            on_invoke_tool=on_invoke_tool,
+            strict_json_schema=legacy_tool.ToolConfig.strict,
+        )

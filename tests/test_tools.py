@@ -3,8 +3,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from agents import RunContextWrapper, RunResult
+from pydantic import Field
 
-from agency_swarm import Agent
+from agency_swarm import Agent, BaseTool
 from agency_swarm.context import MasterContext
 from agency_swarm.thread import ThreadManager
 from agency_swarm.tools.send_message import SendMessage
@@ -82,6 +83,22 @@ def specific_send_message_tool(mock_sender_agent, mock_recipient_agent):
         sender_agent=mock_sender_agent,
         recipient_agent=mock_recipient_agent,
     )
+
+@pytest.fixture
+def legacy_tool():
+    # Create a class that inherits from BaseTool
+    class TestTool(BaseTool):
+        input: str = Field(description="The input to the tool")
+
+        class ToolConfig:
+            strict = True
+
+        def run(self):
+            print(f"Running TestTool with input: {self.input}")
+            return self.input
+
+    return TestTool
+
 
 
 # --- Test Cases ---
@@ -215,6 +232,19 @@ async def test_send_message_target_agent_error(specific_send_message_tool, mock_
 
     assert result == expected_error_message
     mock_module_logger.error.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_legacy_tool(legacy_tool):
+    """
+    Test that a legacy BaseTool can be used via the on_invoke_tool method of the adapted FunctionTool.
+    """
+    from agency_swarm.agent import Agent
+    agent = Agent(name="test", instructions="test")
+    function_tool = agent._adapt_legacy_tool(legacy_tool)
+    input_json = '{"input": "hello"}'
+    result = await function_tool.on_invoke_tool(None, input_json)
+    assert result == "hello"
 
 
 # TODO: Add tests for response validation aspects
