@@ -1,34 +1,4 @@
-from setuptools import find_packages, setup
+from setuptools import setup
 
-# Read the contents of your requirements file
-with open("requirements.txt") as f:
-    requirements = f.read().splitlines()
-
-setup(
-    name="agency-swarm",
-    version="0.5.1",
-    author="VRSEN",
-    author_email="me@vrsen.ai",
-    description="An opensource agent orchestration framework built on top of the latest OpenAI Assistants API.",
-    long_description=open("README.md", encoding="utf-8").read(),
-    long_description_content_type="text/markdown",
-    url="https://github.com/VRSEN/agency-swarm",
-    packages=find_packages(exclude=["tests", "tests.*"]),
-    install_requires=requirements,
-    extras_require={
-        "fastapi": [
-            "fastapi>=0.115.0",
-            "uvicorn[standard]>=0.34.0",
-            "anyio>=4.9.0"
-        ]
-    },
-    classifiers=[
-        "Intended Audience :: Developers",
-        "Topic :: Software Development :: Build Tools",
-        "License :: OSI Approved :: MIT License",
-    ],
-    entry_points={
-        "console_scripts": ["agency-swarm=agency_swarm.cli:main"],
-    },
-    python_requires=">=3.10",
-)
+# All configuration is now in pyproject.toml
+setup()

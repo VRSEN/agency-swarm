@@ -3,38 +3,30 @@ Each agent or tool you add to Agency Swarm will automatically be available for i
 
 This document provides guidelines for contributing new agents and tools to the framework.
 
-## Setting Up Your Development Environment
+## Prerequisites
 
-To contribute to Agency Swarm, you'll need to set up your local development environment:
+- Python 3.10 or higher
+- Pip
+- Git
 
-1. **Clone the Repository**
+## Setup
 
+1. Clone the repository:
    ```bash
    git clone https://github.com/VRSEN/agency-swarm.git
    cd agency-swarm
    ```
-
-2. **Create a Virtual Environment**
-
-   Create and activate a virtual environment:
-
+2. Create and activate a virtual environment (recommended):
    ```bash
-   python3 -m venv venv
-   source venv/bin/activate  # On Windows use `venv\Scripts\activate`
+   python -m venv .venv
+   source .venv/bin/activate  # On Windows use `.venv\Scripts\activate`
+   ```
+3. Install dependencies including development tools:
+   ```bash
+   pip install -e ".[dev]"
    ```
 
-3. **Install Dependencies**
-
-   Install the required packages:
-
-   ```bash
-   pip install -r requirements-dev.txt
-   ```
-
-4. **Install Pre-Commit Hooks**
-
-   Install pre-commit hooks for code quality checks:
-
+4. Install Pre-Commit Hooks:
    ```bash
    pip install pre-commit
    pre-commit install
@@ -42,23 +34,17 @@ To contribute to Agency Swarm, you'll need to set up your local development envi
 
 ## Running Tests
 
-Ensure all tests pass before submitting your changes:
+To ensure your changes haven't broken existing functionality, please run the test suite. First, make sure you have installed the development dependencies:
 
-1. **Install Test Dependencies**
+```bash
+pip install -e ".[dev]"
+```
 
-   Install test dependencies:
+Then, run pytest from the root directory:
 
-   ```bash
-   pip install -r requirements-dev.txt
-   ```
-
-2. **Run Tests**
-
-   Run the test suite:
-
-   ```bash
-   pytest
-   ```
+```bash
+pytest
+```
 
 3. **Check Test Coverage**
 
@@ -101,7 +87,7 @@ Thank you for contributing to Agency Swarm! Your efforts help us build a more ro
    If there are any additional test dependencies, install them:
 
    ```bash
-   pip install -r requirements-dev.txt
+   pip install -e ".[dev]"
    ```
 
 2. **Run Tests with Pytest**
@@ -156,5 +142,75 @@ class AgentName(Agent):
 ```
 
 ---
+
+Thank you for contributing to Agency Swarm! Your efforts help us build a more robust and versatile framework.
+
+## Code Style and Linting
+
+This project uses `ruff` for linting and code formatting. Configuration for this tool can be found in `pyproject.toml`.
+
+### Formatting and Linting Code
+
+Before committing your changes, please check and fix linting errors:
+
+```bash
+ruff check . --fix
+```
+
+It's recommended to install these tools in your development environment. If you followed the setup instructions, they should already be installed via:
+
+```bash
+pip install -e ".[dev]"
+```
+
+## Submitting Pull Requests
+
+To submit a pull request, please follow these steps:
+
+1. **Fork the Repository**
+
+   Fork the repository to your GitHub account.
+
+2. **Clone the Forked Repository**
+
+   Clone the forked repository to your local machine:
+
+   ```bash
+   git clone https://github.com/your-username/agency-swarm.git
+   cd agency-swarm
+   ```
+
+3. **Create a New Branch**
+
+   Create a new branch for your changes:
+
+   ```bash
+   git checkout -b feature-new-tool
+   ```
+
+4. **Make Your Changes**
+
+   Make the necessary changes to the code.
+
+5. **Commit Your Changes**
+
+   Commit your changes with a meaningful commit message:
+
+   ```bash
+   git add .
+   git commit -m "Added new tool: YourNewTool"
+   ```
+
+6. **Push Your Changes**
+
+   Push your changes to your forked repository:
+
+   ```bash
+   git push origin feature-new-tool
+   ```
+
+7. **Create a Pull Request**
+
+   Go to your forked repository on GitHub and click on "Pull requests". Click on "New pull request" and follow the instructions to create a pull request.
 
 Thank you for contributing to Agency Swarm! Your efforts help us build a more robust and versatile framework.
