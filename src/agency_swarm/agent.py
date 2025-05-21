@@ -367,7 +367,7 @@ class Agent(BaseAgent[MasterContext]):
                 f_path = schemas_folder
 
                 if not os.path.isdir(f_path):
-                    f_path = os.path.join(self.get_class_folder_path(), schemas_folder)
+                    f_path = os.path.join(self._get_class_folder_path(), schemas_folder)
                     f_path = os.path.normpath(f_path)
 
                 if os.path.isdir(f_path):
@@ -1092,3 +1092,15 @@ class Agent(BaseAgent[MasterContext]):
             on_invoke_tool=on_invoke_tool,
             strict_json_schema=legacy_tool.ToolConfig.strict,
         )
+
+    def _get_class_folder_path(self):
+        try:
+            # First, try to use the __file__ attribute of the module
+            return os.path.abspath(os.path.dirname(self.__module__.__file__))
+        except (TypeError, OSError, AttributeError) as e:
+            # If that fails, fall back to inspect
+            try:
+                class_file = inspect.getfile(self.__class__)
+            except (TypeError, OSError, AttributeError) as e:
+                return "./"
+            return os.path.abspath(os.path.realpath(os.path.dirname(class_file)))

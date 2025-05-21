@@ -8,6 +8,7 @@ import httpx
 import jsonref
 from agents import FunctionTool
 from agents.run_context import RunContextWrapper
+from agents.strict_schema import ensure_strict_json_schema
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +18,7 @@ def from_openapi_schema(
     *,
     headers: dict[str, str] | None = None,
     params: dict[str, Any] | None = None,
-    strict: bool = True,
+    strict: bool = False,
     timeout: int = 90,
 ) -> list[FunctionTool]:
     """
@@ -154,6 +155,9 @@ def from_openapi_schema(
                         return resp.json()
                     except Exception:
                         return resp.text
+
+            if strict:
+                tool_schema = ensure_strict_json_schema(tool_schema)
 
             tool = FunctionTool(
                 name=function_name,

@@ -247,6 +247,17 @@ async def test_legacy_tool(legacy_tool):
     assert result == "hello"
 
 
+@pytest.mark.asyncio
+async def test_schema_conversion():
+    agent = Agent(name="test", instructions="test", schemas_folder="tests/data/schemas")
+    tool_names = [tool.name for tool in agent.tools]
+    assert "getTimeByTimezone" in tool_names
+    for tool in agent.tools:
+        if tool.name == "getTimeByTimezone":
+            response = await tool.on_invoke_tool(None, input_json='{"parameters": {"timeZone": "America/New_York"}}')
+            assert "'timeZone': 'America/New_York'" in str(response)
+
+
 # TODO: Add tests for response validation aspects
 # TODO: Add tests for context/hooks propagation (more complex, might need integration tests)
 # TODO: Add parameterized tests for various message inputs (empty, long, special chars)
