@@ -822,7 +822,6 @@ class Agent(BaseAgent[MasterContext]):
                 hooks=hooks_override or self.hooks,
                 run_config=run_config or RunConfig(),
                 max_turns=kwargs.get("max_turns", DEFAULT_MAX_TURNS),
-                previous_response_id=kwargs.get("previous_response_id"),
             )
             completion_info = (
                 f"Output Type: {type(run_result.final_output).__name__}"
@@ -939,7 +938,6 @@ class Agent(BaseAgent[MasterContext]):
                 hooks=hooks_to_use,
                 run_config=effective_run_config,
                 max_turns=kwargs.get("max_turns", DEFAULT_MAX_TURNS),
-                previous_response_id=kwargs.get("previous_response_id"),
             )
             async for event in result.stream_events():
                 yield event
