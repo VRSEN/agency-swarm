@@ -26,6 +26,12 @@ This document provides guidelines for contributing new agents and tools to the f
    pip install -e ".[dev]"
    ```
 
+4. Install Pre-Commit Hooks:
+   ```bash
+   pip install pre-commit
+   pre-commit install
+   ```
+
 ## Running Tests
 
 To ensure your changes haven't broken existing functionality, please run the test suite. First, make sure you have installed the development dependencies:
