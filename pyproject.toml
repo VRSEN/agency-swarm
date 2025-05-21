@@ -41,16 +41,14 @@ dev = [
     "pytest-asyncio",
     "ruff>=0.11.0"
 ]
-
-[project.scripts]
-agency-swarm = "agency_swarm.cli:main"
-
-[project.optional-dependencies]
 fastapi = [
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.34.0",
     "anyio>=4.9.0"
 ]
+
+[project.scripts]
+agency-swarm = "agency_swarm.cli:main"
 
 [tool.setuptools_scm]
 
