@@ -19,7 +19,9 @@ Explain the shift from Assistants API to the SDK's `Runner`, `RunHooks`, `Agent`
     *   **Request-Response Pattern:** Facilitated by the internal `send_message` tool (an `agents.FunctionTool`). This tool is automatically configured on a sender agent to allow it to message a receiver agent if that path is defined in `communication_flows` (or derived from the deprecated `agency_chart`). This pattern involves an agent sending a message and awaiting a response, maintaining a distinct conversation history for that pair.
     *   **Sequential Handoffs:** For unidirectional transfers of control where an agent completes its work and passes the interaction to another, use the OpenAI Agents SDK's `handoffs` mechanism. This is configured directly on the sending agent (e.g., `AgentA(name="AgentA", ..., handoffs=[AgentB])`). The conversation history is preserved and continued by the receiving agent.
     *   **`SendMessageSwarm` Deprecation:** The old `SendMessageSwarm` tool is deprecated and removed. Internal agent-to-agent messaging (request-response) is now handled by the dynamically configured `SendMessage` tool. For sequential, unidirectional flows, use the SDK's `handoffs` feature.
-*   **Persistence:** v0.x relied on OpenAI object persistence. v1.x uses explicit `load_callback` and `save_callback` functions provided during `Agency` initialization, which handle the loading/saving of the entire thread dictionary.
+*   **Persistence:** v0.x relied on OpenAI object persistence. v1.x uses explicit `load_callback` and `save_callback` functions provided during `Agency` initialization.
+    *   The `load_callback` is given a `chat_id` (string) and should return a dictionary representing the thread's data, or `None` if the thread is not found.
+    *   The `save_callback` is given a `chat_id` (string) and a dictionary representing the thread's data. It should persist this dictionary.
 
 ## Step-by-Step Migration
 
@@ -43,6 +45,9 @@ Provide concrete steps for users to follow.
     *   **Deprecated `agency_chart`:** The `agency_chart` parameter is deprecated but still functional for backward compatibility (will issue a `DeprecationWarning`). If used, it overrides positional entry points and `communication_flows`. It's strongly recommended to migrate to the new pattern.
     *   Provide `load_callback` and `save_callback` functions for persistence.
         *   **Note:** The new `Agency.__init__` accepts `**kwargs`. Using the old `threads_callbacks` parameter will issue a `DeprecationWarning` but will be mapped to `load_callback`/`save_callback` if they weren't provided directly.
+        *   **Callback Signatures (User Implementation):**
+            *   `load_callback(chat_id: str) -> dict[str, Any] | None`: Your function will be called with a `chat_id`. It should load and return a dictionary containing thread data, or `None` if no data exists for that `chat_id`.
+            *   `save_callback(thread_id: str, thread_data: dict[str, Any]) -> None`: Your function will be called with the `thread_id` and a dictionary (`thread_data`) representing the thread (containing `items` and `metadata`). Your function should save this dictionary.
         *   Using old parameters like `shared_files`, `async_mode`, `send_message_tool_class`, `settings_path`, or `settings_callbacks` will issue `DeprecationWarning`s. Their functionality is removed or handled differently (e.g., persistence via callbacks).
     *   Setting global agent parameters like `temperature`, `top_p`, etc., on the `Agency` is deprecated. Configure these settings directly on individual `Agent` instances.
     *   Update interaction calls from `agency.run()`/`agency.get_completion()` to `agency.get_response()` or `agency.get_response_stream()`, specifying the `recipient_agent`.
@@ -51,9 +56,9 @@ Provide concrete steps for users to follow.
     *   Focus on the `on_invoke_tool(self, wrapper: RunContextWrapper[MasterContext], ...)` method.
     *   Access shared state (like `thread_manager`, `agents` map) via `wrapper.context`.
 5.  **Persistence Implementation:**
-    *   Create `load_callback() -> dict[str, ConversationThread]` function. This function should load the *entire state* (all relevant conversation threads managed by the `ThreadManager`) for the current context (e.g., user session) and return it as a dictionary. If no threads exist, return an empty dictionary.
-    *   Create `save_callback(threads_dict: dict[str, ConversationThread]) -> None` function. This function receives the *entire dictionary* of threads currently held by the `ThreadManager` and should persist it (e.g., save to a database or file).
-    *   These functions handle loading/saving `ConversationThread` objects (likely via serialization like JSON) to your desired storage (files, database, etc.). They are called by internal `PersistenceHooks` used by the `Agency`.
+    *   Create `load_callback(chat_id: str) -> dict[str, Any] | None` function. This function is called with a specific `chat_id`. Your implementation should retrieve the data for this `chat_id` (e.g., from a database or file system) and return it as a dictionary. This dictionary should typically contain an `"items"` key (a list of message dictionaries) and a `"metadata"` key (a dictionary for any custom metadata). If no data is found for the `chat_id`, return `None`. The returned dictionary is used to reconstruct the conversation state.
+    *   Create `save_callback(thread_id: str, thread_data: dict[str, Any]) -> None` function. This function is called with the `thread_id` and a `thread_data` dictionary (which includes `"items"` and `"metadata"`). Your implementation should persist this dictionary to your desired storage, associated with the `thread_id`.
+    *   These functions handle loading/saving dictionary data representing conversation threads. Users interact directly with these dictionaries.
     *   Pass these functions during `Agency` initialization.
 
 ## Code Examples (Before/After)
@@ -109,7 +114,6 @@ print(completion_output)
 
 # --- AFTER (v1.x) ---
 from agency_swarm import Agent, Agency
-from agency_swarm.thread import ThreadManager, ConversationThread
 from agents import FunctionTool, RunContextWrapper, function_tool
 from pathlib import Path
 import json
@@ -117,35 +121,43 @@ from typing import Any
 import asyncio
 from pydantic import BaseModel, Field
 
-# Persistence Callbacks (Example: File-based - Simplified)
-# NOTE: These callbacks MUST match the signatures expected by PersistenceHooks.
-SAVE_PATH = Path("./my_threads_simplified") # Use a distinct path for example
-SAVE_PATH.mkdir(exist_ok=True)
+# Persistence Callbacks
 
-def my_simple_save_callback(threads_dict: Dict[str, ConversationThread]):
-    """Saves the entire dictionary of threads (e.g., to a database or file)."""
-    print(f"[Save Callback] Received {len(threads_dict)} threads to save.")
+def my_simple_save_callback(thread_id: str, thread_data: dict[str, Any]):
+    """Saves thread data (a dictionary) associated with a thread_id."""
+    print(f"[Save Callback] Received data for thread {thread_id} with {len(thread_data.get('items', []))} items to save.")
     # Replace with your actual database or file saving logic
-    # Example: save_threads_to_my_db(threads_dict)
+    # Example: save_thread_data_to_my_db(current_user_id, thread_id, thread_data)
+    # For this simple file example:
+    # Path("./persisted_threads/").mkdir(exist_ok=True)
+    # with open(f"./persisted_threads/{thread_id}.json", "w") as f:
+    #     json.dump(thread_data, f, indent=2)
     pass # Placeholder
 
-def my_simple_load_callback() -> dict[str, ConversationThread]:
-    """Loads the entire dictionary of threads (e.g., from a database or file)."""
-    print("[Load Callback] Attempting to load threads.")
+def my_simple_load_callback(chat_id: str) -> dict[str, Any] | None:
+    """Loads thread data (a dictionary) for a given chat_id."""
+    print(f"[Load Callback] Attempting to load data for chat_id: {chat_id}.")
     # Replace with your actual database or file loading logic
-    # Example: threads: Dict[str, ConversationThread] = load_threads_from_my_db()
-    # Must return a dictionary mapping thread_id strings to ConversationThread objects.
-    # Return {} if no threads are found/loaded.
-    return {} # Example: Return empty dict if none loaded
+    # Example: thread_data_dict = load_thread_data_from_my_db(current_user_id, chat_id)
+    # if thread_data_dict:
+    #     return thread_data_dict
+    # return None
+    # For this simple file example:
+    # if Path(f"./persisted_threads/{chat_id}.json").exists():
+    #     with open(f"./persisted_threads/{chat_id}.json", "r") as f:
+    #         data = json.load(f)
+    #     return data # Return the loaded dictionary
+    return None # Example: Return None if not found or on error
 
 # Tool Definition (Example using @function_tool decorator)
 # Define Args Schema using Pydantic (or use simple types)
-class MySDKToolArgs(BaseModel):
-    param1: str = Field(..., description="The first parameter for the tool.")
+class MyCustomType(BaseModel):
+    field1: str = Field(..., description="Field description for the agent.")
+    field2: str = Field(..., description="Field description for the agent.")
 
 # Define the async function that implements the tool logic using the decorator
 @function_tool
-async def my_sdk_tool(ctx: RunContextWrapper[Any], args: MySDKToolArgs) -> str:
+async def my_sdk_tool(ctx: RunContextWrapper[Any], arg1: str, arg2: str, arg3: MyCustomType) -> str:
     """Does something useful with param1."""
     # The 'args' parameter is now automatically parsed into the MySDKToolArgs model
     try:
@@ -206,16 +218,6 @@ Highlight improvements:
 *   Leverages SDK features (context, hooks, improved tracing potential).
 *   Agent-centric definitions with explicit sub-agent registration.
 
-## Common Migration Issues
-
-*   **Tool Conversion:** This is often the most complex part. Pass your `Tool.run` logic to `FunctionTool.on_invoke_tool`.
-*   **Persistence Logic:** Implementing robust `load_callback`/`save_callback` requires careful state management. Ensure your callbacks match the signatures expected by the internal `PersistenceHooks`:
-    *   `load_callback() -> dict[str, ConversationThread]` (Return an empty dict `{}` if no threads exist for the context).
-    *   `save_callback(threads_dict: dict[str, ConversationThread]) -> None` (Receives the entire dictionary of threads managed by the `ThreadManager` for the session/context).
-    The simplified examples above show the basic structure; real implementations will need more robust error handling and potentially different serialization methods.
-*   **`chat_id` Management:** Your application is responsible for managing the `chat_id` for each distinct conversation. Provide this `chat_id` when calling `agency.get_response` or `agency.get_response_stream` (e.g., for a new user chat, one will be generated automatically like `chat_<uuid>` if none is provided). The `ThreadManager`, used internally, utilizes this `chat_id` (implicitly via thread keys) to manage the loading and saving of the correct conversation history via the `load_callback()` and `save_callback(threads_dict)` functions provided during `Agency` setup.
-*   **API Changes:** Update calls to `Agency` and `Agent` methods, paying attention to deprecated parameters.
-*   **Verifying "BEFORE" Example:** The "BEFORE" code example uses older Agency Swarm constructs. Its direct execution might fail or produce numerous warnings with the current SDK version. Use it primarily as a conceptual reference for the older structure.
 
 ## Links & Resources
 

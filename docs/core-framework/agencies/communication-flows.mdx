@@ -36,3 +36,5 @@ You can add as many levels of communication as you want.
 ## Under the Hood
 
 Agency Swarm uses a special `SendMessage` to allow agents to communicate with each other. By adding agents to the second-level list, it simply adds a new recipient to the `SendMessage` function. If you'd like to modify the behavior of this tool, you can do so by creating your own [Custom Communication Flows](/additional-features/custom-communication-flows/overview) (**Advanced**).
+
+It's important to understand that each defined communication flow (e.g., `[ceo, dev]`) establishes a distinct context for interaction. When the `SendMessage` tool is invoked by a sender agent (e.g., CEO) to a recipient agent (e.g., Developer), this happens within a dedicated conversation thread specific to that CEO-Developer pair. In this thread, the sender agent effectively takes on the role of a "user," and the recipient agent responds as the "assistant." This ensures that the history and context of communication between any two agents are isolated and maintained separately for each specific flow.

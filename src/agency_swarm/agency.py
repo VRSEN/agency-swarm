@@ -77,10 +77,10 @@ class Agency:
         Args:
             *entry_points_args (Agent): Positional arguments representing Agent instances that
                                          serve as entry points for external interaction.
-            communication_flows (Optional[list[tuple[Agent, Agent]]], optional):
+            communication_flows (list[tuple[Agent, Agent]] | None, optional):
                                          Keyword argument defining allowed agent-to-agent
                                          (sender, receiver) message paths. Defaults to None.
-            agency_chart (Optional[AgencyChart], optional): Deprecated keyword argument for defining
+            agency_chart (AgencyChart | None, optional): Deprecated keyword argument for defining
                                                             the agency structure. If provided, it takes
                                                             precedence over entry_points_args and
                                                             communication_flows, issuing a warning.

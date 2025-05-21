@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -16,51 +17,46 @@ def temp_persistence_dir(tmp_path):
     yield tmp_path
 
 
-def file_save_callback(thread: ConversationThread, base_dir: Path):
-    if not isinstance(thread, ConversationThread):
-        print(f"FILE SAVE ERROR: Expected ConversationThread, got {type(thread)}")
-        return
-    thread_id = thread.thread_id
+def file_save_callback(thread_id: str, thread_data: dict[str, Any], base_dir: Path):
     if not thread_id:
-        print("FILE SAVE ERROR: Thread has no ID. Cannot save.")
+        print("FILE SAVE ERROR: Thread ID is missing. Cannot save.")
         return
 
     file_path = base_dir / f"{thread_id}.json"
-    print(f"\nFILE SAVE: Saving thread '{thread_id}' to {file_path}")
+    print(f"\nFILE SAVE: Saving thread data for '{thread_id}' to {file_path}")
     try:
-        thread_dict = {
-            "thread_id": thread.thread_id,
-            "items": [item for item in thread.items],
-            "metadata": thread.metadata,
+        # Ensure thread_data has the expected keys, even if empty
+        data_to_save = {
+            "items": thread_data.get("items", []),
+            "metadata": thread_data.get("metadata", {}),
         }
         with open(file_path, "w") as f:
-            json.dump(thread_dict, f, indent=2)
+            json.dump(data_to_save, f, indent=2)
         print(f"FILE SAVE: Successfully saved {file_path}")
     except Exception as e:
-        print(f"FILE SAVE ERROR: Failed to save thread {thread_id}: {e}")
+        print(f"FILE SAVE ERROR: Failed to save thread data for {thread_id}: {e}")
         import traceback
 
         traceback.print_exc()
 
 
-def file_load_callback(thread_id: str, base_dir: Path) -> ConversationThread | None:
+def file_load_callback(thread_id: str, base_dir: Path) -> dict[str, Any] | None:
     file_path = base_dir / f"{thread_id}.json"
-    print(f"\nFILE LOAD: Attempting to load thread '{thread_id}' from {file_path}")
+    print(f"\nFILE LOAD: Attempting to load thread data for '{thread_id}' from {file_path}")
     if not file_path.exists():
         print("FILE LOAD: File not found.")
         return None
     try:
         with open(file_path) as f:
             thread_dict = json.load(f)
-        loaded_thread = ConversationThread(
-            thread_id=thread_dict.get("thread_id", thread_id),
-            items=thread_dict.get("items", []),
-            metadata=thread_dict.get("metadata", {}),
-        )
-        print(f"FILE LOAD: Successfully loaded and reconstructed thread '{thread_id}'")
-        return loaded_thread
+        # Basic validation of loaded structure
+        if not isinstance(thread_dict.get("items"), list) or not isinstance(thread_dict.get("metadata"), dict):
+            print(f"FILE LOAD ERROR: Loaded data for {thread_id} has incorrect structure.")
+            return None
+        print(f"FILE LOAD: Successfully loaded data for thread '{thread_id}'")
+        return thread_dict  # Return the raw dictionary
     except Exception as e:
-        print(f"FILE LOAD ERROR: Failed to load/reconstruct thread {thread_id}: {e}")
+        print(f"FILE LOAD ERROR: Failed to load/reconstruct thread data for {thread_id}: {e}")
         # Log traceback for detailed debugging
         import traceback
 
@@ -68,11 +64,10 @@ def file_load_callback(thread_id: str, base_dir: Path) -> ConversationThread | N
         return None
 
 
-def file_save_callback_error(thread: ConversationThread, base_dir: Path):
+def file_save_callback_error(thread_id: str, thread_data: dict[str, Any], base_dir: Path):
     """Mock file save callback that raises an error."""
-    thread_id = thread.thread_id
     if not thread_id:
-        print("FILE SAVE ERROR (Intentional Fail): Thread has no ID.")
+        print("FILE SAVE ERROR (Intentional Fail): Thread ID is missing.")
         raise ValueError("Cannot simulate save error for thread without ID")
 
     file_path = base_dir / f"{thread_id}.json"
@@ -80,7 +75,7 @@ def file_save_callback_error(thread: ConversationThread, base_dir: Path):
     raise OSError(f"Simulated save error for {thread_id}")
 
 
-def file_load_callback_error(thread_id: str, base_dir: Path) -> ConversationThread | None:
+def file_load_callback_error(thread_id: str, base_dir: Path) -> dict[str, Any] | None:
     """Mock file load callback that raises an error."""
     file_path = base_dir / f"{thread_id}.json"
     print(f"\nFILE LOAD ERROR: Intentionally failing for thread '{thread_id}' at {file_path}")
@@ -103,7 +98,7 @@ def persistence_agent():
 @pytest.fixture
 def file_persistence_callbacks(temp_persistence_dir):
     """Fixture to provide configured file callbacks."""
-    save_cb = lambda thread: file_save_callback(thread, temp_persistence_dir)
+    save_cb = lambda thread_id, thread_data: file_save_callback(thread_id, thread_data, temp_persistence_dir)
     load_cb = lambda thread_id: file_load_callback(thread_id, temp_persistence_dir)
     return load_cb, save_cb
 
@@ -122,10 +117,10 @@ async def test_persistence_callbacks_called(temp_persistence_dir, persistence_ag
     chat_file = temp_persistence_dir / f"{chat_id}.json"
 
     # Define actual callbacks using temp_persistence_dir
-    def actual_save_cb(thread):
-        file_save_callback(thread, base_dir=temp_persistence_dir)
+    def actual_save_cb(thread_id: str, thread_data: dict[str, Any]):
+        file_save_callback(thread_id, thread_data, base_dir=temp_persistence_dir)
 
-    def actual_load_cb(thread_id):
+    def actual_load_cb(thread_id: str) -> dict[str, Any] | None:
         return file_load_callback(thread_id, base_dir=temp_persistence_dir)
 
     # Initialize Agency with actual callbacks
@@ -146,8 +141,11 @@ async def test_persistence_callbacks_called(temp_persistence_dir, persistence_ag
     # Read file content to check basic structure (optional)
     with open(chat_file) as f:
         data = json.load(f)
-    assert data.get("thread_id") == chat_id
+    # The thread_id is now implicit in the filename and managed by ThreadManager;
+    # it's not stored inside the JSON by file_save_callback anymore.
+    # assert data.get("thread_id") == chat_id
     assert isinstance(data.get("items"), list)
+    assert isinstance(data.get("metadata"), dict)  # Check metadata is a dict
 
     # Turn 2
     print(f"\n--- Callback Test Turn 2 (ChatID: {chat_id}) --- MSG: {message2}")
@@ -189,16 +187,19 @@ async def test_persistence_loads_history(file_persistence_callbacks, persistence
     # --- Verification after Turn 1 ---
     # Manually load the thread data using the callback to check saved state
     print(f"\n--- Verifying saved state for {chat_id} after Turn 1 ---")
-    loaded_thread_after_t1 = load_cb(chat_id)  # Now returns ConversationThread or None
-    assert loaded_thread_after_t1 is not None, "Thread data failed to load after Turn 1"
-    assert isinstance(
-        loaded_thread_after_t1, ConversationThread
-    ), f"Loaded data is not a ConversationThread: {type(loaded_thread_after_t1)}"
+    loaded_thread_data_after_t1 = load_cb(chat_id)
+    assert loaded_thread_data_after_t1 is not None, "Thread data dict failed to load after Turn 1"
+    assert isinstance(loaded_thread_data_after_t1, dict), (
+        f"Loaded data is not a dict: {type(loaded_thread_data_after_t1)}"
+    )
+    assert "items" in loaded_thread_data_after_t1, "Loaded dict missing 'items' key"
+    assert "metadata" in loaded_thread_data_after_t1, "Loaded dict missing 'metadata' key"
+
     # Check if message 1 is in the saved items
     found_message1_in_saved = False
-    items_to_check = loaded_thread_after_t1.items
+    items_to_check = loaded_thread_data_after_t1.get("items", [])
     # Print items for debugging
-    print(f"DEBUG: Saved items for {chat_id}: {items_to_check}")
+    print(f"DEBUG: Saved items data for {chat_id}: {items_to_check}")
     for item_dict in items_to_check:
         if (
             isinstance(item_dict, dict)
@@ -207,9 +208,9 @@ async def test_persistence_loads_history(file_persistence_callbacks, persistence
         ):
             found_message1_in_saved = True
             break
-    assert (
-        found_message1_in_saved
-    ), f"Message 1 content '{message1_content}' not found in saved thread items: {items_to_check}"
+    assert found_message1_in_saved, (
+        f"Message 1 content '{message1_content}' not found in saved thread items data: {items_to_check}"
+    )
     print("--- Saved state verified successfully. ---")
 
     # Agency Instance 2 - Turn 2
@@ -233,9 +234,9 @@ async def test_persistence_loads_history(file_persistence_callbacks, persistence
         if isinstance(item, dict) and item.get("role") == "user" and message1_content in item.get("content", ""):
             found_message1_in_loaded = True
             break
-    assert (
-        found_message1_in_loaded
-    ), f"Message 1 content '{message1_content}' not found in loaded thread items in agency2: {items_to_check_loaded}"
+    assert found_message1_in_loaded, (
+        f"Message 1 content '{message1_content}' not found in loaded thread items in agency2: {items_to_check_loaded}"
+    )
     print("--- Loaded state verified successfully. ---")
 
     # Final LLM output content is NOT asserted.
@@ -249,12 +250,13 @@ async def test_persistence_load_error(temp_persistence_dir, persistence_agent):
     chat_id = "load_error_test_1"
     message1 = "Message before load error."
 
-    # Define actual callbacks using temp_persistence_dir
-    def actual_save_cb(thread):
-        file_save_callback(thread, base_dir=temp_persistence_dir)
+    # Define actual callbacks
+    def actual_save_cb(thread_id: str, thread_data: dict[str, Any]):
+        file_save_callback(thread_id, thread_data, base_dir=temp_persistence_dir)
 
-    def actual_load_cb_error(thread_id):  # Error-raising version
-        return file_load_callback_error(thread_id, base_dir=temp_persistence_dir)
+    def actual_load_cb_error(thread_id: str) -> dict[str, Any] | None:  # Error-raising version
+        file_load_callback_error(thread_id, base_dir=temp_persistence_dir)  # This will raise OSError
+        return None  # Should not be reached
 
     # Agency Instance 1 - Turn 1 (Normal save)
     print("\n--- Load Error Test Instance 1 - Turn 1 --- Creating Agency 1")
@@ -297,11 +299,11 @@ async def test_persistence_save_error(temp_persistence_dir, persistence_agent):
     message1 = "Message causing save error."
 
     # Define actual callbacks
-    def actual_load_cb(thread_id):
+    def actual_load_cb(thread_id: str) -> dict[str, Any] | None:
         return file_load_callback(thread_id, base_dir=temp_persistence_dir)
 
-    def actual_save_cb_error(thread):  # Error-raising save
-        file_save_callback_error(thread, base_dir=temp_persistence_dir)
+    def actual_save_cb_error(thread_id: str, thread_data: dict[str, Any]):  # Error-raising save
+        file_save_callback_error(thread_id, thread_data, base_dir=temp_persistence_dir)
 
     # Agency Instance
     print("\n--- Save Error Test Instance - Turn 1 --- Creating Agency")
@@ -341,8 +343,11 @@ async def test_persistence_save_error(temp_persistence_dir, persistence_agent):
 
         # If persistence hooks are enabled, check the second call too
         if agency.persistence_hooks:
-            assert mock_logger_error.call_count == 2, (
-                f"Expected logger.error to be called twice with hooks, "
+            # For a new thread: 1 (create) + 1 (initial message) + 1 (result items) = 3 calls
+            # If the thread existed, it would be 1 (initial) + 1 (result) = 2 calls.
+            # Since this test creates a new thread for chat_id, expect 3.
+            assert mock_logger_error.call_count == 3, (
+                f"Expected logger.error to be called 3 times for a new thread with hooks, "
                 f"but was called {mock_logger_error.call_count} times."
             )
             args2, kwargs2 = mock_logger_error.call_args_list[1]
@@ -397,47 +402,64 @@ async def test_persistence_chat_id_isolation(file_persistence_callbacks, persist
 
     # Verify Chat 1's history contains message 1a, but not message 2a
     print(f"--- Isolation Test - Verifying loaded state for {chat_id_1} ---")
-    loaded_thread_1 = load_cb(chat_id_1)
-    assert loaded_thread_1 is not None
-    assert isinstance(loaded_thread_1, ConversationThread)
-    found_message_1a = any(
-        item.get("role") == "user" and message_1a in item.get("content", "") for item in loaded_thread_1.items
+    loaded_thread_1_data = load_cb(chat_id_1)
+    assert loaded_thread_1_data is not None, f"Loaded data for {chat_id_1} should not be None"
+    assert isinstance(loaded_thread_1_data, dict), (
+        f"Loaded data for {chat_id_1} is not a dict: {type(loaded_thread_1_data)}"
     )
-    found_message_2a = any(
-        item.get("role") == "user" and message_2a in item.get("content", "") for item in loaded_thread_1.items
+    assert "items" in loaded_thread_1_data, f"Loaded data for {chat_id_1} missing 'items' key"
+    assert "metadata" in loaded_thread_1_data, f"Loaded data for {chat_id_1} missing 'metadata' key"
+
+    chat1_items_after_reload = loaded_thread_1_data.get("items", [])
+    found_message_1a_in_chat1 = any(
+        isinstance(item, dict) and item.get("role") == "user" and message_1a in item.get("content", "")
+        for item in chat1_items_after_reload
     )
-    assert (
-        found_message_1a
-    ), f"Message '{message_1a}' not found in loaded thread for {chat_id_1}: {loaded_thread_1.items}"
-    assert not found_message_2a, (
-        f"Message '{message_2a}' (from chat 2) unexpectedly found in loaded thread for {chat_id_1}: "
-        f"{loaded_thread_1.items}"
+    not_found_message_2a_in_chat1 = not any(
+        isinstance(item, dict) and item.get("role") == "user" and message_2a in item.get("content", "")
+        for item in chat1_items_after_reload
     )
-    print(f"--- Isolation Test - Verification for {chat_id_1} successful ---")
+    assert found_message_1a_in_chat1, (
+        f"Message '{message_1a}' not found in reloaded chat 1 items: {chat1_items_after_reload}"
+    )
+    assert not_found_message_2a_in_chat1, (
+        f"Message '{message_2a}' (from chat 2) found in reloaded chat 1 items: {chat1_items_after_reload}"
+    )
 
     # Verify Chat 2's history contains message 2a, but not message 1a or 1b
     print(f"--- Isolation Test - Verifying loaded state for {chat_id_2} ---")
-    loaded_thread_2 = load_cb(chat_id_2)
-    assert loaded_thread_2 is not None
-    assert isinstance(loaded_thread_2, ConversationThread)
-    items_2 = loaded_thread_2.items
-    found_message_1a_in_2 = any(
-        item.get("role") == "user" and message_1a in item.get("content", "") for item in items_2
+    loaded_thread_2_data = load_cb(chat_id_2)
+    assert loaded_thread_2_data is not None, f"Loaded data for {chat_id_2} should not be None"
+    assert isinstance(loaded_thread_2_data, dict), (
+        f"Loaded data for {chat_id_2} is not a dict: {type(loaded_thread_2_data)}"
     )
-    found_message_1b_in_2 = any(
-        item.get("role") == "user" and message_1b in item.get("content", "") for item in items_2
+    assert "items" in loaded_thread_2_data, f"Loaded data for {chat_id_2} missing 'items' key"
+    assert "metadata" in loaded_thread_2_data, f"Loaded data for {chat_id_2} missing 'metadata' key"
+
+    chat2_items_after_reload = loaded_thread_2_data.get("items", [])
+    found_message_2a_in_chat2 = any(
+        isinstance(item, dict) and item.get("role") == "user" and message_2a in item.get("content", "")
+        for item in chat2_items_after_reload
     )
-    found_message_2a_in_2 = any(
-        item.get("role") == "user" and message_2a in item.get("content", "") for item in items_2
+    not_found_message_1a_in_chat2 = not any(
+        isinstance(item, dict) and item.get("role") == "user" and message_1a in item.get("content", "")
+        for item in chat2_items_after_reload
     )
-    assert found_message_2a_in_2, f"Message '{message_2a}' not found in loaded thread for {chat_id_2}: {items_2}"
-    assert (
-        not found_message_1a_in_2
-    ), f"Message '{message_1a}' (from chat 1) unexpectedly found in loaded thread for {chat_id_2}: {items_2}"
-    assert (
-        not found_message_1b_in_2
-    ), f"Message '{message_1b}' (from chat 1) unexpectedly found in loaded thread for {chat_id_2}: {items_2}"
-    print(f"--- Isolation Test - Verification for {chat_id_2} successful ---")
+    not_found_message_1b_in_chat2 = not any(
+        isinstance(item, dict) and item.get("role") == "user" and message_1b in item.get("content", "")
+        for item in chat2_items_after_reload
+    )
+    assert found_message_2a_in_chat2, (
+        f"Message '{message_2a}' not found in reloaded chat 2 items: {chat2_items_after_reload}"
+    )
+    assert not_found_message_1a_in_chat2, (
+        f"Message '{message_1a}' (from chat 1) found in reloaded chat 2 items: {chat2_items_after_reload}"
+    )
+    assert not_found_message_1b_in_chat2, (
+        f"Message '{message_1b}' (from chat 1) found in reloaded chat 2 items: {chat2_items_after_reload}"
+    )
+
+    print("--- Isolation Test Completed Successfully ---")
 
 
 @pytest.mark.asyncio

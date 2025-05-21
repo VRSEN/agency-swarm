@@ -96,7 +96,6 @@ class SendMessage(FunctionTool):
         my_primary_instructions = kwargs.get("my_primary_instructions")
         additional_instructions = kwargs.get("additional_instructions", "")
 
-        # Validate that all newly required fields are present
         if not message_content:
             logger.error(f"Tool '{self.name}' invoked without 'message' parameter.")
             return f"Error: Missing required parameter 'message' for tool {self.name}."
@@ -116,7 +115,7 @@ class SendMessage(FunctionTool):
         logger.info(
             f"Agent '{sender_name_for_call}' invoking tool '{self.name}'. "
             f"Recipient: '{recipient_name_for_call}', ChatID: {current_chat_id}, "
-            f'Message: "{message_content[:50]}..."'
+            f'Message: "{str(message_content)[:50]}..."'
         )
 
         try:
@@ -129,9 +128,14 @@ class SendMessage(FunctionTool):
                 additional_instructions=additional_instructions,
             )
 
-            final_output_text = response.final_output or "(No text output from recipient)"
-            if not isinstance(final_output_text, str):
-                final_output_text = str(final_output_text)
+            current_final_output = response.final_output
+            if current_final_output is None:
+                final_output_text = ""  # Represent None as an empty string
+            elif isinstance(current_final_output, str):
+                final_output_text = current_final_output  # Use string (including empty string) as is
+            else:
+                # For any other type (bool, int, float, custom object), convert to string
+                final_output_text = str(current_final_output)
 
             logger.info(
                 f"Received response via tool '{self.name}' from '{recipient_name_for_call}': "

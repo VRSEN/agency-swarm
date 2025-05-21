@@ -30,7 +30,7 @@ from agents.items import (
 from agents.run import DEFAULT_MAX_TURNS
 from agents.stream_events import RunItemStreamEvent
 from openai import AsyncOpenAI, NotFoundError
-from openai.types.responses import ResponseFunctionToolCall
+from openai.types.responses import ResponseFileSearchToolCall, ResponseFunctionToolCall
 
 from .context import MasterContext
 from .thread import ThreadManager
@@ -94,6 +94,7 @@ class Agent(BaseAgent[MasterContext]):
         _associated_vector_store_id (str | None): The ID of the OpenAI Vector Store associated via `files_folder`.
         files_folder_path (Path | None): The resolved absolute path for `files_folder`.
         _subagents (dict[str, "Agent"]): Dictionary mapping names of registered subagents to their instances.
+        _openai_client (AsyncOpenAI | None): Internal reference to the initialized AsyncOpenAI client instance.
     """
 
     # --- Agency Swarm Specific Parameters ---
@@ -108,6 +109,7 @@ class Agent(BaseAgent[MasterContext]):
     _associated_vector_store_id: str | None = None
     files_folder_path: Path | None = None
     _subagents: dict[str, "Agent"]
+    _openai_client: AsyncOpenAI | None = None
 
     # --- SDK Agent Compatibility ---
     # Re-declare attributes from BaseAgent for clarity and potential overrides
@@ -280,12 +282,13 @@ class Agent(BaseAgent[MasterContext]):
         self.description = current_agent_params.get("description")
 
         # --- Internal State Init ---
+        self._openai_client = None
         self._subagents = {}
         # _thread_manager and _agency_instance are injected by Agency
 
         # --- Setup ---
-        self._load_tools_from_folder()  # Placeholder call
-        self._init_file_handling()
+        self._parse_files_folder_for_vs_id()  # New synchronous method
+        # The full async _init_file_handling (with VS retrieval) should be called by Agency or explicitly in tests.
 
     # --- Properties ---
     @property
@@ -393,62 +396,129 @@ class Agent(BaseAgent[MasterContext]):
         logger.debug(f"Dynamically added tool '{tool_name}' to agent '{self.name}'.")
 
     # --- File Handling ---
-    def _init_file_handling(self) -> None:
-        """Initializes file handling: sets up local folder and VS ID if specified."""
-        self._associated_vector_store_id = None
+    def _parse_files_folder_for_vs_id(self) -> None:
+        """Synchronously parses files_folder for VS ID and sets path."""
         self.files_folder_path = None
+        self._associated_vector_store_id = None  # Reset
+
         if not self.files_folder:
             return
 
-        try:
-            self.files_folder_path = Path(self.files_folder).resolve()
-            folder_name = self.files_folder_path.name
-            match = re.search(r"_vs_([a-zA-Z0-9\-]+)$", folder_name)
-            if match:
-                vs_id = match.group(1)
-                logger.info(f"Detected Vector Store ID '{vs_id}' in files_folder name.")
-                self._associated_vector_store_id = vs_id
-                base_folder_name = folder_name[: match.start()]
-                # Construct the base path
-                base_path = self.files_folder_path.parent / base_folder_name
-                # Create the base directory
-                base_path.mkdir(parents=True, exist_ok=True)
-                # Assign the corrected base path
-                self.files_folder_path = base_path
-            else:
-                # If no VS ID, just ensure the original path exists
-                self.files_folder_path.mkdir(parents=True, exist_ok=True)
+        folder_str = str(self.files_folder)
+        base_path_str = folder_str
+        # Regex to capture base path and a VS ID that itself starts with 'vs_'
+        vs_id_match = re.search(r"(.+)_vs_(vs_[a-zA-Z0-9_]+)$", folder_str)
 
-            # This log message should now show the correct path
-            logger.info(f"Agent '{self.name}' local files folder: {self.files_folder_path}")
-
-            if self._associated_vector_store_id:
-                self._ensure_file_search_tool()
-        except Exception as e:
-            logger.error(
-                f"Error initializing file handling for path '{self.files_folder}': {e}",
-                exc_info=True,
+        if vs_id_match:
+            base_path_str = vs_id_match.group(1)
+            self._associated_vector_store_id = vs_id_match.group(2)
+            logger.info(
+                f"Agent {self.name}: Parsed Vector Store ID '{self._associated_vector_store_id}' from files_folder '{folder_str}'. Base path: '{base_path_str}'"
             )
-            self.files_folder_path = None  # Reset on error
+        else:
+            logger.info(
+                f"Agent {self.name}: files_folder '{folder_str}' does not specify a Vector Store ID with '_vs_' suffix. Local file management only."
+            )
+
+        self.files_folder_path = Path(base_path_str).resolve()
+        try:
+            self.files_folder_path.mkdir(parents=True, exist_ok=True)
+            logger.info(f"Agent {self.name}: Ensured local files folder exists at {self.files_folder_path}")
+        except OSError as e:
+            logger.error(f"Agent {self.name}: Error creating files_folder at {self.files_folder_path}: {e}")
+            self.files_folder_path = None
+            if self._associated_vector_store_id:
+                self._associated_vector_store_id = None  # Invalidate if folder creation fails
+            return
+
+        # Add FileSearchTool tentatively if VS ID is parsed. Actual VS check is async.
+        if self._associated_vector_store_id:
+            self._ensure_file_search_tool()  # This method is synchronous
+
+    async def _init_file_handling(self) -> None:
+        """
+        Asynchronously initializes file handling by verifying/retrieving the
+        associated Vector Store on OpenAI if an ID was parsed.
+        This method should be called after agent instantiation in an async context.
+        """
+        # Ensure synchronous parts have run (idempotent checks or rely on __init__ call)
+        if self.files_folder and not self.files_folder_path:
+            self._parse_files_folder_for_vs_id()  # Ensure path and tentative VS ID are set
+
+        if not self._associated_vector_store_id or not self.files_folder_path:
+            logger.debug(f"Agent {self.name}: Skipping async VS check. No VS ID parsed or files_folder_path not set.")
+            return
+
+        # If a vector store ID is associated AND local folder path is valid
+        try:
+            # Attempt to retrieve the Vector Store by ID
+            vector_store = await self.client.vector_stores.retrieve(vector_store_id=self._associated_vector_store_id)
+            logger.info(
+                f"Agent {self.name}: Successfully retrieved existing Vector Store '{vector_store.id}' ('{vector_store.name}')."
+            )
+            # If successful, ensure FileSearchTool is correctly configured (might be redundant if _ensure_file_search_tool was robust)
+            # self._ensure_file_search_tool() # Already called in sync part, but could re-verify here if needed
+        except NotFoundError:
+            logger.error(
+                f"Agent {self.name}: Vector Store ID '{self._associated_vector_store_id}' provided in files_folder was not found on OpenAI. "
+                f"FileSearchTool might not be effective or may need manual VS creation and ID update."
+            )
+            # Decide if we should nullify _associated_vector_store_id here or just warn.
+            # For now, keep the ID but log error. User might create it later.
+            # Or, to be safer and prevent use of a non-existent VS:
+            # self._associated_vector_store_id = None
+            # self.tools = [t for t in self.tools if not isinstance(t, FileSearchTool)] # Remove FileSearchTool
+        except Exception as e_retrieve:
+            logger.error(
+                f"Agent {self.name}: Error retrieving Vector Store '{self._associated_vector_store_id}': {e_retrieve}"
+            )
+            # Similar decision: nullify or just warn.
+            # self._associated_vector_store_id = None
+            # self.tools = [t for t in self.tools if not isinstance(t, FileSearchTool)]
 
     def _ensure_file_search_tool(self):
-        """Adds or updates the FileSearchTool if a VS ID is associated."""
+        """
+        Ensures that a FileSearchTool is available and configured if the agent
+        has an associated Vector Store ID (`self._associated_vector_store_id`).
+
+        If the tool is not present, it's added. If present but not configured with
+        the agent's Vector Store ID, the ID is added to its configuration.
+        """
         if not self._associated_vector_store_id:
+            logger.debug(f"Agent {self.name}: No associated vector store ID; FileSearchTool setup skipped.")
             return
-        # Remove existing FileSearchTool(s) first to avoid duplicates/conflicts
-        self.tools = [t for t in self.tools if not isinstance(t, FileSearchTool)]
-        logger.info(f"Adding FileSearchTool for VS ID: {self._associated_vector_store_id}")
-        self.add_tool(FileSearchTool(vector_store_ids=[self._associated_vector_store_id]))
+
+        file_search_tool_exists = any(isinstance(tool, FileSearchTool) for tool in self.tools)
+
+        if not file_search_tool_exists:
+            logger.info(
+                f"Agent {self.name}: Adding FileSearchTool as vector store ID '{self._associated_vector_store_id}' is associated."
+            )
+            self.add_tool(FileSearchTool(vector_store_ids=[self._associated_vector_store_id]))
+        else:
+            for tool in self.tools:
+                if isinstance(tool, FileSearchTool):
+                    if not tool.vector_store_ids:
+                        tool.vector_store_ids = [self._associated_vector_store_id]
+                        logger.info(
+                            f"Agent {self.name}: Configured existing FileSearchTool with vector store ID '{self._associated_vector_store_id}'."
+                        )
+                    elif self._associated_vector_store_id not in tool.vector_store_ids:
+                        tool.vector_store_ids.append(self._associated_vector_store_id)
+                        logger.info(
+                            f"Agent {self.name}: Added vector store ID '{self._associated_vector_store_id}' to existing FileSearchTool."
+                        )
+                    break  # Assume only one FileSearchTool
 
     async def upload_file(self, file_path: str) -> str:
         """
-        Uploads a file to OpenAI and potentially copies it locally and associates it with a Vector Store.
+        Uploads a file to OpenAI and optionally associates it with the agent's
+        Vector Store if `self._associated_vector_store_id` is set (derived from
+        `files_folder` using the `_vs_<id>` naming convention).
 
-        - Copies the file to the agent's `files_folder` if specified.
-        - Uploads the file to OpenAI with purpose "assistants".
-        - If `files_folder` is associated with a Vector Store (e.g., `path/to/folder_vs_abc123`),
-          the uploaded OpenAI file is added to that Vector Store.
-        - Ensures the `FileSearchTool` is added/updated if a Vector Store is associated.
+        The file is copied into the agent's local `files_folder_path` after being
+        renamed to include the OpenAI File ID (e.g., `original_name_<file_id>.ext`).
+        This helps prevent re-uploading the same file.
 
         Args:
             file_path (str): The path to the local file to upload.
@@ -457,102 +527,117 @@ class Agent(BaseAgent[MasterContext]):
             str: The OpenAI File ID of the uploaded file.
 
         Raises:
-            FileNotFoundError: If the `file_path` does not exist or is not a file.
-            AgentsException: If the upload to OpenAI fails or association with the Vector Store fails.
+            FileNotFoundError: If the `file_path` does not exist.
+            AgentsException: If the upload or Vector Store association fails.
         """
-        source_path = Path(file_path)
-        if not source_path.is_file():
-            raise FileNotFoundError(f"Source file not found: {file_path}")
+        fpath = Path(file_path)
+        if not fpath.exists():
+            raise FileNotFoundError(f"File not found at {file_path}")
 
-        local_upload_path = source_path  # Default to source if no local copy needed
+        if not self.files_folder_path:
+            # This case implies files_folder was not set or creation failed.
+            # We could upload to OpenAI generally, but the convention is to manage
+            # files within a files_folder context for this method.
+            raise AgentsException(
+                f"Agent {self.name}: Cannot upload file. Agent_files_folder_path is not set. Please initialize the agent with a valid 'files_folder'."
+            )
 
-        # Copy locally if folder is set
-        if self.files_folder_path:
-            # Simple copy, overwrites allowed for simplicity now.
-            # Could add UUID or checks if needed.
-            local_destination = self.files_folder_path / source_path.name
-            try:
-                shutil.copy2(source_path, local_destination)
-                logger.info(f"Copied file locally to {local_destination}")
-                local_upload_path = local_destination
-            except Exception as e:
-                logger.error(f"Error copying file {source_path} locally: {e}", exc_info=True)
-                # Continue with original path for OpenAI upload
+        # Check if a version of this file (with an ID) already exists locally
+        # This is a simple check; more robust would involve checking remote file IDs if available
+        # For now, local name check prevents re-upload if local copy with ID exists.
+        existing_file_id = await self.check_file_exists(fpath.name)
+        if existing_file_id:
+            logger.info(f"File {fpath.name} with ID {existing_file_id} already exists locally. Skipping upload.")
+            return existing_file_id
 
-        # Upload to OpenAI
         try:
-            logger.info(f"Uploading file '{local_upload_path.name}' to OpenAI...")
-            openai_file = await self.client.files.create(file=local_upload_path.open("rb"), purpose="assistants")
-            logger.info(f"Uploaded to OpenAI. File ID: {openai_file.id}")
-
-            # Associate with Vector Store if needed
-            if self._associated_vector_store_id:
-                try:
-                    logger.info(f"Adding OpenAI file {openai_file.id} to VS {self._associated_vector_store_id}")
-                    # Check if file already exists in VS (optional, API call)
-                    # vs_files = await self.client.beta.vector_stores.files.list(vector_store_id=self._associated_vector_store_id, limit=100)
-                    # if any(f.id == openai_file.id for f in vs_files.data):
-                    #     logger.debug(f"File {openai_file.id} already in VS {self._associated_vector_store_id}.")
-                    # else:
-                    await self.client.beta.vector_stores.files.create(
-                        vector_store_id=self._associated_vector_store_id, file_id=openai_file.id
-                    )
-                    logger.info(f"Added file {openai_file.id} to VS {self._associated_vector_store_id}.")
-                    self._ensure_file_search_tool()  # Ensure tool is present after adding first file
-                except NotFoundError:
-                    logger.error(
-                        f"Vector Store {self._associated_vector_store_id} not found when adding file {openai_file.id}."
-                    )
-                except Exception as e:
-                    logger.error(
-                        f"Error adding file {openai_file.id} to VS {self._associated_vector_store_id}: {e}",
-                        exc_info=True,
-                    )
-
-            return openai_file.id
-
+            with open(fpath, "rb") as f:
+                uploaded_file = await self.client.files.create(file=f, purpose="assistants")
+            logger.info(
+                f"Agent {self.name}: Successfully uploaded file {fpath.name} to OpenAI. File ID: {uploaded_file.id}"
+            )
         except Exception as e:
-            logger.error(f"Error uploading file {local_upload_path.name} to OpenAI: {e}", exc_info=True)
-            raise AgentsException(f"Failed to upload file to OpenAI: {e}") from e
+            logger.error(f"Agent {self.name}: Failed to upload file {fpath.name} to OpenAI: {e}")
+            raise AgentsException(f"Failed to upload file {fpath.name} to OpenAI: {e}") from e
 
-    async def check_file_exists(self, file_path: str) -> str | None:
+        # Copy to agent's files_folder_path and rename with OpenAI ID
+        try:
+            new_filename = f"{fpath.stem}_{uploaded_file.id}{fpath.suffix}"
+            destination_path = self.files_folder_path / new_filename
+            shutil.copy(fpath, destination_path)
+            logger.info(f"Agent {self.name}: Copied uploaded file to {destination_path}")
+        except Exception as e:
+            logger.warning(
+                f"Agent {self.name}: Failed to copy file {fpath.name} to {self.files_folder_path}. File ID: {uploaded_file.id}. Error: {e}"
+            )
+            # Not raising an exception here as the file is uploaded to OpenAI,
+            # but local copy failed. The File ID is still returned.
+
+        # Associate with Vector Store if one is linked to this agent via files_folder
+        if self._associated_vector_store_id:
+            try:
+                # First, check if the vector store still exists.
+                try:
+                    await self.client.vector_stores.retrieve(vector_store_id=self._associated_vector_store_id)
+                    logger.debug(
+                        f"Agent {self.name}: Confirmed Vector Store {self._associated_vector_store_id} exists before associating file {uploaded_file.id}."
+                    )
+                except NotFoundError:
+                    logger.warning(
+                        f"Agent {self.name}: Vector Store {self._associated_vector_store_id} not found during file {uploaded_file.id} association. "
+                        "It might have been deleted after agent initialization. Skipping association."
+                    )
+                    return uploaded_file.id  # File is uploaded, but association is skipped. Early exit.
+
+                # If VS exists, proceed to associate the file
+                await self.client.vector_stores.files.create(
+                    vector_store_id=self._associated_vector_store_id, file_id=uploaded_file.id
+                )
+                logger.info(
+                    f"Agent {self.name}: Associated file {uploaded_file.id} with Vector Store {self._associated_vector_store_id}."
+                )
+            except Exception as e:
+                logger.error(
+                    f"Agent {self.name}: Failed to associate file {uploaded_file.id} with Vector Store {self._associated_vector_store_id}: {e}"
+                )
+                # Don't raise an exception here if association fails.
+
+        return uploaded_file.id
+
+    async def check_file_exists(self, file_name_or_path: str) -> str | None:
         """
-        Checks if a file with the same name exists in the agent's associated Vector Store (if any).
+        Checks if a file with a given original name (or full path) likely exists
+        as an uploaded file in the agent's local `files_folder_path` by looking
+        for a version of it with an appended OpenAI File ID.
 
         Args:
-            file_path (str): The path or name of the file to check. Only the filename is used for matching.
+            file_name_or_path (str): The original name of the file (e.g., 'document.pdf')
+                                     or the full path to the original file.
 
         Returns:
-            str | None: The OpenAI File ID if a matching file is found in the Vector Store, otherwise None.
-                         Returns None if the agent has no associated Vector Store.
+            str | None: The OpenAI File ID if a matching file is found, otherwise None.
         """
-        if not self._associated_vector_store_id:
+        if not self.files_folder_path:
             return None
-        target_filename = Path(file_path).name
-        try:
-            logger.debug(f"Checking for file '{target_filename}' in VS {self._associated_vector_store_id}...")
-            vs_files_page = await self.client.beta.vector_stores.files.list(
-                vector_store_id=self._associated_vector_store_id, limit=100
-            )
-            for vs_file in vs_files_page.data:
-                try:
-                    file_object = await self.client.files.retrieve(vs_file.id)
-                    if file_object.filename == target_filename:
-                        logger.debug(f"Found matching file in VS: {vs_file.id}")
-                        return vs_file.id
-                except NotFoundError:
-                    logger.warning(f"VS file {vs_file.id} not found in OpenAI files.")
-                except Exception as e_inner:
-                    logger.warning(f"Error retrieving details for file {vs_file.id}: {e_inner}")
-            return None
-        except NotFoundError:
-            logger.error(f"Vector Store {self._associated_vector_store_id} not found during file check.")
-            return None
-        except Exception as e:
-            logger.error(
-                f"Error checking file existence in VS {self._associated_vector_store_id}: {e}",
-                exc_info=True,
-            )
+
+        original_path = Path(file_name_or_path)
+        original_stem = original_path.stem
+        original_suffix = original_path.suffix
+
+        # Search for files in files_folder_path that match the pattern: original_stem_file-ID.original_suffix
+        # Example: document_file-abc123xyz.pdf
+        # OpenAI File IDs usually start with 'file-'
+        pattern = re.compile(f"^{re.escape(original_stem)}_(file-[a-zA-Z0-9]+){re.escape(original_suffix)}$")
+
+        for f_path in self.files_folder_path.iterdir():
+            if f_path.is_file():
+                match = pattern.match(f_path.name)
+                if match:
+                    file_id = match.group(1)
+                    logger.debug(
+                        f"Found existing file {f_path.name} with ID {file_id} for original name {file_name_or_path}"
+                    )
+                    return file_id
             return None
 
     # --- Core Execution Methods ---
@@ -566,89 +651,100 @@ class Agent(BaseAgent[MasterContext]):
         run_config: RunConfig | None = None,
         **kwargs: Any,
     ) -> RunResult:
-        """
-        Runs the agent's turn using the `agents.Runner`, returning the full execution result.
-
-        This is the primary method for interacting with an agent. It handles retrieving
-        or creating the conversation thread, preparing context and hooks, executing
-        the agent's logic via the `Runner`, optionally validating the response, and
-        saving results to the thread if it's a top-level call (not agent-to-agent).
-
-        Args:
-            message (str | list[dict[str, Any]]): The input message for the agent. Can be a simple
-                                                  string or a list of OpenAI-compatible message dicts.
-            sender_name (str | None, optional): The name of the sending agent if this is an
-                                                agent-to-agent message. Defaults to None (indicating
-                                                user interaction).
-            chat_id (str | None, optional): The ID of the conversation thread to use. If None, a new
-                                            chat ID is generated for user interactions. Required for
-                                            agent-to-agent messages initiated via tool calls.
-            context_override (dict[str, Any] | None, optional): Additional user context to merge into
-                                                               the `MasterContext` for this run.
-            hooks_override (RunHooks | None, optional): Custom `RunHooks` to use for this specific run,
-                                                       overriding the agent's default hooks.
-            run_config (RunConfig | None, optional): Configuration options for the `agents.Runner`.
-            **kwargs: Additional keyword arguments passed directly to `agents.Runner.run` (e.g., `max_turns`).
-
-        Returns:
-            RunResult: An object containing the full details of the agent run, including all generated
-                       items (messages, tool calls, outputs) and the final output.
-
-        Raises:
-            RuntimeError: If the agent has not been properly configured with a `ThreadManager`
-                          or associated with an `Agency` instance before being called.
-            ValueError: If `sender_name` is provided (agent-to-agent call) but `chat_id` is missing.
-            AgentsException: If an error occurs during the `agents.Runner` execution.
-        """
-        # 1. Validate Prerequisites & Get Thread
+        """Run the agent's turn, returning the full execution result."""
         if not self._thread_manager:
             raise RuntimeError(f"Agent '{self.name}' missing ThreadManager.")
         if not self._agency_instance or not hasattr(self._agency_instance, "agents"):
             raise RuntimeError(f"Agent '{self.name}' missing Agency instance or agents map.")
 
-        # Determine chat_id if not provided (e.g., for user interaction)
         effective_chat_id = chat_id
         if sender_name is None and not effective_chat_id:
             effective_chat_id = f"chat_{uuid.uuid4()}"
             logger.info(f"New user interaction, generated chat_id: {effective_chat_id}")
         elif sender_name is not None and not effective_chat_id:
-            # This case should be prevented by the check below, but handle defensively
             raise ValueError("chat_id is required for agent-to-agent communication within get_response.")
 
         logger.info(f"Agent '{self.name}' handling get_response for chat_id: {effective_chat_id}")
         thread = self._thread_manager.get_thread(effective_chat_id)
 
-        # Add user message to thread before run
-        if sender_name is None:  # Only add if it's initial user input
-            try:
-                items_to_add = ItemHelpers.input_to_new_input_list(message)
-                thread.add_items(items_to_add)
-                logger.debug(f"Added initial user message to thread {thread.thread_id} before run.")
-            except Exception as e:
-                logger.error(f"Error processing initial input message for get_response: {e}", exc_info=True)
-
-        # 3. Prepare Context (History is handled internally by Runner now)
-        # history_for_runner = thread.get_history() # Don't need to get history here
-        master_context = self._prepare_master_context(context_override, effective_chat_id)
-
-        # 4. Prepare Hooks & Config
-        hooks_to_use = hooks_override or self.hooks
-        effective_run_config = run_config or RunConfig()
-
-        # 5. Execute via Runner
+        processed_current_message_items: list[TResponseInputItem]
         try:
-            logger.debug(f"Calling Runner.run for agent '{self.name}'...")
-            # Call Runner.run as a class method, passing the initial input
+            processed_current_message_items = ItemHelpers.input_to_new_input_list(message)
+        except Exception as e:
+            logger.error(f"Error processing current input message for get_response: {e}", exc_info=True)
+            raise AgentsException(f"Failed to process input message for agent {self.name}") from e
+
+        history_for_runner: list[TResponseInputItem]
+        if sender_name is None:  # Top-level call from user or agency
+            self._thread_manager.add_items_and_save(thread, processed_current_message_items)
+            logger.debug(f"Added current message to shared thread {thread.thread_id} for top-level call.")
+            history_for_runner = list(thread.items)  # Get full history after adding
+        else:  # Agent-to-agent call (e.g., via SendMessage tool)
+            # For sub-calls, the history for the runner is the current shared thread items
+            # PLUS the processed current message items for this specific agent's turn.
+            # These `processed_current_message_items` have been converted by ItemHelpers
+            # but have not been through `thread.add_item`'s specific normalization yet,
+            # which is fine as they are only for this Runner's input, not direct thread storage here.
+            history_up_to_this_call = list(thread.items)
+            history_for_runner = history_up_to_this_call + processed_current_message_items
+            logger.debug(
+                f"Constructed temporary history for sub-agent '{self.name}' run. Shared thread not modified with this input."
+            )
+
+        # The history_for_runner now contains OpenAI-compatible message dictionaries.
+        # It should include user, assistant (possibly with tool_calls), and tool messages if they are part of the conversation.
+        # No filtering is applied here based on user instruction.
+
+        logger.info(
+            f"AGENT_GET_RESPONSE: History for Runner in agent '{self.name}' for chat '{effective_chat_id}' (length {len(history_for_runner)}):"
+        )
+        for i, history_item in enumerate(history_for_runner):
+            # Limiting log length for potentially long content
+            content_preview = str(history_item.get("content"))[:100]
+            tool_calls_preview = str(history_item.get("tool_calls"))[:100]
+            logger.info(
+                f"AGENT_GET_RESPONSE: History item [{i}]: role={history_item.get('role')}, content='{content_preview}...', tool_calls='{tool_calls_preview}...'"
+            )
+
+        message_files_from_kwargs = kwargs.get("message_files")
+        if message_files_from_kwargs and isinstance(message_files_from_kwargs, list) and history_for_runner:
+            last_message_item = history_for_runner[-1]
+            if isinstance(last_message_item, dict):
+                attachments_to_add_to_last_item = []
+                for file_id in message_files_from_kwargs:
+                    if isinstance(file_id, str) and file_id.startswith("file-"):
+                        attachments_to_add_to_last_item.append({"file_id": file_id, "tools": [{"type": "file_search"}]})
+                    else:
+                        logger.warning(f"Invalid file_id format in message_files: {file_id} for agent {self.name}")
+
+                if attachments_to_add_to_last_item:
+                    if "attachments" not in last_message_item:
+                        last_message_item["attachments"] = []
+
+                    existing_file_ids_in_last = {
+                        att.get("file_id")
+                        for att in last_message_item.get("attachments", [])
+                        if isinstance(att, dict) and att.get("file_id")
+                    }
+                    for att_to_add in attachments_to_add_to_last_item:
+                        if att_to_add["file_id"] not in existing_file_ids_in_last:
+                            last_message_item["attachments"].append(att_to_add)
+            else:
+                logger.warning(
+                    f"Cannot add attachments to agent {self.name}: Last item in history_for_runner is not a dict. "
+                    f"Type: {type(last_message_item)}. Skipping attachment."
+                )
+
+        try:
+            logger.debug(f"Calling Runner.run for agent '{self.name}' with {len(history_for_runner)} history items.")
             run_result: RunResult = await Runner.run(
                 starting_agent=self,
-                input=message,  # Runner handles adding this initial input
-                context=master_context,
-                hooks=hooks_to_use,
-                run_config=effective_run_config,
+                input=history_for_runner,
+                context=self._prepare_master_context(context_override, effective_chat_id),
+                hooks=hooks_override or self.hooks,
+                run_config=run_config or RunConfig(),
                 max_turns=kwargs.get("max_turns", DEFAULT_MAX_TURNS),
-                previous_response_id=kwargs.get("previous_response_id"),
             )
-            # Log completion based on presence of final_output
             completion_info = (
                 f"Output Type: {type(run_result.final_output).__name__}"
                 if run_result.final_output is not None
@@ -660,37 +756,37 @@ class Agent(BaseAgent[MasterContext]):
             logger.error(f"Error during Runner.run for agent '{self.name}': {e}", exc_info=True)
             raise AgentsException(f"Runner execution failed for agent {self.name}") from e
 
-        # 6. Optional: Validate Response
         response_text_for_validation = ""
-        if run_result.new_items:
-            # Use ItemHelpers to extract text from message output items in the result
+        if run_result.new_items:  # new_items are RunItem objects
             response_text_for_validation = ItemHelpers.text_message_outputs(run_result.new_items)
 
         if response_text_for_validation and self.response_validator:
             if not self._validate_response(response_text_for_validation):
                 logger.warning(f"Response validation failed for agent '{self.name}'")
 
-        # 7. Add final result items to thread ONLY if it's a top-level call (from user/agency)
-        if sender_name is None:
+        if sender_name is None:  # Only save to thread if top-level call
             if self._thread_manager and run_result.new_items:
                 thread = self._thread_manager.get_thread(effective_chat_id)
                 items_to_save: list[TResponseInputItem] = []
-                logger.debug(f"Preparing to save {len(run_result.new_items)} new items to thread {thread.thread_id}")
-                for i, run_item in enumerate(run_result.new_items):
-                    item_dict = self._run_item_to_tresponse_input_item(run_item)
+                logger.debug(
+                    f"Preparing to save {len(run_result.new_items)} new items from RunResult to thread {thread.thread_id}"
+                )
+                for i, run_item_obj in enumerate(run_result.new_items):
+                    # _run_item_to_tresponse_input_item converts RunItem to TResponseInputItem (dict)
+                    item_dict = self._run_item_to_tresponse_input_item(run_item_obj)
                     if item_dict:
                         items_to_save.append(item_dict)
-                        logger.debug(f"  Item {i + 1}/{len(run_result.new_items)} converted for saving: {item_dict}")
+                        logger.debug(
+                            f"  Item {i + 1}/{len(run_result.new_items)} converted for saving: {item_dict.get('role')}"
+                        )
                     else:
                         logger.debug(
-                            f"  Item {i + 1}/{len(run_result.new_items)} ({type(run_item).__name__}) skipped or failed conversion."
+                            f"  Item {i + 1}/{len(run_result.new_items)} ({type(run_item_obj).__name__}) skipped or failed conversion."
                         )
-
                 if items_to_save:
-                    logger.info(f"Saving {len(items_to_save)} converted items to thread {thread.thread_id}")
+                    logger.info(f"Saving {len(items_to_save)} converted RunResult items to thread {thread.thread_id}")
                     self._thread_manager.add_items_and_save(thread, items_to_save)
 
-        # 8. Return Result
         return run_result
 
     async def get_response_stream(
@@ -703,34 +799,7 @@ class Agent(BaseAgent[MasterContext]):
         run_config_override: RunConfig | None = None,
         **kwargs,
     ) -> AsyncGenerator[Any, None]:
-        """
-        Runs the agent's turn using the `agents.Runner` in streaming mode.
-
-        Yields events as they occur during the agent's execution (e.g., tool calls,
-        text generation deltas). Handles context, hooks, and thread management similarly
-        to `get_response`.
-
-        Args:
-            message (str | list[dict[str, Any]]): The input message for the agent.
-            sender_name (str | None, optional): The name of the sending agent, if applicable.
-            chat_id (str | None, optional): The ID of the conversation thread. If None for user
-                                            interaction, a new one is generated. Required for agent-to-agent calls.
-            context_override (dict[str, Any] | None, optional): Additional user context.
-            hooks_override (RunHooks | None, optional): Custom `RunHooks` for this run.
-            run_config_override (RunConfig | None, optional): Custom `RunConfig` for this run.
-            **kwargs: Additional arguments passed to `agents.Runner.run_streamed`.
-
-        Yields:
-            Any: Events generated by the `agents.Runner.run_streamed` execution, such as
-                 `RunItemStreamEvent`, `TextStreamEvent`, etc.
-
-        Raises:
-            RuntimeError: If the agent is missing `ThreadManager` or `Agency` linkage.
-            ValueError: If `sender_name` is provided but `chat_id` is missing.
-            AgentsException: If an error occurs during the `agents.Runner` execution setup.
-                             Errors during streaming are yielded as error events.
-        """
-        # --- Early input validation ---
+        """Runs the agent's turn in streaming mode."""
         if message is None:
             logger.error("message cannot be None")
             yield {"type": "error", "content": "message cannot be None"}
@@ -739,177 +808,214 @@ class Agent(BaseAgent[MasterContext]):
             logger.error("message cannot be empty")
             yield {"type": "error", "content": "message cannot be empty"}
             return
-        # --- End input validation ---
 
-        # Ensure internal state is ready
         if self._thread_manager is None:
-            raise RuntimeError("ThreadManager is not initialized")
+            # This should ideally be caught by type checkers or earlier validation
+            # if _thread_manager is essential for agent functionality.
+            logger.error(f"Agent '{self.name}' missing ThreadManager for streaming.")
+            raise RuntimeError(f"Agent '{self.name}' missing ThreadManager.")
 
-        # Determine effective chat_id
-        effective_chat_id: str | None = chat_id
-
-        if effective_chat_id is None:
-            # chat_id was not provided
+        effective_chat_id: str
+        if chat_id is None:
             if sender_name is not None:
-                # Agent-to-agent communication requires a chat_id
+                logger.error(f"Agent '{self.name}': chat_id is required for agent-to-agent stream communication.")
                 raise ValueError("chat_id is required for agent-to-agent stream communication.")
             else:
-                # User interaction without a provided chat_id
-                # Generate a new chat ID, do not rely on persisted state
                 effective_chat_id = f"chat_{uuid.uuid4()}"
-                logger.info(f"New user stream interaction, generated chat_id: {effective_chat_id}")
-
-        if not self._thread_manager:
-            raise RuntimeError("ThreadManager is not initialized")
-
-        # We should now have a valid effective_chat_id
-        if effective_chat_id is None:
-            # This should be unreachable if logic is correct
-            raise RuntimeError("Internal Error: Failed to determine effective chat_id for stream.")
+                logger.info(
+                    f"New user stream interaction for agent '{self.name}', generated chat_id: {effective_chat_id}"
+                )
+        else:
+            effective_chat_id = chat_id
 
         logger.info(f"Agent '{self.name}' handling get_response_stream for chat_id: {effective_chat_id}")
+        thread = self._thread_manager.get_thread(effective_chat_id)
 
-        # Add user message to thread *before* starting the run, only if sender is None (user)
-        if sender_name is None:
-            try:
-                thread = self._thread_manager.get_thread(effective_chat_id)
-                items_to_add = ItemHelpers.input_to_new_input_list(message)  # Convert string to dict list
-                # Ensure thread object supports add_items if necessary, or handle via manager
-                # thread.add_items(items_to_add)
-                self._thread_manager.add_items_and_save(thread, items_to_add)
-                logger.debug(f"Added user message to thread {effective_chat_id} before streaming.")
-            except Exception as e:
-                logger.error(f"Error processing input message for stream: {e}", exc_info=True)
-                yield {"type": "error", "content": f"Invalid input message format: {e}"}  # Yield error event
-                return  # Stop the generator
+        try:
+            processed_initial_messages = ItemHelpers.input_to_new_input_list(message)
+            self._thread_manager.add_items_and_save(thread, processed_initial_messages)
+            logger.debug(
+                f"Added initial message to thread {effective_chat_id} before streaming for agent '{self.name}'."
+            )
+        except Exception as e:
+            logger.error(f"Error processing input message for stream agent '{self.name}': {e}", exc_info=True)
+            yield {"type": "error", "content": f"Invalid input message format: {e}"}
+            return
 
-        # Prepare context, hooks, and config
         try:
             master_context = self._prepare_master_context(context_override, effective_chat_id)
             hooks_to_use = hooks_override or self.hooks
             effective_run_config = run_config_override or RunConfig()
         except RuntimeError as e:
-            # Catch errors from _prepare_master_context (e.g., missing agency)
-            logger.error(f"Error preparing context/hooks for stream: {e}", exc_info=True)
-            # Re-raise the critical context preparation error
-            raise e
-            # yield {"type": "error", "content": f"Error preparing context/hooks: {e}"}
-            # return
+            logger.error(f"Error preparing context/hooks for stream agent '{self.name}': {e}", exc_info=True)
+            raise e  # Re-raise critical context preparation error
 
-        # Execute via Runner stream
-        final_result_items = []  # To capture items for potential post-processing
+        final_result_items = []
         try:
-            logger.debug(f"Calling Runner.run_streamed for agent '{self.name}'...")
+            logger.debug(
+                f"Calling Runner.run_streamed for agent '{self.name}' with {len(thread.items)} thread items..."
+            )
+
+            # Pass full history from thread, unfiltered, based on user instruction.
+            history_for_stream_runner = list(thread.items)
+
             async for event in Runner.run_streamed(
                 starting_agent=self,
-                input=message if sender_name is None else [],  # Runner handles input logic from thread
+                input=history_for_stream_runner,
                 context=master_context,
                 hooks=hooks_to_use,
                 run_config=effective_run_config,
                 max_turns=kwargs.get("max_turns", DEFAULT_MAX_TURNS),
-                previous_response_id=kwargs.get("previous_response_id"),
             ):
                 yield event
-                # Collect RunItems from the stream events if needed
                 if isinstance(event, RunItemStreamEvent):
                     final_result_items.append(event.item)
-
             logger.info(f"Runner.run_streamed completed for agent '{self.name}'.")
 
         except Exception as e:
             logger.error(f"Error during Runner.run_streamed for agent '{self.name}': {e}", exc_info=True)
-            yield {"type": "error", "content": f"Runner execution failed: {e}"}  # Yield error event
-            return  # Stop the generator after yielding error
+            yield {"type": "error", "content": f"Runner execution failed: {e}"}
+            return
 
-        # Optional post-streaming actions (like validation, final save) can be added here
-        # if necessary, using final_result_items.
-        # Example: Save final assistant messages/tool calls if required by persistence model
-        # Note: SDK Runner itself handles state within a run via context/hooks.
+        # After streaming, if it was a top-level call (user/agency direct call, not agent-to-agent),
+        # and new items were generated by the run (captured in final_result_items),
+        # these should be converted and saved to the thread to reflect the assistant's full turn.
+        # Note: The `input` messages were already added above.
+        # `final_result_items` here are `RunItem` objects from the stream.
+        if sender_name is None and final_result_items:  # Top-level call and new items exist
+            if self._thread_manager:
+                items_to_save_from_stream: list[TResponseInputItem] = []
+                logger.debug(
+                    f"Preparing to save {len(final_result_items)} new items from stream result for agent '{self.name}' to thread {thread.thread_id}"
+                )
+                for i, run_item_obj in enumerate(final_result_items):
+                    item_dict = self._run_item_to_tresponse_input_item(run_item_obj)
+                    if item_dict:
+                        # Avoid adding items that might effectively be duplicates of the initial input if not handled carefully
+                        # This check might be too simplistic and depend on exact item structure / IDs if available
+                        is_duplicate = False
+                        if processed_initial_messages:
+                            # This simple check may not be robust enough for all cases.
+                            # It assumes that if a generated item is identical to an initial one, it might be a duplicate.
+                            # A more robust check would compare based on unique IDs if available, or more specific content fields.
+                            if item_dict in processed_initial_messages and item_dict.get("role") == "user":
+                                is_duplicate = (
+                                    True  # Avoid re-adding the initial user message if it somehow appears in output
+                                )
+
+                        if not is_duplicate:
+                            items_to_save_from_stream.append(item_dict)
+                            logger.debug(
+                                f"  Stream Item {i + 1}/{len(final_result_items)} for agent '{self.name}' converted for saving: {item_dict.get('role')}"
+                            )
+                        else:
+                            logger.debug(
+                                f"  Stream Item {i + 1}/{len(final_result_items)} for agent '{self.name}' skipped as potential duplicate of input."
+                            )
+                    else:
+                        logger.debug(
+                            f"  Stream Item {i + 1}/{len(final_result_items)} for agent '{self.name}' ({type(run_item_obj).__name__}) skipped or failed conversion."
+                        )
+                if items_to_save_from_stream:
+                    logger.info(
+                        f"Saving {len(items_to_save_from_stream)} converted stream items for agent '{self.name}' to thread {thread.thread_id}"
+                    )
+                    self._thread_manager.add_items_and_save(thread, items_to_save_from_stream)
 
     # --- Helper Methods ---
     def _run_item_to_tresponse_input_item(self, item: RunItem) -> TResponseInputItem | None:
-        """Converts a RunItem into the TResponseInputItem dictionary format for history.
-        Returns None if the item type shouldn't be added to history directly.
+        """Converts a RunItem from a RunResult into TResponseInputItem dictionary format for history.
+        Returns None if the item type should not be directly added to history.
         """
-
         if isinstance(item, MessageOutputItem):
-            # Extract text content for simplicity; complex content needs more handling
             content = ItemHelpers.text_message_output(item)
             logger.debug(f"Converting MessageOutputItem to history: role=assistant, content='{content[:50]}...'")
             return {"role": "assistant", "content": content}
 
         elif isinstance(item, ToolCallItem):
-            # Construct tool_calls list
             tool_calls = []
-            # Handle different raw_item types within ToolCallItem
-            if isinstance(item.raw_item, ResponseFunctionToolCall):
-                # Access attributes directly from ResponseFunctionToolCall
-                call_id = getattr(item.raw_item, "call_id", None)
-                func_name = getattr(item.raw_item, "name", None)
-                func_args = getattr(item.raw_item, "arguments", None)
+            if hasattr(item, "raw_item"):
+                raw = item.raw_item
+                tool_call_id_for_array = None
+                func_name = None
+                func_args_str = None
 
-                if not call_id or not func_name:
-                    logger.warning(f"Missing call_id or name in ResponseFunctionToolCall: {item.raw_item}")
+                if isinstance(raw, ResponseFunctionToolCall):
+                    tool_call_id_for_array = getattr(raw, "call_id", getattr(raw, "id", None))
+                    func_name = getattr(raw, "name", None)
+                    func_args_raw = getattr(raw, "arguments", None)
+                    if not isinstance(func_args_raw, str):
+                        try:
+                            func_args_str = json.dumps(func_args_raw)
+                        except TypeError as e:
+                            logger.error(f"Could not serialize func_args for {func_name}: {func_args_raw}. Error: {e}")
+                            return None
+                    else:
+                        func_args_str = func_args_raw
+                elif isinstance(raw, ResponseFileSearchToolCall):
+                    tool_call_id_for_array = getattr(raw, "id", None)
+                    func_name = "FileSearch"  # Per agents.FileSearchTool.name
+                    try:
+                        func_args_str = json.dumps({"queries": getattr(raw, "queries", [])})
+                    except TypeError as e:
+                        logger.error(
+                            f"Could not serialize queries for FileSearch: {getattr(raw, 'queries', [])}. Error: {e}"
+                        )
+                        return None
+                else:
+                    logger.warning(f"Unhandled raw_item type in ToolCallItem: {type(raw)}")
                     return None
 
-                # Need to handle potential serialization issues with func_args
-                # It's often a string already, but might be dict/list
-                if isinstance(func_args, dict | list):
-                    args_str = json.dumps(func_args)
-                elif isinstance(func_args, str):
-                    args_str = func_args
-                else:
-                    args_str = str(func_args)  # Fallback
+                if not tool_call_id_for_array or not func_name:
+                    logger.warning(
+                        f"Converting ToolCallItem: Missing id or name. ID: {tool_call_id_for_array}, Name: {func_name}, Raw: {raw}"
+                    )
+                    return None
 
-                logger.debug(
-                    f"Converting ToolCallItem (Function) to history: id={call_id}, name={func_name}, args='{args_str[:50]}...'"
-                )
                 tool_calls.append(
                     {
-                        "id": call_id,
+                        "id": tool_call_id_for_array,
                         "type": "function",
-                        "function": {"name": func_name, "arguments": args_str},
+                        "function": {"name": func_name, "arguments": func_args_str},
                     }
                 )
-            # Add elif blocks here for other tool call types if needed
-            # elif isinstance(item.raw_item, ResponseComputerToolCall): ...
-            # elif isinstance(item.raw_item, ResponseFileSearchToolCall): ...
             else:
-                logger.warning(f"Unhandled raw_item type in ToolCallItem: {type(item.raw_item)}")
-                return None  # Or handle appropriately
-
-            if tool_calls:
-                # Ensure content is None when tool_calls are present
-                return {"role": "assistant", "content": None, "tool_calls": tool_calls}
-            else:
-                return None  # No valid tool calls extracted
-
-        elif isinstance(item, ToolCallOutputItem):
-            # Construct tool call output item
-            tool_call_id = None
-            output_content = str(item.output)  # Use the processed output
-            # Check structure instead of isinstance for TypedDict
-            if isinstance(item.raw_item, dict) and item.raw_item.get("type") == "function_call_output":
-                tool_call_id = item.raw_item.get("call_id")
-                logger.debug(
-                    f"Converting ToolCallOutputItem (Function) to history: tool_call_id={tool_call_id}, content='{output_content[:50]}...'"
-                )
-
-            # Add similar checks here if handling ComputerCallOutput, etc.
-            # elif isinstance(item.raw_item, dict) and item.raw_item.get('type') == 'computer_call_output':
-            #     tool_call_id = item.raw_item.get("call_id")
-            #     logger.debug(f"Converting ToolCallOutputItem (Computer) to history: tool_call_id={tool_call_id}, content='{output_content[:50]}...'")
-
-            if tool_call_id:
-                # Content should be stringified output
-                return {"role": "tool", "tool_call_id": tool_call_id, "content": output_content}
-            else:
-                logger.warning(f"Could not determine tool_call_id for ToolCallOutputItem: {item.raw_item}")
+                logger.warning(f"ToolCallItem has no raw_item. Cannot convert: {item}")
                 return None
 
-        # Add handling for other RunItem types if needed (e.g., HandoffOutputItem?)
-        # elif isinstance(item, UserInputItem) -> Should already be handled when initially added
+            if tool_calls:
+                logger.debug(f"Converted ToolCallItem to assistant message with tool_calls: {tool_calls}")
+                return {"role": "assistant", "content": None, "tool_calls": tool_calls}
+            else:
+                logger.warning("ToolCallItem conversion resulted in no tool_calls.")
+                return None
 
+        elif isinstance(item, ToolCallOutputItem):
+            tool_call_id = None
+            output_content = str(item.output)
+
+            # Attempt to retrieve the tool_call_id, prioritizing direct attribute if SDK provides it
+            if hasattr(item, "tool_call_id") and item.tool_call_id:
+                tool_call_id = item.tool_call_id
+            # Fallback: check raw_item if it's the ResponseFunctionToolCall or a dict containing call_id
+            elif isinstance(item.raw_item, ResponseFunctionToolCall):
+                # ResponseFunctionToolCall from /v1/responses has 'call_id' for matching, and 'id' for its own unique ID
+                tool_call_id = getattr(item.raw_item, "call_id", None)
+                if tool_call_id is None:  # Should not happen if call_id is reliable
+                    tool_call_id = getattr(item.raw_item, "id", None)  # Less reliable for matching
+            elif isinstance(item.raw_item, dict) and "call_id" in item.raw_item:
+                tool_call_id = item.raw_item.get("call_id")
+
+            if tool_call_id:
+                logger.debug(
+                    f"Converting ToolCallOutputItem to history: tool_call_id={tool_call_id}, content='{output_content[:50]}...'"
+                )
+                return {"role": "tool", "tool_call_id": tool_call_id, "content": output_content}
+            else:
+                logger.warning(
+                    f"Could not determine tool_call_id for ToolCallOutputItem: raw_item={item.raw_item}, item={item}"
+                )
+                return None
         else:
             logger.debug(f"Skipping RunItem type {type(item).__name__} for thread history saving.")
             return None

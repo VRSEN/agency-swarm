@@ -4,7 +4,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from agents import RunResult, TResponseInputItem
+from agents import TResponseInputItem
 
 if TYPE_CHECKING:
     from .agent import Agent  # Use forward reference
@@ -33,41 +33,51 @@ class ConversationThread:
     items: list[TResponseInputItem] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
 
-    def add_item(self, item: TResponseInputItem) -> None:
-        """Appends a single message item dictionary to the thread history.
+    def add_item(self, item_dict: TResponseInputItem) -> None:
+        """Appends a single, pre-processed message item dictionary to the thread history.
 
-        Performs basic validation to ensure the item is a dictionary with a 'role' key.
+        Ensures the 'content' field complies with OpenAI API requirements.
+        It's expected that the input `item_dict` has already been processed (e.g.,
+        from a Pydantic model to a dict if necessary) before being passed to this method.
 
         Args:
-            item (TResponseInputItem): The message item dictionary to add.
-                                       Must contain at least a 'role' key.
+            item_dict (TResponseInputItem): The pre-processed message item dictionary to add.
+                                         Must contain at least a 'role' key.
         """
-        # Basic validation: ensure it's a dict with a 'role'
-        if not isinstance(item, dict) or "role" not in item:
-            logger.warning(f"Attempted to add non-TResponseInputItem-like dict {type(item)} to thread {self.thread_id}")
+        if not isinstance(item_dict, dict) or "role" not in item_dict:
+            logger.warning(f"THREAD_ADD_ITEM: Attempted to add invalid item: {item_dict}. Expected dict with 'role'.")
             return
-        self.items.append(item)
-        logger.debug(f"Added item with role '{item.get('role')}' to thread {self.thread_id}")
+
+        # Ensure basic structure and normalize content
+        role = item_dict.get("role")
+        content = item_dict.get("content")
+
+        # Normalize content: if None, set to "" for user, tool, and ASSISTANT roles
+        if content is None:
+            if role == "user" or role == "tool" or role == "assistant":
+                item_dict["content"] = ""
+                logger.debug(
+                    f"THREAD_ADD_ITEM: Normalized content from None to empty string for role '{role}' in thread {self.thread_id}"
+                )
+            # else: content can remain None for other roles if any (e.g. system, though not typical here)
+
+        # Assistant messages can have tool_calls, and tool messages have tool_call_id.
+        # These should be preserved as they are part of the standard OpenAI Chat Completions message format.
+        # The Runner or the underlying API client is responsible for handling these correctly.
+
+        self.items.append(item_dict)
+        logger.debug(f"Added item with role '{item_dict.get('role')}' to thread {self.thread_id}")
 
     def add_items(self, items: Sequence[TResponseInputItem]) -> None:
-        """Appends multiple message item dictionaries to the thread history.
+        """Appends multiple pre-processed message item dictionaries to the thread history.
 
-        Iterates through the sequence, adding each valid item (dictionary with a 'role' key).
+        Each item is processed by `add_item`.
 
         Args:
-            items (Sequence[TResponseInputItem]): A sequence of message item dictionaries to add.
+            items (Sequence[TResponseInputItem]): A sequence of pre-processed message item dictionaries.
         """
-        added_count = 0
         for item in items:
-            # Basic validation: ensure it's a dict with a 'role'
-            if isinstance(item, dict) and "role" in item:
-                self.items.append(item)
-                added_count += 1
-            else:
-                logger.warning(
-                    f"Skipping non-TResponseInputItem-like dict {type(item)} during add_items in thread {self.thread_id}"
-                )
-        logger.debug(f"Added {added_count} items to thread {self.thread_id}")
+            self.add_item(item)
 
     def add_user_message(self, message: str | TResponseInputItem) -> None:
         """Adds a user message to the thread history.
@@ -102,7 +112,6 @@ class ConversationThread:
 
     def get_history(
         self,
-        perspective_agent: "Agent" | None = None,
         max_items: int | None = None,
     ) -> list[TResponseInputItem]:
         """Gets the message history, suitable for use by `agents.Runner`.
@@ -111,7 +120,6 @@ class ConversationThread:
         the history to the most recent `max_items`.
 
         Args:
-            perspective_agent ("Agent" | None, optional): Reserved for future use. Defaults to None.
             max_items (int | None, optional): The maximum number of recent items to return.
                                               If None, the full history is returned. Defaults to None.
 
@@ -152,9 +160,10 @@ class ConversationThread:
 
 
 # Placeholder imports for callbacks - Update Typehint
-ThreadLoadCallback = Callable[[str], ConversationThread | None]
-# Save callback expects the full dictionary of threads
-ThreadSaveCallback = Callable[[ConversationThread], None]
+# User's load callback should return a dictionary representation of the thread or None
+ThreadLoadCallback = Callable[[str], dict[str, Any] | None]
+# User's save callback should accept the thread_id and a dictionary representation
+ThreadSaveCallback = Callable[[str, dict[str, Any]], None]
 
 
 class ThreadManager:
@@ -165,8 +174,8 @@ class ThreadManager:
     `Agency` initialization.
     Attributes:
         _threads (dict[str, ConversationThread]): In-memory cache of active conversation threads.
-        _load_callback (ThreadLoadCallback | None): The callback function used to load thread data.
-        _save_callback (ThreadSaveCallback | None): The callback function used to save thread data.
+        _load_callback (ThreadLoadCallback | None): The callback function used to load thread data as a dict.
+        _save_callback (ThreadSaveCallback | None): The callback function used to save thread data as a dict.
     """
 
     _threads: dict[str, ConversationThread]  # In-memory storage
@@ -183,11 +192,12 @@ class ThreadManager:
 
         Args:
             load_callback (ThreadLoadCallback | None, optional):
-                A function to load a specific `ConversationThread` by its ID.
-                Expected signature: `(thread_id: str) -> Optional[ConversationThread]`.
+                A function to load thread data as a dictionary by its ID.
+                Expected signature: `(thread_id: str) -> Optional[dict[str, Any]]`
+                The dict should have keys like 'items' (list) and 'metadata' (dict).
             save_callback (ThreadSaveCallback | None, optional):
-                A function to save a specific `ConversationThread`.
-                Expected signature: `(thread: ConversationThread) -> None`.
+                A function to save thread data (provided as a dictionary).
+                Expected signature: `(thread_id: str, thread_data: dict[str, Any]) -> None`.
         """
         self._threads = {}
         self._load_callback = load_callback
@@ -199,9 +209,11 @@ class ThreadManager:
 
         If a `thread_id` is provided, it first checks the in-memory cache.
         If not found and a `load_callback` is configured, it attempts to load
-        the thread using the callback.
+        the thread data (as a dict) using the callback, then reconstructs the
+        `ConversationThread` object.
         If still not found, or if no `thread_id` was provided, a new
         `ConversationThread` is created with a unique ID.
+        Newly created or loaded threads are cached in memory.
         Newly created threads are saved immediately if a `save_callback` is configured.
 
         Args:
@@ -214,13 +226,11 @@ class ThreadManager:
         Raises:
             TypeError: If `thread_id` is provided but is not a string.
         """
-        # Fix 1: Explicitly check type if thread_id is provided
         if thread_id is not None and not isinstance(thread_id, str):
             raise TypeError(f"thread_id must be a string or None, not {type(thread_id)}")
 
         effective_thread_id = thread_id
 
-        # Fix 2: Generate ID here if None
         if effective_thread_id is None:
             effective_thread_id = f"as_thread_{uuid.uuid4()}"
             logger.info(f"No thread_id provided, generated new ID: {effective_thread_id}")
@@ -229,43 +239,51 @@ class ThreadManager:
             logger.debug(f"Returning existing thread {effective_thread_id} from memory.")
             return self._threads[effective_thread_id]
 
-        # Load attempt uses effective_thread_id (which might be the generated one)
-        if self._load_callback:
-            logger.debug(f"Attempting to load thread {effective_thread_id} using callback...")
-            # Assuming load callback should only be called if an ID was initially provided
-            # or if we expect a specific generated ID format might exist.
-            # Let's refine: Only attempt load if thread_id was explicitly provided.
-            if thread_id is not None:
-                loaded_thread = self._load_callback(thread_id)  # Use original provided id for load
-                if loaded_thread:
-                    logger.info(f"Successfully loaded thread {thread_id} from persistence.")
-                    # Ensure the loaded thread uses the requested ID
-                    if loaded_thread.thread_id != thread_id:
-                        logger.warning(
-                            f"Loaded thread ID '{loaded_thread.thread_id}' differs from requested ID '{thread_id}'. Using requested ID."
-                        )
-                        loaded_thread.thread_id = thread_id
-                    self._threads[thread_id] = loaded_thread
-                    return loaded_thread
-                else:
-                    logger.warning(f"Load callback provided but failed to load thread {thread_id}.")
-            else:
-                logger.debug("Skipping load callback as no specific thread_id was requested.")
+        if self._load_callback and thread_id is not None:  # Only load if an ID was explicitly provided
+            logger.debug(f"Attempting to load thread data for {thread_id} using callback...")
+            loaded_thread_data: dict[str, Any] | None = self._load_callback(thread_id)
+            if loaded_thread_data:
+                try:
+                    items = loaded_thread_data.get("items", [])
+                    metadata = loaded_thread_data.get("metadata", {})
+                    if not isinstance(items, list):
+                        logger.error(f"Loaded 'items' for thread {thread_id} is not a list. Found: {type(items)}")
+                        # Decide handling: raise error, or create new thread as if load failed
+                        items = []  # Default to empty items on malformed data
+                    if not isinstance(metadata, dict):
+                        logger.error(f"Loaded 'metadata' for thread {thread_id} is not a dict. Found: {type(metadata)}")
+                        metadata = {}  # Default to empty metadata
 
-        # Create new thread using the effective_thread_id (original or generated)
+                    loaded_thread_obj = ConversationThread(thread_id=thread_id, items=items, metadata=metadata)
+                    logger.info(f"Successfully loaded and reconstructed thread {thread_id} from persisted data.")
+                    self._threads[thread_id] = loaded_thread_obj
+                    return loaded_thread_obj
+                except Exception as e:
+                    logger.error(
+                        f"Error reconstructing ConversationThread for {thread_id} from loaded data: {e}", exc_info=True
+                    )
+                    # Fall through to create a new thread as if loading failed
+            else:
+                logger.info(
+                    f"Load callback did not find data for thread {thread_id}. A new thread will be created if needed."
+                )
+
+        # Create new thread if not loaded or if thread_id was initially None
         new_thread = ConversationThread(thread_id=effective_thread_id)
-        # actual_id = new_thread.thread_id # Not needed anymore as we use effective_thread_id
         self._threads[effective_thread_id] = new_thread
         logger.info(f"Created new thread: {effective_thread_id}. Storing in memory.")
+        # Save the newly created thread if a save callback exists
+        # This ensures that even if a thread_id was provided but not found by load_callback,
+        # the new thread associated with that thread_id is persisted.
         if self._save_callback:
-            # Save only if it was newly created (i.e., not loaded)
-            self._save_thread(new_thread)
+            self._save_thread(new_thread)  # Persist the newly created thread
         return new_thread
 
     def add_item_and_save(self, thread: ConversationThread, item: TResponseInputItem):
         """
         Adds a single message item to the specified thread and persists the thread.
 
+        The `item` is expected to be an already processed TResponseInputItem dictionary.
         If a `save_callback` is configured, it will be called after adding the item.
         Args:
             thread (ConversationThread): The thread to add the item to.
@@ -279,6 +297,7 @@ class ThreadManager:
         """
         Adds multiple message items to the specified thread and persists the thread.
 
+        The `items` are expected to be a sequence of already processed TResponseInputItem dictionaries.
         If a `save_callback` is configured, it will be called after adding the items.
         Args:
             thread (ConversationThread): The thread to add the items to.
@@ -289,11 +308,12 @@ class ThreadManager:
             self._save_thread(thread)
 
     def _save_thread(self, thread: ConversationThread):
-        """Internal method to save a thread using the callback."""
+        """Internal method to save a thread using the callback after converting it to a dict."""
         if self._save_callback:
             try:
-                logger.debug(f"Saving thread {thread.thread_id} using callback...")
-                self._save_callback(thread)
-                logger.info(f"Successfully saved thread {thread.thread_id}.")
+                logger.debug(f"Preparing to save thread {thread.thread_id} using callback...")
+                thread_data_dict = {"items": thread.items, "metadata": thread.metadata}
+                self._save_callback(thread.thread_id, thread_data_dict)
+                logger.info(f"Successfully triggered save for thread {thread.thread_id}.")
             except Exception as e:
                 logger.error(f"Error saving thread {thread.thread_id} using callback: {e}", exc_info=True)

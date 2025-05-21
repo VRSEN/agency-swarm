@@ -1,14 +1,17 @@
 import asyncio
 import json
 import uuid
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import pytest
 from agents import FunctionTool, RunConfig, RunContextWrapper, RunResult
+from agents.items import MessageOutputItem
 from agents.lifecycle import RunHooks
+from openai import AsyncOpenAI
+from openai.types.responses import ResponseOutputMessage, ResponseOutputText
 from pydantic import BaseModel, ValidationError
 
-from agency_swarm import Agent
+from agency_swarm import Agency, Agent
 from agency_swarm.agent import SEND_MESSAGE_TOOL_PREFIX, FileSearchTool
 from agency_swarm.context import MasterContext
 from agency_swarm.thread import ConversationThread, ThreadManager
@@ -25,39 +28,52 @@ def mock_thread_manager():
     def get_thread_side_effect(chat_id):
         """Side effect for get_thread to create/return mock threads with correct ID."""
         if chat_id not in created_threads:
-            mock_thread = MagicMock(spec=ConversationThread)
-            mock_thread.thread_id = chat_id
-            mock_thread.items = []
+            mock_thread_fixture_created = MagicMock(spec=ConversationThread)
+            mock_thread_fixture_created.thread_id = chat_id
+            mock_thread_fixture_created.items = []
 
             def add_item_side_effect(item):
-                mock_thread.items.append(item)
+                mock_thread_fixture_created.items.append(item)
 
-            mock_thread.add_item.side_effect = add_item_side_effect
+            mock_thread_fixture_created.add_item.side_effect = add_item_side_effect
 
             def add_items_side_effect(items):
-                mock_thread.items.extend(items)
+                mock_thread_fixture_created.items.extend(items)
 
-            mock_thread.add_items.side_effect = add_items_side_effect
-            mock_thread.get_history.return_value = []
-            created_threads[chat_id] = mock_thread
+            mock_thread_fixture_created.add_items.side_effect = add_items_side_effect
+            mock_thread_fixture_created.get_history.return_value = []
+            created_threads[chat_id] = mock_thread_fixture_created
         return created_threads[chat_id]
 
     manager.get_thread.side_effect = get_thread_side_effect
 
+    def add_items_and_save_side_effect(thread_obj, items_to_add):
+        if hasattr(thread_obj, "items") and isinstance(thread_obj.items, list):
+            thread_obj.items.extend(items_to_add)
+        else:
+            pass
+
     manager.add_item_and_save = MagicMock()
-    manager.add_items_and_save = MagicMock()
+    manager.add_items_and_save = MagicMock(side_effect=add_items_and_save_side_effect)
     return manager
 
 
 @pytest.fixture
-def minimal_agent(mock_thread_manager):
+def mock_agency_instance(mock_thread_manager):
+    agency = MagicMock(spec=Agent._agency_instance)
+    agency.agents = {}
+    agency.user_context = {}
+    agency.thread_manager = mock_thread_manager
+    return agency
+
+
+@pytest.fixture
+def minimal_agent(mock_thread_manager, mock_agency_instance):
     """Provides a minimal Agent instance for basic tests."""
     agent = Agent(name="TestAgent", instructions="Test instructions")
-    mock_agency = MagicMock()
-    mock_agency.agents = {agent.name: agent}
-    mock_agency.user_context = {}
-    agent._set_agency_instance(mock_agency)
+    agent._set_agency_instance(mock_agency_instance)
     agent._set_thread_manager(mock_thread_manager)
+    mock_agency_instance.agents[agent.name] = agent
     return agent
 
 
@@ -116,25 +132,41 @@ def test_agent_initialization_with_validator():
 
 
 @patch("agency_swarm.agent.Agent._init_file_handling")
-def test_agent_initialization_files_folder(mock_init_files, tmp_path):
-    """Test initialization calls _init_file_handling when files_folder is set."""
+@patch("agency_swarm.agent.Agent._parse_files_folder_for_vs_id")
+def test_agent_initialization_files_folder(mock_parse_files, mock_init_files, tmp_path):
+    """Test initialization calls _parse_files_folder_for_vs_id when files_folder is set."""
     files_dir = tmp_path / "agent_files"
     agent = Agent(name="FileAgent", instructions="Handle files", files_folder=str(files_dir))
-    mock_init_files.assert_called_once()
-    assert agent.files_folder == str(files_dir)
+    mock_parse_files.assert_called_once()
+    mock_init_files.assert_not_called()  # Async part is not called from __init__
 
 
 @patch("agency_swarm.agent.Agent._ensure_file_search_tool")
 def test_agent_adds_filesearch_tool(mock_ensure_fs_tool, tmp_path):
     """Test that _ensure_file_search_tool is called when files_folder implies VS."""
-    vs_id_part = uuid.uuid4()
-    vs_dir_name = f"folder_vs_{vs_id_part}"
+    vs_id_part_raw = uuid.uuid4().hex  # Just the hex part
+    full_vs_id_for_folder = f"vs_{vs_id_part_raw}"
+    vs_dir_name = f"folder_vs_{full_vs_id_for_folder}"
     files_dir = tmp_path / vs_dir_name
 
-    agent = Agent(name="FileSearchAgent", instructions="Search files", files_folder=str(files_dir))
+    mock_retrieved_vs = MagicMock()
+    mock_retrieved_vs.id = full_vs_id_for_folder
+    mock_retrieved_vs.name = "Test VS For FileSearchTool"
 
-    mock_ensure_fs_tool.assert_called_once()
-    assert agent._associated_vector_store_id == str(vs_id_part)
+    mock_agent_resolved_client = AsyncMock(spec=AsyncOpenAI)
+    mock_agent_resolved_client.vector_stores = AsyncMock()
+    mock_agent_resolved_client.vector_stores.retrieve.return_value = mock_retrieved_vs
+
+    with patch.object(Agent, "client", new_callable=PropertyMock) as mock_client_property:
+        mock_client_property.return_value = mock_agent_resolved_client
+        agent = Agent(
+            name="TestAgentFSTool",
+            files_folder=str(files_dir),
+            description="Test agent for FileSearchTool addition",
+            instructions="Test instructions",
+        )
+        mock_ensure_fs_tool.assert_called_once()
+        assert agent._associated_vector_store_id == full_vs_id_for_folder
 
 
 def test_agent_does_not_add_filesearch_tool(tmp_path):
@@ -200,20 +232,38 @@ def test_register_subagent_idempotent(minimal_agent):
 async def test_upload_file(tmp_path):
     """Test uploading a file LOCALLY only."""
     files_dir = tmp_path / "agent_files_upload"
+    # Agent init involves _init_file_handling, which might call MasterContext.get_client.
+    # For this test, we assume _init_file_handling works or doesn't interfere with client needed for upload.
+    # If init needs specific client behavior, it should be mocked via 'agency_swarm.context.MasterContext.get_client'.
     agent = Agent(name="UploadAgent", instructions="Test", files_folder=str(files_dir))
 
-    with patch.object(agent.client.files, "create", new_callable=AsyncMock) as mock_create:
-        mock_create.return_value = MagicMock(id="fake-openai-id")
+    mock_agent_client_instance = AsyncMock()
+    mock_uploaded_file_obj = MagicMock(id="fake-openai-id-123")
+
+    mock_agent_client_instance.files = AsyncMock()
+    mock_agent_client_instance.files.create = AsyncMock(return_value=mock_uploaded_file_obj)
+    # For asserting .vector_stores.files.create.assert_not_awaited()
+    mock_agent_client_instance.vector_stores = AsyncMock()
+    mock_agent_client_instance.vector_stores.files = AsyncMock()
 
     source_file_path = tmp_path / "source.txt"
-    source_file_path.write_text("Test content")
+    source_file_content = "Test content for upload"
+    source_file_path.write_text(source_file_content)
 
-    await agent.upload_file(str(source_file_path))
+    # Patch Agent.client property
+    with patch.object(Agent, "client", new_callable=PropertyMock) as mock_client_property:
+        mock_client_property.return_value = mock_agent_client_instance
+        returned_file_id = await agent.upload_file(str(source_file_path))
 
-    expected_target_path = agent.files_folder_path / source_file_path.name
-    assert expected_target_path.is_file()
-    assert expected_target_path.read_text() == "Test content"
-    mock_create.assert_not_awaited()
+    assert returned_file_id == "fake-openai-id-123"
+
+    expected_filename = f"{source_file_path.stem}_{mock_uploaded_file_obj.id}{source_file_path.suffix}"
+    expected_target_path = agent.files_folder_path / expected_filename
+    assert expected_target_path.is_file(), f"Expected file {expected_target_path} not found."
+    assert expected_target_path.read_text() == source_file_content
+
+    mock_agent_client_instance.files.create.assert_awaited_once()
+    mock_agent_client_instance.vector_stores.files.create.assert_not_awaited()
 
 
 @pytest.mark.skip(reason="Requires mocking OpenAI API or live calls")
@@ -234,16 +284,16 @@ async def test_check_file_exists_true(mock_openai_client, tmp_path):
     mock_file_details = MagicMock(id=target_file_id, filename=filename_to_check)
 
     mock_client_instance = mock_openai_client.return_value
-    mock_client_instance.beta.vector_stores.files.list.return_value = MagicMock(data=[mock_vs_file_entry])
+    mock_client_instance.vector_stores.files.list.return_value = MagicMock(data=[mock_vs_file_entry])
     mock_client_instance.files.retrieve.return_value = mock_file_details
 
-    agent.client.beta.vector_stores.files.list = mock_client_instance.beta.vector_stores.files.list
+    agent.client.vector_stores.files.list = mock_client_instance.vector_stores.files.list
     agent.client.files.retrieve = mock_client_instance.files.retrieve
 
     result = await agent.check_file_exists(filename_to_check)
 
     assert result == target_file_id
-    agent.client.beta.vector_stores.files.list.assert_awaited_once_with(vector_store_id=vs_id, limit=100)
+    agent.client.vector_stores.files.list.assert_awaited_once_with(vector_store_id=vs_id, limit=100)
     agent.client.files.retrieve.assert_awaited_once_with(target_file_id)
 
 
@@ -261,14 +311,14 @@ async def test_check_file_exists_false(mock_openai_client, tmp_path):
     filename_to_check = "myfile_not_found.txt"
 
     mock_client_instance = mock_openai_client.return_value
-    mock_client_instance.beta.vector_stores.files.list.return_value = MagicMock(data=[])
+    mock_client_instance.vector_stores.files.list.return_value = MagicMock(data=[])
 
-    agent.client.beta.vector_stores.files.list = mock_client_instance.beta.vector_stores.files.list
+    agent.client.vector_stores.files.list = mock_client_instance.vector_stores.files.list
 
     result = await agent.check_file_exists(filename_to_check)
 
     assert result is None
-    agent.client.beta.vector_stores.files.list.assert_awaited_once_with(vector_store_id=vs_id, limit=100)
+    agent.client.vector_stores.files.list.assert_awaited_once_with(vector_store_id=vs_id, limit=100)
 
 
 @pytest.mark.asyncio
@@ -279,7 +329,7 @@ async def test_check_file_exists_no_vs_id():
     with patch("openai.AsyncOpenAI") as mock_openai_client:
         result = await agent.check_file_exists("somefile.txt")
         assert result is None
-        mock_openai_client.return_value.beta.vector_stores.files.list.assert_not_called()
+        mock_openai_client.return_value.vector_stores.files.list.assert_not_called()
 
 
 # 4. get_response Tests
@@ -289,26 +339,49 @@ async def test_get_response_basic(mock_runner_run, minimal_agent, mock_thread_ma
     """Test basic call flow of get_response, mocking Runner.run."""
     mock_run_result = MagicMock(spec=RunResult)
     mock_run_result.final_output = "Mocked response"
-    mock_run_result.new_items = [{"role": "assistant", "content": "Mocked response"}]
+
+    raw_mock_openai_message = ResponseOutputMessage(
+        id=f"msg_{uuid.uuid4()}",
+        type="message",
+        status="completed",
+        content=[ResponseOutputText(text="Mocked response", type="output_text", annotations=[])],
+        role="assistant",
+    )
+    # This is what Agent._run_item_to_tresponse_input_item would convert MessageOutputItem(raw_item=raw_mock_openai_message) to
+    mock_assistant_response_for_history = [{"role": "assistant", "content": "Mocked response"}]
+    # This is what goes into RunResult.new_items
+    mock_message_output_item_for_run_result = MessageOutputItem(agent=minimal_agent, raw_item=raw_mock_openai_message)
+    mock_run_result.new_items = [mock_message_output_item_for_run_result]
+
     mock_runner_run.return_value = mock_run_result
 
     chat_id = "test_chat_123"
-    message = "Hello Agent"
-    result = await minimal_agent.get_response(message, chat_id=chat_id)
+    message_content = "Hello Agent"
+
+    result = await minimal_agent.get_response(message_content, chat_id=chat_id)
+
+    retrieved_thread = mock_thread_manager.get_thread(chat_id)
 
     assert result == mock_run_result
     mock_runner_run.assert_awaited_once()
     call_args, call_kwargs = mock_runner_run.call_args
     assert call_kwargs["starting_agent"] == minimal_agent
 
-    assert call_kwargs["input"] == message
+    expected_user_message_item = [{"role": "user", "content": message_content}]
 
-    assert isinstance(call_kwargs["context"], MasterContext)
-    assert call_kwargs["context"].current_agent_name == minimal_agent.name
-    assert call_kwargs["context"].chat_id == chat_id
-    assert call_kwargs["context"].thread_manager == mock_thread_manager
+    # 1. Assert what Runner.run received as input
+    # This should be the history *before* the assistant's response is added by add_items_and_save.
+    # mock_thread_manager.get_thread().items starts empty.
+    # agent.get_response calls thread.add_items(expected_user_message_item) via side effect from fixture.
+    # So, at the time of Runner.run, thread.items only contains the user message.
+    assert call_kwargs["input"] == expected_user_message_item
 
-    mock_thread_manager.get_thread.assert_called_with(chat_id)
+    # 2. Assert that thread_manager.add_items_and_save was called correctly to add the user message
+    # We use assert_any_call because add_items_and_save will be called again for the assistant's response.
+    mock_thread_manager.add_items_and_save.assert_any_call(retrieved_thread, expected_user_message_item)
+
+    # 3. Assert that thread_manager.add_items_and_save was called for the assistant's response
+    mock_thread_manager.add_items_and_save.assert_any_call(retrieved_thread, mock_assistant_response_for_history)
 
 
 @pytest.mark.asyncio
@@ -376,6 +449,7 @@ async def test_get_response_stream_basic(mock_runner_run_streamed_patch, minimal
     mock_events = [
         {"event": "text", "data": "Hello "},
         {"event": "text", "data": "World"},
+        {"event": "done"},
     ]
 
     async def mock_stream_wrapper():
@@ -386,9 +460,9 @@ async def test_get_response_stream_basic(mock_runner_run_streamed_patch, minimal
     mock_runner_run_streamed_patch.return_value = mock_stream_wrapper()
 
     chat_id = "stream_chat_456"
-    message = "Stream this"
+    message_content = "Stream this"
     events = []
-    async for event in minimal_agent.get_response_stream(message, chat_id=chat_id):
+    async for event in minimal_agent.get_response_stream(message_content, chat_id=chat_id):
         events.append(event)
 
     assert events == mock_events
@@ -398,10 +472,15 @@ async def test_get_response_stream_basic(mock_runner_run_streamed_patch, minimal
     assert isinstance(call_kwargs["context"], MasterContext)
     assert call_kwargs["context"].chat_id == chat_id
 
-    mock_thread_manager.get_thread.assert_called_with(chat_id)
-    assert mock_thread_manager.add_items_and_save.call_count > 0
-    initial_save_call = mock_thread_manager.add_items_and_save.call_args_list[0]
-    assert initial_save_call[0][1] == [{"role": "user", "content": message}]
+    retrieved_thread_for_stream = mock_thread_manager.get_thread(chat_id)
+
+    expected_new_message_item_stream = [{"role": "user", "content": message_content}]
+    mock_thread_manager.add_items_and_save.assert_called_once_with(
+        retrieved_thread_for_stream, expected_new_message_item_stream
+    )
+
+    assert call_kwargs["input"] == retrieved_thread_for_stream.items
+    assert retrieved_thread_for_stream.items == expected_new_message_item_stream
 
 
 @pytest.mark.asyncio

@@ -49,25 +49,24 @@ def test_get_thread_loads_from_callback(mocker):
     """Tests that get_thread attempts to load from the load_callback if provided."""
     mock_load = mocker.MagicMock()
     test_id = "load_me_789"
-    loaded_thread = ConversationThread(thread_id=test_id)
-    loaded_thread.add_item({"role": "system", "content": "Loaded"})
-    mock_load.return_value = loaded_thread
+    # Define the dictionary that the load_callback is expected to return
+    loaded_data_dict = {"items": [{"role": "system", "content": "Loaded"}], "metadata": {"source": "mock_db"}}
+    mock_load.return_value = loaded_data_dict
 
     manager = ThreadManager(load_callback=mock_load)
 
     # First call should trigger load
     thread = manager.get_thread(test_id)
     mock_load.assert_called_once_with(test_id)
-    assert thread == loaded_thread
-    assert thread.items[0]["content"] == "Loaded"
-    assert test_id in manager._threads
-    assert manager._threads[test_id] == loaded_thread
+    # Verify the thread was reconstructed correctly from the loaded_data_dict
+    assert thread.thread_id == test_id
+    assert thread.items == loaded_data_dict["items"]
+    assert thread.metadata == loaded_data_dict["metadata"]
 
-    # Second call should return from memory, not call load again
-    mock_load.reset_mock()
+    # Second call should return from memory, not call load_callback again
     thread2 = manager.get_thread(test_id)
-    mock_load.assert_not_called()
-    assert thread2 == loaded_thread
+    mock_load.assert_called_once_with(test_id)  # Still called only once
+    assert thread2 == thread
 
 
 def test_get_thread_creates_new_if_load_fails(mocker):
@@ -162,8 +161,9 @@ def test_add_item_and_save_triggers_callback(mocker):
     # Verify item was added
     assert len(thread.items) == 1
     assert thread.items[0] == item
-    # Verify save callback was called once (only by add_item_and_save)
-    mock_save.assert_called_once_with(thread)
+    # Verify save callback was called once with thread_id and correct data dict
+    expected_thread_data = {"items": thread.items, "metadata": thread.metadata}
+    mock_save.assert_called_once_with(thread.thread_id, expected_thread_data)
 
 
 def test_add_items_and_save_triggers_callback(mocker):
@@ -185,8 +185,9 @@ def test_add_items_and_save_triggers_callback(mocker):
     assert len(thread.items) == 2
     assert thread.items[0] == items[0]
     assert thread.items[1] == items[1]
-    # Verify save callback was called once (only by add_items_and_save)
-    mock_save.assert_called_once_with(thread)
+    # Verify save callback was called once with thread_id and correct data dict
+    expected_thread_data = {"items": thread.items, "metadata": thread.metadata}
+    mock_save.assert_called_once_with(thread.thread_id, expected_thread_data)
 
 
 def test_save_not_called_without_callback():
