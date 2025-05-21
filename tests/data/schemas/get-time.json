@@ -1,0 +1,87 @@
+{
+    "openapi": "3.0.0",
+    "name": "get_weather",
+    "info": {
+        "title": "Time API",
+        "version": "1.0.0",
+        "description": "API to get the current time in a specified city."
+    },
+    "servers": [{ "url": "https://timeapi.io" }],
+    "paths": {
+        "/api/time/current/zone": {
+            "get": {
+                "description": "Get current time information for a specific timezone",
+                "operationId": "getTimeByTimezone",
+                "parameters": [{
+                    "name": "timeZone",
+                    "in": "path",
+                    "required": true,
+                    "description": "The timezone of the city to get the current time for",
+                    "schema": { "type": "string" }
+                }],
+                "responses": {
+                    "200": {
+                        "description": "Successful response with the time details",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "abbreviation": { "type": "string" },
+                                        "client_ip": { "type": "string" },
+                                        "datetime": { "type": "string", "example": "2024-04-30T13:17:56.622950+04:00" },
+                                        "day_of_week": { "type": "integer" },
+                                        "day_of_year": { "type": "integer" },
+                                        "dst": { "type": "boolean" },
+                                        "dst_from": { "type": "string", "nullable": true },
+                                        "dst_offset": { "type": "integer" },
+                                        "dst_until": { "type": "string", "nullable": true },
+                                        "raw_offset": { "type": "integer" },
+                                        "timezone": { "type": "string" },
+                                        "unixtime": { "type": "integer" },
+                                        "utc_datetime": { "type": "string" },
+                                        "utc_offset": { "type": "string" },
+                                        "week_number": { "type": "integer" }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": { "description": "Bad request if the timezone is invalid" },
+                    "404": { "description": "Timezone not found" }
+                }
+            }
+        },
+        "/api/conversion/converttimezone": {
+            "post": {
+                "description": "Convert a datetime from one timezone to another",
+                "operationId": "convertTimeZone",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "fromTimeZone": { "type": "string", "description": "The source timezone." },
+                                    "dateTime": { "type": "string", "description": "The datetime to convert. Correct format: 2021-03-14 17:45:00" },
+                                    "toTimeZone": { "type": "string", "description": "The target timezone." },
+                                    "dstAmbiguity": { "type": "string", "description": "DST ambiguity info." }
+                                },
+                                "required": ["fromTimeZone", "dateTime", "toTimeZone", "dstAmbiguity"]
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Successful timezone conversion",
+                        "content": { "application/json": { "schema": { "type": "object" } } }
+                    },
+                    "400": { "description": "Bad request if the input is invalid" },
+                    "404": { "description": "Timezone not found" }
+                }
+            }
+        }
+    }
+}

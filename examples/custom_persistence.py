@@ -10,6 +10,10 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 script_dir = Path(__file__).parent
@@ -98,6 +102,23 @@ async def run_persistent_conversation():
     if PERSISTENCE_DIR.exists():
         shutil.rmtree(PERSISTENCE_DIR)
         print(f"\nTemporary persistence directory {PERSISTENCE_DIR} cleaned up.")
+
+
+async def check_persistence():
+    chat_id = f"chat_{uuid.uuid4()}"
+    response1 = await agency.get_response(
+        recipient_agent=agent1,  # Send to the entry point agent
+        message="what's 2+5?",
+        chat_id=chat_id,  # Use generated chat_id
+    )
+    print(response1)
+
+    response2 = await agency.get_response(
+        recipient_agent=agent1,  # Use agent1 again for the second turn
+        message="Add 2 to your previous answer",
+        chat_id=chat_id,  # Use generated chat_id
+    )
+    print(response2)
 
 
 if __name__ == "__main__":

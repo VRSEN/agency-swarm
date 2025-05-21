@@ -1,6 +1,8 @@
+import asyncio
 import inspect
 import json
 import logging
+import os
 import re
 import shutil
 import uuid
@@ -29,12 +31,16 @@ from agents.items import (
 )
 from agents.run import DEFAULT_MAX_TURNS
 from agents.stream_events import RunItemStreamEvent
+from agents.strict_schema import ensure_strict_json_schema
+from agents.tool import FunctionTool
 from openai import AsyncOpenAI, NotFoundError
 from openai.types.responses import ResponseFileSearchToolCall, ResponseFunctionToolCall
 
 from .context import MasterContext
 from .thread import ThreadManager
+from .tools import BaseTool
 from .tools.send_message import SendMessage
+from .tools.utils import from_openapi_schema, validate_openapi_spec
 
 logger = logging.getLogger(__name__)
 
@@ -154,9 +160,6 @@ class Agent(BaseAgent[MasterContext]):
                 DeprecationWarning,
                 stacklevel=2,
             )
-            deprecated_args_used["schemas_folder"] = kwargs.pop("schemas_folder", None)
-            deprecated_args_used["api_headers"] = kwargs.pop("api_headers", None)
-            deprecated_args_used["api_params"] = kwargs.pop("api_params", None)
         if "file_ids" in kwargs:
             warnings.warn(
                 "'file_ids' is deprecated. Use 'files_folder' to associate with Vector Stores or manage files via Agent methods.",
@@ -218,6 +221,17 @@ class Agent(BaseAgent[MasterContext]):
             )
             deprecated_args_used["refresh_from_id"] = kwargs.pop("refresh_from_id")
 
+        if "tools" in kwargs:
+            tools_list = kwargs["tools"]
+            for i, tool in enumerate(tools_list):
+                if isinstance(tool, type) and issubclass(tool, BaseTool):
+                    warnings.warn(
+                        "'BaseTool' class is deprecated. Consider switching to FunctionTool.",
+                        DeprecationWarning,
+                        stacklevel=2,
+                    )
+                    tools_list[i] = self._adapt_legacy_tool(tool)
+
         # Log if any deprecated args were used
         if deprecated_args_used:
             logger.warning(f"Deprecated Agent parameters used: {list(deprecated_args_used.keys())}")
@@ -254,7 +268,15 @@ class Agent(BaseAgent[MasterContext]):
             if key in base_param_names:
                 base_agent_params[key] = value
             # Swarm-specific parameters
-            elif key in {"files_folder", "tools_folder", "response_validator", "description"}:
+            elif key in {
+                "files_folder",
+                "tools_folder",
+                "schemas_folder",
+                "api_headers",
+                "api_params",
+                "response_validator",
+                "description",
+            }:
                 current_agent_params[key] = value
             else:
                 # Only warn if it wasn't a handled deprecated arg
@@ -277,6 +299,9 @@ class Agent(BaseAgent[MasterContext]):
         # --- Agency Swarm Attrs Init --- (Assign AFTER super)
         self.files_folder = current_agent_params.get("files_folder")
         self.tools_folder = current_agent_params.get("tools_folder")
+        self.schemas_folder = current_agent_params.get("schemas_folder", [])
+        self.api_headers = current_agent_params.get("api_headers", {})
+        self.api_params = current_agent_params.get("api_params", {})
         self.response_validator = current_agent_params.get("response_validator")
         # Set description directly from current_agent_params, default to None if not provided
         self.description = current_agent_params.get("description")
@@ -287,8 +312,9 @@ class Agent(BaseAgent[MasterContext]):
         # _thread_manager and _agency_instance are injected by Agency
 
         # --- Setup ---
-        self._parse_files_folder_for_vs_id()  # New synchronous method
-        # The full async _init_file_handling (with VS retrieval) should be called by Agency or explicitly in tests.
+        self._load_tools_from_folder()  # Placeholder call
+        self._parse_schemas()
+        self._init_file_handling()
 
     # --- Properties ---
     @property
@@ -339,6 +365,58 @@ class Agent(BaseAgent[MasterContext]):
             #         self.add_tool(tool)
             # except Exception as e:
             #     logger.error(f"Error loading tools from folder {self.tools_folder}: {e}")
+
+    def _parse_schemas(self):
+        schemas_folders = self.schemas_folder if isinstance(self.schemas_folder, list) else [self.schemas_folder]
+
+        for schemas_folder in schemas_folders:
+            if isinstance(schemas_folder, str):
+                f_path = schemas_folder
+
+                if not os.path.isdir(f_path):
+                    f_path = os.path.join(self._get_class_folder_path(), schemas_folder)
+                    f_path = os.path.normpath(f_path)
+
+                if os.path.isdir(f_path):
+                    f_paths = os.listdir(f_path)
+
+                    f_paths = [f for f in f_paths if not f.startswith(".")]
+
+                    f_paths = [os.path.join(f_path, f) for f in f_paths]
+
+                    for f_path in f_paths:
+                        with open(f_path, "r") as f:
+                            openapi_spec = f.read()
+                            f.close()  # fix permission error on windows
+                        try:
+                            validate_openapi_spec(openapi_spec)
+                        except Exception as e:
+                            logger.error("Invalid OpenAPI schema: " + os.path.basename(f_path))
+                            raise e
+                        try:
+                            headers = None
+                            params = None
+                            if os.path.basename(f_path) in self.api_headers:
+                                headers = self.api_headers[os.path.basename(f_path)]
+                            if os.path.basename(f_path) in self.api_params:
+                                params = self.api_params[os.path.basename(f_path)]
+                            tools = from_openapi_schema(openapi_spec, headers=headers, params=params)
+                        except Exception as e:
+                            logger.error(
+                                "Error parsing OpenAPI schema: " + os.path.basename(f_path),
+                                exc_info=True,
+                            )
+                            raise e
+                        for tool in tools:
+                            logger.info(f"Adding tool {tool.name} from {f_path}")
+                            self.add_tool(tool)
+                else:
+                    logger.warning("Schemas folder path is not a directory. Skipping... ", f_path)
+            else:
+                logger.warning(
+                    "Schemas folder path must be a string or list of strings. Skipping... ",
+                    schemas_folder,
+                )
 
     # --- Subagent Management ---
     def register_subagent(self, recipient_agent: "Agent") -> None:
@@ -739,11 +817,12 @@ class Agent(BaseAgent[MasterContext]):
             logger.debug(f"Calling Runner.run for agent '{self.name}' with {len(history_for_runner)} history items.")
             run_result: RunResult = await Runner.run(
                 starting_agent=self,
-                input=history_for_runner,
+                input=thread.items,  # Runner handles adding this initial input
                 context=self._prepare_master_context(context_override, effective_chat_id),
                 hooks=hooks_override or self.hooks,
                 run_config=run_config or RunConfig(),
                 max_turns=kwargs.get("max_turns", DEFAULT_MAX_TURNS),
+                previous_response_id=kwargs.get("previous_response_id"),
             )
             completion_info = (
                 f"Output Type: {type(run_result.final_output).__name__}"
@@ -852,21 +931,17 @@ class Agent(BaseAgent[MasterContext]):
 
         final_result_items = []
         try:
-            logger.debug(
-                f"Calling Runner.run_streamed for agent '{self.name}' with {len(thread.items)} thread items..."
-            )
-
-            # Pass full history from thread, unfiltered, based on user instruction.
-            history_for_stream_runner = list(thread.items)
-
-            async for event in Runner.run_streamed(
+            logger.debug(f"Calling Runner.run_streamed for agent '{self.name}'...")
+            result = Runner.run_streamed(
                 starting_agent=self,
-                input=history_for_stream_runner,
+                input=thread.items if sender_name is None else [],  # Runner handles input logic from thread
                 context=master_context,
                 hooks=hooks_to_use,
                 run_config=effective_run_config,
                 max_turns=kwargs.get("max_turns", DEFAULT_MAX_TURNS),
-            ):
+                previous_response_id=kwargs.get("previous_response_id"),
+            )
+            async for event in result.stream_events():
                 yield event
                 if isinstance(event, RunItemStreamEvent):
                     final_result_items.append(event.item)
@@ -1064,3 +1139,66 @@ class Agent(BaseAgent[MasterContext]):
         if not hasattr(agency, "agents"):
             raise TypeError("Provided agency instance must have an 'agents' dictionary.")
         self._agency_instance = agency
+
+    def _adapt_legacy_tool(self, legacy_tool: type[BaseTool]):
+        """
+        Adapts a legacy BaseTool (class-based) to a FunctionTool (function-based).
+        Args:
+            legacy_tool: A class inheriting from BaseTool.
+        Returns:
+            A FunctionTool instance.
+        """
+        name = legacy_tool.__name__
+        description = legacy_tool.__doc__ or ""
+        if bool(getattr(legacy_tool, "__abstractmethods__", set())):
+            raise TypeError(f"Legacy tool '{name}' must implement all abstract methods.")
+        if description == "":
+            logger.warning(f"Warning: Tool {name} has no docstring.")
+        # Use the Pydantic model schema for parameters
+        params_json_schema = legacy_tool.model_json_schema()
+        if legacy_tool.ToolConfig.strict:
+            params_json_schema = ensure_strict_json_schema(params_json_schema)
+        # Remove title/description at the top level, keep only in properties
+        params_json_schema = {k: v for k, v in params_json_schema.items() if k not in ("title", "description")}
+        params_json_schema["additionalProperties"] = False
+
+        # The on_invoke_tool function
+        async def on_invoke_tool(ctx, input_json: str):
+            # Parse input_json to dict
+            import json
+
+            try:
+                args = json.loads(input_json) if input_json else {}
+            except Exception as e:
+                return f"Error: Invalid JSON input: {e}"
+            try:
+                # Instantiate the legacy tool with args
+                tool_instance = legacy_tool(**args)
+                if inspect.iscoroutinefunction(tool_instance.run):
+                    result = await tool_instance.run()
+                else:
+                    # Always run sync run() in a thread for async compatibility
+                    result = await asyncio.to_thread(tool_instance.run)
+                return str(result)
+            except Exception as e:
+                return f"Error running legacy tool: {e}"
+
+        return FunctionTool(
+            name=name,
+            description=description.strip(),
+            params_json_schema=params_json_schema,
+            on_invoke_tool=on_invoke_tool,
+            strict_json_schema=legacy_tool.ToolConfig.strict,
+        )
+
+    def _get_class_folder_path(self):
+        try:
+            # First, try to use the __file__ attribute of the module
+            return os.path.abspath(os.path.dirname(self.__module__.__file__))
+        except (TypeError, OSError, AttributeError) as e:
+            # If that fails, fall back to inspect
+            try:
+                class_file = inspect.getfile(self.__class__)
+            except (TypeError, OSError, AttributeError) as e:
+                return "./"
+            return os.path.abspath(os.path.realpath(os.path.dirname(class_file)))
