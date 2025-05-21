@@ -626,10 +626,9 @@ class Agent:
             return
 
         for server in self.mcp_servers:
+            # Get tools from the MCP server
+            mcp_tools = ToolFactory.from_mcp(server)
             try:
-                # Get tools from the MCP server
-                mcp_tools = ToolFactory.from_mcp(server)
-
                 logger.info(f"\n--- Adding Tools from MCP Server: {server.name} ---")
                 # Add each tool to the agent and print its name
                 for tool in mcp_tools:
@@ -639,7 +638,8 @@ class Agent:
                     f"--- Finished adding {len(mcp_tools)} tools from {server.name} ---\n"
                 )
             except Exception as e:
-                logger.error(f"Error processing {server.name} MCP: {e}", exc_info=True)
+                logger.error(f"Error processing {server.name} MCP server: {e}", exc_info=True)
+                raise Exception(f"Error starting {server.name} MCP server: {e}")
 
     # --- Settings Methods ---
 

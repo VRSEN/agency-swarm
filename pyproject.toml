@@ -32,6 +32,13 @@ urls = { homepage = "https://github.com/VRSEN/agency-swarm" }
 [project.scripts]
 agency-swarm = "agency_swarm.cli:main"
 
+[project.optional-dependencies]
+fastapi = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.34.0",
+    "anyio>=4.9.0"
+]
+
 [tool.setuptools_scm]
 
 [tool.pytest.ini_options]

@@ -1,0 +1,143 @@
+---
+title: "FastAPI Integration"
+description: "Serving your agencies and tools as APIs with FastAPI."
+icon: "server"
+---
+
+Agency Swarm supports serving your agencies and tools as production-ready HTTP APIs using [FastAPI](https://fastapi.tiangolo.com/). This enables you to interact with your agents and tools over HTTP, integrate with other services, or connect it to web frontends.
+
+## Installation
+
+FastAPI integration is an **optional installation**. To install all required dependencies, run:
+
+```bash
+pip install agency-swarm[fastapi]
+```
+
+## Setting Up FastAPI Endpoints
+
+You can expose your agencies and tools as API endpoints using the `run_fastapi()` function.
+
+### Example: Create an api endpoint for a single agency using instance method
+
+```python
+from agency_swarm.agency import Agency
+
+agency = Agency([ceo], name="test_agency")
+
+agency.run_fastapi()
+```
+
+Optionally, you can specify following parameters: 
+- host (default: `"0.0.0.0"`)
+- port (default: `8000`)
+- app_token_env (default: `"APP_TOKEN"`) - Name of the env variable storing app token.
+
+This will create 2 endpoints for the agency: 
+- `/test_agency/get_completion`
+- `/test_agency/get_completion_stream`
+
+Both of these endpoints will accept following input parameters:
+```python
+message: str
+message_files: List[str] = None
+# Name of the agent, as defined within it's name attribute
+recipient_agent: str = None
+additional_instructions: str = None
+attachments: List[Attachment] = []
+tool_choice: dict = None
+response_format: dict = None
+# Only for the get_completion endpoint, will be ignored in the streaming endpoint
+verbose: bool = False
+```
+
+Additionally, you will need to provide a bearer token in the authorization if you have `"APP_TOKEN"` specified (or a differently named variable if you provided app_token_env). If the token is **not specified** in the env variables, **authentication will be disabled**.
+
+### Example: Serving Multiple Agencies and Tools
+You can deploy multiple agencies **and** tools in a single function call by using run_fastapi function from the integrations directory
+
+```python
+from pydantic import Field
+
+from agency_swarm.agency import Agency
+from agency_swarm.tools import BaseTool
+from agency_swarm.integrations.fastapi import run_fastapi
+
+
+# Example tools
+class ExampleTool(BaseTool):
+  example_field: str = Field(..., description="Example input.")
+  def run(self):
+      return "Result of ExampleTool operation"
+
+class TestTool(BaseTool):
+  example_field: str = Field(..., description="Example input.")
+  def run(self):
+      return "Result of TestTool operation"
+
+# Create agencies
+agency1 = Agency([agent], name="test_agency_1")
+agency2 = Agency([agent], name="test_agency_2")
+
+run_fastapi(
+    agencies=[agency_test_1, agency_test_2],
+    tools=[ExampleTool, TestTool],
+)
+```
+
+This will create 6 following endpoints: 
+- `/test_agency_1/get_completion`
+- `/test_agency_1/get_completion_stream`
+- `/test_agency_2/get_completion`
+- `/test_agency_2/get_completion_stream`
+- `/tool/ExampleTool`
+- `/tool/TestTool`
+
+Inputs for the tool endpoints will follow their pydantic schemas respectively.
+
+---
+
+## API Usage Example
+
+You can interact with your agents and tools using HTTP requests. Here's an example using Python's `requests` library:
+
+```python
+import requests
+
+agency_url = "http://127.0.0.1:8000/test_agency_1/get_completion"
+payload = {
+    "message": "Hello",
+}
+
+headers = {
+    "Authorization": "Bearer 123"  # Replace 'test-token' with your actual token if needed
+}
+
+agency_response = requests.post(url, json=payload, headers=headers)
+print("Status code:", agency_response.status_code)
+print("Response:", agency_response.json()) 
+
+tool_url = "http://127.0.0.1:8000/tool/ExampleTool"
+payload = {
+    "example_field": "test",
+}
+
+tool_response = requests.post(url, json=payload, headers=headers)
+print("Status code:", tool_response.status_code)
+print("Response:", tool_response.json()) 
+```
+
+---
+
+## Endpoint Structure
+
+- **Agency Endpoints:**  
+  Each agency is served at:
+  - `/your_agency_name/get_completion` (POST)
+  - `/your_agency_name/get_completion_stream` (POST, streaming responses)
+
+- **Tool Endpoints:**  
+  Each tool is served at:
+  - `/tool/ToolClassName` (POST)
+
+---

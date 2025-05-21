@@ -360,6 +360,9 @@ class ToolFactory:
         tool_definitions = server.list_tools()
         tools = []
 
+        if tool_definitions == []:
+            raise Exception(f"No tools found in MCP server: {server.name}")
+
         for definition in tool_definitions:
             # Handle both dictionary and object formats
             if isinstance(definition, dict):
@@ -382,7 +385,7 @@ class ToolFactory:
                         has_default_values = True
                         break
             # If any parameter has a default value, set strict to False
-            if has_default_values:
+            if has_default_values and server.strict:
                 logger.warning("Non-supported tool parameter found, disabling strict mode.")
                 server.strict = False
 
@@ -398,7 +401,12 @@ class ToolFactory:
                     }
 
                     # Call the tool with just the arguments, not the whole model
-                    result = server.call_tool(tool_name, args)
+                    try:
+                        result = server.call_tool(tool_name, args)
+                        logger.info(f"Tool {tool_name} output: {result}")
+                    except Exception as e:
+                        logger.error(f"Tool call failed: {type(e).__name__}: {e!r}")
+                        return f"Tool call failed: {type(e).__name__}: {e!r}"
 
                     if hasattr(result, "content") and result.content:
                         # Extract text from the first content item if it exists

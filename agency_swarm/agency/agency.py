@@ -68,6 +68,7 @@ class Agency:
     def __init__(
         self,
         agency_chart: List,
+        name: str = None,
         shared_instructions: str = "",
         shared_files: Union[str, List[str]] = None,
         async_mode: Literal["threading", "tools_threading"] = None,
@@ -86,6 +87,7 @@ class Agency:
 
         Parameters:
             agency_chart: The structure defining the hierarchy and interaction of agents within the agency.
+            name (str, optional): The name of the agency. Used for identification and routing. Defaults to None.
             shared_instructions (str, optional): A path to a file containing shared instructions for all agents. Defaults to an empty string.
             shared_files (Union[str, List[str]], optional): A path to a folder or a list of folders containing shared files for all agents. Defaults to None.
             async_mode (str, optional): Specifies the mode for asynchronous processing. In "threading" mode, all sub-agents run in separate threads. In "tools_threading" mode, all tools run in separate threads, but agents do not. Defaults to None.
@@ -101,6 +103,7 @@ class Agency:
 
         This constructor initializes various components of the Agency, including CEO, agents, threads, and user interactions. It parses the agency chart to set up the organizational structure and initializes the messaging tools, agents, and threads necessary for the operation of the agency. Additionally, it prepares a main thread for user interactions.
         """
+        self.name = name
         self.ceo = None
         self.user = User()
         self.agents = []
@@ -1143,3 +1146,10 @@ class Agency:
             for server in reversed(agent.mcp_servers):
                 logger.info(f"Shutting down MCP server: {server.name}")
                 server.cleanup()
+
+    def run_fastapi(self, host: str = "0.0.0.0", port: int = 8000, app_token_env: str = "APP_TOKEN"):
+        """
+        Launch a FastAPI server exposing the agency's completion and streaming endpoints using the shared integrations.fastapi.run_fastapi utility.
+        """
+        from agency_swarm.integrations.fastapi import run_fastapi
+        run_fastapi(agencies=[self], host=host, port=port, app_token_env=app_token_env)
