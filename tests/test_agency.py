@@ -120,16 +120,12 @@ class AgencyTest(unittest.TestCase):
 
         # copy files from data/files to test_agents/TestAgent1/files
         for file in os.listdir("./data/files"):
-            shutil.copyfile(
-                "./data/files/" + file, "./test_agents/TestAgent1/files/" + file
-            )
+            shutil.copyfile("./data/files/" + file, "./test_agents/TestAgent1/files/" + file)
             cls.num_files += 1
 
         # copy schemas from data/schemas to test_agents/TestAgent2/schemas
         for file in os.listdir("./data/schemas"):
-            shutil.copyfile(
-                "./data/schemas/" + file, "./test_agents/TestAgent2/schemas/" + file
-            )
+            shutil.copyfile("./data/schemas/" + file, "./test_agents/TestAgent2/schemas/" + file)
             cls.num_schemas += 1
 
         from tests.test_agents.CEO.CEO import CEO
@@ -216,9 +212,7 @@ class AgencyTest(unittest.TestCase):
         self.assertTrue(self.__class__.agent1.id == agent3.id)
 
         # check that assistant settings match
-        self.assertTrue(
-            agent3._check_parameters(self.__class__.agent1.assistant.model_dump())
-        )
+        self.assertTrue(agent3._check_parameters(self.__class__.agent1.assistant.model_dump()))
 
         self.check_agent_settings(agent3)
 
@@ -235,14 +229,13 @@ class AgencyTest(unittest.TestCase):
         self.assertTrue(self.__class__.agent1.id == agent3.id)
 
         # check that assistant settings match
-        self.assertTrue(
-            agent3._check_parameters(self.__class__.agent1.assistant.model_dump())
-        )
+        self.assertTrue(agent3._check_parameters(self.__class__.agent1.assistant.model_dump()))
 
         self.check_agent_settings(agent3)
 
     def test_04_agent_communication(self):
         """it should communicate between agents"""
+        self.test_01_init_agency()
         print("TestAgent1 tools", self.__class__.agent1.tools)
         self.__class__.agent1.parallel_tool_calls = False
         message = self.__class__.agency.get_completion(
@@ -256,28 +249,17 @@ class AgencyTest(unittest.TestCase):
         )
 
         self.assertTrue(self.__class__.agency.agents_and_threads["main_thread"].id)
-        self.assertTrue(
-            self.__class__.agency.agents_and_threads["CEO"]["TestAgent1"].id
-        )
-        self.assertTrue(
-            self.__class__.agency.agents_and_threads["TestAgent1"]["TestAgent2"].id
-        )
+        self.assertTrue(self.__class__.agency.agents_and_threads["CEO"]["TestAgent1"].id)
+        self.assertTrue(self.__class__.agency.agents_and_threads["TestAgent1"]["TestAgent2"].id)
 
         for agent in self.__class__.agency.agents:
-            self.assertTrue(
-                agent.id
-                in [
-                    settings["id"] for settings in self.__class__.loaded_agents_settings
-                ]
-            )
+            self.assertTrue(agent.id in [settings["id"] for settings in self.__class__.loaded_agents_settings])
 
         # assistants v2 checks
         main_thread = self.__class__.agency.main_thread
         main_thread_id = main_thread.id
 
-        thread_messages = self.__class__.client.beta.threads.messages.list(
-            main_thread_id, limit=100, order="asc"
-        )
+        thread_messages = self.__class__.client.beta.threads.messages.list(main_thread_id, limit=100, order="asc")
 
         self.assertTrue(len(thread_messages.data) == 4)
 
@@ -285,20 +267,14 @@ class AgencyTest(unittest.TestCase):
 
         run = main_thread._run
         self.assertTrue(run.max_prompt_tokens == self.__class__.ceo.max_prompt_tokens)
-        self.assertTrue(
-            run.max_completion_tokens == self.__class__.ceo.max_completion_tokens
-        )
+        self.assertTrue(run.max_completion_tokens == self.__class__.ceo.max_completion_tokens)
         self.assertTrue(run.tool_choice.type == "function")
 
-        agent1_thread = self.__class__.agency.agents_and_threads[
-            self.__class__.ceo.name
-        ][self.__class__.agent1.name]
+        agent1_thread = self.__class__.agency.agents_and_threads[self.__class__.ceo.name][self.__class__.agent1.name]
 
         agent1_thread_id = agent1_thread.id
 
-        agent1_thread_messages = self.__class__.client.beta.threads.messages.list(
-            agent1_thread_id, limit=100
-        )
+        agent1_thread_messages = self.__class__.client.beta.threads.messages.list(agent1_thread_id, limit=100)
 
         self.assertTrue(len(agent1_thread_messages.data) == 2)
 
@@ -308,9 +284,7 @@ class AgencyTest(unittest.TestCase):
         self.assertTrue(agent1_run.truncation_strategy.last_messages == 10)
         self.assertFalse(agent1_run.parallel_tool_calls)
 
-        agent2_thread = self.__class__.agency.agents_and_threads[
-            self.__class__.agent1.name
-        ][self.__class__.agent2.name]
+        agent2_thread = self.__class__.agency.agents_and_threads[self.__class__.agent1.name][self.__class__.agent2.name]
 
         agent2_message = agent2_thread._get_last_message_text()
 
@@ -362,26 +336,15 @@ class AgencyTest(unittest.TestCase):
 
         self.assertTrue(self.__class__.TestTool._shared_state.get("test_tool_used"))
 
-        agent1_thread = self.__class__.agency.agents_and_threads[
-            self.__class__.ceo.name
-        ][self.__class__.agent1.name]
+        agent1_thread = self.__class__.agency.agents_and_threads[self.__class__.ceo.name][self.__class__.agent1.name]
         self.assertFalse(agent1_thread._run.parallel_tool_calls)
 
         self.assertTrue(self.__class__.agency.main_thread.id)
-        self.assertTrue(
-            self.__class__.agency.agents_and_threads["CEO"]["TestAgent1"].id
-        )
-        self.assertTrue(
-            self.__class__.agency.agents_and_threads["TestAgent1"]["TestAgent2"].id
-        )
+        self.assertTrue(self.__class__.agency.agents_and_threads["CEO"]["TestAgent1"].id)
+        self.assertTrue(self.__class__.agency.agents_and_threads["TestAgent1"]["TestAgent2"].id)
 
         for agent in self.__class__.agency.agents:
-            self.assertTrue(
-                agent.id
-                in [
-                    settings["id"] for settings in self.__class__.loaded_agents_settings
-                ]
-            )
+            self.assertTrue(agent.id in [settings["id"] for settings in self.__class__.loaded_agents_settings])
 
     def test_06_load_from_db(self):
         """it should load agents from db"""
@@ -456,16 +419,8 @@ class AgencyTest(unittest.TestCase):
 
         # check that agents are the same
         for agent in agency.agents:
-            self.assertTrue(
-                agent.id
-                in [
-                    settings["id"] for settings in self.__class__.loaded_agents_settings
-                ]
-            )
-            self.assertTrue(
-                agent.id
-                in [settings["id"] for settings in previous_loaded_agents_settings]
-            )
+            self.assertTrue(agent.id in [settings["id"] for settings in self.__class__.loaded_agents_settings])
+            self.assertTrue(agent.id in [settings["id"] for settings in previous_loaded_agents_settings])
 
     def test_07_init_async_agency(self):
         """it should initialize async agency with agents"""
@@ -540,22 +495,13 @@ class AgencyTest(unittest.TestCase):
         self.assertTrue(EventHandler.recipient_agent_name == "TestAgent1")
 
         if "error" in message.lower():
-            self.assertFalse(
-                "error" in message.lower(), self.__class__.agency.main_thread.thread_url
-            )
+            self.assertFalse("error" in message.lower(), self.__class__.agency.main_thread.thread_url)
 
         self.assertTrue(self.__class__.agency.main_thread.id)
-        self.assertTrue(
-            self.__class__.agency.agents_and_threads["TestAgent1"]["TestAgent2"].id
-        )
+        self.assertTrue(self.__class__.agency.agents_and_threads["TestAgent1"]["TestAgent2"].id)
 
         for agent in self.__class__.agency.agents:
-            self.assertTrue(
-                agent.id
-                in [
-                    settings["id"] for settings in self.__class__.loaded_agents_settings
-                ]
-            )
+            self.assertTrue(agent.id in [settings["id"] for settings in self.__class__.loaded_agents_settings])
 
     def test_09_async_tool_calls(self):
         """it should execute tools asynchronously"""
@@ -640,9 +586,7 @@ class AgencyTest(unittest.TestCase):
                 "Please call PrintHeaders tool TWICE at the same time in a single message with domain='print-headers' and query='test'. If any of the function outputs do not contain headers, please say 'error'."
             )
 
-            self.assertTrue(
-                result.lower().count("error") == 0, agency.main_thread.thread_url
-            )
+            self.assertTrue(result.lower().count("error") == 0, agency.main_thread.thread_url)
         finally:
             # Restore original client
             httpx.AsyncClient = original_client
@@ -675,9 +619,7 @@ class AgencyTest(unittest.TestCase):
         # check if result is a MathReasoning object
         self.assertTrue(MathReasoning.model_validate_json(result))
 
-        result = agency.get_completion_parse(
-            "how can I solve 3x + 2 = 14", response_format=MathReasoning
-        )
+        result = agency.get_completion_parse("how can I solve 3x + 2 = 14", response_format=MathReasoning)
 
         # check if result is a MathReasoning object
         self.assertTrue(isinstance(result, MathReasoning))
@@ -695,9 +637,7 @@ class AgencyTest(unittest.TestCase):
                 settings = json.load(f)
                 for assistant_settings in settings:
                     if assistant_settings["id"] == agent.id:
-                        self.assertTrue(
-                            agent._check_parameters(assistant_settings, debug=True)
-                        )
+                        self.assertTrue(agent._check_parameters(assistant_settings, debug=True))
 
             assistant = agent.assistant
             self.assertTrue(assistant)
@@ -705,29 +645,11 @@ class AgencyTest(unittest.TestCase):
             if agent.name == "TestAgent1":
                 num_tools = 3 if not async_mode else 4
 
-                self.assertTrue(
-                    len(
-                        assistant.tool_resources.model_dump()["code_interpreter"][
-                            "file_ids"
-                        ]
-                    )
-                    == 3
-                )
-                self.assertTrue(
-                    len(
-                        assistant.tool_resources.model_dump()["file_search"][
-                            "vector_store_ids"
-                        ]
-                    )
-                    == 1
-                )
+                self.assertTrue(len(assistant.tool_resources.model_dump()["code_interpreter"]["file_ids"]) == 3)
+                self.assertTrue(len(assistant.tool_resources.model_dump()["file_search"]["vector_store_ids"]) == 1)
 
-                vector_store_id = assistant.tool_resources.model_dump()["file_search"][
-                    "vector_store_ids"
-                ][0]
-                vector_store_files = agent.client.vector_stores.files.list(
-                    vector_store_id=vector_store_id
-                )
+                vector_store_id = assistant.tool_resources.model_dump()["file_search"]["vector_store_ids"][0]
+                vector_store_files = agent.client.vector_stores.files.list(vector_store_id=vector_store_id)
 
                 file_ids = [file.id for file in vector_store_files.data]
 
@@ -741,9 +663,7 @@ class AgencyTest(unittest.TestCase):
                 self.assertTrue(assistant.tools[0].type == "code_interpreter")
                 self.assertTrue(assistant.tools[1].type == "file_search")
                 if not async_mode:
-                    self.assertTrue(
-                        assistant.tools[1].file_search.max_num_results == 49
-                    )  # Updated line
+                    self.assertTrue(assistant.tools[1].file_search.max_num_results == 49)  # Updated line
                 self.assertTrue(assistant.tools[2].type == "function")
                 self.assertTrue(assistant.tools[2].function.name == "SendMessage")
                 self.assertFalse(assistant.tools[2].function.strict)
@@ -756,15 +676,9 @@ class AgencyTest(unittest.TestCase):
                 self.assertTrue(len(assistant.tools) == self.__class__.num_schemas + 1)
                 for tool in assistant.tools:
                     self.assertTrue(tool.type == "function")
-                    self.assertTrue(
-                        tool.function.name in [tool.__name__ for tool in agent.tools]
-                    )
+                    self.assertTrue(tool.function.name in [tool.__name__ for tool in agent.tools])
                 test_tool = next(
-                    (
-                        tool
-                        for tool in assistant.tools
-                        if tool.function.name == "TestTool"
-                    ),
+                    (tool for tool in assistant.tools if tool.function.name == "TestTool"),
                     None,
                 )
                 self.assertTrue(test_tool.function.strict, test_tool)
