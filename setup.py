@@ -15,6 +15,13 @@ setup(
     url="https://github.com/VRSEN/agency-swarm",
     packages=find_packages(exclude=["tests", "tests.*"]),
     install_requires=requirements,
+    extras_require={
+        "fastapi": [
+            "fastapi>=0.115.0",
+            "uvicorn[standard]>=0.34.0",
+            "anyio>=4.9.0"
+        ]
+    },
     classifiers=[
         "Intended Audience :: Developers",
         "Topic :: Software Development :: Build Tools",

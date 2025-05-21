@@ -1,6 +1,9 @@
+import os
 import abc
+import time
 import asyncio
 import logging
+import tempfile
 from contextlib import AbstractAsyncContextManager, AsyncExitStack
 from pathlib import Path
 from typing import Any, Literal
@@ -104,6 +107,7 @@ class _MCPServerWithClientSession(MCPServer, abc.ABC):
         self._queue = asyncio.Queue()
         self._shutdown_event = threading.Event()
         self._ready_event = threading.Event()
+        self._startup_exception = None  # Store startup exception for detailed error reporting
         self._thread.start()
 
     def _run_loop(self):
@@ -134,28 +138,66 @@ class _MCPServerWithClientSession(MCPServer, abc.ABC):
             await self._cleanup_async()
             self._shutdown_event.set()
 
-    def _call_in_loop(self, method, *args):
-        self._ready_event.wait()
+    @staticmethod
+    def extract_error_from_log(log_file_path: str, errlog_handle=None) -> str | None:
+        """
+        Read and return the contents of the given log file, or an empty string if not found or empty.
+        Deletes the file after reading. Closes the file handle if provided.
+        """
+        if errlog_handle is not None and not errlog_handle.closed:
+            errlog_handle.close()
+        if not os.path.exists(log_file_path):
+            return None
+        with open(log_file_path, 'r', encoding='utf-8') as f:
+            contents = f.read()
+        # Try to delete the file, retrying if necessary
+        start = time.time()
+        while True:
+            try:
+                os.remove(log_file_path)
+                break
+            except PermissionError as e:
+                if time.time() - start > 5.0:
+                    logger.warning(f"Failed to delete log file after 5 seconds: {log_file_path}")
+                    break
+                time.sleep(0.2)
+        return contents
+
+    def _call_in_loop(self, method, *args, timeout=120):
+        # Add a timeout to prevent indefinite hangs
+        if not self._ready_event.wait(timeout=timeout):
+            errlog = getattr(self, '_errlog_buffer', None)
+            if errlog:
+                error_message = self.extract_error_from_log(errlog.name, errlog)
+                if error_message and error_message.strip()!='':
+                    raise RuntimeError(error_message)
+                else:
+                    raise RuntimeError("Failed to connect to the server. Please check if the server is running and accessible.")
+            else:
+                # SSE servers do not support error logging, print generic message
+                raise RuntimeError("Failed to connect to the server. Please check if the server is running and accessible.")
+                
         result_future = Future()
         self._loop.call_soon_threadsafe(self._queue.put_nowait, (method, args, result_future))
         return result_future.result()  # blocks until result is ready
 
     # Synchronous public methods
     def connect(self):
-        print("connect")
-        return self._call_in_loop("connect")
+        return self._call_in_loop("connect", timeout=10)
 
     def list_tools(self):
-        return self._call_in_loop("list_tools")
+        return self._call_in_loop("list_tools", timeout=10)
 
-    def call_tool(self, tool_name, arguments):
-        return self._call_in_loop("call_tool", tool_name, arguments)
+    def call_tool(self, tool_name, arguments, timeout=120):
+        return self._call_in_loop("call_tool", tool_name, arguments, timeout=timeout)
 
     def cleanup(self):
         self._loop.call_soon_threadsafe(self._queue.put_nowait, "SHUTDOWN")
         self._shutdown_event.wait()
         self._loop.call_soon_threadsafe(self._loop.stop)
         self._thread.join()
+        if (errlog := getattr(self, '_errlog_buffer', None)) is not None:
+            self.extract_error_from_log(errlog.name, errlog) # Delete the error log file
 
     # Async implementations
     async def _connect_async(self):
@@ -320,6 +362,10 @@ class MCPServerStdio(_MCPServerWithClientSession):
             encoding_error_handler=params.get("encoding_error_handler", "strict"),
         )
         self._name = name or f"stdio: {self.params.command}"
+        # Save error log in the local directory
+        self._errlog_buffer = tempfile.NamedTemporaryFile(
+            mode="w+", encoding="utf-8", delete=False, suffix=f"_{self._name}_stderr.log"
+        )
         super().__init__(cache_tools_list, strict=strict, allowed_tools=allowed_tools)
 
     def create_streams(
@@ -331,7 +377,8 @@ class MCPServerStdio(_MCPServerWithClientSession):
         ]
     ]:
         """Create the streams for the server."""
-        return stdio_client(self.params)
+        # Pass the error log buffer to stdio_client
+        return stdio_client(self.params, errlog=self._errlog_buffer)
 
     @property
     def name(self) -> str:
