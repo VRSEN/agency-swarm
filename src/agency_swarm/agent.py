@@ -2,6 +2,7 @@ import asyncio
 import inspect
 import json
 import logging
+import os
 import re
 import shutil
 import uuid
@@ -39,6 +40,7 @@ from .context import MasterContext
 from .thread import ThreadManager
 from .tools import BaseTool
 from .tools.send_message import SendMessage
+from .tools.utils import from_openapi_schema, validate_openapi_spec
 
 logger = logging.getLogger(__name__)
 
@@ -156,9 +158,6 @@ class Agent(BaseAgent[MasterContext]):
                 DeprecationWarning,
                 stacklevel=2,
             )
-            deprecated_args_used["schemas_folder"] = kwargs.pop("schemas_folder", None)
-            deprecated_args_used["api_headers"] = kwargs.pop("api_headers", None)
-            deprecated_args_used["api_params"] = kwargs.pop("api_params", None)
         if "file_ids" in kwargs:
             warnings.warn(
                 "'file_ids' is deprecated. Use 'files_folder' to associate with Vector Stores or manage files via Agent methods.",
@@ -267,7 +266,7 @@ class Agent(BaseAgent[MasterContext]):
             if key in base_param_names:
                 base_agent_params[key] = value
             # Swarm-specific parameters
-            elif key in {"files_folder", "tools_folder", "response_validator", "description"}:
+            elif key in {"files_folder", "tools_folder", "schemas_folder", "api_headers", "api_params", "response_validator", "description"}:
                 current_agent_params[key] = value
             else:
                 # Only warn if it wasn't a handled deprecated arg
@@ -290,6 +289,9 @@ class Agent(BaseAgent[MasterContext]):
         # --- Agency Swarm Attrs Init --- (Assign AFTER super)
         self.files_folder = current_agent_params.get("files_folder")
         self.tools_folder = current_agent_params.get("tools_folder")
+        self.schemas_folder = current_agent_params.get("schemas_folder", [])
+        self.api_headers = current_agent_params.get("api_headers", {})
+        self.api_params = current_agent_params.get("api_params", {})
         self.response_validator = current_agent_params.get("response_validator")
         # Set description directly from current_agent_params, default to None if not provided
         self.description = current_agent_params.get("description")
@@ -300,6 +302,7 @@ class Agent(BaseAgent[MasterContext]):
 
         # --- Setup ---
         self._load_tools_from_folder()  # Placeholder call
+        self._parse_schemas()
         self._init_file_handling()
 
     # --- Properties ---
@@ -351,6 +354,69 @@ class Agent(BaseAgent[MasterContext]):
             #         self.add_tool(tool)
             # except Exception as e:
             #     logger.error(f"Error loading tools from folder {self.tools_folder}: {e}")
+
+    def _parse_schemas(self):
+        schemas_folders = (
+            self.schemas_folder
+            if isinstance(self.schemas_folder, list)
+            else [self.schemas_folder]
+        )
+
+        for schemas_folder in schemas_folders:
+            if isinstance(schemas_folder, str):
+                f_path = schemas_folder
+
+                if not os.path.isdir(f_path):
+                    f_path = os.path.join(self.get_class_folder_path(), schemas_folder)
+                    f_path = os.path.normpath(f_path)
+
+                if os.path.isdir(f_path):
+                    f_paths = os.listdir(f_path)
+
+                    f_paths = [f for f in f_paths if not f.startswith(".")]
+
+                    f_paths = [os.path.join(f_path, f) for f in f_paths]
+
+                    for f_path in f_paths:
+                        with open(f_path, "r") as f:
+                            openapi_spec = f.read()
+                            f.close()  # fix permission error on windows
+                        try:
+                            validate_openapi_spec(openapi_spec)
+                        except Exception as e:
+                            logger.error(
+                                "Invalid OpenAPI schema: " + os.path.basename(f_path)
+                            )
+                            raise e
+                        try:
+                            headers = None
+                            params = None
+                            if os.path.basename(f_path) in self.api_headers:
+                                headers = self.api_headers[os.path.basename(f_path)]
+                            if os.path.basename(f_path) in self.api_params:
+                                params = self.api_params[os.path.basename(f_path)]
+                            tools = from_openapi_schema(
+                                openapi_spec, headers=headers, params=params
+                            )
+                        except Exception as e:
+                            logger.error(
+                                "Error parsing OpenAPI schema: "
+                                + os.path.basename(f_path),
+                                exc_info=True,
+                            )
+                            raise e
+                        for tool in tools:
+                            logger.info(f"Adding tool {tool.name} from {f_path}")
+                            self.add_tool(tool)
+                else:
+                    logger.warning(
+                        "Schemas folder path is not a directory. Skipping... ", f_path
+                    )
+            else:
+                logger.warning(
+                    "Schemas folder path must be a string or list of strings. Skipping... ",
+                    schemas_folder,
+                )
 
     # --- Subagent Management ---
     def register_subagent(self, recipient_agent: "Agent") -> None:
