@@ -143,7 +143,6 @@ async def test_persistence_callbacks_called(temp_persistence_dir, persistence_ag
         data = json.load(f)
     # The thread_id is now implicit in the filename and managed by ThreadManager;
     # it's not stored inside the JSON by file_save_callback anymore.
-    # assert data.get("thread_id") == chat_id
     assert isinstance(data.get("items"), list)
     assert isinstance(data.get("metadata"), dict)  # Check metadata is a dict
 

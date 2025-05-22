@@ -311,10 +311,9 @@ class Agent(BaseAgent[MasterContext]):
         self._subagents = {}
         # _thread_manager and _agency_instance are injected by Agency
 
-        # --- Setup ---
-        self._load_tools_from_folder()  # Placeholder call
+        self._parse_files_folder_for_vs_id()
         self._parse_schemas()
-        self._init_file_handling()
+        # The full async _init_file_handling (with VS retrieval) should be called by Agency or explicitly in tests.
 
     # --- Properties ---
     @property
@@ -773,6 +772,9 @@ class Agent(BaseAgent[MasterContext]):
         # It should include user, assistant (possibly with tool_calls), and tool messages if they are part of the conversation.
         # No filtering is applied here based on user instruction.
 
+        # Sanitize tool_calls for OpenAI /v1/responses API compliance
+        history_for_runner = self._sanitize_tool_calls_in_history(history_for_runner)
+
         logger.info(
             f"AGENT_GET_RESPONSE: History for Runner in agent '{self.name}' for chat '{effective_chat_id}' (length {len(history_for_runner)}):"
         )
@@ -817,7 +819,7 @@ class Agent(BaseAgent[MasterContext]):
             logger.debug(f"Calling Runner.run for agent '{self.name}' with {len(history_for_runner)} history items.")
             run_result: RunResult = await Runner.run(
                 starting_agent=self,
-                input=thread.items,  # Runner handles adding this initial input
+                input=history_for_runner,
                 context=self._prepare_master_context(context_override, effective_chat_id),
                 hooks=hooks_override or self.hooks,
                 run_config=run_config or RunConfig(),
@@ -1014,7 +1016,11 @@ class Agent(BaseAgent[MasterContext]):
                 func_args_str = None
 
                 if isinstance(raw, ResponseFunctionToolCall):
-                    tool_call_id_for_array = getattr(raw, "call_id", getattr(raw, "id", None))
+                    # For /v1/responses API, use call_id for matching tool outputs
+                    tool_call_id_for_array = getattr(raw, "call_id", None)
+                    if tool_call_id_for_array is None:
+                        # Fallback to id only if call_id is not available
+                        tool_call_id_for_array = getattr(raw, "id", None)
                     func_name = getattr(raw, "name", None)
                     func_args_raw = getattr(raw, "arguments", None)
                     if not isinstance(func_args_raw, str):
@@ -1067,23 +1073,26 @@ class Agent(BaseAgent[MasterContext]):
             tool_call_id = None
             output_content = str(item.output)
 
-            # Attempt to retrieve the tool_call_id, prioritizing direct attribute if SDK provides it
+            # For /v1/responses API, prioritize call_id for matching tool outputs
             if hasattr(item, "tool_call_id") and item.tool_call_id:
                 tool_call_id = item.tool_call_id
-            # Fallback: check raw_item if it's the ResponseFunctionToolCall or a dict containing call_id
             elif isinstance(item.raw_item, ResponseFunctionToolCall):
-                # ResponseFunctionToolCall from /v1/responses has 'call_id' for matching, and 'id' for its own unique ID
+                # ResponseFunctionToolCall from /v1/responses has 'call_id' for matching
                 tool_call_id = getattr(item.raw_item, "call_id", None)
-                if tool_call_id is None:  # Should not happen if call_id is reliable
-                    tool_call_id = getattr(item.raw_item, "id", None)  # Less reliable for matching
+                if tool_call_id is None:  # Fallback only if call_id is not available
+                    tool_call_id = getattr(item.raw_item, "id", None)
             elif isinstance(item.raw_item, dict) and "call_id" in item.raw_item:
                 tool_call_id = item.raw_item.get("call_id")
 
             if tool_call_id:
                 logger.debug(
-                    f"Converting ToolCallOutputItem to history: tool_call_id={tool_call_id}, content='{output_content[:50]}...'"
+                    f"Converting ToolCallOutputItem to assistant message: tool_call_id={tool_call_id}, content='{output_content[:50]}...'"
                 )
-                return {"role": "tool", "tool_call_id": tool_call_id, "content": output_content}
+                # Convert tool output to assistant message with tool_call_id in content
+                return {
+                    "role": "assistant",
+                    "content": f"Tool output for call {tool_call_id}: {output_content}",
+                }
             else:
                 logger.warning(
                     f"Could not determine tool_call_id for ToolCallOutputItem: raw_item={item.raw_item}, item={item}"
@@ -1126,6 +1135,29 @@ class Agent(BaseAgent[MasterContext]):
                 logger.error(f"Error during response validation for agent {self.name}: {e}", exc_info=True)
                 return False  # Treat validation errors as failure
         return True  # No validator means always valid
+
+    @staticmethod
+    def _sanitize_tool_calls_in_history(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """
+        Ensures only the most recent assistant message in the history has a 'tool_calls' field.
+        Removes 'tool_calls' from all other messages.
+        """
+        # Find the index of the last assistant message
+        last_assistant_idx = None
+        for i in reversed(range(len(history))):
+            if history[i].get("role") == "assistant":
+                last_assistant_idx = i
+                break
+        if last_assistant_idx is None:
+            return history
+        # Remove 'tool_calls' from all assistant messages except the last one
+        sanitized = []
+        for idx, msg in enumerate(history):
+            if msg.get("role") == "assistant" and "tool_calls" in msg and idx != last_assistant_idx:
+                msg = dict(msg)
+                msg.pop("tool_calls", None)
+            sanitized.append(msg)
+        return sanitized
 
     # --- Agency Configuration Methods --- (Called by Agency)
     def _set_thread_manager(self, manager: ThreadManager):

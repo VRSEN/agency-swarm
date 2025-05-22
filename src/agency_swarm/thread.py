@@ -112,7 +112,6 @@ class ConversationThread:
 
     def get_history(
         self,
-        # perspective_agent: "Agent" | None = None,
         max_items: int | None = None,
     ) -> list[TResponseInputItem]:
         """Gets the message history, suitable for use by `agents.Runner`.
@@ -249,7 +248,6 @@ class ThreadManager:
                     metadata = loaded_thread_data.get("metadata", {})
                     if not isinstance(items, list):
                         logger.error(f"Loaded 'items' for thread {thread_id} is not a list. Found: {type(items)}")
-                        # Decide handling: raise error, or create new thread as if load failed
                         items = []  # Default to empty items on malformed data
                     if not isinstance(metadata, dict):
                         logger.error(f"Loaded 'metadata' for thread {thread_id} is not a dict. Found: {type(metadata)}")

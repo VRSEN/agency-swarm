@@ -104,23 +104,6 @@ async def run_persistent_conversation():
         print(f"\nTemporary persistence directory {PERSISTENCE_DIR} cleaned up.")
 
 
-async def check_persistence():
-    chat_id = f"chat_{uuid.uuid4()}"
-    response1 = await agency.get_response(
-        recipient_agent=agent1,  # Send to the entry point agent
-        message="what's 2+5?",
-        chat_id=chat_id,  # Use generated chat_id
-    )
-    print(response1)
-
-    response2 = await agency.get_response(
-        recipient_agent=agent1,  # Use agent1 again for the second turn
-        message="Add 2 to your previous answer",
-        chat_id=chat_id,  # Use generated chat_id
-    )
-    print(response2)
-
-
 if __name__ == "__main__":
     if not os.getenv("OPENAI_API_KEY"):
         print("\n\nCRITICAL ERROR: OPENAI_API_KEY environment variable not set.")

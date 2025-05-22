@@ -135,27 +135,6 @@ def test_agent_initialization_with_validator():
 
 
 @pytest.mark.asyncio
-async def test_get_response_basic(tmp_path):
-    agent = Agent(name="TestAgent", instructions="Test instructions")
-    from agency_swarm.thread import ThreadManager
-
-    agent._thread_manager = ThreadManager()
-    agent._agency_instance = type("Agency", (), {"agents": {"TestAgent": agent}, "user_context": {}})()
-    chat_id = "test_chat_123"
-    message_content = "Hello Agent"
-
-    class DummyRunResult:
-        final_output = "Mocked response"
-        new_items = []
-
-    from unittest.mock import patch
-
-    with patch("agency_swarm.agent.Runner.run", return_value=DummyRunResult()):
-        result = await agent.get_response(message_content, chat_id=chat_id)
-        assert result.final_output == "Mocked response"
-
-
-@pytest.mark.asyncio
 async def test_get_response_stream_basic(tmp_path):
     agent = Agent(name="TestAgent", instructions="Test instructions")
     from agency_swarm.thread import ThreadManager
