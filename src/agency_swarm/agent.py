@@ -726,6 +726,8 @@ class Agent(BaseAgent[MasterContext]):
         context_override: dict[str, Any] | None = None,
         hooks_override: RunHooks | None = None,
         run_config: RunConfig | None = None,
+        message_files: list[str] | None = None,  # Backward compatibility
+        file_ids: list[str] | None = None,  # New parameter
         **kwargs: Any,
     ) -> RunResult:
         """Run the agent's turn, returning the full execution result."""
@@ -750,6 +752,50 @@ class Agent(BaseAgent[MasterContext]):
         except Exception as e:
             logger.error(f"Error processing current input message for get_response: {e}", exc_info=True)
             raise AgentsException(f"Failed to process input message for agent {self.name}") from e
+
+        # Handle file attachments - support both old message_files and new file_ids
+        files_to_attach = file_ids or message_files or kwargs.get("file_ids") or kwargs.get("message_files")
+        if files_to_attach and isinstance(files_to_attach, list):
+            # Warn about deprecated message_files usage
+            if message_files or kwargs.get("message_files"):
+                warnings.warn(
+                    "'message_files' parameter is deprecated. Use 'file_ids' instead.",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
+
+            # Add file items to the last user message content
+            if processed_current_message_items:
+                last_message = processed_current_message_items[-1]
+                if isinstance(last_message, dict) and last_message.get("role") == "user":
+                    # Ensure content is a list for multi-content messages
+                    current_content = last_message.get("content", "")
+                    if isinstance(current_content, str):
+                        # Convert string content to list format
+                        content_list = [{"type": "input_text", "text": current_content}] if current_content else []
+                    elif isinstance(current_content, list):
+                        content_list = list(current_content)
+                    else:
+                        content_list = []
+
+                    # Add file items to content
+                    for file_id in files_to_attach:
+                        if isinstance(file_id, str) and file_id.startswith("file-"):
+                            file_content_item = {
+                                "type": "input_file",
+                                "file_id": file_id,
+                            }
+                            content_list.append(file_content_item)
+                            logger.debug(f"Added file content item for file_id: {file_id}")
+                        else:
+                            logger.warning(f"Invalid file_id format: {file_id} for agent {self.name}")
+
+                    # Update the message content
+                    last_message["content"] = content_list
+                else:
+                    logger.warning(f"Cannot attach files: Last message is not a user message for agent {self.name}")
+            else:
+                logger.warning(f"Cannot attach files: No messages to attach to for agent {self.name}")
 
         history_for_runner: list[TResponseInputItem]
         if sender_name is None:  # Top-level call from user or agency
@@ -785,35 +831,6 @@ class Agent(BaseAgent[MasterContext]):
             logger.info(
                 f"AGENT_GET_RESPONSE: History item [{i}]: role={history_item.get('role')}, content='{content_preview}...', tool_calls='{tool_calls_preview}...'"
             )
-
-        message_files_from_kwargs = kwargs.get("message_files")
-        if message_files_from_kwargs and isinstance(message_files_from_kwargs, list) and history_for_runner:
-            last_message_item = history_for_runner[-1]
-            if isinstance(last_message_item, dict):
-                attachments_to_add_to_last_item = []
-                for file_id in message_files_from_kwargs:
-                    if isinstance(file_id, str) and file_id.startswith("file-"):
-                        attachments_to_add_to_last_item.append({"file_id": file_id, "tools": [{"type": "file_search"}]})
-                    else:
-                        logger.warning(f"Invalid file_id format in message_files: {file_id} for agent {self.name}")
-
-                if attachments_to_add_to_last_item:
-                    if "attachments" not in last_message_item:
-                        last_message_item["attachments"] = []
-
-                    existing_file_ids_in_last = {
-                        att.get("file_id")
-                        for att in last_message_item.get("attachments", [])
-                        if isinstance(att, dict) and att.get("file_id")
-                    }
-                    for att_to_add in attachments_to_add_to_last_item:
-                        if att_to_add["file_id"] not in existing_file_ids_in_last:
-                            last_message_item["attachments"].append(att_to_add)
-            else:
-                logger.warning(
-                    f"Cannot add attachments to agent {self.name}: Last item in history_for_runner is not a dict. "
-                    f"Type: {type(last_message_item)}. Skipping attachment."
-                )
 
         try:
             logger.debug(f"Calling Runner.run for agent '{self.name}' with {len(history_for_runner)} history items.")

@@ -1,113 +1,155 @@
 # examples/file_handling.py
+"""
+Modern File Handling & Vision Example
+
+This example demonstrates Agency Swarm's built-in capabilities for:
+1. PDF file attachment processing (OpenAI automatically extracts content)
+2. Image vision analysis using input_image format
+3. No custom tools required - OpenAI handles everything automatically
+"""
+
 import asyncio
-import logging
+import base64
 import os
-import tempfile
-import uuid
 from pathlib import Path
 
-# Configure basic logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+from agents import ModelSettings
 
-import sys
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
-
-from agency_swarm.agency import Agency
-from agency_swarm.agent import Agent
-
-# --- Define Agents ---
-
-# Agent that manages files
-file_manager_agent = Agent(
-    name="FileManager",
-    instructions="You manage files. You can upload files and check if they exist.",
-    files_folder="./file_manager_files",  # Define a folder for this agent
-    # FileSearchTool is added automatically if files_folder is set and contains _vs_
-    # Or we can add it manually if needed later.
-    tools=[],  # Start with no explicit tools other than send_message
-)
-
-# Agent that requests file operations
-requester_agent = Agent(
-    name="Requester",
-    instructions="You request file operations from the FileManager agent.",
-    tools=[],
-)
-
-# --- Define Agency Chart ---
-agency_chart = [
-    requester_agent,  # Entry point
-    [requester_agent, file_manager_agent],  # Requester talks to FileManager
-]
-
-# --- Create Agency Instance ---
-agency = Agency(agency_chart=agency_chart, shared_instructions="Handle file operations carefully.")
-
-# --- Run Interaction ---
+from agency_swarm import Agency, Agent
 
 
-async def run_file_handling_example():
-    print("\n--- Running File Handling Example ---")
+def image_to_base64(image_path: Path) -> str:
+    """Convert image file to base64 string for vision processing."""
+    with open(image_path, "rb") as image_file:
+        return base64.b64encode(image_file.read()).decode("utf-8")
 
-    # Create a temporary file for the example
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as tmp_file:
-        tmp_file.write("This is a test file for the file handling example.")
-        temp_file_path = tmp_file.name
-        print(f"Created temporary file: {temp_file_path}")
 
-    # Generate a chat ID for this interaction
-    chat_id = f"chat_{uuid.uuid4()}"
-    print(f"\nInitiating chat with ID: {chat_id}")
+async def main():
+    """Run file handling and vision examples."""
 
-    response_upload = None
+    # Create a single agent that can handle both files and vision
+    agent = Agent(
+        name="FileAndVisionAgent",
+        instructions="""You are an expert at analyzing files and images.
+        When files or images are provided, examine them carefully and provide detailed analysis.
+        Be precise and specific in your responses.""",
+        model_settings=ModelSettings(temperature=0.0),  # Deterministic responses
+    )
+
+    # Create agency with the single agent
+    agency = Agency(agent, shared_instructions="Demonstrate file and vision processing.")
+
+    print("🚀 Agency Swarm File Handling & Vision Demo")
+    print("=" * 50)
+
+    # --- PDF File Processing ---
+    print("\n📄 PDF File Processing")
+    print("-" * 25)
+
     try:
-        # 1. Ask Requester to tell FileManager to upload the file
-        print(f"\nAsking Requester to tell FileManager to upload '{Path(temp_file_path).name}'")
-        response_upload = await agency.get_response(
-            recipient_agent=requester_agent,
-            message=f"Please ask the FileManager to upload the file '{temp_file_path}'.",
-            chat_id=chat_id,  # Pass the generated chat_id
-        )
-        print("Response from Requester after upload request:")
-        if response_upload:
-            final_output_upload = response_upload.final_output
-            print(
-                f"  Output: {final_output_upload if isinstance(final_output_upload, str) else type(final_output_upload)}"
-            )
-        else:
-            print("  No response received.")
+        from openai import AsyncOpenAI
 
-        # 2. Ask Requester to tell FileManager to check for the file
-        #    (Illustrative - requires FileSearchTool or similar on FileManager)
-        print(f"\nAsking Requester to tell FileManager to check for '{Path(temp_file_path).name}'")
-        response_check = await agency.get_response(
-            recipient_agent=requester_agent,
-            message=f"Please ask the FileManager to check if the file '{Path(temp_file_path).name}' exists.",
-            chat_id=chat_id,  # Continue the same chat
+        client = AsyncOpenAI()
+
+        # Upload the pre-generated PDF
+        pdf_path = Path(__file__).parent / "data" / "sample_report.pdf"
+        with open(pdf_path, "rb") as f:
+            uploaded_file = await client.files.create(file=f, purpose="assistants")
+
+        print(f"📤 Uploaded: {pdf_path.name}")
+
+        # Analyze the PDF
+        response = await agency.get_response(
+            recipient_agent=agent,
+            message="Please analyze the attached PDF and summarize the key financial metrics.",
+            file_ids=[uploaded_file.id],
         )
-        print("Response from Requester after check request:")
-        if response_check:
-            final_output_check = response_check.final_output
-            print(
-                f"  Output: {final_output_check if isinstance(final_output_check, str) else type(final_output_check)}"
-            )
-        else:
-            print("  No response received.")
+
+        print(f"🤖 Analysis: {response.final_output}")
+
+        # Cleanup
+        await client.files.delete(uploaded_file.id)
 
     except Exception as e:
-        logging.error(f"An error occurred during the file handling example: {e}", exc_info=True)
+        print(f"❌ PDF demo failed: {e}")
 
-    finally:
-        # Clean up the temporary file
-        if os.path.exists(temp_file_path):
-            os.remove(temp_file_path)
-            print(f"\nCleaned up temporary file: {temp_file_path}")
+    # --- Vision Processing ---
+    print("\n👁️  Vision Processing")
+    print("-" * 20)
+
+    try:
+        # Load and analyze the shapes image
+        shapes_path = Path(__file__).parent / "data" / "shapes_and_text.png"
+        b64_image = image_to_base64(shapes_path)
+
+        print(f"🖼️  Analyzing: {shapes_path.name}")
+
+        # Create vision message
+        vision_message = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "input_image",
+                        "detail": "auto",
+                        "image_url": f"data:image/png;base64,{b64_image}",
+                    }
+                ],
+            },
+            {"role": "user", "content": "What shapes and text do you see in this image?"},
+        ]
+
+        response = await agency.get_response(recipient_agent=agent, message=vision_message)
+
+        print(f"🤖 Vision: {response.final_output}")
+
+    except Exception as e:
+        print(f"❌ Vision demo failed: {e}")
+
+    # --- Complex Scene Analysis ---
+    print("\n🏞️  Complex Scene Analysis")
+    print("-" * 28)
+
+    try:
+        # Load and analyze the landscape scene
+        scene_path = Path(__file__).parent / "data" / "landscape_scene.png"
+        b64_scene = image_to_base64(scene_path)
+
+        print(f"🖼️  Analyzing: {scene_path.name}")
+
+        # Create scene analysis message
+        scene_message = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "input_image",
+                        "detail": "high",
+                        "image_url": f"data:image/png;base64,{b64_scene}",
+                    }
+                ],
+            },
+            {"role": "user", "content": "Describe this scene. How many trees do you see?"},
+        ]
+
+        response = await agency.get_response(recipient_agent=agent, message=scene_message)
+
+        print(f"🤖 Scene: {response.final_output}")
+
+    except Exception as e:
+        print(f"❌ Scene analysis failed: {e}")
+
+    print("\n✅ Demo Complete!")
+    print("\n💡 Key Takeaways:")
+    print("   • File attachments work with file_ids parameter")
+    print("   • Vision uses input_image type with base64 images")
+    print("   • No custom tools needed - OpenAI handles everything")
+    print("   • Use temperature=0 for consistent results")
 
 
-# --- Main Execution ---
 if __name__ == "__main__":
     if not os.getenv("OPENAI_API_KEY"):
-        print("Error: OPENAI_API_KEY environment variable not set.")
+        print("❌ Error: OPENAI_API_KEY environment variable not set.")
+        print("   Please set your OpenAI API key to run this example.")
     else:
-        asyncio.run(run_file_handling_example())
+        asyncio.run(main())

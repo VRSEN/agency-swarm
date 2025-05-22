@@ -59,6 +59,7 @@ dev = [
     "coverage>=7.6.12",
     "pynput",
     "types-pynput",
+    "Pillow>=10.0.0",
 ]
 
 [tool.uv]

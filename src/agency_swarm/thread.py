@@ -48,22 +48,35 @@ class ConversationThread:
             logger.warning(f"THREAD_ADD_ITEM: Attempted to add invalid item: {item_dict}. Expected dict with 'role'.")
             return
 
-        # Ensure basic structure and normalize content
+        # Create a copy to avoid modifying the original
+        item_dict = item_dict.copy()
+
         role = item_dict.get("role")
         content = item_dict.get("content")
+        tool_calls = item_dict.get("tool_calls")
 
-        # Normalize content: if None, set to "" for user, tool, and ASSISTANT roles
-        if content is None:
-            if role == "user" or role == "tool" or role == "assistant":
+        # Special handling for assistant messages with tool calls
+        if role == "assistant" and tool_calls:
+            if content is None:
+                # For messages with tool calls, we need a non-null content for streaming
+                # Convert tool calls to a descriptive string
+                tool_descriptions = []
+                for tc in tool_calls:
+                    if isinstance(tc, dict):
+                        func_name = tc.get("function", {}).get("name", "unknown")
+                        tool_descriptions.append(f"{func_name}")
+                content_str = f"Using tools: {', '.join(tool_descriptions)}"
+                item_dict["content"] = content_str
+                logger.debug(
+                    f"THREAD_ADD_ITEM: Converted tool calls to content string for streaming compatibility in thread {self.thread_id}"
+                )
+        # Normal content normalization for other cases
+        elif content is None:
+            if role in ("user", "tool", "assistant"):
                 item_dict["content"] = ""
                 logger.debug(
                     f"THREAD_ADD_ITEM: Normalized content from None to empty string for role '{role}' in thread {self.thread_id}"
                 )
-            # else: content can remain None for other roles if any (e.g. system, though not typical here)
-
-        # Assistant messages can have tool_calls, and tool messages have tool_call_id.
-        # These should be preserved as they are part of the standard OpenAI Chat Completions message format.
-        # The Runner or the underlying API client is responsible for handling these correctly.
 
         self.items.append(item_dict)
         logger.debug(f"Added item with role '{item_dict.get('role')}' to thread {self.thread_id}")
@@ -157,6 +170,18 @@ class ConversationThread:
         """Removes all message items from the thread history."""
         self.items.clear()
         logger.info(f"Cleared items from thread {self.thread_id}")
+
+    def get_items(self) -> list[TResponseInputItem]:
+        """Returns a copy of the thread's message items.
+
+        Returns:
+            list[TResponseInputItem]: Copy of the thread's message items.
+        """
+        return self.items.copy()
+
+    def __bool__(self) -> bool:
+        """Returns True if the thread has any message items, False otherwise."""
+        return bool(self.items)
 
 
 # Placeholder imports for callbacks - Update Typehint

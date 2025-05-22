@@ -1,20 +1,16 @@
 import asyncio
+import base64
 import json
 import os
 import shutil
 import uuid
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
-from agents import MessageOutputItem, RunContextWrapper, RunResult, ToolCallItem, ToolCallOutputItem, function_tool
-from openai import AsyncOpenAI, NotFoundError
-from openai.types.responses import (
-    ResponseFileSearchToolCall,
-    ResponseFunctionToolCall,
-    ResponseOutputMessage,
-    ResponseOutputText,
-)
+from agents import ModelSettings, RunContextWrapper, ToolCallItem, ToolCallOutputItem, function_tool
+from openai import AsyncOpenAI
+from openai.types.responses import ResponseFileSearchToolCall
 
 from agency_swarm import Agency, Agent
 from agency_swarm.agent import FileSearchTool
@@ -69,7 +65,7 @@ async def temporary_vs_and_agent(real_openai_client: AsyncOpenAI, tmp_path: Path
             name=f"FileSearchAgent_{vs_suffix}",
             instructions="You are an agent that uses FileSearchTool to answer questions based on provided files.",
             files_folder=str(agent_folder_for_vs),  # Pass the specially named folder
-            # tools=[] # FileSearchTool should be added automatically by _init_file_handling
+            model_settings=ModelSettings(temperature=0.0),
         )
 
         # Assign the real client to the agent for its operations
@@ -212,105 +208,263 @@ async def test_rag_with_filesearchtool_and_real_vs(
     )
 
 
-@pytest.mark.skip(
-    reason="Current 'message_files' to 'attachments' key implementation is incompatible with /v1/responses API. Needs redesign for how tools access specific files with this API."
-)
 @requires_openai_api
 @pytest.mark.asyncio
 async def test_agent_processes_message_files_attachment(real_openai_client: AsyncOpenAI, tmp_path: Path):
     """
-    Tests that an agent can receive a file ID via `message_files`,
-    pass it to a custom tool, and the tool call appears in the run history.
+    Tests that an agent can receive a file ID via `file_ids` parameter,
+    and OpenAI automatically makes the file content available to the LLM.
+    No custom tools are needed - OpenAI handles file processing automatically.
     Uses a REAL OpenAI client for file upload and REAL agent execution.
     """
-    # 1. Create a dummy file and upload it to get a real File ID
-    dummy_content = "This is a test file for message attachment."
-    dummy_file_for_attachment = tmp_path / "attachment_test.txt"
-    dummy_file_for_attachment.write_text(dummy_content)
+    # Use existing rich test PDF from v0.X tests
+    test_pdf_path = Path("tests/data/files/test-pdf.pdf")
+    assert test_pdf_path.exists(), f"Test PDF not found at {test_pdf_path}"
 
-    uploaded_real_file = await real_openai_client.files.create(
-        file=dummy_file_for_attachment.open("rb"), purpose="assistants"
-    )
+    uploaded_real_file = await real_openai_client.files.create(file=test_pdf_path.open("rb"), purpose="assistants")
     attached_file_id = uploaded_real_file.id
-    print(f"TEST: Uploaded file {dummy_file_for_attachment.name} for attachment, ID: {attached_file_id}")
+    print(f"TEST: Uploaded file {test_pdf_path.name} for attachment, ID: {attached_file_id}")
 
-    # 2. Define a custom tool that expects a file_id
-    # This tool will be called by the agent.
-    tool_call_tracker = {"called": False, "received_file_id": None}
-
-    @function_tool
-    async def specific_file_reader_tool_real(ctx: RunContextWrapper, file_id: str) -> str:
-        tool_call_tracker["called"] = True
-        tool_call_tracker["received_file_id"] = file_id
-        # In a real tool, you might fetch content. Here, we just confirm ID.
-        print(f"TOOL DEBUG: specific_file_reader_tool_real called with file_id: {file_id}")
-        return f"Tool processed file ID: {file_id}"
-
-    # 3. Initialize Agent with the custom tool and REAL client
+    # 2. Initialize Agent WITHOUT any custom file processing tools
+    # OpenAI will automatically process the attached file and make content available to the LLM
     attachment_tester_agent = Agent(
         name="AttachmentTesterAgentReal",
-        instructions="You must use the specific_file_reader_tool_real to process the attached file mentioned in the user message.",
-        tools=[specific_file_reader_tool_real],
+        instructions="You are a helpful assistant. When files are attached, you can read their content directly. Answer questions about the file content accurately.",
+        model_settings=ModelSettings(temperature=0.0),
     )
-    attachment_tester_agent._openai_client = real_openai_client  # Assign REAL client
+    attachment_tester_agent._openai_client = real_openai_client
 
-    # 4. Setup a minimal real Agency and ThreadManager for agent.get_response()
-    # This is to avoid mocking these core components in an integration test.
-    # For a fully isolated agent test without real agency, mocks would be needed,
-    # but per instructions, we avoid mocks in integration tests.
-    agency = Agency(attachment_tester_agent, user_context=None)  # Pass agent as positional arg
-    # Access the thread manager created by the agency
+    # 3. Setup a minimal real Agency and ThreadManager for agent.get_response()
+    agency = Agency(attachment_tester_agent, user_context=None)
     thread_manager = attachment_tester_agent._thread_manager
     assert thread_manager is not None, "ThreadManager not set by Agency"
 
-    # 5. Call get_response with message_files
+    # 4. Call get_response with file_ids - OpenAI will automatically process the file
     test_chat_id = f"test_msg_files_real_chat_{uuid.uuid4().hex[:8]}"
-    message_to_agent = "Please read the content of the attached file using your tool."
+    message_to_agent = "What content do you see in the attached PDF file? Please summarize what you find."
 
-    print(
-        f"TEST: Calling get_response for agent '{attachment_tester_agent.name}' with message_files: [{attached_file_id}]"
-    )
+    print(f"TEST: Calling get_response for agent '{attachment_tester_agent.name}' with file_ids: [{attached_file_id}]")
     response_result = await attachment_tester_agent.get_response(
-        message_to_agent, chat_id=test_chat_id, message_files=[attached_file_id]
+        message_to_agent, chat_id=test_chat_id, file_ids=[attached_file_id]
     )
 
-    # 6. Assertions
     assert response_result is not None
+    assert response_result.final_output is not None
     print(f"TEST: Agent final output: {response_result.final_output}")
-    # Check that our custom tool was actually called during the run
-    assert tool_call_tracker["called"], "specific_file_reader_tool_real was not called."
-    assert tool_call_tracker["received_file_id"] == attached_file_id, (
-        f"Tool received file_id {tool_call_tracker['received_file_id']} but expected {attached_file_id}"
+
+    # 5. Verify the agent could access the file content automatically
+    # The LLM should be able to read the PDF content without any custom tools
+    # The test PDF contains a secret phrase we can verify
+    response_lower = response_result.final_output.lower()
+    assert len(response_result.final_output) > 20, (
+        f"Response too short, suggests file content was not processed. Response: {response_result.final_output}"
     )
 
-    # Verify the tool call and output are in the RunResult history (new_items)
-    tool_call_found_in_history = False
-    tool_output_found_in_history = False
+    # Look for the secret phrase that should be in the PDF
+    secret_phrase_found = "first pdf secret phrase" in response_lower
+    assert secret_phrase_found, (
+        f"Expected secret phrase 'FIRST PDF SECRET PHRASE' not found in response. "
+        f"This suggests the PDF content was not made available to the LLM. "
+        f"Response: {response_result.final_output}"
+    )
+
+    # 6. Verify NO custom tool calls were made (since OpenAI handles file processing automatically)
+    tool_calls_found = False
     for item in response_result.new_items:
         if isinstance(item, ToolCallItem):
-            if item.raw_item.name == "specific_file_reader_tool_real":
-                tool_call_found_in_history = True
-                assert json.loads(item.raw_item.arguments).get("file_id") == attached_file_id
-                print(f"HISTORY CHECK: Found ToolCallItem for specific_file_reader_tool_real with correct file_id.")
-        elif isinstance(item, ToolCallOutputItem):
-            if item.tool_call_id == item.agent.last_responses[0].tool_calls[0].id:  # Assuming one tool call
-                # Check if the output matches what the tool would return
-                if f"Tool processed file ID: {attached_file_id}" in str(item.output):
-                    tool_output_found_in_history = True
-                    print(
-                        f"HISTORY CHECK: Found ToolCallOutputItem for specific_file_reader_tool_real with correct output."
-                    )
+            tool_calls_found = True
+            print(f"Unexpected tool call found: {item.raw_item}")
 
-    assert tool_call_found_in_history, (
-        "ToolCallItem for specific_file_reader_tool_real not found in RunResult.new_items"
-    )
-    assert tool_output_found_in_history, (
-        "ToolCallOutputItem for specific_file_reader_tool_real not found in RunResult.new_items or output mismatch"
+    # We expect NO tool calls since OpenAI processes files automatically
+    assert not tool_calls_found, (
+        "No tool calls should be found since OpenAI automatically processes file attachments. "
+        "The presence of tool calls suggests the implementation is incorrectly trying to use custom tools."
     )
 
-    # Cleanup the uploaded file from OpenAI
+    # 7. Cleanup the test file
     try:
-        await real_openai_client.files.delete(file_id=attached_file_id)
-        print(f"TEST: Cleaned up uploaded file {attached_file_id} from OpenAI.")
+        await real_openai_client.files.delete(attached_file_id)
+        print(f"Cleaned up file {attached_file_id}")
     except Exception as e:
-        print(f"TEST ERROR: Could not clean up file {attached_file_id} from OpenAI: {e}")
+        print(f"Warning: Failed to clean up file {attached_file_id}: {e}")
+
+
+@requires_openai_api
+@pytest.mark.asyncio
+async def test_multi_file_type_processing(real_openai_client: AsyncOpenAI, tmp_path: Path):
+    """
+    Tests that an agent can process PDF files automatically via OpenAI's Responses API file processing.
+
+    NOTE: The OpenAI Responses API with input_file type only supports PDF files for direct attachment.
+    Other file types (TXT, CSV, images) are supported through different mechanisms:
+    - Vector Stores/File Search (for RAG functionality)
+    - Code Interpreter (for code execution with files)
+
+    This test focuses on the direct file attachment capability which is PDF-only.
+    Uses the existing rich test PDF from the v0.X test suite.
+    """
+    # Use the existing rich test PDF with secret phrase
+    test_pdf_path = Path("tests/data/files/test-pdf.pdf")
+    assert test_pdf_path.exists(), f"Test PDF not found at {test_pdf_path}"
+
+    # Upload PDF file to OpenAI
+    with open(test_pdf_path, "rb") as f:
+        uploaded_file = await real_openai_client.files.create(file=f, purpose="assistants")
+        file_id = uploaded_file.id
+        print(f"Uploaded {test_pdf_path.name}, got ID: {file_id}")
+
+    try:
+        # Create an agent WITHOUT custom file processing tools
+        # OpenAI will automatically process PDF files and make content available
+        file_processor_agent = Agent(
+            name="FileProcessorAgent",
+            instructions="""You are an agent that can read and analyze PDF files automatically.
+            When PDF files are attached, you can access their content directly.
+            Extract and summarize key information from the PDF content accurately.""",
+            model_settings=ModelSettings(temperature=0.0),
+        )
+        file_processor_agent._openai_client = real_openai_client
+
+        # Initialize agency for the agent
+        agency = Agency(file_processor_agent, user_context=None)
+
+        # Test processing the PDF file
+        question = "What secret phrase do you find in this PDF file?"
+        expected_content = "FIRST PDF SECRET PHRASE"
+
+        # Process the PDF file - OpenAI will automatically make file content available
+        chat_id = f"test_file_processing_{uuid.uuid4().hex[:8]}"
+        response_result = await file_processor_agent.get_response(question, chat_id=chat_id, file_ids=[file_id])
+
+        # Verify response
+        assert response_result is not None
+        print(f"Response for {test_pdf_path.name}: {response_result.final_output}")
+
+        # Use case-insensitive search for matching
+        response_lower = response_result.final_output.lower()
+        expected_lower = expected_content.lower()
+
+        # With temperature=0, responses should be deterministic
+        content_found = expected_lower in response_lower
+
+        assert content_found, (
+            f"Expected content '{expected_content}' not found in response for {test_pdf_path.name}. "
+            f"This suggests OpenAI did not make the PDF file content available to the LLM. "
+            f"Response: {response_result.final_output}"
+        )
+
+        # Verify NO custom tool calls were made (OpenAI processes PDFs automatically)
+        tool_calls_found = False
+        for item in response_result.new_items:
+            if isinstance(item, ToolCallItem):
+                tool_calls_found = True
+                print(f"Unexpected tool call found for {test_pdf_path.name}: {item.raw_item}")
+
+        assert not tool_calls_found, (
+            f"No tool calls should be found for {test_pdf_path.name} since OpenAI automatically processes PDF file attachments. "
+            f"The presence of tool calls suggests the implementation is incorrectly trying to use custom tools."
+        )
+
+    finally:
+        # Cleanup: Delete uploaded file from OpenAI
+        try:
+            await real_openai_client.files.delete(file_id=file_id)
+            print(f"Cleaned up file {file_id}")
+        except Exception as e:
+            print(f"Error cleaning up file {file_id}: {e}")
+
+
+@requires_openai_api
+@pytest.mark.asyncio
+async def test_agent_vision_capabilities(real_openai_client: AsyncOpenAI, tmp_path: Path):
+    """
+    Tests that an agent can process images using OpenAI's vision capabilities.
+    Uses the input_image format with base64 encoded images.
+    Uses the pre-generated example images since vision requires actual image files.
+    """
+
+    def image_to_base64(image_path: Path) -> str:
+        """Convert image file to base64 string."""
+        with open(image_path, "rb") as image_file:
+            encoded_string = base64.b64encode(image_file.read()).decode("utf-8")
+        return encoded_string
+
+    # Use the example images since they're actual image files (not text files)
+    test_images = [
+        (Path("examples/data/shapes_and_text.png"), "How many shapes do you see in this image?", "three"),
+        (Path("examples/data/shapes_and_text.png"), "What text do you see in this image?", "VISION TEST 2024"),
+    ]
+
+    # Verify test images exist
+    for image_path, _, _ in test_images:
+        assert image_path.exists(), f"Test image not found at {image_path}"
+
+    # Create a vision-capable agent with temperature=0 for deterministic responses
+    vision_agent = Agent(
+        name="VisionAgent",
+        instructions="""You are an expert vision AI that can analyze images accurately.
+        When images are provided, examine them carefully and answer questions about their content.
+        Be precise and specific in your descriptions.""",
+        model_settings=ModelSettings(temperature=0.0),
+    )
+    vision_agent._openai_client = real_openai_client
+
+    # Initialize agency for the agent
+    agency = Agency(vision_agent, user_context=None)
+
+    # Test processing each image
+    for image_path, question, expected_content in test_images:
+        print(f"\nTesting vision processing of {image_path.name}")
+
+        # Convert image to base64
+        b64_image = image_to_base64(image_path)
+
+        # Create message with input_image format
+        message_with_image = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "input_image",
+                        "detail": "auto",
+                        "image_url": f"data:image/png;base64,{b64_image}",
+                    }
+                ],
+            },
+            {"role": "user", "content": question},
+        ]
+
+        # Process the image - OpenAI will automatically handle vision processing
+        chat_id = f"test_vision_{uuid.uuid4().hex[:8]}"
+        response_result = await vision_agent.get_response(message_with_image, chat_id=chat_id)
+
+        # Verify response
+        assert response_result is not None
+        assert response_result.final_output is not None
+        print(f"Vision response for {image_path.name}: {response_result.final_output}")
+
+        # Use case-insensitive search for matching
+        response_lower = response_result.final_output.lower()
+        expected_lower = expected_content.lower()
+
+        # With temperature=0, responses should be deterministic
+        content_found = expected_lower in response_lower
+
+        assert content_found, (
+            f"Expected content '{expected_content}' not found in vision response for {image_path.name}. "
+            f"This suggests the vision processing failed or the model couldn't see the image content. "
+            f"Response: {response_result.final_output}"
+        )
+
+        # Verify NO custom tool calls were made (OpenAI processes vision automatically)
+        tool_calls_found = False
+        for item in response_result.new_items:
+            if isinstance(item, ToolCallItem):
+                tool_calls_found = True
+                print(f"Unexpected tool call found for {image_path.name}: {item.raw_item}")
+
+        # We expect NO tool calls since OpenAI processes vision automatically
+        assert not tool_calls_found, (
+            f"No tool calls should be found for {image_path.name} since OpenAI automatically processes vision. "
+            f"The presence of tool calls suggests the implementation is incorrectly trying to use custom tools."
+        )
