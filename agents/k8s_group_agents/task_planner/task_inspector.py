@@ -1,5 +1,5 @@
 from agency_swarm import Agent
-_name = "inspector"
+_name = "task_inspector"
 
 _description = """
 职责是检查task_planner规划的任务是否合理

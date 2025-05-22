@@ -1,7 +1,7 @@
 from agency_swarm import Agent, Agency
 
 from agents.k8s_group_agents.task_planner import (
-    task_planner, scheduler, inspector
+    task_planner, task_scheduler, task_inspector
 )
 from agents.k8s_group_agents.subtask_planner import (
     subtask_planner, subtask_scheduler, subtask_inspector
@@ -105,8 +105,8 @@ def main():
     try:
         # 以下是日志功能更新前的代码
         task_planner_instance = task_planner.create_agent()
-        scheduler_instance = scheduler.create_agent()
-        inspector_instance = inspector.create_agent()
+        task_scheduler_instance = task_scheduler.create_agent()
+        task_inspector_instance = task_inspector.create_agent()
 
         subtask_planner_instance = subtask_planner.create_agent()
         subtask_scheduler_instance = subtask_scheduler.create_agent()
@@ -157,7 +157,7 @@ def main():
 
         chat_graph = [
             # task
-            task_planner_instance, scheduler_instance, inspector_instance,
+            task_planner_instance, task_scheduler_instance, task_inspector_instance,
 
             # subtask
             subtask_planner_instance, subtask_scheduler_instance, subtask_inspector_instance,
@@ -223,8 +223,8 @@ def main():
 
         plan_agents = {
             "task_planner": task_planner_instance,
-            "inspector": inspector_instance,
-            "scheduler": scheduler_instance,
+            "task_scheduler": task_scheduler_instance,
+            "task_inspector": task_inspector_instance,
             "subtask_planner": subtask_planner_instance,
             "subtask_scheduler": subtask_scheduler_instance,
             "subtask_inspector": subtask_inspector_instance,
@@ -232,12 +232,12 @@ def main():
         }
 
         cap_group_agents = {
-            "pod管理能力群": [pod_manage_planner_instance, None, pod_manage_step_scheduler_instance],
-            "pod编排调度能力群": [pod_orchestration_scheduling_planner_instance, None, pod_orchestration_scheduling_step_scheduler_instance],
-            "配置管理能力群": [config_manage_planner_instance, None, config_manage_step_scheduler_instance],
-            "存储能力群": [storage_planner_instance, None, storage_step_scheduler_instance],
-            "监控能力群": [monitor_planner_instance, None,monitor_step_scheduler_instance],
-            "软件管理能力群": [software_manage_planner_instance, None, software_manage_step_scheduler_instance],
+            "pod管理能力群": [pod_manage_planner_instance, pod_manage_step_scheduler_instance],
+            "pod编排调度能力群": [pod_orchestration_scheduling_planner_instance, pod_orchestration_scheduling_step_scheduler_instance],
+            "配置管理能力群": [config_manage_planner_instance, config_manage_step_scheduler_instance],
+            "存储能力群": [storage_planner_instance, storage_step_scheduler_instance],
+            "监控能力群": [monitor_planner_instance,monitor_step_scheduler_instance],
+            "软件管理能力群": [software_manage_planner_instance, software_manage_step_scheduler_instance],
         }
 
         cap_agents = {
@@ -249,27 +249,7 @@ def main():
             "存储能力群": [pv_agent_instance, pvc_agent_instance, storageclass_agent_instance, csi_agent_instance, emptydir_agent_instance, hostpath_agent_instance, disk_agent_instance,],
         }
 
-        # step_json = {
-        #     "title": "创建节点",
-        #     "id": "step_1",
-        #     "agent": ["NODE_lifecycle_agent"],
-        #     "description": "在cn-north-4a可用区中，名为ccetest的CCE集群中创建一个节点，节点名字为node-1，集群id为eeb8f029-1c4b-11f0-a423-0255ac100260，节点规格为c6.large.2，系统盘和数据盘大小分别为50GB和100GB，磁盘类型都为SSD，节点通过密码方式登录，用户名为'root', 密码为'JDYkc2FsdCR1SzEzUEgvMy9rOHZRQ0UzRFBEVzFiZm1UMmVZSnFEQjMydzFxOVY5WUt3M2ZmR0JTZWN1N2ZNZlkzYmY5Z2ZDNlJlTHp6NGl3anc3WHM5RDFUcmNuLg=='",
-        #     "dep": []
-        # }
-        # perpared = {
-        #     "cap_group": "节点管理能力群",
-        #     "step": step_json
-        # }
-        # agency.test_single_cap_agent(plan_agents=plan_agents, cap_group_agents=cap_group_agents, cap_agents=cap_agents, **perpared)
-
-        # text = "在cn-north-4a可用区中，名为ccetest的CCE集群中加入一个节点，节点名字为node-1，集群id为eeb8f029-1c4b-11f0-a423-0255ac100260，节点规格为c6.large.2，系统盘和数据盘大小分别为50GB和100GB，磁盘类型都为SSD"
-        # text = "在cn-north-4a可用区创建一个名为ccetest的CCE集群，最小规格；未创建vpc和子网，需要创建名为vpc111的vpc和名为subnet111的子网，vpc的cidr为192.168.0.0/24，网关ip为192.168.0.1; 之后你需要在该CCE集群中加入三个节点"
-        # text = "在北京cn-north-4a可用区创建一个最低规格的CCE，名为'ccetest'，已有vpc和子网，VPC id为8bf558f4-2f96-4248-9cb0-fee7a2a6cebb，子网id为0519a325-6fa3-4f68-83ec-6f13263167d2"
-        # text = "创建一个8核32g的ECS，操作系统选择为Ubuntu 20.04。"
-        # text = "在北京可用区创建三个ecs，之后删除创建时间超过5分钟的ecs"
-        # text = "在华为云ecs上部署mysql和postgresql，并用sysbench测试它们的性能"
-        # text = input("👤 USER: ")
-        text ="""WARN: [K8s] Container CPU throttled - usage: 850m, limit: 1000m"""
+        text ="""我需要在k8s集群上用Operator部署一个3实例的PostgreSQL集群，包括一个主节点，两个从节点，PostgreSQL版本为13.8，使用华为云EVS磁盘存储，每个节点有10GB的存储空间。"""
         
         agency.task_planning(original_request=text, plan_agents=plan_agents, cap_group_agents=cap_group_agents, cap_agents=cap_agents)
     
@@ -286,8 +266,7 @@ if __name__ == "__main__":
         import winsound
         import time
         winsound.MessageBeep(winsound.MB_ICONEXCLAMATION)
-        time.sleep(1)
+        time.sleep(2)
         winsound.MessageBeep(winsound.MB_ICONEXCLAMATION)
-        time.sleep(1)
+        time.sleep(2)
         winsound.MessageBeep(winsound.MB_ICONEXCLAMATION)
-        time.sleep(1)

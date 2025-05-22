@@ -1,6 +1,6 @@
 from agency_swarm import Agent
 from agents.tools.read_json_file.ReadJsonFile import ReadJsonFile
-_name = "scheduler"
+_name = "task_scheduler"
 
 _description = """
 职责是调度任务

@@ -1,6 +1,7 @@
 from agency_swarm import Agent
 
 from agents.k8s_group_agents.k8s_agent_instruction import k8s_agent_instruction
+from agents.tools.read_json_file.ReadJsonFile import ReadJsonFile
 from agents.k8s_group_agents.tools.ExecuteCommand import ExecuteCommand
 
 _name = "task_manage_agent"
@@ -13,7 +14,7 @@ import os
 current_path = os.path.abspath(os.path.dirname(__file__))
 _instruction = k8s_agent_instruction(_name,_description)
 
-_tools = [ExecuteCommand]
+_tools = [ReadJsonFile, ExecuteCommand]
 
 _file_folder = ""
 
