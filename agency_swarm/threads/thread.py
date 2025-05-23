@@ -431,13 +431,16 @@ class Thread:
                 run_id=actual_run_id,
                 poll_interval_ms=500,
             )
+            time.sleep(1)  # Give time for cancellation to propagate
         except BadRequestError as e:
             if "Cannot cancel run with status" in e.message:
+                logger.warning(f"Could not cancel run: {e.message}. Assuming it's in terminal state.")
                 self._run = self.client.beta.threads.runs.poll(
                     thread_id=actual_thread_id,
                     run_id=actual_run_id,
                     poll_interval_ms=500,
                 )
+                time.sleep(1)
             else:
                 raise e
 
@@ -818,7 +821,7 @@ class Thread:
         try:
             self.submit_tool_outputs(tool_outputs, event_handler)
         except BadRequestError as e:
-            if 'Runs in status "expired"' in e.message:
+            if 'Runs in status "expired"' in e.message or 'Runs in status "cancelled"' in e.message:
                 self.create_message(
                     message="Previous request timed out. Please repeat the exact same tool calls in the exact same order with the same arguments.",
                     role="user",
@@ -879,20 +882,49 @@ class Thread:
             "cancel" – actively cancel the run, then wait until the
                         cancellation is confirmed.
         """
+        # First check local state
         if not self._run or self._run.status in self.terminal_states:
-            return  # already safe
-
+            # Local state looks good, verify through API
+            has_active_run, run_id = self._check_for_active_runs()
+            if not has_active_run:
+                return  # Confirmed safe
+            
+            # We found an active run that our local state wasn't aware of
+            # Update our local state
+            if run_id:
+                self._run = self.client.beta.threads.runs.retrieve(
+                    thread_id=self.id, run_id=run_id
+                )
+        
+        # Handle the active run
         if action == "cancel":
             self.cancel_run()  # poll() inside guarantees termination
         else:
             self._run_until_done()  # passive wait
 
-        # Defensive sanity-check
-        if self._run and self._run.status not in self.terminal_states:
+        # Double-check with the API
+        has_active_run, _ = self._check_for_active_runs()
+        if has_active_run:
             raise RuntimeError(
-                f"Run {self._run.id} still active after _ensure_no_active_run "
-                f"(status={self._run.status})."
+                f"Run still active after _ensure_no_active_run "
+                f"(status={self._run.status if self._run else 'unknown'})."
             )
+        
+    def _check_for_active_runs(self) -> tuple[bool, str | None]:
+        """
+        Check if there are any active runs for this thread.
+        
+        Returns:
+            tuple: (has_active_run, run_id)
+        """
+        # List runs with a filter for non-terminal states
+        runs = self.client.beta.threads.runs.list(thread_id=self.id, limit=1)
+        
+        for run in runs.data:
+            if run.status not in self.terminal_states:
+                return True, run.id
+                
+        return False, None
 
     def _setup_attachments(
         self,
