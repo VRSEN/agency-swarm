@@ -14,7 +14,7 @@ _input_format = """
             "id": 子任务ID, 
             "capability_group": <所需能力群名称>
             "description": 子任务描述, 
-            "dep": <前置子任务ID列表>,
+            "dep": <前置子任务ID列表>
         },
         ...
     }

@@ -23,7 +23,7 @@ _output_format = """
         "id": 任务ID, 
         "capability_group": <能力群名称>,
         "description": 任务描述, 
-        "dep": <前置任务ID列表>,
+        "dep": <前置任务ID列表>
     },
     ...
 }
