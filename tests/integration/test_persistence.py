@@ -98,8 +98,13 @@ def persistence_agent():
 @pytest.fixture
 def file_persistence_callbacks(temp_persistence_dir):
     """Fixture to provide configured file callbacks."""
-    save_cb = lambda thread_id, thread_data: file_save_callback(thread_id, thread_data, temp_persistence_dir)
-    load_cb = lambda thread_id: file_load_callback(thread_id, temp_persistence_dir)
+
+    def save_cb(thread_id, thread_data):
+        return file_save_callback(thread_id, thread_data, temp_persistence_dir)
+
+    def load_cb(thread_id):
+        return file_load_callback(thread_id, temp_persistence_dir)
+
     return load_cb, save_cb
 
 

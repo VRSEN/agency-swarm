@@ -94,6 +94,7 @@ class Agent(BaseAgent[MasterContext]):
         response_validator (Callable[[str], bool] | None): An optional callable that validates the agent's
                                                           final text response. It should return `True` if the
                                                           response is valid, `False` otherwise.
+        output_type (type[Any] | None): The type of the agent's final output.
         _thread_manager (ThreadManager | None): Internal reference to the agency's `ThreadManager`.
                                                 Set by the parent `Agency`.
         _agency_instance (Any | None): Internal reference to the parent `Agency` instance. Set by the parent `Agency`.
@@ -108,6 +109,7 @@ class Agent(BaseAgent[MasterContext]):
     tools_folder: str | Path | None  # Placeholder for future ToolFactory
     description: str | None
     response_validator: Callable[[str], bool] | None
+    output_type: type[Any] | None  # Add output_type parameter
 
     # --- Internal State ---
     _thread_manager: ThreadManager | None = None
@@ -132,7 +134,7 @@ class Agent(BaseAgent[MasterContext]):
             **kwargs: Keyword arguments including standard `agents.Agent` parameters
                       (like `name`, `instructions`, `model`, `tools`, `hooks`, etc.)
                       and Agency Swarm specific parameters (`files_folder`, `description`,
-                      `response_validator`). Deprecated parameters are handled with warnings.
+                      `response_validator`, `output_type`). Deprecated parameters are handled with warnings.
 
         Raises:
             ValueError: If the required 'name' parameter is not provided.
@@ -294,6 +296,7 @@ class Agent(BaseAgent[MasterContext]):
         # BaseAgent might have its own description or similar param, but Swarm's `description`
         # is for inter-agent communication tool generation.
         base_agent_params.pop("description", None)
+
         super().__init__(**base_agent_params)
 
         # --- Agency Swarm Attrs Init --- (Assign AFTER super)
@@ -305,6 +308,7 @@ class Agent(BaseAgent[MasterContext]):
         self.response_validator = current_agent_params.get("response_validator")
         # Set description directly from current_agent_params, default to None if not provided
         self.description = current_agent_params.get("description")
+        # output_type is handled by the base Agent constructor, no need to set it here
 
         # --- Internal State Init ---
         self._openai_client = None
@@ -316,6 +320,17 @@ class Agent(BaseAgent[MasterContext]):
         # The full async _init_file_handling (with VS retrieval) should be called by Agency or explicitly in tests.
 
     # --- Properties ---
+    def __repr__(self) -> str:
+        """Return a string representation of the Agent instance."""
+        # Get model information - try model_settings.model first, then fall back to model attribute
+        model_info = "unknown"
+        if hasattr(self, "model_settings") and self.model_settings and hasattr(self.model_settings, "model"):
+            model_info = self.model_settings.model
+        elif hasattr(self, "model") and self.model:
+            model_info = self.model
+
+        return f"<Agent name={self.name!r} desc={self.description!r} model={model_info!r}>"
+
     @property
     def client(self) -> AsyncOpenAI:
         """Provides access to an initialized AsyncOpenAI client instance."""
@@ -384,7 +399,7 @@ class Agent(BaseAgent[MasterContext]):
                     f_paths = [os.path.join(f_path, f) for f in f_paths]
 
                     for f_path in f_paths:
-                        with open(f_path, "r") as f:
+                        with open(f_path) as f:
                             openapi_spec = f.read()
                             f.close()  # fix permission error on windows
                         try:
@@ -1242,10 +1257,10 @@ class Agent(BaseAgent[MasterContext]):
         try:
             # First, try to use the __file__ attribute of the module
             return os.path.abspath(os.path.dirname(self.__module__.__file__))
-        except (TypeError, OSError, AttributeError) as e:
+        except (TypeError, OSError, AttributeError):
             # If that fails, fall back to inspect
             try:
                 class_file = inspect.getfile(self.__class__)
-            except (TypeError, OSError, AttributeError) as e:
+            except (TypeError, OSError, AttributeError):
                 return "./"
             return os.path.abspath(os.path.realpath(os.path.dirname(class_file)))

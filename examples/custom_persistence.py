@@ -23,7 +23,6 @@ if str(project_root) not in sys.path:
 
 from agency_swarm.agency import Agency
 from agency_swarm.agent import Agent
-from agency_swarm.thread import ConversationThread, TResponseInputItem
 
 agent1 = Agent(
     name="MemoryAgent",

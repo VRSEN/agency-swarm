@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 from agents import TResponseInputItem
 
 if TYPE_CHECKING:
-    from .agent import Agent  # Use forward reference
+    pass  # Use forward reference
 
 logger = logging.getLogger(__name__)
 

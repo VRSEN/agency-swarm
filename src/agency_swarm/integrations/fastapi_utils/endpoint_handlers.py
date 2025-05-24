@@ -11,13 +11,16 @@ from agency_swarm.agency import Agency
 def get_verify_token(app_token):
     auto_error = app_token is not None and app_token != ""
     security = HTTPBearer(auto_error=auto_error)
+
     async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):  # noqa: B008
         if app_token is None or app_token == "":
             return None
         if not credentials or credentials.credentials != app_token:
             raise HTTPException(status_code=401, detail="Unauthorized")
         return credentials.credentials
+
     return verify_token
+
 
 # Non‑streaming completion endpoint
 def make_completion_endpoint(request_model, current_agency: Agency, verify_token):
@@ -27,11 +30,12 @@ def make_completion_endpoint(request_model, current_agency: Agency, verify_token
             recipient_agent=request.recipient_agent,
             chat_id=request.chat_id,
             context_override=request.context_override,
-            hooks_override=request.hooks_override
+            hooks_override=request.hooks_override,
         )
         return {"response": response.final_output}
 
     return handler
+
 
 # Streaming SSE endpoint
 def make_stream_endpoint(request_model, current_agency: Agency, verify_token):
@@ -45,7 +49,6 @@ def make_stream_endpoint(request_model, current_agency: Agency, verify_token):
                     chat_id=request.chat_id,
                     context_override=request.context_override,
                     hooks_override=request.hooks_override,
-
                     # Not yet implemented
                     # message_files=getattr(request, "message_files", None),
                     # additional_instructions=getattr(request, "additional_instructions", None),
@@ -65,7 +68,7 @@ def make_stream_endpoint(request_model, current_agency: Agency, verify_token):
                             data = str(event)
                         yield "data: " + json.dumps({"data": data}) + "\n\n"
                     except Exception as e:
-                        yield "data: " + json.dumps({"error": f'Failed to serialize event: {e}'}) + "\n\n"
+                        yield "data: " + json.dumps({"error": f"Failed to serialize event: {e}"}) + "\n\n"
             except Exception as exc:
                 yield "data: " + json.dumps({"error": str(exc)}) + "\n\n"
 
@@ -81,6 +84,7 @@ def make_stream_endpoint(request_model, current_agency: Agency, verify_token):
 
     return handler
 
+
 # Tool endpoint
 def make_tool_endpoint(tool, verify_token, context=None):
     async def handler(request: Request, token: str = Depends(verify_token)):
@@ -90,8 +94,8 @@ def make_tool_endpoint(tool, verify_token, context=None):
             # If this is a FunctionTool (from @function_tool), use on_invoke_tool
             if hasattr(tool, "on_invoke_tool"):
                 # Ensure 'args' key is present for function tools
-                if 'args' not in data:
-                    input_json = json.dumps({'args': data})
+                if "args" not in data:
+                    input_json = json.dumps({"args": data})
                 else:
                     input_json = json.dumps(data)
                 print("input_json:", input_json)
@@ -108,11 +112,12 @@ def make_tool_endpoint(tool, verify_token, context=None):
             return {"response": result}
         except Exception as e:
             return JSONResponse(status_code=500, content={"Error": str(e)})
+
     return handler
+
 
 async def exception_handler(request, exc):
     error_message = str(exc)
     if isinstance(exc, tuple):
         error_message = str(exc[1]) if len(exc) > 1 else str(exc[0])
     return JSONResponse(status_code=500, content={"error": error_message})
-

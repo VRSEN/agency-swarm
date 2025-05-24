@@ -6,6 +6,7 @@ from collections.abc import AsyncGenerator
 from typing import Any
 
 from agents import (
+    RunConfig,
     RunHooks,
     RunResult,
 )
@@ -388,7 +389,9 @@ class Agency:
         chat_id: str | None = None,
         context_override: dict[str, Any] | None = None,
         hooks_override: RunHooks | None = None,
-        message_files: list[str] | None = None,  # Backward compatibility
+        run_config: RunConfig | None = None,
+        message_files: list[str] | None = None,
+        file_ids: list[str] | None = None,
         **kwargs: Any,
     ) -> RunResult:
         """
@@ -407,7 +410,9 @@ class Agency:
             context_override (dict[str, Any] | None, optional): Additional context to pass to the agent run.
             hooks_override (RunHooks | None, optional): Specific hooks to use for this run, overriding
                                                        agency-level persistence hooks.
+            run_config (RunConfig | None, optional): Configuration for the agent run.
             message_files (list[str] | None, optional): Backward compatibility parameter.
+            file_ids (list[str] | None, optional): Additional file IDs for the agent run.
             **kwargs: Additional arguments passed down to the target agent's `get_response` method
                       and subsequently to `agents.Runner.run`.
 
@@ -438,7 +443,9 @@ class Agency:
             chat_id=chat_id,
             context_override=context_override,
             hooks_override=effective_hooks,
+            run_config=run_config,
             message_files=message_files,
+            file_ids=file_ids,
             **kwargs,
         )
 
@@ -449,7 +456,9 @@ class Agency:
         chat_id: str | None = None,
         context_override: dict[str, Any] | None = None,
         hooks_override: RunHooks | None = None,
-        message_files: list[str] | None = None,  # Backward compatibility
+        run_config_override: RunConfig | None = None,
+        message_files: list[str] | None = None,
+        file_ids: list[str] | None = None,
         **kwargs: Any,
     ) -> AsyncGenerator[Any, None]:
         """
@@ -465,7 +474,9 @@ class Agency:
                                             thread is initiated.
             context_override (dict[str, Any] | None, optional): Additional context for the run.
             hooks_override (RunHooks | None, optional): Specific hooks for this run.
+            run_config_override (RunConfig | None, optional): Specific run configuration for this run.
             message_files (list[str] | None, optional): Backward compatibility parameter.
+            file_ids (list[str] | None, optional): Additional file IDs for the agent run.
             **kwargs: Additional arguments passed down to `get_response_stream` and `run_streamed`.
 
         Yields:
@@ -495,7 +506,9 @@ class Agency:
             chat_id=chat_id,
             context_override=context_override,
             hooks_override=effective_hooks,
+            run_config_override=run_config_override,
             message_files=message_files,
+            file_ids=file_ids,
             **kwargs,
         ):
             yield event
@@ -596,10 +609,36 @@ class Agency:
             logger.warning("verbose parameter is deprecated and ignored. Use logging configuration instead.")
 
         if response_format:
-            raise NotImplementedError(
-                "response_format parameter is not yet implemented in v1.x. "
-                "TODO: Implement response_format support in get_response."
-            )
+            # Convert response_format to output_type for compatibility
+            # response_format in v0.x was a dict like {"type": "json_schema", "json_schema": {...}}
+            # We need to extract the schema and create a compatible output_type
+            if isinstance(response_format, dict):
+                if response_format.get("type") == "json_schema":
+                    json_schema = response_format.get("json_schema", {})
+                    schema_dict = json_schema.get("schema", {})
+                    if schema_dict:
+                        # For now, we'll pass the response_format through kwargs
+                        # The actual conversion would require creating a Pydantic model from the schema
+                        # which is complex and may not be necessary for most use cases
+                        logger.warning(
+                            "response_format parameter is deprecated. For structured outputs, "
+                            "use the 'output_type' parameter on the Agent instead. "
+                            "Passing response_format through kwargs for now."
+                        )
+                        kwargs["response_format"] = response_format
+                    else:
+                        logger.warning("response_format provided but no schema found. Ignoring.")
+                elif response_format.get("type") == "json_object":
+                    logger.warning(
+                        "response_format with type 'json_object' is deprecated. "
+                        "Use 'output_type' parameter on the Agent for structured outputs. "
+                        "Passing through kwargs for now."
+                    )
+                    kwargs["response_format"] = response_format
+                else:
+                    logger.warning(f"Unsupported response_format type: {response_format.get('type')}. Ignoring.")
+            else:
+                logger.warning("response_format must be a dictionary. Ignoring.")
 
         # Determine recipient agent - default to first entry point if not specified
         target_recipient = recipient_agent

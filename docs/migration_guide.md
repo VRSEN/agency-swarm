@@ -19,6 +19,10 @@ Explain the shift from Assistants API to the SDK's `Runner`, `RunHooks`, `Agent`
     *   **Request-Response Pattern:** Facilitated by the internal `send_message` tool (an `agents.FunctionTool`). This tool is automatically configured on a sender agent to allow it to message a receiver agent if that path is defined in `communication_flows` (or derived from the deprecated `agency_chart`). This pattern involves an agent sending a message and awaiting a response, maintaining a distinct conversation history for that pair.
     *   **Sequential Handoffs:** For unidirectional transfers of control where an agent completes its work and passes the interaction to another, use the OpenAI Agents SDK's `handoffs` mechanism. This is configured directly on the sending agent (e.g., `AgentA(name="AgentA", ..., handoffs=[AgentB])`). The conversation history is preserved and continued by the receiving agent.
     *   **`SendMessageSwarm` Deprecation:** The old `SendMessageSwarm` tool is deprecated and removed. Internal agent-to-agent messaging (request-response) is now handled by the dynamically configured `SendMessage` tool. For sequential, unidirectional flows, use the SDK's `handoffs` feature.
+*   **Structured Outputs:**
+    *   **v0.x Method:** Used the `response_format` parameter in `agency.get_completion()` with OpenAI's structured output format: `{"type": "json_schema", "json_schema": {...}}`.
+    *   **v1.x Method (Recommended):** Use the `output_type` parameter directly on `Agent` instances. Pass any Python type that can be wrapped in a Pydantic TypeAdapter (Pydantic models, dataclasses, TypedDict, etc.). The SDK automatically converts this to the appropriate `response_format` for OpenAI's structured outputs.
+    *   **Backward Compatibility:** The deprecated `get_completion` method still accepts `response_format` but issues warnings and passes it through for basic compatibility.
 *   **Persistence:** v0.x relied on OpenAI object persistence. v1.x uses explicit `load_callback` and `save_callback` functions provided during `Agency` initialization.
     *   The `load_callback` is given a `chat_id` (string) and should return a dictionary representing the thread's data, or `None` if the thread is not found.
     *   The `save_callback` is given a `chat_id` (string) and a dictionary representing the thread's data. It should persist this dictionary.
@@ -108,7 +112,22 @@ agency = Agency(
 # Run Interaction (Example v0.x Call)
 completion_output = agency.get_completion(
     message="Start the process",
-    recipient_agent="Agent1"
+    recipient_agent="Agent1",
+    response_format={  # v0.x structured output method
+        "type": "json_schema",
+        "json_schema": {
+            "name": "task_output",
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "task_name": {"type": "string"},
+                    "status": {"type": "string"},
+                    "priority": {"type": "integer"}
+                },
+                "required": ["task_name", "status", "priority"]
+            }
+        }
+    }
 )
 print(completion_output)
 
@@ -120,6 +139,12 @@ import json
 from typing import Any
 import asyncio
 from pydantic import BaseModel, Field
+
+# Structured Output Example
+class TaskOutput(BaseModel):
+    task_name: str = Field(..., description="Name of the task")
+    status: str = Field(..., description="Status of the task")
+    priority: int = Field(..., description="Priority level (1-5)")
 
 # Persistence Callbacks
 
@@ -180,7 +205,7 @@ class MyAgentSDK(Agent):
         super().__init__(tools=[my_sdk_tool], **kwargs) # Pass the decorated function
 
 # Agency Setup
-agent1 = MyAgentSDK(name="Agent1", instructions="...")
+agent1 = MyAgentSDK(name="Agent1", instructions="...", output_type=TaskOutput)  # Add output_type for structured outputs
 agent2 = MyAgentSDK(name="Agent2", instructions="...")
 # Recommended v1.x initialization:
 agency = Agency(

@@ -2,6 +2,7 @@
 This module is provided solely to ensure backwards compatibility with previous versions of the Agency Swarm framework.
 It is deprecated and should not be used for new development.
 """
+
 from abc import ABC, abstractmethod
 from typing import Any, ClassVar
 
@@ -53,27 +54,20 @@ class BaseTool(BaseModel, ABC):
         """
         schema = cls.model_json_schema()
         docstring = parse(cls.__doc__ or "")
-        parameters = {
-            k: v for k, v in schema.items() if k not in ("title", "description")
-        }
+        parameters = {k: v for k, v in schema.items() if k not in ("title", "description")}
         for param in docstring.params:
-            if (name := param.arg_name) in parameters["properties"] and (
-                description := param.description
-            ):
+            if (name := param.arg_name) in parameters["properties"] and (description := param.description):
                 if "description" not in parameters["properties"][name]:
                     parameters["properties"][name]["description"] = description
 
-        parameters["required"] = sorted(
-            k for k, v in parameters["properties"].items() if "default" not in v
-        )
+        parameters["required"] = sorted(k for k, v in parameters["properties"].items() if "default" not in v)
 
         if "description" not in schema:
             if docstring.short_description:
                 schema["description"] = docstring.short_description
             else:
                 schema["description"] = (
-                    f"Correctly extracted `{cls.__name__}` with all "
-                    f"the required parameters with correct types"
+                    f"Correctly extracted `{cls.__name__}` with all the required parameters with correct types"
                 )
 
         schema = {

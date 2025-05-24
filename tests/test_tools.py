@@ -84,6 +84,7 @@ def specific_send_message_tool(mock_sender_agent, mock_recipient_agent):
         recipient_agent=mock_recipient_agent,
     )
 
+
 @pytest.fixture
 def legacy_tool():
     # Create a class that inherits from BaseTool
@@ -98,7 +99,6 @@ def legacy_tool():
             return self.input
 
     return TestTool
-
 
 
 # --- Test Cases ---
@@ -240,6 +240,7 @@ async def test_legacy_tool(legacy_tool):
     Test that a legacy BaseTool can be used via the on_invoke_tool method of the adapted FunctionTool.
     """
     from agency_swarm.agent import Agent
+
     agent = Agent(name="test", instructions="test")
     function_tool = agent._adapt_legacy_tool(legacy_tool)
     input_json = '{"input": "hello"}'

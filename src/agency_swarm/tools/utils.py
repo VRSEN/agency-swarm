@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Union
+from typing import Any
 
 import httpx
 import jsonref
@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 def from_openapi_schema(
-    schema: Union[str, dict[str, Any]],
+    schema: str | dict[str, Any],
     *,
     headers: dict[str, str] | None = None,
     params: dict[str, Any] | None = None,
@@ -55,10 +55,7 @@ def from_openapi_schema(
             description = verb_spec.get("description") or verb_spec.get("summary", "")
 
             req_body_schema = (
-                verb_spec.get("requestBody", {})
-                .get("content", {})
-                .get("application/json", {})
-                .get("schema")
+                verb_spec.get("requestBody", {}).get("content", {}).get("application/json", {}).get("schema")
             )
 
             param_properties: dict[str, Any] = {}
@@ -126,19 +123,11 @@ def from_openapi_schema(
                         param_container[key] = None
                 url = url.rstrip("/")
 
-                query_params = {
-                    k: v
-                    for k, v in param_container.items()
-                    if v is not None
-                }
+                query_params = {k: v for k, v in param_container.items() if v is not None}
                 if fixed_params:
                     query_params = {**query_params, **fixed_params}
 
-                json_body = (
-                    body_payload
-                    if verb_.lower() in {"post", "put", "patch", "delete"}
-                    else None
-                )
+                json_body = body_payload if verb_.lower() in {"post", "put", "patch", "delete"} else None
 
                 logger.info(f"Calling URL: {url}\nQuery Params: {query_params}\nJSON Body: {json_body}")
 
@@ -169,6 +158,7 @@ def from_openapi_schema(
             tools.append(tool)
 
     return tools
+
 
 def validate_openapi_spec(spec: str):
     spec = json.loads(spec)
