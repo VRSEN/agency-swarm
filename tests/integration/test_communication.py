@@ -1,4 +1,5 @@
 import uuid
+from unittest.mock import patch
 
 import pytest
 from agents import ModelSettings, RunResult
@@ -81,3 +82,48 @@ async def test_multi_agent_communication_flow(multi_agent_agency: Agency):
     task_id_part = initial_task.split(" ")[-1].split(".")[0]
     assert task_id_part in final_result.final_output
     print("--- Assertions Passed ---")
+
+
+@pytest.mark.asyncio
+async def test_context_preservation_in_agent_communication(multi_agent_agency: Agency):
+    """
+    Test that agent-to-agent communication preserves the original conversation context
+    to enable the recursive orchestrator pattern.
+    """
+    captured_chat_ids = []
+
+    # Patch the get_response method to capture chat_id parameters
+    original_get_response = Agent.get_response
+
+    async def capture_get_response(self, *args, **kwargs):
+        chat_id = kwargs.get("chat_id")
+        sender_name = kwargs.get("sender_name")
+        if chat_id and sender_name:  # This indicates agent-to-agent communication
+            captured_chat_ids.append(chat_id)
+            print(f"Captured agent-to-agent chat_id: {chat_id} (sender: {sender_name})")
+        return await original_get_response(self, *args, **kwargs)
+
+    with patch.object(Agent, "get_response", capture_get_response):
+        initial_task = "Simple task for testing context preservation."
+        print(f"\n--- Testing Context Preservation --- TASK: {initial_task}")
+
+        final_result: RunResult = await multi_agent_agency.get_response(message=initial_task, recipient_agent="Planner")
+
+        print(f"--- Captured chat_ids: {captured_chat_ids}")
+
+        # Verify that we captured some agent-to-agent communications
+        assert len(captured_chat_ids) > 0, "No agent-to-agent communications were captured"
+
+        # Verify that all agent-to-agent communications use the SAME chat_id (context preservation)
+        # This is essential for the recursive orchestrator pattern
+        unique_chat_ids = set(captured_chat_ids)
+        assert len(unique_chat_ids) == 1, (
+            f"Expected all communications to use same chat_id for context preservation, but found: {unique_chat_ids}"
+        )
+
+        # The chat_id should NOT be a structured identifier like "Planner->Worker"
+        shared_chat_id = list(unique_chat_ids)[0]
+        assert "->" not in shared_chat_id, f"Chat ID should not be structured identifier, found: {shared_chat_id}"
+
+        print(f"✓ Verified all agent communications use shared chat_id: {shared_chat_id}")
+        print("--- Context preservation test passed ---")

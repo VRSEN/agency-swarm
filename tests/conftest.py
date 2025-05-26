@@ -47,7 +47,7 @@ def mock_thread_manager():
 
 @pytest.fixture
 def mock_agency_instance(mock_thread_manager):
-    agency = MagicMock(spec=Agent._agency_instance)
+    agency = MagicMock()
     agency.agents = {}
     agency.user_context = {}
     agency.thread_manager = mock_thread_manager

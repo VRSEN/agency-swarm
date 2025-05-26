@@ -15,19 +15,13 @@ from agency_swarm import Agency, Agent
 from agency_swarm.agent import FileSearchTool
 from agency_swarm.thread import ConversationThread, ThreadManager
 
-# Ensure API key is available for tests that make real calls
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-IS_GITHUB_ACTIONS = os.environ.get("GITHUB_ACTIONS") == "true"
-
-# Conditional skip for tests requiring OpenAI API key if not in GITHUB_ACTIONS
-# In GitHub Actions, these tests are expected to run with secrets.
-requires_openai_api = pytest.mark.skipif(not OPENAI_API_KEY and not IS_GITHUB_ACTIONS, reason="Requires OPENAI_API_KEY")
 
 
 @pytest.fixture(scope="module")
 async def real_openai_client():
     if not OPENAI_API_KEY:
-        pytest.skip("OPENAI_API_KEY not set, skipping tests that make real API calls.")
+        pytest.fail("OPENAI_API_KEY not set, can't run integration tests")
     return AsyncOpenAI(api_key=OPENAI_API_KEY)
 
 
@@ -97,7 +91,6 @@ async def temporary_vs_and_agent(real_openai_client: AsyncOpenAI, tmp_path: Path
         #     shutil.rmtree(agent_files_folder_root)
 
 
-@requires_openai_api
 @pytest.mark.asyncio
 async def test_rag_with_filesearchtool_and_real_vs(
     temporary_vs_and_agent, real_openai_client: AsyncOpenAI, tmp_path: Path
@@ -207,7 +200,6 @@ async def test_rag_with_filesearchtool_and_real_vs(
     )
 
 
-@requires_openai_api
 @pytest.mark.asyncio
 async def test_agent_processes_message_files_attachment(real_openai_client: AsyncOpenAI, tmp_path: Path):
     """
@@ -234,8 +226,8 @@ async def test_agent_processes_message_files_attachment(real_openai_client: Asyn
     attachment_tester_agent._openai_client = real_openai_client
 
     # 3. Setup a minimal real Agency and ThreadManager for agent.get_response()
-    Agency(attachment_tester_agent, user_context=None)
-    thread_manager = attachment_tester_agent._thread_manager
+    agency = Agency(attachment_tester_agent, user_context=None)
+    thread_manager = attachment_tester_agent._thread_managers.get(agency)
     assert thread_manager is not None, "ThreadManager not set by Agency"
 
     # 4. Call get_response with file_ids - OpenAI will automatically process the file
@@ -288,7 +280,6 @@ async def test_agent_processes_message_files_attachment(real_openai_client: Asyn
         print(f"Warning: Failed to clean up file {attached_file_id}: {e}")
 
 
-@requires_openai_api
 @pytest.mark.asyncio
 async def test_multi_file_type_processing(real_openai_client: AsyncOpenAI, tmp_path: Path):
     """
@@ -373,7 +364,6 @@ async def test_multi_file_type_processing(real_openai_client: AsyncOpenAI, tmp_p
             print(f"Error cleaning up file {file_id}: {e}")
 
 
-@requires_openai_api
 @pytest.mark.asyncio
 async def test_agent_vision_capabilities(real_openai_client: AsyncOpenAI, tmp_path: Path):
     """
