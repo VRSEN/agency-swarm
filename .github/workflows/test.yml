@@ -19,13 +19,7 @@ jobs:
         node-version: '20.x'
     - uses: actions/setup-python@v5
       with:
-        python-version: '3.12'
-
-    # Disable IPv6 to avoid NAT64 gateway issues with IPv4-only OpenAI API
-    - name: Disable IPv6 (OpenAI is IPv4-only)
-      run: |
-        sudo sysctl -w net.ipv6.conf.all.disable_ipv6=1
-        sudo sysctl -w net.ipv6.conf.default.disable_ipv6=1
+        python-version: '3.13'
 
     - name: Install dependencies
       run: |
