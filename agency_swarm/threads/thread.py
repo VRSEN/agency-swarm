@@ -140,9 +140,7 @@ class Thread:
         self.init_thread()
         if not recipient_agent:
             recipient_agent = self.recipient_agent
-        attachments = self._setup_attachments(
-            attachments, message_files, recipient_agent
-        )
+        attachments = self._setup_attachments(attachments, message_files, recipient_agent)
 
         # 2. Optionally set the event handler's agent references
         if event_handler:
@@ -153,13 +151,9 @@ class Thread:
         self._debug_print_sender_and_url(recipient_agent)
         message_obj = None
         if message:
-            message_obj = self.create_message(
-                message=message, role="user", attachments=attachments
-            )
+            message_obj = self.create_message(message=message, role="user", attachments=attachments)
             if yield_messages:
-                yield MessageOutput(
-                    "text", self.agent.name, recipient_agent.name, message, message_obj
-                )
+                yield MessageOutput("text", self.agent.name, recipient_agent.name, message, message_obj)
 
         # 4. Create run (conversation block)
         self._create_run(
@@ -248,9 +242,7 @@ class Thread:
                 )
                 error_attempts += 1
                 if not retry_successful:
-                    raise Exception(
-                        "OpenAI Run Failed. Error: ", self._run.last_error.message
-                    )
+                    raise Exception("OpenAI Run Failed. Error: ", self._run.last_error.message)
 
             elif self._run.status == "incomplete":
                 self._on_run_incomplete(parent_run_id)
@@ -317,9 +309,7 @@ class Thread:
                     max_completion_tokens=recipient_agent.max_completion_tokens,
                     truncation_strategy=recipient_agent.truncation_strategy,
                     temperature=temperature,
-                    extra_body={
-                        "parallel_tool_calls": recipient_agent.parallel_tool_calls
-                    },
+                    extra_body={"parallel_tool_calls": recipient_agent.parallel_tool_calls},
                     response_format=response_format,
                 ) as stream:
                     stream.until_done()
@@ -342,9 +332,7 @@ class Thread:
                     run_id=self._run.id,
                 )
         except APIError as e:
-            match = re.search(
-                r"Thread (\w+) already has an active run (\w+)", e.message
-            )
+            match = re.search(r"Thread (\w+) already has an active run (\w+)", e.message)
             if match:
                 self.cancel_run(
                     thread_id=match.groups()[0],
@@ -360,10 +348,7 @@ class Thread:
                     temperature=temperature,
                     response_format=response_format,
                 )
-            elif (
-                "The server had an error processing your request" in e.message
-                and self._num_run_retries < 3
-            ):
+            elif "The server had an error processing your request" in e.message and self._num_run_retries < 3:
                 time.sleep(1)
                 self._num_run_retries += 1
                 return self._create_run(
@@ -378,11 +363,43 @@ class Thread:
                 raise e
 
     def _run_until_done(self):
-        while self._run.status in ["queued", "in_progress", "cancelling"]:
+        max_poll_attempts = 120  # 60 seconds max (500ms * 120)
+        poll_attempts = 0
+        stuck_status_count = 0
+        last_status = None
+
+        while self._run.status in ["queued", "in_progress", "cancelling"] and poll_attempts < max_poll_attempts:
             time.sleep(0.5)
-            self._run = self.client.beta.threads.runs.retrieve(
-                thread_id=self.id, run_id=self._run.id
-            )
+            try:
+                self._run = self.client.beta.threads.runs.retrieve(thread_id=self.id, run_id=self._run.id)
+
+                # Circuit breaker: if status hasn't changed for too long, break out
+                if self._run.status == last_status:
+                    stuck_status_count += 1
+                    if stuck_status_count > 20:  # 10 seconds of same status
+                        logger.warning(
+                            f"Run appears stuck in {self._run.status} status for 10+ seconds. Breaking polling loop."
+                        )
+                        break
+                else:
+                    stuck_status_count = 0
+
+                last_status = self._run.status
+                poll_attempts += 1
+
+            except Exception as e:
+                logger.warning(f"Error polling run status: {e}")
+                break
+
+        if poll_attempts >= max_poll_attempts:
+            logger.warning(f"Run polling timed out after {max_poll_attempts * 0.5}s")
+
+        if stuck_status_count > 20:
+            logger.warning(f"Run was stuck in {self._run.status} status, may need manual intervention")
+
+        # Log final status for debugging
+        if hasattr(self._run, "status"):
+            logger.debug(f"Polling completed. Final run status: {self._run.status}")
 
     def submit_tool_outputs(self, tool_outputs, event_handler=None, poll=True):
         if not poll:
@@ -405,11 +422,7 @@ class Thread:
                     self._run = stream.get_final_run()
 
     def cancel_run(self, thread_id=None, run_id=None, check_status=True):
-        if (
-            check_status
-            and (not self._run or self._run.status in self.terminal_states)
-            and not run_id
-        ):
+        if check_status and (not self._run or self._run.status in self.terminal_states) and not run_id:
             return
 
         try:
@@ -417,14 +430,10 @@ class Thread:
             actual_run_id = run_id or (self._run.id if self._run else None)
 
             if not actual_run_id:
-                logger.warning(
-                    f"Can't cancel without a run ID: thread_id={actual_thread_id}"
-                )
+                logger.warning(f"Can't cancel without a run ID: thread_id={actual_thread_id}")
                 return
 
-            self._run = self.client.beta.threads.runs.cancel(
-                thread_id=actual_thread_id, run_id=actual_run_id
-            )
+            self._run = self.client.beta.threads.runs.cancel(thread_id=actual_thread_id, run_id=actual_run_id)
 
             self._run = self.client.beta.threads.runs.poll(
                 thread_id=actual_thread_id,
@@ -600,9 +609,7 @@ class Thread:
 
         return tool_outputs
 
-    def _get_sync_async_tool_calls(
-        self, tool_calls: list[RequiredActionFunctionToolCall], recipient_agent: Agent
-    ):
+    def _get_sync_async_tool_calls(self, tool_calls: list[RequiredActionFunctionToolCall], recipient_agent: Agent):
         async_tool_calls = []
         sync_tool_calls = []
 
@@ -612,18 +619,13 @@ class Thread:
                 continue
 
             tool = next(
-                (
-                    func
-                    for func in recipient_agent.functions
-                    if func.__name__ == tool_call.function.name
-                ),
+                (func for func in recipient_agent.functions if func.__name__ == tool_call.function.name),
                 None,
             )
 
             if tool is None:
                 error_message = (
-                    f"Tool {tool_call.function.name} not found in agent {recipient_agent.name}. "
-                    "Cancelling run."
+                    f"Tool {tool_call.function.name} not found in agent {recipient_agent.name}. " "Cancelling run."
                 )
                 logger.error(error_message)
                 self.cancel_run()
@@ -642,9 +644,7 @@ class Thread:
         all_messages = []
         after = None
         while True:
-            response = self.client.beta.threads.messages.list(
-                thread_id=self.id, limit=100, after=after
-            )
+            response = self.client.beta.threads.messages.list(thread_id=self.id, limit=100, after=after)
             messages = response.data
             if not messages:
                 break
@@ -674,13 +674,9 @@ class Thread:
         tool_calls = self._run.required_action.submit_tool_outputs.tool_calls
         tool_outputs_and_names: list[tuple[str, Any]] = []
 
-        self._tracking_manager.track_agent_actions(
-            tool_calls, self._run.id, parent_run_id
-        )
+        self._tracking_manager.track_agent_actions(tool_calls, self._run.id, parent_run_id)
 
-        sync_tool_calls, async_tool_calls = self._get_sync_async_tool_calls(
-            tool_calls, recipient_agent
-        )
+        sync_tool_calls, async_tool_calls = self._get_sync_async_tool_calls(tool_calls, recipient_agent)
 
         def handle_output(
             tool_call: ToolCall, output: str | Generator[Any, None, None]
@@ -746,9 +742,7 @@ class Thread:
                             tool_outputs_and_names,
                         )
                     ] = tool_call
-                    tool_outputs_and_names.append(
-                        (tool_call.function.name, {"tool_call_id": tool_call.id})
-                    )
+                    tool_outputs_and_names.append((tool_call.function.name, {"tool_call_id": tool_call.id}))
 
                 for future in as_completed(futures):
                     tool_call = futures[future]
@@ -888,14 +882,12 @@ class Thread:
             has_active_run, run_id = self._check_for_active_runs()
             if not has_active_run:
                 return  # Confirmed safe
-            
+
             # We found an active run that our local state wasn't aware of
             # Update our local state
             if run_id:
-                self._run = self.client.beta.threads.runs.retrieve(
-                    thread_id=self.id, run_id=run_id
-                )
-        
+                self._run = self.client.beta.threads.runs.retrieve(thread_id=self.id, run_id=run_id)
+
         # Handle the active run
         if action == "cancel":
             self.cancel_run()  # poll() inside guarantees termination
@@ -909,22 +901,26 @@ class Thread:
                 f"Run still active after _ensure_no_active_run "
                 f"(status={self._run.status if self._run else 'unknown'})."
             )
-        
+
     def _check_for_active_runs(self) -> tuple[bool, str | None]:
         """
         Check if there are any active runs for this thread.
-        
+
         Returns:
             tuple: (has_active_run, run_id)
         """
-        # List runs with a filter for non-terminal states
-        runs = self.client.beta.threads.runs.list(thread_id=self.id, limit=1)
-        
-        for run in runs.data:
-            if run.status not in self.terminal_states:
-                return True, run.id
-                
-        return False, None
+        try:
+            # List runs with a filter for non-terminal states
+            runs = self.client.beta.threads.runs.list(thread_id=self.id, limit=1)
+
+            for run in runs.data:
+                if run.status not in self.terminal_states:
+                    return True, run.id
+
+            return False, None
+        except Exception as e:
+            logger.warning(f"Error checking for active runs: {e}")
+            return False, None
 
     def _setup_attachments(
         self,
@@ -959,9 +955,7 @@ class Thread:
         Determines the sender's name based on the agent type.
         """
         sender_name = "user" if isinstance(self.agent, User) else self.agent.name
-        logger.info(
-            f"THREAD:[ {sender_name} -> {recipient_agent.name} ]: URL {self.thread_url}"
-        )
+        logger.info(f"THREAD:[ {sender_name} -> {recipient_agent.name} ]: URL {self.thread_url}")
 
     def _try_run_failed_recovery(
         self,
@@ -974,9 +968,7 @@ class Thread:
         parent_run_id: str | None,
     ) -> bool:
         """Attempts to recover from run failures if they match common errors (up to 3 times)."""
-        error_message = (
-            self._run.last_error.message.lower() if self._run.last_error else ""
-        )
+        error_message = self._run.last_error.message.lower() if self._run.last_error else ""
         common_errors = [
             "something went wrong",
             "the server had an error processing your request",
@@ -1009,15 +1001,11 @@ class Thread:
     def _on_run_incomplete(self, parent_run_id: str | None):
         """Handle incomplete runs by firing chain error callbacks and raising an exception."""
         self._tracking_manager.track_chain_error(
-            error=Exception(
-                "OpenAI Run Incomplete. Details: " + str(self._run.incomplete_details)
-            ),
+            error=Exception("OpenAI Run Incomplete. Details: " + str(self._run.incomplete_details)),
             run_id=self._run.id,
             parent_run_id=parent_run_id,
         )
-        raise Exception(
-            "OpenAI Run Incomplete. Details: ", self._run.incomplete_details
-        )
+        raise Exception("OpenAI Run Incomplete. Details: ", self._run.incomplete_details)
 
     def _validate_assistant_response(
         self,
@@ -1053,11 +1041,7 @@ class Thread:
                     message_outputs = []
                     try:
                         evaluated_content = eval(str(e))
-                        content = (
-                            evaluated_content
-                            if isinstance(evaluated_content, list)
-                            else str(e)
-                        )
+                        content = evaluated_content if isinstance(evaluated_content, list) else str(e)
                     except Exception as e2:
                         content = str(e2)
 

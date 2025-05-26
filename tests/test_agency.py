@@ -235,63 +235,81 @@ class AgencyTest(unittest.TestCase):
 
     def test_04_agent_communication(self):
         """it should communicate between agents"""
-        self.test_01_init_agency()
-        print("TestAgent1 tools", self.__class__.agent1.tools)
-        self.__class__.agent1.parallel_tool_calls = False
-        message = self.__class__.agency.get_completion(
-            "Please tell TestAgent1 to say test to TestAgent2.",
-            tool_choice={"type": "function", "function": {"name": "SendMessage"}},
-        )
+        import signal
 
-        self.assertFalse(
-            "error" in message.lower(),
-            f"Error found in message: {message}. Thread url: {self.__class__.agency.main_thread.thread_url}",
-        )
+        def timeout_handler(signum, frame):
+            raise TimeoutError("Test timed out after 90 seconds - likely hanging")
 
-        self.assertTrue(self.__class__.agency.agents_and_threads["main_thread"].id)
-        self.assertTrue(self.__class__.agency.agents_and_threads["CEO"]["TestAgent1"].id)
-        self.assertTrue(self.__class__.agency.agents_and_threads["TestAgent1"]["TestAgent2"].id)
-
-        for agent in self.__class__.agency.agents:
-            self.assertTrue(agent.id in [settings["id"] for settings in self.__class__.loaded_agents_settings])
-
-        # assistants v2 checks
-        main_thread = self.__class__.agency.main_thread
-        main_thread_id = main_thread.id
-
-        thread_messages = self.__class__.client.beta.threads.messages.list(main_thread_id, limit=100, order="asc")
-
-        self.assertTrue(len(thread_messages.data) == 4)
-
-        self.assertTrue(thread_messages.data[0].content[0].text.value == "Hi!")
-
-        run = main_thread._run
-        self.assertTrue(run.max_prompt_tokens == self.__class__.ceo.max_prompt_tokens)
-        self.assertTrue(run.max_completion_tokens == self.__class__.ceo.max_completion_tokens)
-        self.assertTrue(run.tool_choice.type == "function")
-
-        agent1_thread = self.__class__.agency.agents_and_threads[self.__class__.ceo.name][self.__class__.agent1.name]
-
-        agent1_thread_id = agent1_thread.id
-
-        agent1_thread_messages = self.__class__.client.beta.threads.messages.list(agent1_thread_id, limit=100)
-
-        self.assertTrue(len(agent1_thread_messages.data) == 2)
-
-        agent1_run = agent1_thread._run
-
-        self.assertTrue(agent1_run.truncation_strategy.type == "last_messages")
-        self.assertTrue(agent1_run.truncation_strategy.last_messages == 10)
-        self.assertFalse(agent1_run.parallel_tool_calls)
-
-        agent2_thread = self.__class__.agency.agents_and_threads[self.__class__.agent1.name][self.__class__.agent2.name]
-
-        agent2_message = agent2_thread._get_last_message_text()
+        # Set a timeout for the entire test to catch true hangs
+        signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(90)  # 90 second timeout for hang detection
 
         try:
-            json.loads(agent2_message)
-        except json.JSONDecodeError as e:
-            self.assertTrue(False)
+            self.test_01_init_agency()
+            print("TestAgent1 tools", self.__class__.agent1.tools)
+            self.__class__.agent1.parallel_tool_calls = False
+            message = self.__class__.agency.get_completion(
+                "Please tell TestAgent1 to say test to TestAgent2.",
+                tool_choice={"type": "function", "function": {"name": "SendMessage"}},
+            )
+
+            self.assertFalse(
+                "error" in message.lower(),
+                f"Error found in message: {message}. Thread url: {self.__class__.agency.main_thread.thread_url}",
+            )
+
+            self.assertTrue(self.__class__.agency.agents_and_threads["main_thread"].id)
+            self.assertTrue(self.__class__.agency.agents_and_threads["CEO"]["TestAgent1"].id)
+            self.assertTrue(self.__class__.agency.agents_and_threads["TestAgent1"]["TestAgent2"].id)
+
+            for agent in self.__class__.agency.agents:
+                self.assertTrue(agent.id in [settings["id"] for settings in self.__class__.loaded_agents_settings])
+
+            # assistants v2 checks
+            main_thread = self.__class__.agency.main_thread
+            main_thread_id = main_thread.id
+
+            thread_messages = self.__class__.client.beta.threads.messages.list(main_thread_id, limit=100, order="asc")
+
+            self.assertTrue(len(thread_messages.data) == 4)
+
+            self.assertTrue(thread_messages.data[0].content[0].text.value == "Hi!")
+
+            run = main_thread._run
+            self.assertTrue(run.max_prompt_tokens == self.__class__.ceo.max_prompt_tokens)
+            self.assertTrue(run.max_completion_tokens == self.__class__.ceo.max_completion_tokens)
+            self.assertTrue(run.tool_choice.type == "function")
+
+            agent1_thread = self.__class__.agency.agents_and_threads[self.__class__.ceo.name][
+                self.__class__.agent1.name
+            ]
+
+            agent1_thread_id = agent1_thread.id
+
+            agent1_thread_messages = self.__class__.client.beta.threads.messages.list(agent1_thread_id, limit=100)
+
+            self.assertTrue(len(agent1_thread_messages.data) == 2)
+
+            agent1_run = agent1_thread._run
+
+            self.assertTrue(agent1_run.truncation_strategy.type == "last_messages")
+            self.assertTrue(agent1_run.truncation_strategy.last_messages == 10)
+            self.assertFalse(agent1_run.parallel_tool_calls)
+
+            agent2_thread = self.__class__.agency.agents_and_threads[self.__class__.agent1.name][
+                self.__class__.agent2.name
+            ]
+
+            agent2_message = agent2_thread._get_last_message_text()
+
+            try:
+                json.loads(agent2_message)
+            except json.JSONDecodeError as e:
+                self.assertTrue(False)
+        except TimeoutError as e:
+            self.fail(f"Test hung and was terminated: {e}")
+        finally:
+            signal.alarm(0)  # Disable the timeout
 
     def test_05_agent_communication_stream(self):
         """it should communicate between agents using streaming"""
