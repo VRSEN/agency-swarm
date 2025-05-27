@@ -138,8 +138,6 @@ def make_stream_endpoint(request_model, current_agency, verify_token):
                         break
 
                     if event == "[DONE]":
-                        threads_info = get_threads(current_agency)
-                        yield "data: " + json.dumps({"threads": threads_info}) + "\n\n"
                         break
                     if isinstance(event, dict) and "error" in event:
                         yield "data: " + json.dumps(event) + "\n\n"
@@ -197,7 +195,6 @@ def override_threads(agency, threads: dict):
             }
         agency._init_threads()
         agency._create_special_tools()
-        agency._init_agents()
     except Exception as e:
         raise ValueError(f"Error overriding threads: {e}")
     
