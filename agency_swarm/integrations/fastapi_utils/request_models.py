@@ -21,7 +21,7 @@ class BaseRequest(BaseModel):
     tool_choice: dict = None
     response_format: dict = None
     threads: dict = Field(
-        None,
+        None, # Not providing this parameter will keep the existing threads
         description="The structure should follow the pattern used in threads callbacks",
         examples=[
             {
@@ -31,7 +31,8 @@ class BaseRequest(BaseModel):
                 },
                 "WorkerAgent": {"HelperAgent": "thread_WOSPRx1xVF9os41t6ph4xEoJ"},
                 "main_thread": "thread_t2ggvsmZYzOTM05e4n3O7lIl",
-            }
+            },
+            {} # Providing empty dict will reset all threads and start a new chat
         ],
     )
 
