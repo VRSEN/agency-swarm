@@ -190,10 +190,11 @@ def override_threads(agency, threads: dict):
             pass
         if agency.threads_callbacks:
             agency.threads_callbacks['load'] = lambda: load_threads(threads)
-            # agency.threads_callbacks['save'] = lambda threads: save_threads(threads)
         else:
-            agency.threads_callbacks = {'load': lambda: load_threads(threads),
-                                        'save': lambda threads: save_threads(threads)}
+            agency.threads_callbacks = {
+                'load': lambda: load_threads(threads),
+                'save': lambda threads: save_threads(threads)
+            }
         agency._init_threads()
         agency._create_special_tools()
         agency._init_agents()
