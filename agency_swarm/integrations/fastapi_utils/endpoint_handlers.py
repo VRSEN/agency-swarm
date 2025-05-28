@@ -1,7 +1,8 @@
-import os
+import asyncio
 import json
+import os
+from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Any, Optional
-from concurrent.futures import ThreadPoolExecutor, Future
 
 import anyio
 from anyio import (
@@ -9,7 +10,6 @@ from anyio import (
     create_memory_object_stream,
     fail_after,
 )
-import asyncio
 from fastapi import Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -50,7 +50,11 @@ def get_verify_token(app_token):
 def make_completion_endpoint(request_model, current_agency, verify_token):
     async def handler(request: request_model, token: str = Depends(verify_token)):
         def call_completion() -> Any:
-            return current_agency.get_completion(
+            if request.threads:
+                current_thread = get_threads(current_agency)
+                if current_thread != request.threads:
+                    override_threads(current_agency, request.threads)
+            response = current_agency.get_completion(
                 request.message,
                 message_files=request.message_files,
                 recipient_agent=request.recipient_agent,
@@ -60,9 +64,10 @@ def make_completion_endpoint(request_model, current_agency, verify_token):
                 verbose=getattr(request, "verbose", False),
                 response_format=request.response_format,
             )
+            return response
 
         response = await anyio.to_thread.run_sync(call_completion, cancellable=True)
-        return {"response": response}
+        return {"response": response, "threads": get_threads(current_agency)}
 
     return handler
 
@@ -99,6 +104,10 @@ def make_stream_endpoint(request_model, current_agency, verify_token):
 
         def run_completion() -> None:
             try:
+                if request.threads:
+                    current_thread = get_threads(current_agency)
+                    if current_thread != request.threads:
+                        override_threads(current_agency, request.threads)
                 current_agency.get_completion_stream(
                     request.message,
                     message_files=request.message_files,
@@ -169,3 +178,50 @@ async def exception_handler(request, exc):
     if isinstance(exc, tuple):
         error_message = str(exc[1]) if len(exc) > 1 else str(exc[0])
     return JSONResponse(status_code=500, content={"error": error_message})
+
+def override_threads(agency, threads: dict):
+    try:
+        _reset_agents_and_threads(agency)
+        def load_threads(threads_dict: dict):
+            return threads_dict
+        def save_threads(threads_dict):
+            pass
+        if agency.threads_callbacks:
+            agency.threads_callbacks['load'] = lambda: load_threads(threads)
+        else:
+            agency.threads_callbacks = {
+                'load': lambda: load_threads(threads),
+                'save': lambda threads: save_threads(threads)
+            }
+        agency._init_threads()
+        agency._create_special_tools()
+    except Exception as e:
+        raise ValueError(f"Error overriding threads: {e}")
+    
+def get_threads(agency):
+    loaded_thread_ids = {}
+    for agent_name, threads in agency.agents_and_threads.items():
+        if agent_name == "main_thread":
+            continue
+        loaded_thread_ids[agent_name] = {}
+        for other_agent, thread in threads.items():
+            loaded_thread_ids[agent_name][other_agent] = thread.id
+
+    loaded_thread_ids["main_thread"] = agency.main_thread.id
+    return loaded_thread_ids
+
+
+def _reset_agents_and_threads(agency):
+    """Helper function to return agents_and_threads to it's initial state (before init_threads)"""
+    pre_loaded_dict = {}
+    for sender_agent, recipients in agency.agents_and_threads.items():
+        recipient_agents = {}
+        if sender_agent == "main_thread" and not isinstance(recipients, dict):
+            continue
+        for recipient_agent in recipients.keys():
+            recipient_agents[recipient_agent] = {
+                "agent": sender_agent,
+                "recipient_agent": recipient_agent
+            }
+        pre_loaded_dict[sender_agent] = recipient_agents
+    agency.agents_and_threads = pre_loaded_dict
