@@ -822,6 +822,7 @@ class Thread:
 
                 self.submit_tool_outputs(tool_outputs, event_handler)
             else:
+                # Re-raise the validation exception when retry attempts are exceeded
                 raise e
 
         # Return None so the outer loop continues
@@ -1001,11 +1002,7 @@ class Thread:
                 if validation_attempts < recipient_agent.validation_attempts:
                     # Attempt to parse the exception as text
                     message_outputs = []
-                    try:
-                        evaluated_content = eval(str(e))
-                        content = evaluated_content if isinstance(evaluated_content, list) else str(e)
-                    except Exception as e2:
-                        content = str(e2)
+                    content = str(e)
 
                     # Create the user message to inform the model about the validation error
                     message_obj = self.create_message(message=content, role="user")
