@@ -175,7 +175,7 @@ class Agency:
 
     def get_completion(
         self,
-        message: str,
+        message: str | list[dict],
         message_files: list[str] | None = None,
         yield_messages: bool = False,
         recipient_agent: Agent | None = None,
@@ -189,7 +189,7 @@ class Agency:
         Retrieves the completion for a given message from the main thread.
 
         Parameters:
-            message (str): The message for which completion is to be retrieved.
+            message (str | list[dict]): A message or an array of messages (following openai format: https://platform.openai.com/docs/api-reference/messages/createMessage) for which completion is to be retrieved.
             message_files (list, optional): A list of file ids to be sent as attachments with the message. When using this parameter, files will be assigned both to file_search and code_interpreter tools if available. It is recommended to assign files to the most sutiable tool manually, using the attachments parameter.  Defaults to None.
             yield_messages (bool, optional): Flag to determine if intermediate messages should be yielded. Defaults to False.
             recipient_agent (Agent, optional): The agent to which the message should be sent. Defaults to the first agent in the agency chart.
@@ -246,7 +246,7 @@ class Agency:
 
     def get_completion_stream(
         self,
-        message: str,
+        message: str | list[dict],
         event_handler: Type[AgencyEventHandler],
         message_files: list[str] | None = None,
         recipient_agent: Agent | None = None,
@@ -259,7 +259,7 @@ class Agency:
         Generates a stream of completions for a given message from the main thread.
 
         Parameters:
-            message (str): The message for which completion is to be retrieved.
+            message (str | list[dict]): A message or an array of messages (following openai format: https://platform.openai.com/docs/api-reference/messages/createMessage) for which completion is to be retrieved.
             event_handler (Type[AgencyEventHandler]): The event handler class to handle the completion stream. https://github.com/openai/openai-python/blob/main/helpers.md
             message_files (list, optional): A list of file ids to be sent as attachments with the message. When using this parameter, files will be assigned both to file_search and code_interpreter tools if available. It is recommended to assign files to the most sutiable tool manually, using the attachments parameter.  Defaults to None.
             recipient_agent (Agent, optional): The agent to which the message should be sent. Defaults to the first agent in the agency chart.
