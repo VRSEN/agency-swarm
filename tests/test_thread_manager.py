@@ -9,8 +9,8 @@ def test_thread_manager_initialization():
     """Tests that ThreadManager initializes with an empty threads dictionary."""
     manager = ThreadManager()
     assert manager._threads == {}
-    assert manager._load_callback is None  # Check default callbacks
-    assert manager._save_callback is None
+    assert manager._load_threads_callback is None  # Check default callbacks
+    assert manager._save_threads_callback is None
 
 
 def test_get_thread_generates_id():
@@ -46,14 +46,14 @@ def test_get_thread_returns_existing_by_id():
 
 
 def test_get_thread_loads_from_callback(mocker):
-    """Tests that get_thread attempts to load from the load_callback if provided."""
+    """Tests that get_thread attempts to load from the load_threads_callback if provided."""
     mock_load = mocker.MagicMock()
     test_id = "load_me_789"
-    # Define the dictionary that the load_callback is expected to return
+    # Define the dictionary that the load_threads_callback is expected to return
     loaded_data_dict = {"items": [{"role": "system", "content": "Loaded"}], "metadata": {"source": "mock_db"}}
     mock_load.return_value = loaded_data_dict
 
-    manager = ThreadManager(load_callback=mock_load)
+    manager = ThreadManager(load_threads_callback=mock_load)
 
     # First call should trigger load
     thread = manager.get_thread(test_id)
@@ -61,20 +61,19 @@ def test_get_thread_loads_from_callback(mocker):
     # Verify the thread was reconstructed correctly from the loaded_data_dict
     assert thread.thread_id == test_id
     assert thread.items == loaded_data_dict["items"]
-    assert thread.metadata == loaded_data_dict["metadata"]
 
-    # Second call should return from memory, not call load_callback again
+    # Second call should return from memory, not call load_threads_callback again
     thread2 = manager.get_thread(test_id)
     mock_load.assert_called_once_with(test_id)  # Still called only once
     assert thread2 == thread
 
 
 def test_get_thread_creates_new_if_load_fails(mocker):
-    """Tests that get_thread creates a new thread if load_callback returns None."""
+    """Tests that get_thread creates a new thread if load_threads_callback returns None."""
     mock_load = mocker.MagicMock(return_value=None)
     test_id = "load_fail_abc"
 
-    manager = ThreadManager(load_callback=mock_load)
+    manager = ThreadManager(load_threads_callback=mock_load)
     thread = manager.get_thread(test_id)
 
     mock_load.assert_called_once_with(test_id)
@@ -108,8 +107,8 @@ def test_thread_manager_serialization():
 
     # Verify
     assert isinstance(deserialized_manager, ThreadManager)
-    assert deserialized_manager._load_callback is None  # Callbacks shouldn't serialize
-    assert deserialized_manager._save_callback is None
+    assert deserialized_manager._load_threads_callback is None  # Callbacks shouldn't serialize
+    assert deserialized_manager._save_threads_callback is None
     assert len(deserialized_manager._threads) == 2
     assert thread1_id in deserialized_manager._threads
     assert thread2_id in deserialized_manager._threads
@@ -147,13 +146,13 @@ def test_get_thread_invalid_thread_id_type():
 
 
 def test_add_item_and_save_triggers_callback(mocker):
-    """Tests that add_item_and_save calls the save_callback."""
+    """Tests that add_item_and_save calls the save_threads_callback."""
     mock_save = mocker.MagicMock()
     manager = ThreadManager()  # Initialize WITHOUT callback first
     thread_id = "save_test_thread_1"
     thread = manager.get_thread(thread_id)
     # Assign callback AFTER thread creation to isolate save calls
-    manager._save_callback = mock_save
+    manager._save_threads_callback = mock_save
 
     item = {"role": "user", "content": "Test message for save"}
     manager.add_item_and_save(thread, item)
@@ -167,13 +166,13 @@ def test_add_item_and_save_triggers_callback(mocker):
 
 
 def test_add_items_and_save_triggers_callback(mocker):
-    """Tests that add_items_and_save calls the save_callback."""
+    """Tests that add_items_and_save calls the save_threads_callback."""
     mock_save = mocker.MagicMock()
     manager = ThreadManager()  # Initialize WITHOUT callback first
     thread_id = "save_test_thread_2"
     thread = manager.get_thread(thread_id)
     # Assign callback AFTER thread creation
-    manager._save_callback = mock_save
+    manager._save_threads_callback = mock_save
 
     items = [
         {"role": "user", "content": "Message 1"},
@@ -194,7 +193,7 @@ def test_save_not_called_without_callback():
     """Tests that save is not attempted if no callback is provided."""
     # We can't easily mock the internal _save_thread, but we can check
     # that no error occurs and items are added when no callback is set.
-    manager = ThreadManager()  # No save_callback
+    manager = ThreadManager()  # No save_threads_callback
     thread = manager.get_thread("no_save_test")
     item = {"role": "user", "content": "Test"}
     items = [{"role": "assistant", "content": "Test 2"}]

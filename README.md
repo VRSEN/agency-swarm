@@ -9,7 +9,7 @@ The **Agency Swarm Framework** is an advanced system for building multi-agent ap
 Agency Swarm enhances the underlying SDK by introducing:
 - True agent collaboration with flexible, user-defined communication flows (orchestrator-workers pattern with async execution support).
 - An `Agency` that uses an `agency_chart` to define complex communication flows and interaction patterns between agents.
-- Flexible conversation persistence: Manage conversation history by providing `load_callback` and `save_callback` functions to the `Agency`, enabling threads to be loaded from and saved to external storage (e.g., a database). This allows conversations to continue across sessions, which is essential for production environments.
+- Flexible conversation persistence: Manage conversation history by providing `load_threads_callback` and `save_threads_callback` functions to the `Agency`, enabling threads to be loaded from and saved to external storage (e.g., a database). This allows conversations to continue across sessions, which is essential for production environments.
 - A specialized `send_message` tool automatically configured for agents, enabling them to communicate based on the defined `agency_chart`.
 - `agency_swarm.Agent` which extends the base SDK `Agent` with built-in file handling and sub-agent registration capabilities.
 
@@ -30,7 +30,7 @@ This framework continues the original vision of Arsenii Shatokhin (aka VRSEN) to
 - **Full Control Over Agent Instructions**: Maintain complete control over each agent's guiding prompts (instructions) for precise behavior customization.
 - **Type-Safe Tools**: Develop robust tools using Pydantic models for automatic argument validation, compatible with the OpenAI Agents SDK's `FunctionTool` format.
 - **Orchestrated Agent Communication**: Agents communicate via a dedicated `send_message` tool, with interactions governed by an `agency_chart` that defines allowed communication pathways within the `Agency`.
-- **Flexible State Persistence**: Manage conversation history by providing `load_callback` and `save_callback` functions to the `Agency`. This allows for loading and saving conversation threads to external storage, enabling persistence across sessions.
+- **Flexible State Persistence**: Manage conversation history by providing `load_threads_callback` and `save_threads_callback` functions to the `Agency`. This allows for loading and saving conversation threads to external storage, enabling persistence across sessions.
 - **Robust Multi-Agent Orchestration**: Build complex and reliable agent workflows by leveraging the OpenAI Agents SDK foundation, enhanced by Agency Swarm's structured orchestration layer.
 
 ## Installation

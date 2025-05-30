@@ -50,7 +50,7 @@ async def test_agency_get_response_with_hooks(mock_agent):
     mock_load_cb = MagicMock()
     mock_save_cb = MagicMock()
     chart = [mock_agent]
-    agency = Agency(agency_chart=chart, load_callback=mock_load_cb, save_callback=mock_save_cb)
+    agency = Agency(agency_chart=chart, load_threads_callback=mock_load_cb, save_threads_callback=mock_save_cb)
 
     mock_agent.get_response.return_value = MagicMock(final_output="Test response")
     hooks_override = MagicMock(spec=RunHooks)
@@ -103,7 +103,7 @@ async def test_agency_get_response_stream_with_hooks(mock_agent):
     mock_load_cb = MagicMock()
     mock_save_cb = MagicMock()
     chart = [mock_agent]
-    agency = Agency(agency_chart=chart, load_callback=mock_load_cb, save_callback=mock_save_cb)
+    agency = Agency(agency_chart=chart, load_threads_callback=mock_load_cb, save_threads_callback=mock_save_cb)
 
     async def mock_stream():
         yield {"event": "text", "data": "Hello"}
@@ -152,7 +152,7 @@ async def test_agent_communication_context_hooks_propagation(mock_agent, mock_ag
         mock_agent,
         [mock_agent, mock_agent2],
     ]
-    agency = Agency(agency_chart=chart, load_callback=mock_load_cb, save_callback=mock_save_cb)
+    agency = Agency(agency_chart=chart, load_threads_callback=mock_load_cb, save_threads_callback=mock_save_cb)
 
     mock_agent.get_response.return_value = MagicMock(final_output="Test response")
     context_override = {"test_key": "test_value"}

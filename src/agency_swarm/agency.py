@@ -42,7 +42,7 @@ class Agency:
                                      (agents listed standalone in the chart).
         thread_manager (ThreadManager): The manager responsible for handling conversation threads.
         persistence_hooks (PersistenceHooks | None): Optional hooks for loading/saving thread state,
-                                                    derived from `load_callback` and `save_callback`.
+                                                    derived from `load_threads_callback` and `save_threads_callback`.
         shared_instructions (str | None): Optional instructions prepended to every agent's system prompt.
         user_context (dict[str, Any]): A dictionary for shared user-defined context accessible
                                         within `MasterContext` during runs.
@@ -63,8 +63,8 @@ class Agency:
         agency_chart: AgencyChart | None = None,
         name: str | None = None,
         shared_instructions: str | None = None,
-        load_callback: ThreadLoadCallback | None = None,
-        save_callback: ThreadSaveCallback | None = None,
+        load_threads_callback: ThreadLoadCallback | None = None,
+        save_threads_callback: ThreadSaveCallback | None = None,
         user_context: dict[str, Any] | None = None,
         **kwargs: Any,
     ):
@@ -88,8 +88,8 @@ class Agency:
                                                             communication_flows, issuing a warning.
                                                             Defaults to None.
             shared_instructions (str | None, optional): Instructions prepended to all agents' system prompts.
-            load_callback (ThreadLoadCallback | None, optional): A callable to load conversation threads.
-            save_callback (ThreadSaveCallback | None, optional): A callable to save conversation threads.
+            load_threads_callback (ThreadLoadCallback | None, optional): A callable to load conversation threads.
+            save_threads_callback (ThreadSaveCallback | None, optional): A callable to save conversation threads.
             user_context (dict[str, Any] | None, optional): Initial shared context accessible to all agents.
             **kwargs: Catches other deprecated parameters, issuing warnings if used.
 
@@ -103,21 +103,21 @@ class Agency:
         # --- Handle Deprecated Args & New/Old Chart Logic ---
         deprecated_args_used = {}
         # --- Handle Deprecated Thread Callbacks ---
-        final_load_callback = load_callback
-        final_save_callback = save_callback
+        final_load_threads_callback = load_threads_callback
+        final_save_threads_callback = save_threads_callback
         if "threads_callbacks" in kwargs:
             warnings.warn(
-                "'threads_callbacks' is deprecated. Pass 'load_callback' and 'save_callback' directly.",
+                "'threads_callbacks' is deprecated. Pass 'load_threads_callback' and 'save_threads_callback' directly.",
                 DeprecationWarning,
                 stacklevel=2,
             )
             threads_callbacks = kwargs.pop("threads_callbacks")
             if isinstance(threads_callbacks, dict):
                 # Only override if new callbacks weren't provided explicitly
-                if final_load_callback is None and "load" in threads_callbacks:
-                    final_load_callback = threads_callbacks["load"]
-                if final_save_callback is None and "save" in threads_callbacks:
-                    final_save_callback = threads_callbacks["save"]
+                if final_load_threads_callback is None and "load" in threads_callbacks:
+                    final_load_threads_callback = threads_callbacks["load"]
+                if final_save_threads_callback is None and "save" in threads_callbacks:
+                    final_save_threads_callback = threads_callbacks["save"]
             deprecated_args_used["threads_callbacks"] = threads_callbacks
         # --- Handle Other Deprecated Args ---
         if "shared_files" in kwargs:
@@ -217,10 +217,12 @@ class Agency:
         self.user_context = user_context or {}
 
         # --- Initialize Core Components ---
-        self.thread_manager = ThreadManager(load_callback=final_load_callback, save_callback=final_save_callback)
+        self.thread_manager = ThreadManager(
+            load_threads_callback=final_load_threads_callback, save_threads_callback=final_save_threads_callback
+        )
         self.persistence_hooks = None
-        if final_load_callback and final_save_callback:
-            self.persistence_hooks = PersistenceHooks(final_load_callback, final_save_callback)
+        if final_load_threads_callback and final_save_threads_callback:
+            self.persistence_hooks = PersistenceHooks(final_load_threads_callback, final_save_threads_callback)
             logger.info("Persistence hooks enabled.")
 
         # --- Register Agents and Set Entry Points ---

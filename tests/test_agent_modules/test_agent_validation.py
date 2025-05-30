@@ -89,8 +89,8 @@ async def test_get_response_integrates_validation_pass(mock_thread_manager, mock
     """Test that get_response integrates with response validation (passing case)."""
     # Use a real Agent instance with validation
     agent = Agent(name="TestAgent", instructions="Test", response_validator=validator_true)
-    agent._set_thread_manager(mock_thread_manager)
     agent._set_agency_instance(mock_agency_instance)
+    agent._set_thread_manager(mock_thread_manager)
     mock_agency_instance.agents[agent.name] = agent
 
     # Mock thread
@@ -114,8 +114,8 @@ async def test_get_response_integrates_validation_fail(mock_thread_manager, mock
     """Test that get_response integrates with response validation (failing case)."""
     # Use a real Agent instance with validation
     agent = Agent(name="TestAgent", instructions="Test", response_validator=validator_false)
-    agent._set_thread_manager(mock_thread_manager)
     agent._set_agency_instance(mock_agency_instance)
+    agent._set_thread_manager(mock_thread_manager)
     mock_agency_instance.agents[agent.name] = agent
 
     # Mock thread
@@ -140,8 +140,8 @@ async def test_get_response_integrates_validation_raise(mock_thread_manager, moc
     """Test that get_response integrates with response validation (exception case)."""
     # Use a real Agent instance with validation
     agent = Agent(name="TestAgent", instructions="Test", response_validator=validator_raises)
-    agent._set_thread_manager(mock_thread_manager)
     agent._set_agency_instance(mock_agency_instance)
+    agent._set_thread_manager(mock_thread_manager)
     mock_agency_instance.agents[agent.name] = agent
 
     # Mock thread

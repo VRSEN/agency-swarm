@@ -60,7 +60,7 @@ def test_agency_initialization_persistence_hooks(mock_agent):
     mock_load_cb = MagicMock()
     mock_save_cb = MagicMock()
     chart = [mock_agent]
-    agency = Agency(agency_chart=chart, load_callback=mock_load_cb, save_callback=mock_save_cb)
+    agency = Agency(agency_chart=chart, load_threads_callback=mock_load_cb, save_threads_callback=mock_save_cb)
     assert agency.persistence_hooks is not None
     # The callbacks are passed to ThreadManager and PersistenceHooks, not stored directly
 

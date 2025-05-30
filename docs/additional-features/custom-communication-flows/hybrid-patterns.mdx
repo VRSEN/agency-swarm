@@ -4,7 +4,7 @@ description: "Learn how to effectively combine Agency Swarm's SendMessage tools 
 icon: "arrows-split-up-and-left"
 ---
 
-Agency Swarm supports two powerful paradigms for inter-agent communication that can work together seamlessly: **SendMessage tools** (orchestrator pattern) and **OpenAI SDK Handoffs** (transfer pattern). This guide explains how these patterns interact and provides practical examples for building sophisticated multi-agent systems.
+Agency Swarm supports two powerful paradigms for inter-agent communication that can work together seamlessly: **SendMessage tools** (orchestrator pattern) and **OpenAI SDK Handoffs** (sequential pattern). This guide explains how these patterns interact and provides practical examples for building sophisticated multi-agent systems.
 
 ## Understanding the Two Paradigms
 
@@ -14,7 +14,7 @@ Agency Swarm supports two powerful paradigms for inter-agent communication that 
 - **Implementation**: Via `SendMessage` tool variants
 - **Example**: `Orchestrator -> Worker -> Response to Orchestrator`
 
-### Handoffs (Transfer Pattern)
+### Handoffs (Sequential Pattern)
 - **Control Flow**: Control **transfers** to the handoff target
 - **Use Case**: Complete task delegation and specialization
 - **Implementation**: Via agent `handoffs` attribute + OpenAI SDK
@@ -30,7 +30,7 @@ When both patterns are used together, Agency Swarm implements a **sophisticated 
    - `SendMessage.on_invoke_tool()` always returns results to the calling agent
    - The orchestrator pattern's contract is preserved
 
-2. **Handoffs Work Within Recipient Execution**
+2. **Sequential Handoffs Work Within Recipient Execution**
    - During the recipient's `get_response()` execution, handoffs can occur
    - The OpenAI SDK handles handoffs internally
    - Specialist insights are incorporated into the recipient's response
@@ -178,7 +178,7 @@ This prevents tool responses from cluttering the main conversation while preserv
 - Responses back to the calling agent
 - Workflow orchestration
 
-**Use Handoffs when you need**:
+**Use Sequential Handoffs when you need**:
 - Internal agent decision-making
 - Specialized task delegation within agent execution
 - Expert consultation during task processing
@@ -221,7 +221,7 @@ class SendMessage(FunctionTool):
         return str(result.final_output)  # Always returns to caller
 ```
 
-### Handoff Integration
+### Sequential Handoff Integration
 - Handoffs configured via `agent.handoffs = [target_agent]`
 - Handled by OpenAI SDK during agent execution
 - Can occur within `get_response()` call triggered by SendMessage
@@ -230,14 +230,14 @@ class SendMessage(FunctionTool):
 ## Benefits of the Hybrid Approach
 
 ✅ **No Paradigm Conflicts**: Both patterns work together seamlessly
-✅ **Orchestrator Visibility**: Calling agents get informed about handoff decisions
-✅ **Internal Delegation**: Agents can use handoffs for specialized processing
+✅ **Orchestrator Visibility**: Calling agents get informed about sequential handoff decisions
+✅ **Internal Delegation**: Agents can use sequential handoffs for specialized processing
 ✅ **Maintained Control**: Orchestrator pattern contract is preserved
 ✅ **Context Preservation**: Information flows correctly through the system
 
 ## Conclusion
 
-Agency Swarm's hybrid paradigm resolution enables sophisticated multi-agent architectures that would be difficult to achieve with either pattern alone. By understanding how SendMessage tools and Handoffs work together, you can build powerful systems that combine the best of both orchestration and delegation patterns.
+Agency Swarm's hybrid paradigm resolution enables sophisticated multi-agent architectures that would be difficult to achieve with either pattern alone. By understanding how SendMessage tools and Sequential Handoffs work together, you can build powerful systems that combine the best of both orchestration and sequential delegation patterns.
 
 The hybrid approach maintains the strengths of both paradigms while eliminating conflicts, giving you the flexibility to design complex multi-agent workflows with confidence.
 

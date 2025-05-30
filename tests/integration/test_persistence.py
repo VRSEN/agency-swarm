@@ -17,13 +17,9 @@ def temp_persistence_dir(tmp_path):
     yield tmp_path
 
 
-def file_save_callback(thread_id: str, thread_data: dict[str, Any], base_dir: Path):
-    if not thread_id:
-        print("FILE SAVE ERROR: Thread ID is missing. Cannot save.")
-        return
-
-    file_path = base_dir / f"{thread_id}.json"
-    print(f"\nFILE SAVE: Saving thread data for '{thread_id}' to {file_path}")
+def file_save_callback(thread_data: dict[str, Any], base_dir: Path):
+    file_path = base_dir / "thread_test.json"
+    print(f"\nFILE SAVE: Saving thread data to {file_path}")
     try:
         # Ensure thread_data has the expected keys, even if empty
         data_to_save = {
@@ -34,15 +30,15 @@ def file_save_callback(thread_id: str, thread_data: dict[str, Any], base_dir: Pa
             json.dump(data_to_save, f, indent=2)
         print(f"FILE SAVE: Successfully saved {file_path}")
     except Exception as e:
-        print(f"FILE SAVE ERROR: Failed to save thread data for {thread_id}: {e}")
+        print(f"FILE SAVE ERROR: Failed to save thread data: {e}")
         import traceback
 
         traceback.print_exc()
 
 
-def file_load_callback(thread_id: str, base_dir: Path) -> dict[str, Any] | None:
-    file_path = base_dir / f"{thread_id}.json"
-    print(f"\nFILE LOAD: Attempting to load thread data for '{thread_id}' from {file_path}")
+def file_load_callback(chat_id: str, base_dir: Path) -> dict[str, Any] | None:
+    file_path = base_dir / f"{chat_id}.json"
+    print(f"\nFILE LOAD: Attempting to load thread data for '{chat_id}' from {file_path}")
     if not file_path.exists():
         print("FILE LOAD: File not found.")
         return None
@@ -51,12 +47,12 @@ def file_load_callback(thread_id: str, base_dir: Path) -> dict[str, Any] | None:
             thread_dict = json.load(f)
         # Basic validation of loaded structure
         if not isinstance(thread_dict.get("items"), list) or not isinstance(thread_dict.get("metadata"), dict):
-            print(f"FILE LOAD ERROR: Loaded data for {thread_id} has incorrect structure.")
+            print(f"FILE LOAD ERROR: Loaded data for {chat_id} has incorrect structure.")
             return None
-        print(f"FILE LOAD: Successfully loaded data for thread '{thread_id}'")
+        print(f"FILE LOAD: Successfully loaded data for thread '{chat_id}'")
         return thread_dict  # Return the raw dictionary
     except Exception as e:
-        print(f"FILE LOAD ERROR: Failed to load/reconstruct thread data for {thread_id}: {e}")
+        print(f"FILE LOAD ERROR: Failed to load/reconstruct thread data for {chat_id}: {e}")
         # Log traceback for detailed debugging
         import traceback
 
@@ -64,22 +60,22 @@ def file_load_callback(thread_id: str, base_dir: Path) -> dict[str, Any] | None:
         return None
 
 
-def file_save_callback_error(thread_id: str, thread_data: dict[str, Any], base_dir: Path):
+def file_save_callback_error(thread_data: dict[str, Any], base_dir: Path):
     """Mock file save callback that raises an error."""
-    if not thread_id:
+    if not thread_data:
         print("FILE SAVE ERROR (Intentional Fail): Thread ID is missing.")
         raise ValueError("Cannot simulate save error for thread without ID")
 
-    file_path = base_dir / f"{thread_id}.json"
-    print(f"\nFILE SAVE ERROR: Intentionally failing for thread '{thread_id}' at {file_path}")
-    raise OSError(f"Simulated save error for {thread_id}")
+    file_path = base_dir / "thread_test.json"
+    print(f"\nFILE SAVE ERROR: Intentionally failing at {file_path}")
+    raise OSError("Simulated save error")
 
 
-def file_load_callback_error(thread_id: str, base_dir: Path) -> dict[str, Any] | None:
+def file_load_callback_error(chat_id: str, base_dir: Path) -> dict[str, Any] | None:
     """Mock file load callback that raises an error."""
-    file_path = base_dir / f"{thread_id}.json"
-    print(f"\nFILE LOAD ERROR: Intentionally failing for thread '{thread_id}' at {file_path}")
-    raise OSError(f"Simulated load error for {thread_id}")
+    file_path = base_dir / "thread_test.json"
+    print(f"\nFILE LOAD ERROR: Intentionally failing at {file_path}")
+    raise OSError("Simulated load error")
 
 
 # --- Test Agent ---
@@ -99,11 +95,11 @@ def persistence_agent():
 def file_persistence_callbacks(temp_persistence_dir):
     """Fixture to provide configured file callbacks."""
 
-    def save_cb(thread_id, thread_data):
-        return file_save_callback(thread_id, thread_data, temp_persistence_dir)
+    def save_cb(thread_data):
+        return file_save_callback(thread_data, temp_persistence_dir)
 
-    def load_cb(thread_id):
-        return file_load_callback(thread_id, temp_persistence_dir)
+    def load_cb(chat_id):
+        return file_load_callback(chat_id, temp_persistence_dir)
 
     return load_cb, save_cb
 
@@ -122,17 +118,17 @@ async def test_persistence_callbacks_called(temp_persistence_dir, persistence_ag
     chat_file = temp_persistence_dir / f"{chat_id}.json"
 
     # Define actual callbacks using temp_persistence_dir
-    def actual_save_cb(thread_id: str, thread_data: dict[str, Any]):
-        file_save_callback(thread_id, thread_data, base_dir=temp_persistence_dir)
+    def actual_save_cb(thread_data: dict[str, Any]):
+        file_save_callback(thread_data, base_dir=temp_persistence_dir)
 
-    def actual_load_cb(thread_id: str) -> dict[str, Any] | None:
-        return file_load_callback(thread_id, base_dir=temp_persistence_dir)
+    def actual_load_cb(chat_id: str) -> dict[str, Any] | None:
+        return file_load_callback(chat_id, base_dir=temp_persistence_dir)
 
     # Initialize Agency with actual callbacks
     agency = Agency(
         agency_chart=[persistence_agent],
-        load_callback=actual_load_cb,
-        save_callback=actual_save_cb,
+        load_threads_callback=actual_load_cb,
+        save_threads_callback=actual_save_cb,
     )
 
     # Turn 1
@@ -156,8 +152,8 @@ async def test_persistence_callbacks_called(temp_persistence_dir, persistence_ag
     # Use a new agency instance to ensure loading happens via the callback
     agency2 = Agency(
         agency_chart=[persistence_agent],
-        load_callback=actual_load_cb,
-        save_callback=actual_save_cb,
+        load_threads_callback=actual_load_cb,
+        save_threads_callback=actual_save_cb,
     )
 
     await agency2.get_response(message=message2, recipient_agent=persistence_agent.name, chat_id=chat_id)
@@ -184,7 +180,7 @@ async def test_persistence_loads_history(file_persistence_callbacks, persistence
 
     # Agency Instance 1 - Turn 1
     print("\n--- History Test Instance 1 - Turn 1 --- Creating Agency 1")
-    agency1 = Agency(agency_chart=[persistence_agent], load_callback=load_cb, save_callback=save_cb)
+    agency1 = Agency(agency_chart=[persistence_agent], load_threads_callback=load_cb, save_threads_callback=save_cb)
     print(f"--- History Test Instance 1 - Turn 1 (ChatID: {chat_id}) --- MSG: {message1_content}")
     await agency1.get_response(message=message1_content, recipient_agent="PersistenceTester", chat_id=chat_id)
 
@@ -219,7 +215,7 @@ async def test_persistence_loads_history(file_persistence_callbacks, persistence
 
     # Agency Instance 2 - Turn 2
     print("\n--- History Test Instance 2 - Turn 2 --- Creating Agency 2")
-    agency2 = Agency(agency_chart=[persistence_agent], load_callback=load_cb, save_callback=save_cb)
+    agency2 = Agency(agency_chart=[persistence_agent], load_threads_callback=load_cb, save_threads_callback=save_cb)
     print(f"--- History Test Instance 2 - Turn 2 (ChatID: {chat_id}) --- MSG: {message2_content}")
     await agency2.get_response(message=message2_content, recipient_agent="PersistenceTester", chat_id=chat_id)
 
@@ -249,25 +245,25 @@ async def test_persistence_loads_history(file_persistence_callbacks, persistence
 @pytest.mark.asyncio
 async def test_persistence_load_error(temp_persistence_dir, persistence_agent):
     """
-    Test that Agency.get_response fails gracefully if the load_callback raises an error.
+    Test that Agency.get_response fails gracefully if the load_threads_callback raises an error.
     """
     chat_id = "load_error_test_1"
     message1 = "Message before load error."
 
     # Define actual callbacks
-    def actual_save_cb(thread_id: str, thread_data: dict[str, Any]):
-        file_save_callback(thread_id, thread_data, base_dir=temp_persistence_dir)
+    def actual_save_cb(thread_data: dict[str, Any]):
+        file_save_callback(thread_data, base_dir=temp_persistence_dir)
 
-    def actual_load_cb_error(thread_id: str) -> dict[str, Any] | None:  # Error-raising version
-        file_load_callback_error(thread_id, base_dir=temp_persistence_dir)  # This will raise OSError
+    def actual_load_cb_error(chat_id: str) -> dict[str, Any] | None:  # Error-raising version
+        file_load_callback_error(chat_id, base_dir=temp_persistence_dir)  # This will raise OSError
         return None  # Should not be reached
 
     # Agency Instance 1 - Turn 1 (Normal save)
     print("\n--- Load Error Test Instance 1 - Turn 1 --- Creating Agency 1")
     agency1 = Agency(
         agency_chart=[persistence_agent],
-        load_callback=None,  # No load on first run
-        save_callback=actual_save_cb,  # Use actual save
+        load_threads_callback=None,  # No load on first run
+        save_threads_callback=actual_save_cb,  # Use actual save
     )
     print(f"--- Load Error Test Instance 1 - Turn 1 (ChatID: {chat_id}) --- MSG: {message1}")
     await agency1.get_response(message=message1, recipient_agent="PersistenceTester", chat_id=chat_id)
@@ -278,8 +274,8 @@ async def test_persistence_load_error(temp_persistence_dir, persistence_agent):
 
     agency2 = Agency(
         agency_chart=[persistence_agent],
-        load_callback=actual_load_cb_error,
-        save_callback=actual_save_cb,
+        load_threads_callback=actual_load_cb_error,
+        save_threads_callback=actual_save_cb,
     )
 
     print(f"--- Load Error Test Instance 2 - Turn 2 (ChatID: {chat_id}) --- Expecting Error")
@@ -296,25 +292,25 @@ async def test_persistence_load_error(temp_persistence_dir, persistence_agent):
 @pytest.mark.asyncio
 async def test_persistence_save_error(temp_persistence_dir, persistence_agent):
     """
-    Test that Agency.get_response completes but logs an error if the save_callback fails.
+    Test that Agency.get_response completes but logs an error if the save_threads_callback fails.
     Expect logger to be called TWICE now (once on create, once on end hook).
     """
     chat_id = "save_error_test_1"
     message1 = "Message causing save error."
 
     # Define actual callbacks
-    def actual_load_cb(thread_id: str) -> dict[str, Any] | None:
-        return file_load_callback(thread_id, base_dir=temp_persistence_dir)
+    def actual_load_cb(chat_id: str) -> dict[str, Any] | None:
+        return file_load_callback(chat_id, base_dir=temp_persistence_dir)
 
-    def actual_save_cb_error(thread_id: str, thread_data: dict[str, Any]):  # Error-raising save
-        file_save_callback_error(thread_id, thread_data, base_dir=temp_persistence_dir)
+    def actual_save_cb_error(thread_data: dict[str, Any]):  # Error-raising save
+        file_save_callback_error(thread_data, base_dir=temp_persistence_dir)
 
     # Agency Instance
     print("\n--- Save Error Test Instance - Turn 1 --- Creating Agency")
     agency = Agency(
         agency_chart=[persistence_agent],
-        load_callback=actual_load_cb,
-        save_callback=actual_save_cb_error,
+        load_threads_callback=actual_load_cb,
+        save_threads_callback=actual_save_cb_error,
     )
 
     print(f"--- Save Error Test Instance - Turn 1 (ChatID: {chat_id}) --- Expecting Save Error Log")
@@ -332,7 +328,7 @@ async def test_persistence_save_error(temp_persistence_dir, persistence_agent):
 
         print("--- Save Error Test Instance - Turn 1 Completed Successfully (as expected) ---")
 
-        # Verify logger.error was called TWICE due to save_callback failure
+        # Verify logger.error was called TWICE due to save_threads_callback failure
         assert (
             mock_logger_error.call_count >= 1  # Should be called at least once
         ), f"Expected logger.error to be called at least once, but was called {mock_logger_error.call_count} times."
@@ -383,7 +379,7 @@ async def test_persistence_chat_id_isolation(file_persistence_callbacks, persist
 
     # Agency Instance
     print("\n--- Isolation Test - Creating Agency ---")
-    agency = Agency(agency_chart=[persistence_agent], load_callback=load_cb, save_callback=save_cb)
+    agency = Agency(agency_chart=[persistence_agent], load_threads_callback=load_cb, save_threads_callback=save_cb)
 
     # Turn 1 for Chat 1
     print(f"--- Isolation Test - Turn 1 (ChatID: {chat_id_1}) --- MSG: {message_1a}")
@@ -401,7 +397,9 @@ async def test_persistence_chat_id_isolation(file_persistence_callbacks, persist
     # Turn 2 for Chat 1
     print(f"--- Isolation Test - Turn 2 (ChatID: {chat_id_1}) --- MSG: {message_1b}")
     # Create a new agency instance to force loading
-    agency_reloaded = Agency(agency_chart=[persistence_agent], load_callback=load_cb, save_callback=save_cb)
+    agency_reloaded = Agency(
+        agency_chart=[persistence_agent], load_threads_callback=load_cb, save_threads_callback=save_cb
+    )
     await agency_reloaded.get_response(message=message_1b, recipient_agent="PersistenceTester", chat_id=chat_id_1)
 
     # Verify Chat 1's history contains message 1a, but not message 2a
@@ -477,7 +475,7 @@ async def test_no_persistence_no_callbacks(persistence_agent, temp_persistence_d
 
     # Agency Instance 1 - Turn 1 (No callbacks)
     print("\n--- No Persistence Test - Instance 1 - Turn 1 --- Creating Agency 1")
-    agency1 = Agency(agency_chart=[persistence_agent], load_callback=None, save_callback=None)
+    agency1 = Agency(agency_chart=[persistence_agent], load_threads_callback=None, save_threads_callback=None)
     print(f"--- No Persistence Test - Instance 1 - Turn 1 (ChatID: {chat_id}) --- MSG: {message1}")
     await agency1.get_response(message=message1, recipient_agent="PersistenceTester", chat_id=chat_id)
 
@@ -488,7 +486,7 @@ async def test_no_persistence_no_callbacks(persistence_agent, temp_persistence_d
 
     # Agency Instance 2 - Turn 2 (No callbacks)
     print("\n--- No Persistence Test - Instance 2 - Turn 2 --- Creating Agency 2")
-    agency2 = Agency(agency_chart=[persistence_agent], load_callback=None, save_callback=None)
+    agency2 = Agency(agency_chart=[persistence_agent], load_threads_callback=None, save_threads_callback=None)
     print(f"--- No Persistence Test - Instance 2 - Turn 2 (ChatID: {chat_id}) --- MSG: {message2}")
     await agency2.get_response(message=message2, recipient_agent="PersistenceTester", chat_id=chat_id)
 

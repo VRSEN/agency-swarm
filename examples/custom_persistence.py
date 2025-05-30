@@ -21,8 +21,7 @@ project_root = script_dir.parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root / "src"))
 
-from agency_swarm.agency import Agency
-from agency_swarm.agent import Agent
+from agency_swarm import Agency, Agent  # noqa: E402
 
 agent1 = Agent(
     name="MemoryAgent",
@@ -35,28 +34,27 @@ agent1 = Agent(
 PERSISTENCE_DIR = Path(tempfile.mkdtemp(prefix="thread_persistence_"))
 
 
-def save_thread_data_to_file(thread_id: str, thread_data: dict[str, Any]):
-    file_path = PERSISTENCE_DIR / f"{thread_id}.json"
+def save_thread_data_to_file(thread_data: dict[str, Any]):
+    file_path = PERSISTENCE_DIR / "thread_test.json"
     with open(file_path, "w") as f:
         json.dump(thread_data, f, indent=2)
 
 
-def load_thread_data_from_file(thread_id: str) -> dict[str, Any] | None:
-    file_path = PERSISTENCE_DIR / f"{thread_id}.json"
+def load_thread_data_from_file(chat_id: str) -> dict[str, Any] | None:
+    file_path = PERSISTENCE_DIR / "thread_test.json"
     if not file_path.exists():
         return None
     with open(file_path) as f:
         thread_data: dict[str, Any] = json.load(f)
-    if not isinstance(thread_data.get("items"), list) or not isinstance(thread_data.get("metadata"), dict):
-        return None
     return thread_data
 
 
+# --- Create Agency Instance (v1.x Pattern) ---
 agency = Agency(
-    agent1,
+    agent1,  # MemoryAgent is the entry point (positional argument)
     shared_instructions="Be concise in your responses.",
-    load_callback=load_thread_data_from_file,
-    save_callback=save_thread_data_to_file,
+    load_threads_callback=load_thread_data_from_file,
+    save_threads_callback=save_thread_data_to_file,
 )
 
 SECRET_CODE = "sky-is-blue-77"
@@ -77,10 +75,10 @@ async def run_persistent_conversation():
     await asyncio.sleep(1)
 
     reloaded_agency = Agency(
-        agent1,
+        agent1,  # MemoryAgent is the entry point (positional argument)
         shared_instructions="Be concise in your responses.",
-        load_callback=load_thread_data_from_file,
-        save_callback=save_thread_data_to_file,
+        load_threads_callback=load_thread_data_from_file,
+        save_threads_callback=save_thread_data_to_file,
     )
 
     print("\n--- Turn 2: User -> MemoryAgent (Recall Secret using Reloaded Agency) ---")

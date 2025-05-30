@@ -74,7 +74,7 @@ class TestPersistenceHooksUnit:
         }
         mock_load_callback.return_value = loaded_threads_dict  # Simulate successful load returning a dict
 
-        hooks = PersistenceHooks(load_callback=mock_load_callback, save_callback=mock_save_callback)
+        hooks = PersistenceHooks(load_threads_callback=mock_load_callback, save_threads_callback=mock_save_callback)
 
         # Act
         # Call on_run_start only with context (it's synchronous)
@@ -93,12 +93,12 @@ class TestPersistenceHooksUnit:
         mock_thread_manager,
         mock_run_context_wrapper,
     ):
-        """Test PersistenceHooks.on_run_start when load_callback returns None."""
+        """Test PersistenceHooks.on_run_start when load_threads_callback returns None."""
         # Arrange
         mock_load_callback.return_value = None  # Simulate load returning None
         initial_threads = mock_thread_manager._threads.copy()
 
-        hooks = PersistenceHooks(load_callback=mock_load_callback, save_callback=mock_save_callback)
+        hooks = PersistenceHooks(load_threads_callback=mock_load_callback, save_threads_callback=mock_save_callback)
 
         # Act
         hooks.on_run_start(context=mock_run_context_wrapper.context)
@@ -116,13 +116,13 @@ class TestPersistenceHooksUnit:
         mock_thread_manager,
         mock_run_context_wrapper,
     ):
-        """Test PersistenceHooks.on_run_start when load_callback raises an error."""
+        """Test PersistenceHooks.on_run_start when load_threads_callback raises an error."""
         # Arrange
         load_error = OSError("Simulated load error")
         mock_load_callback.side_effect = load_error  # Simulate load raising error
         initial_threads = mock_thread_manager._threads.copy()
 
-        hooks = PersistenceHooks(load_callback=mock_load_callback, save_callback=mock_save_callback)
+        hooks = PersistenceHooks(load_threads_callback=mock_load_callback, save_threads_callback=mock_save_callback)
 
         # Act & Assert
         # Verify the hook runs without raising the exception itself (it should catch it)
@@ -145,7 +145,7 @@ class TestPersistenceHooksUnit:
         mock_run_context_wrapper,
         mock_run_result,  # Add mock_run_result fixture
     ):
-        """Test PersistenceHooks.on_run_end successfully calls save_callback."""
+        """Test PersistenceHooks.on_run_end successfully calls save_threads_callback."""
         # Arrange
         chat_id_1 = "unit_test_chat_1"
         # Pre-populate the mock thread manager with some data to be saved
@@ -154,16 +154,16 @@ class TestPersistenceHooksUnit:
         }
         mock_thread_manager._threads = threads_to_save
 
-        hooks = PersistenceHooks(load_callback=mock_load_callback, save_callback=mock_save_callback)
+        hooks = PersistenceHooks(load_threads_callback=mock_load_callback, save_threads_callback=mock_save_callback)
 
         # Act
         # Call on_run_end (synchronous)
         hooks.on_run_end(context=mock_run_context_wrapper.context, result=mock_run_result)
 
         # Assert
-        # Verify save_callback (which is async mock) was called correctly
+        # Verify save_threads_callback (which is async mock) was called correctly
         mock_save_callback.assert_called_once_with(threads_to_save)
-        # Note: We don't await the save_callback directly here, just check it was called.
+        # Note: We don't await the save_threads_callback directly here, just check it was called.
         # The hook calls it synchronously, but the callback itself might do async IO.
 
     @pytest.mark.asyncio
@@ -175,7 +175,7 @@ class TestPersistenceHooksUnit:
         mock_run_context_wrapper,
         mock_run_result,
     ):
-        """Test PersistenceHooks.on_run_end when save_callback raises an error."""
+        """Test PersistenceHooks.on_run_end when save_threads_callback raises an error."""
         # Arrange
         chat_id_1 = "unit_test_chat_1"
         threads_to_save = {
@@ -187,7 +187,7 @@ class TestPersistenceHooksUnit:
         # Configure the async mock to raise an error when called
         mock_save_callback.side_effect = save_error
 
-        hooks = PersistenceHooks(load_callback=mock_load_callback, save_callback=mock_save_callback)
+        hooks = PersistenceHooks(load_threads_callback=mock_load_callback, save_threads_callback=mock_save_callback)
 
         # Act & Assert
         # Verify the hook runs without raising the exception itself (it should catch it)
@@ -196,6 +196,6 @@ class TestPersistenceHooksUnit:
         except Exception as e:
             pytest.fail(f"PersistenceHooks.on_run_end raised an unexpected exception: {e}")
 
-        # Verify save_callback was still called
+        # Verify save_threads_callback was still called
         mock_save_callback.assert_called_once_with(threads_to_save)
         # Optional: Check logs for error message

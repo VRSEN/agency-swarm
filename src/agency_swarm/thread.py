@@ -190,7 +190,7 @@ class ConversationThread:
 ThreadLoadCallback = Callable[[str], dict[str, Any] | None]
 # User's save callback should accept the conversation identifier and a dictionary representation
 # The first string parameter is the conversation identifier (chat_id or structured like "user->agent_name")
-ThreadSaveCallback = Callable[[str, dict[str, Any]], None]
+ThreadSaveCallback = Callable[[dict[str, Any]], None]
 
 
 class ThreadManager:
@@ -201,49 +201,49 @@ class ThreadManager:
     `Agency` initialization.
     Attributes:
         _threads (dict[str, ConversationThread]): In-memory cache of active conversation threads.
-        _load_callback (ThreadLoadCallback | None): The callback function used to load thread data as a dict.
-        _save_callback (ThreadSaveCallback | None): The callback function used to save thread data as a dict.
+        _load_threads_callback (ThreadLoadCallback | None): The callback function used to load thread data as a dict.
+        _save_threads_callback (ThreadSaveCallback | None): The callback function used to save thread data as a dict.
     """
 
     _threads: dict[str, ConversationThread]  # In-memory storage
-    _load_callback: ThreadLoadCallback | None
-    _save_callback: ThreadSaveCallback | None
+    _load_threads_callback: ThreadLoadCallback | None
+    _save_threads_callback: ThreadSaveCallback | None
 
     def __init__(
         self,
-        load_callback: ThreadLoadCallback | None = None,
-        save_callback: ThreadSaveCallback | None = None,
+        load_threads_callback: ThreadLoadCallback | None = None,
+        save_threads_callback: ThreadSaveCallback | None = None,
     ):
         """
         Initializes the ThreadManager.
 
         Args:
-            load_callback (ThreadLoadCallback | None, optional):
+            load_threads_callback (ThreadLoadCallback | None, optional):
                 A function to load thread data as a dictionary by its conversation identifier.
                 Expected signature: `(conversation_id: str) -> Optional[dict[str, Any]]`
                 The dict should have keys like 'items' (list) and 'metadata' (dict).
                 The conversation_id can be a chat_id or structured like "user->agent_name".
-            save_callback (ThreadSaveCallback | None, optional):
+            save_threads_callback (ThreadSaveCallback | None, optional):
                 A function to save thread data (provided as a dictionary).
-                Expected signature: `(conversation_id: str, thread_data: dict[str, Any]) -> None`.
+                Expected signature: `(thread_data: dict[str, Any]) -> None`.
                 The conversation_id can be a chat_id or structured like "user->agent_name".
         """
         self._threads = {}
-        self._load_callback = load_callback
-        self._save_callback = save_callback
+        self._load_threads_callback = load_threads_callback
+        self._save_threads_callback = save_threads_callback
         logger.info("ThreadManager initialized.")
 
     def get_thread(self, conversation_id: str | None = None) -> ConversationThread:
         """Retrieves an existing `ConversationThread` or creates a new one.
 
         If a `conversation_id` is provided, it first checks the in-memory cache.
-        If not found and a `load_callback` is configured, it attempts to load
+        If not found and a `load_threads_callback` is configured, it attempts to load
         the thread data (as a dict) using the callback, then reconstructs the
         `ConversationThread` object.
         If still not found, or if no `conversation_id` was provided, a new
         `ConversationThread` is created with a unique ID.
         Newly created or loaded threads are cached in memory.
-        Newly created threads are saved immediately if a `save_callback` is configured.
+        Newly created threads are saved immediately if a `save_threads_callback` is configured.
 
         Args:
             conversation_id (str | None, optional): The conversation identifier (e.g., chat_id, or
@@ -269,9 +269,9 @@ class ThreadManager:
             logger.debug(f"Returning existing thread {effective_conversation_id} from memory.")
             return self._threads[effective_conversation_id]
 
-        if self._load_callback and conversation_id is not None:  # Only load if an ID was explicitly provided
+        if self._load_threads_callback and conversation_id is not None:  # Only load if an ID was explicitly provided
             logger.debug(f"Attempting to load thread data for {conversation_id} using callback...")
-            loaded_thread_data: dict[str, Any] | None = self._load_callback(conversation_id)
+            loaded_thread_data: dict[str, Any] | None = self._load_threads_callback(conversation_id)
             if loaded_thread_data:
                 try:
                     items = loaded_thread_data.get("items", [])
@@ -305,9 +305,9 @@ class ThreadManager:
         self._threads[effective_conversation_id] = new_thread
         logger.info(f"Created new thread: {effective_conversation_id}. Storing in memory.")
         # Save the newly created thread if a save callback exists
-        # This ensures that even if a conversation_id was provided but not found by load_callback,
+        # This ensures that even if a conversation_id was provided but not found by load_threads_callback,
         # the new thread associated with that conversation_id is persisted.
-        if self._save_callback:
+        if self._save_threads_callback:
             self._save_thread(new_thread)  # Persist the newly created thread
         return new_thread
 
@@ -316,13 +316,13 @@ class ThreadManager:
         Adds a single message item to the specified thread and persists the thread.
 
         The `item` is expected to be an already processed TResponseInputItem dictionary.
-        If a `save_callback` is configured, it will be called after adding the item.
+        If a `save_threads_callback` is configured, it will be called after adding the item.
         Args:
             thread (ConversationThread): The thread to add the item to.
             item (TResponseInputItem): The message item dictionary to add.
         """
         thread.add_item(item)
-        if self._save_callback:
+        if self._save_threads_callback:
             self._save_thread(thread)
 
     def add_items_and_save(self, thread: ConversationThread, items: Sequence[TResponseInputItem]):
@@ -330,22 +330,22 @@ class ThreadManager:
         Adds multiple message items to the specified thread and persists the thread.
 
         The `items` are expected to be a sequence of already processed TResponseInputItem dictionaries.
-        If a `save_callback` is configured, it will be called after adding the items.
+        If a `save_threads_callback` is configured, it will be called after adding the items.
         Args:
             thread (ConversationThread): The thread to add the items to.
             items (Sequence[TResponseInputItem]): A sequence of message item dictionaries to add.
         """
         thread.add_items(items)
-        if self._save_callback:
+        if self._save_threads_callback:
             self._save_thread(thread)
 
     def _save_thread(self, thread: ConversationThread):
         """Internal method to save a thread using the callback after converting it to a dict."""
-        if self._save_callback:
+        if self._save_threads_callback:
             try:
                 logger.debug(f"Preparing to save thread {thread.thread_id} using callback...")
-                thread_data_dict = {"items": thread.items, "metadata": thread.metadata}
-                self._save_callback(thread.thread_id, thread_data_dict)
+                thread_data_dict = {thread.thread_id: thread.items}  # FIXME: This is not correct
+                self._save_threads_callback(thread_data_dict)
                 logger.info(f"Successfully triggered save for thread {thread.thread_id}.")
             except Exception as e:
                 logger.error(f"Error saving thread {thread.thread_id} using callback: {e}", exc_info=True)

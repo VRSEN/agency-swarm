@@ -64,15 +64,10 @@ worker_agent = Agent(
     ],
 )
 
-# --- Define Agency Chart --- #
-agency_chart = [
-    ui_agent,
-    [ui_agent, worker_agent],
-]
-
-# --- Create Agency Instance --- #
+# --- Create Agency Instance (v1.x Pattern) --- #
 agency = Agency(
-    agency_chart=agency_chart,
+    ui_agent,  # UI Agent is the entry point (positional argument)
+    communication_flows=[(ui_agent, worker_agent)],  # UI Agent can communicate with Worker Agent
     shared_instructions="All agents must be precise and follow instructions exactly.",
 )
 
@@ -137,7 +132,7 @@ async def run_conversation():
                 history_items = thread.get_history()
                 print(f"Total items in history: {len(history_items)}")
                 for i, item in enumerate(history_items):
-                    print(f"Item {i+1}: {item}")
+                    print(f"Item {i + 1}: {item}")
                 print("----------------------------------------------------")
             else:
                 print(f"\nWarning: Chat thread {chat_id} not found.")
