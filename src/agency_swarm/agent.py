@@ -1102,34 +1102,15 @@ class Agent(BaseAgent[MasterContext]):
                 return None
 
         elif isinstance(item, ToolCallOutputItem):
-            tool_call_id = None
-            output_content = str(item.output)
-
-            # For /v1/responses API, prioritize call_id for matching tool outputs
-            if hasattr(item, "tool_call_id") and item.tool_call_id:
-                tool_call_id = item.tool_call_id
-            elif isinstance(item.raw_item, ResponseFunctionToolCall):
-                # ResponseFunctionToolCall from /v1/responses has 'call_id' for matching
-                tool_call_id = getattr(item.raw_item, "call_id", None)
-                if tool_call_id is None:  # Fallback only if call_id is not available
-                    tool_call_id = getattr(item.raw_item, "id", None)
-            elif isinstance(item.raw_item, dict) and "call_id" in item.raw_item:
-                tool_call_id = item.raw_item.get("call_id")
-
-            if tool_call_id:
-                logger.debug(
-                    f"Converting ToolCallOutputItem to assistant message: tool_call_id={tool_call_id}, content='{output_content[:50]}...'"
-                )
-                # Convert tool output to assistant message with tool_call_id in content
-                return {
-                    "role": "assistant",
-                    "content": f"Tool output for call {tool_call_id}: {output_content}",
-                }
-            else:
-                logger.warning(
-                    f"Could not determine tool_call_id for ToolCallOutputItem: raw_item={item.raw_item}, item={item}"
-                )
+            # FIX: Use SDK's standard to_input_item() method instead of incorrectly converting to assistant message
+            try:
+                input_item = item.to_input_item()
+                logger.debug(f"Converted ToolCallOutputItem using SDK's to_input_item(): {input_item}")
+                return input_item
+            except Exception as e:
+                logger.error(f"Error converting ToolCallOutputItem using to_input_item(): {e}", exc_info=True)
                 return None
+
         else:
             logger.debug(f"Skipping RunItem type {type(item).__name__} for thread history saving.")
             return None

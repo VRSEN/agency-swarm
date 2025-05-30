@@ -12,6 +12,9 @@ from agents.models.openai_responses import OpenAIResponsesModel
 from openai import AsyncOpenAI
 from pydantic import BaseModel
 
+from agency_swarm import Agent as AgencySwarmAgent
+from agency_swarm.thread import ThreadManager
+
 # Configure logging to see SDK and HTTP client details
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -34,6 +37,39 @@ class SimpleToolOutput(BaseModel):
 def simple_processor_tool(params: SimpleToolParams) -> SimpleToolOutput:
     logger.debug(f"simple_processor_tool called with: {params.input_string}")
     return SimpleToolOutput(processed_string=f"Processed: {params.input_string}")
+
+
+class CalculatorToolParams(BaseModel):
+    a: float
+    b: float
+    operation: str  # "add", "subtract", "multiply", "divide"
+
+
+class CalculatorToolOutput(BaseModel):
+    result: float
+    calculation: str
+
+
+@function_tool
+def calculator_tool(params: CalculatorToolParams) -> CalculatorToolOutput:
+    """A calculator tool that performs basic arithmetic operations."""
+    logger.debug(f"calculator_tool called with: {params.a} {params.operation} {params.b}")
+
+    if params.operation == "add":
+        result = params.a + params.b
+    elif params.operation == "subtract":
+        result = params.a - params.b
+    elif params.operation == "multiply":
+        result = params.a * params.b
+    elif params.operation == "divide":
+        if params.b == 0:
+            raise ValueError("Cannot divide by zero")
+        result = params.a / params.b
+    else:
+        raise ValueError(f"Unsupported operation: {params.operation}")
+
+    calculation = f"{params.a} {params.operation} {params.b} = {result}"
+    return CalculatorToolOutput(result=result, calculation=calculation)
 
 
 @pytest.mark.asyncio
@@ -118,3 +154,130 @@ async def test_tool_cycle_with_sdk_and_responses_api():
         print(f"--- New Items ({len(result.new_items)}) ---")
         for i, item in enumerate(result.new_items):
             print(f"Item {i + 1}: {type(item)} - {item}")
+
+
+@pytest.mark.asyncio
+async def test_tool_output_conversion_bug_two_turn_conversation():
+    """
+    Integration test for ToolCallOutputItem conversion bug in Agency Swarm.
+
+    This test demonstrates the bug where ToolCallOutputItem is incorrectly converted
+    to assistant role messages instead of using SDK's to_input_item() method.
+
+    Test scenario:
+    1. First turn: Agent uses calculator tool to perform a calculation
+    2. Second turn: Ask agent to reference the previous calculation result
+
+    The bug causes the tool output to be incorrectly formatted in conversation history,
+    which can break tool call/response matching in multi-turn conversations.
+    """
+
+    if not OPENAI_API_KEY:
+        pytest.skip("OPENAI_API_KEY not available")
+
+    # Create Agency Swarm agent with calculator tool
+    agent = AgencySwarmAgent(
+        name="Calculator Agent",
+        instructions="You are a calculator assistant. Use the calculator tool for arithmetic operations.",
+        model="gpt-4o",
+    )
+
+    # Add the calculator tool to the agent
+    agent.add_tool(calculator_tool)
+
+    # Set up thread manager and agency instance (required by Agency Swarm)
+    thread_manager = ThreadManager()
+    agent._set_thread_manager(thread_manager)
+
+    # Create a mock agency instance
+    class MockAgency:
+        def __init__(self):
+            self.agents = {"Calculator Agent": agent}
+            self.user_context = {}
+
+    mock_agency = MockAgency()
+    agent._set_agency_instance(mock_agency)
+
+    # TURN 1: Ask agent to perform a calculation
+    logger.info("=== TURN 1: Performing calculation ===")
+
+    result1 = await agent.get_response(
+        message="Please calculate 15 + 27 using the calculator tool.", chat_id="test_conversation"
+    )
+
+    # Verify the first turn completed successfully
+    assert result1 is not None
+    logger.info(f"Turn 1 result: {result1.final_output}")
+
+    # Get the thread to inspect conversation history
+    thread = thread_manager.get_thread("test_conversation")
+    history_after_turn1 = thread.get_history()
+
+    logger.info(f"=== CONVERSATION HISTORY AFTER TURN 1 ({len(history_after_turn1)} items) ===")
+    for i, item in enumerate(history_after_turn1):
+        logger.info(f"Item {i + 1}: {item}")
+
+    # TURN 2: Ask agent to reference the previous calculation
+    logger.info("=== TURN 2: Referencing previous calculation ===")
+
+    result2 = await agent.get_response(
+        message="What was the result of the calculation you just performed? Please tell me the exact result.",
+        chat_id="test_conversation",  # Same chat_id to continue conversation
+    )
+
+    # Verify the second turn completed successfully
+    assert result2 is not None
+    logger.info(f"Turn 2 result: {result2.final_output}")
+
+    # Get the final conversation history
+    history_after_turn2 = thread.get_history()
+
+    logger.info(f"=== FINAL CONVERSATION HISTORY ({len(history_after_turn2)} items) ===")
+    for i, item in enumerate(history_after_turn2):
+        logger.info(f"Item {i + 1}: {item}")
+
+    # TEST ASSERTIONS
+
+    # 1. Verify that tool outputs in conversation history have correct format
+    tool_output_items = [
+        item for item in history_after_turn2 if isinstance(item, dict) and item.get("type") == "function_call_output"
+    ]
+
+    logger.info(f"Found {len(tool_output_items)} tool output items in conversation history")
+
+    # 2. Check if any tool outputs were incorrectly converted to assistant messages
+    incorrect_assistant_messages = [
+        item
+        for item in history_after_turn2
+        if (
+            isinstance(item, dict)
+            and item.get("role") == "assistant"
+            and isinstance(item.get("content"), str)
+            and "Tool output for call" in item.get("content", "")
+        )
+    ]
+
+    logger.info(f"Found {len(incorrect_assistant_messages)} incorrectly converted tool outputs")
+
+    # 3. The bug assertion: Currently this will fail due to the bug
+    # Once fixed, tool outputs should be in correct FunctionCallOutput format
+    if incorrect_assistant_messages:
+        logger.error("BUG DETECTED: Tool outputs incorrectly converted to assistant messages:")
+        for msg in incorrect_assistant_messages:
+            logger.error(f"  {msg}")
+
+    # This assertion will fail initially (demonstrating the bug)
+    # After fixing the bug, it should pass
+    assert len(incorrect_assistant_messages) == 0, (
+        f"Found {len(incorrect_assistant_messages)} incorrectly converted tool outputs. "
+        "ToolCallOutputItem should use SDK's to_input_item() method, not convert to assistant messages."
+    )
+
+    # 4. Verify that the agent can correctly reference previous tool outputs
+    # The second response should mention the calculation result (42)
+    final_response = str(result2.final_output).lower()
+    assert "42" in final_response, (
+        f"Agent should be able to reference the previous calculation result (42). Got response: {result2.final_output}"
+    )
+
+    logger.info("Test completed successfully - no ToolCallOutputItem conversion bug detected")
