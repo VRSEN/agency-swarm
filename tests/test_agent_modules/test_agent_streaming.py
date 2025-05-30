@@ -67,10 +67,10 @@ async def test_get_response_stream_final_result_processing(tmp_path):
 
 @pytest.mark.asyncio
 @patch("agency_swarm.agent.Runner.run_streamed")
-async def test_get_response_stream_generates_chat_id(
+async def test_get_response_stream_generates_thread_id(
     mock_runner_run_streamed_patch, minimal_agent, mock_thread_manager
 ):
-    """Test that get_response_stream generates a chat_id when none is provided."""
+    """Test that get_response_stream generates a consistent thread ID for user interactions."""
 
     async def mock_stream_wrapper():
         yield {"event": "text", "data": "Hello"}
@@ -87,19 +87,42 @@ async def test_get_response_stream_generates_chat_id(
         events.append(event)
 
     assert len(events) == 2
-    # Verify that get_thread was called with a generated chat_id
+    # Verify that get_thread was called with the consistent user->agent format
     mock_thread_manager.get_thread.assert_called()
     call_args = mock_thread_manager.get_thread.call_args[0]
     assert len(call_args) == 1
-    assert call_args[0].startswith("chat_")
+    assert call_args[0] == "user->TestAgent"
 
 
 @pytest.mark.asyncio
-async def test_get_response_stream_requires_chat_id_for_agent_sender(minimal_agent):
-    """Test that get_response_stream requires chat_id when sender_name is provided."""
-    with pytest.raises(ValueError, match="chat_id is required"):
-        async for _event in minimal_agent.get_response_stream("Test message", sender_name="SomeAgent"):
-            pass
+@patch("agency_swarm.agent.Runner.run_streamed")
+async def test_get_response_stream_agent_to_agent_communication(
+    mock_runner_run_streamed_patch, minimal_agent, mock_thread_manager
+):
+    """Test that get_response_stream works correctly for agent-to-agent communication without requiring chat_id."""
+
+    async def mock_stream_wrapper():
+        yield {"event": "text", "data": "Hello"}
+        yield {"event": "done"}
+
+    class MockStreamedResult:
+        def stream_events(self):
+            return mock_stream_wrapper()
+
+    mock_runner_run_streamed_patch.return_value = MockStreamedResult()
+
+    # This should now work without chat_id - it will generate a thread identifier based on sender->recipient
+    events = []
+    async for event in minimal_agent.get_response_stream("Test message", sender_name="SomeAgent"):
+        events.append(event)
+
+    assert len(events) == 2
+    # Verify that get_thread was called with the sender->recipient format
+    mock_thread_manager.get_thread.assert_called_once()
+    call_args = mock_thread_manager.get_thread.call_args[0]
+    assert len(call_args) == 1
+    # Should be in format "SomeAgent->TestAgent"
+    assert call_args[0] == "SomeAgent->TestAgent"
 
 
 @pytest.mark.asyncio
@@ -173,13 +196,16 @@ async def test_get_response_stream_thread_management(
 
     mock_runner_run_streamed_patch.return_value = MockStreamedResult()
 
-    chat_id = "test_stream_chat"
     events = []
-    async for event in minimal_agent.get_response_stream("Test message", chat_id=chat_id):
+    async for event in minimal_agent.get_response_stream("Test message"):
         events.append(event)
 
     assert len(events) == 2
-    # Verify thread was retrieved with correct chat_id
-    mock_thread_manager.get_thread.assert_called_with(chat_id)
+    # Verify thread was retrieved with the consistent user->agent format
+    mock_thread_manager.get_thread.assert_called_once()
+    call_args = mock_thread_manager.get_thread.call_args[0]
+    assert len(call_args) == 1
+    # Should be the consistent user->agent format
+    assert call_args[0] == "user->TestAgent"
     # Verify items were added to thread
     mock_thread_manager.add_items_and_save.assert_called()

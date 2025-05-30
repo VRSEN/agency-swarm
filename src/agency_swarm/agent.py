@@ -5,7 +5,6 @@ import logging
 import os
 import re
 import shutil
-import uuid
 import warnings
 from collections.abc import AsyncGenerator, Callable
 from pathlib import Path
@@ -737,7 +736,6 @@ class Agent(BaseAgent[MasterContext]):
         self,
         message: str | list[dict[str, Any]],
         sender_name: str | None = None,
-        chat_id: str | None = None,
         context_override: dict[str, Any] | None = None,
         hooks_override: RunHooks | None = None,
         run_config: RunConfig | None = None,
@@ -745,21 +743,30 @@ class Agent(BaseAgent[MasterContext]):
         file_ids: list[str] | None = None,  # New parameter
         **kwargs: Any,
     ) -> RunResult:
-        """Run the agent's turn, returning the full execution result."""
+        """Run the agent's turn, returning the full execution result.
+
+        Args:
+            message: The input message or list of message items
+            sender_name: Name of the sending agent (None for user interactions)
+            context_override: Optional context data to override default values
+            hooks_override: Optional hooks to override default agent hooks
+            run_config: Optional run configuration
+            message_files: Deprecated - use file_ids instead
+            file_ids: List of OpenAI file IDs to attach to the message
+            **kwargs: Additional keyword arguments
+
+        Returns:
+            RunResult: The complete execution result
+        """
         if not self._thread_manager:
             raise RuntimeError(f"Agent '{self.name}' missing ThreadManager.")
         if not self._agency_instance or not hasattr(self._agency_instance, "agents"):
             raise RuntimeError(f"Agent '{self.name}' missing Agency instance or agents map.")
 
-        effective_chat_id = chat_id
-        if sender_name is None and not effective_chat_id:
-            effective_chat_id = f"chat_{uuid.uuid4()}"
-            logger.info(f"New user interaction, generated chat_id: {effective_chat_id}")
-        elif sender_name is not None and not effective_chat_id:
-            raise ValueError("chat_id is required for agent-to-agent communication within get_response.")
-
-        logger.info(f"Agent '{self.name}' handling get_response for chat_id: {effective_chat_id}")
-        thread = self._thread_manager.get_thread(effective_chat_id)
+        # Generate a thread identifier based on communication context
+        thread_id = self._get_thread_identifier(sender_name)
+        logger.info(f"Agent '{self.name}' handling get_response for thread: {thread_id}")
+        thread = self._thread_manager.get_thread(thread_id)
 
         processed_current_message_items: list[TResponseInputItem]
         try:
@@ -837,7 +844,7 @@ class Agent(BaseAgent[MasterContext]):
         history_for_runner = self._sanitize_tool_calls_in_history(history_for_runner)
 
         logger.info(
-            f"AGENT_GET_RESPONSE: History for Runner in agent '{self.name}' for chat '{effective_chat_id}' (length {len(history_for_runner)}):"
+            f"AGENT_GET_RESPONSE: History for Runner in agent '{self.name}' for thread '{thread_id}' (length {len(history_for_runner)}):"
         )
         for i, history_item in enumerate(history_for_runner):
             # Limiting log length for potentially long content
@@ -852,7 +859,7 @@ class Agent(BaseAgent[MasterContext]):
             run_result: RunResult = await Runner.run(
                 starting_agent=self,
                 input=history_for_runner,
-                context=self._prepare_master_context(context_override, effective_chat_id),
+                context=self._prepare_master_context(context_override),
                 hooks=hooks_override or self.hooks,
                 run_config=run_config or RunConfig(),
                 max_turns=kwargs.get("max_turns", DEFAULT_MAX_TURNS),
@@ -878,7 +885,7 @@ class Agent(BaseAgent[MasterContext]):
 
         if sender_name is None:  # Only save to thread if top-level call
             if self._thread_manager and run_result.new_items:
-                thread = self._thread_manager.get_thread(effective_chat_id)
+                thread = self._thread_manager.get_thread(thread_id)
                 items_to_save: list[TResponseInputItem] = []
                 logger.debug(
                     f"Preparing to save {len(run_result.new_items)} new items from RunResult to thread {thread.thread_id}"
@@ -905,13 +912,24 @@ class Agent(BaseAgent[MasterContext]):
         self,
         message: str | list[dict[str, Any]],
         sender_name: str | None = None,
-        chat_id: str | None = None,
         context_override: dict[str, Any] | None = None,
         hooks_override: RunHooks | None = None,
         run_config_override: RunConfig | None = None,
         **kwargs,
-    ) -> AsyncGenerator[Any, None]:
-        """Runs the agent's turn in streaming mode."""
+    ) -> AsyncGenerator[Any]:
+        """Runs the agent's turn in streaming mode.
+
+        Args:
+            message: The input message or list of message items
+            sender_name: Name of the sending agent (None for user interactions)
+            context_override: Optional context data to override default values
+            hooks_override: Optional hooks to override default agent hooks
+            run_config_override: Optional run configuration
+            **kwargs: Additional keyword arguments
+
+        Yields:
+            Stream events from the agent's execution
+        """
         if message is None:
             logger.error("message cannot be None")
             yield {"type": "error", "content": "message cannot be None"}
@@ -927,35 +945,22 @@ class Agent(BaseAgent[MasterContext]):
             logger.error(f"Agent '{self.name}' missing ThreadManager for streaming.")
             raise RuntimeError(f"Agent '{self.name}' missing ThreadManager.")
 
-        effective_chat_id: str
-        if chat_id is None:
-            if sender_name is not None:
-                logger.error(f"Agent '{self.name}': chat_id is required for agent-to-agent stream communication.")
-                raise ValueError("chat_id is required for agent-to-agent stream communication.")
-            else:
-                effective_chat_id = f"chat_{uuid.uuid4()}"
-                logger.info(
-                    f"New user stream interaction for agent '{self.name}', generated chat_id: {effective_chat_id}"
-                )
-        else:
-            effective_chat_id = chat_id
-
-        logger.info(f"Agent '{self.name}' handling get_response_stream for chat_id: {effective_chat_id}")
-        thread = self._thread_manager.get_thread(effective_chat_id)
+        # Generate a thread identifier based on communication context
+        thread_id = self._get_thread_identifier(sender_name)
+        logger.info(f"Agent '{self.name}' handling get_response_stream for thread: {thread_id}")
+        thread = self._thread_manager.get_thread(thread_id)
 
         try:
             processed_initial_messages = ItemHelpers.input_to_new_input_list(message)
             self._thread_manager.add_items_and_save(thread, processed_initial_messages)
-            logger.debug(
-                f"Added initial message to thread {effective_chat_id} before streaming for agent '{self.name}'."
-            )
+            logger.debug(f"Added initial message to thread {thread_id} before streaming for agent '{self.name}'.")
         except Exception as e:
             logger.error(f"Error processing input message for stream agent '{self.name}': {e}", exc_info=True)
             yield {"type": "error", "content": f"Invalid input message format: {e}"}
             return
 
         try:
-            master_context = self._prepare_master_context(context_override, effective_chat_id)
+            master_context = self._prepare_master_context(context_override)
             hooks_to_use = hooks_override or self.hooks
             effective_run_config = run_config_override or RunConfig()
         except RuntimeError as e:
@@ -1030,6 +1035,22 @@ class Agent(BaseAgent[MasterContext]):
                     self._thread_manager.add_items_and_save(thread, items_to_save_from_stream)
 
     # --- Helper Methods ---
+    def _get_thread_identifier(self, sender_name: str | None = None) -> str:
+        """Generate a thread identifier based on communication context.
+
+        Args:
+            sender_name: Name of the sending agent (None for user interactions)
+
+        Returns:
+            str: A thread identifier for conversation isolation
+        """
+        if sender_name is None:
+            # For user interactions, use consistent thread ID per agent entry point
+            return f"user->{self.name}"
+        else:
+            # For agent-to-agent communication, use sender->recipient format
+            return f"{sender_name}->{self.name}"
+
     def _run_item_to_tresponse_input_item(self, item: RunItem) -> TResponseInputItem | None:
         """Converts a RunItem from a RunResult into TResponseInputItem dictionary format for history.
         Returns None if the item type should not be directly added to history.
@@ -1115,7 +1136,7 @@ class Agent(BaseAgent[MasterContext]):
             logger.debug(f"Skipping RunItem type {type(item).__name__} for thread history saving.")
             return None
 
-    def _prepare_master_context(self, context_override: dict[str, Any] | None, chat_id: str | None) -> MasterContext:
+    def _prepare_master_context(self, context_override: dict[str, Any] | None) -> MasterContext:
         """Constructs the MasterContext for the current run."""
         if not self._agency_instance or not hasattr(self._agency_instance, "agents"):
             raise RuntimeError("Cannot prepare context: Agency instance or agents map missing.")
@@ -1133,7 +1154,6 @@ class Agent(BaseAgent[MasterContext]):
             agents=self._agency_instance.agents,
             user_context=merged_user_context,
             current_agent_name=self.name,
-            chat_id=chat_id,  # Pass chat_id to context
         )
 
     def _validate_response(self, response_text: str) -> bool:

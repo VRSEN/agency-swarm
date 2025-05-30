@@ -10,23 +10,34 @@ from agency_swarm import Agent
 
 @pytest.mark.asyncio
 @patch("agency_swarm.agent.Runner.run", new_callable=AsyncMock)
-async def test_get_response_generates_chat_id(mock_runner_run, minimal_agent, mock_thread_manager):
-    """Test that get_response generates a chat_id when none is provided."""
+async def test_get_response_generates_thread_id(mock_runner_run, minimal_agent, mock_thread_manager):
+    """Test that get_response generates a consistent thread ID for user interactions."""
     mock_runner_run.return_value = MagicMock(new_items=[], final_output="Test response")
     result = await minimal_agent.get_response("Test message")
     assert result is not None
-    # Verify that get_thread was called with a generated chat_id
+    # Verify that get_thread was called with the consistent user->agent format
     mock_thread_manager.get_thread.assert_called()
     call_args = mock_thread_manager.get_thread.call_args[0]
     assert len(call_args) == 1
-    assert call_args[0].startswith("chat_")
+    assert call_args[0] == "user->TestAgent"
 
 
 @pytest.mark.asyncio
-async def test_get_response_requires_chat_id_for_agent_sender(minimal_agent):
-    """Test that get_response requires chat_id when sender_name is provided."""
-    with pytest.raises(ValueError, match="chat_id is required"):
-        await minimal_agent.get_response("Test message", sender_name="SomeAgent")
+@patch("agency_swarm.agent.Runner.run", new_callable=AsyncMock)
+async def test_get_response_agent_to_agent_communication(mock_runner_run, minimal_agent, mock_thread_manager):
+    """Test that get_response works correctly for agent-to-agent communication without requiring chat_id."""
+    mock_runner_run.return_value = MagicMock(new_items=[], final_output="Test response")
+
+    # This should now work without chat_id - it will generate a thread identifier based on sender->recipient
+    result = await minimal_agent.get_response("Test message", sender_name="SomeAgent")
+
+    assert result is not None
+    # Verify that get_thread was called with the sender->recipient format
+    mock_thread_manager.get_thread.assert_called_once()
+    call_args = mock_thread_manager.get_thread.call_args[0]
+    assert len(call_args) == 1
+    # Should be in format "SomeAgent->TestAgent"
+    assert call_args[0] == "SomeAgent->TestAgent"
 
 
 @pytest.mark.asyncio
@@ -40,7 +51,6 @@ async def test_get_response_with_overrides(mock_runner_run, minimal_agent):
 
     result = await minimal_agent.get_response(
         "Test message",
-        chat_id="test_chat",
         context_override=context_override,
         hooks_override=hooks_override,
         run_config=run_config,
