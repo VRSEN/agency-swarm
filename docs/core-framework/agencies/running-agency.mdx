@@ -42,6 +42,30 @@ print(response)
 - `attachments` (optional): A list of attachments to be sent with the message, following [OpenAI format](https://platform.openai.com/docs/api-reference/messages/createMessage#messages-createmessage-attachments).
 - `recipient_agent` (optional): The agent to which the message should be sent.
 
+### Image attachments
+
+When using the `get_completion` method, you can also pass an array of message objects to use vision capabilities (if your llm model supports it):
+
+```python
+message_objects = [
+    {
+        "type": "text",
+        "text": "What is presented on these pictures?"
+    },
+    {
+        "type": "image_file",
+        "image_file": {"file_id": file_id}
+    },
+    {
+        "type": "image_url",
+        "image_url": {"url": "https://example.com/image.png"}
+    }
+]
+
+response = agency.get_completion(message=message_objects)
+print(response)
+```
+
 ## Terminal Version
 
 To run the agency directly from your terminal, use the `run_demo` method:
