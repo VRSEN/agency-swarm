@@ -37,6 +37,34 @@ class CustomerSupportAgent(Agent):
 
 In this example, `CustomerSupportAgent` checks the response for the presence of "bad word" and raises a `ValueError` if it is found. The error is passed to the Agent to generate a corrected response.
 
+#### Validation Attempts
+
+The `validation_attempts` parameter controls how many times an agent can retry when validation fails. **Default is 1** (no retries - validation failure raises an exception immediately).
+
+```python
+from agency_swarm import Agent
+
+class JSONAgent(Agent):
+    def __init__(self, **kwargs):
+        super().__init__(
+            validation_attempts=3,  # Allow 2 retries for learning
+            **kwargs
+        )
+
+    def response_validator(self, message: str) -> str:
+        """Validate JSON format."""
+        try:
+            json.loads(message)
+            return message
+        except json.JSONDecodeError:
+            raise ValueError("Response must be valid JSON format.")
+```
+
+**When to increase `validation_attempts`:**
+- **Format validation** (JSON, structured output): Use `validation_attempts=2-3`
+- **Content requirements** that agents can learn: Use `validation_attempts=2`
+- **Critical/security validation**: Keep default `validation_attempts=1` (fail-fast)
+
 ### Tool Validators
 
 When defining tools, you can use Pydantic validators to prevent invalid data from being passed to the tool by the calling agent.
