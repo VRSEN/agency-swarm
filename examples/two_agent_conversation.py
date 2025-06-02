@@ -77,20 +77,18 @@ agency = Agency(
 async def run_conversation():
     print("\n--- Running Stateful Two-Agent Conversation Example (Testing Memory) ---")
 
-    chat_id = f"chat_{uuid.uuid4()}"
-    print(f"\nInitiating conversation with Chat ID: {chat_id}")
+    print(f"\nInitiating conversation (thread isolation automatic)")
 
     # --- Turn 1: Ask worker to STORE a value --- #
     key_to_store = "user_data_1"
     value_to_store = "DataPointAlpha"
     user_message_1 = f"Please ask the worker agent to store the value '{value_to_store}' with the key '{key_to_store}'."
-    print(f"\nUser Message 1 to {ui_agent.name}: '{user_message_1}' (Chat ID: {chat_id})")
+    print(f"\nUser Message 1 to {ui_agent.name}: '{user_message_1}'")
 
     try:
         response1 = await agency.get_response(
             message=user_message_1,
             recipient_agent=ui_agent,
-            chat_id=chat_id,
         )
 
         print("\n--- Turn 1 Finished (Store Value) ---")
@@ -102,12 +100,11 @@ async def run_conversation():
         # --- Turn 2: Ask worker to RETRIEVE the value --- #
         print("\n--- Turn 2: Asking worker to retrieve the stored value (Testing Worker Memory) ---")
         user_message_2 = f"What value did the worker store for the key '{key_to_store}'?"
-        print(f"\nUser Message 2 to {ui_agent.name}: '{user_message_2}' (Chat ID: {chat_id})")
+        print(f"\nUser Message 2 to {ui_agent.name}: '{user_message_2}'")
 
         response2 = await agency.get_response(
             message=user_message_2,
             recipient_agent=ui_agent,
-            chat_id=chat_id,
         )
 
         print("\n--- Turn 2 Finished (Retrieve Value) ---")
@@ -126,16 +123,18 @@ async def run_conversation():
 
         # --- Inspect the final conversation history --- #
         if agency.thread_manager:
-            thread = agency.thread_manager.get_thread(chat_id)
+            # The thread identifier will be "user->UI_Agent" for user interactions with UI_Agent
+            thread_id = f"user->{ui_agent.name}"
+            thread = agency.thread_manager.get_thread(thread_id)
             if thread:
-                print(f"\n--- Final Conversation History (Chat ID: {chat_id}) ---")
+                print(f"\n--- Final Conversation History (Thread ID: {thread_id}) ---")
                 history_items = thread.get_history()
                 print(f"Total items in history: {len(history_items)}")
                 for i, item in enumerate(history_items):
                     print(f"Item {i + 1}: {item}")
                 print("----------------------------------------------------")
             else:
-                print(f"\nWarning: Chat thread {chat_id} not found.")
+                print(f"\nWarning: Chat thread {thread_id} not found.")
         else:
             print("\nWarning: Agency does not have a ThreadManager instance.")
 

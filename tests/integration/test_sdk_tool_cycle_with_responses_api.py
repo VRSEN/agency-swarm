@@ -201,16 +201,15 @@ async def test_tool_output_conversion_bug_two_turn_conversation():
     # TURN 1: Ask agent to perform a calculation
     logger.info("=== TURN 1: Performing calculation ===")
 
-    result1 = await agent.get_response(
-        message="Please calculate 15 + 27 using the calculator tool.", chat_id="test_conversation"
-    )
+    result1 = await agent.get_response(message="Please calculate 15 + 27 using the calculator tool.")
 
     # Verify the first turn completed successfully
     assert result1 is not None
     logger.info(f"Turn 1 result: {result1.final_output}")
 
-    # Get the thread to inspect conversation history
-    thread = thread_manager.get_thread("test_conversation")
+    # Get the thread to inspect conversation history using proper thread identifier
+    thread_identifier = "user->Calculator Agent"
+    thread = thread_manager.get_thread(thread_identifier)
     history_after_turn1 = thread.get_history()
 
     logger.info(f"=== CONVERSATION HISTORY AFTER TURN 1 ({len(history_after_turn1)} items) ===")
@@ -221,8 +220,7 @@ async def test_tool_output_conversion_bug_two_turn_conversation():
     logger.info("=== TURN 2: Referencing previous calculation ===")
 
     result2 = await agent.get_response(
-        message="What was the result of the calculation you just performed? Please tell me the exact result.",
-        chat_id="test_conversation",  # Same chat_id to continue conversation
+        message="What was the result of the calculation you just performed? Please tell me the exact result."
     )
 
     # Verify the second turn completed successfully
