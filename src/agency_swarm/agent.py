@@ -764,7 +764,7 @@ class Agent(BaseAgent[MasterContext]):
             raise RuntimeError(f"Agent '{self.name}' missing Agency instance or agents map.")
 
         # Generate a thread identifier based on communication context
-        thread_id = self._get_thread_identifier(sender_name)
+        thread_id = self._get_thread_id(sender_name)
         logger.info(f"Agent '{self.name}' handling get_response for thread: {thread_id}")
         thread = self._thread_manager.get_thread(thread_id)
 
@@ -946,7 +946,7 @@ class Agent(BaseAgent[MasterContext]):
             raise RuntimeError(f"Agent '{self.name}' missing ThreadManager.")
 
         # Generate a thread identifier based on communication context
-        thread_id = self._get_thread_identifier(sender_name)
+        thread_id = self._get_thread_id(sender_name)
         logger.info(f"Agent '{self.name}' handling get_response_stream for thread: {thread_id}")
         thread = self._thread_manager.get_thread(thread_id)
 
@@ -1035,7 +1035,7 @@ class Agent(BaseAgent[MasterContext]):
                     self._thread_manager.add_items_and_save(thread, items_to_save_from_stream)
 
     # --- Helper Methods ---
-    def _get_thread_identifier(self, sender_name: str | None = None) -> str:
+    def _get_thread_id(self, sender_name: str | None = None) -> str:
         """Generate a thread identifier based on communication context.
 
         Args:

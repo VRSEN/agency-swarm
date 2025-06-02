@@ -87,7 +87,7 @@ async def test_send_message_communication(send_message_tool, mock_recipient_agen
 
 
 @pytest.mark.asyncio
-async def test_thread_identifier_generation(send_message_tool, mock_recipient_agent, master_context):
+async def test_thread_id_generation(send_message_tool, mock_recipient_agent, master_context):
     """
     Test that the system generates appropriate thread identifiers based on sender->recipient patterns.
     """

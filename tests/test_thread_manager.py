@@ -160,9 +160,9 @@ def test_add_item_and_save_triggers_callback(mocker):
     # Verify item was added
     assert len(thread.items) == 1
     assert thread.items[0] == item
-    # Verify save callback was called once with thread_id and correct data dict
-    expected_thread_data = {"items": thread.items, "metadata": thread.metadata}
-    mock_save.assert_called_once_with(thread.thread_id, expected_thread_data)
+    # Verify save callback was called once with all threads data
+    expected_all_threads_data = {thread_id: {"items": thread.items, "metadata": thread.metadata}}
+    mock_save.assert_called_once_with(expected_all_threads_data)
 
 
 def test_add_items_and_save_triggers_callback(mocker):
@@ -184,9 +184,9 @@ def test_add_items_and_save_triggers_callback(mocker):
     assert len(thread.items) == 2
     assert thread.items[0] == items[0]
     assert thread.items[1] == items[1]
-    # Verify save callback was called once with thread_id and correct data dict
-    expected_thread_data = {"items": thread.items, "metadata": thread.metadata}
-    mock_save.assert_called_once_with(thread.thread_id, expected_thread_data)
+    # Verify save callback was called once with all threads data
+    expected_all_threads_data = {thread_id: {"items": thread.items, "metadata": thread.metadata}}
+    mock_save.assert_called_once_with(expected_all_threads_data)
 
 
 def test_save_not_called_without_callback():
