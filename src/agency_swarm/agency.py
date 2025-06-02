@@ -1,6 +1,5 @@
 # --- agency.py ---
 import logging
-import uuid
 import warnings
 from collections.abc import AsyncGenerator
 from typing import Any
@@ -388,7 +387,6 @@ class Agency:
         self,
         message: str | list[dict[str, Any]],
         recipient_agent: str | Agent,
-        chat_id: str | None = None,
         context_override: dict[str, Any] | None = None,
         hooks_override: RunHooks | None = None,
         run_config: RunConfig | None = None,
@@ -401,14 +399,11 @@ class Agency:
 
         This method resolves the target agent, validates if it's a designated entry point
         (logs warning if not), determines the appropriate hooks (user override or agency default
-        persistence hooks), manages the chat ID (creates one if needed), and delegates
-        the actual execution to the target agent's `get_response` method.
+        persistence hooks), and delegates the actual execution to the target agent's `get_response` method.
 
         Args:
             message (str | list[dict[str, Any]]): The input message for the agent.
             recipient_agent (str | Agent): The target agent instance or its name.
-            chat_id (str | None, optional): The specific chat thread ID to use. If None, a new
-                                            thread is initiated for this interaction.
             context_override (dict[str, Any] | None, optional): Additional context to pass to the agent run.
             hooks_override (RunHooks | None, optional): Specific hooks to use for this run, overriding
                                                        agency-level persistence hooks.
@@ -436,13 +431,9 @@ class Agency:
                 f"(Entry points: {[ep.name for ep in self.entry_points]}). Call allowed but may indicate unintended usage."
             )
         effective_hooks = hooks_override or self.persistence_hooks
-        if not chat_id:
-            chat_id = f"chat_{uuid.uuid4()}"
-            logger.info(f"Initiating new chat with agent '{target_agent.name}', chat_id: {chat_id}")
         return await target_agent.get_response(
             message=message,
             sender_name=None,
-            chat_id=chat_id,
             context_override=context_override,
             hooks_override=effective_hooks,
             run_config=run_config,
@@ -455,7 +446,6 @@ class Agency:
         self,
         message: str | list[dict[str, Any]],
         recipient_agent: str | Agent,
-        chat_id: str | None = None,
         context_override: dict[str, Any] | None = None,
         hooks_override: RunHooks | None = None,
         run_config_override: RunConfig | None = None,
@@ -472,8 +462,6 @@ class Agency:
         Args:
             message (str | list[dict[str, Any]]): The input message for the agent.
             recipient_agent (str | Agent): The target agent instance or its name.
-            chat_id (str | None, optional): The specific chat thread ID to use. If None, a new
-                                            thread is initiated.
             context_override (dict[str, Any] | None, optional): Additional context for the run.
             hooks_override (RunHooks | None, optional): Specific hooks for this run.
             run_config_override (RunConfig | None, optional): Specific run configuration for this run.
@@ -498,14 +486,10 @@ class Agency:
                 f"(Entry points: {[ep.name for ep in self.entry_points]}). Stream call allowed but may indicate unintended usage."
             )
         effective_hooks = hooks_override or self.persistence_hooks
-        if not chat_id:
-            chat_id = f"chat_{uuid.uuid4()}"
-            logger.info(f"Initiating new stream chat with agent '{target_agent.name}', chat_id: {chat_id}")
 
         async for event in target_agent.get_response_stream(
             message=message,
             sender_name=None,
-            chat_id=chat_id,
             context_override=context_override,
             hooks_override=effective_hooks,
             run_config_override=run_config_override,
