@@ -764,7 +764,7 @@ class Agent(BaseAgent[MasterContext]):
             raise RuntimeError(f"Agent '{self.name}' missing Agency instance or agents map.")
 
         # Generate a thread identifier based on communication context
-        thread_id = self._get_thread_id(sender_name)
+        thread_id = self.get_thread_id(sender_name)
         logger.info(f"Agent '{self.name}' handling get_response for thread: {thread_id}")
         thread = self._thread_manager.get_thread(thread_id)
 
@@ -946,7 +946,7 @@ class Agent(BaseAgent[MasterContext]):
             raise RuntimeError(f"Agent '{self.name}' missing ThreadManager.")
 
         # Generate a thread identifier based on communication context
-        thread_id = self._get_thread_id(sender_name)
+        thread_id = self.get_thread_id(sender_name)
         logger.info(f"Agent '{self.name}' handling get_response_stream for thread: {thread_id}")
         thread = self._thread_manager.get_thread(thread_id)
 
@@ -1035,21 +1035,10 @@ class Agent(BaseAgent[MasterContext]):
                     self._thread_manager.add_items_and_save(thread, items_to_save_from_stream)
 
     # --- Helper Methods ---
-    def _get_thread_id(self, sender_name: str | None = None) -> str:
-        """Generate a thread identifier based on communication context.
-
-        Args:
-            sender_name: Name of the sending agent (None for user interactions)
-
-        Returns:
-            str: A thread identifier for conversation isolation
-        """
-        if sender_name is None:
-            # For user interactions, use consistent thread ID per agent entry point
-            return f"user->{self.name}"
-        else:
-            # For agent-to-agent communication, use sender->recipient format
-            return f"{sender_name}->{self.name}"
+    def get_thread_id(self, sender_name: str | None = None) -> str:
+        """Construct a thread identifier based on sender and recipient names."""
+        sender = sender_name or "user"
+        return f"{sender}->{self.name}"
 
     def _run_item_to_tresponse_input_item(self, item: RunItem) -> TResponseInputItem | None:
         """Converts a RunItem from a RunResult into TResponseInputItem dictionary format for history.

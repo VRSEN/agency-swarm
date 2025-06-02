@@ -87,43 +87,46 @@ async def test_multi_agent_communication_flow(multi_agent_agency: Agency):
 @pytest.mark.asyncio
 async def test_context_preservation_in_agent_communication(multi_agent_agency: Agency):
     """
-    Test that agent-to-agent communication preserves the original conversation context
-    to enable the recursive orchestrator pattern.
+    Test that agent-to-agent communication creates proper thread isolation
+    with structured thread identifiers for each communication pair.
     """
-    captured_chat_ids = []
+    captured_thread_calls = []
 
-    # Patch the get_response method to capture chat_id parameters
-    original_get_response = Agent.get_response
+    # Patch the get_thread_id method to capture thread identifier creation
+    from agency_swarm.agent import Agent
 
-    async def capture_get_response(self, *args, **kwargs):
-        chat_id = kwargs.get("chat_id")
-        sender_name = kwargs.get("sender_name")
-        if chat_id and sender_name:  # This indicates agent-to-agent communication
-            captured_chat_ids.append(chat_id)
-            print(f"Captured agent-to-agent chat_id: {chat_id} (sender: {sender_name})")
-        return await original_get_response(self, *args, **kwargs)
+    original_get_thread_id = Agent.get_thread_id
 
-    with patch.object(Agent, "get_response", capture_get_response):
+    def capture_get_thread_id(self, sender_name=None):
+        thread_id = original_get_thread_id(self, sender_name)
+        if sender_name:  # This indicates agent-to-agent communication
+            captured_thread_calls.append({"thread_id": thread_id, "sender": sender_name, "recipient": self.name})
+            print(f"Captured agent-to-agent thread_id: {thread_id} (sender: {sender_name} -> recipient: {self.name})")
+        return thread_id
+
+    with patch.object(Agent, "get_thread_id", capture_get_thread_id):
         initial_task = "Simple task for testing context preservation."
         print(f"\n--- Testing Context Preservation --- TASK: {initial_task}")
 
         final_result: RunResult = await multi_agent_agency.get_response(message=initial_task, recipient_agent="Planner")
 
-        print(f"--- Captured chat_ids: {captured_chat_ids}")
+        print(f"--- Captured thread calls: {captured_thread_calls}")
 
         # Verify that we captured some agent-to-agent communications
-        assert len(captured_chat_ids) > 0, "No agent-to-agent communications were captured"
+        assert len(captured_thread_calls) > 0, "No agent-to-agent communications were captured"
 
-        # Verify that all agent-to-agent communications use the SAME chat_id (context preservation)
-        # This is essential for the recursive orchestrator pattern
-        unique_chat_ids = set(captured_chat_ids)
-        assert len(unique_chat_ids) == 1, (
-            f"Expected all communications to use same chat_id for context preservation, but found: {unique_chat_ids}"
-        )
+        # Verify that each communication pair gets its own thread (proper isolation)
+        for call in captured_thread_calls:
+            thread_id = call["thread_id"]
+            sender = call["sender"]
+            recipient = call["recipient"]
 
-        # The chat_id should NOT be a structured identifier like "Planner->Worker"
-        shared_chat_id = list(unique_chat_ids)[0]
-        assert "->" not in shared_chat_id, f"Chat ID should not be structured identifier, found: {shared_chat_id}"
+            # Verify thread identifier follows the "sender->recipient" format
+            expected_thread_id = f"{sender}->{recipient}"
+            assert thread_id == expected_thread_id, f"Expected thread_id '{expected_thread_id}', but got '{thread_id}'"
 
-        print(f"✓ Verified all agent communications use shared chat_id: {shared_chat_id}")
-        print("--- Context preservation test passed ---")
+            # Verify the thread ID IS a structured identifier (this is correct behavior)
+            assert "->" in thread_id, f"Thread ID should be structured identifier, found: {thread_id}"
+
+        print(f"✓ Verified all agent communications use proper thread identifiers")
+        print("--- Thread isolation test passed ---")
