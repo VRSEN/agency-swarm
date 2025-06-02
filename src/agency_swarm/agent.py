@@ -3,8 +3,6 @@ import inspect
 import json
 import logging
 import os
-import re
-import shutil
 import warnings
 from collections.abc import AsyncGenerator, Callable
 from pathlib import Path
@@ -32,7 +30,7 @@ from agents.run import DEFAULT_MAX_TURNS
 from agents.stream_events import RunItemStreamEvent
 from agents.strict_schema import ensure_strict_json_schema
 from agents.tool import FunctionTool
-from openai import AsyncOpenAI, NotFoundError
+from openai import AsyncOpenAI, NotFoundError, OpenAI
 from openai.types.responses import ResponseFileSearchToolCall, ResponseFunctionToolCall
 
 from .context import MasterContext
@@ -40,6 +38,7 @@ from .thread import ThreadManager
 from .tools import BaseTool
 from .tools.send_message import SendMessage
 from .tools.utils import from_openapi_schema, validate_openapi_spec
+from .utils.agent_file_manager import AgentFileManager
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +100,8 @@ class Agent(BaseAgent[MasterContext]):
         files_folder_path (Path | None): The resolved absolute path for `files_folder`.
         _subagents (dict[str, "Agent"]): Dictionary mapping names of registered subagents to their instances.
         _openai_client (AsyncOpenAI | None): Internal reference to the initialized AsyncOpenAI client instance.
+        _openai_client_sync (OpenAI | None): Internal reference to the initialized sync OpenAI client instance.
+        file_manager (AgentFileManager | None): File management utility for handling file uploads and vector stores.
         _load_threads_callback (Callable[[str], dict[str, Any] | None] | None): Callback to load thread data by thread_id.
         _save_threads_callback (Callable[[dict[str, Any]], None] | None): Callback to save all threads data.
     """
@@ -119,6 +120,8 @@ class Agent(BaseAgent[MasterContext]):
     files_folder_path: Path | None = None
     _subagents: dict[str, "Agent"]
     _openai_client: AsyncOpenAI | None = None
+    _openai_client_sync: OpenAI | None = None
+    file_manager: AgentFileManager | None = None
     _load_threads_callback: Callable[[str], dict[str, Any] | None] | None = None
     _save_threads_callback: Callable[[dict[str, Any]], None] | None = None
 
@@ -322,10 +325,14 @@ class Agent(BaseAgent[MasterContext]):
 
         # --- Internal State Init ---
         self._openai_client = None
+        # Needed for file operations
+        self._openai_client_sync = OpenAI()
         self._subagents = {}
         # _thread_manager and _agency_instance are injected by Agency
 
-        self._parse_files_folder_for_vs_id()
+        self.file_manager = AgentFileManager(self)
+
+        self.file_manager._parse_files_folder_for_vs_id()
         self._parse_schemas()
         # The full async _init_file_handling (with VS retrieval) should be called by Agency or explicitly in tests.
 
@@ -344,10 +351,16 @@ class Agent(BaseAgent[MasterContext]):
     @property
     def client(self) -> AsyncOpenAI:
         """Provides access to an initialized AsyncOpenAI client instance."""
-        # Consider making client management more robust if needed
-        if not hasattr(self, "_openai_client"):
+        if not hasattr(self, "_openai_client") or self._openai_client is None:
             self._openai_client = AsyncOpenAI()
         return self._openai_client
+
+    @property
+    def client_sync(self) -> OpenAI:
+        """Provides access to an initialized sync OpenAI client instance."""
+        if not hasattr(self, "_openai_client_sync") or self._openai_client_sync is None:
+            self._openai_client_sync = OpenAI()
+        return self._openai_client_sync
 
     # --- Tool Management ---
     def add_tool(self, tool: Tool) -> None:
@@ -498,45 +511,6 @@ class Agent(BaseAgent[MasterContext]):
         logger.debug(f"Dynamically added tool '{tool_name}' to agent '{self.name}'.")
 
     # --- File Handling ---
-    def _parse_files_folder_for_vs_id(self) -> None:
-        """Synchronously parses files_folder for VS ID and sets path."""
-        self.files_folder_path = None
-        self._associated_vector_store_id = None  # Reset
-
-        if not self.files_folder:
-            return
-
-        folder_str = str(self.files_folder)
-        base_path_str = folder_str
-        # Regex to capture base path and a VS ID that itself starts with 'vs_'
-        vs_id_match = re.search(r"(.+)_vs_(vs_[a-zA-Z0-9_]+)$", folder_str)
-
-        if vs_id_match:
-            base_path_str = vs_id_match.group(1)
-            self._associated_vector_store_id = vs_id_match.group(2)
-            logger.info(
-                f"Agent {self.name}: Parsed Vector Store ID '{self._associated_vector_store_id}' from files_folder '{folder_str}'. Base path: '{base_path_str}'"
-            )
-        else:
-            logger.info(
-                f"Agent {self.name}: files_folder '{folder_str}' does not specify a Vector Store ID with '_vs_' suffix. Local file management only."
-            )
-
-        self.files_folder_path = Path(base_path_str).resolve()
-        try:
-            self.files_folder_path.mkdir(parents=True, exist_ok=True)
-            logger.info(f"Agent {self.name}: Ensured local files folder exists at {self.files_folder_path}")
-        except OSError as e:
-            logger.error(f"Agent {self.name}: Error creating files_folder at {self.files_folder_path}: {e}")
-            self.files_folder_path = None
-            if self._associated_vector_store_id:
-                self._associated_vector_store_id = None  # Invalidate if folder creation fails
-            return
-
-        # Add FileSearchTool tentatively if VS ID is parsed. Actual VS check is async.
-        if self._associated_vector_store_id:
-            self._ensure_file_search_tool()  # This method is synchronous
-
     async def _init_file_handling(self) -> None:
         """
         Asynchronously initializes file handling by verifying/retrieving the
@@ -545,7 +519,7 @@ class Agent(BaseAgent[MasterContext]):
         """
         # Ensure synchronous parts have run (idempotent checks or rely on __init__ call)
         if self.files_folder and not self.files_folder_path:
-            self._parse_files_folder_for_vs_id()  # Ensure path and tentative VS ID are set
+            self.file_manager._parse_files_folder_for_vs_id()  # Ensure path and tentative VS ID are set
 
         if not self._associated_vector_store_id or not self.files_folder_path:
             logger.debug(f"Agent {self.name}: Skipping async VS check. No VS ID parsed or files_folder_path not set.")
@@ -558,8 +532,6 @@ class Agent(BaseAgent[MasterContext]):
             logger.info(
                 f"Agent {self.name}: Successfully retrieved existing Vector Store '{vector_store.id}' ('{vector_store.name}')."
             )
-            # If successful, ensure FileSearchTool is correctly configured (might be redundant if _ensure_file_search_tool was robust)
-            # self._ensure_file_search_tool() # Already called in sync part, but could re-verify here if needed
         except NotFoundError:
             logger.error(
                 f"Agent {self.name}: Vector Store ID '{self._associated_vector_store_id}' provided in files_folder was not found on OpenAI. "
@@ -578,168 +550,18 @@ class Agent(BaseAgent[MasterContext]):
             # self._associated_vector_store_id = None
             # self.tools = [t for t in self.tools if not isinstance(t, FileSearchTool)]
 
-    def _ensure_file_search_tool(self):
-        """
-        Ensures that a FileSearchTool is available and configured if the agent
-        has an associated Vector Store ID (`self._associated_vector_store_id`).
-
-        If the tool is not present, it's added. If present but not configured with
-        the agent's Vector Store ID, the ID is added to its configuration.
-        """
-        if not self._associated_vector_store_id:
-            logger.debug(f"Agent {self.name}: No associated vector store ID; FileSearchTool setup skipped.")
-            return
-
-        file_search_tool_exists = any(isinstance(tool, FileSearchTool) for tool in self.tools)
-
-        if not file_search_tool_exists:
-            logger.info(
-                f"Agent {self.name}: Adding FileSearchTool as vector store ID '{self._associated_vector_store_id}' is associated."
-            )
-            self.add_tool(FileSearchTool(vector_store_ids=[self._associated_vector_store_id]))
-        else:
-            for tool in self.tools:
-                if isinstance(tool, FileSearchTool):
-                    if not tool.vector_store_ids:
-                        tool.vector_store_ids = [self._associated_vector_store_id]
-                        logger.info(
-                            f"Agent {self.name}: Configured existing FileSearchTool with vector store ID '{self._associated_vector_store_id}'."
-                        )
-                    elif self._associated_vector_store_id not in tool.vector_store_ids:
-                        tool.vector_store_ids.append(self._associated_vector_store_id)
-                        logger.info(
-                            f"Agent {self.name}: Added vector store ID '{self._associated_vector_store_id}' to existing FileSearchTool."
-                        )
-                    break  # Assume only one FileSearchTool
-
-    async def upload_file(self, file_path: str) -> str:
-        """
-        Uploads a file to OpenAI and optionally associates it with the agent's
-        Vector Store if `self._associated_vector_store_id` is set (derived from
-        `files_folder` using the `_vs_<id>` naming convention).
-
-        The file is copied into the agent's local `files_folder_path` after being
-        renamed to include the OpenAI File ID (e.g., `original_name_<file_id>.ext`).
-        This helps prevent re-uploading the same file.
-
-        Args:
-            file_path (str): The path to the local file to upload.
-
-        Returns:
-            str: The OpenAI File ID of the uploaded file.
-
-        Raises:
-            FileNotFoundError: If the `file_path` does not exist.
-            AgentsException: If the upload or Vector Store association fails.
-        """
-        fpath = Path(file_path)
-        if not fpath.exists():
-            raise FileNotFoundError(f"File not found at {file_path}")
-
-        if not self.files_folder_path:
-            # This case implies files_folder was not set or creation failed.
-            # We could upload to OpenAI generally, but the convention is to manage
-            # files within a files_folder context for this method.
-            raise AgentsException(
-                f"Agent {self.name}: Cannot upload file. Agent_files_folder_path is not set. Please initialize the agent with a valid 'files_folder'."
-            )
-
-        # Check if a version of this file (with an ID) already exists locally
-        # This is a simple check; more robust would involve checking remote file IDs if available
-        # For now, local name check prevents re-upload if local copy with ID exists.
-        existing_file_id = await self.check_file_exists(fpath.name)
-        if existing_file_id:
-            logger.info(f"File {fpath.name} with ID {existing_file_id} already exists locally. Skipping upload.")
-            return existing_file_id
-
-        try:
-            with open(fpath, "rb") as f:
-                uploaded_file = await self.client.files.create(file=f, purpose="assistants")
-            logger.info(
-                f"Agent {self.name}: Successfully uploaded file {fpath.name} to OpenAI. File ID: {uploaded_file.id}"
-            )
-        except Exception as e:
-            logger.error(f"Agent {self.name}: Failed to upload file {fpath.name} to OpenAI: {e}")
-            raise AgentsException(f"Failed to upload file {fpath.name} to OpenAI: {e}") from e
-
-        # Copy to agent's files_folder_path and rename with OpenAI ID
-        try:
-            new_filename = f"{fpath.stem}_{uploaded_file.id}{fpath.suffix}"
-            destination_path = self.files_folder_path / new_filename
-            shutil.copy(fpath, destination_path)
-            logger.info(f"Agent {self.name}: Copied uploaded file to {destination_path}")
-        except Exception as e:
-            logger.warning(
-                f"Agent {self.name}: Failed to copy file {fpath.name} to {self.files_folder_path}. File ID: {uploaded_file.id}. Error: {e}"
-            )
-            # Not raising an exception here as the file is uploaded to OpenAI,
-            # but local copy failed. The File ID is still returned.
-
-        # Associate with Vector Store if one is linked to this agent via files_folder
-        if self._associated_vector_store_id:
-            try:
-                # First, check if the vector store still exists.
-                try:
-                    await self.client.vector_stores.retrieve(vector_store_id=self._associated_vector_store_id)
-                    logger.debug(
-                        f"Agent {self.name}: Confirmed Vector Store {self._associated_vector_store_id} exists before associating file {uploaded_file.id}."
-                    )
-                except NotFoundError:
-                    logger.warning(
-                        f"Agent {self.name}: Vector Store {self._associated_vector_store_id} not found during file {uploaded_file.id} association. "
-                        "It might have been deleted after agent initialization. Skipping association."
-                    )
-                    return uploaded_file.id  # File is uploaded, but association is skipped. Early exit.
-
-                # If VS exists, proceed to associate the file
-                await self.client.vector_stores.files.create(
-                    vector_store_id=self._associated_vector_store_id, file_id=uploaded_file.id
-                )
-                logger.info(
-                    f"Agent {self.name}: Associated file {uploaded_file.id} with Vector Store {self._associated_vector_store_id}."
-                )
-            except Exception as e:
-                logger.error(
-                    f"Agent {self.name}: Failed to associate file {uploaded_file.id} with Vector Store {self._associated_vector_store_id}: {e}"
-                )
-                # Don't raise an exception here if association fails.
-
-        return uploaded_file.id
+    # Expose the upload_file method from the file_manager for ease of access
+    def upload_file(self, file_path: str, include_in_vector_store: bool = True) -> str:
+        """Upload a file using the agent's file manager."""
+        return self.file_manager.upload_file(file_path, include_in_vector_store)
 
     async def check_file_exists(self, file_name_or_path: str) -> str | None:
-        """
-        Checks if a file with a given original name (or full path) likely exists
-        as an uploaded file in the agent's local `files_folder_path` by looking
-        for a version of it with an appended OpenAI File ID.
-
-        Args:
-            file_name_or_path (str): The original name of the file (e.g., 'document.pdf')
-                                     or the full path to the original file.
-
-        Returns:
-            str | None: The OpenAI File ID if a matching file is found, otherwise None.
-        """
-        if not self.files_folder_path:
+        """Check if a file exists using the agent's file manager."""
+        if not self.file_manager or not self.files_folder_path:
             return None
-
-        original_path = Path(file_name_or_path)
-        original_stem = original_path.stem
-        original_suffix = original_path.suffix
-
-        # Search for files in files_folder_path that match the pattern: original_stem_file-ID.original_suffix
-        # Example: document_file-abc123xyz.pdf
-        # OpenAI File IDs usually start with 'file-'
-        pattern = re.compile(f"^{re.escape(original_stem)}_(file-[a-zA-Z0-9]+){re.escape(original_suffix)}$")
-
-        for f_path in self.files_folder_path.iterdir():
-            if f_path.is_file():
-                match = pattern.match(f_path.name)
-                if match:
-                    file_id = match.group(1)
-                    logger.debug(
-                        f"Found existing file {f_path.name} with ID {file_id} for original name {file_name_or_path}"
-                    )
-                    return file_id
+        try:
+            return self.file_manager.get_id_from_file(file_name_or_path)
+        except FileNotFoundError:
             return None
 
     # --- Core Execution Methods ---
@@ -946,7 +768,7 @@ class Agent(BaseAgent[MasterContext]):
         hooks_override: RunHooks | None = None,
         run_config_override: RunConfig | None = None,
         **kwargs,
-    ) -> AsyncGenerator[Any]:
+    ) -> AsyncGenerator[Any, None]:
         """Runs the agent's turn in streaming mode.
 
         Args:
@@ -973,8 +795,6 @@ class Agent(BaseAgent[MasterContext]):
         self._ensure_thread_manager()
 
         if self._thread_manager is None:
-            # This should ideally be caught by type checkers or earlier validation
-            # if _thread_manager is essential for agent functionality.
             logger.error(f"Agent '{self.name}' missing ThreadManager for streaming.")
             raise RuntimeError(f"Agent '{self.name}' missing ThreadManager.")
 
@@ -998,12 +818,60 @@ class Agent(BaseAgent[MasterContext]):
 
         try:
             processed_initial_messages = ItemHelpers.input_to_new_input_list(message)
-            self._thread_manager.add_items_and_save(thread, processed_initial_messages)
-            logger.debug(f"Added initial message to thread {thread_id} before streaming for agent '{self.name}'.")
         except Exception as e:
             logger.error(f"Error processing input message for stream agent '{self.name}': {e}", exc_info=True)
             yield {"type": "error", "content": f"Invalid input message format: {e}"}
             return
+
+        # Handle file attachments - support both old message_files and new file_ids
+        files_to_attach = kwargs.get("file_ids") or kwargs.get("message_files")
+        if files_to_attach and isinstance(files_to_attach, list):
+            if kwargs.get("message_files"):
+                warnings.warn(
+                    "'message_files' parameter is deprecated. Use 'file_ids' instead.",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
+            if processed_initial_messages:
+                last_message = processed_initial_messages[-1]
+                if isinstance(last_message, dict) and last_message.get("role") == "user":
+                    current_content = last_message.get("content", "")
+                    if isinstance(current_content, str):
+                        content_list = [{"type": "input_text", "text": current_content}] if current_content else []
+                    elif isinstance(current_content, list):
+                        content_list = list(current_content)
+                    else:
+                        content_list = []
+                    for file_id in files_to_attach:
+                        if isinstance(file_id, str) and file_id.startswith("file-"):
+                            file_content_item = {
+                                "type": "input_file",
+                                "file_id": file_id,
+                            }
+                            content_list.append(file_content_item)
+                            logger.debug(f"Added file content item for file_id: {file_id}")
+                        else:
+                            logger.warning(f"Invalid file_id format: {file_id} for agent {self.name}")
+                    last_message["content"] = content_list
+                else:
+                    logger.warning(f"Cannot attach files: Last message is not a user message for agent {self.name}")
+            else:
+                logger.warning(f"Cannot attach files: No messages to attach to for agent {self.name}")
+
+        # --- Input history logic (match get_response) ---
+        if sender_name is None:  # Top-level call from user or agency
+            self._thread_manager.add_items_and_save(thread, processed_initial_messages)
+            logger.debug(f"Added current message to shared thread {thread.thread_id} for top-level stream call.")
+            history_for_runner = list(thread.items)  # Get full history after adding
+        else:  # Agent-to-agent call (e.g., via SendMessage tool)
+            history_up_to_this_call = list(thread.items)
+            history_for_runner = history_up_to_this_call + processed_initial_messages
+            logger.debug(
+                f"Constructed temporary history for sub-agent '{self.name}' stream run. Shared thread not modified with this input."
+            )
+
+        # Sanitize tool_calls for OpenAI /v1/responses API compliance
+        history_for_runner = self._sanitize_tool_calls_in_history(history_for_runner)
 
         try:
             master_context = self._prepare_master_context(context_override)
@@ -1011,14 +879,14 @@ class Agent(BaseAgent[MasterContext]):
             effective_run_config = run_config_override or RunConfig()
         except RuntimeError as e:
             logger.error(f"Error preparing context/hooks for stream agent '{self.name}': {e}", exc_info=True)
-            raise e  # Re-raise critical context preparation error
+            raise e
 
         final_result_items = []
         try:
             logger.debug(f"Calling Runner.run_streamed for agent '{self.name}'...")
             result = Runner.run_streamed(
                 starting_agent=self,
-                input=thread.items if sender_name is None else [],  # Runner handles input logic from thread
+                input=history_for_runner,
                 context=master_context,
                 hooks=hooks_to_use,
                 run_config=effective_run_config,
@@ -1049,18 +917,10 @@ class Agent(BaseAgent[MasterContext]):
                 for i, run_item_obj in enumerate(final_result_items):
                     item_dict = self._run_item_to_tresponse_input_item(run_item_obj)
                     if item_dict:
-                        # Avoid adding items that might effectively be duplicates of the initial input if not handled carefully
-                        # This check might be too simplistic and depend on exact item structure / IDs if available
                         is_duplicate = False
                         if processed_initial_messages:
-                            # This simple check may not be robust enough for all cases.
-                            # It assumes that if a generated item is identical to an initial one, it might be a duplicate.
-                            # A more robust check would compare based on unique IDs if available, or more specific content fields.
                             if item_dict in processed_initial_messages and item_dict.get("role") == "user":
-                                is_duplicate = (
-                                    True  # Avoid re-adding the initial user message if it somehow appears in output
-                                )
-
+                                is_duplicate = True
                         if not is_duplicate:
                             items_to_save_from_stream.append(item_dict)
                             logger.debug(
@@ -1123,7 +983,12 @@ class Agent(BaseAgent[MasterContext]):
                     tool_call_id_for_array = getattr(raw, "id", None)
                     func_name = "FileSearch"  # Per agents.FileSearchTool.name
                     try:
-                        func_args_str = json.dumps({"queries": getattr(raw, "queries", [])})
+                        func_args_str = json.dumps(
+                            {
+                                "queries": getattr(raw, "queries", []),
+                                "results": [r.dict() for r in getattr(raw, "results", [])],
+                            }
+                        )
                     except TypeError as e:
                         logger.error(
                             f"Could not serialize queries for FileSearch: {getattr(raw, 'queries', [])}. Error: {e}"
@@ -1158,13 +1023,33 @@ class Agent(BaseAgent[MasterContext]):
                 return None
 
         elif isinstance(item, ToolCallOutputItem):
-            # FIX: Use SDK's standard to_input_item() method instead of incorrectly converting to assistant message
-            try:
-                input_item = item.to_input_item()
-                logger.debug(f"Converted ToolCallOutputItem using SDK's to_input_item(): {input_item}")
-                return input_item
-            except Exception as e:
-                logger.error(f"Error converting ToolCallOutputItem using to_input_item(): {e}", exc_info=True)
+            tool_call_id = None
+            output_content = str(item.output)
+
+            # For /v1/responses API, prioritize call_id for matching tool outputs
+            if hasattr(item, "tool_call_id") and item.tool_call_id:
+                tool_call_id = item.tool_call_id
+            elif isinstance(item.raw_item, ResponseFunctionToolCall):
+                # ResponseFunctionToolCall from /v1/responses has 'call_id' for matching
+                tool_call_id = getattr(item.raw_item, "call_id", None)
+                if tool_call_id is None:  # Fallback only if call_id is not available
+                    tool_call_id = getattr(item.raw_item, "id", None)
+            elif isinstance(item.raw_item, dict) and "call_id" in item.raw_item:
+                tool_call_id = item.raw_item.get("call_id")
+
+            if tool_call_id:
+                logger.debug(
+                    f"Converting ToolCallOutputItem to assistant message: tool_call_id={tool_call_id}, content='{output_content[:50]}...'"
+                )
+                # Convert tool output to assistant message with tool_call_id in content
+                return {
+                    "role": "assistant",
+                    "content": f"Tool output for call {tool_call_id}: {output_content}",
+                }
+            else:
+                logger.warning(
+                    f"Could not determine tool_call_id for ToolCallOutputItem: raw_item={item.raw_item}, item={item}"
+                )
                 return None
 
         else:
@@ -1323,6 +1208,19 @@ class Agent(BaseAgent[MasterContext]):
         )
 
     def _get_class_folder_path(self):
+        try:
+            # First, try to use the __file__ attribute of the module
+            return os.path.abspath(os.path.dirname(self.__module__.__file__))
+        except (TypeError, OSError, AttributeError):
+            # If that fails, fall back to inspect
+            try:
+                class_file = inspect.getfile(self.__class__)
+            except (TypeError, OSError, AttributeError):
+                return "./"
+            return os.path.abspath(os.path.realpath(os.path.dirname(class_file)))
+
+    def get_class_folder_path(self):
+        """Public method to get the class folder path."""
         try:
             # First, try to use the __file__ attribute of the module
             return os.path.abspath(os.path.dirname(self.__module__.__file__))

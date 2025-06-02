@@ -100,10 +100,12 @@ def test_agent_initialization_with_all_parameters():
     assert agent.name == "CompleteAgent"
     assert agent.instructions == "Complete agent with all params"
     assert agent.model == "gpt-4o-mini"
-    assert len(agent.tools) == 1
+    assert len(agent.tools) == 2
+    assert agent.tools[0] == tool1
+    assert agent.tools[1].__class__.__name__ == "FileSearchTool"
     assert agent.response_validator == validator
     assert agent.output_type == TaskOutput
-    assert agent.files_folder == "./test_files"
+    assert agent.files_folder.startswith("test_files_vs_")
     assert agent.description == "A complete test agent"
 
 

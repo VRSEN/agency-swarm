@@ -61,11 +61,14 @@ class ConversationThread:
                 # For messages with tool calls, we need a non-null content for streaming
                 # Convert tool calls to a descriptive string
                 tool_descriptions = []
+                content_str = ""
                 for tc in tool_calls:
                     if isinstance(tc, dict):
                         func_name = tc.get("function", {}).get("name", "unknown")
                         tool_descriptions.append(f"{func_name}")
-                content_str = f"Using tools: {', '.join(tool_descriptions)}"
+                        content_str = (
+                            f"Using tool: {func_name}. Tool output: {tc.get('function', {}).get('arguments', '')}"
+                        )
                 item_dict["content"] = content_str
                 logger.debug(
                     f"THREAD_ADD_ITEM: Converted tool calls to content string for streaming compatibility in thread {self.thread_id}"
