@@ -66,11 +66,11 @@ class TestPersistenceHooksUnit:
         """Test PersistenceHooks.on_run_start successfully loads thread data."""
         # Arrange
         # Simulate load_callback returning a dictionary of threads
-        chat_id_1 = "unit_test_chat_1"
-        chat_id_2 = "unit_test_chat_2"
+        thread_id_1 = "user->TestAgent"
+        thread_id_2 = "user->OtherAgent"
         loaded_threads_dict = {
-            chat_id_1: ConversationThread(thread_id=chat_id_1, items=[{"role": "user", "content": "loaded1"}]),
-            chat_id_2: ConversationThread(thread_id=chat_id_2, items=[{"role": "user", "content": "loaded2"}]),
+            thread_id_1: ConversationThread(thread_id=thread_id_1, items=[{"role": "user", "content": "loaded1"}]),
+            thread_id_2: ConversationThread(thread_id=thread_id_2, items=[{"role": "user", "content": "loaded2"}]),
         }
         mock_load_callback.return_value = loaded_threads_dict  # Simulate successful load returning a dict
 
@@ -147,10 +147,10 @@ class TestPersistenceHooksUnit:
     ):
         """Test PersistenceHooks.on_run_end successfully calls save_threads_callback."""
         # Arrange
-        chat_id_1 = "unit_test_chat_1"
+        thread_id_1 = "user->TestAgent"
         # Pre-populate the mock thread manager with some data to be saved
         threads_to_save = {
-            chat_id_1: ConversationThread(thread_id=chat_id_1, items=[{"role": "user", "content": "to_save"}])
+            thread_id_1: ConversationThread(thread_id=thread_id_1, items=[{"role": "user", "content": "to_save"}])
         }
         mock_thread_manager._threads = threads_to_save
 
@@ -177,9 +177,9 @@ class TestPersistenceHooksUnit:
     ):
         """Test PersistenceHooks.on_run_end when save_threads_callback raises an error."""
         # Arrange
-        chat_id_1 = "unit_test_chat_1"
+        thread_id_1 = "user->TestAgent"
         threads_to_save = {
-            chat_id_1: ConversationThread(thread_id=chat_id_1, items=[{"role": "user", "content": "to_save"}])
+            thread_id_1: ConversationThread(thread_id=thread_id_1, items=[{"role": "user", "content": "to_save"}])
         }
         mock_thread_manager._threads = threads_to_save
 

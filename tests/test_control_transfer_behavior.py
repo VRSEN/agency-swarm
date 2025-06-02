@@ -241,7 +241,6 @@ class TestControlTransferBehavior:
             # Test the actual execution path
             result = await orchestrator.get_response(
                 message="Please analyze this complex dataset and provide insights. Use whatever resources you need.",
-                chat_id="test_mixed_pattern_123",
             )
 
             print(f"Final result type: {type(result)}")
@@ -291,7 +290,6 @@ class TestControlTransferBehavior:
             # Be very explicit about using the send_message tool
             result = await orchestrator.get_response(
                 message="Use the send_message_to_Worker tool to ask the Worker to process a task that requires specialist expertise and should trigger a handoff to the Specialist agent.",
-                chat_id="test_forced_sendmessage_123",
             )
 
             print(f"Final result type: {type(result)}")

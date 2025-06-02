@@ -69,11 +69,22 @@ async def test_get_response_with_overrides(mock_runner_run, minimal_agent):
 
 @pytest.mark.asyncio
 async def test_get_response_missing_thread_manager():
-    """Test that get_response raises error when thread manager is missing."""
+    """Test that get_response succeeds by creating ThreadManager when missing."""
     agent = Agent(name="TestAgent", instructions="Test")
-    # Don't set thread manager
-    with pytest.raises(RuntimeError, match="missing ThreadManager"):
-        await agent.get_response("Test message")
+    # Don't set thread manager initially
+    assert agent._thread_manager is None
+
+    # The agent should now successfully create a ThreadManager via _ensure_thread_manager()
+    # and create a minimal agency instance for compatibility
+    with patch("agency_swarm.agent.Runner.run", new_callable=AsyncMock) as mock_runner:
+        mock_runner.return_value = MagicMock(new_items=[], final_output="Test response")
+
+        # This should succeed by auto-creating necessary components
+        result = await agent.get_response("Test message")
+
+        # Verify ThreadManager was created
+        assert agent._thread_manager is not None
+        assert result is not None
 
 
 # --- Error Handling Tests ---
@@ -81,11 +92,23 @@ async def test_get_response_missing_thread_manager():
 
 @pytest.mark.asyncio
 async def test_call_before_agency_setup():
-    """Test that calling agent methods before agency setup raises appropriate errors."""
+    """Test that calling agent methods without agency setup succeeds by auto-creating components."""
     agent = Agent(name="TestAgent", instructions="Test")
-    # Agent not set up with agency, so should raise RuntimeError
-    with pytest.raises(RuntimeError):
-        await agent.get_response("Test message")
+    # Agent not set up with agency initially
+    assert agent._agency_instance is None
+    assert agent._thread_manager is None
+
+    # The agent should auto-create necessary components for direct usage
+    with patch("agency_swarm.agent.Runner.run", new_callable=AsyncMock) as mock_runner:
+        mock_runner.return_value = MagicMock(new_items=[], final_output="Test response")
+
+        # This should succeed by auto-creating ThreadManager and minimal agency
+        result = await agent.get_response("Test message")
+
+        # Verify components were created
+        assert agent._thread_manager is not None
+        assert agent._agency_instance is not None
+        assert result is not None
 
 
 # --- File Handling Tests ---

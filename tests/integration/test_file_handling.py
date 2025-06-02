@@ -119,14 +119,14 @@ async def test_rag_with_filesearchtool_and_real_vs(
     mock_thread_manager = MagicMock(spec=ThreadManager)
     created_threads = {}
 
-    def get_thread_side_effect(chat_id):
-        if chat_id not in created_threads:
+    def get_thread_side_effect(thread_id):
+        if thread_id not in created_threads:
             mock_thread = MagicMock(spec=ConversationThread)
-            mock_thread.thread_id = chat_id
+            mock_thread.thread_id = thread_id
             mock_thread.items = []
             mock_thread.add_items.side_effect = lambda items_to_add: mock_thread.items.extend(items_to_add)
-            created_threads[chat_id] = mock_thread
-        return created_threads[chat_id]
+            created_threads[thread_id] = mock_thread
+        return created_threads[thread_id]
 
     mock_thread_manager.get_thread.side_effect = get_thread_side_effect
     mock_thread_manager.add_items_and_save.side_effect = lambda thread_obj, items: thread_obj.add_items(
@@ -158,8 +158,7 @@ async def test_rag_with_filesearchtool_and_real_vs(
     question = "What is the AgencySwarm version mentioned in rag_info.txt?"
     print(f"TEST: Asking agent: '{question}'")
 
-    chat_id = f"test_rag_chat_{uuid.uuid4().hex[:8]}"
-    response_result = await agent.get_response(question, chat_id=chat_id)
+    response_result = await agent.get_response(question)
 
     assert response_result is not None
     final_output = response_result.final_output
@@ -227,17 +226,14 @@ async def test_agent_processes_message_files_attachment(real_openai_client: Asyn
 
     # 3. Setup a minimal real Agency and ThreadManager for agent.get_response()
     agency = Agency(attachment_tester_agent, user_context=None)
-    thread_manager = attachment_tester_agent._thread_managers.get(agency)
+    thread_manager = attachment_tester_agent._thread_manager
     assert thread_manager is not None, "ThreadManager not set by Agency"
 
     # 4. Call get_response with file_ids - OpenAI will automatically process the file
-    test_chat_id = f"test_msg_files_real_chat_{uuid.uuid4().hex[:8]}"
     message_to_agent = "What content do you see in the attached PDF file? Please summarize what you find."
 
     print(f"TEST: Calling get_response for agent '{attachment_tester_agent.name}' with file_ids: [{attached_file_id}]")
-    response_result = await attachment_tester_agent.get_response(
-        message_to_agent, chat_id=test_chat_id, file_ids=[attached_file_id]
-    )
+    response_result = await attachment_tester_agent.get_response(message_to_agent, file_ids=[attached_file_id])
 
     assert response_result is not None
     assert response_result.final_output is not None
@@ -323,8 +319,7 @@ async def test_multi_file_type_processing(real_openai_client: AsyncOpenAI, tmp_p
         expected_content = "FIRST PDF SECRET PHRASE"
 
         # Process the PDF file - OpenAI will automatically make file content available
-        chat_id = f"test_file_processing_{uuid.uuid4().hex[:8]}"
-        response_result = await file_processor_agent.get_response(question, chat_id=chat_id, file_ids=[file_id])
+        response_result = await file_processor_agent.get_response(question, file_ids=[file_id])
 
         # Verify response
         assert response_result is not None
@@ -424,8 +419,7 @@ async def test_agent_vision_capabilities(real_openai_client: AsyncOpenAI, tmp_pa
         ]
 
         # Process the image - OpenAI will automatically handle vision processing
-        chat_id = f"test_vision_{uuid.uuid4().hex[:8]}"
-        response_result = await vision_agent.get_response(message_with_image, chat_id=chat_id)
+        response_result = await vision_agent.get_response(message_with_image)
 
         # Verify response
         assert response_result is not None

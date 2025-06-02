@@ -213,7 +213,6 @@ class TestHandoffsWithCommunicationFlows:
                 # AgentA orchestrates by sending message to AgentB
                 result = await agent_a.get_response(
                     message="Send this complex task to AgentB for processing and potential handoff",
-                    chat_id="test_orchestrator_handoff_123",
                 )
 
                 assert result is not None
