@@ -101,6 +101,8 @@ class Agent(BaseAgent[MasterContext]):
         files_folder_path (Path | None): The resolved absolute path for `files_folder`.
         _subagents (dict[str, "Agent"]): Dictionary mapping names of registered subagents to their instances.
         _openai_client (AsyncOpenAI | None): Internal reference to the initialized AsyncOpenAI client instance.
+        _load_threads_callback (Callable[[str], dict[str, Any] | None] | None): Callback to load thread data by thread_id.
+        _save_threads_callback (Callable[[dict[str, Any]], None] | None): Callback to save all threads data.
     """
 
     # --- Agency Swarm Specific Parameters ---
@@ -117,6 +119,8 @@ class Agent(BaseAgent[MasterContext]):
     files_folder_path: Path | None = None
     _subagents: dict[str, "Agent"]
     _openai_client: AsyncOpenAI | None = None
+    _load_threads_callback: Callable[[str], dict[str, Any] | None] | None = None
+    _save_threads_callback: Callable[[dict[str, Any]], None] | None = None
 
     # --- SDK Agent Compatibility ---
     # Re-declare attributes from BaseAgent for clarity and potential overrides
@@ -133,7 +137,8 @@ class Agent(BaseAgent[MasterContext]):
             **kwargs: Keyword arguments including standard `agents.Agent` parameters
                       (like `name`, `instructions`, `model`, `tools`, `hooks`, etc.)
                       and Agency Swarm specific parameters (`files_folder`, `description`,
-                      `response_validator`, `output_type`). Deprecated parameters are handled with warnings.
+                      `response_validator`, `output_type`, `load_threads_callback`, `save_threads_callback`).
+                      Deprecated parameters are handled with warnings.
 
         Raises:
             ValueError: If the required 'name' parameter is not provided.
@@ -277,6 +282,8 @@ class Agent(BaseAgent[MasterContext]):
                 "api_params",
                 "response_validator",
                 "description",
+                "load_threads_callback",
+                "save_threads_callback",
             }:
                 current_agent_params[key] = value
             else:
@@ -308,6 +315,10 @@ class Agent(BaseAgent[MasterContext]):
         # Set description directly from current_agent_params, default to None if not provided
         self.description = current_agent_params.get("description")
         # output_type is handled by the base Agent constructor, no need to set it here
+
+        # --- Persistence Callbacks ---
+        self._load_threads_callback = current_agent_params.get("load_threads_callback")
+        self._save_threads_callback = current_agent_params.get("save_threads_callback")
 
         # --- Internal State Init ---
         self._openai_client = None
@@ -743,25 +754,44 @@ class Agent(BaseAgent[MasterContext]):
         file_ids: list[str] | None = None,  # New parameter
         **kwargs: Any,
     ) -> RunResult:
-        """Run the agent's turn, returning the full execution result.
+        """
+        Runs the agent's turn in the conversation loop, handling both user and agent-to-agent interactions.
+
+        This method serves as the primary interface for interacting with the agent. It processes
+        the input message, manages conversation history via threads, runs the agent using the
+        `agents.Runner`, validates responses, and persists the results.
 
         Args:
-            message: The input message or list of message items
+            message: The input message as a string or structured input items list
             sender_name: Name of the sending agent (None for user interactions)
-            context_override: Optional context data to override default values
+            context_override: Optional context data to override default MasterContext values
             hooks_override: Optional hooks to override default agent hooks
-            run_config: Optional run configuration
-            message_files: Deprecated - use file_ids instead
+            run_config: Optional run configuration settings
+            message_files: DEPRECATED: Use file_ids instead. File IDs to attach to the message
             file_ids: List of OpenAI file IDs to attach to the message
-            **kwargs: Additional keyword arguments
+            **kwargs: Additional keyword arguments including max_turns
 
         Returns:
             RunResult: The complete execution result
         """
+        # Ensure ThreadManager exists (for direct agent usage without Agency)
+        self._ensure_thread_manager()
+
         if not self._thread_manager:
             raise RuntimeError(f"Agent '{self.name}' missing ThreadManager.")
+
+        # For direct agent usage, we need to ensure _agency_instance exists with minimal agents map
         if not self._agency_instance or not hasattr(self._agency_instance, "agents"):
-            raise RuntimeError(f"Agent '{self.name}' missing Agency instance or agents map.")
+            if sender_name is None:  # Direct user interaction without agency
+                # Create a minimal agency-like object for compatibility
+                class MinimalAgency:
+                    def __init__(self, agent):
+                        self.agents = {agent.name: agent}
+                        self.user_context = {}
+
+                self._agency_instance = MinimalAgency(self)
+            else:
+                raise RuntimeError(f"Agent '{self.name}' missing Agency instance for agent-to-agent communication.")
 
         # Generate a thread identifier based on communication context
         thread_id = self.get_thread_id(sender_name)
@@ -939,11 +969,27 @@ class Agent(BaseAgent[MasterContext]):
             yield {"type": "error", "content": "message cannot be empty"}
             return
 
+        # Ensure ThreadManager exists (for direct agent usage without Agency)
+        self._ensure_thread_manager()
+
         if self._thread_manager is None:
             # This should ideally be caught by type checkers or earlier validation
             # if _thread_manager is essential for agent functionality.
             logger.error(f"Agent '{self.name}' missing ThreadManager for streaming.")
             raise RuntimeError(f"Agent '{self.name}' missing ThreadManager.")
+
+        # For direct agent usage, we need to ensure _agency_instance exists with minimal agents map
+        if not self._agency_instance or not hasattr(self._agency_instance, "agents"):
+            if sender_name is None:  # Direct user interaction without agency
+                # Create a minimal agency-like object for compatibility
+                class MinimalAgency:
+                    def __init__(self, agent):
+                        self.agents = {agent.name: agent}
+                        self.user_context = {}
+
+                self._agency_instance = MinimalAgency(self)
+            else:
+                raise RuntimeError(f"Agent '{self.name}' missing Agency instance for agent-to-agent communication.")
 
         # Generate a thread identifier based on communication context
         thread_id = self.get_thread_id(sender_name)
@@ -1191,6 +1237,39 @@ class Agent(BaseAgent[MasterContext]):
         if not hasattr(agency, "agents"):
             raise TypeError("Provided agency instance must have an 'agents' dictionary.")
         self._agency_instance = agency
+
+    def _set_persistence_callbacks(
+        self,
+        load_threads_callback: Callable[[str], dict[str, Any] | None] | None = None,
+        save_threads_callback: Callable[[dict[str, Any]], None] | None = None,
+    ):
+        """Set persistence callbacks for the agent's thread manager.
+
+        This method allows setting callbacks after agent initialization and will
+        create a new ThreadManager with the provided callbacks if none exists.
+
+        Args:
+            load_threads_callback: Callback to load thread data by thread_id
+            save_threads_callback: Callback to save all threads data
+        """
+        self._load_threads_callback = load_threads_callback
+        self._save_threads_callback = save_threads_callback
+
+        # Create ThreadManager with callbacks if it doesn't exist
+        if self._thread_manager is None:
+            self._thread_manager = ThreadManager(
+                load_threads_callback=load_threads_callback, save_threads_callback=save_threads_callback
+            )
+
+    def _ensure_thread_manager(self):
+        """Ensures the agent has a ThreadManager, creating one if necessary.
+
+        This is called when the agent is used directly without an Agency.
+        """
+        if self._thread_manager is None:
+            self._thread_manager = ThreadManager(
+                load_threads_callback=self._load_threads_callback, save_threads_callback=self._save_threads_callback
+            )
 
     def _adapt_legacy_tool(self, legacy_tool: type[BaseTool]):
         """

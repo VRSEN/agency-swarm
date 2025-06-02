@@ -350,10 +350,22 @@ class Agency:
             if receiver_name not in communication_map[sender_name]:
                 communication_map[sender_name].append(receiver_name)
 
+        # Extract persistence callbacks from the thread manager to delegate to agents
+        thread_manager_load_callback = getattr(self.thread_manager, "_load_threads_callback", None)
+        thread_manager_save_callback = getattr(self.thread_manager, "_save_threads_callback", None)
+
         # Configure each agent
         for agent_name, agent_instance in self.agents.items():
             agent_instance._set_agency_instance(self)
             agent_instance._set_thread_manager(self.thread_manager)
+
+            # Delegate persistence callbacks to each agent
+            if thread_manager_load_callback is not None or thread_manager_save_callback is not None:
+                agent_instance._set_persistence_callbacks(
+                    load_threads_callback=thread_manager_load_callback,
+                    save_threads_callback=thread_manager_save_callback,
+                )
+                logger.debug(f"Delegated persistence callbacks to agent: {agent_name}")
 
             # Apply shared instructions (prepend)
             if self.shared_instructions:
