@@ -34,7 +34,6 @@ async def test_invoke_send_message_tool_success(minimal_agent):
     # Mock the context
     mock_context = MagicMock(spec=RunContextWrapper)
     mock_master_context = MagicMock(spec=MasterContext)
-    mock_master_context.chat_id = "test_chat_123"
     mock_master_context.user_context = {}  # Add user_context attribute
     mock_context.context = mock_master_context
 
@@ -65,7 +64,6 @@ async def test_invoke_send_message_tool_arg_parse_error(minimal_agent):
     # Mock the context
     mock_context = MagicMock(spec=RunContextWrapper)
     mock_master_context = MagicMock(spec=MasterContext)
-    mock_master_context.chat_id = "test_chat_123"
     mock_master_context.user_context = {}  # Add user_context attribute
     mock_context.context = mock_master_context
 
@@ -95,7 +93,6 @@ async def test_invoke_send_message_tool_missing_arg(minimal_agent):
     # Mock the context
     mock_context = MagicMock(spec=RunContextWrapper)
     mock_master_context = MagicMock(spec=MasterContext)
-    mock_master_context.chat_id = "test_chat_123"
     mock_master_context.user_context = {}  # Add user_context attribute
     mock_context.context = mock_master_context
 
@@ -128,7 +125,6 @@ async def test_invoke_send_message_tool_recipient_error(minimal_agent):
     # Mock the context
     mock_context = MagicMock(spec=RunContextWrapper)
     mock_master_context = MagicMock(spec=MasterContext)
-    mock_master_context.chat_id = "test_chat_123"
     mock_master_context.user_context = {}  # Add user_context attribute
     mock_context.context = mock_master_context
 

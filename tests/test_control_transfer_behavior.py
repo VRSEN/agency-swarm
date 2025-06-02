@@ -356,7 +356,6 @@ class TestControlTransferBehavior:
 
             mock_context = MagicMock(spec=RunContextWrapper)
             mock_master_context = MagicMock(spec=MasterContext)
-            mock_master_context.chat_id = "test_direct_tool_123"
             mock_master_context.user_context = {}
             mock_context.context = mock_master_context
 

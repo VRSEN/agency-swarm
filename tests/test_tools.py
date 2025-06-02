@@ -42,7 +42,6 @@ def mock_recipient_agent(mock_run_context_wrapper):
 @pytest.fixture
 def mock_master_context():
     context = MagicMock(spec=MasterContext)
-    context.chat_id = "test_chat_123"
     context.user_context = {"user_key": "user_value"}
     return context
 
@@ -61,7 +60,6 @@ def mock_context():
     context.thread_manager = MagicMock(spec=ThreadManager)
     context.thread_manager.get_thread = MagicMock(return_value=MagicMock())
     context.thread_manager.add_items_and_save = AsyncMock()
-    context.chat_id = "test_chat_123"
     context.user_context = {"user_key": "user_val"}
     return context
 
@@ -122,7 +120,6 @@ async def test_send_message_success(specific_send_message_tool, mock_wrapper, mo
     mock_recipient_agent.get_response.assert_called_once_with(
         message=message_content,
         sender_name=specific_send_message_tool.sender_agent.name,
-        chat_id=mock_context.chat_id,
         context_override=mock_context.user_context,
         additional_instructions="Additional instructions for test.",
     )
@@ -184,30 +181,6 @@ async def test_send_message_missing_required_param(specific_send_message_tool, m
     assert result == expected_error_missing_instr
     mock_module_logger_instr.error.assert_called_once_with(
         f"Tool '{specific_send_message_tool.name}' invoked without 'my_primary_instructions' parameter."
-    )
-
-
-@pytest.mark.asyncio
-async def test_send_message_missing_chat_id(specific_send_message_tool, mock_wrapper):
-    mock_wrapper.context.chat_id = None
-    message_content = "Test message"
-    args_dict = {
-        "my_primary_instructions": "Primary instructions.",
-        "message": message_content,
-    }
-    args_json_string = json.dumps(args_dict)
-    expected_error_message = (
-        f"Error: Internal context error. Missing chat_id for tool {specific_send_message_tool.name}."
-    )
-
-    with patch("agency_swarm.tools.send_message.logger") as mock_module_logger:
-        result = await specific_send_message_tool.on_invoke_tool(
-            wrapper=mock_wrapper, arguments_json_string=args_json_string
-        )
-
-    assert result == expected_error_message
-    mock_module_logger.error.assert_called_once_with(
-        f"Tool '{specific_send_message_tool.name}' invoked without 'chat_id' in MasterContext."
     )
 
 

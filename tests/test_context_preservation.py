@@ -1,12 +1,12 @@
 """
-Test context preservation in the recursive orchestrator pattern.
+Test context preservation and thread management in agent-to-agent communication.
 
-This test verifies that agent-to-agent communication preserves the original
-conversation context (chat_id) to enable the recursive orchestrator pattern
-where all agents in a chain have access to the full conversation history.
+This test verifies that agent-to-agent communication works correctly with the
+thread identifier system based on sender->recipient patterns for conversation
+isolation and context management.
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from agents import RunContextWrapper, RunResult
@@ -42,9 +42,11 @@ def mock_recipient_agent():
 
 
 @pytest.fixture
-def original_user_context():
-    """The original user's conversation context that should be preserved."""
-    return MagicMock(spec=MasterContext)
+def master_context():
+    """A master context for agent communication."""
+    context = MagicMock(spec=MasterContext)
+    context.user_context = {"user_id": "user_456", "session": "session_789"}
+    return context
 
 
 @pytest.fixture
@@ -57,27 +59,14 @@ def send_message_tool(mock_sender_agent, mock_recipient_agent):
 
 
 @pytest.mark.asyncio
-async def test_context_preservation_in_recursive_orchestrator_pattern(
-    send_message_tool, mock_recipient_agent, original_user_context
-):
+async def test_send_message_communication(send_message_tool, mock_recipient_agent, master_context):
     """
-    Test that agent-to-agent communication preserves the original user's chat_id
-    to enable the recursive orchestrator pattern with shared context.
-
-    In the recursive orchestrator pattern:
-    - User starts conversation with chat_id="user_chat_123"
-    - Orchestrator calls Worker with the SAME chat_id="user_chat_123"
-    - Worker can call Specialist with the SAME chat_id="user_chat_123"
-    - All agents have access to the full conversation history
+    Test that agent-to-agent communication works correctly through SendMessage tools.
+    The system uses sender->recipient thread identifiers automatically.
     """
-    # Simulate the original user's conversation context
-    original_chat_id = "user_chat_123"
-    original_user_context.chat_id = original_chat_id
-    original_user_context.user_context = {"user_id": "user_456", "session": "session_789"}
-
-    # Create wrapper with the original user context
+    # Create wrapper with the master context
     wrapper = MagicMock(spec=RunContextWrapper)
-    wrapper.context = original_user_context
+    wrapper.context = master_context
 
     # Prepare the message arguments
     args_json = '{"my_primary_instructions": "Coordinate the task", "message": "Please process this user request", "additional_instructions": "Use the full conversation context"}'
@@ -88,31 +77,22 @@ async def test_context_preservation_in_recursive_orchestrator_pattern(
     # Verify the result
     assert result == "Work completed"
 
-    # CRITICAL: Verify that the recipient agent receives the ORIGINAL chat_id
-    # This is essential for the recursive orchestrator pattern to work correctly
+    # Verify that the recipient agent receives the correct parameters
     mock_recipient_agent.get_response.assert_called_once_with(
         message="Please process this user request",
         sender_name="OrchestratorAgent",
-        chat_id=original_chat_id,  # Must be the original user's chat_id, NOT "OrchestratorAgent->WorkerAgent"
         context_override={"user_id": "user_456", "session": "session_789"},
         additional_instructions="Use the full conversation context",
     )
 
 
 @pytest.mark.asyncio
-async def test_thread_manager_uses_original_chat_id_for_context_lookup(
-    send_message_tool, mock_recipient_agent, original_user_context
-):
+async def test_thread_identifier_generation(send_message_tool, mock_recipient_agent, master_context):
     """
-    Test that the ThreadManager uses the original chat_id for thread lookup,
-    ensuring all agents in the chain access the same conversation thread.
+    Test that the system generates appropriate thread identifiers based on sender->recipient patterns.
     """
-    original_chat_id = "user_conversation_456"
-    original_user_context.chat_id = original_chat_id
-    original_user_context.user_context = {}
-
     wrapper = MagicMock(spec=RunContextWrapper)
-    wrapper.context = original_user_context
+    wrapper.context = master_context
 
     args_json = (
         '{"my_primary_instructions": "Test instructions", "message": "Test message", "additional_instructions": ""}'
@@ -120,41 +100,36 @@ async def test_thread_manager_uses_original_chat_id_for_context_lookup(
 
     await send_message_tool.on_invoke_tool(wrapper, args_json)
 
-    # Verify that get_response was called with the original chat_id
-    # This ensures the ThreadManager will look up the correct conversation thread
+    # Verify that get_response was called with sender_name for thread identifier generation
     call_args = mock_recipient_agent.get_response.call_args
-    assert call_args.kwargs["chat_id"] == original_chat_id
-
-    # The chat_id should NOT be a structured identifier like "OrchestratorAgent->WorkerAgent"
-    assert "->" not in call_args.kwargs["chat_id"]
-    assert call_args.kwargs["chat_id"] == original_chat_id
+    assert call_args.kwargs["sender_name"] == "OrchestratorAgent"
 
 
 @pytest.mark.asyncio
-async def test_structured_identifiers_break_context_preservation():
+async def test_context_propagation_through_communication():
     """
-    Test that demonstrates why structured identifiers like "A->B" break
-    the recursive orchestrator pattern by isolating conversations.
-
-    This test documents the problem with the current implementation.
+    Test that demonstrates how context flows through agent-to-agent communication
+    using sender->recipient thread identifiers for conversation isolation.
     """
-    # This test documents the architectural issue:
-    # If we use structured identifiers like "OrchestratorAgent->WorkerAgent",
-    # each agent-to-agent communication happens in isolation, breaking
-    # the shared context that is essential for the recursive orchestrator pattern.
+    # The architecture uses sender->recipient patterns for thread identification:
+    # - User conversation with Agent A: "user->AgentA"
+    # - Agent A to Agent B: "AgentA->AgentB"
+    # - Agent B to Agent C: "AgentB->AgentC"
 
-    structured_id = "OrchestratorAgent->WorkerAgent"
-    original_user_chat_id = "user_chat_123"
+    # Each communication pair has its own thread, which provides:
+    # 1. Better isolation between different communication flows
+    # 2. Clearer tracking of who's talking to whom
+    # 3. Context propagation through the context_override parameter
 
-    # These should be the same for context preservation, but structured IDs make them different
-    assert structured_id != original_user_chat_id
+    user_to_agent_thread = "user->OrchestratorAgent"
+    orchestrator_to_worker = "OrchestratorAgent->WorkerAgent"
+    worker_to_specialist = "WorkerAgent->SpecialistAgent"
 
-    # This breaks the recursive orchestrator pattern because:
-    # 1. User conversation happens in thread "user_chat_123"
-    # 2. Orchestrator->Worker happens in thread "OrchestratorAgent->WorkerAgent"
-    # 3. Worker->Specialist would happen in thread "WorkerAgent->SpecialistAgent"
-    # 4. No agent has access to the original user context
-    # 5. The recursive chain is broken
+    # These are all different threads, which is the intended behavior
+    assert user_to_agent_thread != orchestrator_to_worker
+    assert orchestrator_to_worker != worker_to_specialist
 
-    print("Structured identifiers break context preservation in recursive orchestrator pattern")
-    assert True  # This test documents the architectural issue
+    # Context is propagated through the context_override parameter
+    # rather than through shared thread identifiers
+    print("Architecture uses sender->recipient thread isolation with context propagation")
+    assert True

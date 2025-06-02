@@ -104,17 +104,12 @@ class SendMessage(FunctionTool):
             return f"Error: Missing required parameter 'my_primary_instructions' for tool {self.name}."
 
         master_context: MasterContext = wrapper.context
-        if not master_context.chat_id:
-            logger.error(f"Tool '{self.name}' invoked without 'chat_id' in MasterContext.")
-            return f"Error: Internal context error. Missing chat_id for tool {self.name}."
-
-        current_chat_id = master_context.chat_id
         sender_name_for_call = self.sender_agent.name
         recipient_name_for_call = self.recipient_agent.name
 
         logger.info(
             f"Agent '{sender_name_for_call}' invoking tool '{self.name}'. "
-            f"Recipient: '{recipient_name_for_call}', ChatID: {current_chat_id}, "
+            f"Recipient: '{recipient_name_for_call}', "
             f'Message: "{str(message_content)[:50]}..."'
         )
 
@@ -123,7 +118,6 @@ class SendMessage(FunctionTool):
             response = await self.recipient_agent.get_response(
                 message=message_content,
                 sender_name=self.sender_agent.name,
-                chat_id=master_context.chat_id,
                 context_override=master_context.user_context,
                 additional_instructions=additional_instructions,
             )
