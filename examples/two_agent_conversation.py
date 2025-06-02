@@ -75,15 +75,30 @@ agency = Agency(
 
 
 async def run_conversation():
-    print("\n--- Running Stateful Two-Agent Conversation Example (Testing Memory) ---")
+    """
+    Demonstrates multi-agent communication with automatic thread isolation in Agency Swarm v1.x.
 
-    print(f"\nInitiating conversation (thread isolation automatic)")
+    Key concepts demonstrated:
+    1. Multiple communication flows: user->UI_Agent and UI_Agent->Worker_Agent
+    2. Thread isolation: Each flow gets its own conversation thread
+    3. Thread identifiers: Follow "sender->recipient" format automatically
+    4. No chat_id management: Framework handles thread identification
+
+    Thread structure in this example:
+    - "user->UI_Agent": User conversations with UI_Agent
+    - "UI_Agent->Worker_Agent": UI_Agent delegating tasks to Worker_Agent
+    """
+    print("\n--- Running Stateful Two-Agent Conversation Example (Testing Memory) ---")
+    print("This example demonstrates automatic thread isolation in v1.x")
+
+    print("\nInitiating conversation (thread isolation automatic)")
 
     # --- Turn 1: Ask worker to STORE a value --- #
     key_to_store = "user_data_1"
     value_to_store = "DataPointAlpha"
     user_message_1 = f"Please ask the worker agent to store the value '{value_to_store}' with the key '{key_to_store}'."
     print(f"\nUser Message 1 to {ui_agent.name}: '{user_message_1}'")
+    print("Thread for this interaction: user->UI_Agent")
 
     try:
         response1 = await agency.get_response(
@@ -101,6 +116,7 @@ async def run_conversation():
         print("\n--- Turn 2: Asking worker to retrieve the stored value (Testing Worker Memory) ---")
         user_message_2 = f"What value did the worker store for the key '{key_to_store}'?"
         print(f"\nUser Message 2 to {ui_agent.name}: '{user_message_2}'")
+        print("Thread for this interaction: user->UI_Agent (continues same thread)")
 
         response2 = await agency.get_response(
             message=user_message_2,
@@ -122,16 +138,31 @@ async def run_conversation():
             print("No valid response or final output received for Turn 2.")
 
         # --- Inspect the final conversation history --- #
+        print("\n--- Thread Isolation Demonstration ---")
         if agency.thread_manager:
             # The thread identifier will be "user->UI_Agent" for user interactions with UI_Agent
             thread_id = f"user->{ui_agent.name}"
             thread = agency.thread_manager.get_thread(thread_id)
             if thread:
-                print(f"\n--- Final Conversation History (Thread ID: {thread_id}) ---")
+                print(f"\n--- Primary Conversation Thread (ID: {thread_id}) ---")
+                print("This thread contains only user <-> UI_Agent conversations")
                 history_items = thread.get_history()
                 print(f"Total items in history: {len(history_items)}")
                 for i, item in enumerate(history_items):
                     print(f"Item {i + 1}: {item}")
+
+                # Check if there's also a UI_Agent -> Worker_Agent thread
+                worker_thread_id = f"{ui_agent.name}->{worker_agent.name}"
+                worker_thread = agency.thread_manager.get_thread(worker_thread_id)
+                if worker_thread:
+                    worker_history = worker_thread.get_history()
+                    print(f"\n--- Agent-to-Agent Thread (ID: {worker_thread_id}) ---")
+                    print("This thread contains only UI_Agent <-> Worker_Agent conversations")
+                    print(f"Total items in worker thread: {len(worker_history)}")
+                    print("This demonstrates complete thread isolation between different communication flows")
+                else:
+                    print(f"\nNo separate {worker_thread_id} thread found (may not have been created)")
+
                 print("----------------------------------------------------")
             else:
                 print(f"\nWarning: Chat thread {thread_id} not found.")
@@ -147,4 +178,11 @@ if __name__ == "__main__":
     if not os.getenv("OPENAI_API_KEY"):
         print("Error: OPENAI_API_KEY environment variable not set.")
     else:
+        print("\n=== Agency Swarm v1.x Multi-Agent Communication Demo ===")
+        print("This example demonstrates:")
+        print("• Multi-agent communication flows")
+        print("• Automatic thread isolation using 'sender->recipient' identifiers")
+        print("• Inter-agent tool delegation")
+        print("• No chat_id management required")
+        print("=" * 60)
         asyncio.run(run_conversation())
