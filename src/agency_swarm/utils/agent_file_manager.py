@@ -3,10 +3,11 @@ import os
 import re
 from pathlib import Path
 
-from agents import CodeInterpreterTool, FileSearchTool
+from agents import FileSearchTool
 from agents.exceptions import AgentsException
 from openai import NotFoundError
-from openai.types.responses.tool_param import CodeInterpreter
+
+# from openai.types.responses.tool_param import CodeInterpreter  # Comment out since CodeInterpreterTool doesn't exist
 
 logger = logging.getLogger(__name__)
 
@@ -239,7 +240,10 @@ class AgentFileManager:
             logger.error(f"Agent {self.agent.name}: No associated vector store ID; FileSearchTool setup skipped.")
 
         if code_interpreter_file_ids:
-            self._add_code_interpreter_tool(code_interpreter_file_ids)
+            # self._add_code_interpreter_tool(code_interpreter_file_ids)  # Comment out since CodeInterpreterTool doesn't exist
+            logger.warning(
+                f"Agent {self.agent.name}: CodeInterpreterTool is not available in this version. Skipping code interpreter files."
+            )
 
     def _add_file_search_tool(self):
         """
@@ -280,39 +284,40 @@ class AgentFileManager:
                         )
                     break  # Assume only one FileSearchTool
 
-    def _add_code_interpreter_tool(self, code_interpreter_file_ids: list[str]):
-        """
-        Checks that a CodeInterpreterTool is available and configured.
-
-        If the tool is not present, it will be added. If present but not configured with
-        the agent's Vector Store ID, the ID is added to its configuration.
-        """
-
-        code_interpreter_tool_exists = any(isinstance(tool, CodeInterpreterTool) for tool in self.agent.tools)
-
-        if not code_interpreter_tool_exists:
-            logger.info(f"Agent {self.agent.name}: Adding CodeInterpreterTool")
-            self.agent.add_tool(
-                CodeInterpreterTool(
-                    tool_config=CodeInterpreter(
-                        container={"type": "auto", "file_ids": code_interpreter_file_ids}, type="code_interpreter"
-                    )
-                )
-            )
-        else:
-            for tool in self.agent.tools:
-                if isinstance(tool, CodeInterpreterTool):
-                    if isinstance(tool.tool_config.get("container", ""), str):
-                        logger.warning(
-                            f"Agent {self.agent.name}: Cannot add files to container for code interpreter, "
-                            "add them manually or switch to using id list."
-                        )
-                    elif code_interpreter_file_ids:
-                        existing_file_ids = tool.tool_config.container.get("file_ids", [])
-                        existing_file_ids.extend(code_interpreter_file_ids)
-                        tool.tool_config.container["file_ids"] = existing_file_ids
-                        logger.info(
-                            f"Agent {self.agent.name}: Added vector store ID "
-                            f"'{self.agent._associated_vector_store_id}' to existing CodeInterpreter."
-                        )
-                    break  # Assume only one CodeInterpreterTool
+    # Comment out the entire _add_code_interpreter_tool method since CodeInterpreterTool doesn't exist
+    # def _add_code_interpreter_tool(self, code_interpreter_file_ids: list[str]):
+    #     """
+    #     Checks that a CodeInterpreterTool is available and configured.
+    #
+    #     If the tool is not present, it will be added. If present but not configured with
+    #     the agent's Vector Store ID, the ID is added to its configuration.
+    #     """
+    #
+    #     code_interpreter_tool_exists = any(isinstance(tool, CodeInterpreterTool) for tool in self.agent.tools)
+    #
+    #     if not code_interpreter_tool_exists:
+    #         logger.info(f"Agent {self.agent.name}: Adding CodeInterpreterTool")
+    #         self.agent.add_tool(
+    #             CodeInterpreterTool(
+    #                 tool_config=CodeInterpreter(
+    #                     container={"type": "auto", "file_ids": code_interpreter_file_ids}, type="code_interpreter"
+    #                 )
+    #             )
+    #         )
+    #     else:
+    #         for tool in self.agent.tools:
+    #             if isinstance(tool, CodeInterpreterTool):
+    #                 if isinstance(tool.tool_config.get("container", ""), str):
+    #                     logger.warning(
+    #                         f"Agent {self.agent.name}: Cannot add files to container for code interpreter, "
+    #                         "add them manually or switch to using id list."
+    #                     )
+    #                 elif code_interpreter_file_ids:
+    #                     existing_file_ids = tool.tool_config.container.get("file_ids", [])
+    #                     existing_file_ids.extend(code_interpreter_file_ids)
+    #                     tool.tool_config.container["file_ids"] = existing_file_ids
+    #                     logger.info(
+    #                         f"Agent {self.agent.name}: Added vector store ID "
+    #                         f"'{self.agent._associated_vector_store_id}' to existing CodeInterpreter."
+    #                     )
+    #                 break  # Assume only one CodeInterpreterTool

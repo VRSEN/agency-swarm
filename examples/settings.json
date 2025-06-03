@@ -1,0 +1,36 @@
+[
+    {
+        "id": "asst_nieRgYZFq8sHgrU7crgwkqfV",
+        "created_at": 1748965322,
+        "description": "",
+        "instructions": "Demonstrate FileSearch functionality with needle-in-haystack testing.\n\nYou are a research assistant that can search through confidential research reports.\n            Use the file search tool to find specific information in the documents and provide accurate answers.\n            Only answer based on the information found in the files - do not use general knowledge.",
+        "metadata": {},
+        "model": "gpt-4o",
+        "name": "ResearchAnalysisAgent",
+        "object": "assistant",
+        "tools": [
+            {
+                "type": "file_search",
+                "file_search": {
+                    "max_num_results": null,
+                    "ranking_options": {
+                        "score_threshold": 0.0,
+                        "ranker": "default_2024_08_21"
+                    }
+                }
+            }
+        ],
+        "response_format": "auto",
+        "temperature": 0.3,
+        "tool_resources": {
+            "code_interpreter": null,
+            "file_search": {
+                "vector_store_ids": [
+                    "vs_683f17cb159c8191add876e703894f7b"
+                ]
+            }
+        },
+        "top_p": 1.0,
+        "reasoning_effort": null
+    }
+]
