@@ -948,112 +948,20 @@ class Agent(BaseAgent[MasterContext]):
 
     def _run_item_to_tresponse_input_item(self, item: RunItem) -> TResponseInputItem | None:
         """Converts a RunItem from a RunResult into TResponseInputItem dictionary format for history.
-        Returns None if the item type should not be directly added to history.
+        Uses the SDK's built-in to_input_item() method for proper conversion.
+        Returns None if the item should not be directly added to history.
         """
-        if isinstance(item, MessageOutputItem):
-            content = ItemHelpers.text_message_output(item)
-            logger.debug(f"Converting MessageOutputItem to history: role=assistant, content='{content[:50]}...'")
-            return {"role": "assistant", "content": content}
+        try:
+            # Use the SDK's built-in conversion method instead of manual conversion
+            # This fixes the critical bug where ToolCallOutputItem was incorrectly converted
+            # to assistant messages instead of proper function call output format
+            converted_item = item.to_input_item()
 
-        elif isinstance(item, ToolCallItem):
-            tool_calls = []
-            if hasattr(item, "raw_item"):
-                raw = item.raw_item
-                tool_call_id_for_array = None
-                func_name = None
-                func_args_str = None
+            logger.debug(f"Converting {type(item).__name__} using SDK to_input_item(): {converted_item}")
+            return converted_item
 
-                if isinstance(raw, ResponseFunctionToolCall):
-                    # For /v1/responses API, use call_id for matching tool outputs
-                    tool_call_id_for_array = getattr(raw, "call_id", None)
-                    if tool_call_id_for_array is None:
-                        # Fallback to id only if call_id is not available
-                        tool_call_id_for_array = getattr(raw, "id", None)
-                    func_name = getattr(raw, "name", None)
-                    func_args_raw = getattr(raw, "arguments", None)
-                    if not isinstance(func_args_raw, str):
-                        try:
-                            func_args_str = json.dumps(func_args_raw)
-                        except TypeError as e:
-                            logger.error(f"Could not serialize func_args for {func_name}: {func_args_raw}. Error: {e}")
-                            return None
-                    else:
-                        func_args_str = func_args_raw
-                elif isinstance(raw, ResponseFileSearchToolCall):
-                    tool_call_id_for_array = getattr(raw, "id", None)
-                    func_name = "FileSearch"  # Per agents.FileSearchTool.name
-                    try:
-                        func_args_str = json.dumps(
-                            {
-                                "queries": getattr(raw, "queries", []),
-                                "results": [r.dict() for r in getattr(raw, "results", [])],
-                            }
-                        )
-                    except TypeError as e:
-                        logger.error(
-                            f"Could not serialize queries for FileSearch: {getattr(raw, 'queries', [])}. Error: {e}"
-                        )
-                        return None
-                else:
-                    logger.warning(f"Unhandled raw_item type in ToolCallItem: {type(raw)}")
-                    return None
-
-                if not tool_call_id_for_array or not func_name:
-                    logger.warning(
-                        f"Converting ToolCallItem: Missing id or name. ID: {tool_call_id_for_array}, Name: {func_name}, Raw: {raw}"
-                    )
-                    return None
-
-                tool_calls.append(
-                    {
-                        "id": tool_call_id_for_array,
-                        "type": "function",
-                        "function": {"name": func_name, "arguments": func_args_str},
-                    }
-                )
-            else:
-                logger.warning(f"ToolCallItem has no raw_item. Cannot convert: {item}")
-                return None
-
-            if tool_calls:
-                logger.debug(f"Converted ToolCallItem to assistant message with tool_calls: {tool_calls}")
-                return {"role": "assistant", "content": None, "tool_calls": tool_calls}
-            else:
-                logger.warning("ToolCallItem conversion resulted in no tool_calls.")
-                return None
-
-        elif isinstance(item, ToolCallOutputItem):
-            tool_call_id = None
-            output_content = str(item.output)
-
-            # For /v1/responses API, prioritize call_id for matching tool outputs
-            if hasattr(item, "tool_call_id") and item.tool_call_id:
-                tool_call_id = item.tool_call_id
-            elif isinstance(item.raw_item, ResponseFunctionToolCall):
-                # ResponseFunctionToolCall from /v1/responses has 'call_id' for matching
-                tool_call_id = getattr(item.raw_item, "call_id", None)
-                if tool_call_id is None:  # Fallback only if call_id is not available
-                    tool_call_id = getattr(item.raw_item, "id", None)
-            elif isinstance(item.raw_item, dict) and "call_id" in item.raw_item:
-                tool_call_id = item.raw_item.get("call_id")
-
-            if tool_call_id:
-                logger.debug(
-                    f"Converting ToolCallOutputItem to assistant message: tool_call_id={tool_call_id}, content='{output_content[:50]}...'"
-                )
-                # Convert tool output to assistant message with tool_call_id in content
-                return {
-                    "role": "assistant",
-                    "content": f"Tool output for call {tool_call_id}: {output_content}",
-                }
-            else:
-                logger.warning(
-                    f"Could not determine tool_call_id for ToolCallOutputItem: raw_item={item.raw_item}, item={item}"
-                )
-                return None
-
-        else:
-            logger.debug(f"Skipping RunItem type {type(item).__name__} for thread history saving.")
+        except Exception as e:
+            logger.warning(f"Failed to convert {type(item).__name__} using to_input_item(): {e}")
             return None
 
     def _prepare_master_context(self, context_override: dict[str, Any] | None) -> MasterContext:

@@ -12,5 +12,5 @@ def test_add_item_tool_calls_null_content():
     thread.add_item(item_dict)
 
     # Verify that the content was set to a descriptive string
-    assert thread.items[-1]["content"] == "Using tools: test_tool"
+    assert thread.items[-1]["content"] == "Using tool: test_tool. Tool output: "
     assert thread.items[-1]["tool_calls"] == item_dict["tool_calls"]

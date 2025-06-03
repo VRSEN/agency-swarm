@@ -86,27 +86,47 @@ def test_agent_initialization_with_all_parameters():
     tool1 = MagicMock(spec=FunctionTool)
     tool1.name = "tool1"
 
-    agent = Agent(
-        name="CompleteAgent",
-        instructions="Complete agent with all params",
-        model="gpt-4o-mini",
-        tools=[tool1],
-        response_validator=validator,
-        output_type=TaskOutput,
-        files_folder="./test_files",
-        description="A complete test agent",
-    )
+    # TEST-ONLY SETUP: Create test directory to enable FileSearchTool auto-addition
+    import os
+    import tempfile
+    from pathlib import Path
 
-    assert agent.name == "CompleteAgent"
-    assert agent.instructions == "Complete agent with all params"
-    assert agent.model == "gpt-4o-mini"
-    assert len(agent.tools) == 2
-    assert agent.tools[0] == tool1
-    assert agent.tools[1].__class__.__name__ == "FileSearchTool"
-    assert agent.response_validator == validator
-    assert agent.output_type == TaskOutput
-    assert agent.files_folder.startswith("test_files_vs_")
-    assert agent.description == "A complete test agent"
+    # Create a temporary test directory
+    temp_dir = Path(tempfile.mkdtemp(prefix="test_files_"))
+    test_file = temp_dir / "test.txt"
+    test_file.write_text("test content for FileSearchTool")
+
+    try:
+        agent = Agent(
+            name="CompleteAgent",
+            instructions="Complete agent with all params",
+            model="gpt-4o-mini",
+            tools=[tool1],
+            response_validator=validator,
+            output_type=TaskOutput,
+            files_folder=str(temp_dir),  # Use temporary directory
+            description="A complete test agent",
+        )
+
+        assert agent.name == "CompleteAgent"
+        assert agent.instructions == "Complete agent with all params"
+        assert agent.model == "gpt-4o-mini"
+        assert len(agent.tools) == 2
+        assert agent.tools[0] == tool1
+        assert agent.tools[1].__class__.__name__ == "FileSearchTool"
+        assert agent.response_validator == validator
+        assert agent.output_type == TaskOutput
+        assert str(temp_dir) in str(agent.files_folder)  # Should contain the temp directory path
+        assert agent.description == "A complete test agent"
+
+    finally:
+        # TEST-ONLY CLEANUP: Remove temporary directory
+        import shutil
+
+        try:
+            shutil.rmtree(temp_dir)
+        except Exception as e:
+            pass  # Ignore cleanup errors in tests
 
 
 def test_agent_repr():
