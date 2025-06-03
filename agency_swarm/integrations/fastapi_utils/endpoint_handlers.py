@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 import json
 import os
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -168,7 +169,11 @@ def make_tool_endpoint(tool, verify_token):
         try:
             data = await request.json()
             tool_instance = tool(**data) if isinstance(tool, type) else tool
-            return {"response": tool_instance.run()}
+            if inspect.iscoroutinefunction(tool_instance.run):
+                result = await tool_instance.run()
+            else:
+                result = tool_instance.run()
+            return {"response": result}
         except Exception as e:
             return JSONResponse(status_code=500, content={"Error": str(e)})
     return handler

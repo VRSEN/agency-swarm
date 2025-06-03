@@ -396,7 +396,7 @@ class ToolFactory:
                     # Extract arguments from the model_dump, excluding any internal attributes
                     args = {
                         k: v
-                        for k, v in self.model_dump().items()
+                        for k, v in self.model_dump(exclude_unset=True, by_alias=True).items()
                         if not k.startswith("_") and k != "self"
                     }
 
