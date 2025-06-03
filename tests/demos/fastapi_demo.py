@@ -9,7 +9,7 @@ from agency_swarm.integrations.fastapi import run_fastapi
 
 load_dotenv()
 
-os.environ["app_token"] = "123" # Can be set in .env file
+os.environ["APP_TOKEN"] = "123" # Can be set in .env file
 
 
 class ExampleTool(BaseTool):
