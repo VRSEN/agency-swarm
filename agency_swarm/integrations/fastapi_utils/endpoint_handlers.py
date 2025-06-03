@@ -2,6 +2,7 @@ import asyncio
 import inspect
 import json
 import os
+import threading
 from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Any, Optional
 
@@ -26,6 +27,7 @@ except ImportError:  # pragma: no cover – fallback path
 _n_cpus = os.cpu_count() or 1
 _MAX_WORKERS = max(1, int(os.getenv("STREAM_THREAD_POOL_SIZE", _n_cpus * 4)))
 _EXECUTOR: Optional[ThreadPoolExecutor] = None
+_COMPLETION_LOCK = threading.Lock()  # Global lock for sequential completion processing
 
 def get_executor() -> ThreadPoolExecutor:
     """Get the thread pool executor, ensuring it has been initialized."""
@@ -39,7 +41,7 @@ def get_executor() -> ThreadPoolExecutor:
 def get_verify_token(app_token):
     auto_error = app_token is not None and app_token != ""
     security = HTTPBearer(auto_error=auto_error)
-    async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
         if app_token is None or app_token == "":
             return None
         if not credentials or credentials.credentials != app_token:
@@ -49,12 +51,15 @@ def get_verify_token(app_token):
 
 # Non‑streaming completion endpoint
 def make_completion_endpoint(request_model, current_agency, verify_token):
-    async def handler(request: request_model, token: str = Depends(verify_token)):
-        def call_completion() -> Any:
+    def handler(request: request_model, token: str = Depends(verify_token)):
+        # Use lock to ensure sequential processing
+        with _COMPLETION_LOCK:
+            # Run completion sequentially instead of in a separate thread
             if request.threads:
                 current_thread = get_threads(current_agency)
                 if current_thread != request.threads:
                     override_threads(current_agency, request.threads)
+            
             response = current_agency.get_completion(
                 request.message,
                 message_files=request.message_files,
@@ -65,10 +70,8 @@ def make_completion_endpoint(request_model, current_agency, verify_token):
                 verbose=getattr(request, "verbose", False),
                 response_format=request.response_format,
             )
-            return response
-
-        response = await anyio.to_thread.run_sync(call_completion, cancellable=True)
-        return {"response": response, "threads": get_threads(current_agency)}
+            
+            return {"response": response, "threads": get_threads(current_agency)}
 
     return handler
 
@@ -105,20 +108,22 @@ def make_stream_endpoint(request_model, current_agency, verify_token):
 
         def run_completion() -> None:
             try:
-                if request.threads:
-                    current_thread = get_threads(current_agency)
-                    if current_thread != request.threads:
-                        override_threads(current_agency, request.threads)
-                current_agency.get_completion_stream(
-                    request.message,
-                    message_files=request.message_files,
-                    recipient_agent=request.recipient_agent,
-                    additional_instructions=request.additional_instructions,
-                    attachments=request.attachments,
-                    tool_choice=request.tool_choice,
-                    response_format=request.response_format,
-                    event_handler=StreamEventHandler,
-                )
+                # Use lock to ensure sequential processing for streaming
+                with _COMPLETION_LOCK:
+                    if request.threads:
+                        current_thread = get_threads(current_agency)
+                        if current_thread != request.threads:
+                            override_threads(current_agency, request.threads)
+                    current_agency.get_completion_stream(
+                        request.message,
+                        message_files=request.message_files,
+                        recipient_agent=request.recipient_agent,
+                        additional_instructions=request.additional_instructions,
+                        attachments=request.attachments,
+                        tool_choice=request.tool_choice,
+                        response_format=request.response_format,
+                        event_handler=StreamEventHandler,
+                    )
             except Exception as exc:
                 _threadsafe_send({"error": str(exc)})
                 raise

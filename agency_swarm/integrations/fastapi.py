@@ -135,10 +135,11 @@ def run_fastapi(
 
     app.add_exception_handler(Exception, exception_handler)
 
+    print("Created endpoints:\n" + "\n".join(endpoints))
+
     if return_app:
         return app
 
     print(f"Starting FastAPI server at http://{host}:{port}")
-    print("Created endpoints:\n" + "\n".join(endpoints))
     
     uvicorn.run(app, host=host, port=port)
