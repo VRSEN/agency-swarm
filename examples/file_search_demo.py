@@ -4,6 +4,8 @@ FileSearch Demo - Agency Swarm v1.x
 
 This example demonstrates how to use the FileSearch tool with Agency Swarm.
 The agent automatically creates a vector store and indexes files for search.
+
+Uses real files from examples/data to demonstrate production-like usage.
 """
 
 import asyncio
@@ -17,7 +19,7 @@ from agency_swarm import Agency, Agent
 
 
 async def main():
-    """Demonstrate FileSearch functionality."""
+    """Demonstrate FileSearch functionality using real data files."""
 
     if not os.getenv("OPENAI_API_KEY"):
         print("❌ Error: OPENAI_API_KEY environment variable not set.")
@@ -26,27 +28,20 @@ async def main():
     print("🚀 Agency Swarm FileSearch Demo")
     print("=" * 40)
 
-    # Create a temporary directory with a test file
-    demo_dir = Path("data")
-    demo_dir.mkdir(exist_ok=True)  # Use existing examples/data directory
+    # Use existing data files - this is more production-like
+    data_dir = Path(__file__).parent / "data"
 
-    # Create a sample text file with book information
-    books_file = demo_dir / "demo_books.txt"
-    with open(books_file, "w") as f:
-        f.write("""1. To Kill a Mockingbird – Harper Lee
-2. Pride and Prejudice – Jane Austen
-3. 1984 – George Orwell
-4. The Hobbit – J.R.R. Tolkien
-5. Harry Potter and the Sorcerer's Stone – J.K. Rowling
-6. The Great Gatsby – F. Scott Fitzgerald
-7. Charlotte's Web – E.B. White
-8. Anne of Green Gables – Lucy Maud Montgomery
-9. The Alchemist – Paulo Coelho
-10. Little Women – Louisa May Alcott""")
+    # Verify the required files exist
+    books_file = data_dir / "favorite_books.txt"
+    if not books_file.exists():
+        print(f"❌ Error: Required file not found: {books_file}")
+        print("   Run: python create_example_images.py first to set up example data")
+        return
+
+    print(f"📁 Using existing data files from: {data_dir}")
+    print(f"📖 Books file: {books_file}")
 
     try:
-        print(f"📁 Created demo files in: {demo_dir}")
-
         # Create an agent with FileSearch capability
         # The agent will automatically create a vector store and add FileSearchTool
         search_agent = Agent(
@@ -54,7 +49,7 @@ async def main():
             instructions="""You are a helpful assistant that can search through uploaded files.
             Use the file search tool to find information in the documents and provide accurate answers.""",
             model_settings=ModelSettings(temperature=0.0),
-            files_folder=demo_dir,  # This triggers automatic FileSearch setup
+            files_folder=data_dir,  # Use real data directory
         )
 
         print(f"🤖 Created agent: {search_agent.name}")
@@ -64,9 +59,23 @@ async def main():
         # Create agency
         agency = Agency(search_agent)
 
-        # Wait a moment for vector store processing
-        print("⏳ Waiting for file indexing...")
-        await asyncio.sleep(3)
+        # Wait for vector store processing (production-like approach)
+        if search_agent._associated_vector_store_id:
+            print("⏳ Waiting for vector store processing...")
+            from openai import OpenAI
+
+            client = OpenAI()
+
+            for i in range(30):  # Wait up to 30 seconds
+                vs = client.vector_stores.retrieve(search_agent._associated_vector_store_id)
+                if vs.status == "completed":
+                    print(f"✅ Vector store processing completed after {i + 1} seconds")
+                    break
+                elif vs.status == "failed":
+                    raise Exception(f"Vector store processing failed: {vs}")
+                await asyncio.sleep(1)
+            else:
+                print(f"⚠️  Vector store still processing after 30 seconds, continuing anyway...")
 
         # Test questions
         questions = [
@@ -107,25 +116,20 @@ async def main():
         print("   • Agent automatically created vector store from files_folder")
         print("   • FileSearchTool was added automatically")
         print("   • Agent can search through uploaded files")
+        print("   • Uses real data files like production environment")
         print("   • No custom tools needed - everything is automatic")
 
     finally:
-        # Cleanup
+        # Cleanup vector store folder (production-like cleanup)
         try:
-            # Find and clean up the vector store folder
-            parent = demo_dir.parent
-            base_name = demo_dir.name
+            parent = data_dir.parent
+            base_name = data_dir.name
             vs_folders = list(parent.glob(f"{base_name}_vs_*"))
 
             for vs_folder in vs_folders:
                 if vs_folder.is_dir():
-                    print(f"🧹 Cleaning up: {vs_folder}")
+                    print(f"🧹 Cleaning up vector store: {vs_folder.name}")
                     shutil.rmtree(vs_folder, ignore_errors=True)
-
-            # Remove the demo file
-            if books_file.exists():
-                books_file.unlink()
-                print(f"🧹 Cleaned up demo file: {books_file}")
 
         except Exception as e:
             print(f"Warning: Cleanup error: {e}")
