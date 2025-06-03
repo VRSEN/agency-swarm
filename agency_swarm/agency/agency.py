@@ -1147,9 +1147,16 @@ class Agency:
                 logger.info(f"Shutting down MCP server: {server.name}")
                 server.cleanup()
 
-    def run_fastapi(self, host: str = "0.0.0.0", port: int = 8000, app_token_env: str = "APP_TOKEN"):
+    def run_fastapi(
+            self, 
+            host: str = "0.0.0.0", 
+            port: int = 8000, 
+            app_token_env: str = "APP_TOKEN", 
+            return_app: bool = False
+        ):
         """
-        Launch a FastAPI server exposing the agency's completion and streaming endpoints using the shared integrations.fastapi.run_fastapi utility.
+        Launch a FastAPI server exposing the agency's completion and 
+        streaming endpoints using the shared integrations.fastapi.run_fastapi utility.
         """
         from agency_swarm.integrations.fastapi import run_fastapi
-        run_fastapi(agencies=[self], host=host, port=port, app_token_env=app_token_env)
+        return run_fastapi(agencies=[self], host=host, port=port, app_token_env=app_token_env, return_app=return_app)
