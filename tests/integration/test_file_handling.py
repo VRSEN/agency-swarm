@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import os
 import shutil
@@ -219,6 +220,21 @@ async def test_file_search_tool(real_openai_client: AsyncOpenAI, tmp_path: Path)
             folder_path = ""
 
         assert folder_path != "", "No vector store folder found"
+
+        # Wait for vector store processing to complete
+        vector_store_id = file_search_agent._associated_vector_store_id
+        if vector_store_id:
+            print(f"Waiting for vector store {vector_store_id} to complete processing...")
+            for i in range(30):  # Wait up to 30 seconds
+                vs = await real_openai_client.vector_stores.retrieve(vector_store_id)
+                if vs.status == "completed":
+                    print(f"Vector store processing completed after {i + 1} seconds")
+                    break
+                elif vs.status == "failed":
+                    raise Exception(f"Vector store processing failed: {vs}")
+                await asyncio.sleep(1)
+            else:
+                print(f"Warning: Vector store still processing after 30 seconds, status: {vs.status}")
 
         # Initialize agency for the agent
         agency = Agency(file_search_agent, user_context=None)

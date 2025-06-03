@@ -42,47 +42,65 @@ class ConversationThread:
 
         Args:
             item_dict (TResponseInputItem): The pre-processed message item dictionary to add.
-                                         Must contain at least a 'role' key.
+                                         Must be a valid TResponseInputItem structure.
         """
-        if not isinstance(item_dict, dict) or "role" not in item_dict:
-            logger.warning(f"THREAD_ADD_ITEM: Attempted to add invalid item: {item_dict}. Expected dict with 'role'.")
+        if not isinstance(item_dict, dict):
+            logger.warning(f"THREAD_ADD_ITEM: Attempted to add invalid item: {item_dict}. Expected dict.")
             return
 
         # Create a copy to avoid modifying the original
         item_dict = item_dict.copy()
 
+        # Check if this is a message-type item (has 'role') or a tool call item (has 'type')
         role = item_dict.get("role")
-        content = item_dict.get("content")
-        tool_calls = item_dict.get("tool_calls")
+        item_type = item_dict.get("type")
 
-        # Special handling for assistant messages with tool calls
-        if role == "assistant" and tool_calls:
-            if content is None:
-                # For messages with tool calls, we need a non-null content for streaming
-                # Convert tool calls to a descriptive string
-                tool_descriptions = []
-                content_str = ""
-                for tc in tool_calls:
-                    if isinstance(tc, dict):
-                        func_name = tc.get("function", {}).get("name", "unknown")
-                        tool_descriptions.append(f"{func_name}")
-                        content_str = (
-                            f"Using tool: {func_name}. Tool output: {tc.get('function', {}).get('arguments', '')}"
-                        )
-                item_dict["content"] = content_str
-                logger.debug(
-                    f"THREAD_ADD_ITEM: Converted tool calls to content string for streaming compatibility in thread {self.thread_id}"
-                )
-        # Normal content normalization for other cases
-        elif content is None:
-            if role in ("user", "tool", "assistant"):
-                item_dict["content"] = ""
-                logger.debug(
-                    f"THREAD_ADD_ITEM: Normalized content from None to empty string for role '{role}' in thread {self.thread_id}"
-                )
+        # Tool call items (like file_search_call, function_call, etc.) don't have 'role'
+        # but have 'type' field instead. These are valid TResponseInputItem types.
+        if role is None and item_type is None:
+            logger.warning(f"THREAD_ADD_ITEM: Item has neither 'role' nor 'type' field: {item_dict}")
+            return
+
+        # Only process content normalization for message-type items (those with 'role')
+        if role is not None:
+            content = item_dict.get("content")
+            tool_calls = item_dict.get("tool_calls")
+
+            # Special handling for assistant messages with tool calls
+            if role == "assistant" and tool_calls:
+                if content is None:
+                    # For messages with tool calls, we need a non-null content for streaming
+                    # Convert tool calls to a descriptive string
+                    tool_descriptions = []
+                    content_str = ""
+                    for tc in tool_calls:
+                        if isinstance(tc, dict):
+                            func_name = tc.get("function", {}).get("name", "unknown")
+                            tool_descriptions.append(f"{func_name}")
+                            content_str = (
+                                f"Using tool: {func_name}. Tool output: {tc.get('function', {}).get('arguments', '')}"
+                            )
+                    item_dict["content"] = content_str
+                    logger.debug(
+                        f"THREAD_ADD_ITEM: Converted tool calls to content string for streaming compatibility in thread {self.thread_id}"
+                    )
+            # Normal content normalization for other cases
+            elif content is None:
+                if role in ("user", "tool", "assistant"):
+                    item_dict["content"] = ""
+                    logger.debug(
+                        f"THREAD_ADD_ITEM: Normalized content from None to empty string for role '{role}' in thread {self.thread_id}"
+                    )
 
         self.items.append(item_dict)
-        logger.debug(f"Added item with role '{item_dict.get('role')}' to thread {self.thread_id}")
+
+        # Log different information based on item type
+        if role is not None:
+            logger.debug(f"Added message item with role '{role}' to thread {self.thread_id}")
+        elif item_type is not None:
+            logger.debug(f"Added tool call item with type '{item_type}' to thread {self.thread_id}")
+        else:
+            logger.debug(f"Added item to thread {self.thread_id}")
 
     def add_items(self, items: Sequence[TResponseInputItem]) -> None:
         """Appends multiple pre-processed message item dictionaries to the thread history.
