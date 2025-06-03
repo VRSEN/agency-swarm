@@ -27,11 +27,11 @@ async def main():
     print("=" * 40)
 
     # Create a temporary directory with a test file
-    demo_dir = Path("examples/data/demo_files")
-    demo_dir.mkdir(exist_ok=True, parents=True)  # Create parent directories too
+    demo_dir = Path("data")
+    demo_dir.mkdir(exist_ok=True)  # Use existing examples/data directory
 
     # Create a sample text file with book information
-    books_file = demo_dir / "favorite_books.txt"
+    books_file = demo_dir / "demo_books.txt"
     with open(books_file, "w") as f:
         f.write("""1. To Kill a Mockingbird – Harper Lee
 2. Pride and Prejudice – Jane Austen
@@ -122,10 +122,10 @@ async def main():
                     print(f"🧹 Cleaning up: {vs_folder}")
                     shutil.rmtree(vs_folder, ignore_errors=True)
 
-            # Remove the demo directory
-            if demo_dir.exists():
-                shutil.rmtree(demo_dir, ignore_errors=True)
-                print(f"🧹 Cleaned up demo directory: {demo_dir}")
+            # Remove the demo file
+            if books_file.exists():
+                books_file.unlink()
+                print(f"🧹 Cleaned up demo file: {books_file}")
 
         except Exception as e:
             print(f"Warning: Cleanup error: {e}")
