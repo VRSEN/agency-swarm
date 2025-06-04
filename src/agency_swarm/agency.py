@@ -398,7 +398,7 @@ class Agency:
     async def get_response(
         self,
         message: str | list[dict[str, Any]],
-        recipient_agent: str | Agent,
+        recipient_agent: str | Agent | None = None,
         context_override: dict[str, Any] | None = None,
         hooks_override: RunHooks | None = None,
         run_config: RunConfig | None = None,
@@ -415,7 +415,8 @@ class Agency:
 
         Args:
             message (str | list[dict[str, Any]]): The input message for the agent.
-            recipient_agent (str | Agent): The target agent instance or its name.
+            recipient_agent (str | Agent | None, optional): The target agent instance or its name.
+                                                           If None, defaults to the first entry point agent.
             context_override (dict[str, Any] | None, optional): Additional context to pass to the agent run.
             hooks_override (RunHooks | None, optional): Specific hooks to use for this run, overriding
                                                        agency-level persistence hooks.
@@ -430,11 +431,24 @@ class Agency:
 
         Raises:
             ValueError: If the specified `recipient_agent` name is not found or the instance
-                        is not part of this agency.
+                        is not part of this agency, or if no recipient_agent is specified and
+                        no entry points are available.
             TypeError: If `recipient_agent` is not a string or an `Agent` instance.
             AgentsException: If errors occur during the underlying agent execution.
         """
-        target_agent = self._resolve_agent(recipient_agent)
+        # Determine recipient agent - default to first entry point if not specified
+        target_recipient = recipient_agent
+        if target_recipient is None:
+            if self.entry_points:
+                target_recipient = self.entry_points[0]
+                logger.info(f"No recipient_agent specified, using first entry point: {target_recipient.name}")
+            else:
+                raise ValueError(
+                    "No recipient_agent specified and no entry points available. "
+                    "Specify recipient_agent or ensure agency has entry points."
+                )
+
+        target_agent = self._resolve_agent(target_recipient)
         if not self.entry_points:
             logger.warning("Agency has no designated entry points. Allowing call to any agent.")
         elif target_agent not in self.entry_points:
@@ -457,7 +471,7 @@ class Agency:
     async def get_response_stream(
         self,
         message: str | list[dict[str, Any]],
-        recipient_agent: str | Agent,
+        recipient_agent: str | Agent | None = None,
         context_override: dict[str, Any] | None = None,
         hooks_override: RunHooks | None = None,
         run_config_override: RunConfig | None = None,
@@ -473,7 +487,8 @@ class Agency:
 
         Args:
             message (str | list[dict[str, Any]]): The input message for the agent.
-            recipient_agent (str | Agent): The target agent instance or its name.
+            recipient_agent (str | Agent | None, optional): The target agent instance or its name.
+                                                           If None, defaults to the first entry point agent.
             context_override (dict[str, Any] | None, optional): Additional context for the run.
             hooks_override (RunHooks | None, optional): Specific hooks for this run.
             run_config_override (RunConfig | None, optional): Specific run configuration for this run.
@@ -485,11 +500,26 @@ class Agency:
             Any: Events from the `agents.Runner.run_streamed` execution.
 
         Raises:
-            ValueError: If the specified `recipient_agent` is not found.
+            ValueError: If the specified `recipient_agent` is not found, or if no recipient_agent
+                        is specified and no entry points are available.
             TypeError: If `recipient_agent` is not a string or `Agent` instance.
             AgentsException: If errors occur during setup or execution.
         """
-        target_agent = self._resolve_agent(recipient_agent)
+        # Determine recipient agent - default to first entry point if not specified
+        target_recipient = recipient_agent
+        if target_recipient is None:
+            if self.entry_points:
+                target_recipient = self.entry_points[0]
+                logger.info(
+                    f"No recipient_agent specified for stream, using first entry point: {target_recipient.name}"
+                )
+            else:
+                raise ValueError(
+                    "No recipient_agent specified and no entry points available. "
+                    "Specify recipient_agent or ensure agency has entry points."
+                )
+
+        target_agent = self._resolve_agent(target_recipient)
         if not self.entry_points:
             logger.warning("Agency has no designated entry points. Allowing stream call to any agent.")
         elif target_agent not in self.entry_points:
