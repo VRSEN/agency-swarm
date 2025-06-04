@@ -135,19 +135,19 @@ Follow this folder structure when further creating or modifying any files.
 
 Tools are the specific actions that agents can perform. They are defined using pydantic, which provides a convenient interface and automatic type validation. To create a tool:
 
-1. Import Necessary Modules  
+1. Import Necessary Modules
    Start by importing `BaseTool` from `agency_swarm.tools` and `Field` from `pydantic`. These imports will serve as the foundation for your custom tool class. Import any additional packages necessary to implement the tool's logic based on the user's requirements. Import `load_dotenv` from `dotenv` to load the environment variables.
 
-2. Define Your Tool Class and Docstring  
+2. Define Your Tool Class and Docstring
    Create a new class that inherits from `BaseTool`. Write a clear docstring describing the tool's purpose. This docstring is crucial as it helps agents understand how to use the tool. `BaseTool` extends `BaseModel` from pydantic.
 
-3. Specify Tool Fields  
+3. Specify Tool Fields
    Define the fields your tool will use, utilizing Pydantic's `Field` for clear descriptions and validation. These fields represent the inputs your tool will work with, including only variables that vary with each use. Define any constant variables globally.
 
-4. Implement the `run` Method  
+4. Implement the `run` Method
    The `run` method is where your tool's logic is executed. Use the fields defined earlier to perform the tool's intended task. It must contain the actual fully functional correct python code. It can utilize various python packages, previously imported in step 1.
 
-5. Test the Tool  
+5. Test the Tool
    Add a test case at the bottom of the file in if **name** == "**main**": block. It will be used to test the tool later.
 
 ### Best Practices
@@ -234,7 +234,7 @@ filesystem_server = MCPServerStdio(
     name="Filesystem_Server",
     params={
         "command": "npx",
-        "args": ["-y", "@modelcontextprotocol/server-filesystem", "."], 
+        "args": ["-y", "@modelcontextprotocol/server-filesystem", "."],
     },
     cache_tools_list=True
 )

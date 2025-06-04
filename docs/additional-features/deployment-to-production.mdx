@@ -34,7 +34,9 @@ Callbacks are functions that are called by the framework automatically when Agen
 
 Example persistence callbacks in a FastAPI application:
 
-**Agency Swarm v1.x (Current):**
+<Tabs>
+<Tab title="v1.x (Current)" defaultOpen={true}>
+
 ```python
 from fastapi import FastAPI, Request
 from agency_swarm import Agency
@@ -62,7 +64,9 @@ async def handle_chat(chat_id: str, message: str):
     return {"response": response.final_output}
 ```
 
-**Agency Swarm v0.x (Legacy):**
+</Tab>
+<Tab title="v0.x (Legacy)">
+
 ```python
 @app.post("/chat/{chat_id}")
 async def handle_chat(chat_id: str, message: str):
@@ -77,6 +81,9 @@ async def handle_chat(chat_id: str, message: str):
     response = await agency.get_response(message, recipient_agent="CEO")
     return {"response": response.final_output}
 ```
+
+</Tab>
+</Tabs>
 
 <Warning>
 **v1.x Change:** The old `threads_callbacks` parameter is deprecated. Use `load_threads_callback` and `save_threads_callback` instead for better clarity and functionality.
@@ -98,7 +105,8 @@ Settings is a list of dictionaries that contains settings of all agents. If a ch
 **Note:** Agent settings persistence via `settings_callbacks` is deprecated in v1.x. Agent configurations should be managed through code and version control rather than dynamic persistence. This approach provides better reliability and deployment consistency.
 </Warning>
 
-**Legacy v0.x approach (Deprecated):**
+<Tabs>
+<Tab title="v0.x (Legacy)" defaultOpen={true}>
 
 ```python
 def load_settings(user_id):
@@ -118,6 +126,28 @@ agency = Agency(
     },
 )
 ```
+
+</Tab>
+<Tab title="v1.x (Current)">
+
+Agent settings persistence is deprecated in v1.x. Agent configurations should be managed through code and version control rather than dynamic persistence.
+
+```python
+# v1.x approach: Define agents with fixed configurations
+from agency_swarm import Agent, Agency
+
+ceo = Agent(
+    name="CEO",
+    description="Chief Executive Officer",
+    instructions="Your fixed instructions here...",
+    model="gpt-4o"
+)
+
+agency = Agency([ceo])
+```
+
+</Tab>
+</Tabs>
 
 <Note>
 Make sure you load and return settings and threads in the exact same format as they are saved.

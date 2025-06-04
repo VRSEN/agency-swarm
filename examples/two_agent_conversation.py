@@ -2,7 +2,6 @@ import asyncio
 import logging
 import os
 import sys
-import uuid
 
 from agents import function_tool
 

@@ -1,4 +1,4 @@
-CONFIDENTIAL RESEARCH REPORTS - Q3 2024
+FICTIONAL RESEARCH REPORTS - Q3 2024 (DEMO DATA)
 
 ==============================================
 PROJECT CODENAME: AZURE FALCON
@@ -80,5 +80,5 @@ END OF REPORT
 ==============================================
 
 Report Generated: September 28, 2024
-Classification: CONFIDENTIAL
+Classification: FICTIONAL DEMO DATA
 Document ID: AF-Q3-2024-FINAL

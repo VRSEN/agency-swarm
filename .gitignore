@@ -170,3 +170,9 @@ tasks/
 /.cursor/rules/
 /scripts/
 /references/
+
+# Vector store directories (contain environment-specific OpenAI IDs)
+*_vs_*/
+
+# Temporary file_search directories
+file_search_*/

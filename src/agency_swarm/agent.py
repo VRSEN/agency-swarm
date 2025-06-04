@@ -1026,9 +1026,33 @@ class Agent(BaseAgent[MasterContext]):
         self._thread_manager = manager
 
     def _set_agency_instance(self, agency: Any):
-        """Allows the Agency to inject a reference to itself and its agent map."""
+        """Allows the Agency to inject a reference to itself and its agent map.
+
+        Prevents agent instance sharing between agencies to avoid callback and ThreadManager conflicts.
+        """
         if not hasattr(agency, "agents"):
             raise TypeError("Provided agency instance must have an 'agents' dictionary.")
+
+        # Check if agent is already owned by a different agency
+        if hasattr(self, "_agency_instance") and self._agency_instance is not None:
+            if self._agency_instance is not agency:
+                agency_name = getattr(agency, "name", "unnamed")
+                existing_agency_name = getattr(self._agency_instance, "name", "unnamed")
+                raise ValueError(
+                    f"Agent '{self.name}' is already registered in agency '{existing_agency_name}'. "
+                    f"Each agent instance can only belong to one agency to prevent callback conflicts. "
+                    f"To use the same agent logic in multiple agencies, create separate agent instances:\n"
+                    f"  agent1 = Agent(name='{self.name}', instructions='...', ...)\n"
+                    f"  agent2 = Agent(name='{self.name}', instructions='...', ...)\n"
+                    f"Then use agent1 in one agency and agent2 in another."
+                )
+            # Agent is already registered in this agency, allow re-configuration
+            agency_name = getattr(agency, "name", "unnamed")
+            logger.debug(
+                f"Agent '{self.name}' already registered in agency '{agency_name}', skipping duplicate registration."
+            )
+            return
+
         self._agency_instance = agency
 
     def _set_persistence_callbacks(

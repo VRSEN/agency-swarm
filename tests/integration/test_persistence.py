@@ -159,14 +159,18 @@ async def test_persistence_callbacks_called(temp_persistence_dir, persistence_ag
 
     # Turn 2
     print(f"\n--- Callback Test Turn 2 (Thread: {expected_thread_id}) --- MSG: {message2}")
-    # Use a new agency instance to ensure loading happens via the callback
+    # Create a separate agent instance for the second agency to avoid sharing conflicts
+    persistence_agent2 = PersistenceTestAgent(
+        name="PersistenceTester",
+        instructions="Remember the secret code word I tell you. In the next turn, repeat the code word.",
+    )
     agency2 = Agency(
-        agency_chart=[persistence_agent],
+        agency_chart=[persistence_agent2],
         load_threads_callback=actual_load_cb,
         save_threads_callback=actual_save_cb,
     )
 
-    await agency2.get_response(message=message2, recipient_agent=persistence_agent.name)
+    await agency2.get_response(message=message2, recipient_agent=persistence_agent2.name)
 
     # Verify file still exists (implicitly means save likely worked again)
     assert thread_file.exists(), f"File {thread_file} should still exist after second run."
@@ -225,7 +229,12 @@ async def test_persistence_loads_history(file_persistence_callbacks, persistence
 
     # Agency Instance 2 - Turn 2
     print("\n--- History Test Instance 2 - Turn 2 --- Creating Agency 2")
-    agency2 = Agency(agency_chart=[persistence_agent], load_threads_callback=load_cb, save_threads_callback=save_cb)
+    # Create a separate agent instance for the second agency to avoid sharing conflicts
+    persistence_agent2 = PersistenceTestAgent(
+        name="PersistenceTester",
+        instructions="Remember the secret code word I tell you. In the next turn, repeat the code word.",
+    )
+    agency2 = Agency(agency_chart=[persistence_agent2], load_threads_callback=load_cb, save_threads_callback=save_cb)
     print(f"--- History Test Instance 2 - Turn 2 (Thread: {expected_thread_id}) --- MSG: {message2_content}")
     await agency2.get_response(message=message2_content, recipient_agent="PersistenceTester")
 
@@ -281,9 +290,13 @@ async def test_persistence_load_error(temp_persistence_dir, persistence_agent):
 
     # Agency Instance 2 - Turn 2 (Error on load)
     print("\n--- Load Error Test Instance 2 - Turn 2 --- Creating Agency 2 (with error load)")
-
+    # Create a separate agent instance for the second agency to avoid sharing conflicts
+    persistence_agent2 = PersistenceTestAgent(
+        name="PersistenceTester",
+        instructions="Remember the secret code word I tell you. In the next turn, repeat the code word.",
+    )
     agency2 = Agency(
-        agency_chart=[persistence_agent],
+        agency_chart=[persistence_agent2],
         load_threads_callback=actual_load_cb_error,
         save_threads_callback=actual_save_cb,
     )
@@ -404,8 +417,17 @@ async def test_persistence_thread_isolation(file_persistence_callbacks, persiste
 
     # Turn 2 for user->PersistenceTester thread (using a new agency instance to force loading)
     print(f"--- Isolation Test - Turn 2 (Thread: {user_to_tester_thread_id}) --- MSG: {message_1b}")
+    # Create separate agent instances for the second agency to avoid sharing conflicts
+    persistence_agent2 = PersistenceTestAgent(
+        name="PersistenceTester",
+        instructions="Remember the secret code word I tell you. In the next turn, repeat the code word.",
+    )
+    second_agent2 = PersistenceTestAgent(
+        name="SecondAgent",
+        instructions="You are a secondary agent for testing thread isolation.",
+    )
     agency_reloaded = Agency(
-        agency_chart=[persistence_agent, [persistence_agent, second_agent]],
+        agency_chart=[persistence_agent2, [persistence_agent2, second_agent2]],
         load_threads_callback=load_cb,
         save_threads_callback=save_cb,
     )
@@ -469,7 +491,12 @@ async def test_no_persistence_no_callbacks(persistence_agent, temp_persistence_d
 
     # Agency Instance 2 - Turn 2 (No callbacks)
     print("\n--- No Persistence Test - Instance 2 - Turn 2 --- Creating Agency 2")
-    agency2 = Agency(agency_chart=[persistence_agent], load_threads_callback=None, save_threads_callback=None)
+    # Create a separate agent instance for the second agency to avoid sharing conflicts
+    persistence_agent2 = PersistenceTestAgent(
+        name="PersistenceTester",
+        instructions="Remember the secret code word I tell you. In the next turn, repeat the code word.",
+    )
+    agency2 = Agency(agency_chart=[persistence_agent2], load_threads_callback=None, save_threads_callback=None)
     print(f"--- No Persistence Test - Instance 2 - Turn 2 (Thread: {expected_thread_id}) --- MSG: {message2}")
     await agency2.get_response(message=message2, recipient_agent="PersistenceTester")
 
