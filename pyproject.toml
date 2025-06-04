@@ -48,23 +48,15 @@ voice = ["numpy>=2.2.0, <3; python_version>='3.10'", "websockets>=15.0, <16"]
 viz = ["graphviz>=0.17"]
 litellm = ["litellm>=1.65.0, <2"]
 
-[dependency-groups]
-dev = [
-    "mypy",
-    "ruff==0.9.2",
-    "pytest",
-    "pytest-asyncio",
-    "pytest-mock>=3.14.0",
-    "rich>=13.1.0, <14",
-    "coverage>=7.6.12",
-    "pynput",
-    "types-pynput",
-    "Pillow>=10.0.0",
-]
-
 [tool.uv]
 dev-dependencies = [
+    "coverage>=7.8.2",
+    "mypy>=1.16.0",
     "pre-commit>=4.2.0",
+    "pytest>=8.4.0",
+    "pytest-asyncio>=1.0.0",
+    "pytest-mock>=3.14.1",
+    "ruff>=0.11.12",
 ]
 
 [tool.uv.workspace]
