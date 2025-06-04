@@ -4,7 +4,7 @@ Modern File Handling & Vision Example
 
 This example demonstrates Agency Swarm's built-in capabilities for:
 1. PDF file attachment processing (OpenAI automatically extracts content)
-2. Image vision analysis using input_image format
+2. Image vision analysis using fresh agent instances (avoids caching issues)
 3. No custom tools required - OpenAI handles everything automatically
 """
 
@@ -58,7 +58,7 @@ async def main():
 
         print(f"📤 Uploaded: {pdf_path.name}")
 
-        # Analyze the PDF
+        # Analyze the PDF using agency (file uploads work correctly through agency)
         response = await agency.get_response(
             recipient_agent=agent,
             message="Please analyze the attached PDF and summarize the key financial metrics.",
@@ -84,8 +84,20 @@ async def main():
 
         print(f"🖼️  Analyzing: {shapes_path.name}")
 
-        # Create vision message
-        vision_message = [
+        # Create fresh vision agent to avoid SDK state persistence issues
+        vision_agent = Agent(
+            name="VisionAgent1",
+            instructions="""You are an expert vision AI that can analyze images accurately.
+            When images are provided, examine them carefully and answer questions about their content.
+            Be precise and specific in your descriptions.""",
+            model_settings=ModelSettings(temperature=0.0),
+        )
+
+        # Initialize agency for the fresh agent (matches working test pattern)
+        Agency(vision_agent, user_context=None)
+
+        # Create vision message - exact format from working integration test
+        message_with_image = [
             {
                 "role": "user",
                 "content": [
@@ -99,7 +111,8 @@ async def main():
             {"role": "user", "content": "What shapes and text do you see in this image?"},
         ]
 
-        response = await agency.get_response(recipient_agent=agent, message=vision_message)
+        # Call agent directly for vision (matches working test pattern)
+        response = await vision_agent.get_response(message_with_image)
 
         print(f"🤖 Vision: {response.final_output}")
 
@@ -145,8 +158,20 @@ async def main():
 
         print(f"🖼️  Analyzing: {scene_path.name}")
 
-        # Create scene analysis message
-        scene_message = [
+        # Create another fresh vision agent to avoid SDK state issues
+        scene_agent = Agent(
+            name="SceneAgent",
+            instructions="""You are an expert vision AI that can analyze images accurately.
+            When images are provided, examine them carefully and answer questions about their content.
+            Be precise and specific in your descriptions.""",
+            model_settings=ModelSettings(temperature=0.0),
+        )
+
+        # Initialize agency for the fresh agent
+        Agency(scene_agent, user_context=None)
+
+        # Create scene analysis message - exact format from working integration test
+        message_with_scene = [
             {
                 "role": "user",
                 "content": [
@@ -160,7 +185,8 @@ async def main():
             {"role": "user", "content": "Describe this scene. How many trees do you see?"},
         ]
 
-        response = await agency.get_response(recipient_agent=agent, message=scene_message)
+        # Call agent directly for vision
+        response = await scene_agent.get_response(message_with_scene)
 
         print(f"🤖 Scene: {response.final_output}")
 
@@ -196,8 +222,9 @@ async def main():
 
     print("\n✅ Demo Complete!")
     print("\n💡 Key Takeaways:")
-    print("   • File attachments work with file_ids parameter")
-    print("   • Vision uses input_image type with base64 images")
+    print("   • File attachments work with file_ids parameter through agency")
+    print("   • Vision requires fresh agent instances to avoid SDK caching issues")
+    print("   • Use exact format from integration tests for reliable vision processing")
     print("   • No custom tools needed - OpenAI handles everything")
     print("   • Use temperature=0 for consistent results")
 
