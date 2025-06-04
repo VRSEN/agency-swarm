@@ -105,7 +105,7 @@ async def test_get_response_integrates_validation_pass(mock_thread_manager, mock
 
     with patch("agency_swarm.agent.Runner.run", new_callable=AsyncMock) as mock_runner:
         mock_runner.return_value = mock_run_result
-        result = await agent.get_response("Test message", chat_id="test_chat")
+        result = await agent.get_response("Test message")
         assert result == mock_run_result
 
 
@@ -130,7 +130,7 @@ async def test_get_response_integrates_validation_fail(mock_thread_manager, mock
 
     with patch("agency_swarm.agent.Runner.run", new_callable=AsyncMock) as mock_runner:
         mock_runner.return_value = mock_run_result
-        result = await agent.get_response("Test message", chat_id="test_chat")
+        result = await agent.get_response("Test message")
         # Should still return the result, but validation failure should be logged
         assert result == mock_run_result
 
@@ -156,6 +156,6 @@ async def test_get_response_integrates_validation_raise(mock_thread_manager, moc
 
     with patch("agency_swarm.agent.Runner.run", new_callable=AsyncMock) as mock_runner:
         mock_runner.return_value = mock_run_result
-        result = await agent.get_response("Test message", chat_id="test_chat")
+        result = await agent.get_response("Test message")
         # Should still return the result, but validation exception should be handled
         assert result == mock_run_result

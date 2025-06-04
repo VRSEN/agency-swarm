@@ -14,7 +14,6 @@ async def test_get_response_stream_basic(tmp_path):
     agent = Agent(name="TestAgent", instructions="Test instructions")
     agent._thread_manager = ThreadManager()
     agent._agency_instance = type("Agency", (), {"agents": {"TestAgent": agent}, "user_context": {}})()
-    chat_id = "stream_chat_456"
     message_content = "Stream this"
 
     async def dummy_stream():
@@ -28,7 +27,7 @@ async def test_get_response_stream_basic(tmp_path):
 
     with patch("agency_swarm.agent.Runner.run_streamed", return_value=DummyStreamedResult()):
         events = []
-        async for event in agent.get_response_stream(message_content, chat_id=chat_id):
+        async for event in agent.get_response_stream(message_content):
             events.append(event)
         assert events == [
             {"event": "text", "data": "Hello "},
@@ -42,7 +41,6 @@ async def test_get_response_stream_final_result_processing(tmp_path):
     agent = Agent(name="TestAgent", instructions="Test instructions")
     agent._thread_manager = ThreadManager()
     agent._agency_instance = type("Agency", (), {"agents": {"TestAgent": agent}, "user_context": {}})()
-    chat_id = "final_result_chat"
     final_content = {"final_key": "final_value"}
 
     async def dummy_stream():
@@ -56,7 +54,7 @@ async def test_get_response_stream_final_result_processing(tmp_path):
 
     with patch("agency_swarm.agent.Runner.run_streamed", return_value=DummyStreamedResult()):
         events = []
-        async for event in agent.get_response_stream("Process this", chat_id=chat_id):
+        async for event in agent.get_response_stream("Process this"):
             events.append(event)
         assert events == [
             {"event": "text", "data": "Thinking..."},

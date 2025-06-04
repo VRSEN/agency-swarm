@@ -12,11 +12,11 @@ def mock_thread_manager():
     manager = MagicMock(spec=ThreadManager)
     created_threads = {}
 
-    def get_thread_side_effect(chat_id):
+    def get_thread_side_effect(thread_id):
         """Side effect for get_thread to create/return mock threads with correct ID."""
-        if chat_id not in created_threads:
+        if thread_id not in created_threads:
             mock_thread_fixture_created = MagicMock(spec=ConversationThread)
-            mock_thread_fixture_created.thread_id = chat_id
+            mock_thread_fixture_created.thread_id = thread_id
             mock_thread_fixture_created.items = []
 
             def add_item_side_effect(item):
@@ -29,8 +29,8 @@ def mock_thread_manager():
 
             mock_thread_fixture_created.add_items.side_effect = add_items_side_effect
             mock_thread_fixture_created.get_history.return_value = []
-            created_threads[chat_id] = mock_thread_fixture_created
-        return created_threads[chat_id]
+            created_threads[thread_id] = mock_thread_fixture_created
+        return created_threads[thread_id]
 
     manager.get_thread.side_effect = get_thread_side_effect
 
