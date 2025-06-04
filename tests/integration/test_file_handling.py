@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import os
+import re
 import shutil
 from pathlib import Path
 
@@ -344,7 +345,13 @@ async def test_code_interpreter_tool(real_openai_client: AsyncOpenAI, tmp_path: 
         response_result = await agency.get_response(query, recipient_agent=code_interpreter_agent)
 
         assert response_result is not None
-        assert "14910" in response_result.final_output.lower()
+        # Handle various number formatting (with/without commas, LaTeX formatting, etc.)
+        response_text = response_result.final_output.lower()
+        # Remove LaTeX formatting and common separators to find the core number
+        numbers_in_response = re.findall(r"14[,\s\\()]*910", response_text)
+        assert len(numbers_in_response) > 0, (
+            f"Expected to find '14910' (possibly formatted) in response. Response: {response_result.final_output}"
+        )
 
     finally:
         # Cleanup: Delete uploaded file from OpenAI and temp directory
