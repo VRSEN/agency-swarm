@@ -22,29 +22,21 @@ if str(project_root) not in sys.path:
 
 from agency_swarm import Agency, Agent  # noqa: E402
 
-agent1 = Agent(
-    name="MemoryAgent",
-    instructions="You are MemoryAgent. You have an excellent memory. "
-    "Remember details the user tells you and recall them when asked. "
-    "Respond directly to the user's messages.",
-    tools=[],
-)
-
 PERSISTENCE_DIR = Path(tempfile.mkdtemp(prefix="thread_persistence_"))
 
 
 def save_thread_data_to_file(thread_data: dict[str, Any]):
     """
-    Save threads data to a file.
+    Save thread data to a file.
 
     thread_data is a dictionary mapping thread_ids to conversation items.
     Thread IDs follow the format "sender->recipient", for example:
-    - "user->MemoryAgent" for user interactions with MemoryAgent
-    - "MemoryAgent->AssistantAgent" for agent-to-agent communication
+    - "user->AssistantAgent" for user interactions with AssistantAgent
+    - "AssistantAgent->HelperAgent" for agent-to-agent communication
 
     Each thread maintains completely isolated conversation history.
     """
-    file_path = PERSISTENCE_DIR / "thread_test.json"
+    file_path = PERSISTENCE_DIR / "thread_data.json"
     with open(file_path, "w") as f:
         json.dump(thread_data, f, indent=2)
 
@@ -59,7 +51,7 @@ def load_thread_data_from_file(thread_id: str) -> dict[str, Any] | None:
     Load specific thread data from a file.
 
     Args:
-        thread_id: The specific thread identifier to load (e.g., "user->MemoryAgent")
+        thread_id: The specific thread identifier to load (e.g., "user->AssistantAgent")
 
     Returns:
         Dictionary containing the thread data for the specified thread_id, or None if not found.
@@ -68,16 +60,16 @@ def load_thread_data_from_file(thread_id: str) -> dict[str, Any] | None:
     Note: This demonstrates how the persistence system works with thread isolation.
     Each thread_id represents a separate conversation flow with isolated history.
     """
-    file_path = PERSISTENCE_DIR / "thread_test.json"
+    file_path = PERSISTENCE_DIR / "thread_data.json"
     if not file_path.exists():
         print(f"No existing thread data file found - starting fresh for thread: {thread_id}")
         return None
 
     with open(file_path) as f:
-        all_threads_data: dict[str, Any] = json.load(f)
+        all_thread_data: dict[str, Any] = json.load(f)
 
     # Return the specific thread data for the requested thread_id
-    thread_data = all_threads_data.get(thread_id)
+    thread_data = all_thread_data.get(thread_id)
 
     if thread_data:
         print(f"Loaded thread data for: {thread_id}")
@@ -87,10 +79,31 @@ def load_thread_data_from_file(thread_id: str) -> dict[str, Any] | None:
         return None
 
 
+# Initialize all agents and agencies at the top
+assistant_agent = Agent(
+    name="AssistantAgent",
+    instructions="You are a helpful assistant. Answer questions and help users with their tasks.",
+    tools=[],
+)
+
 # --- Create Agency Instance (v1.x Pattern) ---
 agency = Agency(
-    agent1,  # MemoryAgent is the entry point (positional argument)
-    shared_instructions="Be concise in your responses.",
+    assistant_agent,  # AssistantAgent is the entry point (positional argument)
+    shared_instructions="Be helpful and concise in your responses.",
+    load_threads_callback=load_thread_data_from_file,
+    save_threads_callback=save_thread_data_to_file,
+)
+
+# Create a second agent instance for the reloaded agency (to avoid agent reuse)
+assistant_agent_reloaded = Agent(
+    name="AssistantAgent",
+    instructions="You are a helpful assistant. Answer questions and help users with their tasks.",
+    tools=[],
+)
+
+agency_reloaded = Agency(
+    assistant_agent_reloaded,  # Use NEW agent instance to prevent reuse error
+    shared_instructions="Be helpful and concise in your responses.",
     load_threads_callback=load_thread_data_from_file,
     save_threads_callback=save_thread_data_to_file,
 )
@@ -109,45 +122,38 @@ async def run_persistent_conversation():
     4. No chat_id needed: Framework automatically manages thread identification
     """
 
-    print("\n--- Turn 1: User -> MemoryAgent (Tell Secret) ---")
-    print("Thread identifier will be: user->MemoryAgent")
+    print("\n--- Turn 1: User -> AssistantAgent (Tell Secret) ---")
+    print("Thread identifier will be: user->AssistantAgent")
 
-    user_message_1 = f"Hello MemoryAgent. My secret code is '{SECRET_CODE}'. Please remember this."
+    user_message_1 = f"Hello. Please remember this secret code: '{SECRET_CODE}'. I'll ask you about it later."
     response1 = await agency.get_response(
-        recipient_agent=agent1,
+        recipient_agent=assistant_agent,
         message=user_message_1,
     )
-    print(f"Response from MemoryAgent: {response1.final_output}")
+    print(f"Response from AssistantAgent: {response1.final_output}")
 
     await asyncio.sleep(1)
 
-    # Simulate application restart by creating a new agency instance
+    # Simulate application restart by using the pre-initialized reloaded agency
     print("\n--- Simulating Application Restart ---")
-    print("Creating new agency instance with same persistence callbacks...")
+    print("Using pre-initialized reloaded agency instance...")
 
-    reloaded_agency = Agency(
-        agent1,  # MemoryAgent is the entry point (positional argument)
-        shared_instructions="Be concise in your responses.",
-        load_threads_callback=load_thread_data_from_file,
-        save_threads_callback=save_thread_data_to_file,
-    )
+    print("\n--- Turn 2: User -> AssistantAgent (Recall Secret using Reloaded Agency) ---")
+    print("Thread identifier will be: user->AssistantAgent (same as before)")
 
-    print("\n--- Turn 2: User -> MemoryAgent (Recall Secret using Reloaded Agency) ---")
-    print("Thread identifier will be: user->MemoryAgent (same as before)")
-
-    user_message_2 = "Hello again, MemoryAgent. What was the secret code I told you earlier?"
-    response2 = await reloaded_agency.get_response(
-        recipient_agent=agent1,
+    user_message_2 = "What was the secret code I told you earlier?"
+    response2 = await agency_reloaded.get_response(
+        recipient_agent=assistant_agent_reloaded,
         message=user_message_2,
     )
-    print(f"Response from Reloaded MemoryAgent: {response2.final_output}")
+    print(f"Response from Reloaded AssistantAgent: {response2.final_output}")
 
     # Test result
     if response2.final_output and SECRET_CODE.lower() in response2.final_output.lower():
-        print(f"\n✅ SUCCESS: MemoryAgent remembered the secret code ('{SECRET_CODE}')!")
+        print(f"\n✅ SUCCESS: AssistantAgent remembered the secret code ('{SECRET_CODE}')!")
         print("Thread isolation and persistence working correctly.")
     else:
-        print(f"\n❌ FAILURE: MemoryAgent did NOT remember the secret code ('{SECRET_CODE}').")
+        print(f"\n❌ FAILURE: AssistantAgent did NOT remember the secret code ('{SECRET_CODE}').")
         print(f"Agent's response: {response2.final_output}")
 
     # Cleanup

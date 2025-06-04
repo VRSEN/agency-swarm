@@ -181,9 +181,21 @@ class AgentFileManager:
             # Rename the folder if it exists and is not already named with the VS id
             try:
                 if Path(base_path_str).exists() and Path(base_path_str).name != new_folder_name:
-                    Path(base_path_str).rename(new_folder_path)
+                    # Create the new vector store directory and copy files (preserve original)
+                    new_folder_path.mkdir(parents=True, exist_ok=True)
+
+                    # Copy all files from original to new directory
+                    for file_path in Path(base_path_str).rglob("*"):
+                        if file_path.is_file():
+                            relative_path = file_path.relative_to(base_path_str)
+                            destination = new_folder_path / relative_path
+                            destination.parent.mkdir(parents=True, exist_ok=True)
+                            shutil.copy2(file_path, destination)
+
                     base_path_str = str(new_folder_path)
-                    logger.info(f"Agent {self.agent.name}: Renamed files folder to {new_folder_path}")
+                    logger.info(
+                        f"Agent {self.agent.name}: Created vector store folder {new_folder_path} (original preserved)"
+                    )
                 elif not Path(base_path_str).exists():
                     # If the folder does not exist, create it with the new name
                     new_folder_path.mkdir(parents=True, exist_ok=True)
