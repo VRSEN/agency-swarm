@@ -3,7 +3,13 @@ import logging
 import os
 import sys
 
+# Path setup for standalone examples
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
+
 from agents import function_tool
+
+from agency_swarm.agency import Agency
+from agency_swarm.agent import Agent
 
 # Configure basic logging
 logging.basicConfig(level=logging.WARNING, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -12,11 +18,6 @@ logging.getLogger("agency_swarm").setLevel(logging.INFO)
 
 # Define logger for this module
 logger = logging.getLogger(__name__)
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
-
-from agency_swarm.agency import Agency
-from agency_swarm.agent import Agent
 
 # --- Define Tools for Worker --- #
 

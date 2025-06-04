@@ -118,7 +118,7 @@ Regional Performance:
         response_text = str(exact_data_response.final_output)
         has_exact_revenue = "5,678,901.23" in response_text or "5678901.23" in response_text
 
-        print(f"\n--- Hosted Tool Preservation Results ---")
+        print("\n--- Hosted Tool Preservation Results ---")
         print(f"Agent can access exact revenue ($5,678,901.23): {has_exact_revenue}")
 
         if has_exact_revenue:
