@@ -404,6 +404,7 @@ class Agency:
         run_config: RunConfig | None = None,
         message_files: list[str] | None = None,
         file_ids: list[str] | None = None,
+        additional_instructions: str | None = None,
         **kwargs: Any,
     ) -> RunResult:
         """
@@ -423,6 +424,7 @@ class Agency:
             run_config (RunConfig | None, optional): Configuration for the agent run.
             message_files (list[str] | None, optional): Backward compatibility parameter.
             file_ids (list[str] | None, optional): Additional file IDs for the agent run.
+            additional_instructions (str | None, optional): Additional instructions to be appended to the recipient agent's instructions for this run only.
             **kwargs: Additional arguments passed down to the target agent's `get_response` method
                       and subsequently to `agents.Runner.run`.
 
@@ -465,6 +467,7 @@ class Agency:
             run_config=run_config,
             message_files=message_files,
             file_ids=file_ids,
+            additional_instructions=additional_instructions,
             **kwargs,
         )
 
@@ -477,6 +480,7 @@ class Agency:
         run_config_override: RunConfig | None = None,
         message_files: list[str] | None = None,
         file_ids: list[str] | None = None,
+        additional_instructions: str | None = None,
         **kwargs: Any,
     ) -> AsyncGenerator[Any, None]:
         """
@@ -494,6 +498,7 @@ class Agency:
             run_config_override (RunConfig | None, optional): Specific run configuration for this run.
             message_files (list[str] | None, optional): Backward compatibility parameter.
             file_ids (list[str] | None, optional): Additional file IDs for the agent run.
+            additional_instructions (str | None, optional): Additional instructions to be appended to the recipient agent's instructions for this run only.
             **kwargs: Additional arguments passed down to `get_response_stream` and `run_streamed`.
 
         Yields:
@@ -537,6 +542,7 @@ class Agency:
             run_config_override=run_config_override,
             message_files=message_files,
             file_ids=file_ids,
+            additional_instructions=additional_instructions,
             **kwargs,
         ):
             yield event
@@ -610,12 +616,6 @@ class Agency:
                 "Use get_response_stream() instead for streaming responses."
             )
 
-        if additional_instructions:
-            raise NotImplementedError(
-                "additional_instructions parameter is not yet implemented in v1.x. "
-                "TODO: Implement additional_instructions support in get_response."
-            )
-
         if attachments:
             warnings.warn(
                 "'attachments' parameter is deprecated. Use 'message_files' or 'file_ids' instead.",
@@ -685,6 +685,7 @@ class Agency:
             message=message,
             recipient_agent=target_recipient,
             message_files=message_files,  # Pass deprecated parameter for compatibility
+            additional_instructions=additional_instructions,  # Pass additional_instructions parameter
             **kwargs,
         )
         return str(run_result.final_output) if run_result.final_output is not None else ""

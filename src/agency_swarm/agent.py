@@ -31,7 +31,7 @@ from agents.stream_events import RunItemStreamEvent
 from agents.strict_schema import ensure_strict_json_schema
 from agents.tool import FunctionTool
 from openai import AsyncOpenAI, NotFoundError, OpenAI
-from openai.types.responses import ResponseFileSearchToolCall, ResponseFunctionToolCall
+from openai.types.responses import ResponseFileSearchToolCall, ResponseFunctionToolCall, ResponseFunctionWebSearch
 
 from .context import MasterContext
 from .thread import ThreadManager
@@ -574,6 +574,7 @@ class Agent(BaseAgent[MasterContext]):
         run_config: RunConfig | None = None,
         message_files: list[str] | None = None,  # Backward compatibility
         file_ids: list[str] | None = None,  # New parameter
+        additional_instructions: str | None = None,  # New parameter for v1.x
         **kwargs: Any,
     ) -> RunResult:
         """
@@ -591,6 +592,7 @@ class Agent(BaseAgent[MasterContext]):
             run_config: Optional run configuration settings
             message_files: DEPRECATED: Use file_ids instead. File IDs to attach to the message
             file_ids: List of OpenAI file IDs to attach to the message
+            additional_instructions: Additional instructions to be appended to the agent's instructions for this run only
             **kwargs: Additional keyword arguments including max_turns
 
         Returns:
@@ -615,150 +617,186 @@ class Agent(BaseAgent[MasterContext]):
             else:
                 raise RuntimeError(f"Agent '{self.name}' missing Agency instance for agent-to-agent communication.")
 
-        # Generate a thread identifier based on communication context
-        thread_id = self.get_thread_id(sender_name)
-        logger.info(f"Agent '{self.name}' handling get_response for thread: {thread_id}")
-        thread = self._thread_manager.get_thread(thread_id)
+        # Store original instructions for restoration
+        original_instructions = self.instructions
 
-        processed_current_message_items: list[TResponseInputItem]
-        try:
-            processed_current_message_items = ItemHelpers.input_to_new_input_list(message)
-        except Exception as e:
-            logger.error(f"Error processing current input message for get_response: {e}", exc_info=True)
-            raise AgentsException(f"Failed to process input message for agent {self.name}") from e
-
-        # Handle file attachments - support both old message_files and new file_ids
-        files_to_attach = file_ids or message_files or kwargs.get("file_ids") or kwargs.get("message_files")
-        if files_to_attach and isinstance(files_to_attach, list):
-            # Warn about deprecated message_files usage
-            if message_files or kwargs.get("message_files"):
-                warnings.warn(
-                    "'message_files' parameter is deprecated. Use 'file_ids' instead.",
-                    DeprecationWarning,
-                    stacklevel=2,
-                )
-
-            # Add file items to the last user message content
-            if processed_current_message_items:
-                last_message = processed_current_message_items[-1]
-                if isinstance(last_message, dict) and last_message.get("role") == "user":
-                    # Ensure content is a list for multi-content messages
-                    current_content = last_message.get("content", "")
-                    if isinstance(current_content, str):
-                        # Convert string content to list format
-                        content_list = [{"type": "input_text", "text": current_content}] if current_content else []
-                    elif isinstance(current_content, list):
-                        content_list = list(current_content)
-                    else:
-                        content_list = []
-
-                    # Add file items to content
-                    for file_id in files_to_attach:
-                        if isinstance(file_id, str) and file_id.startswith("file-"):
-                            file_content_item = {
-                                "type": "input_file",
-                                "file_id": file_id,
-                            }
-                            content_list.append(file_content_item)
-                            logger.debug(f"Added file content item for file_id: {file_id}")
-                        else:
-                            logger.warning(f"Invalid file_id format: {file_id} for agent {self.name}")
-
-                    # Update the message content
-                    last_message["content"] = content_list
-                else:
-                    logger.warning(f"Cannot attach files: Last message is not a user message for agent {self.name}")
-            else:
-                logger.warning(f"Cannot attach files: No messages to attach to for agent {self.name}")
-
-        history_for_runner: list[TResponseInputItem]
-        if sender_name is None:  # Top-level call from user or agency
-            self._thread_manager.add_items_and_save(thread, processed_current_message_items)
-            logger.debug(f"Added current message to shared thread {thread.thread_id} for top-level call.")
-            history_for_runner = list(thread.items)  # Get full history after adding
-        else:  # Agent-to-agent call (e.g., via SendMessage tool)
-            # For sub-calls, the history for the runner is the current shared thread items
-            # PLUS the processed current message items for this specific agent's turn.
-            # These `processed_current_message_items` have been converted by ItemHelpers
-            # but have not been through `thread.add_item`'s specific normalization yet,
-            # which is fine as they are only for this Runner's input, not direct thread storage here.
-            history_up_to_this_call = list(thread.items)
-            history_for_runner = history_up_to_this_call + processed_current_message_items
+        # Temporarily modify instructions if additional_instructions provided
+        if additional_instructions:
             logger.debug(
-                f"Constructed temporary history for sub-agent '{self.name}' run. Shared thread not modified with this input."
+                f"Appending additional instructions to agent '{self.name}': {additional_instructions[:100]}..."
             )
-
-        # The history_for_runner now contains OpenAI-compatible message dictionaries.
-        # It should include user, assistant (possibly with tool_calls), and tool messages if they are part of the conversation.
-        # No filtering is applied here based on user instruction.
-
-        # Sanitize tool_calls for OpenAI /v1/responses API compliance
-        history_for_runner = self._sanitize_tool_calls_in_history(history_for_runner)
-
-        logger.info(
-            f"AGENT_GET_RESPONSE: History for Runner in agent '{self.name}' for thread '{thread_id}' (length {len(history_for_runner)}):"
-        )
-        for i, history_item in enumerate(history_for_runner):
-            # Limiting log length for potentially long content
-            content_preview = str(history_item.get("content"))[:100]
-            tool_calls_preview = str(history_item.get("tool_calls"))[:100]
-            logger.info(
-                f"AGENT_GET_RESPONSE: History item [{i}]: role={history_item.get('role')}, content='{content_preview}...', tool_calls='{tool_calls_preview}...'"
-            )
+            if self.instructions:
+                self.instructions = self.instructions + "\n\n" + additional_instructions
+            else:
+                self.instructions = additional_instructions
 
         try:
-            logger.debug(f"Calling Runner.run for agent '{self.name}' with {len(history_for_runner)} history items.")
-            run_result: RunResult = await Runner.run(
-                starting_agent=self,
-                input=history_for_runner,
-                context=self._prepare_master_context(context_override),
-                hooks=hooks_override or self.hooks,
-                run_config=run_config or RunConfig(),
-                max_turns=kwargs.get("max_turns", DEFAULT_MAX_TURNS),
-            )
-            completion_info = (
-                f"Output Type: {type(run_result.final_output).__name__}"
-                if run_result.final_output is not None
-                else "No final output"
-            )
-            logger.info(f"Runner.run completed for agent '{self.name}'. {completion_info}")
+            # Generate a thread identifier based on communication context
+            thread_id = self.get_thread_id(sender_name)
+            logger.info(f"Agent '{self.name}' handling get_response for thread: {thread_id}")
+            thread = self._thread_manager.get_thread(thread_id)
 
-        except Exception as e:
-            logger.error(f"Error during Runner.run for agent '{self.name}': {e}", exc_info=True)
-            raise AgentsException(f"Runner execution failed for agent {self.name}") from e
+            processed_current_message_items: list[TResponseInputItem]
+            try:
+                processed_current_message_items = ItemHelpers.input_to_new_input_list(message)
+            except Exception as e:
+                logger.error(f"Error processing current input message for get_response: {e}", exc_info=True)
+                raise AgentsException(f"Failed to process input message for agent {self.name}") from e
 
-        response_text_for_validation = ""
-        if run_result.new_items:  # new_items are RunItem objects
-            response_text_for_validation = ItemHelpers.text_message_outputs(run_result.new_items)
+            # Handle file attachments - support both old message_files and new file_ids
+            files_to_attach = file_ids or message_files or kwargs.get("file_ids") or kwargs.get("message_files")
+            if files_to_attach and isinstance(files_to_attach, list):
+                # Warn about deprecated message_files usage
+                if message_files or kwargs.get("message_files"):
+                    warnings.warn(
+                        "'message_files' parameter is deprecated. Use 'file_ids' instead.",
+                        DeprecationWarning,
+                        stacklevel=2,
+                    )
 
-        if response_text_for_validation and self.response_validator:
-            if not self._validate_response(response_text_for_validation):
-                logger.warning(f"Response validation failed for agent '{self.name}'")
+                # Add file items to the last user message content
+                if processed_current_message_items:
+                    last_message = processed_current_message_items[-1]
+                    if isinstance(last_message, dict) and last_message.get("role") == "user":
+                        # Ensure content is a list for multi-content messages
+                        current_content = last_message.get("content", "")
+                        if isinstance(current_content, str):
+                            # Convert string content to list format
+                            content_list = [{"type": "input_text", "text": current_content}] if current_content else []
+                        elif isinstance(current_content, list):
+                            content_list = list(current_content)
+                        else:
+                            content_list = []
 
-        if sender_name is None:  # Only save to thread if top-level call
-            if self._thread_manager and run_result.new_items:
-                thread = self._thread_manager.get_thread(thread_id)
-                items_to_save: list[TResponseInputItem] = []
-                logger.debug(
-                    f"Preparing to save {len(run_result.new_items)} new items from RunResult to thread {thread.thread_id}"
-                )
-                for i, run_item_obj in enumerate(run_result.new_items):
-                    # _run_item_to_tresponse_input_item converts RunItem to TResponseInputItem (dict)
-                    item_dict = self._run_item_to_tresponse_input_item(run_item_obj)
-                    if item_dict:
-                        items_to_save.append(item_dict)
-                        logger.debug(
-                            f"  Item {i + 1}/{len(run_result.new_items)} converted for saving: {item_dict.get('role')}"
-                        )
+                        # Add file items to content
+                        for file_id in files_to_attach:
+                            if isinstance(file_id, str) and file_id.startswith("file-"):
+                                file_content_item = {
+                                    "type": "input_file",
+                                    "file_id": file_id,
+                                }
+                                content_list.append(file_content_item)
+                                logger.debug(f"Added file content item for file_id: {file_id}")
+                            else:
+                                logger.warning(f"Invalid file_id format: {file_id} for agent {self.name}")
+
+                        # Update the message content
+                        last_message["content"] = content_list
                     else:
-                        logger.debug(
-                            f"  Item {i + 1}/{len(run_result.new_items)} ({type(run_item_obj).__name__}) skipped or failed conversion."
-                        )
-                if items_to_save:
-                    logger.info(f"Saving {len(items_to_save)} converted RunResult items to thread {thread.thread_id}")
-                    self._thread_manager.add_items_and_save(thread, items_to_save)
+                        logger.warning(f"Cannot attach files: Last message is not a user message for agent {self.name}")
+                else:
+                    logger.warning(f"Cannot attach files: No messages to attach to for agent {self.name}")
 
-        return run_result
+            history_for_runner: list[TResponseInputItem]
+            if sender_name is None:  # Top-level call from user or agency
+                self._thread_manager.add_items_and_save(thread, processed_current_message_items)
+                logger.debug(f"Added current message to shared thread {thread.thread_id} for top-level call.")
+                history_for_runner = list(thread.items)  # Get full history after adding
+            else:  # Agent-to-agent call (e.g., via SendMessage tool)
+                # For sub-calls, the history for the runner is the current shared thread items
+                # PLUS the processed current message items for this specific agent's turn.
+                # These `processed_current_message_items` have been converted by ItemHelpers
+                # but have not been through `thread.add_item`'s specific normalization yet,
+                # which is fine as they are only for this Runner's input, not direct thread storage here.
+                history_up_to_this_call = list(thread.items)
+                history_for_runner = history_up_to_this_call + processed_current_message_items
+                logger.debug(
+                    f"Constructed temporary history for sub-agent '{self.name}' run. Shared thread not modified with this input."
+                )
+
+            # The history_for_runner now contains OpenAI-compatible message dictionaries.
+            # It should include user, assistant (possibly with tool_calls), and tool messages if they are part of the conversation.
+            # No filtering is applied here based on user instruction.
+
+            # Sanitize tool_calls for OpenAI /v1/responses API compliance
+            history_for_runner = self._sanitize_tool_calls_in_history(history_for_runner)
+
+            logger.info(
+                f"AGENT_GET_RESPONSE: History for Runner in agent '{self.name}' for thread '{thread_id}' (length {len(history_for_runner)}):"
+            )
+            for i, history_item in enumerate(history_for_runner):
+                # Limiting log length for potentially long content
+                content_preview = str(history_item.get("content"))[:100]
+                tool_calls_preview = str(history_item.get("tool_calls"))[:100]
+                logger.info(
+                    f"AGENT_GET_RESPONSE: History item [{i}]: role={history_item.get('role')}, content='{content_preview}...', tool_calls='{tool_calls_preview}...'"
+                )
+
+            try:
+                logger.debug(
+                    f"Calling Runner.run for agent '{self.name}' with {len(history_for_runner)} history items."
+                )
+                run_result: RunResult = await Runner.run(
+                    starting_agent=self,
+                    input=history_for_runner,
+                    context=self._prepare_master_context(context_override),
+                    hooks=hooks_override or self.hooks,
+                    run_config=run_config or RunConfig(),
+                    max_turns=kwargs.get("max_turns", DEFAULT_MAX_TURNS),
+                )
+                completion_info = (
+                    f"Output Type: {type(run_result.final_output).__name__}"
+                    if run_result.final_output is not None
+                    else "No final output"
+                )
+                logger.info(f"Runner.run completed for agent '{self.name}'. {completion_info}")
+
+            except Exception as e:
+                logger.error(f"Error during Runner.run for agent '{self.name}': {e}", exc_info=True)
+                raise AgentsException(f"Runner execution failed for agent {self.name}") from e
+
+            response_text_for_validation = ""
+            if run_result.new_items:  # new_items are RunItem objects
+                response_text_for_validation = ItemHelpers.text_message_outputs(run_result.new_items)
+
+            if response_text_for_validation and self.response_validator:
+                if not self._validate_response(response_text_for_validation):
+                    logger.warning(f"Response validation failed for agent '{self.name}'")
+
+            if sender_name is None:  # Only save to thread if top-level call
+                if self._thread_manager and run_result.new_items:
+                    thread = self._thread_manager.get_thread(thread_id)
+                    items_to_save: list[TResponseInputItem] = []
+                    logger.debug(
+                        f"Preparing to save {len(run_result.new_items)} new items from RunResult to thread {thread.thread_id}"
+                    )
+
+                    # Extract hosted tool results before converting regular items
+                    hosted_tool_outputs = self._extract_hosted_tool_results(run_result.new_items)
+
+                    for i, run_item_obj in enumerate(run_result.new_items):
+                        # _run_item_to_tresponse_input_item converts RunItem to TResponseInputItem (dict)
+                        item_dict = self._run_item_to_tresponse_input_item(run_item_obj)
+                        if item_dict:
+                            items_to_save.append(item_dict)
+                            logger.debug(
+                                f"  Item {i + 1}/{len(run_result.new_items)} converted for saving: {item_dict.get('role')}"
+                            )
+                        else:
+                            logger.debug(
+                                f"  Item {i + 1}/{len(run_result.new_items)} ({type(run_item_obj).__name__}) skipped or failed conversion."
+                            )
+
+                    # Add synthetic hosted tool outputs to the conversation history
+                    items_to_save.extend(hosted_tool_outputs)
+                    if hosted_tool_outputs:
+                        logger.info(
+                            f"Added {len(hosted_tool_outputs)} synthetic hosted tool output items to preserve results"
+                        )
+
+                    if items_to_save:
+                        logger.info(
+                            f"Saving {len(items_to_save)} converted RunResult items to thread {thread.thread_id}"
+                        )
+                        self._thread_manager.add_items_and_save(thread, items_to_save)
+
+            return run_result
+
+        finally:
+            # Always restore original instructions
+            self.instructions = original_instructions
+            if additional_instructions:
+                logger.debug(f"Restored original instructions for agent '{self.name}'")
 
     async def get_response_stream(
         self,
@@ -767,6 +805,7 @@ class Agent(BaseAgent[MasterContext]):
         context_override: dict[str, Any] | None = None,
         hooks_override: RunHooks | None = None,
         run_config_override: RunConfig | None = None,
+        additional_instructions: str | None = None,  # New parameter for v1.x
         **kwargs,
     ) -> AsyncGenerator[Any, None]:
         """Runs the agent's turn in streaming mode.
@@ -777,6 +816,7 @@ class Agent(BaseAgent[MasterContext]):
             context_override: Optional context data to override default values
             hooks_override: Optional hooks to override default agent hooks
             run_config_override: Optional run configuration
+            additional_instructions: Additional instructions to be appended to the agent's instructions for this run only
             **kwargs: Additional keyword arguments
 
         Yields:
@@ -811,134 +851,166 @@ class Agent(BaseAgent[MasterContext]):
             else:
                 raise RuntimeError(f"Agent '{self.name}' missing Agency instance for agent-to-agent communication.")
 
-        # Generate a thread identifier based on communication context
-        thread_id = self.get_thread_id(sender_name)
-        logger.info(f"Agent '{self.name}' handling get_response_stream for thread: {thread_id}")
-        thread = self._thread_manager.get_thread(thread_id)
+        # Store original instructions for restoration
+        original_instructions = self.instructions
 
-        try:
-            processed_initial_messages = ItemHelpers.input_to_new_input_list(message)
-        except Exception as e:
-            logger.error(f"Error processing input message for stream agent '{self.name}': {e}", exc_info=True)
-            yield {"type": "error", "content": f"Invalid input message format: {e}"}
-            return
-
-        # Handle file attachments - support both old message_files and new file_ids
-        files_to_attach = kwargs.get("file_ids") or kwargs.get("message_files")
-        if files_to_attach and isinstance(files_to_attach, list):
-            if kwargs.get("message_files"):
-                warnings.warn(
-                    "'message_files' parameter is deprecated. Use 'file_ids' instead.",
-                    DeprecationWarning,
-                    stacklevel=2,
-                )
-            if processed_initial_messages:
-                last_message = processed_initial_messages[-1]
-                if isinstance(last_message, dict) and last_message.get("role") == "user":
-                    current_content = last_message.get("content", "")
-                    if isinstance(current_content, str):
-                        content_list = [{"type": "input_text", "text": current_content}] if current_content else []
-                    elif isinstance(current_content, list):
-                        content_list = list(current_content)
-                    else:
-                        content_list = []
-                    for file_id in files_to_attach:
-                        if isinstance(file_id, str) and file_id.startswith("file-"):
-                            file_content_item = {
-                                "type": "input_file",
-                                "file_id": file_id,
-                            }
-                            content_list.append(file_content_item)
-                            logger.debug(f"Added file content item for file_id: {file_id}")
-                        else:
-                            logger.warning(f"Invalid file_id format: {file_id} for agent {self.name}")
-                    last_message["content"] = content_list
-                else:
-                    logger.warning(f"Cannot attach files: Last message is not a user message for agent {self.name}")
-            else:
-                logger.warning(f"Cannot attach files: No messages to attach to for agent {self.name}")
-
-        # --- Input history logic (match get_response) ---
-        if sender_name is None:  # Top-level call from user or agency
-            self._thread_manager.add_items_and_save(thread, processed_initial_messages)
-            logger.debug(f"Added current message to shared thread {thread.thread_id} for top-level stream call.")
-            history_for_runner = list(thread.items)  # Get full history after adding
-        else:  # Agent-to-agent call (e.g., via SendMessage tool)
-            history_up_to_this_call = list(thread.items)
-            history_for_runner = history_up_to_this_call + processed_initial_messages
+        # Temporarily modify instructions if additional_instructions provided
+        if additional_instructions:
             logger.debug(
-                f"Constructed temporary history for sub-agent '{self.name}' stream run. Shared thread not modified with this input."
+                f"Appending additional instructions to agent '{self.name}' for streaming: {additional_instructions[:100]}..."
             )
-
-        # Sanitize tool_calls for OpenAI /v1/responses API compliance
-        history_for_runner = self._sanitize_tool_calls_in_history(history_for_runner)
+            if self.instructions:
+                self.instructions = self.instructions + "\n\n" + additional_instructions
+            else:
+                self.instructions = additional_instructions
 
         try:
-            master_context = self._prepare_master_context(context_override)
-            hooks_to_use = hooks_override or self.hooks
-            effective_run_config = run_config_override or RunConfig()
-        except RuntimeError as e:
-            logger.error(f"Error preparing context/hooks for stream agent '{self.name}': {e}", exc_info=True)
-            raise e
+            # Generate a thread identifier based on communication context
+            thread_id = self.get_thread_id(sender_name)
+            logger.info(f"Agent '{self.name}' handling get_response_stream for thread: {thread_id}")
+            thread = self._thread_manager.get_thread(thread_id)
 
-        final_result_items = []
-        try:
-            logger.debug(f"Calling Runner.run_streamed for agent '{self.name}'...")
-            result = Runner.run_streamed(
-                starting_agent=self,
-                input=history_for_runner,
-                context=master_context,
-                hooks=hooks_to_use,
-                run_config=effective_run_config,
-                max_turns=kwargs.get("max_turns", DEFAULT_MAX_TURNS),
-            )
-            async for event in result.stream_events():
-                yield event
-                if isinstance(event, RunItemStreamEvent):
-                    final_result_items.append(event.item)
-            logger.info(f"Runner.run_streamed completed for agent '{self.name}'.")
+            try:
+                processed_initial_messages = ItemHelpers.input_to_new_input_list(message)
+            except Exception as e:
+                logger.error(f"Error processing input message for stream agent '{self.name}': {e}", exc_info=True)
+                yield {"type": "error", "content": f"Invalid input message format: {e}"}
+                return
 
-        except Exception as e:
-            logger.error(f"Error during Runner.run_streamed for agent '{self.name}': {e}", exc_info=True)
-            yield {"type": "error", "content": f"Runner execution failed: {e}"}
-            return
+            # Handle file attachments - support both old message_files and new file_ids
+            files_to_attach = kwargs.get("file_ids") or kwargs.get("message_files")
+            if files_to_attach and isinstance(files_to_attach, list):
+                if kwargs.get("message_files"):
+                    warnings.warn(
+                        "'message_files' parameter is deprecated. Use 'file_ids' instead.",
+                        DeprecationWarning,
+                        stacklevel=2,
+                    )
+                if processed_initial_messages:
+                    last_message = processed_initial_messages[-1]
+                    if isinstance(last_message, dict) and last_message.get("role") == "user":
+                        current_content = last_message.get("content", "")
+                        if isinstance(current_content, str):
+                            content_list = [{"type": "input_text", "text": current_content}] if current_content else []
+                        elif isinstance(current_content, list):
+                            content_list = list(current_content)
+                        else:
+                            content_list = []
+                        for file_id in files_to_attach:
+                            if isinstance(file_id, str) and file_id.startswith("file-"):
+                                file_content_item = {
+                                    "type": "input_file",
+                                    "file_id": file_id,
+                                }
+                                content_list.append(file_content_item)
+                                logger.debug(f"Added file content item for file_id: {file_id}")
+                            else:
+                                logger.warning(f"Invalid file_id format: {file_id} for agent {self.name}")
+                        last_message["content"] = content_list
+                    else:
+                        logger.warning(f"Cannot attach files: Last message is not a user message for agent {self.name}")
+                else:
+                    logger.warning(f"Cannot attach files: No messages to attach to for agent {self.name}")
 
-        # After streaming, if it was a top-level call (user/agency direct call, not agent-to-agent),
-        # and new items were generated by the run (captured in final_result_items),
-        # these should be converted and saved to the thread to reflect the assistant's full turn.
-        # Note: The `input` messages were already added above.
-        # `final_result_items` here are `RunItem` objects from the stream.
-        if sender_name is None and final_result_items:  # Top-level call and new items exist
-            if self._thread_manager:
-                items_to_save_from_stream: list[TResponseInputItem] = []
+            # --- Input history logic (match get_response) ---
+            if sender_name is None:  # Top-level call from user or agency
+                self._thread_manager.add_items_and_save(thread, processed_initial_messages)
+                logger.debug(f"Added current message to shared thread {thread.thread_id} for top-level stream call.")
+                history_for_runner = list(thread.items)  # Get full history after adding
+            else:  # Agent-to-agent call (e.g., via SendMessage tool)
+                history_up_to_this_call = list(thread.items)
+                history_for_runner = history_up_to_this_call + processed_initial_messages
                 logger.debug(
-                    f"Preparing to save {len(final_result_items)} new items from stream result for agent '{self.name}' to thread {thread.thread_id}"
+                    f"Constructed temporary history for sub-agent '{self.name}' stream run. Shared thread not modified with this input."
                 )
-                for i, run_item_obj in enumerate(final_result_items):
-                    item_dict = self._run_item_to_tresponse_input_item(run_item_obj)
-                    if item_dict:
-                        is_duplicate = False
-                        if processed_initial_messages:
-                            if item_dict in processed_initial_messages and item_dict.get("role") == "user":
-                                is_duplicate = True
-                        if not is_duplicate:
-                            items_to_save_from_stream.append(item_dict)
-                            logger.debug(
-                                f"  Stream Item {i + 1}/{len(final_result_items)} for agent '{self.name}' converted for saving: {item_dict.get('role')}"
-                            )
+
+            # Sanitize tool_calls for OpenAI /v1/responses API compliance
+            history_for_runner = self._sanitize_tool_calls_in_history(history_for_runner)
+
+            try:
+                master_context = self._prepare_master_context(context_override)
+                hooks_to_use = hooks_override or self.hooks
+                effective_run_config = run_config_override or RunConfig()
+            except RuntimeError as e:
+                logger.error(f"Error preparing context/hooks for stream agent '{self.name}': {e}", exc_info=True)
+                raise e
+
+            final_result_items = []
+            try:
+                logger.debug(f"Calling Runner.run_streamed for agent '{self.name}'...")
+                result = Runner.run_streamed(
+                    starting_agent=self,
+                    input=history_for_runner,
+                    context=master_context,
+                    hooks=hooks_to_use,
+                    run_config=effective_run_config,
+                    max_turns=kwargs.get("max_turns", DEFAULT_MAX_TURNS),
+                )
+                async for event in result.stream_events():
+                    yield event
+                    if isinstance(event, RunItemStreamEvent):
+                        final_result_items.append(event.item)
+                logger.info(f"Runner.run_streamed completed for agent '{self.name}'.")
+
+            except Exception as e:
+                logger.error(f"Error during Runner.run_streamed for agent '{self.name}': {e}", exc_info=True)
+                yield {"type": "error", "content": f"Runner execution failed: {e}"}
+                return
+
+            # After streaming, if it was a top-level call (user/agency direct call, not agent-to-agent),
+            # and new items were generated by the run (captured in final_result_items),
+            # these should be converted and saved to the thread to reflect the assistant's full turn.
+            # Note: The `input` messages were already added above.
+            # `final_result_items` here are `RunItem` objects from the stream.
+            if sender_name is None and final_result_items:  # Top-level call and new items exist
+                if self._thread_manager:
+                    items_to_save_from_stream: list[TResponseInputItem] = []
+                    logger.debug(
+                        f"Preparing to save {len(final_result_items)} new items from stream result for agent '{self.name}' to thread {thread.thread_id}"
+                    )
+
+                    # Extract hosted tool results before converting regular items
+                    hosted_tool_outputs = self._extract_hosted_tool_results(final_result_items)
+
+                    for i, run_item_obj in enumerate(final_result_items):
+                        item_dict = self._run_item_to_tresponse_input_item(run_item_obj)
+                        if item_dict:
+                            is_duplicate = False
+                            if processed_initial_messages:
+                                if item_dict in processed_initial_messages and item_dict.get("role") == "user":
+                                    is_duplicate = True
+                            if not is_duplicate:
+                                items_to_save_from_stream.append(item_dict)
+                                logger.debug(
+                                    f"  Stream Item {i + 1}/{len(final_result_items)} for agent '{self.name}' converted for saving: {item_dict.get('role')}"
+                                )
+                            else:
+                                logger.debug(
+                                    f"  Stream Item {i + 1}/{len(final_result_items)} for agent '{self.name}' skipped as potential duplicate of input."
+                                )
                         else:
                             logger.debug(
-                                f"  Stream Item {i + 1}/{len(final_result_items)} for agent '{self.name}' skipped as potential duplicate of input."
+                                f"  Stream Item {i + 1}/{len(final_result_items)} for agent '{self.name}' ({type(run_item_obj).__name__}) skipped or failed conversion."
                             )
-                    else:
-                        logger.debug(
-                            f"  Stream Item {i + 1}/{len(final_result_items)} for agent '{self.name}' ({type(run_item_obj).__name__}) skipped or failed conversion."
+
+                    # Add synthetic hosted tool outputs to the conversation history
+                    items_to_save_from_stream.extend(hosted_tool_outputs)
+                    if hosted_tool_outputs:
+                        logger.info(
+                            f"Added {len(hosted_tool_outputs)} synthetic hosted tool output items to preserve results"
                         )
-                if items_to_save_from_stream:
-                    logger.info(
-                        f"Saving {len(items_to_save_from_stream)} converted stream items for agent '{self.name}' to thread {thread.thread_id}"
-                    )
-                    self._thread_manager.add_items_and_save(thread, items_to_save_from_stream)
+
+                    if items_to_save_from_stream:
+                        logger.info(
+                            f"Saving {len(items_to_save_from_stream)} converted stream items for agent '{self.name}' to thread {thread.thread_id}"
+                        )
+                        self._thread_manager.add_items_and_save(thread, items_to_save_from_stream)
+
+        finally:
+            # Always restore original instructions
+            self.instructions = original_instructions
+            if additional_instructions:
+                logger.debug(f"Restored original instructions for agent '{self.name}' after streaming")
 
     # --- Helper Methods ---
     def get_thread_id(self, sender_name: str | None = None) -> str:
@@ -963,6 +1035,87 @@ class Agent(BaseAgent[MasterContext]):
         except Exception as e:
             logger.warning(f"Failed to convert {type(item).__name__} using to_input_item(): {e}")
             return None
+
+    def _extract_hosted_tool_results(self, run_items: list[RunItem]) -> list[TResponseInputItem]:
+        """
+        Extract hosted tool results (FileSearch, WebSearch) from assistant message content
+        and create special assistant messages to preserve results in conversation history.
+
+        This solves the critical bug where hosted tool results are not preserved for
+        multi-turn conversations, unlike function tool results.
+        """
+        synthetic_outputs = []
+
+        # Find all hosted tool calls and their corresponding assistant messages
+        hosted_tool_calls = []
+        assistant_messages = []
+
+        for item in run_items:
+            if isinstance(item, ToolCallItem):
+                if isinstance(item.raw_item, (ResponseFileSearchToolCall, ResponseFunctionWebSearch)):
+                    hosted_tool_calls.append(item)
+            elif isinstance(item, MessageOutputItem):
+                assistant_messages.append(item)
+
+        # For each hosted tool call, extract results and create preservation messages
+        for tool_call_item in hosted_tool_calls:
+            tool_call = tool_call_item.raw_item
+            tool_results = []
+
+            # Try to find corresponding results in assistant message content
+            for msg_item in assistant_messages:
+                message = msg_item.raw_item
+
+                # Check if this message contains tool results
+                if hasattr(message, "content") and message.content:
+                    for content_item in message.content:
+                        # Look for file search results or web search results
+                        if hasattr(content_item, "annotations") and content_item.annotations:
+                            for annotation in content_item.annotations:
+                                # FileSearch results
+                                if (
+                                    hasattr(annotation, "type")
+                                    and annotation.type == "file_citation"
+                                    and isinstance(tool_call, ResponseFileSearchToolCall)
+                                ):
+                                    result_data = {
+                                        "file_id": getattr(annotation, "file_id", "unknown"),
+                                        "content": getattr(content_item, "text", ""),
+                                        "citation": getattr(annotation, "text", ""),
+                                        "start_index": getattr(annotation, "start_index", 0),
+                                        "end_index": getattr(annotation, "end_index", 0),
+                                    }
+                                    tool_results.append(result_data)
+
+                        # For WebSearch, extract the search content
+                        elif (
+                            isinstance(tool_call, ResponseFunctionWebSearch)
+                            and hasattr(content_item, "text")
+                            and content_item.text
+                        ):
+                            result_data = {"search_content": content_item.text, "type": "web_search"}
+                            tool_results.append(result_data)
+
+            # Create a special assistant message to preserve the tool results
+            if tool_results:
+                preservation_content = f"[TOOL_RESULT_PRESERVATION] Tool Call ID: {tool_call.id}\n"
+                if isinstance(tool_call, ResponseFileSearchToolCall):
+                    preservation_content += f"Tool Type: file_search\n"
+                    preservation_content += f"Results: {len(tool_results)} files found\n"
+                    for i, result in enumerate(tool_results):
+                        preservation_content += f"File {i + 1}: {result.get('file_id', 'unknown')}\n"
+                        preservation_content += f"Content: {result.get('content', '')[:200]}...\n"
+                elif isinstance(tool_call, ResponseFunctionWebSearch):
+                    preservation_content += f"Tool Type: web_search\n"
+                    preservation_content += f"Search Results:\n{tool_results[0].get('search_content', '')[:500]}...\n"
+
+                # Create special assistant message to preserve tool results
+                synthetic_output = {"role": "assistant", "content": preservation_content}
+                synthetic_outputs.append(synthetic_output)
+
+                logger.debug(f"Created preservation message for {type(tool_call).__name__} call_id: {tool_call.id}")
+
+        return synthetic_outputs
 
     def _prepare_master_context(self, context_override: dict[str, Any] | None) -> MasterContext:
         """Constructs the MasterContext for the current run."""
