@@ -81,7 +81,6 @@ async def run_conversation():
     1. Multiple communication flows: user->UI_Agent and UI_Agent->Worker_Agent
     2. Thread isolation: Each flow gets its own conversation thread
     3. Thread identifiers: Follow "sender->recipient" format automatically
-    4. No chat_id management: Framework handles thread identification
 
     Thread structure in this example:
     - "user->UI_Agent": User conversations with UI_Agent
@@ -182,6 +181,5 @@ if __name__ == "__main__":
         print("• Multi-agent communication flows")
         print("• Automatic thread isolation using 'sender->recipient' identifiers")
         print("• Inter-agent tool delegation")
-        print("• No chat_id management required")
         print("=" * 60)
         asyncio.run(run_conversation())

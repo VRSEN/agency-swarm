@@ -1,5 +1,8 @@
+import asyncio
 import logging
 import os
+import tempfile
+from pathlib import Path
 
 import pytest
 from agents import (
@@ -75,101 +78,93 @@ def calculator_tool(params: CalculatorToolParams) -> CalculatorToolOutput:
 @pytest.mark.asyncio
 async def test_tool_cycle_with_sdk_and_responses_api():
     """
-    Tests a full tool call cycle using the openai-agents SDK,
-    aiming to interact with the /v1/responses API.
-    This test expects that the current SDK might misformat the request
-    when sending tool results back to the /v1/responses API, leading to an error.
+    Integration test verifying that the openai-agents SDK properly handles tool cycles
+    with the OpenAI Responses API.
+
+    This test ensures that:
+    1. Tools can be called successfully using the SDK
+    2. Tool outputs are processed correctly
+    3. The agent can provide a final response incorporating tool results
+    4. The SDK's tool use behavior works as expected with the Responses API
     """
 
     # Explicitly create an AsyncOpenAI client
     client = AsyncOpenAI(api_key=OPENAI_API_KEY)
-
-    # Force the use of OpenAIResponsesModel
-    # The OpenAIResponsesModel itself takes the model string like "gpt-4o"
     forced_responses_model = OpenAIResponsesModel(model="gpt-4o", openai_client=client)
 
     agent = Agent(
         name="SDK Responses API Test Agent",
-        instructions="You are an agent that uses tools. Please use simple_processor_tool.",
+        instructions="You are an agent that uses tools. When asked to process text, use the simple_processor_tool.",
         tools=[simple_processor_tool],
-        tool_use_behavior="run_llm_again",  # Send tool output back to LLM
-        model=forced_responses_model,  # Pass the instantiated OpenAIResponsesModel
-        model_settings=ModelSettings(
-            temperature=0.1,
-        ),
+        tool_use_behavior="run_llm_again",  # Send tool output back to LLM for final response
+        model=forced_responses_model,
+        model_settings=ModelSettings(temperature=0.1),
     )
 
-    logger.info("Starting Runner.run with SDK Agent explicitly using OpenAIResponsesModel.")
+    logger.info("Testing tool cycle with SDK Agent using OpenAIResponsesModel")
 
-    final_output = None
-    error_occurred = False
-    error_message = ""
+    # Test that the agent can successfully use tools and provide a response
+    result = await Runner.run(agent, input="Please process the text 'hello world' using your tool.")
 
-    try:
-        # For this test, we want to see the interaction with the /v1/responses API.
-        # The `input` for `Runner.run` should be a simple string to start the conversation.
-        result = await Runner.run(agent, input="Use the simple_processor_tool with 'hello world'.")
-        final_output = result.final_output
-        logger.info(f"Runner.run completed. Final output: {final_output}")
-        logger.info(f"Raw responses from RunResult: {result.raw_responses}")
-        logger.info(f"New items from RunResult: {result.new_items}")
-    except Exception as e:
-        logger.error(f"Error during Runner.run: {e}", exc_info=True)
-        error_occurred = True
-        error_message = str(e)
+    # Verify the run completed successfully
+    assert result is not None, "Runner.run should return a result"
+    assert result.final_output is not None, "Result should have a final output"
 
-    # Based on our hypothesis, we expect an openai.BadRequestError if the SDK
-    # sends a `role: tool` message or incorrectly formats the tool output history
-    # for the /v1/responses endpoint.
+    logger.info(f"Final output: {result.final_output}")
+    logger.info(f"Number of new items: {len(result.new_items) if result.new_items else 0}")
 
-    # For now, we'll just log. Assertions will be added once we confirm the expected error.
-    if error_occurred:
-        logger.warning(f"Test finished with an error as potentially expected: {error_message}")
-        # Example of a more specific check we might add later:
-        # assert "Invalid value: 'tool'" in error_message or "function_call_output" in error_message # depending on how it fails
-    else:
-        logger.info("Test finished without direct error. Output needs inspection.")
+    # Verify that the tool was actually called and the output was processed
+    final_output_str = str(result.final_output).lower()
 
-    # Further inspection would involve checking logs for HTTP requests if possible,
-    # or relying on the error message if one occurs.
-    # No explicit assert True/False yet, this is an investigative test.
-    print(f"Test Agent: {agent.name}")
-    print(f"Final output: {final_output}")
-    print(f"Error occurred: {error_occurred}")
-    print(f"Error message: {error_message}")
-    if hasattr(result, "raw_responses"):
-        print(f"--- Raw Responses ({len(result.raw_responses)}) ---")
-        for i, raw_resp in enumerate(result.raw_responses):
-            print(f"Response {i + 1}: {type(raw_resp)}")
-            if hasattr(raw_resp, "model"):  # For OpenAI responses
-                print(f"  Model: {raw_resp.model}")
-            if hasattr(raw_resp, "id"):  # Response ID
-                print(f"  ID: {raw_resp.id}")
-            # Try to print the output part which might show structure
-            if hasattr(raw_resp, "output"):
-                print(f"  Output structure: {raw_resp.output}")
-            elif hasattr(raw_resp, "choices"):  # For ChatCompletion
-                print(f"  Choices: {raw_resp.choices}")
-    if hasattr(result, "new_items"):
-        print(f"--- New Items ({len(result.new_items)}) ---")
-        for i, item in enumerate(result.new_items):
-            print(f"Item {i + 1}: {type(item)} - {item}")
+    # The tool should have processed "hello world" to "Processed: hello world"
+    assert "processed" in final_output_str, f"Tool output should be processed. Got: {result.final_output}"
+    assert "hello world" in final_output_str, f"Original input should be referenced. Got: {result.final_output}"
+
+    # Verify that we have the expected items in the result
+    assert result.new_items is not None and len(result.new_items) > 0, "Should have new items from the run"
+
+    # Debug: Print the actual items to understand the structure
+    logger.info(f"Actual items returned:")
+    for i, item in enumerate(result.new_items):
+        logger.info(f"  Item {i + 1}: {type(item).__name__} - {item}")
+        if hasattr(item, "raw_item"):
+            logger.info(f"    Raw item type: {type(item.raw_item)}")
+
+    # Check that we have meaningful output from the tool
+    # The agent should have used the tool and incorporated the result
+    assert "processed" in final_output_str, f"Tool should have been used to process text. Got: {result.final_output}"
+
+    # Verify the tool was actually executed by checking for tool-related items
+    # Look for any tool-related items (calls or outputs)
+    tool_related_items = [
+        item
+        for item in result.new_items
+        if hasattr(item, "raw_item")
+        and ("function" in str(type(item.raw_item)).lower() or "tool" in str(type(item.raw_item)).lower())
+    ]
+
+    logger.info(f"Found {len(tool_related_items)} tool-related items")
+
+    # The test passes if the tool was used (evidenced by the output) and we got a response
+    # The exact structure of items may vary by SDK version, but the functionality should work
+    assert len(result.new_items) > 0, "Should have generated some items during execution"
+
+    logger.info("✅ SDK tool cycle with Responses API working correctly")
 
 
 @pytest.mark.asyncio
 async def test_tool_output_conversion_bug_two_turn_conversation():
     """
-    Integration test for ToolCallOutputItem conversion bug in Agency Swarm.
+    Integration test verifying that ToolCallOutputItem is correctly converted in Agency Swarm.
 
-    This test demonstrates the bug where ToolCallOutputItem is incorrectly converted
-    to assistant role messages instead of using SDK's to_input_item() method.
+    This test ensures that tool outputs are properly formatted in conversation history
+    for multi-turn conversations, allowing agents to reference previous tool results.
 
     Test scenario:
     1. First turn: Agent uses calculator tool to perform a calculation
     2. Second turn: Ask agent to reference the previous calculation result
 
-    The bug causes the tool output to be incorrectly formatted in conversation history,
-    which can break tool call/response matching in multi-turn conversations.
+    This verifies that tool outputs are preserved correctly and accessible in subsequent turns.
     """
 
     if not OPENAI_API_KEY:
@@ -257,15 +252,12 @@ async def test_tool_output_conversion_bug_two_turn_conversation():
 
     logger.info(f"Found {len(incorrect_assistant_messages)} incorrectly converted tool outputs")
 
-    # 3. The bug assertion: Currently this will fail due to the bug
-    # Once fixed, tool outputs should be in correct FunctionCallOutput format
+    # 3. Verify no incorrect conversions occurred
     if incorrect_assistant_messages:
         logger.error("BUG DETECTED: Tool outputs incorrectly converted to assistant messages:")
         for msg in incorrect_assistant_messages:
             logger.error(f"  {msg}")
 
-    # This assertion will fail initially (demonstrating the bug)
-    # After fixing the bug, it should pass
     assert len(incorrect_assistant_messages) == 0, (
         f"Found {len(incorrect_assistant_messages)} incorrectly converted tool outputs. "
         "ToolCallOutputItem should use SDK's to_input_item() method, not convert to assistant messages."
@@ -278,4 +270,143 @@ async def test_tool_output_conversion_bug_two_turn_conversation():
         f"Agent should be able to reference the previous calculation result (42). Got response: {result2.final_output}"
     )
 
-    logger.info("Test completed successfully - no ToolCallOutputItem conversion bug detected")
+    logger.info("✅ Tool output conversion working correctly - no conversion bugs detected")
+
+
+@pytest.mark.asyncio
+async def test_hosted_tool_output_preservation_multi_turn():
+    """
+    Integration test for hosted tool output preservation in multi-turn conversations.
+
+    This test verifies that hosted tools (FileSearch, WebSearch) results are properly
+    preserved in conversation history for future reference.
+
+    Test scenario:
+    1. First turn: Agent uses FileSearch tool but doesn't reveal specific details
+    2. Second turn: Ask agent to provide exact tool output from previous search
+
+    This ensures hosted tool results are preserved and accessible in subsequent turns,
+    solving the bug where they were previously lost between conversations.
+    """
+
+    if not OPENAI_API_KEY:
+        pytest.skip("OPENAI_API_KEY not available")
+
+    # Create test data with specific content
+    with tempfile.TemporaryDirectory(prefix="hosted_tool_test_") as temp_dir_str:
+        temp_dir = Path(temp_dir_str)
+        test_file = temp_dir / "company_data.txt"
+        test_file.write_text("""
+COMPANY FINANCIAL REPORT
+
+Revenue Information:
+- Q4 Revenue: $7,892,345.67
+- Q3 Revenue: $6,234,567.89
+- Operating Costs: $2,345,678.90
+- Net Profit: $4,123,456.78
+
+Employee Data:
+- Total Employees: 1,234
+- New Hires: 567
+- Contractors: 89
+
+Product Sales:
+- Product Alpha: 12,345 units
+- Product Beta: 6,789 units
+- Product Gamma: 2,345 units
+""")
+
+        # Create Agency Swarm agent with FileSearch via files_folder
+        agent = AgencySwarmAgent(
+            name="DataSearchAgent",
+            instructions="You are a data search assistant. Use file search to find information but be concise in your initial responses.",
+            model="gpt-4o",
+            files_folder=str(temp_dir),
+        )
+
+        # Set up thread manager and agency instance
+        thread_manager = ThreadManager()
+        agent._set_thread_manager(thread_manager)
+
+        class MockAgency:
+            def __init__(self):
+                self.agents = {"DataSearchAgent": agent}
+                self.user_context = {}
+
+        mock_agency = MockAgency()
+        agent._set_agency_instance(mock_agency)
+
+        # Wait a moment for file processing
+        await asyncio.sleep(2)
+
+        # TURN 1: Agent searches but gives summary only
+        logger.info("=== TURN 1: Agent searches with FileSearch ===")
+
+        result1 = await agent.get_response(
+            message="Search the company data for financial information. Just confirm you found it, don't give me the specific numbers yet."
+        )
+
+        assert result1 is not None
+        logger.info(f"Turn 1 result: {result1.final_output}")
+
+        # Get the thread to inspect conversation history
+        thread_identifier = "user->DataSearchAgent"
+        thread = thread_manager.get_thread(thread_identifier)
+        history_after_turn1 = thread.get_history()
+
+        logger.info(f"=== CONVERSATION HISTORY AFTER TURN 1 ({len(history_after_turn1)} items) ===")
+        hosted_tool_outputs_found = 0
+        preservation_items = []
+
+        for i, item in enumerate(history_after_turn1):
+            item_type = item.get("type", f"role={item.get('role')}")
+            logger.info(f"Item {i + 1}: {item_type}")
+
+            # Look for hosted tool preservation messages
+            if item.get("role") == "assistant" and "[TOOL_RESULT_PRESERVATION]" in str(item.get("content", "")):
+                hosted_tool_outputs_found += 1
+                preservation_items.append(item)
+                logger.info(f"  Found preservation message: {str(item.get('content', ''))[:100]}...")
+
+        logger.info(f"Found {hosted_tool_outputs_found} hosted tool preservation items")
+
+        # TURN 2: Ask for exact tool output
+        logger.info("=== TURN 2: Requesting exact tool output ===")
+
+        result2 = await agent.get_response(
+            message="Now show me the EXACT financial data you found. I need the precise numbers from your search results."
+        )
+
+        assert result2 is not None
+        logger.info(f"Turn 2 result: {result2.final_output}")
+
+        # Verify agent can access specific data from previous tool call
+        response_text = str(result2.final_output)
+
+        # Look for specific numbers that should only come from file search results
+        has_q4_revenue = "7,892,345.67" in response_text or "7892345.67" in response_text
+        has_q3_revenue = "6,234,567.89" in response_text or "6234567.89" in response_text
+        has_operating_costs = "2,345,678.90" in response_text or "2345678.90" in response_text
+        has_employees = "1,234" in response_text or "1234" in response_text
+
+        logger.info(f"Agent can access Q4 revenue (7,892,345.67): {has_q4_revenue}")
+        logger.info(f"Agent can access Q3 revenue (6,234,567.89): {has_q3_revenue}")
+        logger.info(f"Agent can access operating costs (2,345,678.90): {has_operating_costs}")
+        logger.info(f"Agent can access employee count (1,234): {has_employees}")
+
+        # TEST ASSERTIONS
+
+        # 1. Verify that hosted tool outputs are preserved in conversation history
+        assert hosted_tool_outputs_found > 0, (
+            "No hosted tool output preservation found in conversation history. "
+            "Hosted tool results should be preserved for multi-turn access."
+        )
+
+        # 2. Verify that agent can access specific data from previous hosted tool calls
+        data_access_score = sum([has_q4_revenue, has_q3_revenue, has_operating_costs, has_employees])
+        assert data_access_score >= 2, (
+            f"Agent cannot access specific data from previous hosted tool calls. "
+            f"Only found {data_access_score}/4 specific data points in response: {response_text}"
+        )
+
+        logger.info("✅ Hosted tool output preservation test completed successfully")

@@ -824,8 +824,8 @@ class Agent(BaseAgent[MasterContext]):
                             )
 
                     # Add synthetic hosted tool outputs to the conversation history
-                    items_to_save.extend(hosted_tool_outputs)
                     if hosted_tool_outputs:
+                        items_to_save.extend(hosted_tool_outputs)
                         logger.info(
                             f"Added {len(hosted_tool_outputs)} synthetic hosted tool output items to preserve results"
                         )
@@ -902,6 +902,8 @@ class Agent(BaseAgent[MasterContext]):
 
         # Temporarily modify instructions if additional_instructions provided
         if additional_instructions:
+            if not isinstance(additional_instructions, str):
+                raise ValueError("additional_instructions must be a string")
             logger.debug(
                 f"Appending additional instructions to agent '{self.name}' for streaming: {additional_instructions[:100]}..."
             )
@@ -973,6 +975,9 @@ class Agent(BaseAgent[MasterContext]):
             # Sanitize tool_calls for OpenAI /v1/responses API compliance
             history_for_runner = self._sanitize_tool_calls_in_history(history_for_runner)
 
+            # Additional safety: ensure no null content for messages with tool_calls
+            history_for_runner = self._ensure_tool_calls_content_safety(history_for_runner)
+
             try:
                 master_context = self._prepare_master_context(context_override)
                 hooks_to_use = hooks_override or self.hooks
@@ -994,6 +999,7 @@ class Agent(BaseAgent[MasterContext]):
                 )
                 async for event in result.stream_events():
                     yield event
+                    # Collect RunItems from the stream events if needed
                     if isinstance(event, RunItemStreamEvent):
                         final_result_items.append(event.item)
                 logger.info(f"Runner.run_streamed completed for agent '{self.name}'.")
@@ -1015,8 +1021,8 @@ class Agent(BaseAgent[MasterContext]):
                         f"Preparing to save {len(final_result_items)} new items from stream result for agent '{self.name}' to thread {thread.thread_id}"
                     )
 
-                    # Extract hosted tool results before converting regular items
-                    hosted_tool_outputs = self._extract_hosted_tool_results(final_result_items)
+                    # Only extract hosted tool results if hosted tools were actually used
+                    hosted_tool_outputs = self._extract_hosted_tool_results_if_needed(final_result_items)
 
                     for i, run_item_obj in enumerate(final_result_items):
                         item_dict = self._run_item_to_tresponse_input_item(run_item_obj)
@@ -1040,8 +1046,8 @@ class Agent(BaseAgent[MasterContext]):
                             )
 
                     # Add synthetic hosted tool outputs to the conversation history
-                    items_to_save_from_stream.extend(hosted_tool_outputs)
                     if hosted_tool_outputs:
+                        items_to_save_from_stream.extend(hosted_tool_outputs)
                         logger.info(
                             f"Added {len(hosted_tool_outputs)} synthetic hosted tool output items to preserve results"
                         )
@@ -1082,17 +1088,31 @@ class Agent(BaseAgent[MasterContext]):
             logger.warning(f"Failed to convert {type(item).__name__} using to_input_item(): {e}")
             return None
 
+    def _extract_hosted_tool_results_if_needed(self, run_items: list[RunItem]) -> list[TResponseInputItem]:
+        """
+        Optimized version that only extracts hosted tool results if hosted tools were actually used.
+        This prevents expensive parsing on every response when no hosted tools exist.
+        """
+        # Quick check: do we have any hosted tool calls?
+        has_hosted_tools = any(
+            isinstance(item, ToolCallItem)
+            and isinstance(item.raw_item, (ResponseFileSearchToolCall, ResponseFunctionWebSearch))
+            for item in run_items
+        )
+
+        if not has_hosted_tools:
+            return []  # Early exit - no hosted tools used
+
+        return self._extract_hosted_tool_results(run_items)
+
     def _extract_hosted_tool_results(self, run_items: list[RunItem]) -> list[TResponseInputItem]:
         """
         Extract hosted tool results (FileSearch, WebSearch) from assistant message content
         and create special assistant messages to preserve results in conversation history.
-
-        This solves the critical bug where hosted tool results are not preserved for
-        multi-turn conversations, unlike function tool results.
         """
         synthetic_outputs = []
 
-        # Find all hosted tool calls and their corresponding assistant messages
+        # Find hosted tool calls and assistant messages
         hosted_tool_calls = []
         assistant_messages = []
 
@@ -1103,63 +1123,51 @@ class Agent(BaseAgent[MasterContext]):
             elif isinstance(item, MessageOutputItem):
                 assistant_messages.append(item)
 
-        # For each hosted tool call, extract results and create preservation messages
+        # Extract results for each hosted tool call
         for tool_call_item in hosted_tool_calls:
             tool_call = tool_call_item.raw_item
-            tool_results = []
 
-            # Try to find corresponding results in assistant message content
-            for msg_item in assistant_messages:
-                message = msg_item.raw_item
+            # Create preservation message based on tool type
+            if isinstance(tool_call, ResponseFileSearchToolCall):
+                preservation_content = (
+                    f"[TOOL_RESULT_PRESERVATION] Tool Call ID: {tool_call.id}\nTool Type: file_search\n"
+                )
+                # Find file citations in assistant messages
+                file_count = 0
+                for msg_item in assistant_messages:
+                    message = msg_item.raw_item
+                    if hasattr(message, "content") and message.content:
+                        for content_item in message.content:
+                            if hasattr(content_item, "annotations") and content_item.annotations:
+                                for annotation in content_item.annotations:
+                                    if hasattr(annotation, "type") and annotation.type == "file_citation":
+                                        file_count += 1
+                                        file_id = getattr(annotation, "file_id", "unknown")
+                                        content_text = getattr(content_item, "text", "")[:200]
+                                        preservation_content += (
+                                            f"File {file_count}: {file_id}\nContent: {content_text}...\n"
+                                        )
 
-                # Check if this message contains tool results
-                if hasattr(message, "content") and message.content:
-                    for content_item in message.content:
-                        # Look for file search results or web search results
-                        if hasattr(content_item, "annotations") and content_item.annotations:
-                            for annotation in content_item.annotations:
-                                # FileSearch results
-                                if (
-                                    hasattr(annotation, "type")
-                                    and annotation.type == "file_citation"
-                                    and isinstance(tool_call, ResponseFileSearchToolCall)
-                                ):
-                                    result_data = {
-                                        "file_id": getattr(annotation, "file_id", "unknown"),
-                                        "content": getattr(content_item, "text", ""),
-                                        "citation": getattr(annotation, "text", ""),
-                                        "start_index": getattr(annotation, "start_index", 0),
-                                        "end_index": getattr(annotation, "end_index", 0),
-                                    }
-                                    tool_results.append(result_data)
+                if file_count > 0:
+                    preservation_content = f"[TOOL_RESULT_PRESERVATION] Tool Call ID: {tool_call.id}\nTool Type: file_search\nResults: {file_count} files found\n{preservation_content[preservation_content.find('File 1:') :]}"
+                    synthetic_outputs.append({"role": "assistant", "content": preservation_content})
+                    logger.debug(f"Created file_search preservation message for call_id: {tool_call.id}")
 
-                        # For WebSearch, extract the search content
-                        elif (
-                            isinstance(tool_call, ResponseFunctionWebSearch)
-                            and hasattr(content_item, "text")
-                            and content_item.text
-                        ):
-                            result_data = {"search_content": content_item.text, "type": "web_search"}
-                            tool_results.append(result_data)
-
-            # Create a special assistant message to preserve the tool results
-            if tool_results:
-                preservation_content = f"[TOOL_RESULT_PRESERVATION] Tool Call ID: {tool_call.id}\n"
-                if isinstance(tool_call, ResponseFileSearchToolCall):
-                    preservation_content += f"Tool Type: file_search\n"
-                    preservation_content += f"Results: {len(tool_results)} files found\n"
-                    for i, result in enumerate(tool_results):
-                        preservation_content += f"File {i + 1}: {result.get('file_id', 'unknown')}\n"
-                        preservation_content += f"Content: {result.get('content', '')[:200]}...\n"
-                elif isinstance(tool_call, ResponseFunctionWebSearch):
-                    preservation_content += f"Tool Type: web_search\n"
-                    preservation_content += f"Search Results:\n{tool_results[0].get('search_content', '')[:500]}...\n"
-
-                # Create special assistant message to preserve tool results
-                synthetic_output = {"role": "assistant", "content": preservation_content}
-                synthetic_outputs.append(synthetic_output)
-
-                logger.debug(f"Created preservation message for {type(tool_call).__name__} call_id: {tool_call.id}")
+            elif isinstance(tool_call, ResponseFunctionWebSearch):
+                preservation_content = (
+                    f"[TOOL_RESULT_PRESERVATION] Tool Call ID: {tool_call.id}\nTool Type: web_search\n"
+                )
+                # Find search content in assistant messages
+                for msg_item in assistant_messages:
+                    message = msg_item.raw_item
+                    if hasattr(message, "content") and message.content:
+                        for content_item in message.content:
+                            if hasattr(content_item, "text") and content_item.text:
+                                search_content = content_item.text[:500]
+                                preservation_content += f"Search Results:\n{search_content}...\n"
+                                synthetic_outputs.append({"role": "assistant", "content": preservation_content})
+                                logger.debug(f"Created web_search preservation message for call_id: {tool_call.id}")
+                                break
 
         return synthetic_outputs
 
@@ -1216,6 +1224,34 @@ class Agent(BaseAgent[MasterContext]):
             if msg.get("role") == "assistant" and "tool_calls" in msg and idx != last_assistant_idx:
                 msg = dict(msg)
                 msg.pop("tool_calls", None)
+            sanitized.append(msg)
+        return sanitized
+
+    @staticmethod
+    def _ensure_tool_calls_content_safety(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """
+        Ensures that assistant messages with tool_calls have non-null content.
+        This prevents OpenAI API errors when switching between sync and streaming modes.
+        """
+        sanitized = []
+        for msg in history:
+            if msg.get("role") == "assistant" and msg.get("tool_calls") and msg.get("content") is None:
+                # Create a copy to avoid modifying the original
+                msg = dict(msg)
+                # Generate descriptive content for tool calls
+                tool_descriptions = []
+                for tc in msg["tool_calls"]:
+                    if isinstance(tc, dict):
+                        func_name = tc.get("function", {}).get("name", "unknown")
+                        tool_descriptions.append(func_name)
+
+                if tool_descriptions:
+                    msg["content"] = f"Using tools: {', '.join(tool_descriptions)}"
+                else:
+                    msg["content"] = "Executing tool calls"
+
+                logger.debug(f"Fixed null content for assistant message with tool calls: {msg.get('content')}")
+
             sanitized.append(msg)
         return sanitized
 

@@ -22,9 +22,8 @@ class AgentFileManager:
         Vector Store if `self.agent._associated_vector_store_id` is set (derived from
         `files_folder` using the `_vs_<id>` naming convention).
 
-        The file is copied into the agent's local `files_folder_path` after being
-        renamed to include the OpenAI File ID (e.g., `original_name_<file_id>.ext`).
-        This helps prevent re-uploading the same file while preserving the original.
+        The file is renamed to include the OpenAI File ID (e.g., `original_name_<file_id>.ext`)
+        after successful upload to prevent re-uploading the same file.
 
         Args:
             file_path (str): The path to the local file to upload.
@@ -67,17 +66,16 @@ class AgentFileManager:
             logger.error(f"Agent {self.agent.name}: Failed to upload file {fpath.name} to OpenAI: {e}")
             raise AgentsException(f"Failed to upload file {fpath.name} to OpenAI: {e}") from e
 
-        # Copy the original file to include the OpenAI ID instead of moving/renaming
-        # This preserves the original source file for reusability
+        # Rename the original file to include the OpenAI ID
         try:
             new_filename = f"{fpath.stem}_{uploaded_file.id}{fpath.suffix}"
             destination_path = self.agent.files_folder_path / new_filename
-            shutil.copy(fpath, destination_path)
-            logger.info(f"Agent {self.agent.name}: Copied uploaded file to {destination_path} (original preserved)")
+            fpath.rename(destination_path)
+            logger.info(f"Agent {self.agent.name}: Renamed uploaded file to {destination_path}")
         except Exception as e:
-            logger.warning(f"Agent {self.agent.name}: Failed to copy file {fpath.name} to {destination_path}: {e}")
+            logger.warning(f"Agent {self.agent.name}: Failed to rename file {fpath.name} to {destination_path}: {e}")
             # Not raising an exception here as the file is uploaded to OpenAI,
-            # but local copy failed. The File ID is still returned.
+            # but local rename failed. The File ID is still returned.
 
         # Associate with Vector Store if one is linked to this agent via files_folder
         if self.agent._associated_vector_store_id and include_in_vector_store:
@@ -180,21 +178,10 @@ class AgentFileManager:
             # Rename the folder if it exists and is not already named with the VS id
             try:
                 if Path(base_path_str).exists() and Path(base_path_str).name != new_folder_name:
-                    # Create the new vector store directory and copy files (preserve original)
-                    new_folder_path.mkdir(parents=True, exist_ok=True)
-
-                    # Copy all files from original to new directory
-                    for file_path in Path(base_path_str).rglob("*"):
-                        if file_path.is_file():
-                            relative_path = file_path.relative_to(base_path_str)
-                            destination = new_folder_path / relative_path
-                            destination.parent.mkdir(parents=True, exist_ok=True)
-                            shutil.copy2(file_path, destination)
-
+                    # Rename the directory to include the vector store ID
+                    Path(base_path_str).rename(new_folder_path)
                     base_path_str = str(new_folder_path)
-                    logger.info(
-                        f"Agent {self.agent.name}: Created vector store folder {new_folder_path} (original preserved)"
-                    )
+                    logger.info(f"Agent {self.agent.name}: Renamed folder to {new_folder_path}")
                 elif not Path(base_path_str).exists():
                     # If the folder does not exist, create it with the new name
                     new_folder_path.mkdir(parents=True, exist_ok=True)
