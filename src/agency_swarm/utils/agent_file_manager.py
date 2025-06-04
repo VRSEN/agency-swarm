@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+import shutil
 from pathlib import Path
 
 from agents import FileSearchTool
@@ -24,7 +25,7 @@ class AgentFileManager:
 
         The file is copied into the agent's local `files_folder_path` after being
         renamed to include the OpenAI File ID (e.g., `original_name_<file_id>.ext`).
-        This helps prevent re-uploading the same file.
+        This helps prevent re-uploading the same file while preserving the original.
 
         Args:
             file_path (str): The path to the local file to upload.
@@ -67,16 +68,17 @@ class AgentFileManager:
             logger.error(f"Agent {self.agent.name}: Failed to upload file {fpath.name} to OpenAI: {e}")
             raise AgentsException(f"Failed to upload file {fpath.name} to OpenAI: {e}") from e
 
-        # Rename the original file to include the OpenAI ID instead of copying
+        # Copy the original file to include the OpenAI ID instead of moving/renaming
+        # This preserves the original source file for reusability
         try:
             new_filename = f"{fpath.stem}_{uploaded_file.id}{fpath.suffix}"
             destination_path = self.agent.files_folder_path / new_filename
-            fpath.rename(destination_path)
-            logger.info(f"Agent {self.agent.name}: Renamed uploaded file to {destination_path}")
+            shutil.copy(fpath, destination_path)
+            logger.info(f"Agent {self.agent.name}: Copied uploaded file to {destination_path} (original preserved)")
         except Exception as e:
-            logger.warning(f"Agent {self.agent.name}: Failed to rename file {fpath.name} to {destination_path}: {e}")
+            logger.warning(f"Agent {self.agent.name}: Failed to copy file {fpath.name} to {destination_path}: {e}")
             # Not raising an exception here as the file is uploaded to OpenAI,
-            # but local rename failed. The File ID is still returned.
+            # but local copy failed. The File ID is still returned.
 
         # Associate with Vector Store if one is linked to this agent via files_folder
         if self.agent._associated_vector_store_id and include_in_vector_store:
