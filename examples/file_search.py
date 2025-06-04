@@ -17,6 +17,7 @@ The example uses fabricated research data to demonstrate true "needle in haystac
 
 import asyncio
 import os
+import shutil
 from pathlib import Path
 
 from agency_swarm import Agency, Agent
@@ -197,12 +198,21 @@ When answering questions:
         print("   • Add new .txt files to data/ folder and restart to index them")
         print("   • Framework automatically preserves source files")
 
-    except Exception as e:
-        print(f"❌ Unexpected error: {e}")
-        import traceback
-
-        traceback.print_exc()
+    finally:
+        # Cleanup: Remove temporary vector store directories
+        examples_dir = Path(__file__).parent
+        vs_dirs = list(examples_dir.glob("data_vs_*"))
+        if vs_dirs:
+            print(f"\n🧹 Cleaning up {len(vs_dirs)} temporary vector store directories...")
+            for vs_dir in vs_dirs:
+                try:
+                    shutil.rmtree(vs_dir)
+                    print(f"   • Removed: {vs_dir.name}")
+                except Exception as e:
+                    print(f"   • Failed to remove {vs_dir.name}: {e}")
 
 
 if __name__ == "__main__":
+    if os.name == "nt":
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     asyncio.run(main())
