@@ -97,7 +97,7 @@ async def test_get_response_stream_generates_thread_id(
 async def test_get_response_stream_agent_to_agent_communication(
     mock_runner_run_streamed_patch, minimal_agent, mock_thread_manager
 ):
-    """Test that get_response_stream works correctly for agent-to-agent communication without requiring chat_id."""
+    """Test that get_response_stream works correctly for agent-to-agent communication."""
 
     async def mock_stream_wrapper():
         yield {"event": "text", "data": "Hello"}
@@ -109,7 +109,6 @@ async def test_get_response_stream_agent_to_agent_communication(
 
     mock_runner_run_streamed_patch.return_value = MockStreamedResult()
 
-    # This should now work without chat_id - it will generate a thread identifier based on sender->recipient
     events = []
     async for event in minimal_agent.get_response_stream("Test message", sender_name="SomeAgent"):
         events.append(event)

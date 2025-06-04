@@ -87,16 +87,15 @@ def test_agent_initialization_with_all_parameters():
     tool1.name = "tool1"
 
     # TEST-ONLY SETUP: Create test directory to enable FileSearchTool auto-addition
-    import os
     import tempfile
     from pathlib import Path
 
     # Create a temporary test directory
-    temp_dir = Path(tempfile.mkdtemp(prefix="test_files_"))
-    test_file = temp_dir / "test.txt"
-    test_file.write_text("test content for FileSearchTool")
+    with tempfile.TemporaryDirectory(prefix="test_files_") as temp_dir_str:
+        temp_dir = Path(temp_dir_str)
+        test_file = temp_dir / "test.txt"
+        test_file.write_text("test content for FileSearchTool")
 
-    try:
         agent = Agent(
             name="CompleteAgent",
             instructions="Complete agent with all params",
@@ -118,15 +117,6 @@ def test_agent_initialization_with_all_parameters():
         assert agent.output_type == TaskOutput
         assert str(temp_dir) in str(agent.files_folder)  # Should contain the temp directory path
         assert agent.description == "A complete test agent"
-
-    finally:
-        # TEST-ONLY CLEANUP: Remove temporary directory
-        import shutil
-
-        try:
-            shutil.rmtree(temp_dir)
-        except Exception as e:
-            pass  # Ignore cleanup errors in tests
 
 
 def test_agent_repr():

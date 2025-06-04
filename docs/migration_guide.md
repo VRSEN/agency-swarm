@@ -47,6 +47,10 @@ The migration from v0.x to v1.x represents a fundamental shift in how Agency Swa
     *   **Note:** In v0.x, these were called `threads_callbacks` with `'load'` and `'save'` keys. The new v1.x approach uses separate callback parameters for clarity.
     *   **Important:** If you don't provide these callbacks, conversations are kept in memory only (great for local testing, but data is lost when the Agency instance is destroyed).
 *   **Asynchronous Methods:** v1.x methods `get_response()` and `get_response_stream()` are now asynchronous and must be called with `await` or `asyncio.run()`.
+*   **Model Configuration:**
+    *   **v0.x Method:** Model parameters like `temperature`, `top_p`, `max_completion_tokens`, etc., could be set individually on Agent instances or as global defaults on the Agency.
+    *   **v1.x Method (Recommended):** Use the `model_settings` parameter on Agent instances with a `ModelSettings` object from the `agents` SDK. This provides centralized model configuration and better type safety: `Agent(name="MyAgent", model_settings=ModelSettings(temperature=0.0, model="gpt-4o"))`.
+    *   **Backward Compatibility:** Individual model parameters on Agent instances are still supported but deprecated. Agency-level model parameters are deprecated - configure them directly on individual agents instead.
 
 ## Step-by-Step Migration
 
@@ -59,6 +63,8 @@ Provide concrete steps for users to follow.
         *   **Note:** The new `Agent.__init__` accepts `**kwargs` for backward compatibility. Using old parameters like `id`, `tool_resources`, `schemas_folder`, `api_headers`, `api_params`, `file_ids`, `reasoning_effort`, `validation_attempts`, `examples`, `file_search`, or `refresh_from_id`, will issue `DeprecationWarning`s.
         *   The old `examples` parameter content will be automatically prepended to the `instructions` with a warning.
         *   Functionality related to `id` and OpenAPI schemas (`schemas_*`, `api_*`) is removed. Files should be managed via `files_folder` and `upload_file`. Validation is handled via the `response_validator` parameter (Note: Future integration with SDK `OutputGuardrail`s is planned).
+    *   **Model Configuration:** Replace individual model parameters (`temperature`, `top_p`, `max_completion_tokens`, etc.) with the `model_settings` parameter using a `ModelSettings` object from the `agents` SDK: `model_settings=ModelSettings(temperature=0.7, model="gpt-4o")`. Individual model parameters are deprecated but still supported for backward compatibility.
+        *   **Note:** For easier migration, deprecated model parameters are automatically merged into existing `model_settings` if both are provided, allowing gradual migration without breaking existing code.
     *   Replace `BaseTool`-based tool definitions with SDK `FunctionTool` or other `Tool` subclasses (See Tool Conversion section). **Note:** The `agency_swarm.tools.BaseTool` class itself has been removed.
     *   Remove direct calls to Assistants API client methods.
     *   Implement file handling using `self.upload_file`, if needed.
@@ -116,6 +122,9 @@ class MyAgentV0(Agent):
             instructions="./instructions.md", # Example path
             tools=[MyCustomTool],
             files_folder="./files", # Example path
+            temperature=0.7,  # Individual model parameters
+            top_p=1.0,
+            max_completion_tokens=25000,
             # ... other v0.x parameters
             **kwargs
         )
@@ -127,7 +136,9 @@ agency = Agency(
         agent1_v0,  # Entry point
         [agent1_v0, MyAgentV0(name="Agent2")], # Communication flow
     ],
-    shared_instructions='./agency_manifesto.md'
+    shared_instructions='./agency_manifesto.md',
+    temperature=0.3,  # Global model parameters (deprecated in v1.x)
+    max_completion_tokens=25000,
 )
 
 # Run Interaction (Example v0.x Call)
@@ -154,7 +165,7 @@ print(completion_output)
 
 # --- AFTER (v1.x) ---
 from agency_swarm import Agent, Agency
-from agents import function_tool
+from agents import function_tool, ModelSettings
 from pathlib import Path
 from typing import Any
 import asyncio
@@ -208,8 +219,17 @@ class MyAgentSDK(Agent):
 # Agency Setup - Two Options Available:
 
 # Option 1: New Recommended Pattern (v1.x)
-agent1 = MyAgentSDK(name="Agent1", instructions="...", output_type=TaskOutput)
-agent2 = MyAgentSDK(name="Agent2", instructions="...")
+agent1 = MyAgentSDK(
+    name="Agent1",
+    instructions="...",
+    output_type=TaskOutput,
+    model_settings=ModelSettings(temperature=0.7, model="gpt-4o")
+)
+agent2 = MyAgentSDK(
+    name="Agent2",
+    instructions="...",
+    model_settings=ModelSettings(temperature=0.3, model="gpt-4o")
+)
 agency = Agency(
     agent1, # agent1 is an entry point (positional argument)
     communication_flows=[(agent1, agent2)], # agent1 can send messages to agent2

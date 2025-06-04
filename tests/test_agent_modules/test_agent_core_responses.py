@@ -25,10 +25,9 @@ async def test_get_response_generates_thread_id(mock_runner_run, minimal_agent, 
 @pytest.mark.asyncio
 @patch("agency_swarm.agent.Runner.run", new_callable=AsyncMock)
 async def test_get_response_agent_to_agent_communication(mock_runner_run, minimal_agent, mock_thread_manager):
-    """Test that get_response works correctly for agent-to-agent communication without requiring chat_id."""
+    """Test that get_response works correctly for agent-to-agent communication."""
     mock_runner_run.return_value = MagicMock(new_items=[], final_output="Test response")
 
-    # This should now work without chat_id - it will generate a thread identifier based on sender->recipient
     result = await minimal_agent.get_response("Test message", sender_name="SomeAgent")
 
     assert result is not None

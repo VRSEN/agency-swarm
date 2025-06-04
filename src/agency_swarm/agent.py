@@ -149,40 +149,29 @@ class Agent(BaseAgent[MasterContext]):
         """
         # --- Handle Deprecated Args ---
         deprecated_args_used = {}
-        if "id" in kwargs:
-            warnings.warn(
-                "'id' parameter (OpenAI Assistant ID) is deprecated and no longer used for loading. Agent state is managed via PersistenceHooks.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            deprecated_args_used["id"] = kwargs.pop("id")
-        if "tool_resources" in kwargs:
-            warnings.warn(
-                "'tool_resources' is deprecated. File resources should be managed via 'files_folder' and the 'upload_file' method for Vector Stores.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            deprecated_args_used["tool_resources"] = kwargs.pop("tool_resources")
-        if "schemas_folder" in kwargs or "api_headers" in kwargs or "api_params" in kwargs:
-            warnings.warn(
-                "'schemas_folder', 'api_headers', and 'api_params' related to OpenAPI tools are deprecated. Use standard FunctionTools instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-        if "file_ids" in kwargs:
-            warnings.warn(
-                "'file_ids' is deprecated. Use 'files_folder' to associate with Vector Stores or manage files via Agent methods.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            deprecated_args_used["file_ids"] = kwargs.pop("file_ids")
-        if "reasoning_effort" in kwargs:
-            warnings.warn(
-                "'reasoning_effort' is deprecated as a direct Agent parameter. Configure model settings via 'model_settings' if needed.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            deprecated_args_used["reasoning_effort"] = kwargs.pop("reasoning_effort")
+        deprecated_model_settings = {}
+
+        # Group deprecated model-related parameters
+        model_related_params = [
+            "temperature",
+            "top_p",
+            "max_completion_tokens",
+            "max_prompt_tokens",
+            "reasoning_effort",
+            "truncation_strategy",
+        ]
+
+        for param in model_related_params:
+            if param in kwargs:
+                param_value = kwargs.pop(param)
+                warnings.warn(
+                    f"'{param}' is deprecated as a direct Agent parameter. Configure model settings via 'model_settings' parameter using a ModelSettings object from the agents SDK.",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
+                deprecated_args_used[param] = param_value
+                deprecated_model_settings[param] = param_value
+
         if "validation_attempts" in kwargs:
             val_attempts = kwargs.pop("validation_attempts")
             warnings.warn(
@@ -193,10 +182,44 @@ class Agent(BaseAgent[MasterContext]):
             if val_attempts > 1 and "response_validator" not in kwargs:
                 warnings.warn(
                     "Using 'validation_attempts > 1' without a 'response_validator' has no effect. Implement validation logic in the callback.",
-                    UserWarning,  # Changed to UserWarning as it's about usage logic
+                    UserWarning,
                     stacklevel=2,
                 )
             deprecated_args_used["validation_attempts"] = val_attempts
+            # Note: validation_attempts doesn't directly map to model_settings but is tracked for compatibility
+
+        # Handle other deprecated parameters
+        if "id" in kwargs:
+            warnings.warn(
+                "'id' parameter (OpenAI Assistant ID) is deprecated and no longer used for loading. Agent state is managed via PersistenceHooks.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            deprecated_args_used["id"] = kwargs.pop("id")
+
+        if "tool_resources" in kwargs:
+            warnings.warn(
+                "'tool_resources' is deprecated. File resources should be managed via 'files_folder' and the 'upload_file' method for Vector Stores.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            deprecated_args_used["tool_resources"] = kwargs.pop("tool_resources")
+
+        if "schemas_folder" in kwargs or "api_headers" in kwargs or "api_params" in kwargs:
+            warnings.warn(
+                "'schemas_folder', 'api_headers', and 'api_params' related to OpenAPI tools are deprecated. Use standard FunctionTools instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
+        if "file_ids" in kwargs:
+            warnings.warn(
+                "'file_ids' is deprecated. Use 'files_folder' to associate with Vector Stores or manage files via Agent methods.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            deprecated_args_used["file_ids"] = kwargs.pop("file_ids")
+
         if "examples" in kwargs:
             examples = kwargs.pop("examples")
             warnings.warn(
@@ -214,7 +237,8 @@ class Agent(BaseAgent[MasterContext]):
                     logger.info("Prepended 'examples' content to agent instructions.")
                 except Exception as e:
                     logger.warning(f"Could not automatically prepend 'examples' to instructions: {e}")
-            deprecated_args_used["examples"] = examples  # Store original for logging if needed
+            deprecated_args_used["examples"] = examples
+
         if "file_search" in kwargs:
             warnings.warn(
                 "'file_search' parameter is deprecated. FileSearchTool is added automatically if 'files_folder' indicates a Vector Store.",
@@ -222,6 +246,7 @@ class Agent(BaseAgent[MasterContext]):
                 stacklevel=2,
             )
             deprecated_args_used["file_search"] = kwargs.pop("file_search")
+
         if "refresh_from_id" in kwargs:
             warnings.warn(
                 "'refresh_from_id' is deprecated as loading by Assistant ID is no longer supported.",
@@ -230,6 +255,7 @@ class Agent(BaseAgent[MasterContext]):
             )
             deprecated_args_used["refresh_from_id"] = kwargs.pop("refresh_from_id")
 
+        # Handle deprecated tools
         if "tools" in kwargs:
             tools_list = kwargs["tools"]
             for i, tool in enumerate(tools_list):
@@ -240,6 +266,21 @@ class Agent(BaseAgent[MasterContext]):
                         stacklevel=2,
                     )
                     tools_list[i] = self._adapt_legacy_tool(tool)
+
+        # Merge deprecated model settings into existing model_settings
+        if deprecated_model_settings:
+            existing_model_settings = kwargs.get("model_settings", {})
+            if existing_model_settings is None:
+                existing_model_settings = {}
+
+            # Create a new dict to avoid modifying the original
+            merged_model_settings = dict(existing_model_settings)
+            merged_model_settings.update(deprecated_model_settings)
+            kwargs["model_settings"] = merged_model_settings
+
+            logger.info(
+                f"Merged deprecated model settings into model_settings: {list(deprecated_model_settings.keys())}"
+            )
 
         # Log if any deprecated args were used
         if deprecated_args_used:
@@ -622,6 +663,8 @@ class Agent(BaseAgent[MasterContext]):
 
         # Temporarily modify instructions if additional_instructions provided
         if additional_instructions:
+            if not isinstance(additional_instructions, str):
+                raise ValueError("additional_instructions must be a string")
             logger.debug(
                 f"Appending additional instructions to agent '{self.name}': {additional_instructions[:100]}..."
             )
@@ -711,6 +754,9 @@ class Agent(BaseAgent[MasterContext]):
             # Sanitize tool_calls for OpenAI /v1/responses API compliance
             history_for_runner = self._sanitize_tool_calls_in_history(history_for_runner)
 
+            # Additional safety: ensure no null content for messages with tool_calls
+            history_for_runner = self._ensure_tool_calls_content_safety(history_for_runner)
+
             logger.info(
                 f"AGENT_GET_RESPONSE: History for Runner in agent '{self.name}' for thread '{thread_id}' (length {len(history_for_runner)}):"
             )
@@ -761,8 +807,8 @@ class Agent(BaseAgent[MasterContext]):
                         f"Preparing to save {len(run_result.new_items)} new items from RunResult to thread {thread.thread_id}"
                     )
 
-                    # Extract hosted tool results before converting regular items
-                    hosted_tool_outputs = self._extract_hosted_tool_results(run_result.new_items)
+                    # Only extract hosted tool results if hosted tools were actually used
+                    hosted_tool_outputs = self._extract_hosted_tool_results_if_needed(run_result.new_items)
 
                     for i, run_item_obj in enumerate(run_result.new_items):
                         # _run_item_to_tresponse_input_item converts RunItem to TResponseInputItem (dict)

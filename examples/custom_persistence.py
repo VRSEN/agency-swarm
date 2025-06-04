@@ -9,6 +9,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from agents import ModelSettings
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -84,6 +85,7 @@ assistant_agent = Agent(
     name="AssistantAgent",
     instructions="You are a helpful assistant. Answer questions and help users with their tasks.",
     tools=[],
+    model_settings=ModelSettings(temperature=0.0),  # Deterministic responses
 )
 
 # --- Create Agency Instance (v1.x Pattern) ---
@@ -99,6 +101,7 @@ assistant_agent_reloaded = Agent(
     name="AssistantAgent",
     instructions="You are a helpful assistant. Answer questions and help users with their tasks.",
     tools=[],
+    model_settings=ModelSettings(temperature=0.0),  # Deterministic responses
 )
 
 agency_reloaded = Agency(
@@ -108,7 +111,7 @@ agency_reloaded = Agency(
     save_threads_callback=save_thread_data_to_file,
 )
 
-SECRET_CODE = "sky-is-blue-77"
+TEST_INFO = "blue and lucky number is 77"
 
 
 async def run_persistent_conversation():
@@ -119,13 +122,12 @@ async def run_persistent_conversation():
     1. Thread isolation: Each communication flow gets its own thread
     2. Thread identifiers: Follow "sender->recipient" format
     3. Persistence: Complete thread state is saved and restored
-    4. No chat_id needed: Framework automatically manages thread identification
     """
 
-    print("\n--- Turn 1: User -> AssistantAgent (Tell Secret) ---")
+    print("\n--- Turn 1: User -> AssistantAgent (Share Info) ---")
     print("Thread identifier will be: user->AssistantAgent")
 
-    user_message_1 = f"Hello. Please remember this secret code: '{SECRET_CODE}'. I'll ask you about it later."
+    user_message_1 = f"Hello. Please remember that my favorite color is {TEST_INFO}. I'll ask you about it later."
     response1 = await agency.get_response(
         recipient_agent=assistant_agent,
         message=user_message_1,
@@ -138,10 +140,10 @@ async def run_persistent_conversation():
     print("\n--- Simulating Application Restart ---")
     print("Using pre-initialized reloaded agency instance...")
 
-    print("\n--- Turn 2: User -> AssistantAgent (Recall Secret using Reloaded Agency) ---")
+    print("\n--- Turn 2: User -> AssistantAgent (Recall Info using Reloaded Agency) ---")
     print("Thread identifier will be: user->AssistantAgent (same as before)")
 
-    user_message_2 = "What was the secret code I told you earlier?"
+    user_message_2 = "What was my favorite color and lucky number I told you earlier?"
     response2 = await agency_reloaded.get_response(
         recipient_agent=assistant_agent_reloaded,
         message=user_message_2,
@@ -149,11 +151,11 @@ async def run_persistent_conversation():
     print(f"Response from Reloaded AssistantAgent: {response2.final_output}")
 
     # Test result
-    if response2.final_output and SECRET_CODE.lower() in response2.final_output.lower():
-        print(f"\n✅ SUCCESS: AssistantAgent remembered the secret code ('{SECRET_CODE}')!")
+    if response2.final_output and "blue" in response2.final_output.lower() and "77" in response2.final_output.lower():
+        print(f"\n✅ SUCCESS: AssistantAgent remembered the information ('{TEST_INFO}')!")
         print("Thread isolation and persistence working correctly.")
     else:
-        print(f"\n❌ FAILURE: AssistantAgent did NOT remember the secret code ('{SECRET_CODE}').")
+        print(f"\n❌ FAILURE: AssistantAgent did NOT remember the information ('{TEST_INFO}').")
         print(f"Agent's response: {response2.final_output}")
 
     # Cleanup
@@ -173,9 +175,9 @@ if __name__ == "__main__":
         print("This example demonstrates:")
         print("• Automatic thread isolation using 'sender->recipient' identifiers")
         print("• Complete conversation persistence across application restarts")
-        print("• No chat_id management required by users")
         print("=" * 60)
 
         if os.name == "nt":
             asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
         asyncio.run(run_persistent_conversation())
