@@ -1,13 +1,13 @@
 import os
-from typing import List, Optional, Dict, Type
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
-
-from agency_swarm.agents import Agent
-from agency_swarm.agency import Agency
-from agency_swarm.tools import BaseTool
+from typing import Dict, List, Optional, Type
 
 from dotenv import load_dotenv
+
+from agency_swarm.agency import Agency
+from agency_swarm.agents import Agent
+from agency_swarm.tools import BaseTool
 
 load_dotenv()
 
@@ -18,6 +18,7 @@ def run_fastapi(
     host: str = "0.0.0.0",
     port: int = 8000,
     app_token_env: str = "APP_TOKEN",
+    return_app: bool = False,
 ):
     """
     Launch a FastAPI server exposing endpoints for multiple agencies and tools.
@@ -32,14 +33,15 @@ def run_fastapi(
         import uvicorn
         from fastapi import FastAPI
         from fastapi.middleware.cors import CORSMiddleware
-        from .fastapi_utils.request_models import add_agent_validator, BaseRequest
+
         from .fastapi_utils.endpoint_handlers import (
+            exception_handler,
+            get_verify_token,
             make_completion_endpoint,
             make_stream_endpoint,
             make_tool_endpoint,
-            exception_handler,
-            get_verify_token,
         )
+        from .fastapi_utils.request_models import BaseRequest, add_agent_validator
     except ImportError:
         print(
             "FastAPI deployment dependencies are missing. Please install agency-swarm[fastapi] package"
@@ -55,7 +57,7 @@ def run_fastapi(
     async def lifespan(app):
         # Startup logic
         global _EXECUTOR
-        from .fastapi_utils.endpoint_handlers import _MAX_WORKERS, _EXECUTOR
+        from .fastapi_utils.endpoint_handlers import _EXECUTOR, _MAX_WORKERS
         if _EXECUTOR is None:
             print("Initializing ThreadPoolExecutor in FastAPI startup event")
             _EXECUTOR = ThreadPoolExecutor(max_workers=_MAX_WORKERS)
@@ -92,7 +94,10 @@ def run_fastapi(
                 agency_name = "agency" if len(agencies) == 1 else f"agency_{idx+1}"
             agency_name = agency_name.replace(" ", "_")
             if agency_name in agency_names:
-                raise ValueError(f"Agency name {agency_name} is already in use. Please provide a unique name in the agency's 'name' parameter.")
+                raise ValueError(
+                    f"Agency name {agency_name} is already in use. "
+                    "Please provide a unique name in the agency's 'name' parameter."
+                )
             agency_names.append(agency_name)
 
             # Store agent instances for easy lookup
@@ -130,6 +135,11 @@ def run_fastapi(
 
     app.add_exception_handler(Exception, exception_handler)
 
-    print(f"Starting FastAPI server at http://{host}:{port}")
     print("Created endpoints:\n" + "\n".join(endpoints))
+
+    if return_app:
+        return app
+
+    print(f"Starting FastAPI server at http://{host}:{port}")
+    
     uvicorn.run(app, host=host, port=port)
