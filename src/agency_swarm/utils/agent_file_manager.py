@@ -135,27 +135,29 @@ class AgentFileManager:
             return
 
         folder_path = Path(self.agent.files_folder)
-        if not folder_path.exists():
-            parent = folder_path.parent
-            base_name = folder_path.name
-            # Look for folders like base_name_vs_*
-            candidates = list(parent.glob(f"{base_name}_vs_*"))
-            if candidates:
-                # Use the first match
-                folder_path = candidates[0]
-                self.agent.files_folder = str(folder_path)
-                logger.info(
-                    f"Agent {self.agent.name}: Using found vector store folder '{folder_path}' "
-                    f"instead of '{base_name}'."
-                )
-            else:
-                # Try resolving relative to the class folder if not absolute
-                if not folder_path.is_absolute():
-                    folder_path = Path(self.agent.get_class_folder_path()).joinpath(self.agent.files_folder)
-                folder_path = folder_path.resolve()
-                if not folder_path.is_dir():
-                    logger.error(f"Files folder '{folder_path}' is not a directory. Skipping...")
-                    return
+        original_folder_path = folder_path  # Keep reference to original directory
+
+        # ALWAYS check for existing vector store directories first, regardless of original directory existence
+        parent = folder_path.parent
+        base_name = folder_path.name
+        candidates = list(parent.glob(f"{base_name}_vs_*"))
+
+        if candidates:
+            # Use the first existing vector store directory found
+            folder_path = candidates[0]
+            self.agent.files_folder = str(folder_path)
+            logger.info(
+                f"Agent {self.agent.name}: Found existing vector store folder '{folder_path}' "
+                f"- reusing instead of creating new one."
+            )
+        elif not folder_path.exists():
+            # Try resolving relative to the class folder if not absolute
+            if not folder_path.is_absolute():
+                folder_path = Path(self.agent.get_class_folder_path()).joinpath(self.agent.files_folder)
+            folder_path = folder_path.resolve()
+            if not folder_path.is_dir():
+                logger.error(f"Files folder '{folder_path}' is not a directory. Skipping...")
+                return
 
         folder_str = str(self.agent.files_folder)
         base_path_str = folder_str
@@ -199,6 +201,29 @@ class AgentFileManager:
 
         self.agent.files_folder_path = Path(base_path_str).resolve()
 
+        # Check for new files in the original directory when reusing vector store
+        is_reusing_vector_store = candidates and original_folder_path.exists()
+        new_files_to_process = []
+
+        if is_reusing_vector_store:
+            logger.info(
+                f"Agent {self.agent.name}: Checking for new files in original directory '{original_folder_path}'"
+            )
+
+            # Get list of files already processed (have _file-<id> suffix) in vector store directory
+            processed_files = set()
+            for vs_file in self.agent.files_folder_path.iterdir():
+                if vs_file.is_file() and "_file-" in vs_file.name:
+                    # Extract original filename: "name_file-<id>.ext" -> "name.ext"
+                    original_name = vs_file.name.split("_file-")[0] + vs_file.suffix
+                    processed_files.add(original_name)
+
+            # Check original directory for new files (not yet processed)
+            for original_file in original_folder_path.iterdir():
+                if original_file.is_file() and original_file.name not in processed_files:
+                    logger.info(f"Agent {self.agent.name}: Found new file to process: {original_file.name}")
+                    new_files_to_process.append(original_file)
+
         code_interpreter_file_ids = []
 
         code_interpreter_file_extensions = [
@@ -223,6 +248,7 @@ class AgentFileManager:
             ".zip",
         ]
 
+        # Process existing files in vector store directory
         for file in os.listdir(self.agent.files_folder_path):
             if Path(file).suffix.lower() in code_interpreter_file_extensions:
                 file_id = self.upload_file(
@@ -231,6 +257,17 @@ class AgentFileManager:
                 code_interpreter_file_ids.append(file_id)
             else:
                 self.upload_file(os.path.join(self.agent.files_folder_path, file))
+
+        # Process new files found in original directory
+        for new_file in new_files_to_process:
+            logger.info(f"Agent {self.agent.name}: Processing new file {new_file.name}")
+
+            # Upload the new file (this will automatically rename it with file ID and move to vector store dir)
+            if new_file.suffix.lower() in code_interpreter_file_extensions:
+                file_id = self.upload_file(str(new_file), include_in_vector_store=False)
+                code_interpreter_file_ids.append(file_id)
+            else:
+                self.upload_file(str(new_file))
 
         # Add FileSearchTool tentatively if VS ID is parsed. Actual VS check is async.
         if self.agent._associated_vector_store_id:
