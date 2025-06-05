@@ -9,7 +9,7 @@ import uuid
 from unittest.mock import patch
 
 import pytest
-from agents import ModelSettings, RunResult
+from agents import ModelSettings
 
 from agency_swarm import Agency, Agent
 
@@ -62,7 +62,7 @@ async def test_user_thread_isolation(basic_agency: Agency):
     unique_ceo_info = f"CEOINFO{uuid.uuid4().hex[:8]}"
     unique_dev_info = f"DEVINFO{uuid.uuid4().hex[:8]}"
 
-    print(f"\n--- User Thread Isolation Test ---")
+    print("\n--- User Thread Isolation Test ---")
 
     # Step 1: Send unique info to CEO (creates user->CEO thread)
     await basic_agency.get_response(message=f"CEO: {unique_ceo_info}", recipient_agent="CEO")
@@ -88,12 +88,12 @@ async def test_user_thread_isolation(basic_agency: Agency):
     dev_thread_content = str(dev_thread.items).lower()
 
     # CEO thread should contain CEO info but NOT Developer info
-    assert unique_ceo_info.lower() in ceo_thread_content, f"CEO thread missing CEO info"
-    assert unique_dev_info.lower() not in ceo_thread_content, f"CEO thread contaminated with Developer info"
+    assert unique_ceo_info.lower() in ceo_thread_content, "CEO thread missing CEO info"
+    assert unique_dev_info.lower() not in ceo_thread_content, "CEO thread contaminated with Developer info"
 
     # Developer thread should contain Developer info but NOT CEO info
-    assert unique_dev_info.lower() in dev_thread_content, f"Developer thread missing Developer info"
-    assert unique_ceo_info.lower() not in dev_thread_content, f"Developer thread contaminated with CEO info"
+    assert unique_dev_info.lower() in dev_thread_content, "Developer thread missing Developer info"
+    assert unique_ceo_info.lower() not in dev_thread_content, "Developer thread contaminated with CEO info"
 
     print("✓ user->CEO and user->Developer threads completely isolated")
     print("✓ No cross-contamination detected")
@@ -109,7 +109,7 @@ async def test_agent_to_agent_thread_isolation(basic_agency: Agency):
     user_ceo_info = f"USERCEO{uuid.uuid4().hex[:8]}"
     user_dev_info = f"USERDEV{uuid.uuid4().hex[:8]}"
 
-    print(f"\n--- Agent-to-Agent Thread Isolation Test ---")
+    print("\n--- Agent-to-Agent Thread Isolation Test ---")
 
     # Flow 1: user->CEO
     await basic_agency.get_response(message=f"CEO info: {user_ceo_info}", recipient_agent="CEO")
@@ -160,7 +160,7 @@ async def test_thread_identifier_format(basic_agency: Agency):
     """
     captured_thread_calls = []
 
-    print(f"\n--- Thread Identifier Format Test ---")
+    print("\n--- Thread Identifier Format Test ---")
 
     # Capture thread ID creation
     from agency_swarm.agent import Agent

@@ -118,7 +118,7 @@ async def test_agent_get_response_stream_restores_instructions_on_error(test_age
 
     with patch("agency_swarm.agent.Runner.run_streamed", side_effect=RuntimeError("Streaming error")):
         try:
-            async for event in test_agent.get_response_stream(
+            async for _event in test_agent.get_response_stream(
                 message="Test message", additional_instructions=additional_text
             ):
                 pass

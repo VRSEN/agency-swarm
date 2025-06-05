@@ -93,7 +93,7 @@ class TestHandoffsWithCommunicationFlows:
 
         # Get tool names for each agent
         agent_a_tools = [tool.name if hasattr(tool, "name") else str(tool) for tool in agent_a.tools]
-        agent_b_tools = [tool.name if hasattr(tool, "name") else str(tool) for tool in agent_b.tools]
+        _ = [tool.name if hasattr(tool, "name") else str(tool) for tool in agent_b.tools]
         agent_c_tools = [tool.name if hasattr(tool, "name") else str(tool) for tool in agent_c.tools]
 
         # AgentA should have send_message_to_* tools for AgentB and AgentC
@@ -161,9 +161,9 @@ class TestHandoffsWithCommunicationFlows:
 
     def test_agency_configuration_maintains_both_patterns(self, mixed_communication_agency):
         """Test that Agency maintains both communication flows and handoffs."""
-        agent_a = mixed_communication_agency.agents["AgentA"]
+        _ = mixed_communication_agency.agents["AgentA"]
         agent_b = mixed_communication_agency.agents["AgentB"]
-        agent_c = mixed_communication_agency.agents["AgentC"]
+        _ = mixed_communication_agency.agents["AgentC"]
 
         # Verify agents are properly registered
         assert len(mixed_communication_agency.agents) == 3
@@ -222,8 +222,8 @@ class TestHandoffsWithCommunicationFlows:
 
     def test_communication_flow_isolation(self, mixed_communication_agency):
         """Test that communication flows and handoffs maintain proper isolation."""
-        agent_a = mixed_communication_agency.agents["AgentA"]
-        agent_b = mixed_communication_agency.agents["AgentB"]
+        _ = mixed_communication_agency.agents["AgentA"]
+        _ = mixed_communication_agency.agents["AgentB"]
         agent_c = mixed_communication_agency.agents["AgentC"]
 
         # AgentA should be able to communicate with both AgentB and AgentC independently

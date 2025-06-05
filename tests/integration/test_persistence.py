@@ -360,7 +360,7 @@ async def test_persistence_save_error(temp_persistence_dir, persistence_agent):
         assert "Error saving thread" in args1[0]
         assert expected_thread_id in args1[0]
         # Check exception type in message
-        assert "IOError" in args1[0] or f"Simulated save error" in args1[0]
+        assert "IOError" in args1[0] or "Simulated save error" in args1[0]
         assert kwargs1.get("exc_info") is True  # Check exc_info was passed
 
         # If persistence hooks are enabled, check for multiple calls
@@ -403,7 +403,6 @@ async def test_persistence_thread_isolation(file_persistence_callbacks, persiste
 
     # Expected thread identifiers
     user_to_tester_thread_id = "user->PersistenceTester"
-    tester_to_second_thread_id = "PersistenceTester->SecondAgent"
 
     message_1a = "Message for user->PersistenceTester thread, first turn."
     message_1b = "Message for user->PersistenceTester thread, second turn."
@@ -458,12 +457,6 @@ async def test_persistence_thread_isolation(file_persistence_callbacks, persiste
     assert found_message_1b, (
         f"Message '{message_1b}' not found in reloaded {user_to_tester_thread_id} items: {user_tester_items_after_reload}"
     )
-
-    # Check that no agent-to-agent thread was created during this test
-    # (since we only tested user->agent communication)
-    tester_second_file = temp_persistence_dir / f"{tester_to_second_thread_id.replace('->', '_to_')}.json"
-    # Note: The file might exist if agent-to-agent communication occurred,
-    # but we shouldn't assert it doesn't exist since SendMessage tool might be used
 
     print("--- Thread Isolation Test Completed Successfully ---")
 

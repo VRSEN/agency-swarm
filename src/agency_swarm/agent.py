@@ -10,7 +10,6 @@ from typing import Any, TypeVar
 
 from agents import (
     Agent as BaseAgent,
-    FileSearchTool,
     RunConfig,
     RunHooks,
     RunItem,
@@ -24,14 +23,13 @@ from agents.items import (
     ItemHelpers,
     MessageOutputItem,
     ToolCallItem,
-    ToolCallOutputItem,
 )
 from agents.run import DEFAULT_MAX_TURNS
 from agents.stream_events import RunItemStreamEvent
 from agents.strict_schema import ensure_strict_json_schema
 from agents.tool import FunctionTool
 from openai import AsyncOpenAI, NotFoundError, OpenAI
-from openai.types.responses import ResponseFileSearchToolCall, ResponseFunctionToolCall, ResponseFunctionWebSearch
+from openai.types.responses import ResponseFileSearchToolCall, ResponseFunctionWebSearch
 
 from .context import MasterContext
 from .thread import ThreadManager
@@ -853,7 +851,7 @@ class Agent(BaseAgent[MasterContext]):
         run_config_override: RunConfig | None = None,
         additional_instructions: str | None = None,  # New parameter for v1.x
         **kwargs,
-    ) -> AsyncGenerator[Any, None]:
+    ) -> AsyncGenerator[Any]:
         """Runs the agent's turn in streaming mode.
 
         Args:
@@ -1096,7 +1094,7 @@ class Agent(BaseAgent[MasterContext]):
         # Quick check: do we have any hosted tool calls?
         has_hosted_tools = any(
             isinstance(item, ToolCallItem)
-            and isinstance(item.raw_item, (ResponseFileSearchToolCall, ResponseFunctionWebSearch))
+            and isinstance(item.raw_item, ResponseFileSearchToolCall | ResponseFunctionWebSearch)
             for item in run_items
         )
 
@@ -1118,7 +1116,7 @@ class Agent(BaseAgent[MasterContext]):
 
         for item in run_items:
             if isinstance(item, ToolCallItem):
-                if isinstance(item.raw_item, (ResponseFileSearchToolCall, ResponseFunctionWebSearch)):
+                if isinstance(item.raw_item, ResponseFileSearchToolCall | ResponseFunctionWebSearch):
                     hosted_tool_calls.append(item)
             elif isinstance(item, MessageOutputItem):
                 assistant_messages.append(item)

@@ -108,7 +108,7 @@ async def test_context_preservation_in_agent_communication(multi_agent_agency: A
         initial_task = "Simple task for testing context preservation."
         print(f"\n--- Testing Context Preservation --- TASK: {initial_task}")
 
-        final_result: RunResult = await multi_agent_agency.get_response(message=initial_task, recipient_agent="Planner")
+        await multi_agent_agency.get_response(message=initial_task, recipient_agent="Planner")
 
         print(f"--- Captured thread calls: {captured_thread_calls}")
 
@@ -128,5 +128,5 @@ async def test_context_preservation_in_agent_communication(multi_agent_agency: A
             # Verify the thread ID IS a structured identifier (this is correct behavior)
             assert "->" in thread_id, f"Thread ID should be structured identifier, found: {thread_id}"
 
-        print(f"✓ Verified all agent communications use proper thread identifiers")
+        print("✓ Verified all agent communications use proper thread identifiers")
         print("--- Thread isolation test passed ---")

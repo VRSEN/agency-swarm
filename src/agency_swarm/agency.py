@@ -482,7 +482,7 @@ class Agency:
         file_ids: list[str] | None = None,
         additional_instructions: str | None = None,
         **kwargs: Any,
-    ) -> AsyncGenerator[Any, None]:
+    ) -> AsyncGenerator[Any]:
         """
         Initiates a streaming interaction with a specified agent within the agency.
 
@@ -692,7 +692,7 @@ class Agency:
 
     async def get_completion_stream(
         self, message: str, recipient_agent: str | Agent, **kwargs: Any
-    ) -> AsyncGenerator[str, None]:
+    ) -> AsyncGenerator[str]:
         """[DEPRECATED] Use get_response_stream instead. Yields text chunks."""
         warnings.warn(
             "Method 'get_completion_stream' is deprecated. Use 'get_response_stream' instead.",

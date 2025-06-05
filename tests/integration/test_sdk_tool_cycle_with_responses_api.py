@@ -124,7 +124,7 @@ async def test_tool_cycle_with_sdk_and_responses_api():
     assert result.new_items is not None and len(result.new_items) > 0, "Should have new items from the run"
 
     # Debug: Print the actual items to understand the structure
-    logger.info(f"Actual items returned:")
+    logger.info("Actual items returned:")
     for i, item in enumerate(result.new_items):
         logger.info(f"  Item {i + 1}: {type(item).__name__} - {item}")
         if hasattr(item, "raw_item"):

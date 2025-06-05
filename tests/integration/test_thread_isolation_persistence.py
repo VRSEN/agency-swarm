@@ -195,7 +195,7 @@ async def test_persistence_thread_file_separation(
     """
     load_cb, save_cb = file_persistence_callbacks
 
-    print(f"\n--- Persistence File Separation Test ---")
+    print("\n--- Persistence File Separation Test ---")
 
     agency = Agency(
         ceo_agent_instance,

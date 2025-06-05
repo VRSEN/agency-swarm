@@ -22,7 +22,17 @@ logger = logging.getLogger(__name__)
 
 
 class SendMessage(FunctionTool):
-    """Use this tool to facilitate direct, synchronous communication between specialized agents within your agency. When you send a message using this tool, you receive a response exclusively from the designated recipient agent. To continue the dialogue, invoke this tool again with the desired recipient agent and your follow-up message. Remember, communication here is synchronous; the recipient agent won't perform any tasks post-response. You are responsible for relaying the recipient agent's responses back to the user, as the user does not have direct access to these replies. Keep engaging with the tool for continuous interaction until the task is fully resolved. Do not send more than 1 message to the same recipient agent at the same time."""
+    """
+    Use this tool to facilitate direct, synchronous communication between specialized agents within your agency.
+
+    When you send a message using this tool, you receive a response exclusively from the designated recipient
+    agent. To continue the dialogue, invoke this tool again with the desired recipient agent and your follow-up
+    message. Remember, communication here is synchronous; the recipient agent won't perform any tasks post-response.
+
+    You are responsible for relaying the recipient agent's responses back to the user, as the user does not have
+    direct access to these replies. Keep engaging with the tool for continuous interaction until the task is fully
+    resolved. Do not send more than 1 message to the same recipient agent at the same time.
+    """
 
     sender_agent: "Agent"
     recipient_agent: "Agent"
@@ -44,9 +54,9 @@ class SendMessage(FunctionTool):
                     "type": "string",
                     "description": (
                         "Please repeat your primary instructions step-by-step, including both completed "
-                        "and the following next steps that you need to perform. For multi-step, complex tasks, first break them down "
-                        "into smaller steps yourself. Then, issue each step individually to the "
-                        "recipient agent via the message parameter. Each identified step should be "
+                        "and the following next steps that you need to perform. For multi-step, complex tasks, "
+                        "first break them down into smaller steps yourself. Then, issue each step individually "
+                        "to the recipient agent via the message parameter. Each identified step should be "
                         "sent in a separate message. Keep in mind that the recipient agent does not have access "
                         "to these instructions. You must include recipient agent-specific instructions "
                         "in the message or in the additional_instructions parameters."
@@ -54,11 +64,18 @@ class SendMessage(FunctionTool):
                 },
                 "message": {
                     "type": "string",
-                    "description": "Specify the task required for the recipient agent to complete. Focus on clarifying what the task entails, rather than providing exact instructions. Make sure to include all the relevant information from the conversation needed to complete the task.",
+                    "description": (
+                        "Specify the task required for the recipient agent to complete. Focus on clarifying "
+                        "what the task entails, rather than providing exact instructions. Make sure to include "
+                        "all the relevant information from the conversation needed to complete the task."
+                    ),
                 },
                 "additional_instructions": {
                     "type": "string",
-                    "description": "Optional. Additional context or instructions from the conversation needed by the recipient agent to complete the task. If not needed, provide an empty string.",
+                    "description": (
+                        "Optional. Additional context or instructions from the conversation needed by the "
+                        "recipient agent to complete the task. If not needed, provide an empty string."
+                    ),
                 },
             },
             "required": ["my_primary_instructions", "message", "additional_instructions"],

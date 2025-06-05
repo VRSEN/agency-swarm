@@ -100,7 +100,7 @@ class TestAgentSharingPrevention:
         )
 
         # Create first agency without callbacks - this should work
-        agency1 = Agency(
+        _ = Agency(
             ceo,
             name="agency1",
         )
