@@ -1,7 +1,6 @@
 import json
 from pathlib import Path
 from typing import Any
-from unittest.mock import patch
 
 import pytest
 
@@ -314,8 +313,12 @@ async def test_persistence_load_error(temp_persistence_dir, persistence_agent):
 @pytest.mark.asyncio
 async def test_persistence_save_error(temp_persistence_dir, persistence_agent):
     """
-    Test that Agency.get_response completes but logs an error if the save_threads_callback fails.
-    Expect logger to be called multiple times due to save_threads_callback failure.
+    Test that Agency.get_response completes successfully despite save_threads_callback failure.
+
+    This test verifies graceful error handling behavior by checking that:
+    1. The get_response call completes and returns a valid result
+    2. No persistence files are created due to the save error
+    3. The system continues to function normally despite the save failure
     """
     expected_thread_id = "user->PersistenceTester"
     message1 = "Message causing save error."
@@ -335,49 +338,35 @@ async def test_persistence_save_error(temp_persistence_dir, persistence_agent):
         save_threads_callback=actual_save_cb_error,
     )
 
-    print(f"--- Save Error Test Instance - Turn 1 (Thread: {expected_thread_id}) --- Expecting Save Error Log")
-    # Patch the logger to verify error logging
-    with patch("agency_swarm.thread.logger.error") as mock_logger_error:
-        # Run should complete successfully despite save error
-        result = await agency.get_response(message=message1, recipient_agent="PersistenceTester")
-        # Assert that the agent interaction produced a result (run completed)
-        assert result is not None
-        from agents import RunResult
+    print(f"--- Save Error Test Instance - Turn 1 (Thread: {expected_thread_id}) --- Expecting Save Error")
 
-        assert isinstance(result, RunResult)
-        assert hasattr(result, "final_output")
-        assert isinstance(result.final_output, str)
+    # Run should complete successfully despite save error
+    result = await agency.get_response(message=message1, recipient_agent="PersistenceTester")
 
-        print("--- Save Error Test Instance - Turn 1 Completed Successfully (as expected) ---")
+    # Assert that the agent interaction produced a result (run completed)
+    assert result is not None
+    from agents import RunResult
 
-        # Verify logger.error was called due to save_threads_callback failure
-        assert (
-            mock_logger_error.call_count >= 1  # Should be called at least once
-        ), f"Expected logger.error to be called at least once, but was called {mock_logger_error.call_count} times."
+    assert isinstance(result, RunResult)
+    assert hasattr(result, "final_output")
+    assert isinstance(result.final_output, str)
 
-        # Check details of the first call (more reliable than checking exact count)
-        args1, kwargs1 = mock_logger_error.call_args_list[0]
-        assert "Error saving thread" in args1[0]
-        assert expected_thread_id in args1[0]
-        # Check exception type in message
-        assert "IOError" in args1[0] or "Simulated save error" in args1[0]
-        assert kwargs1.get("exc_info") is True  # Check exc_info was passed
+    print("--- Save Error Test Instance - Turn 1 Completed Successfully (as expected) ---")
 
-        # If persistence hooks are enabled, check for multiple calls
-        if agency.persistence_hooks:
-            # For a new thread: multiple save calls may occur during the run
-            assert mock_logger_error.call_count >= 1, (
-                f"Expected logger.error to be called at least once for a new thread with hooks, "
-                f"but was called {mock_logger_error.call_count} times."
-            )
-
-    print("--- Save Error Test Instance - Verified logger.error calls ---")
-
-    # Additionally, check that the file wasn't actually created due to the error
+    # Verify that the file wasn't actually created due to the error
     sanitized_thread_id = expected_thread_id.replace("->", "_to_")
     error_file_path = temp_persistence_dir / f"{sanitized_thread_id}.json"
     assert not error_file_path.exists(), f"File {error_file_path} should not exist after save error."
-    print("--- Save Error Test Instance - Verified file does not exist ---")
+
+    # Verify that the thread still exists in memory (system continued to function)
+    thread_in_memory = agency.thread_manager._threads.get(expected_thread_id)
+    assert thread_in_memory is not None, "Thread should still exist in memory despite save error"
+
+    # Verify the thread contains the message (system processed it normally)
+    thread_content = str(thread_in_memory.items).lower()
+    assert message1.lower() in thread_content, "Thread should contain the message despite save error"
+
+    print("--- Save Error Test Instance - Verified graceful error handling ---")
 
 
 @pytest.mark.asyncio

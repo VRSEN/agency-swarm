@@ -6,7 +6,6 @@ using direct structural verification of thread state.
 """
 
 import uuid
-from unittest.mock import patch
 
 import pytest
 from agents import ModelSettings
@@ -157,54 +156,50 @@ async def test_agent_to_agent_thread_isolation(basic_agency: Agency):
 async def test_thread_identifier_format(basic_agency: Agency):
     """
     Test that thread identifiers follow correct "sender->recipient" format.
-    """
-    captured_thread_calls = []
 
+    This test uses direct verification of thread manager state instead of mocking.
+    """
     print("\n--- Thread Identifier Format Test ---")
 
-    # Capture thread ID creation
-    from agency_swarm.agent import Agent
+    # Execute various communication flows
+    await basic_agency.get_response(message="Test message to CEO", recipient_agent="CEO")
+    await basic_agency.get_response(message="Test message to Developer", recipient_agent="Developer")
 
-    original_get_thread_id = Agent.get_thread_id
+    # CEO to Developer
+    developer_agent = basic_agency.agents["Developer"]
+    await developer_agent.get_response(message="Test message from CEO", sender_name="CEO")
 
-    def capture_get_thread_id(self, sender_name=None):
-        thread_id = original_get_thread_id(self, sender_name)
-        captured_thread_calls.append(
-            {
-                "thread_id": thread_id,
-                "sender": sender_name,
-                "recipient": self.name,
-            }
-        )
-        return thread_id
+    # Direct verification - check actual thread manager state
+    thread_manager = basic_agency.thread_manager
+    actual_thread_ids = list(thread_manager._threads.keys())
+    print(f"--- Actual thread IDs created: {actual_thread_ids}")
 
-    with patch.object(Agent, "get_thread_id", capture_get_thread_id):
-        # User to CEO
-        await basic_agency.get_response(message="Test message to CEO", recipient_agent="CEO")
-
-        # User to Developer
-        await basic_agency.get_response(message="Test message to Developer", recipient_agent="Developer")
-
-        # CEO to Developer
-        developer_agent = basic_agency.agents["Developer"]
-        await developer_agent.get_response(message="Test message from CEO", sender_name="CEO")
-
-    # Verify thread identifier formats
-    expected_patterns = [
-        {"thread_id": "user->CEO", "sender": None, "recipient": "CEO"},
-        {"thread_id": "user->Developer", "sender": None, "recipient": "Developer"},
+    # Verify expected thread identifier formats exist
+    expected_thread_patterns = [
+        {"thread_id": "user->CEO", "sender": "user", "recipient": "CEO"},
+        {"thread_id": "user->Developer", "sender": "user", "recipient": "Developer"},
         {"thread_id": "CEO->Developer", "sender": "CEO", "recipient": "Developer"},
     ]
 
-    for expected in expected_patterns:
-        matching_calls = [call for call in captured_thread_calls if call["thread_id"] == expected["thread_id"]]
-        assert len(matching_calls) > 0, f"Thread identifier '{expected['thread_id']}' not found"
+    for expected in expected_thread_patterns:
+        thread_id = expected["thread_id"]
+        sender = expected["sender"]
+        recipient = expected["recipient"]
 
-        call = matching_calls[0]
-        assert call["sender"] == expected["sender"], f"Wrong sender for {expected['thread_id']}"
-        assert call["recipient"] == expected["recipient"], f"Wrong recipient for {expected['thread_id']}"
-        assert "->" in call["thread_id"], f"Thread ID should contain '->': {call['thread_id']}"
+        # Verify thread exists
+        assert thread_id in actual_thread_ids, f"Thread identifier '{thread_id}' not found in {actual_thread_ids}"
+
+        # Verify format structure
+        assert "->" in thread_id, f"Thread ID should contain '->': {thread_id}"
+
+        # Verify sender and recipient parts
+        actual_sender, actual_recipient = thread_id.split("->")
+        assert actual_sender == sender, f"Wrong sender for {thread_id}: expected {sender}, got {actual_sender}"
+        assert actual_recipient == recipient, (
+            f"Wrong recipient for {thread_id}: expected {recipient}, got {actual_recipient}"
+        )
 
     print("✓ All thread identifiers follow 'sender->recipient' format")
     print("✓ User interactions use 'user->agent_name'")
     print("✓ Agent interactions use 'sender_agent->recipient_agent'")
+    print("✓ Thread identifier format verification completed through direct state inspection")
