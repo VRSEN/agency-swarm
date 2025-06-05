@@ -128,10 +128,7 @@ async def run_persistent_conversation():
     print("Thread identifier will be: user->AssistantAgent")
 
     user_message_1 = f"Hello. Please remember that my favorite color is {TEST_INFO}. I'll ask you about it later."
-    response1 = await agency.get_response(
-        recipient_agent=assistant_agent,
-        message=user_message_1,
-    )
+    response1 = await agency.get_response(assistant_agent, message=user_message_1)
     print(f"Response from AssistantAgent: {response1.final_output}")
 
     await asyncio.sleep(1)
@@ -144,10 +141,7 @@ async def run_persistent_conversation():
     print("Thread identifier will be: user->AssistantAgent (same as before)")
 
     user_message_2 = "What was my favorite color and lucky number I told you earlier?"
-    response2 = await agency_reloaded.get_response(
-        recipient_agent=assistant_agent_reloaded,
-        message=user_message_2,
-    )
+    response2 = await agency_reloaded.get_response(assistant_agent_reloaded, message=user_message_2)
     print(f"Response from Reloaded AssistantAgent: {response2.final_output}")
 
     # Test result

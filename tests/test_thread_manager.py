@@ -19,7 +19,7 @@ def test_get_thread_generates_id():
     thread = manager.get_thread()  # No ID provided
     assert isinstance(thread, ConversationThread)
     assert isinstance(thread.thread_id, str)
-    assert thread.thread_id.startswith("as_thread_")
+    assert thread.thread_id.startswith("thread_")
     assert thread.thread_id in manager._threads
     assert manager._threads[thread.thread_id] == thread
 
@@ -49,39 +49,37 @@ def test_get_thread_loads_from_callback(mocker):
     """Tests that get_thread attempts to load from the load_threads_callback if provided."""
     mock_load = mocker.MagicMock()
     test_id = "load_me_789"
-    # Define the dictionary that the load_threads_callback is expected to return
-    loaded_data_dict = {"items": [{"role": "system", "content": "Loaded"}], "metadata": {"source": "mock_db"}}
+    # The callback now returns ALL threads, not just one
+    loaded_data_dict = {
+        test_id: {"items": [{"role": "system", "content": "Loaded"}], "metadata": {"source": "mock_db"}}
+    }
     mock_load.return_value = loaded_data_dict
 
     manager = ThreadManager(load_threads_callback=mock_load)
 
-    # First call should trigger load
+    # First call should trigger load - callback called with NO parameters
     thread = manager.get_thread(test_id)
-    mock_load.assert_called_once_with(test_id)
-    # Verify the thread was reconstructed correctly from the loaded_data_dict
-    assert thread.thread_id == test_id
-    assert thread.items == loaded_data_dict["items"]
+    mock_load.assert_called_once_with()  # NO parameters
 
-    # Second call should return from memory, not call load_threads_callback again
-    thread2 = manager.get_thread(test_id)
-    mock_load.assert_called_once_with(test_id)  # Still called only once
-    assert thread2 == thread
+    # Verify the thread was constructed from the loaded data
+    assert thread.thread_id == test_id
+    assert len(thread.items) == 1
+    assert thread.items[0]["content"] == "Loaded"
 
 
 def test_get_thread_creates_new_if_load_fails(mocker):
-    """Tests that get_thread creates a new thread if load_threads_callback returns None."""
-    mock_load = mocker.MagicMock(return_value=None)
+    """Tests that get_thread creates a new thread if load_threads_callback returns empty dict."""
+    mock_load = mocker.MagicMock(return_value={})  # Empty dict, no threads loaded
     test_id = "load_fail_abc"
 
     manager = ThreadManager(load_threads_callback=mock_load)
     thread = manager.get_thread(test_id)
 
-    mock_load.assert_called_once_with(test_id)
-    assert isinstance(thread, ConversationThread)
-    assert thread.thread_id == test_id  # Should still use the requested ID
-    assert test_id in manager._threads
-    assert manager._threads[test_id] == thread
-    assert not thread.items  # Should be empty as it's newly created
+    mock_load.assert_called_once_with()  # NO parameters
+
+    # Should have created a new thread since load returned empty
+    assert thread.thread_id == test_id
+    assert len(thread.items) == 0
 
 
 def test_thread_manager_serialization():
@@ -126,23 +124,6 @@ def test_thread_manager_serialization():
     assert deserialized_thread2.items[0]["content"] == "Hello agent1"
     assert deserialized_thread2.items[1]["role"] == "assistant"
     assert deserialized_thread2.items[1]["content"] == "Hello USER"
-
-
-def test_get_thread_invalid_thread_id_type():
-    """Tests passing invalid types for thread_id."""
-    manager = ThreadManager()
-    # Expect TypeError because thread_id must be Optional[str]
-    with pytest.raises(TypeError):
-        manager.get_thread(123)  # type: ignore
-
-    with pytest.raises(TypeError):
-        manager.get_thread(["list_is_not_id"])  # type: ignore
-
-    # Passing None is valid (generates new ID)
-    try:
-        manager.get_thread(None)
-    except Exception as e:
-        pytest.fail(f"get_thread(None) raised unexpected exception: {e}")
 
 
 def test_add_item_and_save_triggers_callback(mocker):

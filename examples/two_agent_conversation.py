@@ -100,10 +100,7 @@ async def run_conversation():
     print("Thread for this interaction: user->UI_Agent")
 
     try:
-        response1 = await agency.get_response(
-            message=user_message_1,
-            recipient_agent=ui_agent,
-        )
+        response1 = await agency.get_response(message=user_message_1)
 
         print("\n--- Turn 1 Finished (Store Value) ---")
         if response1 and response1.final_output:
@@ -117,10 +114,7 @@ async def run_conversation():
         print(f"\nUser Message 2 to {ui_agent.name}: '{user_message_2}'")
         print("Thread for this interaction: user->UI_Agent (continues same thread)")
 
-        response2 = await agency.get_response(
-            message=user_message_2,
-            recipient_agent=ui_agent,
-        )
+        response2 = await agency.get_response(message=user_message_2)
 
         print("\n--- Turn 2 Finished (Retrieve Value) ---")
         if response2 and response2.final_output:

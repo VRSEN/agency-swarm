@@ -32,6 +32,7 @@
             "pages": [
               "welcome/overview",
               "welcome/ai-agency-vs-other-frameworks",
+              "migration_guide",
               {
                 "group": "Get Started",
                 "icon": "rocket",

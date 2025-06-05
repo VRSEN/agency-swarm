@@ -50,8 +50,7 @@ def test_agency_initialization_with_flows(mock_agent, mock_agent2):
 def test_agency_initialization_shared_instructions(mock_agent):
     """Test Agency initialization with shared instructions."""
     instructions_content = "These are shared instructions for all agents."
-    chart = [mock_agent]
-    agency = Agency(agency_chart=chart, shared_instructions=instructions_content)
+    agency = Agency(mock_agent, shared_instructions=instructions_content)
     assert agency.shared_instructions == instructions_content
 
 
@@ -59,8 +58,7 @@ def test_agency_initialization_persistence_hooks(mock_agent):
     """Test Agency initialization with persistence hooks."""
     mock_load_cb = MagicMock()
     mock_save_cb = MagicMock()
-    chart = [mock_agent]
-    agency = Agency(agency_chart=chart, load_threads_callback=mock_load_cb, save_threads_callback=mock_save_cb)
+    agency = Agency(mock_agent, load_threads_callback=mock_load_cb, save_threads_callback=mock_save_cb)
     assert agency.persistence_hooks is not None
     # The callbacks are passed to ThreadManager and PersistenceHooks, not stored directly
 

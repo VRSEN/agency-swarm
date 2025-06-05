@@ -16,8 +16,6 @@ OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 
 @pytest.fixture(scope="module")
 async def real_openai_client():
-    if not OPENAI_API_KEY:
-        pytest.skip("OPENAI_API_KEY not set, skipping tests that make real API calls.")
     return AsyncOpenAI(api_key=OPENAI_API_KEY)
 
 
@@ -243,7 +241,7 @@ async def test_file_search_tool(real_openai_client: AsyncOpenAI, tmp_path: Path)
         question = "What is the name of the 4th book in the list?"
 
         try:
-            response_result = await agency.get_response(question, recipient_agent=file_search_agent)
+            response_result = await agency.get_response(question)
 
             # Verify response
             assert response_result is not None
@@ -262,7 +260,7 @@ async def test_file_search_tool(real_openai_client: AsyncOpenAI, tmp_path: Path)
                 print(f"Re-uploaded file {tmp_file_path.name} with ID: {uploaded_file_id}")
 
                 # Retry the question
-                response_result = await agency.get_response(question, recipient_agent=file_search_agent)
+                response_result = await agency.get_response(question)
 
                 # Verify response after retry
                 assert response_result is not None
@@ -334,7 +332,7 @@ async def test_code_interpreter_tool(real_openai_client: AsyncOpenAI, tmp_path: 
         ```import random\nrandom.seed(115)\nprint(random.randint(1, 100))```
         """
 
-        response_result = await agency.get_response(question, recipient_agent=code_interpreter_agent)
+        response_result = await agency.get_response(question)
 
         # Verify response
         assert response_result is not None
@@ -342,7 +340,7 @@ async def test_code_interpreter_tool(real_openai_client: AsyncOpenAI, tmp_path: 
 
         # Execute python script (answer is always 14910)
         query = "Run test-python script, return me its results and tell me exactly what you did to get them."
-        response_result = await agency.get_response(query, recipient_agent=code_interpreter_agent)
+        response_result = await agency.get_response(query)
 
         assert response_result is not None
         # Handle various number formatting (with/without commas, LaTeX formatting, etc.)

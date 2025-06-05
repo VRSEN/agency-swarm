@@ -102,15 +102,13 @@ Regional Performance:
 
         print("\n--- Turn 1: Search for data but don't reveal specifics ---")
         search_response = await hosted_tool_agency.get_response(
-            recipient_agent=file_search_agent,
-            message="Search the sales report for revenue information. Just confirm you found it, don't give me the exact numbers yet.",
+            message="Search the sales report for revenue information. Just confirm you found it, don't give me the exact numbers yet."
         )
         print(f"Search Response: {search_response.final_output}")
 
         print("\n--- Turn 2: Request exact data from previous search ---")
         exact_data_response = await hosted_tool_agency.get_response(
-            recipient_agent=file_search_agent,
-            message="Now tell me the EXACT total revenue figure you found in your previous search. I need the precise number.",
+            message="Now tell me the EXACT total revenue figure you found in your previous search. I need the precise number."
         )
         print(f"Exact Data Response: {exact_data_response.final_output}")
 

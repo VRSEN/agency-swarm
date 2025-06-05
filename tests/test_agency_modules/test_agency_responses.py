@@ -34,8 +34,7 @@ def mock_agent2():
 @pytest.mark.asyncio
 async def test_agency_get_response_basic(mock_agent):
     """Test basic Agency.get_response functionality."""
-    chart = [mock_agent]
-    agency = Agency(agency_chart=chart)
+    agency = Agency(mock_agent)
     mock_agent.get_response.return_value = MagicMock(final_output="Test response")
 
     result = await agency.get_response("Test message", "MockAgent")
@@ -49,8 +48,7 @@ async def test_agency_get_response_with_hooks(mock_agent):
     """Test Agency.get_response with hooks."""
     mock_load_cb = MagicMock()
     mock_save_cb = MagicMock()
-    chart = [mock_agent]
-    agency = Agency(agency_chart=chart, load_threads_callback=mock_load_cb, save_threads_callback=mock_save_cb)
+    agency = Agency(mock_agent, load_threads_callback=mock_load_cb, save_threads_callback=mock_save_cb)
 
     mock_agent.get_response.return_value = MagicMock(final_output="Test response")
     hooks_override = MagicMock(spec=RunHooks)
@@ -64,8 +62,7 @@ async def test_agency_get_response_with_hooks(mock_agent):
 @pytest.mark.asyncio
 async def test_agency_get_response_invalid_recipient_warning(mock_agent):
     """Test Agency.get_response with invalid recipient agent name."""
-    chart = [mock_agent]
-    agency = Agency(agency_chart=chart)
+    agency = Agency(mock_agent)
 
     with pytest.raises(ValueError, match="Agent with name 'InvalidAgent' not found"):
         await agency.get_response("Test message", "InvalidAgent")
@@ -74,8 +71,7 @@ async def test_agency_get_response_invalid_recipient_warning(mock_agent):
 @pytest.mark.asyncio
 async def test_agency_get_response_stream_basic(mock_agent):
     """Test basic Agency.get_response_stream functionality."""
-    chart = [mock_agent]
-    agency = Agency(agency_chart=chart)
+    agency = Agency(mock_agent)
 
     async def mock_stream():
         yield {"event": "text", "data": "Hello"}
@@ -102,8 +98,7 @@ async def test_agency_get_response_stream_with_hooks(mock_agent):
     """Test Agency.get_response_stream with hooks."""
     mock_load_cb = MagicMock()
     mock_save_cb = MagicMock()
-    chart = [mock_agent]
-    agency = Agency(agency_chart=chart, load_threads_callback=mock_load_cb, save_threads_callback=mock_save_cb)
+    agency = Agency(mock_agent, load_threads_callback=mock_load_cb, save_threads_callback=mock_save_cb)
 
     async def mock_stream():
         yield {"event": "text", "data": "Hello"}
@@ -127,11 +122,7 @@ async def test_agency_get_response_stream_with_hooks(mock_agent):
 @pytest.mark.asyncio
 async def test_agency_agent_to_agent_communication(mock_agent, mock_agent2):
     """Test agent-to-agent communication through Agency."""
-    chart = [
-        mock_agent,
-        [mock_agent, mock_agent2],  # mock_agent can communicate with mock_agent2
-    ]
-    agency = Agency(agency_chart=chart)
+    agency = Agency(mock_agent, communication_flows=[(mock_agent, mock_agent2)])
 
     # Mock the first agent to call the second agent
     mock_agent.get_response.return_value = MagicMock(final_output="Response from MockAgent")
@@ -148,11 +139,12 @@ async def test_agent_communication_context_hooks_propagation(mock_agent, mock_ag
     """Test that context and hooks are properly propagated in agent communication."""
     mock_load_cb = MagicMock()
     mock_save_cb = MagicMock()
-    chart = [
+    agency = Agency(
         mock_agent,
-        [mock_agent, mock_agent2],
-    ]
-    agency = Agency(agency_chart=chart, load_threads_callback=mock_load_cb, save_threads_callback=mock_save_cb)
+        communication_flows=[(mock_agent, mock_agent2)],
+        load_threads_callback=mock_load_cb,
+        save_threads_callback=mock_save_cb,
+    )
 
     mock_agent.get_response.return_value = MagicMock(final_output="Test response")
     context_override = {"test_key": "test_value"}

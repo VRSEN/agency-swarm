@@ -17,7 +17,6 @@ The example uses fabricated research data to demonstrate true "needle in haystac
 
 import asyncio
 import os
-import shutil
 from pathlib import Path
 
 from agency_swarm import Agency, Agent
@@ -60,16 +59,15 @@ async def main():
     print(f"📁 Using research data from: {data_dir}")
     print(f"📊 Found {len(txt_files)} research file(s)")
 
-    try:
-        # Create an agent with FileSearch capability
-        # The framework automatically:
-        # 1. Creates a vector store for the files_folder
-        # 2. Uploads all files to OpenAI (preserving originals)
-        # 3. Associates files with the vector store
-        # 4. Adds FileSearchTool to the agent
-        search_agent = Agent(
-            name="ResearchAnalysisAgent",
-            instructions="""You are a research assistant specializing in analyzing confidential research reports.
+    # Create an agent with FileSearch capability
+    # The framework automatically:
+    # 1. Creates a vector store for the files_folder
+    # 2. Uploads all files to OpenAI (preserving originals)
+    # 3. Associates files with the vector store
+    # 4. Adds FileSearchTool to the agent
+    search_agent = Agent(
+        name="ResearchAnalysisAgent",
+        instructions="""You are a research assistant specializing in analyzing confidential research reports.
 
 Your capabilities:
 - Search through research documents using your FileSearch tool
@@ -82,134 +80,121 @@ When answering questions:
 2. Cite the specific source of your information
 3. Be precise and factual
 4. If information isn't found, clearly state that""",
-            files_folder=str(data_dir),  # This triggers automatic vector store creation
-        )
+        files_folder=str(data_dir),  # This triggers automatic vector store creation
+    )
 
-        print(f"🤖 Created agent: {search_agent.name}")
-        print(f"🔧 Agent tools: {[type(tool).__name__ for tool in search_agent.tools]}")
+    print(f"🤖 Created agent: {search_agent.name}")
+    print(f"🔧 Agent tools: {[type(tool).__name__ for tool in search_agent.tools]}")
 
-        # Verify FileSearchTool was added
-        has_file_search = any(tool.__class__.__name__ == "FileSearchTool" for tool in search_agent.tools)
-        if has_file_search:
-            print("✅ FileSearchTool automatically added")
+    # Verify FileSearchTool was added
+    has_file_search = any(tool.__class__.__name__ == "FileSearchTool" for tool in search_agent.tools)
+    if has_file_search:
+        print("✅ FileSearchTool automatically added")
+    else:
+        print("⚠️  Warning: FileSearchTool not found")
+
+    # Create agency
+    agency = Agency(
+        search_agent,
+        shared_instructions="Demonstrate FileSearch functionality with research document analysis.",
+    )
+
+    # Give the system a moment to process files
+    print("\n⏳ Initializing vector store and processing files...")
+    await asyncio.sleep(3)
+
+    # Test a very simple search first
+    print("\n🧪 Basic Search Test:")
+    print("-" * 20)
+    simple_question = "What is this document about?"
+    print(f"❓ Simple Question: {simple_question}")
+
+    try:
+        response = await agency.get_response(simple_question)
+        print(f"🤖 Answer: {response.final_output}")
+
+        if (
+            "azure" in response.final_output.lower()
+            or "research" in response.final_output.lower()
+            or "report" in response.final_output.lower()
+        ):
+            print("✅ Basic search working - agent can see document content")
         else:
-            print("⚠️  Warning: FileSearchTool not found")
+            print("❌ Basic search not working - agent may not have access to document")
 
-        # Create agency
-        agency = Agency(
-            search_agent,
-            shared_instructions="Demonstrate FileSearch functionality with research document analysis.",
-        )
+    except Exception as e:
+        print(f"❌ Error: {e}")
 
-        # Give the system a moment to process files
-        print("\n⏳ Initializing vector store and processing files...")
-        await asyncio.sleep(3)
+    # Test questions that require searching the specific research data
+    test_questions = [
+        {
+            "question": "What is the badge number for Marcus Chen?",
+            "expected": "7401",
+            "description": "Tests needle-in-haystack search for specific personnel data",
+        },
+        {
+            "question": "What was the yield efficiency of experiment AF-7821?",
+            "expected": "89.7%",
+            "description": "Tests search for specific experiment results",
+        },
+        {
+            "question": "What compound was synthesized in the crystal growth experiment?",
+            "expected": "XK-9941",
+            "description": "Tests search for compound identification",
+        },
+    ]
 
-        # Test a very simple search first
-        print("\n🧪 Basic Search Test:")
-        print("-" * 20)
-        simple_question = "What is this document about?"
-        print(f"❓ Simple Question: {simple_question}")
+    print("\n🔍 Testing FileSearch with Research Questions:")
+    print("-" * 50)
+
+    for i, test in enumerate(test_questions, 1):
+        print(f"\n❓ Question {i}: {test['question']}")
+        print(f"   {test['description']}")
 
         try:
-            response = await agency.get_response(simple_question)
+            response = await agency.get_response(test["question"])
             print(f"🤖 Answer: {response.final_output}")
 
-            if (
-                "azure" in response.final_output.lower()
-                or "research" in response.final_output.lower()
-                or "report" in response.final_output.lower()
-            ):
-                print("✅ Basic search working - agent can see document content")
+            # Check if the expected answer is in the response
+            if test["expected"] in response.final_output:
+                print(f"✅ Correct answer found (expected: {test['expected']})")
             else:
-                print("❌ Basic search not working - agent may not have access to document")
+                print(f"❌ Expected answer not found (expected: {test['expected']})")
+                print("   This may indicate the file search didn't work properly")
 
         except Exception as e:
             print(f"❌ Error: {e}")
 
-        # Test questions that require searching the specific research data
-        test_questions = [
-            {
-                "question": "What is the badge number for Marcus Chen?",
-                "expected": "7401",
-                "description": "Tests needle-in-haystack search for specific personnel data",
-            },
-            {
-                "question": "What was the yield efficiency of experiment AF-7821?",
-                "expected": "89.7%",
-                "description": "Tests search for specific experiment results",
-            },
-            {
-                "question": "What compound was synthesized in the crystal growth experiment?",
-                "expected": "XK-9941",
-                "description": "Tests search for compound identification",
-            },
-        ]
+        print()
 
-        print("\n🔍 Testing FileSearch with Research Questions:")
-        print("-" * 50)
+    print("\n🎯 Advanced Search Test:")
+    print("-" * 25)
 
-        for i, test in enumerate(test_questions, 1):
-            print(f"\n❓ Question {i}: {test['question']}")
-            print(f"   {test['description']}")
+    # Test a more complex query
+    complex_question = (
+        "What is the current status of the Mass Spectrometer MS-7 and when is it expected to be operational?"
+    )
+    print(f"❓ Complex Query: {complex_question}")
 
-            try:
-                response = await agency.get_response(test["question"])
-                print(f"🤖 Answer: {response.final_output}")
+    try:
+        response = await agency.get_response(complex_question)
+        print(f"🤖 Answer: {response.final_output}")
 
-                # Check if the expected answer is in the response
-                if test["expected"] in response.final_output:
-                    print(f"✅ Correct answer found (expected: {test['expected']})")
-                else:
-                    print(f"❌ Expected answer not found (expected: {test['expected']})")
-                    print("   This may indicate the file search didn't work properly")
+        # Check for key information
+        if "maintenance" in response.final_output.lower() and "oct" in response.final_output.lower():
+            print("✅ Complex search successful - found maintenance status and timeline")
+        else:
+            print("❌ Complex search may not have found complete information")
 
-            except Exception as e:
-                print(f"❌ Error: {e}")
+    except Exception as e:
+        print(f"❌ Error: {e}")
 
-            print()
+    print("\n✅ FileSearch Example Complete!")
 
-        print("\n🎯 Advanced Search Test:")
-        print("-" * 25)
-
-        # Test a more complex query
-        complex_question = (
-            "What is the current status of the Mass Spectrometer MS-7 and when is it expected to be operational?"
-        )
-        print(f"❓ Complex Query: {complex_question}")
-
-        try:
-            response = await agency.get_response(complex_question)
-            print(f"🤖 Answer: {response.final_output}")
-
-            # Check for key information
-            if "maintenance" in response.final_output.lower() and "oct" in response.final_output.lower():
-                print("✅ Complex search successful - found maintenance status and timeline")
-            else:
-                print("❌ Complex search may not have found complete information")
-
-        except Exception as e:
-            print(f"❌ Error: {e}")
-
-        print("\n✅ FileSearch Example Complete!")
-
-        print("\n🔄 Reusability:")
-        print("   • Run this example multiple times - vector store persists")
-        print("   • Add new .txt files to data/ folder and restart to index them")
-        print("   • Framework automatically preserves source files")
-
-    finally:
-        # Cleanup: Remove temporary vector store directories
-        examples_dir = Path(__file__).parent
-        vs_dirs = list(examples_dir.glob("data_vs_*"))
-        if vs_dirs:
-            print(f"\n🧹 Cleaning up {len(vs_dirs)} temporary vector store directories...")
-            for vs_dir in vs_dirs:
-                try:
-                    shutil.rmtree(vs_dir)
-                    print(f"   • Removed: {vs_dir.name}")
-                except Exception as e:
-                    print(f"   • Failed to remove {vs_dir.name}: {e}")
+    print("\n🔄 Reusability:")
+    print("   • Run this example multiple times - vector store persists")
+    print("   • Add new .txt files to data/ folder and restart to index them")
+    print("   • Framework automatically preserves source files")
 
 
 if __name__ == "__main__":

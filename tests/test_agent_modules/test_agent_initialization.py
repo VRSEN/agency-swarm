@@ -44,10 +44,10 @@ def test_agent_initialization_with_tools():
 
 def test_agent_initialization_with_model():
     """Test Agent initialization with a specific model."""
-    agent = Agent(name="Agent3", instructions="Test", model="gpt-4o-mini")
+    agent = Agent(name="Agent3", instructions="Test", model="gpt-4.1")
     assert agent.name == "Agent3"
     assert agent.instructions == "Test"
-    assert agent.model == "gpt-4o-mini"
+    assert agent.model == "gpt-4.1"
 
 
 def test_agent_initialization_with_validator():
@@ -99,7 +99,7 @@ def test_agent_initialization_with_all_parameters():
         agent = Agent(
             name="CompleteAgent",
             instructions="Complete agent with all params",
-            model="gpt-4o-mini",
+            model="gpt-4.1",
             tools=[tool1],
             response_validator=validator,
             output_type=TaskOutput,
@@ -109,7 +109,7 @@ def test_agent_initialization_with_all_parameters():
 
         assert agent.name == "CompleteAgent"
         assert agent.instructions == "Complete agent with all params"
-        assert agent.model == "gpt-4o-mini"
+        assert agent.model == "gpt-4.1"
         assert len(agent.tools) == 2
         assert agent.tools[0] == tool1
         assert agent.tools[1].__class__.__name__ == "FileSearchTool"
@@ -129,10 +129,10 @@ def test_agent_repr():
     assert "model='unknown'" in repr_str
 
     # Test agent with model
-    agent2 = Agent(name="Worker", model="gpt-4o-mini")
+    agent2 = Agent(name="Worker", model="gpt-4.1")
     repr_str = repr(agent2)
     assert "name='Worker'" in repr_str
-    assert "model='gpt-4o-mini'" in repr_str
+    assert "model='gpt-4.1'" in repr_str
 
     # Test agent with description and output_type
     agent3 = Agent(name="TaskAgent", description="Handles tasks", output_type=TaskOutput)

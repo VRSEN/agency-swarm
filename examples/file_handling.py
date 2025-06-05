@@ -60,7 +60,7 @@ async def main():
 
         # Analyze the PDF using agency (file uploads work correctly through agency)
         response = await agency.get_response(
-            recipient_agent=agent,
+            agent,
             message="Please analyze the attached PDF and summarize the key financial metrics.",
             file_ids=[uploaded_file.id],
         )
@@ -134,7 +134,7 @@ async def main():
                 # Retry with uploaded file
                 vision_message_with_file = "What shapes and text do you see in this image?"
                 response = await agency.get_response(
-                    recipient_agent=agent, message=vision_message_with_file, file_ids=[uploaded_image.id]
+                    agent, message=vision_message_with_file, file_ids=[uploaded_image.id]
                 )
 
                 print(f"🤖 Vision (retry): {response.final_output}")
@@ -207,7 +207,7 @@ async def main():
                 # Retry with uploaded file
                 scene_message_with_file = "Describe this scene. How many trees do you see?"
                 response = await agency.get_response(
-                    recipient_agent=agent, message=scene_message_with_file, file_ids=[uploaded_scene.id]
+                    agent, message=scene_message_with_file, file_ids=[uploaded_scene.id]
                 )
 
                 print(f"🤖 Scene (retry): {response.final_output}")

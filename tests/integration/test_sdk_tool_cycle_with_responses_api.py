@@ -24,8 +24,6 @@ logger = logging.getLogger(__name__)
 
 # Ensure API key is available
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-if not OPENAI_API_KEY:
-    raise ValueError("OPENAI_API_KEY environment variable not set.")
 
 
 class SimpleToolParams(BaseModel):
@@ -90,7 +88,7 @@ async def test_tool_cycle_with_sdk_and_responses_api():
 
     # Explicitly create an AsyncOpenAI client
     client = AsyncOpenAI(api_key=OPENAI_API_KEY)
-    forced_responses_model = OpenAIResponsesModel(model="gpt-4o", openai_client=client)
+    forced_responses_model = OpenAIResponsesModel(model="gpt-4.1", openai_client=client)
 
     agent = Agent(
         name="SDK Responses API Test Agent",
@@ -167,14 +165,11 @@ async def test_tool_output_conversion_bug_two_turn_conversation():
     This verifies that tool outputs are preserved correctly and accessible in subsequent turns.
     """
 
-    if not OPENAI_API_KEY:
-        pytest.skip("OPENAI_API_KEY not available")
-
     # Create Agency Swarm agent with calculator tool
     agent = AgencySwarmAgent(
         name="Calculator Agent",
         instructions="You are a calculator assistant. Use the calculator tool for arithmetic operations.",
-        model="gpt-4o",
+        model="gpt-4.1",
     )
 
     # Add the calculator tool to the agent
@@ -289,9 +284,6 @@ async def test_hosted_tool_output_preservation_multi_turn():
     solving the bug where they were previously lost between conversations.
     """
 
-    if not OPENAI_API_KEY:
-        pytest.skip("OPENAI_API_KEY not available")
-
     # Create test data with specific content
     with tempfile.TemporaryDirectory(prefix="hosted_tool_test_") as temp_dir_str:
         temp_dir = Path(temp_dir_str)
@@ -320,7 +312,7 @@ Product Sales:
         agent = AgencySwarmAgent(
             name="DataSearchAgent",
             instructions="You are a data search assistant. Use file search to find information but be concise in your initial responses.",
-            model="gpt-4o",
+            model="gpt-4.1",
             files_folder=str(temp_dir),
         )
 

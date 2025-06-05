@@ -262,8 +262,7 @@ async def run_workflow():
 
     try:
         response = await agency.get_response(
-            message=f"Provide comprehensive investment analysis for {stock_symbol}. Get market data, risk assessment, and professional report.",
-            recipient_agent=portfolio_manager.name,
+            message=f"Provide comprehensive investment analysis for {stock_symbol}. Get market data, risk assessment, and professional report."
         )
 
         if response:

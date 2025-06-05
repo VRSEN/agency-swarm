@@ -50,17 +50,18 @@ def reporter_agent_instance():
 
 @pytest.fixture
 def multi_agent_agency(planner_agent_instance, worker_agent_instance, reporter_agent_instance):
-    agency_chart = [
+    agency = Agency(
         planner_agent_instance,
-        [planner_agent_instance, worker_agent_instance],
-        [worker_agent_instance, reporter_agent_instance],
-    ]
-    agency = Agency(agency_chart=agency_chart, shared_instructions="This is a test agency.")
+        communication_flows=[
+            (planner_agent_instance, worker_agent_instance),
+            (worker_agent_instance, reporter_agent_instance),
+        ],
+        shared_instructions="This is a test agency.",
+    )
     return agency
 
 
 @pytest.mark.asyncio
-# @pytest.mark.use_real_api # No longer needed
 async def test_multi_agent_communication_flow(multi_agent_agency: Agency):
     """
     Test a full message flow using REAL API calls: User -> Planner -> Worker -> Reporter -> User
@@ -69,7 +70,7 @@ async def test_multi_agent_communication_flow(multi_agent_agency: Agency):
     initial_task = f"Process test data batch {uuid.uuid4()}."
     print(f"\n--- Starting Integration Test --- TASK: {initial_task}")
 
-    final_result: RunResult = await multi_agent_agency.get_response(message=initial_task, recipient_agent="Planner")
+    final_result: RunResult = await multi_agent_agency.get_response(message=initial_task)
     print(f"--- Integration Test Complete --- FINAL OUTPUT:\n{final_result.final_output}")
 
     assert final_result is not None
@@ -95,7 +96,7 @@ async def test_context_preservation_in_agent_communication(multi_agent_agency: A
     print(f"\n--- Testing Context Preservation --- TASK: {initial_task}")
 
     # Execute the communication flow
-    await multi_agent_agency.get_response(message=initial_task, recipient_agent="Planner")
+    await multi_agent_agency.get_response(message=initial_task)
 
     # Direct verification - check actual thread manager state
     thread_manager = multi_agent_agency.thread_manager
