@@ -30,7 +30,7 @@ load_dotenv()
 
 # Checks agent's response
 @output_guardrail
-async def test_guardrail_output(
+async def agent_output_guardrail(
     ctx: RunContextWrapper, agent: Agent, response_text: str
 ) -> GuardrailFunctionOutput:
     tripwire_triggered = False
@@ -46,7 +46,7 @@ async def test_guardrail_output(
 
 # Checks user's input
 @input_guardrail
-async def test_guardrail_input(
+async def agent_input_guardrail(
     ctx: RunContextWrapper, agent: Agent, input_text: str
 ) -> GuardrailFunctionOutput:
     tripwire_triggered = False
@@ -73,8 +73,8 @@ agent = Agent(
     model_settings=ModelSettings(
         temperature=0,
     ),
-    output_guardrails=[test_guardrail_output],
-    input_guardrails=[test_guardrail_input],
+    output_guardrails=[agent_output_guardrail],
+    input_guardrails=[agent_input_guardrail],
 )
 
 agency = Agency(agent)
