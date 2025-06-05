@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock
 
-from agents import FunctionTool
+from agents import FunctionTool, ModelSettings
 from pydantic import BaseModel, Field
 
 from agency_swarm import Agent
@@ -63,6 +63,33 @@ def test_agent_initialization_with_output_type():
     assert agent.output_type == TaskOutput
     assert agent.name == "Agent5"
     assert agent.instructions == "Structured output"
+
+
+def test_agent_initialization_with_model_settings():
+    """Test Agent initialization with a specific model."""
+    agent = Agent(
+        name="Agent6",
+        instructions="Test",
+        model_settings=ModelSettings(
+            temperature=0.3,
+            max_tokens=16,
+            top_p=0.5,
+        ),
+    )
+    assert agent.model_settings.temperature == 0.3
+    assert agent.model_settings.max_tokens == 16
+    assert agent.model_settings.top_p == 0.5
+
+def test_agent_initialization_with_deprecated_model_settings():
+    """Test Agent initialization with a specific model."""
+    agent = Agent(
+        name="Agent7",
+        instructions="Test",
+        temperature=0.3,
+        max_prompt_tokens=16, # should be converted to max_tokens
+    )
+    assert agent.model_settings.temperature == 0.3
+    assert agent.model_settings.max_tokens == 16
 
 
 def test_agent_initialization_with_different_output_types():

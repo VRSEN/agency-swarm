@@ -130,7 +130,7 @@ The `Agency` class constructor has been redesigned for clarity:
 |----------------|----------------|-------|
 | Individual model params (`temperature`, `top_p`, etc.) | `model_settings=ModelSettings(...)` | Individual params deprecated but still work |
 | `examples` | Prepended to `instructions` | Automatic migration with warning |
-| `id`, `tool_resources`, `schemas_folder` | Removed | Use `files_folder` and `upload_file` instead |
+| `id`, `tool_resources` | Removed | Use `files_folder` and `upload_file` instead |
 
 **Model Configuration**:
 - **v0.x**: Set individual parameters like `temperature=0.7` on Agent or Agency
@@ -318,6 +318,53 @@ async def main():
 asyncio.run(main())
 ```
 </Step>
+
+<Step title="Update response validation">
+**v0.x**:
+```python
+class TestAgent(Agent):
+    def __init__(self):
+        super().__init__(
+            name="TestAgent",
+            description="..."
+        )
+
+    @override
+    def response_validator(self, message):
+        # User-defined validation function
+        if self.check_errors(message):
+            raise ValueError("Error processing message")
+
+        # Returns original message if no errors are raised
+        return message
+```
+
+**v1.x** (guardrails):
+```python
+@output_guardrail
+async def agent_output_guardrail(
+    ctx: RunContextWrapper, agent: Agent, agent_response: str
+) -> GuardrailFunctionOutput:
+    # User-defined validation logic
+    error_msg, tripwire_triggered = check_errors(agent_response):
+
+    return GuardrailFunctionOutput(
+        output_info=error_msg,
+        tripwire_triggered=tripwire_triggered, # If True, will raise OutputGuardrailTripwireTriggered error
+    )
+
+agent = Agent(
+    model="gpt-4o",
+    output_guardrails=[agent_output_guardrail],
+    # input_guardrails are defined in a similar way
+)
+```
+
+**What Changed:**
+- Validation is now passed as an agent's input parameter
+- Retry validation logic is no longer incorporated within the library. Users have to implement their own retry logic by catching respective errors.
+</Step>
+
 </Steps>
 
 ## Code Examples

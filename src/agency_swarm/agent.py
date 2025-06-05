@@ -10,7 +10,9 @@ from typing import Any, TypeVar
 
 from agents import (
     Agent as BaseAgent,
+    InputGuardrailTripwireTriggered,
     ModelSettings,
+    OutputGuardrailTripwireTriggered,
     RunConfig,
     RunHooks,
     RunItem,
@@ -88,9 +90,6 @@ class Agent(BaseAgent[MasterContext]):
         tools_folder (str | Path | None): Placeholder for future functionality to load tools from a directory.
         description (str | None): A description of the agent's role or purpose, used when generating
                                   dynamic `send_message` tools for other agents.
-        response_validator (Callable[[str], bool] | None): An optional callable that validates the agent's
-                                                          final text response. It should return `True` if the
-                                                          response is valid, `False` otherwise.
         output_type (type[Any] | None): The type of the agent's final output.
         _thread_manager (ThreadManager | None): Internal reference to the agency's `ThreadManager`.
                                                 Set by the parent `Agency`.
@@ -109,7 +108,6 @@ class Agent(BaseAgent[MasterContext]):
     files_folder: str | Path | None
     tools_folder: str | Path | None  # Placeholder for future ToolFactory
     description: str | None
-    response_validator: Callable[[str], bool] | None
     output_type: type[Any] | None
 
     # --- Internal State ---
@@ -139,7 +137,7 @@ class Agent(BaseAgent[MasterContext]):
             **kwargs: Keyword arguments including standard `agents.Agent` parameters
                       (like `name`, `instructions`, `model`, `tools`, `hooks`, etc.)
                       and Agency Swarm specific parameters (`files_folder`, `description`,
-                      `response_validator`, `output_type`, `load_threads_callback`, `save_threads_callback`).
+                      `output_type`, `load_threads_callback`, `save_threads_callback`).
                       Deprecated parameters are handled with warnings.
 
         Raises:
@@ -174,18 +172,11 @@ class Agent(BaseAgent[MasterContext]):
         if "validation_attempts" in kwargs:
             val_attempts = kwargs.pop("validation_attempts")
             warnings.warn(
-                "'validation_attempts' is deprecated. Use the 'response_validator' callback for validation logic.",
+                "'validation_attempts' is deprecated.",
                 DeprecationWarning,
                 stacklevel=2,
             )
-            if val_attempts > 1 and "response_validator" not in kwargs:
-                warnings.warn(
-                    "Using 'validation_attempts > 1' without a 'response_validator' has no effect. Implement validation logic in the callback.",
-                    UserWarning,
-                    stacklevel=2,
-                )
             deprecated_args_used["validation_attempts"] = val_attempts
-            # Note: validation_attempts doesn't directly map to model_settings but is tracked for compatibility
 
         # Handle other deprecated parameters
         if "id" in kwargs:
@@ -195,6 +186,14 @@ class Agent(BaseAgent[MasterContext]):
                 stacklevel=2,
             )
             deprecated_args_used["id"] = kwargs.pop("id")
+
+        if "response_validator" in kwargs:
+            warnings.warn(
+                "'response_validator' parameter is deprecated. Use 'output_guardrails' and 'input_guardrails' instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            deprecated_args_used["response_validator"] = kwargs.pop("response_validator")
 
         if "tool_resources" in kwargs:
             warnings.warn(
@@ -281,7 +280,7 @@ class Agent(BaseAgent[MasterContext]):
         # Merge deprecated model settings into existing model_settings
         if deprecated_model_settings:
             existing_model_settings = kwargs.get("model_settings")
-            
+
             # Handle existing model_settings being a ModelSettings instance or dict
             if isinstance(existing_model_settings, ModelSettings):
                 # Convert ModelSettings to dict for merging
@@ -295,16 +294,15 @@ class Agent(BaseAgent[MasterContext]):
             # Create a new dict to avoid modifying the original
             merged_model_settings = dict(existing_dict)
             merged_model_settings.update(deprecated_model_settings)
-            
+
             # to_json_dict returns None for keys that were not set
             keys_to_remove = [key for key, value in merged_model_settings.items() if value is None]
             for key in keys_to_remove:
                 merged_model_settings.pop(key)
-            
+
             # Resolve token setting conflicts
             self._resolve_token_settings(merged_model_settings, kwargs.get('name', 'unknown'))
-            print(merged_model_settings)
-            
+
             # Create new ModelSettings instance from merged dict
             kwargs["model_settings"] = ModelSettings(**merged_model_settings)
 
@@ -816,6 +814,14 @@ class Agent(BaseAgent[MasterContext]):
                     else "No final output"
                 )
                 logger.info(f"Runner.run completed for agent '{self.name}'. {completion_info}")
+
+            except OutputGuardrailTripwireTriggered as e:
+                logger.warning(f"OutputGuardrailTripwireTriggered for agent '{self.name}': {e}", exc_info=True)
+                raise e
+
+            except InputGuardrailTripwireTriggered as e:
+                logger.warning(f"InputGuardrailTripwireTriggered for agent '{self.name}': {e}", exc_info=True)
+                raise e
 
             except Exception as e:
                 logger.error(f"Error during Runner.run for agent '{self.name}': {e}", exc_info=True)
