@@ -65,14 +65,14 @@ class TestPersistenceHooksUnit:
     ):
         """Test PersistenceHooks.on_run_start successfully loads thread data."""
         # Arrange
-        # Simulate load_callback returning a dictionary of threads
+        # Simulate load_callback returning serialized thread data (not ConversationThread objects)
         thread_id_1 = "user->TestAgent"
         thread_id_2 = "user->OtherAgent"
-        loaded_threads_dict = {
-            thread_id_1: ConversationThread(thread_id=thread_id_1, items=[{"role": "user", "content": "loaded1"}]),
-            thread_id_2: ConversationThread(thread_id=thread_id_2, items=[{"role": "user", "content": "loaded2"}]),
+        loaded_threads_data = {
+            thread_id_1: {"items": [{"role": "user", "content": "loaded1"}], "metadata": {}},
+            thread_id_2: {"items": [{"role": "user", "content": "loaded2"}], "metadata": {}},
         }
-        mock_load_callback.return_value = loaded_threads_dict  # Simulate successful load returning a dict
+        mock_load_callback.return_value = loaded_threads_data  # Simulate successful load returning serialized data
 
         hooks = PersistenceHooks(load_threads_callback=mock_load_callback, save_threads_callback=mock_save_callback)
 
@@ -82,8 +82,17 @@ class TestPersistenceHooksUnit:
 
         # Assert
         mock_load_callback.assert_called_once_with()  # Called without arguments
-        # Verify thread_manager._threads was populated by the hook
-        assert mock_thread_manager._threads == loaded_threads_dict
+        # Verify thread_manager._threads was populated with ConversationThread objects
+        assert len(mock_thread_manager._threads) == 2
+        assert thread_id_1 in mock_thread_manager._threads
+        assert thread_id_2 in mock_thread_manager._threads
+        # Verify the threads were reconstructed correctly
+        thread_1 = mock_thread_manager._threads[thread_id_1]
+        thread_2 = mock_thread_manager._threads[thread_id_2]
+        assert thread_1.thread_id == thread_id_1
+        assert thread_1.items == [{"role": "user", "content": "loaded1"}]
+        assert thread_2.thread_id == thread_id_2
+        assert thread_2.items == [{"role": "user", "content": "loaded2"}]
 
     @pytest.mark.asyncio
     async def test_on_run_start_load_none(
@@ -148,11 +157,9 @@ class TestPersistenceHooksUnit:
         """Test PersistenceHooks.on_run_end successfully calls save_threads_callback."""
         # Arrange
         thread_id_1 = "user->TestAgent"
-        # Pre-populate the mock thread manager with some data to be saved
-        threads_to_save = {
-            thread_id_1: ConversationThread(thread_id=thread_id_1, items=[{"role": "user", "content": "to_save"}])
-        }
-        mock_thread_manager._threads = threads_to_save
+        # Pre-populate the mock thread manager with some ConversationThread data
+        thread_obj = ConversationThread(thread_id=thread_id_1, items=[{"role": "user", "content": "to_save"}])
+        mock_thread_manager._threads = {thread_id_1: thread_obj}
 
         hooks = PersistenceHooks(load_threads_callback=mock_load_callback, save_threads_callback=mock_save_callback)
 
@@ -161,10 +168,9 @@ class TestPersistenceHooksUnit:
         hooks.on_run_end(context=mock_run_context_wrapper.context, result=mock_run_result)
 
         # Assert
-        # Verify save_threads_callback (which is async mock) was called correctly
-        mock_save_callback.assert_called_once_with(threads_to_save)
-        # Note: We don't await the save_threads_callback directly here, just check it was called.
-        # The hook calls it synchronously, but the callback itself might do async IO.
+        # Verify save_threads_callback was called with serialized data (not ConversationThread objects)
+        expected_serialized_data = {thread_id_1: {"items": [{"role": "user", "content": "to_save"}], "metadata": {}}}
+        mock_save_callback.assert_called_once_with(expected_serialized_data)
 
     @pytest.mark.asyncio
     async def test_on_run_end_save_error(
@@ -178,10 +184,8 @@ class TestPersistenceHooksUnit:
         """Test PersistenceHooks.on_run_end when save_threads_callback raises an error."""
         # Arrange
         thread_id_1 = "user->TestAgent"
-        threads_to_save = {
-            thread_id_1: ConversationThread(thread_id=thread_id_1, items=[{"role": "user", "content": "to_save"}])
-        }
-        mock_thread_manager._threads = threads_to_save
+        thread_obj = ConversationThread(thread_id=thread_id_1, items=[{"role": "user", "content": "to_save"}])
+        mock_thread_manager._threads = {thread_id_1: thread_obj}
 
         save_error = OSError("Simulated save error")
         # Configure the async mock to raise an error when called
@@ -196,6 +200,6 @@ class TestPersistenceHooksUnit:
         except Exception as e:
             pytest.fail(f"PersistenceHooks.on_run_end raised an unexpected exception: {e}")
 
-        # Verify save_threads_callback was still called
-        mock_save_callback.assert_called_once_with(threads_to_save)
-        # Optional: Check logs for error message
+        # Verify save_threads_callback was called with serialized data
+        expected_serialized_data = {thread_id_1: {"items": [{"role": "user", "content": "to_save"}], "metadata": {}}}
+        mock_save_callback.assert_called_once_with(expected_serialized_data)

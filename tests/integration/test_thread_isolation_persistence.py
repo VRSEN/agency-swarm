@@ -67,23 +67,28 @@ def file_save_callback(all_threads_data: dict[str, Any], base_dir: Path):
             json.dump(data_to_save, f, indent=2)
 
 
-def file_load_callback(thread_id: str, base_dir: Path) -> dict[str, Any] | None:
-    """Load thread data from a JSON file based on thread identifier."""
-    # Sanitize thread_id for filesystem (replace '->' with '_to_')
-    sanitized_thread_id = thread_id.replace("->", "_to_")
-    file_path = base_dir / f"{sanitized_thread_id}.json"
+def file_load_callback_all_threads(base_dir: Path) -> dict[str, Any]:
+    """Load ALL thread data from JSON files in the base directory."""
+    all_threads = {}
 
-    if not file_path.exists():
-        return None
+    # Look for all JSON files in the directory
+    for file_path in base_dir.glob("*.json"):
+        # Extract thread_id from filename: "user_to_CEO.json" -> "user->CEO"
+        filename = file_path.stem
+        thread_id = filename.replace("_to_", "->")
 
-    with open(file_path) as f:
-        thread_dict = json.load(f)
+        try:
+            with open(file_path) as f:
+                thread_dict = json.load(f)
 
-    # Basic validation of loaded structure
-    if not isinstance(thread_dict.get("items"), list) or not isinstance(thread_dict.get("metadata"), dict):
-        return None
+            # Basic validation of loaded structure
+            if isinstance(thread_dict.get("items"), list) and isinstance(thread_dict.get("metadata"), dict):
+                all_threads[thread_id] = thread_dict
+        except Exception:
+            # Skip invalid files
+            continue
 
-    return thread_dict
+    return all_threads
 
 
 @pytest.fixture
@@ -93,8 +98,8 @@ def file_persistence_callbacks(temp_persistence_dir):
     def save_cb(all_threads_data):
         return file_save_callback(all_threads_data, temp_persistence_dir)
 
-    def load_cb(thread_id):
-        return file_load_callback(thread_id, temp_persistence_dir)
+    def load_cb():
+        return file_load_callback_all_threads(temp_persistence_dir)
 
     return load_cb, save_cb
 
@@ -147,8 +152,9 @@ async def test_thread_persistence_isolation_structural(
 
     # Step 3: Direct verification of saved data using load callbacks
     # This tests that persistence maintains isolation at the storage level
-    ceo_saved_data = load_cb("user->CEO")
-    dev_saved_data = load_cb("user->Developer")
+    all_saved_data = load_cb()
+    ceo_saved_data = all_saved_data.get("user->CEO")
+    dev_saved_data = all_saved_data.get("user->Developer")
 
     assert ceo_saved_data is not None, "CEO thread data should be saved"
     assert dev_saved_data is not None, "Developer thread data should be saved"
@@ -172,8 +178,9 @@ async def test_thread_persistence_isolation_structural(
     assert ceo_info.lower() not in dev_saved_content, "Developer saved data contaminated with CEO info"
 
     # Step 5: Verify we can load individual threads correctly
-    loaded_ceo_data = load_cb("user->CEO")
-    loaded_dev_data = load_cb("user->Developer")
+    all_loaded_data = load_cb()
+    loaded_ceo_data = all_loaded_data.get("user->CEO")
+    loaded_dev_data = all_loaded_data.get("user->Developer")
 
     assert loaded_ceo_data == ceo_saved_data, "CEO data should load consistently"
     assert loaded_dev_data == dev_saved_data, "Developer data should load consistently"
@@ -210,8 +217,9 @@ async def test_persistence_thread_file_separation(
     await agency.get_response(message="Developer message", recipient_agent="Developer")
 
     # Verify separate thread files exist
-    ceo_thread_data = load_cb("user->CEO")
-    dev_thread_data = load_cb("user->Developer")
+    all_thread_data = load_cb()
+    ceo_thread_data = all_thread_data.get("user->CEO")
+    dev_thread_data = all_thread_data.get("user->Developer")
 
     assert ceo_thread_data is not None, "CEO thread file should exist"
     assert dev_thread_data is not None, "Developer thread file should exist"

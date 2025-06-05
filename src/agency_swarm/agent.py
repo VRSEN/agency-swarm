@@ -100,7 +100,7 @@ class Agent(BaseAgent[MasterContext]):
         _openai_client (AsyncOpenAI | None): Internal reference to the initialized AsyncOpenAI client instance.
         _openai_client_sync (OpenAI | None): Internal reference to the initialized sync OpenAI client instance.
         file_manager (AgentFileManager | None): File management utility for handling file uploads and vector stores.
-        _load_threads_callback (Callable[[str], dict[str, Any] | None] | None): Callback to load thread data by thread_id.
+        _load_threads_callback (Callable[[], dict[str, Any]] | None): Callback to load all thread data.
         _save_threads_callback (Callable[[dict[str, Any]], None] | None): Callback to save all threads data.
     """
 
@@ -120,7 +120,7 @@ class Agent(BaseAgent[MasterContext]):
     _openai_client: AsyncOpenAI | None = None
     _openai_client_sync: OpenAI | None = None
     file_manager: AgentFileManager | None = None
-    _load_threads_callback: Callable[[str], dict[str, Any] | None] | None = None
+    _load_threads_callback: Callable[[], dict[str, Any]] | None = None
     _save_threads_callback: Callable[[dict[str, Any]], None] | None = None
 
     # --- SDK Agent Compatibility ---
@@ -1290,7 +1290,7 @@ class Agent(BaseAgent[MasterContext]):
 
     def _set_persistence_callbacks(
         self,
-        load_threads_callback: Callable[[str], dict[str, Any] | None] | None = None,
+        load_threads_callback: Callable[[], dict[str, Any]] | None = None,
         save_threads_callback: Callable[[dict[str, Any]], None] | None = None,
     ):
         """Set persistence callbacks for the agent's thread manager.
@@ -1299,7 +1299,7 @@ class Agent(BaseAgent[MasterContext]):
         create a new ThreadManager with the provided callbacks if none exists.
 
         Args:
-            load_threads_callback: Callback to load thread data by thread_id
+            load_threads_callback: Callback to load all thread data
             save_threads_callback: Callback to save all threads data
         """
         self._load_threads_callback = load_threads_callback

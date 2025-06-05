@@ -26,11 +26,11 @@ from agency_swarm import Agency, Agent  # noqa: E402
 PERSISTENCE_DIR = Path(tempfile.mkdtemp(prefix="thread_persistence_"))
 
 
-def save_thread_data_to_file(thread_data: dict[str, Any]):
+def save_thread_data_to_file(all_threads_data: dict[str, Any]):
     """
-    Save thread data to a file.
+    Save all threads data to a file.
 
-    thread_data is a dictionary mapping thread_ids to conversation items.
+    all_threads_data is a dictionary mapping thread_ids to their conversation data.
     Thread IDs follow the format "sender->recipient", for example:
     - "user->AssistantAgent" for user interactions with AssistantAgent
     - "AssistantAgent->HelperAgent" for agent-to-agent communication
@@ -39,45 +39,39 @@ def save_thread_data_to_file(thread_data: dict[str, Any]):
     """
     file_path = PERSISTENCE_DIR / "thread_data.json"
     with open(file_path, "w") as f:
-        json.dump(thread_data, f, indent=2)
+        json.dump(all_threads_data, f, indent=2)
 
     # Log the structure for demonstration
-    print(f"Saved thread data with {len(thread_data)} thread(s):")
-    for thread_id in thread_data.keys():
+    print(f"Saved thread data with {len(all_threads_data)} thread(s):")
+    for thread_id in all_threads_data.keys():
         print(f"  - Thread: {thread_id}")
 
 
-def load_thread_data_from_file(thread_id: str) -> dict[str, Any] | None:
+def load_thread_data_from_file() -> dict[str, Any]:
     """
-    Load specific thread data from a file.
-
-    Args:
-        thread_id: The specific thread identifier to load (e.g., "user->AssistantAgent")
+    Load ALL threads data from file.
 
     Returns:
-        Dictionary containing the thread data for the specified thread_id, or None if not found.
-        The returned dict should have 'items' and 'metadata' keys.
+        Dictionary mapping thread_ids to their conversation data.
+        Each thread data dict should have 'items' and 'metadata' keys.
+        Returns empty dict if no data exists.
 
-    Note: This demonstrates how the persistence system works with thread isolation.
-    Each thread_id represents a separate conversation flow with isolated history.
+    Note: This demonstrates the correct callback signature where load_threads_callback
+    takes NO parameters and returns ALL threads for the current context.
     """
     file_path = PERSISTENCE_DIR / "thread_data.json"
     if not file_path.exists():
-        print(f"No existing thread data file found - starting fresh for thread: {thread_id}")
-        return None
+        print("No existing thread data file found - starting with empty threads")
+        return {}
 
     with open(file_path) as f:
-        all_thread_data: dict[str, Any] = json.load(f)
+        all_threads_data: dict[str, Any] = json.load(f)
 
-    # Return the specific thread data for the requested thread_id
-    thread_data = all_thread_data.get(thread_id)
+    print(f"Loaded {len(all_threads_data)} thread(s) from file:")
+    for thread_id in all_threads_data.keys():
+        print(f"  - Thread: {thread_id}")
 
-    if thread_data:
-        print(f"Loaded thread data for: {thread_id}")
-        return thread_data
-    else:
-        print(f"No data found for thread: {thread_id} (starting fresh)")
-        return None
+    return all_threads_data
 
 
 # Initialize all agents and agencies at the top
@@ -122,13 +116,14 @@ async def run_persistent_conversation():
     1. Thread isolation: Each communication flow gets its own thread
     2. Thread identifiers: Follow "sender->recipient" format
     3. Persistence: Complete thread state is saved and restored
+    4. Correct callback signatures: load() -> all_threads, save(all_threads) -> None
     """
 
     print("\n--- Turn 1: User -> AssistantAgent (Share Info) ---")
     print("Thread identifier will be: user->AssistantAgent")
 
     user_message_1 = f"Hello. Please remember that my favorite color is {TEST_INFO}. I'll ask you about it later."
-    response1 = await agency.get_response(assistant_agent, message=user_message_1)
+    response1 = await agency.get_response(message=user_message_1)
     print(f"Response from AssistantAgent: {response1.final_output}")
 
     await asyncio.sleep(1)
@@ -141,7 +136,7 @@ async def run_persistent_conversation():
     print("Thread identifier will be: user->AssistantAgent (same as before)")
 
     user_message_2 = "What was my favorite color and lucky number I told you earlier?"
-    response2 = await agency_reloaded.get_response(assistant_agent_reloaded, message=user_message_2)
+    response2 = await agency_reloaded.get_response(message=user_message_2)
     print(f"Response from Reloaded AssistantAgent: {response2.final_output}")
 
     # Test result
@@ -169,6 +164,7 @@ if __name__ == "__main__":
         print("This example demonstrates:")
         print("• Automatic thread isolation using 'sender->recipient' identifiers")
         print("• Complete conversation persistence across application restarts")
+        print("• Correct callback signatures: load() -> all_threads, save(all_threads) -> None")
         print("=" * 60)
 
         if os.name == "nt":
