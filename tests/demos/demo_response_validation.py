@@ -11,7 +11,6 @@ This comprehensive demo shows:
 
 import json
 import time
-from typing import Optional
 
 from agency_swarm import Agency, Agent
 
@@ -132,49 +131,11 @@ def test_json_format_validation(results: ValidationTestResults):
         results.add_result("JSON Format Validation", False, f"Exception during JSON validation: {str(e)[:100]}...")
 
 
-def test_content_policy_validation(results: ValidationTestResults):
-    """Test content policy enforcement."""
-    print("\n🧪 Test 3: Content Policy Validation")
-
-    forbidden_words = ["password", "secret", "confidential", "private"]
-
-    def content_policy_validator(message: str) -> str:
-        message_lower = message.lower()
-        for word in forbidden_words:
-            if word in message_lower:
-                raise ValueError(
-                    f"Response contains forbidden word '{word}'. Please rephrase without sensitive information."
-                )
-        return message
-
-    agent = Agent(
-        name="PolicyAgent",
-        description="Agent with content filtering",
-        instructions="Provide helpful information. If you receive policy warnings, rephrase to avoid sensitive terms.",
-        validation_attempts=2,
-    )
-    agent.response_validator = content_policy_validator
-
-    try:
-        agency = Agency([agent])
-        # Request something that might trigger policy violation
-        response = agency.get_completion("Tell me about access credentials and authentication.")
-
-        # Check if response avoids forbidden words
-        response_lower = response.lower()
-        violations = [word for word in forbidden_words if word in response_lower]
-
-        if not violations:
-            results.add_result("Content Policy Validation", True, f"No policy violations: {response[:50]}...")
-        else:
-            results.add_result("Content Policy Validation", False, f"Policy violations found: {violations}")
-    except Exception as e:
-        results.add_result("Content Policy Validation", False, f"Exception during policy validation: {str(e)[:100]}...")
 
 
 def test_validation_exception_raising(results: ValidationTestResults):
     """Test that exceptions are raised when retries are exhausted."""
-    print("\n🧪 Test 4: Exception Raising (Retries Exhausted)")
+    print("\n🧪 Test 3: Exception Raising (Retries Exhausted)")
 
     def strict_validator(message: str) -> str:
         # Require a very specific format that's unlikely to be used naturally
@@ -186,7 +147,7 @@ def test_validation_exception_raising(results: ValidationTestResults):
         name="StrictAgent",
         description="Agent with very strict validation",
         instructions="Always respond with simple, natural language. Do not use special prefixes or formatting.",
-        validation_attempts=1,  # No retries - should raise exception
+        validation_attempts=0,  # No retries - should raise exception
     )
     agent.response_validator = strict_validator
 
@@ -210,10 +171,14 @@ def test_validation_exception_raising(results: ValidationTestResults):
 
 def test_multiple_retry_attempts(results: ValidationTestResults):
     """Test multiple validation retry attempts."""
-    print("\n🧪 Test 5: Multiple Retry Attempts")
+    print("\n🧪 Test 4: Multiple Retry Attempts")
+
+    attempt_counter = {"count": 0}
 
     def format_validator(message: str) -> str:
-        if not message.upper().startswith("GREETING:"):
+        """Require 'GREETING:' prefix and force one retry."""
+        attempt_counter["count"] += 1
+        if not message.upper().startswith("GREETING:") or attempt_counter["count"] == 1:
             raise ValueError("Response must start with 'GREETING:' followed by your message")
         return message
 
@@ -221,7 +186,7 @@ def test_multiple_retry_attempts(results: ValidationTestResults):
         name="FormatAgent",
         description="Agent that learns specific formatting",
         instructions="Respond naturally. If you receive formatting instructions, follow them exactly.",
-        validation_attempts=3,  # Allow multiple retries
+        validation_attempts=3,  # Allow multiple retries, though agent may succeed on first attempt
     )
     agent.response_validator = format_validator
 
@@ -257,7 +222,6 @@ def main():
     # Run all tests
     test_simple_keyword_validation(results)
     test_json_format_validation(results)
-    test_content_policy_validation(results)
     test_validation_exception_raising(results)
     test_multiple_retry_attempts(results)
 

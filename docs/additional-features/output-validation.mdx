@@ -39,7 +39,7 @@ In this example, `CustomerSupportAgent` checks the response for the presence of 
 
 #### Validation Attempts
 
-The `validation_attempts` parameter controls how many times an agent can retry when validation fails. **Default is 1** (no retries - validation failure raises an exception immediately).
+The `validation_attempts` parameter controls how many times an agent can retry when validation fails. **Default is 1** (one retry). Set `validation_attempts=0` for immediate fail-fast behavior.
 
 ```python
 from agency_swarm import Agent
@@ -60,10 +60,10 @@ class JSONAgent(Agent):
             raise ValueError("Response must be valid JSON format.")
 ```
 
-**When to increase `validation_attempts`:**
+**When to adjust `validation_attempts`:**
 - **Format validation** (JSON, structured output): Use `validation_attempts=2-3`
 - **Content requirements** that agents can learn: Use `validation_attempts=2`
-- **Critical/security validation**: Keep default `validation_attempts=1` (fail-fast)
+- **Critical/security validation**: Use `validation_attempts=0` to disable retries
 
 ### Tool Validators
 
