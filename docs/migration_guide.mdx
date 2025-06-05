@@ -245,11 +245,11 @@ agent = Agent(temperature=0.7, top_p=1.0, max_completion_tokens=1000)
 
 # v1.x (recommended)
 agent = Agent(
+    model="gpt-4o",
     model_settings=ModelSettings(
         temperature=0.7,
         top_p=1.0,
         max_completion_tokens=1000,
-        model="gpt-4o"
     )
 )
 ```

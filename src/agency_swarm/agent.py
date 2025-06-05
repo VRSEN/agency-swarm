@@ -10,6 +10,7 @@ from typing import Any, TypeVar
 
 from agents import (
     Agent as BaseAgent,
+    ModelSettings,
     RunConfig,
     RunHooks,
     RunItem,
@@ -109,7 +110,7 @@ class Agent(BaseAgent[MasterContext]):
     tools_folder: str | Path | None  # Placeholder for future ToolFactory
     description: str | None
     response_validator: Callable[[str], bool] | None
-    output_type: type[Any] | None  # Add output_type parameter
+    output_type: type[Any] | None
 
     # --- Internal State ---
     _thread_manager: ThreadManager | None = None
@@ -253,6 +254,18 @@ class Agent(BaseAgent[MasterContext]):
             )
             deprecated_args_used["refresh_from_id"] = kwargs.pop("refresh_from_id")
 
+        # Handle response_format parameter mapping to output_type
+        if "response_format" in kwargs:
+            response_format = kwargs.pop("response_format")
+            if "output_type" not in kwargs or kwargs["output_type"] is None:
+                kwargs["output_type"] = response_format
+            warnings.warn(
+                "'response_format' parameter is deprecated. Use 'output_type' instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            deprecated_args_used["response_format"] = response_format
+
         # Handle deprecated tools
         if "tools" in kwargs:
             tools_list = kwargs["tools"]
@@ -267,14 +280,33 @@ class Agent(BaseAgent[MasterContext]):
 
         # Merge deprecated model settings into existing model_settings
         if deprecated_model_settings:
-            existing_model_settings = kwargs.get("model_settings", {})
-            if existing_model_settings is None:
-                existing_model_settings = {}
+            existing_model_settings = kwargs.get("model_settings")
+            
+            # Handle existing model_settings being a ModelSettings instance or dict
+            if isinstance(existing_model_settings, ModelSettings):
+                # Convert ModelSettings to dict for merging
+                existing_dict = existing_model_settings.to_json_dict()
+            elif existing_model_settings is None:
+                existing_dict = {}
+            else:
+                # Assume it's already a dict
+                existing_dict = dict(existing_model_settings)
 
             # Create a new dict to avoid modifying the original
-            merged_model_settings = dict(existing_model_settings)
+            merged_model_settings = dict(existing_dict)
             merged_model_settings.update(deprecated_model_settings)
-            kwargs["model_settings"] = merged_model_settings
+            
+            # to_json_dict returns None for keys that were not set
+            keys_to_remove = [key for key, value in merged_model_settings.items() if value is None]
+            for key in keys_to_remove:
+                merged_model_settings.pop(key)
+            
+            # Resolve token setting conflicts
+            self._resolve_token_settings(merged_model_settings, kwargs.get('name', 'unknown'))
+            print(merged_model_settings)
+            
+            # Create new ModelSettings instance from merged dict
+            kwargs["model_settings"] = ModelSettings(**merged_model_settings)
 
             logger.info(
                 f"Merged deprecated model settings into model_settings: {list(deprecated_model_settings.keys())}"
@@ -1252,6 +1284,50 @@ class Agent(BaseAgent[MasterContext]):
 
             sanitized.append(msg)
         return sanitized
+    
+    @staticmethod
+    def _resolve_token_settings(model_settings_dict: dict[str, Any], agent_name: str = "unknown") -> None:
+        """
+        Resolves conflicts between max_tokens, max_prompt_tokens, and max_completion_tokens.
+        
+        Args:
+            model_settings_dict: Dictionary of model settings to modify in place
+            agent_name: Name of the agent for logging purposes
+        """
+        has_max_tokens = "max_tokens" in model_settings_dict
+        has_max_prompt_tokens = "max_prompt_tokens" in model_settings_dict
+        has_max_completion_tokens = "max_completion_tokens" in model_settings_dict
+        
+        # Since oai only kept 1 parameter to manage tokens, write one of the existing parameters to max_tokens
+        if has_max_tokens:
+            # If max_tokens is specified, drop prompt and completion tokens
+            if has_max_prompt_tokens or has_max_completion_tokens:
+                logger.info(
+                    f"max_tokens is specified, ignoring max_prompt_tokens and max_completion_tokens for agent '{agent_name}'"
+                )
+                model_settings_dict.pop("max_prompt_tokens", None)
+                model_settings_dict.pop("max_completion_tokens", None)
+        else:
+            # If max_tokens is not specified, handle prompt/completion tokens
+            if has_max_prompt_tokens and has_max_completion_tokens:
+                # Both are present, prefer completion tokens and warn
+                model_settings_dict["max_tokens"] = model_settings_dict["max_completion_tokens"]
+                model_settings_dict.pop("max_prompt_tokens", None)
+                model_settings_dict.pop("max_completion_tokens", None)
+                logger.warning(
+                    f"Both max_prompt_tokens and max_completion_tokens specified for agent '{agent_name}'. "
+                    f"Using max_completion_tokens value ({model_settings_dict['max_tokens']}) for max_tokens and ignoring max_prompt_tokens."
+                )
+            elif has_max_completion_tokens:
+                # Only completion tokens present
+                model_settings_dict["max_tokens"] = model_settings_dict["max_completion_tokens"]
+                model_settings_dict.pop("max_completion_tokens", None)
+            elif has_max_prompt_tokens:
+                # Only prompt tokens present
+                model_settings_dict["max_tokens"] = model_settings_dict["max_prompt_tokens"]
+                model_settings_dict.pop("max_prompt_tokens", None)
+
+        return model_settings_dict
 
     # --- Agency Configuration Methods --- (Called by Agency)
     def _set_thread_manager(self, manager: ThreadManager):
