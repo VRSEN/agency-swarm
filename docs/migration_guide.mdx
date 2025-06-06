@@ -596,7 +596,24 @@ v1.x introduces several improvements:
 
 ## Resources
 
-- [Examples Directory](https://github.com/VRSEN/agency-swarm/tree/main/examples)
+### Available Examples
+
+The [`/examples`](https://github.com/VRSEN/agency-swarm/tree/release/v1.0.0-beta/examples) directory contains comprehensive examples demonstrating v1.x features and migration patterns:
+
+- **`two_agent_conversation.py`** - Multi-agent communication with automatic thread isolation, tool delegation between UI and Worker agents, and state management across conversation turns
+- **`streaming.py`** - Real-time response streaming with proper event handling, filtering text vs tool call data, and demonstration of async streaming capabilities
+- **`file_handling.py`** - File processing and vision analysis using OpenAI's built-in capabilities for PDF content extraction and image analysis with base64 encoding
+- **`file_search.py`** - Vector store creation and FileSearch tool usage with automatic indexing, needle-in-haystack search capabilities, and citation-backed responses
+- **`file_search_persistence.py`** - Hosted tool output preservation across conversation turns, demonstrating FileSearch result persistence in multi-turn conversations
+- **`multi_agent_workflow.py`** - Complex multi-agent collaboration with validation, featuring financial analysis workflow with PortfolioManager, RiskAnalyst, and ReportGenerator agents
+- **`response_validation.py`** - Input and output guardrails implementation with tripwire triggers, exception handling, and retry logic for response validation
+- **`custom_persistence.py`** - Thread isolation and persistence across application restarts, demonstrating complete conversation history management and callback patterns
+- **`chat_completion_provider.py`** - Custom OpenAI Chat Completions model provider usage with different models for different agents and multi-agent task management
+
+Each example includes detailed comments explaining v1.x concepts and can be run independently with proper environment setup.
+
+### Additional Resources
+
 - [OpenAI Agents SDK Documentation](https://openai.github.io/openai-agents-python/)
 - [Agency Swarm v0.x Documentation](https://agency-swarm.ai) (current production docs)
 - [GitHub Issues](https://github.com/VRSEN/agency-swarm/issues) - Report v1.x beta issues with the **v1.x beta** label
