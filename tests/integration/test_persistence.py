@@ -5,7 +5,6 @@ from typing import Any
 import pytest
 
 from agency_swarm import Agency, Agent
-from agency_swarm.thread import ConversationThread
 
 # --- File Persistence Setup ---
 

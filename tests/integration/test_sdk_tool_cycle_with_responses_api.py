@@ -313,6 +313,7 @@ Product Sales:
             name="DataSearchAgent",
             instructions="You are a data search assistant. Use file search to find information but be concise in your initial responses.",
             model="gpt-4.1",
+            model_settings=ModelSettings(temperature=0.0),
             files_folder=str(temp_dir),
         )
 
