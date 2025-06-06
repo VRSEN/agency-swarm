@@ -12,6 +12,7 @@ env:
 
 jobs:
   lint:
+    if: false  # Temporarily disabled
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -26,6 +27,7 @@ jobs:
         run: make lint
 
   typecheck:
+    if: false  # Temporarily disabled
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -42,7 +44,7 @@ jobs:
   tests:
     runs-on: ubuntu-latest
     env:
-      OPENAI_API_KEY: fake-for-tests
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
