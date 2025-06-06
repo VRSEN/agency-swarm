@@ -301,7 +301,7 @@ class Agent(BaseAgent[MasterContext]):
                 merged_model_settings.pop(key)
 
             # Resolve token setting conflicts
-            self._resolve_token_settings(merged_model_settings, kwargs.get('name', 'unknown'))
+            self._resolve_token_settings(merged_model_settings, kwargs.get("name", "unknown"))
 
             # Create new ModelSettings instance from merged dict
             kwargs["model_settings"] = ModelSettings(**merged_model_settings)
@@ -352,7 +352,6 @@ class Agent(BaseAgent[MasterContext]):
                 "schemas_folder",
                 "api_headers",
                 "api_params",
-                "response_validator",
                 "description",
                 "load_threads_callback",
                 "save_threads_callback",
@@ -383,7 +382,6 @@ class Agent(BaseAgent[MasterContext]):
         self.schemas_folder = current_agent_params.get("schemas_folder", [])
         self.api_headers = current_agent_params.get("api_headers", {})
         self.api_params = current_agent_params.get("api_params", {})
-        self.response_validator = current_agent_params.get("response_validator")
         # Set description directly from current_agent_params, default to None if not provided
         self.description = current_agent_params.get("description")
         # output_type is handled by the base Agent constructor, no need to set it here
@@ -827,14 +825,6 @@ class Agent(BaseAgent[MasterContext]):
                 logger.error(f"Error during Runner.run for agent '{self.name}': {e}", exc_info=True)
                 raise AgentsException(f"Runner execution failed for agent {self.name}") from e
 
-            response_text_for_validation = ""
-            if run_result.new_items:  # new_items are RunItem objects
-                response_text_for_validation = ItemHelpers.text_message_outputs(run_result.new_items)
-
-            if response_text_for_validation and self.response_validator:
-                if not self._validate_response(response_text_for_validation):
-                    logger.warning(f"Response validation failed for agent '{self.name}'")
-
             if sender_name is None:  # Only save to thread if top-level call
                 if self._thread_manager and run_result.new_items:
                     thread = self._thread_manager.get_thread(thread_id)
@@ -1227,18 +1217,7 @@ class Agent(BaseAgent[MasterContext]):
             current_agent_name=self.name,
         )
 
-    def _validate_response(self, response_text: str) -> bool:
-        """Internal helper to apply response validator if configured."""
-        if self.response_validator:
-            try:
-                is_valid = self.response_validator(response_text)
-                if not is_valid:
-                    logger.warning(f"Response validation failed for agent {self.name}")
-                return is_valid
-            except Exception as e:
-                logger.error(f"Error during response validation for agent {self.name}: {e}", exc_info=True)
-                return False  # Treat validation errors as failure
-        return True  # No validator means always valid
+    # _validate_response removed - use output_guardrails instead
 
     @staticmethod
     def _sanitize_tool_calls_in_history(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -1290,12 +1269,12 @@ class Agent(BaseAgent[MasterContext]):
 
             sanitized.append(msg)
         return sanitized
-    
+
     @staticmethod
     def _resolve_token_settings(model_settings_dict: dict[str, Any], agent_name: str = "unknown") -> None:
         """
         Resolves conflicts between max_tokens, max_prompt_tokens, and max_completion_tokens.
-        
+
         Args:
             model_settings_dict: Dictionary of model settings to modify in place
             agent_name: Name of the agent for logging purposes
@@ -1303,7 +1282,7 @@ class Agent(BaseAgent[MasterContext]):
         has_max_tokens = "max_tokens" in model_settings_dict
         has_max_prompt_tokens = "max_prompt_tokens" in model_settings_dict
         has_max_completion_tokens = "max_completion_tokens" in model_settings_dict
-        
+
         # Since oai only kept 1 parameter to manage tokens, write one of the existing parameters to max_tokens
         if has_max_tokens:
             # If max_tokens is specified, drop prompt and completion tokens

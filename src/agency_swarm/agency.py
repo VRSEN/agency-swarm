@@ -458,6 +458,7 @@ class Agency:
                 f"Recipient agent '{target_agent.name}' is not a designated entry point "
                 f"(Entry points: {[ep.name for ep in self.entry_points]}). Call allowed but may indicate unintended usage."
             )
+
         effective_hooks = hooks_override or self.persistence_hooks
         return await target_agent.get_response(
             message=message,
@@ -532,6 +533,7 @@ class Agency:
                 f"Recipient agent '{target_agent.name}' is not a designated entry point "
                 f"(Entry points: {[ep.name for ep in self.entry_points]}). Stream call allowed but may indicate unintended usage."
             )
+
         effective_hooks = hooks_override or self.persistence_hooks
 
         async for event in target_agent.get_response_stream(
@@ -637,36 +639,10 @@ class Agency:
             logger.warning("verbose parameter is deprecated and ignored. Use logging configuration instead.")
 
         if response_format:
-            # Convert response_format to output_type for compatibility
-            # response_format in v0.x was a dict like {"type": "json_schema", "json_schema": {...}}
-            # We need to extract the schema and create a compatible output_type
-            if isinstance(response_format, dict):
-                if response_format.get("type") == "json_schema":
-                    json_schema = response_format.get("json_schema", {})
-                    schema_dict = json_schema.get("schema", {})
-                    if schema_dict:
-                        # For now, we'll pass the response_format through kwargs
-                        # The actual conversion would require creating a Pydantic model from the schema
-                        # which is complex and may not be necessary for most use cases
-                        logger.warning(
-                            "response_format parameter is deprecated. For structured outputs, "
-                            "use the 'output_type' parameter on the Agent instead. "
-                            "Passing response_format through kwargs for now."
-                        )
-                        kwargs["response_format"] = response_format
-                    else:
-                        logger.warning("response_format provided but no schema found. Ignoring.")
-                elif response_format.get("type") == "json_object":
-                    logger.warning(
-                        "response_format with type 'json_object' is deprecated. "
-                        "Use 'output_type' parameter on the Agent for structured outputs. "
-                        "Passing through kwargs for now."
-                    )
-                    kwargs["response_format"] = response_format
-                else:
-                    logger.warning(f"Unsupported response_format type: {response_format.get('type')}. Ignoring.")
-            else:
-                logger.warning("response_format must be a dictionary. Ignoring.")
+            raise NotImplementedError(
+                "response_format parameter is no longer supported. "
+                "Use the 'output_type' parameter on the Agent instead for structured outputs."
+            )
 
         # Determine recipient agent - default to first entry point if not specified
         target_recipient = recipient_agent

@@ -27,7 +27,7 @@ def test_agent_initialization_minimal():
     assert agent.tools == []
     assert agent._subagents == {}
     assert agent.files_folder is None
-    assert agent.response_validator is None
+    assert not hasattr(agent, "response_validator")  # removed completely
     assert agent._thread_manager is None
     assert agent._agency_instance is None
     assert agent.output_type is None
@@ -51,10 +51,19 @@ def test_agent_initialization_with_model():
 
 
 def test_agent_initialization_with_validator():
-    """Test Agent initialization with a response validator."""
+    """Test Agent initialization with response_validator shows deprecation warning."""
     validator = MagicMock()
-    agent = Agent(name="Agent4", instructions="Validate me", response_validator=validator)
-    assert agent.response_validator == validator
+    import warnings
+
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        agent = Agent(name="Agent4", instructions="Validate me", response_validator=validator)
+        # Should show deprecation warning
+        assert len(w) == 1
+        assert issubclass(w[0].category, DeprecationWarning)
+        assert "response_validator" in str(w[0].message)
+        # response_validator is completely removed
+        assert not hasattr(agent, "response_validator")
 
 
 def test_agent_initialization_with_output_type():
@@ -80,13 +89,14 @@ def test_agent_initialization_with_model_settings():
     assert agent.model_settings.max_tokens == 16
     assert agent.model_settings.top_p == 0.5
 
+
 def test_agent_initialization_with_deprecated_model_settings():
     """Test Agent initialization with a specific model."""
     agent = Agent(
         name="Agent7",
         instructions="Test",
         temperature=0.3,
-        max_prompt_tokens=16, # should be converted to max_tokens
+        max_prompt_tokens=16,  # should be converted to max_tokens
     )
     assert agent.model_settings.temperature == 0.3
     assert agent.model_settings.max_tokens == 16
@@ -123,16 +133,22 @@ def test_agent_initialization_with_all_parameters():
         test_file = temp_dir / "test.txt"
         test_file.write_text("test content for FileSearchTool")
 
-        agent = Agent(
-            name="CompleteAgent",
-            instructions="Complete agent with all params",
-            model="gpt-4.1",
-            tools=[tool1],
-            response_validator=validator,
-            output_type=TaskOutput,
-            files_folder=str(temp_dir),  # Use temporary directory
-            description="A complete test agent",
-        )
+        import warnings
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            agent = Agent(
+                name="CompleteAgent",
+                instructions="Complete agent with all params",
+                model="gpt-4.1",
+                tools=[tool1],
+                response_validator=validator,
+                output_type=TaskOutput,
+                files_folder=str(temp_dir),  # Use temporary directory
+                description="A complete test agent",
+            )
+            # Should trigger deprecation warning for response_validator
+            assert any("response_validator" in str(warning.message) for warning in w)
 
         assert agent.name == "CompleteAgent"
         assert agent.instructions == "Complete agent with all params"
@@ -140,7 +156,8 @@ def test_agent_initialization_with_all_parameters():
         assert len(agent.tools) == 2
         assert agent.tools[0] == tool1
         assert agent.tools[1].__class__.__name__ == "FileSearchTool"
-        assert agent.response_validator == validator
+        # response_validator is completely removed
+        assert not hasattr(agent, "response_validator")
         assert agent.output_type == TaskOutput
         assert str(temp_dir) in str(agent.files_folder)  # Should contain the temp directory path
         assert agent.description == "A complete test agent"
