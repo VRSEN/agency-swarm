@@ -174,12 +174,12 @@ agency = Agency(
 
 The `Agency` class constructor has been redesigned for clarity:
 
-| v0.x Method | v1.x Method (Recommended) | v1.x Backward Compatible |
-|-------------|---------------------------|--------------------------|
-| `agency_chart` parameter | Positional arguments for entry points + `communication_flows` parameter | `agency_chart` (deprecated) |
-| `threads_callbacks` | `load_threads_callback` + `save_threads_callback` | - |
-| `get_completion()` | `get_response()` (async) | `get_completion()` (sync, deprecated) |
-| `get_completion_stream()` | `get_response_stream()` (async) | `get_completion_stream()` (sync, deprecated) |
+| v0.x Method | v1.x Method (Recommended) |
+|-------------|---------------------------|
+| `agency_chart` parameter | Positional arguments for entry points + `communication_flows` parameter |
+| `threads_callbacks` | `load_threads_callback` + `save_threads_callback` |
+| `get_completion()` | `get_response()` (async) |
+| `get_completion_stream()` | `get_response_stream()` (async) |
 
 **Agency Structure Definition:**
 
@@ -518,10 +518,6 @@ async def main():
 
 asyncio.run(main())
 ```
-
-<Note>
-**Backward Compatibility**: `get_completion()` and `get_completion_stream()` remain synchronous in v1.1 for backward compatibility. While deprecated, they work exactly as in v0.x to minimize migration friction.
-</Note>
 </Step>
 
 <Step title="Update response validation">
@@ -575,12 +571,13 @@ agent = Agent(
 
 ## Backward Compatibility
 
-Agency Swarm v1.x maintains backward compatibility where possible:
+Agency Swarm v1.x maintains backward compatibility where possible to ease migration:
 
-- `agency_chart` parameter still works (with deprecation warnings)
-- Individual model parameters on agents still work (with deprecation warnings)
-- `get_completion()` and `get_completion_stream()` are maintained as wrappers
-- `BaseTool` is temporarily retained to ease tool migration
+- **`agency_chart`**: The `agency_chart` parameter in the `Agency` constructor still works but is deprecated. It's recommended to migrate to positional arguments for entry points and the `communication_flows` keyword argument.
+- **`get_completion()`**: This method is maintained as a synchronous wrapper for `get_response()` and works as it did in v0.x. It is deprecated and will be removed in a future version.
+- **`get_completion_stream()`**: This method is **not supported** in v1.x and will raise a `NotImplementedError`. For real-time streaming, you must use the new asynchronous `get_response_stream()` method.
+- **Agent Parameters**: Individual model parameters on `Agent` (like `temperature`) still work but are deprecated. It is recommended to use the `model_settings` parameter with a `ModelSettings` object instead.
+- **`BaseTool`**: The `BaseTool` class is temporarily retained to allow for a gradual migration of your custom tools to the new `@function_tool` decorator format.
 
 <Note>
 Deprecated features will be removed in a future major version. We recommend migrating to the new patterns for the best experience.

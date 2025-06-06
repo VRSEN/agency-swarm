@@ -120,6 +120,12 @@
                         ]
                     },
                     {
+                        "group": "Migration",
+                        "pages": [
+                            "migration/guide"
+                        ]
+                    },
+                    {
                         "group": "FAQ",
                         "pages": [
                             "faq"
