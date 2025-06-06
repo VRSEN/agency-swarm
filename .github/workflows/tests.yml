@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - "release/*"  # Run tests on all release branches
   pull_request:
     # All PRs, including stacked PRs
 
