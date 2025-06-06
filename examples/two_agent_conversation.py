@@ -146,13 +146,18 @@ async def run_conversation():
 
                 # Check if there's also a UI_Agent -> Worker_Agent thread
                 worker_thread_id = f"{ui_agent.name}->{worker_agent.name}"
-                worker_thread = agency.thread_manager.get_thread(worker_thread_id)
-                if worker_thread:
+                if worker_thread_id in agency.thread_manager._threads:
+                    worker_thread = agency.thread_manager._threads[worker_thread_id]
                     worker_history = worker_thread.get_history()
                     print(f"\n--- Agent-to-Agent Thread (ID: {worker_thread_id}) ---")
                     print("This thread contains only UI_Agent <-> Worker_Agent conversations")
                     print(f"Total items in worker thread: {len(worker_history)}")
-                    print("This demonstrates complete thread isolation between different communication flows")
+                    if len(worker_history) > 0:
+                        print("This demonstrates complete thread isolation between different communication flows")
+                        for i, item in enumerate(worker_history):
+                            print(f"Worker Item {i + 1}: {item}")
+                    else:
+                        print("Thread exists but contains no conversation history")
                 else:
                     print(f"\nNo separate {worker_thread_id} thread found (may not have been created)")
 

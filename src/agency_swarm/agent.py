@@ -757,21 +757,10 @@ class Agent(BaseAgent[MasterContext]):
                     logger.warning(f"Cannot attach files: No messages to attach to for agent {self.name}")
 
             history_for_runner: list[TResponseInputItem]
-            if sender_name is None:  # Top-level call from user or agency
-                self._thread_manager.add_items_and_save(thread, processed_current_message_items)
-                logger.debug(f"Added current message to shared thread {thread.thread_id} for top-level call.")
-                history_for_runner = list(thread.items)  # Get full history after adding
-            else:  # Agent-to-agent call (e.g., via SendMessage tool)
-                # For sub-calls, the history for the runner is the current shared thread items
-                # PLUS the processed current message items for this specific agent's turn.
-                # These `processed_current_message_items` have been converted by ItemHelpers
-                # but have not been through `thread.add_item`'s specific normalization yet,
-                # which is fine as they are only for this Runner's input, not direct thread storage here.
-                history_up_to_this_call = list(thread.items)
-                history_for_runner = history_up_to_this_call + processed_current_message_items
-                logger.debug(
-                    f"Constructed temporary history for sub-agent '{self.name}' run. Shared thread not modified with this input."
-                )
+            # Always save current message items to thread (both user and agent-to-agent calls)
+            self._thread_manager.add_items_and_save(thread, processed_current_message_items)
+            logger.debug(f"Added current message to thread {thread.thread_id}.")
+            history_for_runner = list(thread.items)  # Get full history after adding
 
             # The history_for_runner now contains OpenAI-compatible message dictionaries.
             # It should include user, assistant (possibly with tool_calls), and tool messages if they are part of the conversation.
@@ -825,42 +814,40 @@ class Agent(BaseAgent[MasterContext]):
                 logger.error(f"Error during Runner.run for agent '{self.name}': {e}", exc_info=True)
                 raise AgentsException(f"Runner execution failed for agent {self.name}") from e
 
-            if sender_name is None:  # Only save to thread if top-level call
-                if self._thread_manager and run_result.new_items:
-                    thread = self._thread_manager.get_thread(thread_id)
-                    items_to_save: list[TResponseInputItem] = []
-                    logger.debug(
-                        f"Preparing to save {len(run_result.new_items)} new items from RunResult to thread {thread.thread_id}"
+            # Always save response items to thread (both user and agent-to-agent calls)
+            if self._thread_manager and run_result.new_items:
+                thread = self._thread_manager.get_thread(thread_id)
+                items_to_save: list[TResponseInputItem] = []
+                logger.debug(
+                    f"Preparing to save {len(run_result.new_items)} new items from RunResult to thread {thread.thread_id}"
+                )
+
+                # Only extract hosted tool results if hosted tools were actually used
+                hosted_tool_outputs = self._extract_hosted_tool_results_if_needed(run_result.new_items)
+
+                for i, run_item_obj in enumerate(run_result.new_items):
+                    # _run_item_to_tresponse_input_item converts RunItem to TResponseInputItem (dict)
+                    item_dict = self._run_item_to_tresponse_input_item(run_item_obj)
+                    if item_dict:
+                        items_to_save.append(item_dict)
+                        logger.debug(
+                            f"  Item {i + 1}/{len(run_result.new_items)} converted for saving: {item_dict.get('role')}"
+                        )
+                    else:
+                        logger.debug(
+                            f"  Item {i + 1}/{len(run_result.new_items)} ({type(run_item_obj).__name__}) skipped or failed conversion."
+                        )
+
+                # Add synthetic hosted tool outputs to the conversation history
+                if hosted_tool_outputs:
+                    items_to_save.extend(hosted_tool_outputs)
+                    logger.info(
+                        f"Added {len(hosted_tool_outputs)} synthetic hosted tool output items to preserve results"
                     )
 
-                    # Only extract hosted tool results if hosted tools were actually used
-                    hosted_tool_outputs = self._extract_hosted_tool_results_if_needed(run_result.new_items)
-
-                    for i, run_item_obj in enumerate(run_result.new_items):
-                        # _run_item_to_tresponse_input_item converts RunItem to TResponseInputItem (dict)
-                        item_dict = self._run_item_to_tresponse_input_item(run_item_obj)
-                        if item_dict:
-                            items_to_save.append(item_dict)
-                            logger.debug(
-                                f"  Item {i + 1}/{len(run_result.new_items)} converted for saving: {item_dict.get('role')}"
-                            )
-                        else:
-                            logger.debug(
-                                f"  Item {i + 1}/{len(run_result.new_items)} ({type(run_item_obj).__name__}) skipped or failed conversion."
-                            )
-
-                    # Add synthetic hosted tool outputs to the conversation history
-                    if hosted_tool_outputs:
-                        items_to_save.extend(hosted_tool_outputs)
-                        logger.info(
-                            f"Added {len(hosted_tool_outputs)} synthetic hosted tool output items to preserve results"
-                        )
-
-                    if items_to_save:
-                        logger.info(
-                            f"Saving {len(items_to_save)} converted RunResult items to thread {thread.thread_id}"
-                        )
-                        self._thread_manager.add_items_and_save(thread, items_to_save)
+                if items_to_save:
+                    logger.info(f"Saving {len(items_to_save)} converted RunResult items to thread {thread.thread_id}")
+                    self._thread_manager.add_items_and_save(thread, items_to_save)
 
             return run_result
 
@@ -987,16 +974,10 @@ class Agent(BaseAgent[MasterContext]):
                     logger.warning(f"Cannot attach files: No messages to attach to for agent {self.name}")
 
             # --- Input history logic (match get_response) ---
-            if sender_name is None:  # Top-level call from user or agency
-                self._thread_manager.add_items_and_save(thread, processed_initial_messages)
-                logger.debug(f"Added current message to shared thread {thread.thread_id} for top-level stream call.")
-                history_for_runner = list(thread.items)  # Get full history after adding
-            else:  # Agent-to-agent call (e.g., via SendMessage tool)
-                history_up_to_this_call = list(thread.items)
-                history_for_runner = history_up_to_this_call + processed_initial_messages
-                logger.debug(
-                    f"Constructed temporary history for sub-agent '{self.name}' stream run. Shared thread not modified with this input."
-                )
+            # Always save current message items to thread (both user and agent-to-agent calls)
+            self._thread_manager.add_items_and_save(thread, processed_initial_messages)
+            logger.debug(f"Added current message to thread {thread.thread_id} for stream call.")
+            history_for_runner = list(thread.items)  # Get full history after adding
 
             # Sanitize tool_calls for OpenAI /v1/responses API compliance
             history_for_runner = self._sanitize_tool_calls_in_history(history_for_runner)
@@ -1035,12 +1016,11 @@ class Agent(BaseAgent[MasterContext]):
                 yield {"type": "error", "content": f"Runner execution failed: {e}"}
                 return
 
-            # After streaming, if it was a top-level call (user/agency direct call, not agent-to-agent),
-            # and new items were generated by the run (captured in final_result_items),
+            # After streaming, if new items were generated by the run (captured in final_result_items),
             # these should be converted and saved to the thread to reflect the assistant's full turn.
             # Note: The `input` messages were already added above.
             # `final_result_items` here are `RunItem` objects from the stream.
-            if sender_name is None and final_result_items:  # Top-level call and new items exist
+            if final_result_items:  # New items exist
                 if self._thread_manager:
                     items_to_save_from_stream: list[TResponseInputItem] = []
                     logger.debug(
