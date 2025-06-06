@@ -219,15 +219,32 @@ class _MCPServerWithClientSession(MCPServer, abc.ABC):
             raise UserError(
                 "Server not initialized. Make sure you call `connect()` first."
             )
-        # Return from cache if caching is enabled, we have tools, and the cache is not dirty
-        if self.cache_tools_list and not self._cache_dirty and self._tools_list:
-            tools = self._tools_list
-        else:
-            # Reset the cache dirty to False
-            self._cache_dirty = False
-            # Fetch the tools from the server
-            self._tools_list = (await self.session.list_tools()).tools
-            tools = self._tools_list
+        
+        try:
+            # Return from cache if caching is enabled, we have tools, and the cache is not dirty
+            if self.cache_tools_list and not self._cache_dirty and self._tools_list:
+                tools = self._tools_list
+            else:
+                # Reset the cache dirty to False
+                self._cache_dirty = False
+                # Fetch the tools from the server
+                self._tools_list = (await self.session.list_tools()).tools
+                tools = self._tools_list
+        except Exception as e:
+            # Check if it's a connection closed error and attempt to reconnect
+            if self._is_connection_closed_error(e):
+                logger.info(f"Connection closed, attempting to reconnect: {e}")
+                await self._reconnect_async()
+                # Retry the operation after reconnection
+                if self.cache_tools_list and not self._cache_dirty and self._tools_list:
+                    tools = self._tools_list
+                else:
+                    self._cache_dirty = False
+                    self._tools_list = (await self.session.list_tools()).tools
+                    tools = self._tools_list
+            else:
+                raise
+        
         # Filter tools if allowed_tools is set
         if self._allowed_tools is not None:
             tools = [tool for tool in tools if getattr(tool, 'name', None) in self._allowed_tools]
@@ -239,7 +256,17 @@ class _MCPServerWithClientSession(MCPServer, abc.ABC):
                 "Server not initialized. Make sure you call `connect()` first."
             )
 
-        return await self.session.call_tool(tool_name, arguments)
+        try:
+            return await self.session.call_tool(tool_name, arguments)
+        except Exception as e:
+            # Check if it's a connection closed error and attempt to reconnect
+            if self._is_connection_closed_error(e):
+                logger.info(f"Connection closed, attempting to reconnect: {e}")
+                await self._reconnect_async()
+                # Retry the tool call after reconnection
+                return await self.session.call_tool(tool_name, arguments)
+            else:
+                raise
 
     async def _cleanup_async(self):
         async with self._cleanup_lock:
@@ -281,6 +308,58 @@ class _MCPServerWithClientSession(MCPServer, abc.ABC):
     def invalidate_tools_cache(self):
         """Invalidate the tools cache."""
         self._cache_dirty = True
+
+    def _is_connection_closed_error(self, exception: Exception) -> bool:
+        """Check if the exception indicates a closed connection."""
+        # Check for common connection closed errors
+        error_types = [
+            "ClosedResourceError",
+            "ConnectionClosed", 
+            "ConnectionResetError",
+            "BrokenPipeError",
+            "ConnectionAbortedError"
+        ]
+        
+        exception_name = type(exception).__name__
+        exception_str = str(exception).lower()
+        
+        # Check if it's one of the known connection closed error types
+        if exception_name in error_types:
+            return True
+            
+        # Check if error message contains connection closed indicators
+        closed_indicators = [
+            "closed",
+            "connection closed",
+            "broken pipe",
+            "connection reset",
+            "connection aborted"
+        ]
+        
+        return any(indicator in exception_str for indicator in closed_indicators)
+
+    async def _reconnect_async(self):
+        """Reconnect to the server after a connection failure."""
+        logger.info("Attempting to reconnect to MCP server")
+        
+        # Clean up the existing connection
+        try:
+            if self.session:
+                await self.exit_stack.aclose()
+                self.session = None
+        except Exception as e:
+            logger.warning(f"Error during cleanup before reconnect: {e}")
+        
+        # Reset the exit stack for new connection
+        self.exit_stack = AsyncExitStack()
+        
+        # Re-establish the connection
+        await self._connect_async()
+        
+        # Invalidate tools cache to ensure fresh data after reconnection
+        self._cache_dirty = True
+        
+        logger.info("Successfully reconnected to MCP server")
 
 
 class MCPServerStdioParams(TypedDict):
