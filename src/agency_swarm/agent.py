@@ -10,6 +10,9 @@ from typing import Any, TypeVar
 
 from agents import (
     Agent as BaseAgent,
+    InputGuardrailTripwireTriggered,
+    ModelSettings,
+    OutputGuardrailTripwireTriggered,
     RunConfig,
     RunHooks,
     RunItem,
@@ -87,9 +90,6 @@ class Agent(BaseAgent[MasterContext]):
         tools_folder (str | Path | None): Placeholder for future functionality to load tools from a directory.
         description (str | None): A description of the agent's role or purpose, used when generating
                                   dynamic `send_message` tools for other agents.
-        response_validator (Callable[[str], bool] | None): An optional callable that validates the agent's
-                                                          final text response. It should return `True` if the
-                                                          response is valid, `False` otherwise.
         output_type (type[Any] | None): The type of the agent's final output.
         _thread_manager (ThreadManager | None): Internal reference to the agency's `ThreadManager`.
                                                 Set by the parent `Agency`.
@@ -108,8 +108,7 @@ class Agent(BaseAgent[MasterContext]):
     files_folder: str | Path | None
     tools_folder: str | Path | None  # Placeholder for future ToolFactory
     description: str | None
-    response_validator: Callable[[str], bool] | None
-    output_type: type[Any] | None  # Add output_type parameter
+    output_type: type[Any] | None
 
     # --- Internal State ---
     _thread_manager: ThreadManager | None = None
@@ -138,7 +137,7 @@ class Agent(BaseAgent[MasterContext]):
             **kwargs: Keyword arguments including standard `agents.Agent` parameters
                       (like `name`, `instructions`, `model`, `tools`, `hooks`, etc.)
                       and Agency Swarm specific parameters (`files_folder`, `description`,
-                      `response_validator`, `output_type`, `load_threads_callback`, `save_threads_callback`).
+                      `output_type`, `load_threads_callback`, `save_threads_callback`).
                       Deprecated parameters are handled with warnings.
 
         Raises:
@@ -173,18 +172,11 @@ class Agent(BaseAgent[MasterContext]):
         if "validation_attempts" in kwargs:
             val_attempts = kwargs.pop("validation_attempts")
             warnings.warn(
-                "'validation_attempts' is deprecated. Use the 'response_validator' callback for validation logic.",
+                "'validation_attempts' is deprecated.",
                 DeprecationWarning,
                 stacklevel=2,
             )
-            if val_attempts > 1 and "response_validator" not in kwargs:
-                warnings.warn(
-                    "Using 'validation_attempts > 1' without a 'response_validator' has no effect. Implement validation logic in the callback.",
-                    UserWarning,
-                    stacklevel=2,
-                )
             deprecated_args_used["validation_attempts"] = val_attempts
-            # Note: validation_attempts doesn't directly map to model_settings but is tracked for compatibility
 
         # Handle other deprecated parameters
         if "id" in kwargs:
@@ -194,6 +186,14 @@ class Agent(BaseAgent[MasterContext]):
                 stacklevel=2,
             )
             deprecated_args_used["id"] = kwargs.pop("id")
+
+        if "response_validator" in kwargs:
+            warnings.warn(
+                "'response_validator' parameter is deprecated. Use 'output_guardrails' and 'input_guardrails' instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            deprecated_args_used["response_validator"] = kwargs.pop("response_validator")
 
         if "tool_resources" in kwargs:
             warnings.warn(
@@ -253,6 +253,18 @@ class Agent(BaseAgent[MasterContext]):
             )
             deprecated_args_used["refresh_from_id"] = kwargs.pop("refresh_from_id")
 
+        # Handle response_format parameter mapping to output_type
+        if "response_format" in kwargs:
+            response_format = kwargs.pop("response_format")
+            if "output_type" not in kwargs or kwargs["output_type"] is None:
+                kwargs["output_type"] = response_format
+            warnings.warn(
+                "'response_format' parameter is deprecated. Use 'output_type' instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            deprecated_args_used["response_format"] = response_format
+
         # Handle deprecated tools
         if "tools" in kwargs:
             tools_list = kwargs["tools"]
@@ -267,14 +279,32 @@ class Agent(BaseAgent[MasterContext]):
 
         # Merge deprecated model settings into existing model_settings
         if deprecated_model_settings:
-            existing_model_settings = kwargs.get("model_settings", {})
-            if existing_model_settings is None:
-                existing_model_settings = {}
+            existing_model_settings = kwargs.get("model_settings")
+
+            # Handle existing model_settings being a ModelSettings instance or dict
+            if isinstance(existing_model_settings, ModelSettings):
+                # Convert ModelSettings to dict for merging
+                existing_dict = existing_model_settings.to_json_dict()
+            elif existing_model_settings is None:
+                existing_dict = {}
+            else:
+                # Assume it's already a dict
+                existing_dict = dict(existing_model_settings)
 
             # Create a new dict to avoid modifying the original
-            merged_model_settings = dict(existing_model_settings)
+            merged_model_settings = dict(existing_dict)
             merged_model_settings.update(deprecated_model_settings)
-            kwargs["model_settings"] = merged_model_settings
+
+            # to_json_dict returns None for keys that were not set
+            keys_to_remove = [key for key, value in merged_model_settings.items() if value is None]
+            for key in keys_to_remove:
+                merged_model_settings.pop(key)
+
+            # Resolve token setting conflicts
+            self._resolve_token_settings(merged_model_settings, kwargs.get("name", "unknown"))
+
+            # Create new ModelSettings instance from merged dict
+            kwargs["model_settings"] = ModelSettings(**merged_model_settings)
 
             logger.info(
                 f"Merged deprecated model settings into model_settings: {list(deprecated_model_settings.keys())}"
@@ -322,7 +352,6 @@ class Agent(BaseAgent[MasterContext]):
                 "schemas_folder",
                 "api_headers",
                 "api_params",
-                "response_validator",
                 "description",
                 "load_threads_callback",
                 "save_threads_callback",
@@ -353,7 +382,6 @@ class Agent(BaseAgent[MasterContext]):
         self.schemas_folder = current_agent_params.get("schemas_folder", [])
         self.api_headers = current_agent_params.get("api_headers", {})
         self.api_params = current_agent_params.get("api_params", {})
-        self.response_validator = current_agent_params.get("response_validator")
         # Set description directly from current_agent_params, default to None if not provided
         self.description = current_agent_params.get("description")
         # output_type is handled by the base Agent constructor, no need to set it here
@@ -785,17 +813,17 @@ class Agent(BaseAgent[MasterContext]):
                 )
                 logger.info(f"Runner.run completed for agent '{self.name}'. {completion_info}")
 
+            except OutputGuardrailTripwireTriggered as e:
+                logger.warning(f"OutputGuardrailTripwireTriggered for agent '{self.name}': {e}", exc_info=True)
+                raise e
+
+            except InputGuardrailTripwireTriggered as e:
+                logger.warning(f"InputGuardrailTripwireTriggered for agent '{self.name}': {e}", exc_info=True)
+                raise e
+
             except Exception as e:
                 logger.error(f"Error during Runner.run for agent '{self.name}': {e}", exc_info=True)
                 raise AgentsException(f"Runner execution failed for agent {self.name}") from e
-
-            response_text_for_validation = ""
-            if run_result.new_items:  # new_items are RunItem objects
-                response_text_for_validation = ItemHelpers.text_message_outputs(run_result.new_items)
-
-            if response_text_for_validation and self.response_validator:
-                if not self._validate_response(response_text_for_validation):
-                    logger.warning(f"Response validation failed for agent '{self.name}'")
 
             if sender_name is None:  # Only save to thread if top-level call
                 if self._thread_manager and run_result.new_items:
@@ -1189,18 +1217,7 @@ class Agent(BaseAgent[MasterContext]):
             current_agent_name=self.name,
         )
 
-    def _validate_response(self, response_text: str) -> bool:
-        """Internal helper to apply response validator if configured."""
-        if self.response_validator:
-            try:
-                is_valid = self.response_validator(response_text)
-                if not is_valid:
-                    logger.warning(f"Response validation failed for agent {self.name}")
-                return is_valid
-            except Exception as e:
-                logger.error(f"Error during response validation for agent {self.name}: {e}", exc_info=True)
-                return False  # Treat validation errors as failure
-        return True  # No validator means always valid
+    # _validate_response removed - use output_guardrails instead
 
     @staticmethod
     def _sanitize_tool_calls_in_history(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -1252,6 +1269,50 @@ class Agent(BaseAgent[MasterContext]):
 
             sanitized.append(msg)
         return sanitized
+
+    @staticmethod
+    def _resolve_token_settings(model_settings_dict: dict[str, Any], agent_name: str = "unknown") -> None:
+        """
+        Resolves conflicts between max_tokens, max_prompt_tokens, and max_completion_tokens.
+
+        Args:
+            model_settings_dict: Dictionary of model settings to modify in place
+            agent_name: Name of the agent for logging purposes
+        """
+        has_max_tokens = "max_tokens" in model_settings_dict
+        has_max_prompt_tokens = "max_prompt_tokens" in model_settings_dict
+        has_max_completion_tokens = "max_completion_tokens" in model_settings_dict
+
+        # Since oai only kept 1 parameter to manage tokens, write one of the existing parameters to max_tokens
+        if has_max_tokens:
+            # If max_tokens is specified, drop prompt and completion tokens
+            if has_max_prompt_tokens or has_max_completion_tokens:
+                logger.info(
+                    f"max_tokens is specified, ignoring max_prompt_tokens and max_completion_tokens for agent '{agent_name}'"
+                )
+                model_settings_dict.pop("max_prompt_tokens", None)
+                model_settings_dict.pop("max_completion_tokens", None)
+        else:
+            # If max_tokens is not specified, handle prompt/completion tokens
+            if has_max_prompt_tokens and has_max_completion_tokens:
+                # Both are present, prefer completion tokens and warn
+                model_settings_dict["max_tokens"] = model_settings_dict["max_completion_tokens"]
+                model_settings_dict.pop("max_prompt_tokens", None)
+                model_settings_dict.pop("max_completion_tokens", None)
+                logger.warning(
+                    f"Both max_prompt_tokens and max_completion_tokens specified for agent '{agent_name}'. "
+                    f"Using max_completion_tokens value ({model_settings_dict['max_tokens']}) for max_tokens and ignoring max_prompt_tokens."
+                )
+            elif has_max_completion_tokens:
+                # Only completion tokens present
+                model_settings_dict["max_tokens"] = model_settings_dict["max_completion_tokens"]
+                model_settings_dict.pop("max_completion_tokens", None)
+            elif has_max_prompt_tokens:
+                # Only prompt tokens present
+                model_settings_dict["max_tokens"] = model_settings_dict["max_prompt_tokens"]
+                model_settings_dict.pop("max_prompt_tokens", None)
+
+        return model_settings_dict
 
     # --- Agency Configuration Methods --- (Called by Agency)
     def _set_thread_manager(self, manager: ThreadManager):
