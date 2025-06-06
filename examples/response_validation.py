@@ -28,11 +28,10 @@ load_dotenv()
 
 # --- Define Guardrails --- #
 
+
 # Checks agent's response
 @output_guardrail
-async def agent_output_guardrail(
-    ctx: RunContextWrapper, agent: Agent, response_text: str
-) -> GuardrailFunctionOutput:
+async def agent_output_guardrail(ctx: RunContextWrapper, agent: Agent, response_text: str) -> GuardrailFunctionOutput:
     tripwire_triggered = False
     output_info = ""
     if not response_text.startswith("Hello, User!"):
@@ -44,15 +43,16 @@ async def agent_output_guardrail(
         tripwire_triggered=tripwire_triggered,
     )
 
+
 # Checks user's input
 @input_guardrail
 async def agent_input_guardrail(
-    ctx: RunContextWrapper, agent: Agent, input_text: str
+    ctx: RunContextWrapper, agent: Agent, input_text: list[dict]
 ) -> GuardrailFunctionOutput:
     tripwire_triggered = False
     output_info = ""
     # By default agent receives entire conversation history as input_text
-    user_message = input_text[-1]["content"] # Only check last (new) message
+    user_message = input_text[-1]["content"]  # Only check last (new) message
     if not user_message.startswith("Hello, Agent!") and not user_message.startswith("System message:"):
         tripwire_triggered = True
         output_info = "User input must start with 'Hello, Agent!'"
