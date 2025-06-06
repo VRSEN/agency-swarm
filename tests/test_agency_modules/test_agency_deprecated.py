@@ -33,28 +33,3 @@ def test_agency_get_completion_calls_get_response(mock_agent):
     assert result == "Test response"
     # Should call get_response on the first agent in the chart
     mock_agent.get_response.assert_called_once()
-
-
-def test_agency_get_completion_stream_calls_get_response_stream(mock_agent):
-    """Test that deprecated get_completion_stream method calls get_response_stream."""
-    chart = [mock_agent]
-    agency = Agency(agency_chart=chart)
-
-    async def mock_stream():
-        yield {"event": "text", "data": "Hello"}
-        yield {"event": "done"}
-
-    # Configure the mock to return the async generator directly
-    async def mock_get_response_stream(*args, **kwargs):
-        async for event in mock_stream():
-            yield event
-
-    mock_agent.get_response_stream = mock_get_response_stream
-
-    events = []
-    with pytest.warns(DeprecationWarning, match="Method 'get_completion_stream' is deprecated"):
-        for event in agency.get_completion_stream("Test message", "MockAgent"):
-            events.append(event)
-
-    assert len(events) == 1  # Only text events are yielded by get_completion_stream
-    assert events[0] == "Hello"

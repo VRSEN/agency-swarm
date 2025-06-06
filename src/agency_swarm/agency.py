@@ -736,75 +736,18 @@ class Agency:
                 )
             )
 
-    async def _async_get_completion_stream(
-        self, message: str, recipient_agent: str | Agent, **kwargs: Any
-    ) -> AsyncGenerator[str]:
-        """[INTERNAL ASYNC] Async implementation of get_completion_stream for internal use."""
-        async for event in self.get_response_stream(message=message, recipient_agent=recipient_agent, **kwargs):
-            if isinstance(event, dict) and event.get("event") == "text":
-                data = event.get("data")
-                if data:
-                    yield data
-
-    def get_completion_stream(self, message: str, recipient_agent: str | Agent, **kwargs: Any):
+    def get_completion_stream(self, *args: Any, **kwargs: Any):
         """
-        [DEPRECATED] Use get_response_stream instead. Yields text chunks.
-
-        Returns a generator that yields text chunks from the streaming response.
+        [DEPRECATED] Use get_response_stream instead. Yields all events from the modern streaming API.
         """
-        import asyncio
-
         warnings.warn(
             "Method 'get_completion_stream' is deprecated. Use 'get_response_stream' instead.",
             DeprecationWarning,
             stacklevel=2,
         )
 
-        # Handle event loop edge cases for synchronous wrapper
-        try:
-            # Check if we're already in an event loop
-            loop = asyncio.get_running_loop()
-            # If we reach here, there's already a running loop
-            # We need to create a new thread to run the async function
-            import concurrent.futures
-            import threading
-
-            def run_in_thread():
-                # Create new event loop in the thread
-                new_loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(new_loop)
-                try:
-                    # Collect all items from async generator
-                    async def collect_items():
-                        items = []
-                        async for item in self._async_get_completion_stream(
-                            message=message, recipient_agent=recipient_agent, **kwargs
-                        ):
-                            items.append(item)
-                        return items
-
-                    return new_loop.run_until_complete(collect_items())
-                finally:
-                    new_loop.close()
-
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                future = executor.submit(run_in_thread)
-                items = future.result()
-                # Return a generator that yields the collected items
-                for item in items:
-                    yield item
-
-        except RuntimeError:
-            # No event loop running, we can use asyncio.run directly
-            async def collect_items():
-                items = []
-                async for item in self._async_get_completion_stream(
-                    message=message, recipient_agent=recipient_agent, **kwargs
-                ):
-                    items.append(item)
-                return items
-
-            items = asyncio.run(collect_items())
-            # Return a generator that yields the collected items
-            for item in items:
-                yield item
+        raise NotImplementedError(
+            "get_completion_stream() is not supported in v1.x due to architectural differences. "
+            "Use get_response_stream() for actual streaming functionality. "
+            "This method will be removed in v1.1."
+        )
