@@ -573,7 +573,7 @@ class Agency:
         run_fastapi(agencies=[self], host=host, port=port, app_token_env=app_token_env)
 
     # --- Deprecated Methods ---
-    async def get_completion(
+    async def _async_get_completion(
         self,
         message: str,
         message_files: list[str] | None = None,
@@ -587,30 +587,8 @@ class Agency:
         **kwargs: Any,
     ) -> str:
         """
-        [DEPRECATED] Use get_response instead. Returns final text output.
-
-        Retrieves the completion for a given message from the main thread.
-
-        Parameters:
-            message (str): The message for which completion is to be retrieved.
-            message_files (list, optional): A list of file ids to be sent as attachments with the message. When using this parameter, files will be assigned both to file_search and code_interpreter tools if available. It is recommended to assign files to the most suitable tool manually, using the attachments parameter. Defaults to None.
-            yield_messages (bool, optional): Flag to determine if intermediate messages should be yielded. Defaults to False.
-            recipient_agent (Agent, optional): The agent to which the message should be sent. Defaults to the first agent in the agency chart.
-            additional_instructions (str, optional): Additional instructions to be sent with the message. Defaults to None.
-            attachments (List[dict], optional): A list of attachments to be sent with the message, following openai format. Defaults to None.
-            tool_choice (dict, optional): The tool choice for the recipient agent to use. Defaults to None.
-            verbose (bool, optional): Whether to print the intermediary messages in console. Defaults to False.
-            response_format (dict, optional): The response format to use for the completion.
-
-        Returns:
-            Generator or final response: Depending on the 'yield_messages' flag, this method returns either a generator yielding intermediate messages (when yield_messages=True) or the final response from the main thread.
+        [INTERNAL ASYNC] Async implementation of get_completion for internal use.
         """
-        warnings.warn(
-            "Method 'get_completion' is deprecated. Use 'get_response' instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-
         # Handle deprecated parameters
         if yield_messages:
             raise NotImplementedError(
@@ -666,17 +644,167 @@ class Agency:
         )
         return str(run_result.final_output) if run_result.final_output is not None else ""
 
-    async def get_completion_stream(
-        self, message: str, recipient_agent: str | Agent, **kwargs: Any
-    ) -> AsyncGenerator[str]:
-        """[DEPRECATED] Use get_response_stream instead. Yields text chunks."""
+    def get_completion(
+        self,
+        message: str,
+        message_files: list[str] | None = None,
+        yield_messages: bool = False,
+        recipient_agent: str | Agent | None = None,
+        additional_instructions: str | None = None,
+        attachments: list[dict] | None = None,
+        tool_choice: dict | None = None,
+        verbose: bool = False,
+        response_format: dict | None = None,
+        **kwargs: Any,
+    ) -> str:
+        """
+        [DEPRECATED] Use get_response instead. Returns final text output.
+
+        Retrieves the completion for a given message from the main thread.
+
+        Parameters:
+            message (str): The message for which completion is to be retrieved.
+            message_files (list, optional): A list of file ids to be sent as attachments with the message. When using this parameter, files will be assigned both to file_search and code_interpreter tools if available. It is recommended to assign files to the most suitable tool manually, using the attachments parameter. Defaults to None.
+            yield_messages (bool, optional): Flag to determine if intermediate messages should be yielded. Defaults to False.
+            recipient_agent (Agent, optional): The agent to which the message should be sent. Defaults to the first agent in the agency chart.
+            additional_instructions (str, optional): Additional instructions to be sent with the message. Defaults to None.
+            attachments (List[dict], optional): A list of attachments to be sent with the message, following openai format. Defaults to None.
+            tool_choice (dict, optional): The tool choice for the recipient agent to use. Defaults to None.
+            verbose (bool, optional): Whether to print the intermediary messages in console. Defaults to False.
+            response_format (dict, optional): The response format to use for the completion.
+
+        Returns:
+            Generator or final response: Depending on the 'yield_messages' flag, this method returns either a generator yielding intermediate messages (when yield_messages=True) or the final response from the main thread.
+        """
+        import asyncio
+
         warnings.warn(
-            "Method 'get_completion_stream' is deprecated. Use 'get_response_stream' instead.",
+            "Method 'get_completion' is deprecated. Use 'get_response' instead.",
             DeprecationWarning,
             stacklevel=2,
         )
+
+        # Handle event loop edge cases for synchronous wrapper
+        try:
+            # Check if we're already in an event loop
+            loop = asyncio.get_running_loop()
+            # If we reach here, there's already a running loop
+            # We need to create a new thread to run the async function
+            import concurrent.futures
+            import threading
+
+            def run_in_thread():
+                # Create new event loop in the thread
+                new_loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(new_loop)
+                try:
+                    return new_loop.run_until_complete(
+                        self._async_get_completion(
+                            message=message,
+                            message_files=message_files,
+                            yield_messages=yield_messages,
+                            recipient_agent=recipient_agent,
+                            additional_instructions=additional_instructions,
+                            attachments=attachments,
+                            tool_choice=tool_choice,
+                            verbose=verbose,
+                            response_format=response_format,
+                            **kwargs,
+                        )
+                    )
+                finally:
+                    new_loop.close()
+
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(run_in_thread)
+                return future.result()
+
+        except RuntimeError:
+            # No event loop running, we can use asyncio.run directly
+            return asyncio.run(
+                self._async_get_completion(
+                    message=message,
+                    message_files=message_files,
+                    yield_messages=yield_messages,
+                    recipient_agent=recipient_agent,
+                    additional_instructions=additional_instructions,
+                    attachments=attachments,
+                    tool_choice=tool_choice,
+                    verbose=verbose,
+                    response_format=response_format,
+                    **kwargs,
+                )
+            )
+
+    async def _async_get_completion_stream(
+        self, message: str, recipient_agent: str | Agent, **kwargs: Any
+    ) -> AsyncGenerator[str]:
+        """[INTERNAL ASYNC] Async implementation of get_completion_stream for internal use."""
         async for event in self.get_response_stream(message=message, recipient_agent=recipient_agent, **kwargs):
             if isinstance(event, dict) and event.get("event") == "text":
                 data = event.get("data")
                 if data:
                     yield data
+
+    def get_completion_stream(self, message: str, recipient_agent: str | Agent, **kwargs: Any):
+        """
+        [DEPRECATED] Use get_response_stream instead. Yields text chunks.
+
+        Returns a generator that yields text chunks from the streaming response.
+        """
+        import asyncio
+
+        warnings.warn(
+            "Method 'get_completion_stream' is deprecated. Use 'get_response_stream' instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
+        # Handle event loop edge cases for synchronous wrapper
+        try:
+            # Check if we're already in an event loop
+            loop = asyncio.get_running_loop()
+            # If we reach here, there's already a running loop
+            # We need to create a new thread to run the async function
+            import concurrent.futures
+            import threading
+
+            def run_in_thread():
+                # Create new event loop in the thread
+                new_loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(new_loop)
+                try:
+                    # Collect all items from async generator
+                    async def collect_items():
+                        items = []
+                        async for item in self._async_get_completion_stream(
+                            message=message, recipient_agent=recipient_agent, **kwargs
+                        ):
+                            items.append(item)
+                        return items
+
+                    return new_loop.run_until_complete(collect_items())
+                finally:
+                    new_loop.close()
+
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(run_in_thread)
+                items = future.result()
+                # Return a generator that yields the collected items
+                for item in items:
+                    yield item
+
+        except RuntimeError:
+            # No event loop running, we can use asyncio.run directly
+            async def collect_items():
+                items = []
+                async for item in self._async_get_completion_stream(
+                    message=message, recipient_agent=recipient_agent, **kwargs
+                ):
+                    items.append(item)
+                return items
+
+            items = asyncio.run(collect_items())
+            # Return a generator that yields the collected items
+            for item in items:
+                yield item

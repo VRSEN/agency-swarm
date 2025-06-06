@@ -70,12 +70,12 @@ agent = Agent(output_guardrails=[my_guardrail], ...)
 ```
 </Step>
 
-<Step title="Make Methods Async">
+<Step title="Update Method Names (Optional)">
 ```python
-# CHANGE from:
+# v0.x and v1.x (backward compatible):
 result = agency.get_completion("Hello")
 
-# TO:
+# v1.x (recommended new pattern):
 result = await agency.get_response("Hello")
 ```
 </Step>
@@ -174,12 +174,12 @@ agency = Agency(
 
 The `Agency` class constructor has been redesigned for clarity:
 
-| v0.x Method | v1.x Method (Recommended) |
-|-------------|---------------------------|
-| `agency_chart` parameter | Positional arguments for entry points + `communication_flows` parameter |
-| `threads_callbacks` | `load_threads_callback` + `save_threads_callback` |
-| `get_completion()` | `get_response()` (async) |
-| `get_completion_stream()` | `get_response_stream()` (async) |
+| v0.x Method | v1.x Method (Recommended) | v1.x Backward Compatible |
+|-------------|---------------------------|--------------------------|
+| `agency_chart` parameter | Positional arguments for entry points + `communication_flows` parameter | `agency_chart` (deprecated) |
+| `threads_callbacks` | `load_threads_callback` + `save_threads_callback` | - |
+| `get_completion()` | `get_response()` (async) | `get_completion()` (sync, deprecated) |
+| `get_completion_stream()` | `get_response_stream()` (async) | `get_completion_stream()` (sync, deprecated) |
 
 **Agency Structure Definition:**
 
@@ -348,7 +348,14 @@ agency = Agency(
     save_threads_callback=lambda new_threads: save_threads(new_threads)
 )
 
-# Usage (async)
+# Usage (Backward Compatible)
+result = agency.get_completion(
+    message="Start processing",
+    recipient_agent="Agent1"
+)
+print(result)
+
+# Usage (v1.x Recommended - async)
 async def main():
     result = await agency.get_response(
         message="Start processing",
@@ -492,13 +499,13 @@ async def my_tool_with_context(ctx: RunContextWrapper[Any], arg1: str) -> str:
 ```
 </Step>
 
-<Step title="Update Interaction Calls">
-**v0.x**:
+<Step title="Update Interaction Calls (Optional)">
+**v0.x (still works in v1.x with deprecation warning)**:
 ```python
 result = agency.get_completion("Hello", recipient_agent="Agent1")
 ```
 
-**v1.x** (async):
+**v1.x Recommended** (async):
 ```python
 import asyncio
 
@@ -511,6 +518,10 @@ async def main():
 
 asyncio.run(main())
 ```
+
+<Note>
+**Backward Compatibility**: `get_completion()` and `get_completion_stream()` remain synchronous in v1.1 for backward compatibility. While deprecated, they work exactly as in v0.x to minimize migration friction.
+</Note>
 </Step>
 
 <Step title="Update response validation">
