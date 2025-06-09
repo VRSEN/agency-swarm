@@ -6,6 +6,42 @@ icon: "comments"
 
 Unlike all other frameworks, communication flows in Agency Swarm are **not hierarchical** or **sequential**. Instead, they are **uniform**, which means you can define them in any way you want.
 
+## Understanding the Orchestrator Pattern
+
+Agency Swarm implements an **orchestrator pattern** where agents use other agents as tools through the `SendMessage` mechanism. This is fundamentally different from sequential handoffs:
+
+- **Control always returns to the calling agent** - When Agent A calls Agent B, Agent B processes the request and returns a response to Agent A
+- **Agents act as specialized tools** - Each agent can be thought of as a specialized tool that another agent can invoke
+- **Orchestrator agents coordinate workflows** - Typically, one agent orchestrates the entire workflow by calling multiple other agents and compiling their responses
+
+### Example: Investment Research Platform
+```python
+# Portfolio Manager orchestrates investment analysis using output_type for structured responses
+portfolio_manager = Agent(
+    name="PortfolioManager",
+    instructions="Orchestrate investment research by gathering data, delegating analysis, and compiling recommendations",
+    tools=[fetch_market_data],
+    output_type=str,
+)
+
+risk_analyst = Agent(
+    name="RiskAnalyst",
+    instructions="Specialize in investment risk analysis",
+    tools=[analyze_risk_factors],
+    output_type=RiskAssessment,  # Structured output
+)
+
+agency = Agency(
+    portfolio_manager,  # Entry point and orchestrator
+    communication_flows=[
+        (portfolio_manager, risk_analyst),     # Portfolio Manager can request risk analysis
+        (portfolio_manager, report_generator), # Portfolio Manager can request report generation
+    ]
+)
+```
+
+In this example, the Portfolio Manager needs responses from both specialists to make an informed investment decision. The RiskAnalyst provides structured risk assessment data using `output_type`, and control always returns to the Portfolio Manager who compiles the final recommendation.
+
 ## Defining Your Own Communication Flows
 
 Communication flows in Agency Swarm are established from left to right inside the `agency_chart`. So, in the example below, the CEO can initiate communication and send tasks to the Developer and the Virtual Assistant, and it can respond back to him in the same thread, but the Developer or the VA cannot initiate a conversation and assign tasks to the CEO.
@@ -36,3 +72,21 @@ You can add as many levels of communication as you want.
 ## Under the Hood
 
 Agency Swarm uses a special `SendMessage` to allow agents to communicate with each other. By adding agents to the second-level list, it simply adds a new recipient to the `SendMessage` function. If you'd like to modify the behavior of this tool, you can do so by creating your own [Custom Communication Flows](/additional-features/custom-communication-flows/overview) (**Advanced**).
+
+It's important to understand that each defined communication flow (e.g., `[ceo, dev]`) establishes a distinct context for interaction. When the `SendMessage` tool is invoked by a sender agent (e.g., CEO) to a recipient agent (e.g., Developer), this happens within a dedicated conversation thread specific to that CEO-Developer pair. In this thread, the sender agent effectively takes on the role of a "user," and the recipient agent responds as the "assistant." This ensures that the history and context of communication between any two agents are isolated and maintained separately for each specific flow.
+
+<Note>
+**Technical Implementation**: Each communication flow creates a separate conversation thread with identifiers like `"user->AgentName"` for user interactions and `"SenderAgent->RecipientAgent"` for agent-to-agent communication. This is implemented through:
+
+- **ThreadManager** (`src/agency_swarm/thread.py`) - Manages multiple conversation threads
+- **ConversationThread** (`src/agency_swarm/thread.py`) - Stores individual thread history
+- **SendMessage** (`src/agency_swarm/tools/send_message.py`) - Handles agent-to-agent communication
+- **Agent.get_response()** (`src/agency_swarm/agent.py`) - Processes messages and manages thread retrieval
+
+Examples of thread identifiers:
+```python
+"user->CEO"           # User conversations with CEO entry point
+"CEO->Developer"      # CEO sending messages to Developer
+"Developer->QA"       # Developer sending messages to QA
+```
+</Note>
