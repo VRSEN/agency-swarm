@@ -17,8 +17,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 from agents import OpenAIChatCompletionsModel, function_tool
 from openai import AsyncOpenAI
 
-from agency_swarm.agency import Agency
-from agency_swarm.agent import Agent
+from agency_swarm import Agency, Agent
 
 # Simple logging setup
 logging.basicConfig(level=logging.WARNING, format="%(asctime)s - %(levelname)s - %(message)s")
