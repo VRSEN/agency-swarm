@@ -251,7 +251,7 @@ class ThreadManager:
                 A function to save ALL thread data.
                 Expected signature: `(all_threads_data: dict[str, Any]) -> None`
                 Receives a dict mapping thread_ids to their complete data.
-                Example: `lambda all_threads: save_threads(all_threads, chat_id)`
+                Example: `lambda all_threads: save_threads(all_threads)`
         """
         self._threads = {}
         self._load_threads_callback = load_threads_callback
