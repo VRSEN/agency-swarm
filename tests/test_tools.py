@@ -232,6 +232,12 @@ async def test_schema_conversion():
             assert "'timeZone': 'America/New_York'" in str(response)
 
 
+def test_tools_folder_autoload():
+    agent = Agent(name="test", instructions="test", tools_folder="tests/data/tools")
+    tool_names = [tool.name for tool in agent.tools]
+    assert "ExampleTool1" in tool_names
+
+
 # TODO: Add tests for response validation aspects
 # TODO: Add tests for context/hooks propagation (more complex, might need integration tests)
 # TODO: Add parameterized tests for various message inputs (empty, long, special chars)

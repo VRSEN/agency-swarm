@@ -1,8 +1,10 @@
 import asyncio
+import importlib.util
 import inspect
 import json
 import logging
 import os
+import sys
 import warnings
 from collections.abc import AsyncGenerator, Callable
 from pathlib import Path
@@ -401,6 +403,7 @@ class Agent(BaseAgent[MasterContext]):
 
         self.file_manager._parse_files_folder_for_vs_id()
         self._parse_schemas()
+        self._load_tools_from_folder()
         # The full async _init_file_handling (with VS retrieval) should be called by Agency or explicitly in tests.
 
     # --- Properties ---
@@ -458,17 +461,51 @@ class Agent(BaseAgent[MasterContext]):
         logger.debug(f"Tool '{getattr(tool, 'name', '(unknown)')}' added to agent '{self.name}'")
 
     def _load_tools_from_folder(self) -> None:
-        """Placeholder: Loads tools from tools_folder (future Task)."""
-        if self.tools_folder:
-            logger.warning("Tool loading from folder is not fully implemented yet.")
-            # Placeholder logic using ToolFactoryPlaceholder (replace when implemented)
-            # try:
-            #     folder_path = Path(self.tools_folder).resolve()
-            #     loaded_tools = ToolFactory.load_tools_from_folder(folder_path)
-            #     for tool in loaded_tools:
-            #         self.add_tool(tool)
-            # except Exception as e:
-            #     logger.error(f"Error loading tools from folder {self.tools_folder}: {e}")
+        """Load legacy ``BaseTool`` classes from ``tools_folder`` and add them.
+
+        This replicates the automatic tool discovery from Agency Swarm v0.x. The
+        folder should contain Python files, each defining a class with the same
+        name as the file and inheriting from :class:`BaseTool`.
+        """
+
+        if not self.tools_folder:
+            return
+
+        folder_path = Path(self.tools_folder)
+        if not folder_path.is_dir():
+            folder_path = Path(self._get_class_folder_path()) / folder_path
+
+        if not folder_path.is_dir():
+            logger.warning("Tools folder path is not a directory. Skipping... %s", folder_path)
+            return
+
+        for file in folder_path.iterdir():
+            if not file.is_file() or file.suffix != ".py" or file.name.startswith("_"):
+                continue
+
+            module_name = file.stem
+            try:
+                spec = importlib.util.spec_from_file_location(module_name, file)
+                if spec and spec.loader:
+                    module = importlib.util.module_from_spec(spec)
+                    sys.modules[module_name] = module
+                    spec.loader.exec_module(module)
+                else:
+                    logger.error("Unable to import tool module %s", file)
+                    continue
+            except Exception as e:
+                logger.error("Error importing tool module %s: %s", file, e)
+                continue
+
+            tool_class = getattr(module, module_name, None)
+            if inspect.isclass(tool_class) and issubclass(tool_class, BaseTool) and tool_class is not BaseTool:
+                try:
+                    tool = self._adapt_legacy_tool(tool_class)
+                    self.add_tool(tool)
+                except Exception as e:
+                    logger.error("Error adapting tool %s: %s", module_name, e)
+            else:
+                logger.warning("No valid tool class '%s' found in %s", module_name, file)
 
     def _parse_schemas(self):
         schemas_folders = self.schemas_folder if isinstance(self.schemas_folder, list) else [self.schemas_folder]
