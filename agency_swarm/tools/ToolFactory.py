@@ -10,6 +10,7 @@ from typing import Any, Callable, Dict, List, Literal, Optional, Set, Tuple, Typ
 
 import httpx
 import jsonref
+from pydantic import BaseModel
 from datamodel_code_generator import DataModelType, PythonVersion
 from datamodel_code_generator.model import get_data_model_types
 from datamodel_code_generator.parser.jsonschema import JsonSchemaParser
@@ -357,6 +358,7 @@ class ToolFactory:
 
     @staticmethod
     def from_mcp(server):
+        #  Do not pull tools from MCP server if pre-loaded tools are provided
         tool_definitions = server.list_tools()
         tools = []
 
@@ -368,15 +370,18 @@ class ToolFactory:
             if isinstance(definition, dict):
                 name = definition.get("name")
                 description = definition.get("description", "")
-                parameters = definition.get("inputSchema", {})
+                parameters = definition.get("inputSchema")
             else:
                 # Access attributes from object
-                name = getattr(definition, "name", "")
+                name = getattr(definition, "name")
                 description = getattr(definition, "description", "")
-                parameters = getattr(definition, "inputSchema", {})
-                # The returned object might have the parameters as a property or a method
-                if callable(parameters):
-                    parameters = parameters()
+                parameters = getattr(definition, "inputSchema")
+                # If parameters are either a class or an instance of a BaseModel, convert them to json schema
+                if isinstance(parameters, BaseModel) or (
+                    isinstance(parameters, type) and issubclass(parameters, BaseModel)
+                ):
+                    parameters = parameters.model_json_schema()
+
             # Check if any parameter has a default value
             has_default_values = False
             if isinstance(parameters, dict) and "properties" in parameters:

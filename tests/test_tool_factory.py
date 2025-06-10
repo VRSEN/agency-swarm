@@ -13,7 +13,7 @@ from langchain_community.tools import MoveFileTool, YouTubeSearchTool
 from pydantic import BaseModel, ConfigDict, Field
 
 from agency_swarm.tools import BaseTool, ToolFactory
-from agency_swarm.tools.mcp import MCPServerSse, MCPServerStdio
+from agency_swarm.tools.mcp import MCPServerSse, MCPServerStdio, MCPServerStreamableHttp, MCPToolParams
 from agency_swarm.util import get_openai_client
 from agency_swarm.util.helpers.sync_async import run_async_sync
 
@@ -399,7 +399,7 @@ async def test_mcp_sse():
         pytest.skip("Python executable not found")
 
     # Get the server file
-    server_file = os.path.join(os.path.dirname(__file__), "scripts", "server.py")
+    server_file = os.path.join(os.path.dirname(__file__), "scripts", "sse_server.py")
 
     if not os.path.exists(server_file):
         pytest.skip(f"Test file {server_file} not found")
@@ -469,6 +469,77 @@ async def test_mcp_sse():
         import gc
 
         gc.collect()
+
+@pytest.mark.asyncio
+async def test_mcp_http():
+    """Test the ToolFactory.from_mcp method with an HTTP MCP server"""
+
+    # Skip if Python is not available
+    if not shutil.which(sys.executable):
+        pytest.skip("Python executable not found")
+
+    # Get the server file
+    server_file = os.path.join(os.path.dirname(__file__), "scripts", "http_server.py")
+
+    if not os.path.exists(server_file):
+        pytest.skip(f"Test file {server_file} not found")
+
+    # Start the server process
+    process = None
+    try:
+        # Start the server using Python
+        process = subprocess.Popen([sys.executable, server_file])
+        print("Server started")
+
+        # Give it time to start
+        time.sleep(5)
+
+        class InputSchema(BaseModel):
+            pass
+
+        pre_defined_tool = MCPToolParams(
+            name="get_secret_password",
+            description="Get the secret password",
+            inputSchema=InputSchema
+        )
+
+        # Create an MCPServerStreamableHttp instance
+        server = MCPServerStreamableHttp(
+            name="HTTP Server",
+            params={"url": "http://localhost:7860/mcp"},
+            pre_loaded_tools=[pre_defined_tool]
+        )
+        # Get tools from the MCP server
+        tools = ToolFactory.from_mcp(server)
+
+        # Verify tools were created successfully
+        assert len(tools) == 1, f"Expected 1 tool, got {len(tools)}"
+
+        # Get the add tool
+        get_secret_password_tool = next((tool for tool in tools if tool.__name__ == "get_secret_password"), None)
+        assert get_secret_password_tool is not None, "get_secret_password tool not found"
+        assert not hasattr(get_secret_password_tool, "_loop"), "Pre-loaded tool should not have a loop after init"
+
+        # Create an instance of the add tool
+        tool_instance = get_secret_password_tool()
+        result = await tool_instance.run()
+        assert str(result) == "hc1291cb7123", f"Expected 'hc1291cb7123', got {result}"
+
+    finally:
+        # Clean up the server process
+        if process:
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
+
+        # Force garbage collection to clean up resources before event loop closes
+        import gc
+
+        gc.collect()
+
 
 
 if __name__ == "__main__":
