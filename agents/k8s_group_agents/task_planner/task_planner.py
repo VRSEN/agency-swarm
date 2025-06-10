@@ -14,7 +14,7 @@ _output_format = """
         "title": 任务名称,
         "id": 任务ID, 
         "description": 任务的详细描述, 
-        "dep": <前置任务ID列表>,
+        "dep": <前置任务ID列表>
     },
     ...
 }

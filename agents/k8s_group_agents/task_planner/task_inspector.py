@@ -12,7 +12,7 @@ _input_format = """
             "title": 任务名称,
             "id": 任务ID, 
             "description": 任务描述, 
-            "dep": <前置任务ID列表>,
+            "dep": <前置任务ID列表>
         },
         ...
     }

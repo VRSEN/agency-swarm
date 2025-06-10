@@ -30,7 +30,7 @@ _output_format = """
         "id": 步骤ID, 
         "agent": [agent_name_1, ...],
         "description": 步骤描述, 
-        "dep": <前置步骤ID列表>,
+        "dep": <前置步骤ID列表>
     },
     ...
 }

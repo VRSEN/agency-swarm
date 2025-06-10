@@ -19,7 +19,7 @@ _input_format = """
             "id": step ID, 
             "agent": [agent_name_1, ...],
             "description": step描述, 
-            "dep": <前置step ID列表>,
+            "dep": <前置step ID列表>
         },
         ...
     }
