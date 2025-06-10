@@ -24,9 +24,6 @@ sse_server = MCPServerSse(
 )
 
 # Example on how to use pre-loaded tools
-
-
-
 password_tool = MCPToolParams(
     name="get_secret_password", # Name should exactly match the tool name in the server
     description="Get the secret password",
@@ -94,6 +91,7 @@ print("-----------------------------------------------------")
 print("Starting interactive demo session...")
 print("Try asking the agent to perform tasks using its MCP tools, for example:")
 print("  - 'Get the secret word'")
+print("  - 'Get the secret password'")
 print("  - 'Summarize the contents of the README.md file in 5 bullet points'")
 print("  - 'What is the weather in Tokyo?'")
 print("-----------------------------------------------------")
