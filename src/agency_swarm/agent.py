@@ -461,11 +461,12 @@ class Agent(BaseAgent[MasterContext]):
         logger.debug(f"Tool '{getattr(tool, 'name', '(unknown)')}' added to agent '{self.name}'")
 
     def _load_tools_from_folder(self) -> None:
-        """Load legacy ``BaseTool`` classes from ``tools_folder`` and add them.
+        """Load tools defined in ``tools_folder`` and add them to the agent.
 
-        This replicates the automatic tool discovery from Agency Swarm v0.x. The
-        folder should contain Python files, each defining a class with the same
-        name as the file and inheriting from :class:`BaseTool`.
+        Supports both legacy ``BaseTool`` subclasses and ``FunctionTool``
+        instances created via the ``@function_tool`` decorator. This restores the
+        automatic discovery behavior from Agency Swarm v0.x while also handling
+        the new function-based tools.
         """
 
         if not self.tools_folder:
@@ -488,7 +489,7 @@ class Agent(BaseAgent[MasterContext]):
                 spec = importlib.util.spec_from_file_location(module_name, file)
                 if spec and spec.loader:
                     module = importlib.util.module_from_spec(spec)
-                    sys.modules[module_name] = module
+                    sys.modules[f"{module_name}_{id(self)}"] = module
                     spec.loader.exec_module(module)
                 else:
                     logger.error("Unable to import tool module %s", file)
@@ -497,15 +498,22 @@ class Agent(BaseAgent[MasterContext]):
                 logger.error("Error importing tool module %s: %s", file, e)
                 continue
 
-            tool_class = getattr(module, module_name, None)
-            if inspect.isclass(tool_class) and issubclass(tool_class, BaseTool) and tool_class is not BaseTool:
+            # Legacy BaseTool: expect class with same name as file
+            legacy_class = getattr(module, module_name, None)
+            if inspect.isclass(legacy_class) and issubclass(legacy_class, BaseTool) and legacy_class is not BaseTool:
                 try:
-                    tool = self._adapt_legacy_tool(tool_class)
+                    tool = self._adapt_legacy_tool(legacy_class)
                     self.add_tool(tool)
                 except Exception as e:
                     logger.error("Error adapting tool %s: %s", module_name, e)
-            else:
-                logger.warning("No valid tool class '%s' found in %s", module_name, file)
+
+            # FunctionTool instances defined in the module
+            for obj in module.__dict__.values():
+                if isinstance(obj, FunctionTool):
+                    try:
+                        self.add_tool(obj)
+                    except Exception as e:
+                        logger.error("Error adding function tool from %s: %s", file, e)
 
     def _parse_schemas(self):
         schemas_folders = self.schemas_folder if isinstance(self.schemas_folder, list) else [self.schemas_folder]
