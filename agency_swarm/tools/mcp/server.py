@@ -115,7 +115,7 @@ class _MCPServerWithClientSession(MCPServer, abc.ABC):
                 4. No schema validation will be performed, make sure provided schemas are compatible with the server.
         """
         self._initialized = False
-        
+
         if allowed_tools and not pre_loaded_tools:
             logger.warning("allowed_tools are not used if pre_loaded_tools are provided")
 
@@ -157,7 +157,7 @@ class _MCPServerWithClientSession(MCPServer, abc.ABC):
         self._ready_event = threading.Event()
         self._startup_exception = None  # Store startup exception for detailed error reporting
         self._thread.start()
-        
+
         # Wait for the connection to be established before returning
         if not self._ready_event.wait(timeout=20):
             raise TimeoutError("Server initialization timed out")
@@ -170,7 +170,7 @@ class _MCPServerWithClientSession(MCPServer, abc.ABC):
         """
         Main event loop for the background thread managing async MCP server operations.
 
-        Handles initial connection, dispatches synchronous method calls (connect, list_tools, call_tool, cleanup) 
+        Handles initial connection, dispatches synchronous method calls (connect, list_tools, call_tool, cleanup)
         to their async counterparts, maintains proper cleanup and shutdown.
         """
         try:
@@ -187,9 +187,7 @@ class _MCPServerWithClientSession(MCPServer, abc.ABC):
                     result = await asyncio.wait_for(coro, timeout=timeout)
                     result_future.set_result(result)
                 except asyncio.TimeoutError:
-                    result_future.set_exception(
-                        TimeoutError(f"MCP server call '{method}' timed out after {timeout}s")
-                    )
+                    result_future.set_exception(TimeoutError(f"MCP server call '{method}' timed out after {timeout}s"))
                 except Exception as e:
                     result_future.set_exception(e)
 
@@ -202,7 +200,7 @@ class _MCPServerWithClientSession(MCPServer, abc.ABC):
             if not self._ready_event.is_set():
                 self._ready_event.set()
             logger.error(f"Error in MCP server main loop: {root_exception}")
-            return # Do not raise exceptions here as it leads to loop halting
+            return  # Do not raise exceptions here as it leads to loop halting
 
         finally:
             # Cleanup must happen while the event loop is still active
@@ -292,7 +290,7 @@ class _MCPServerWithClientSession(MCPServer, abc.ABC):
                 self.extract_error_from_log(errlog.name, errlog)  # Delete the error log file
 
     # Async implementations
-    async def  _connect_async(self):
+    async def _connect_async(self):
         try:
             # For HTTP clients, ensure we give enough time for the connection to establish
             # and handle any initial connection retries that the client might need
@@ -450,10 +448,10 @@ class _MCPServerWithClientSession(MCPServer, abc.ABC):
     def _extract_root_exception(self, exception: Exception) -> Exception:
         """Extract the root cause exception from ExceptionGroups or return the original exception."""
         # Handle ExceptionGroup (Python 3.11+) or BaseExceptionGroup
-        if hasattr(exception, 'exceptions') and exception.exceptions:
+        if hasattr(exception, "exceptions") and exception.exceptions:
             # Recursively extract from nested ExceptionGroups
             for sub_exception in exception.exceptions:
-                if hasattr(sub_exception, 'exceptions') and sub_exception.exceptions:
+                if hasattr(sub_exception, "exceptions") and sub_exception.exceptions:
                     return self._extract_root_exception(sub_exception)
                 else:
                     return sub_exception
@@ -743,7 +741,7 @@ class MCPServerStreamableHttp(_MCPServerWithClientSession):
 
         self.params = params
         self._name = name or f"streamable_http: {self.params['url']}"
-        
+
         super().__init__(
             cache_tools_list,
             strict=strict,

@@ -43,6 +43,7 @@ def start_server_sse():
             process.kill()
             process.wait()
 
+
 @pytest.fixture(scope="module", autouse=True)
 def start_server_http():
     # Start the server as a subprocess
@@ -67,6 +68,7 @@ def start_server_http():
             process.kill()
             process.wait()
 
+
 @pytest.fixture(scope="module")
 def agency():
     filesystem_server = MCPServerStdio(
@@ -88,7 +90,7 @@ def agency():
         name="SSE Python Server",
         params={"url": "http://localhost:8080/sse"},
         strict=True,
-        allowed_tools=["get_secret_word"]
+        allowed_tools=["get_secret_word"],
     )
 
     http_server = MCPServerStreamableHttp(
@@ -119,14 +121,19 @@ def agency():
 
 # Might take a bit to process
 def test_read_filesystem(agency):
-    result = agency.get_completion(f"Use the list_directory tool to read the contents of {samples_dir} folder.", recipient_agent=agency.agents[0])
+    result = agency.get_completion(
+        f"Use the list_directory tool to read the contents of {samples_dir} folder.", recipient_agent=agency.agents[0]
+    )
     print(result)
     assert "csv-test.csv" in result
 
 
 def test_read_git_commit(agency):
     root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-    result = agency.get_completion(f"Read the last commit of the {root_dir} folder. Provide result in the exact same format as you receive it.", recipient_agent=agency.agents[1])
+    result = agency.get_completion(
+        f"Read the last commit of the {root_dir} folder. Provide result in the exact same format as you receive it.",
+        recipient_agent=agency.agents[1],
+    )
     print(result)
     assert "Author" in result
 
@@ -136,8 +143,11 @@ def test_get_secret_word(agency):
     print(result)
     assert "strawberry" in result.lower()
 
+
 def test_get_secret_password(agency):
-    result = agency.get_completion("Get secret password using get_secret_password tool.", recipient_agent=agency.agents[3])
+    result = agency.get_completion(
+        "Get secret password using get_secret_password tool.", recipient_agent=agency.agents[3]
+    )
     print(result)
     assert "hc1291cb7123" in result.lower()
 

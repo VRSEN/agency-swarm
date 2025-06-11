@@ -42,9 +42,7 @@ def test_complex_schema():
         name: str = Field(..., description="Name of the friend.")
         age: Optional[int] = Field(25, description="Age of the friend.")
         email: Optional[str] = Field(None, description="Email address of the friend.")
-        is_active: Optional[bool] = Field(
-            None, description="Indicates if the friend is currently active."
-        )
+        is_active: Optional[bool] = Field(None, description="Indicates if the friend is currently active.")
 
     class UserDetail(BaseModel):
         """Hey this is a test?"""
@@ -103,9 +101,7 @@ def test_complex_schema():
         """
         if not isinstance(d, dict):
             return d
-        return {
-            k: remove_empty_fields(v) for k, v in d.items() if v not in [{}, [], ""]
-        }
+        return {k: remove_empty_fields(v) for k, v in d.items() if v not in [{}, [], ""]}
 
     cleaned_schema = remove_empty_fields(user_relationships_schema)
     tool_schema = tool.openai_schema
@@ -183,9 +179,7 @@ async def test_relevance_openapi_schema():
         httpx.AsyncClient = MockClient
 
         try:
-            tools = ToolFactory.from_openapi_schema(
-                f.read(), {"Authorization": "mock-key"}
-            )
+            tools = ToolFactory.from_openapi_schema(f.read(), {"Authorization": "mock-key"})
 
             output = await tools[0](requestBody={"text": "test"}).run()
 
@@ -198,13 +192,9 @@ async def test_relevance_openapi_schema():
 @pytest.mark.asyncio
 async def test_get_headers_openapi_schema():
     with open("./data/schemas/get-headers-params.json", "r") as f:
-        tools = ToolFactory.from_openapi_schema(
-            f.read(), {"Bearer": os.environ.get("GET_HEADERS_SCHEMA_API_KEY")}
-        )
+        tools = ToolFactory.from_openapi_schema(f.read(), {"Bearer": os.environ.get("GET_HEADERS_SCHEMA_API_KEY")})
 
-        output = await tools[0](
-            parameters={"domain": "print-headers", "query": "test"}
-        ).run()
+        output = await tools[0](parameters={"domain": "print-headers", "query": "test"}).run()
 
         assert "headers" in output
 
@@ -227,9 +217,7 @@ def test_mcp_filesystem():
     """Test the ToolFactory.from_mcp method with a filesystem MCP server"""
     # Skip if npx is not installed
     if not shutil.which("npx"):
-        pytest.skip(
-            "npx is not installed. Please install it with `npm install -g npx`."
-        )
+        pytest.skip("npx is not installed. Please install it with `npm install -g npx`.")
 
     # Get the sample files directory
     samples_dir = os.path.join(os.path.dirname(__file__), "data", "files")
@@ -278,7 +266,7 @@ def test_mcp_filesystem():
             try:
                 server_process.terminate()
                 server_process.wait(timeout=5)
-            except: #noqa
+            except:  # noqa
                 if server_process.poll() is None:
                     server_process.kill()
                     server_process.wait()
@@ -305,16 +293,14 @@ def test_mcp_git():
         install_process.wait(timeout=30)
         print("Installed mcp-server-git Python package")
     except (subprocess.SubprocessError, subprocess.TimeoutExpired):
-        print(
-            "Note: Failed to install mcp-server-git package (may already be installed)"
-        )
+        print("Note: Failed to install mcp-server-git package (may already be installed)")
     finally:
         # Ensure process is terminated even if wait times out
         if install_process and install_process.poll() is None:
             try:
                 install_process.terminate()
                 install_process.wait(timeout=2)
-            except: #noqa
+            except:  # noqa
                 if install_process.poll() is None:
                     install_process.kill()
 
@@ -339,10 +325,7 @@ def test_mcp_git():
         # Verify that at least one tool has a git-related name
         git_tool_found = False
         for tool in tools:
-            if any(
-                keyword in tool.__name__.lower()
-                for keyword in ["git", "commit", "branch", "repo"]
-            ):
+            if any(keyword in tool.__name__.lower() for keyword in ["git", "commit", "branch", "repo"]):
                 git_tool_found = True
                 break
 
@@ -360,13 +343,9 @@ def test_mcp_git():
             status_tool = git_status_tool(repo_path=repo_path)
 
             status_result = run_async_sync(status_tool.run)
-            assert isinstance(
-                status_result, str
-            ), "Expected string result from git tool"
+            assert isinstance(status_result, str), "Expected string result from git tool"
             assert len(status_result) > 0, "Expected non-empty result from git tool"
-            assert (
-                "Repository status:" in status_result
-            ), "Expected 'Repository status:' in result"
+            assert "Repository status:" in status_result, "Expected 'Repository status:' in result"
         else:
             pytest.skip("No suitable git tool found")
     except asyncio.TimeoutError:
@@ -379,7 +358,7 @@ def test_mcp_git():
             try:
                 server_process.terminate()
                 server_process.wait(timeout=5)
-            except: #noqa
+            except:  # noqa
                 if server_process.poll() is None:
                     server_process.kill()
                     server_process.wait()
@@ -415,7 +394,7 @@ async def test_mcp_sse():
 
         # Create an MCPServerSse instance
         server = MCPServerSse(
-            params={"url": "http://localhost:8080/sse"}
+            params={"url": "http://localhost:8080/sse"},
         )
         # Get tools from the MCP server
         tools = ToolFactory.from_mcp(server)
@@ -433,9 +412,7 @@ async def test_mcp_sse():
         assert str(result) == "29", f"Expected 29, got {result}"
 
         # Get the weather tool
-        weather_tool = next(
-            (tool for tool in tools if tool.__name__ == "get_current_weather"), None
-        )
+        weather_tool = next((tool for tool in tools if tool.__name__ == "get_current_weather"), None)
         assert weather_tool is not None, "get_current_weather tool not found"
 
         # Create an instance of the weather tool
@@ -444,9 +421,7 @@ async def test_mcp_sse():
         assert "Weather report:" in result
 
         # Get the secret word tool
-        secret_tool = next(
-            (tool for tool in tools if tool.__name__ == "get_secret_word"), None
-        )
+        secret_tool = next((tool for tool in tools if tool.__name__ == "get_secret_word"), None)
         assert secret_tool is not None, "get_secret_word tool not found"
 
         # Create an instance of the secret word tool
@@ -469,6 +444,7 @@ async def test_mcp_sse():
         import gc
 
         gc.collect()
+
 
 @pytest.mark.asyncio
 async def test_mcp_http():
@@ -498,16 +474,12 @@ async def test_mcp_http():
             pass
 
         pre_defined_tool = MCPToolParams(
-            name="get_secret_password",
-            description="Get the secret password",
-            inputSchema=InputSchema
+            name="get_secret_password", description="Get the secret password", inputSchema=InputSchema
         )
 
         # Create an MCPServerStreamableHttp instance
         server = MCPServerStreamableHttp(
-            name="HTTP Server",
-            params={"url": "http://localhost:7860/mcp"},
-            pre_loaded_tools=[pre_defined_tool]
+            name="HTTP Server", params={"url": "http://localhost:7860/mcp"}, pre_loaded_tools=[pre_defined_tool]
         )
         # Get tools from the MCP server
         tools = ToolFactory.from_mcp(server)
@@ -539,7 +511,6 @@ async def test_mcp_http():
         import gc
 
         gc.collect()
-
 
 
 if __name__ == "__main__":

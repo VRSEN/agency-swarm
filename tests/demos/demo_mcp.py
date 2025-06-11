@@ -25,29 +25,29 @@ sse_server = MCPServerSse(
 
 # Example on how to use pre-loaded tools
 password_tool = MCPToolParams(
-    name="get_secret_password", # Name should exactly match the tool name in the server
+    name="get_secret_password",  # Name should exactly match the tool name in the server
     description="Get the secret password",
     # Target tool has no inputs - leave properties blank
-    inputSchema={"type": "object", "properties": {}, "required": []}
+    inputSchema={"type": "object", "properties": {}, "required": []},
 )
+
 
 # Schema can also be provided as a Pydantic model
 class InputSchema(BaseModel):
     a: int = Field(..., description="First number")
     b: int = Field(..., description="Second number")
 
+
 add_tool = MCPToolParams(
     name="add_numbers",
     description="Add two numbers",
     # Schema can be provided as a dictionary or a Pydantic model
-    inputSchema=InputSchema
+    inputSchema=InputSchema,
 )
 
 # Define the HTTP MCP Server connection
 http_server = MCPServerStreamableHttp(
-    name="HTTP_Python_Server",
-    params={"url": "http://localhost:7860/mcp"},
-    pre_loaded_tools=[password_tool, add_tool]
+    name="HTTP_Python_Server", params={"url": "http://localhost:7860/mcp"}, pre_loaded_tools=[password_tool, add_tool]
 )
 
 # Define an MCP server for filesystem access
@@ -59,7 +59,7 @@ filesystem_server = MCPServerStdio(
     },
     strict=False,
     # If you want to restrict agent to certain tools from the server, specify them in the allowed_tools
-    allowed_tools=["list_allowed_directories", "list_directory", "read_file"]
+    allowed_tools=["list_allowed_directories", "list_directory", "read_file"],
 )
 
 # Define an agent that uses both MCP servers
@@ -78,12 +78,8 @@ print("-----------------------------------------------------")
 print(" Agency Swarm - MCP Demo")
 print("-----------------------------------------------------")
 print("This demo showcases an agent (`MCPAgent`) equipped with two MCP servers:")
-print(
-    "  1. SSE Server: Connects to a local SSE server to fetch a secret word or get the current weather."
-)
-print(
-    "  2. Filesystem Server: Connects to a local filesystem server to list/read files."
-)
+print("  1. SSE Server: Connects to a local SSE server to fetch a secret word or get the current weather.")
+print("  2. Filesystem Server: Connects to a local filesystem server to list/read files.")
 print("-----------------------------------------------------")
 print("IMPORTANT: Ensure the SSE and HTTP servers are running in a separate terminal:")
 print("$ python tests/scripts/sse_server.py")
