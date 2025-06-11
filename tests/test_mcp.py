@@ -19,29 +19,6 @@ sse_server_file = os.path.join(os.path.dirname(__file__), "scripts", "sse_server
 http_server_file = os.path.join(os.path.dirname(__file__), "scripts", "http_server.py")
 
 
-# def start_server(file):
-#     # Start the server as a subprocess
-#     print(f"Starting server from {file}")
-#     process = subprocess.Popen([sys.executable, file])
-#     time.sleep(5)  # Give it time to start
-#     yield
-#     # Try sending SIGINT (Ctrl+C) for a cleaner shutdown
-#     if platform.system() == "Windows":
-#         process.terminate()
-#     else:
-#         process.send_signal(signal.SIGINT)
-#     try:
-#         process.wait(timeout=10)  # Wait up to 10 seconds
-#     except subprocess.TimeoutExpired:
-#         print("Server did not terminate gracefully, sending SIGTERM")
-#         process.terminate()
-#         try:
-#             process.wait(timeout=5)
-#         except subprocess.TimeoutExpired:
-#             print("Server did not terminate after SIGTERM, sending SIGKILL")
-#             process.kill()
-#             process.wait()
-
 @pytest.fixture(scope="module", autouse=True)
 def start_server_sse():
     # Start the server as a subprocess
@@ -89,14 +66,6 @@ def start_server_http():
             print("Server did not terminate after SIGTERM, sending SIGKILL")
             process.kill()
             process.wait()
-
-# @pytest.fixture(scope="module", autouse=True)
-# def start_sse_server():
-#     start_server(sse_server_file)
-
-# @pytest.fixture(scope="module", autouse=True)
-# def start_http_server():
-#     start_server(http_server_file)
 
 @pytest.fixture(scope="module")
 def agency():
@@ -176,4 +145,4 @@ def test_get_secret_password(agency):
 if __name__ == "__main__":
     import pytest
 
-    pytest.main(["-v", "-s", __file__])
+    pytest.main(["-v", __file__])
