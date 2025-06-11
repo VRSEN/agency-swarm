@@ -1,11 +1,11 @@
 import inspect
 import json
+import logging
 import os
 import sys
 from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
-import logging
 from typing import Any, Callable, Dict, List, Literal, Optional, Set, Tuple, Type, Union
 
 import httpx
@@ -13,10 +13,13 @@ import jsonref
 from datamodel_code_generator import DataModelType, PythonVersion
 from datamodel_code_generator.model import get_data_model_types
 from datamodel_code_generator.parser.jsonschema import JsonSchemaParser
+from pydantic import BaseModel
 
 from .BaseTool import BaseTool
 
 logger = logging.getLogger(__name__)
+
+
 class ToolFactory:
     @staticmethod
     def from_langchain_tools(tools: List) -> List[Type[BaseTool]]:
@@ -63,13 +66,10 @@ class ToolFactory:
                     return tool.run(list(tool_input.values())[0])
                 else:
                     raise TypeError(
-                        f"Error parsing input for tool '{tool.__class__.__name__}' Please open an issue "
-                        f"on github."
+                        f"Error parsing input for tool '{tool.__class__.__name__}' Please open an issue " f"on github."
                     )
 
-        return ToolFactory.from_openai_schema(
-            format_tool_to_openai_function(tool), callback
-        )
+        return ToolFactory.from_openai_schema(format_tool_to_openai_function(tool), callback)
 
     @staticmethod
     def from_openai_schema(schema: Dict[str, Any], callback: Any) -> Type[BaseTool]:
@@ -98,14 +98,16 @@ class ToolFactory:
             use_schema_description=True,
             validation=False,
             class_name="Model",
-            strip_default_none=schema.get("strict", False), # default parameters are not supported in strict mode
-            # custom_template_dir=Path('/Users/vrsen/Projects/agency-swarm/agency-swarm/agency_swarm/tools/data_schema_templates')
+            strip_default_none=schema.get("strict", False),  # default parameters are not supported in strict mode
+            # custom_template_dir=Path('/path/to/data_schema_templates')
         )
 
         result = parser.parse()
 
         # Prepend necessary imports to the generated code string
-        imports_str = "from typing import List, Dict, Any, Optional, Union, Set, Tuple, Literal\nfrom enum import Enum\n"
+        imports_str = (
+            "from typing import List, Dict, Any, Optional, Union, Set, Tuple, Literal\nfrom enum import Enum\n"
+        )
         result = imports_str + result
 
         # --- FIX: Remove problematic __future__ import added by generator --- #
@@ -195,9 +197,7 @@ class ToolFactory:
             for method, spec_with_ref in methods.items():
                 # Use the callback factory to create a unique callback for each path/method
                 # This ensures each callback captures the correct path value
-                callback = ToolFactory._create_callback_for_path(
-                    path, method, openapi_spec, params, headers
-                )
+                callback = ToolFactory._create_callback_for_path(path, method, openapi_spec, params, headers)
 
                 # 1. Resolve JSON references.
                 spec = jsonref.replace_refs(spec_with_ref)
@@ -210,12 +210,7 @@ class ToolFactory:
 
                 schema = {"type": "object", "properties": {}}
 
-                req_body = (
-                    spec.get("requestBody", {})
-                    .get("content", {})
-                    .get("application/json", {})
-                    .get("schema")
-                )
+                req_body = spec.get("requestBody", {}).get("content", {}).get("application/json", {}).get("schema")
                 if req_body:
                     schema["properties"]["requestBody"] = req_body
 
@@ -228,19 +223,13 @@ class ToolFactory:
                             param["schema"] = {"type": param["type"]}
                         param_properties[param["name"]] = param["schema"]
                         if "description" in param:
-                            param_properties[param["name"]]["description"] = param[
-                                "description"
-                            ]
+                            param_properties[param["name"]]["description"] = param["description"]
                         if "required" in param and param["required"]:
                             required_params.append(param["name"])
                         if "example" in param:
-                            param_properties[param["name"]]["example"] = param[
-                                "example"
-                            ]
+                            param_properties[param["name"]]["example"] = param["example"]
                         if "examples" in param:
-                            param_properties[param["name"]]["examples"] = param[
-                                "examples"
-                            ]
+                            param_properties[param["name"]]["examples"] = param["examples"]
 
                     schema["properties"]["parameters"] = {
                         "type": "object",
@@ -287,9 +276,7 @@ class ToolFactory:
             url = url.rstrip("/")
             parameters = {k: v for k, v in parameters.items() if v is not None}
             parameters = {**parameters, **params} if params else parameters
-            async with httpx.AsyncClient(
-                timeout=90
-            ) as client:  # Set custom read timeout to 10 seconds
+            async with httpx.AsyncClient(timeout=90) as client:  # Set custom read timeout to 10 seconds
                 if method == "get":
                     response = await client.get(url, params=parameters, headers=headers)
                 elif method == "post":
@@ -357,6 +344,7 @@ class ToolFactory:
 
     @staticmethod
     def from_mcp(server):
+        #  Do not pull tools from MCP server if pre-loaded tools are provided
         tool_definitions = server.list_tools()
         tools = []
 
@@ -368,15 +356,18 @@ class ToolFactory:
             if isinstance(definition, dict):
                 name = definition.get("name")
                 description = definition.get("description", "")
-                parameters = definition.get("inputSchema", {})
+                parameters = definition.get("inputSchema")
             else:
                 # Access attributes from object
-                name = getattr(definition, "name", "")
+                name = getattr(definition, "name")
                 description = getattr(definition, "description", "")
-                parameters = getattr(definition, "inputSchema", {})
-                # The returned object might have the parameters as a property or a method
-                if callable(parameters):
-                    parameters = parameters()
+                parameters = getattr(definition, "inputSchema")
+                # If parameters are either a class or an instance of a BaseModel, convert them to json schema
+                if isinstance(parameters, BaseModel) or (
+                    isinstance(parameters, type) and issubclass(parameters, BaseModel)
+                ):
+                    parameters = parameters.model_json_schema()
+
             # Check if any parameter has a default value
             has_default_values = False
             if isinstance(parameters, dict) and "properties" in parameters:
@@ -392,7 +383,6 @@ class ToolFactory:
             # Create a factory function to properly capture the tool name
             def create_callback(tool_name):
                 async def callback(self, **kwargs):
-
                     # Extract arguments from the model_dump, excluding any internal attributes
                     args = {
                         k: v
@@ -410,9 +400,7 @@ class ToolFactory:
 
                     if hasattr(result, "content") and result.content:
                         # Extract text from the first content item if it exists
-                        if len(result.content) > 0 and hasattr(
-                            result.content[0], "text"
-                        ):
+                        if len(result.content) > 0 and hasattr(result.content[0], "text"):
                             return result.content[0].text
                         # Try to convert the content to a string
                         return str(result.content)
@@ -427,12 +415,7 @@ class ToolFactory:
             callback = create_callback(name)
 
             tool = ToolFactory.from_openai_schema(
-                {
-                    "name": name,
-                    "description": description,
-                    "parameters": parameters,
-                    "strict": server.strict
-                },
+                {"name": name, "description": description, "parameters": parameters, "strict": server.strict},
                 callback,
             )
             tools.append(tool)
@@ -489,18 +472,12 @@ class ToolFactory:
                     "operationId": openai_schema["name"],
                     "x-openai-isConsequential": False,
                     "parameters": [],
-                    "requestBody": {
-                        "content": {
-                            "application/json": {"schema": openai_schema["parameters"]}
-                        }
-                    },
+                    "requestBody": {"content": {"application/json": {"schema": openai_schema["parameters"]}}},
                 }
             }
 
             schema["components"]["schemas"].update(defs)
 
-        schema = json.dumps(schema, indent=2).replace(
-            "#/$defs/", "#/components/schemas/"
-        )
+        schema = json.dumps(schema, indent=2).replace("#/$defs/", "#/components/schemas/")
 
         return schema
