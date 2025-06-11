@@ -108,26 +108,6 @@ read_file_tool = MCPToolParams(
     }
 )
 
-streaming_tool = MCPToolParams(
-    name="stream_large_content",
-    description="Process and stream large content with progress updates",
-    schema={
-        "type": "object",
-        "properties": {
-            "content": {
-                "type": "string",
-                "description": "The content to process"
-            },
-            "chunk_size": {
-                "type": "integer",
-                "description": "Size of each chunk to process",
-                "default": 100
-            }
-        },
-        "required": ["content"]
-    }
-)
-
 # Assumes your Streamable HTTP server is running at this URL
 streamable_server = MCPServerStreamableHttp(
     name="My_Streamable_Server", # Tools will be accessed like My_Streamable_Server.tool_name
@@ -140,7 +120,7 @@ streamable_server = MCPServerStreamableHttp(
     # Use pre_loaded_tools if you want to avoid pulling tool list on every server initialization
     # Warning: when using this parameter, tool selection will be limited to a list of pre-loaded tools
     # and no tool validation will be performed, make sure provided tools match the expected server schema
-    pre_loaded_tools=[pre_loaded_tool]
+    pre_loaded_tools=[read_file_tool]
 )
 ```
 </Accordion>
