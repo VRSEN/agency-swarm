@@ -46,7 +46,7 @@ From a technical perspective, in Agency Swarm, agents are essentially wrappers f
 | Temperature *(optional)* | `temperature` | Controls randomness in the agent's responses. Lower values make responses more focused and deterministic. Default: `None` |
 | Top P *(optional)* | `top_p` | Alternative to temperature for controlling response randomness. Default: `None` |
 | Response Format *(optional)* | `response_format` | Specifies the format for agent responses. Can be a string, dict, or Pydantic BaseModel. Default: `"auto"` |
-| Tools Folder *(optional)* | `tools_folder` | Path to a directory containing tools. Each tool must be in a separate file named after the tool class. Default: `None` |
+| Tools Folder *(optional)* | `tools_folder` | Path to a directory containing tool files. Each file can hold a class that inherits from `BaseTool` or a function decorated with `@function_tool`. Default: `None` |
 | Files Folder *(optional)* | `files_folder` | Path or list of paths to directories containing files for the agent. Default: `None` |
 | Schemas Folder *(optional)* | `schemas_folder` | Path or list of paths to directories containing OpenAPI schemas. Default: `None` |
 | API Headers *(optional)* | `api_headers` | Headers for OpenAPI requests. Keys must match schema filenames. Default: Empty dict |
