@@ -236,11 +236,6 @@ def test_tools_folder_autoload():
     agent = Agent(name="test", instructions="test", tools_folder="tests/data/tools")
     tool_names = [tool.name for tool in agent.tools]
     assert "ExampleTool1" in tool_names
-
-
-def test_tools_folder_autoload_function_tool():
-    agent = Agent(name="test", instructions="test", tools_folder="tests/data/tools")
-    tool_names = [tool.name for tool in agent.tools]
     assert "sample_tool" in tool_names
 
 

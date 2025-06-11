@@ -64,9 +64,9 @@ icon: "code"
   </Step>
 
   <Step title="Create Tools">
-    Define your custom tools. In **v1.x** you can keep using the class-based `BaseTool`
-    pattern or, preferably, create plain functions decorated with
-    `@function_tool`.
+    Define your custom tools by extending the `BaseTool` class and implementing
+    the `run` method. Starting with **v1.x** you can also create plain functions
+    decorated with `@function_tool`.
 
     **Class-based example:**
 
@@ -99,8 +99,8 @@ icon: "code"
             # Your custom tool logic goes here
             do_something(self.example_field)
 
-        # Return the result of the tool's operation as a string
-        return "Result of MyCustomTool operation"
+            # Return the result of the tool's operation as a string
+            return "Result of MyCustomTool operation"
     ```
 
     **Function-based example:**
