@@ -70,7 +70,7 @@ The migration from v0.x to v1.x represents a fundamental shift in how Agency Swa
 - **v0.x**: Custom `Agent` class with Assistants API integration
 - **v1.x**: `agency_swarm.Agent` extends `agents.Agent`, incorporating tools, subagent registration, and file handling
 
-### Conversation History Persistence {#conversation-history-persistence}
+### Conversation History Persistence
 
 This is an important architectural difference between versions:
 
@@ -118,7 +118,7 @@ agency = Agency(
 **Production Deployment**: Thread callbacks are required in both v0.x and v1.x for production deployment to persist conversation state. The callback signatures remain the same, but the data format changes.
 </Warning>
 
-## Breaking Changes {#breaking-changes}
+## Breaking Changes
 
 <Warning>
 **These changes will cause your v0.x code to crash in v1.x and require immediate attention:**
@@ -128,6 +128,64 @@ agency = Agency(
 3. **Thread callbacks data format**: Now stores complete conversation histories instead of thread IDs
 4. **Async-only methods**: `get_response()` and `get_response_stream()` are async and required `await`
 </Warning>
+
+## Quick-Migration Checklist
+
+> For a concise overview, consult the table below. See the [Step-by-Step Migration](#step-by-step-migration) section for full details.
+
+| What you used in v0.x | Still works? | Action required in v1.x |
+|--------------------------|----------------|---------------------------|
+| `get_completion()` (sync) | Yes – kept for now | Nothing • **Recommended:** rename to `await get_response()` |
+| `get_completion_stream()` | No | Replace with `await get_response_stream()` (async only) |
+| `response_format={...}` | No | Delete this arg and set `output_type=PydanticModel` on the `Agent` |
+| `response_validator=...` | No | Move your logic to `output_guardrails` / `input_guardrails` |
+| `threads_callbacks={...}` (persistence) | No | Split into `load_threads_callback` & `save_threads_callback` and store full histories |
+
+<Steps>
+<Step title="Upgrade your dependencies">
+See the [Installation](#installation) section above for package installation commands.
+</Step>
+
+<Step title="Replace response_format">
+<CodeGroup>
+```python ⛔️ old – will raise NotImplementedError
+agency.get_completion("Hi", response_format={"type": "json_schema", ...})
+```
+
+```python ✅ new
+class Msg(BaseModel):
+    content: str
+agent = Agent(output_type=Msg, ...)
+```
+</CodeGroup>
+</Step>
+
+<Step title="Move response_validator logic">
+<CodeGroup>
+```python ⛔️ old
+agent = Agent(response_validator=my_check, ...)
+```
+
+```python ✅ new
+@output_guardrail
+async def my_check(ctx, agent, text): ...
+agent = Agent(output_guardrails=[my_check], ...)
+```
+</CodeGroup>
+</Step>
+
+<Step title="Update streaming & async calls">
+<CodeGroup>
+```python ⛔️ old
+result = agency.get_completion_stream("Hello")
+```
+
+```python ✅ new
+result = await agency.get_response_stream("Hello")
+```
+</CodeGroup>
+</Step>
+</Steps>
 
 ## Step-by-Step Migration
 
@@ -146,8 +204,8 @@ Update how you pass persistence callbacks to the Agency constructor. See the [Co
 </Step>
 
 <Step title="Update Agency Initialization">
-**New Pattern (Recommended)**:
-```python
+<CodeGroup>
+```python New Pattern (Recommended)
 agency = Agency(
     entry_point_agent,  # Positional argument
     communication_flows=[(agent1, agent2)],
@@ -156,13 +214,13 @@ agency = Agency(
 )
 ```
 
-**Deprecated Pattern (Still Works)**:
-```python
+```python Deprecated Pattern (Still Works)
 agency = Agency(
     agency_chart=[agent1, [agent1, agent2]],  # Will show warning
     # ... other parameters
 )
 ```
+</CodeGroup>
 </Step>
 
 <Step title="Update Agent Definitions">
@@ -228,13 +286,12 @@ async def my_tool_with_context(ctx: RunContextWrapper[Any], arg1: str) -> str:
 </Step>
 
 <Step title="Update Interaction Calls (Optional)">
-**v0.x (still works in v1.x with deprecation warning)**:
-```python
+<CodeGroup>
+```python v0.x (still works in v1.x with deprecation warning)
 result = agency.get_completion("Hello", recipient_agent="Agent1")
 ```
 
-**v1.x Recommended** (async):
-```python
+```python v1.x Recommended (async)
 import asyncio
 
 async def main():
@@ -246,11 +303,12 @@ async def main():
 
 asyncio.run(main())
 ```
+</CodeGroup>
 </Step>
 
 <Step title="Update response validation">
-**v0.x**:
-```python
+<CodeGroup>
+```python v0.x
 class TestAgent(Agent):
     def __init__(self):
         super().__init__(
@@ -268,8 +326,7 @@ class TestAgent(Agent):
         return message
 ```
 
-**v1.x** (guardrails) - See [Breaking Changes](#breaking-changes) for details:
-```python
+```python v1.x (guardrails)
 @output_guardrail
 async def agent_output_guardrail(
     ctx: RunContextWrapper, agent: Agent, agent_response: str
@@ -288,9 +345,10 @@ agent = Agent(
     # input_guardrails are defined in a similar way
 )
 ```
+</CodeGroup>
 
 **What Changed:**
-- **Breaking Change**: `response_validator` parameter is completely removed from Agent class
+- **Breaking Change**: `response_validator` parameter is completely removed from Agent class - See [Breaking Changes](#breaking-changes) for details
 - Validation is now passed using `output_guardrails` and `input_guardrails`
 - Retry validation logic is no longer incorporated within the library. Users have to implement their own retry logic by catching respective errors.
 </Step>
@@ -349,7 +407,7 @@ agent = Agent(
 | `response_format={"type": "json_schema", ...}` | `output_type=PydanticModel` on Agent |
 | `get_completion(response_format=...)` | Agent-level `output_type` configuration |
 
-## Complete Before/After Example {#complete-before-after-example}
+## Complete Before/After Example
 
 <Tabs>
 <Tab title="v0.x (Current Production)">
