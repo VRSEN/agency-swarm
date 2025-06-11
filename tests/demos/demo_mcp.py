@@ -85,8 +85,9 @@ print(
     "  2. Filesystem Server: Connects to a local filesystem server to list/read files."
 )
 print("-----------------------------------------------------")
-print("IMPORTANT: Ensure the SSE server is running in a separate terminal:")
+print("IMPORTANT: Ensure the SSE and HTTP servers are running in a separate terminal:")
 print("$ python tests/scripts/sse_server.py")
+print("$ python tests/scripts/http_server.py")
 print("-----------------------------------------------------")
 print("Starting interactive demo session...")
 print("Try asking the agent to perform tasks using its MCP tools, for example:")
