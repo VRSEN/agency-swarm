@@ -188,10 +188,11 @@ class _MCPServerWithClientSession(MCPServer, abc.ABC):
                     result_future.set_result(result)
                 except asyncio.TimeoutError:
                     result_future.set_exception(TimeoutError(f"MCP server call '{method}' timed out after {timeout}s"))
-                except Exception as e:
-                    result_future.set_exception(e)
+                except BaseException as e:
+                    logger.error(f"Error in MCP server method '{method}': {e}")
+                    result_future.set_exception(e)                    
 
-        except Exception as e:
+        except BaseException as e:
             # Extract the root cause from ExceptionGroup if present
             root_exception = self._extract_root_exception(e)
             # Store the actual meaningful exception for detailed error reporting
@@ -260,8 +261,15 @@ class _MCPServerWithClientSession(MCPServer, abc.ABC):
             raise RuntimeError("MCP server is not running or has been shut down.")
 
         result_future = Future()
-        self._loop.call_soon_threadsafe(self._queue.put_nowait, (method, args, result_future, timeout))
-        return result_future.result()  # blocks until result is ready
+        try:
+            self._loop.call_soon_threadsafe(self._queue.put_nowait, (method, args, result_future, timeout))
+            # Add timeout to prevent indefinite hanging if event loop crashes
+            import concurrent.futures
+            return result_future.result(timeout=timeout + 2)  # Add 2 seconds buffer to method timeout
+        except concurrent.futures.TimeoutError:
+            # Event loop likely crashed or is unresponsive
+            self._initialized = False
+            raise RuntimeError(f"MCP server operation '{method}' timed out - server may have crashed or become unresponsive")
 
     # Synchronous public methods
     def connect(self):
@@ -303,7 +311,7 @@ class _MCPServerWithClientSession(MCPServer, abc.ABC):
             logger.error("Session initialization timed out")
             await self._cleanup_async()
             raise
-        except Exception as e:
+        except BaseException as e:
             logger.error(f"Error initializing MCP server: {e}")
             await self._cleanup_async()
             raise
@@ -322,10 +330,11 @@ class _MCPServerWithClientSession(MCPServer, abc.ABC):
                 # Fetch the tools from the server
                 self._tools_list = (await self.session.list_tools()).tools
                 tools = self._tools_list
-        except Exception as e:
+        except BaseException as e:
             # Check if it's a connection closed error and attempt to reconnect
             if self._is_connection_closed_error(e):
-                logger.info(f"Connection closed, attempting to reconnect: {e}")
+                error_message = e if str(e) != "" else type(e).__name__
+                logger.info(f"Connection closed, attempting to reconnect: {error_message}")
                 await self._reconnect_async()
                 # Retry the operation after reconnection
                 if self._cache_tools_list and not self._cache_dirty and self._tools_list:
@@ -347,11 +356,14 @@ class _MCPServerWithClientSession(MCPServer, abc.ABC):
             raise UserError("Server not initialized. Make sure you call `connect()` first.")
 
         try:
-            return await self.session.call_tool(tool_name, arguments)
-        except Exception as e:
+            result = await self.session.call_tool(tool_name, arguments)
+            return result
+        except BaseException as e:
             # Check if it's a connection closed error and attempt to reconnect
             if self._is_connection_closed_error(e):
-                logger.info(f"Connection closed, attempting to reconnect: {e}")
+                # Closed connection error does not include an error message
+                error_message = e if str(e) != "" else type(e).__name__
+                logger.info(f"Connection closed, attempting to reconnect: {error_message}")
                 await self._reconnect_async()
                 # Retry the tool call after reconnection
                 return await self.session.call_tool(tool_name, arguments)
@@ -363,8 +375,9 @@ class _MCPServerWithClientSession(MCPServer, abc.ABC):
             try:
                 await self.exit_stack.aclose()
                 self.session = None
-            except Exception as e:
+            except BaseException as e:
                 logger.error(f"Error cleaning up server: {e}")
+                raise e
 
     @property
     def strict(self) -> bool:
@@ -408,6 +421,7 @@ class _MCPServerWithClientSession(MCPServer, abc.ABC):
             "ConnectionResetError",
             "BrokenPipeError",
             "ConnectionAbortedError",
+            "CancelledError",
         ]
 
         exception_name = type(exception).__name__
@@ -418,7 +432,11 @@ class _MCPServerWithClientSession(MCPServer, abc.ABC):
             return True
 
         # Check if error message contains connection closed indicators
-        closed_indicators = ["closed", "connection closed", "broken pipe", "connection reset", "connection aborted"]
+        closed_indicators = [
+            "closed", "connection closed", "broken pipe", "connection reset", 
+            "connection aborted", "cancelled", "canceled", "would block",
+            "stream closed", "socket closed", "end of stream"
+        ]
 
         return any(indicator in exception_str for indicator in closed_indicators)
 
@@ -431,7 +449,7 @@ class _MCPServerWithClientSession(MCPServer, abc.ABC):
             if self.session:
                 await self.exit_stack.aclose()
                 self.session = None
-        except Exception as e:
+        except BaseException as e:
             logger.warning(f"Error during cleanup before reconnect: {e}")
 
         # Reset the exit stack for new connection
