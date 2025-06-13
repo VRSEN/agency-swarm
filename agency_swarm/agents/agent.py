@@ -592,6 +592,7 @@ class Agent:
                 if not f.startswith(".")
                 and not f.startswith("__")
                 and not f.endswith("_test.py")
+                and not f.startswith("test_")
             ]
             f_paths = [os.path.join(self.tools_folder, f) for f in f_paths]
             for f_path in f_paths:
