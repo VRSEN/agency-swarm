@@ -4,11 +4,13 @@ description: "Serving your tools as MCP (Model Context Protocol) endpoints."
 icon: "server"
 ---
 
-Agency Swarm supports serving your tools as production-ready MCP (Model Context Protocol) endpoints. This enables AI models to interact with your tools remotely over HTTP, making them accessible to any MCP-compatible client or AI system.
+Agency Swarm supports serving your tools as production-ready MCP (Model Context Protocol) endpoints.  
+This enables AI models to interact with your tools remotely over HTTP, making them accessible to any MCP-compatible client or AI system.
 
 ## Setting Up MCP Server
 
-To expose tools as a standalone MCP endpoint, use the `run_mcp()` function from the integrations module that will create an MCP server and use the streamable HTTP protocol for communication.
+To expose tools as a standalone MCP endpoint, use the `run_mcp()` function from the integrations module.  
+This will create an MCP server that will serve provided tools over the streamable HTTP protocol.
 
 ### Example: Serving Individual Tools
 
@@ -25,7 +27,7 @@ class TestTool(BaseTool):
         return "Test tool called with input: " + self.input
 
 # Start MCP server with individual tools
-run_mcp(tools=[ExampleTool])
+run_mcp(tools=[TestTool])
 
 # Or provide tools folder instead
 run_mcp(tools="path/to/tools/directory")
