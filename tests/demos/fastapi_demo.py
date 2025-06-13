@@ -39,5 +39,5 @@ app = run_fastapi(agencies=[agency], tools=[ExampleTool], return_app=True)
 # agency.run_fastapi()
 
 if __name__ == "__main__":
-    print("\nAfter endpoints are deployed, you can run test_request_demo.py to test them.\n")
+    print("\nAfter endpoints are deployed, you can run fastapi_request_demo.py to test them.\n")
     uvicorn.run(app, host="0.0.0.0", port=7860)
