@@ -56,7 +56,7 @@ class AgentFileManager:
 
         try:
             with open(fpath, "rb") as f:
-                uploaded_file = self.agent._openai_client_sync.files.create(file=f, purpose="assistants")
+                uploaded_file = self.agent.client_sync.files.create(file=f, purpose="assistants")
             logger.info(
                 f"Agent {self.agent.name}: Successfully uploaded file {fpath.name} to OpenAI. "
                 f"File ID: {uploaded_file.id}"
@@ -81,7 +81,7 @@ class AgentFileManager:
             try:
                 # First, check if the vector store still exists.
                 try:
-                    self.agent._openai_client_sync.vector_stores.retrieve(
+                    self.agent.client_sync.vector_stores.retrieve(
                         vector_store_id=self.agent._associated_vector_store_id
                     )
                     logger.debug(
@@ -97,7 +97,7 @@ class AgentFileManager:
                     return uploaded_file.id  # File is uploaded, but association is skipped. Early exit.
 
                 # If VS exists, proceed to associate the file
-                self.agent._openai_client_sync.vector_stores.files.create(
+                self.agent.client_sync.vector_stores.files.create(
                     vector_store_id=self.agent._associated_vector_store_id, file_id=uploaded_file.id
                 )
                 logger.info(
@@ -171,7 +171,7 @@ class AgentFileManager:
                 f"Agent {self.agent.name}: files_folder '{folder_str}' does not specify a Vector Store ID "
                 "with '_vs_' suffix. Creating a new Vector Store."
             )
-            created_vs = self.agent._openai_client_sync.vector_stores.create(name=openai_vs_name)
+            created_vs = self.agent.client_sync.vector_stores.create(name=openai_vs_name)
             vs_id = created_vs.id
             new_folder_name = f"{folder_name}_{vs_id}"
             parent_dir = Path(base_path_str).parent
