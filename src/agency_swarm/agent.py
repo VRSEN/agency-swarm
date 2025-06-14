@@ -392,8 +392,8 @@ class Agent(BaseAgent[MasterContext]):
 
         # --- Internal State Init ---
         self._openai_client = None
-        # Needed for file operations
-        self._openai_client_sync = OpenAI()
+        # Sync OpenAI client is lazily initialised when required
+        self._openai_client_sync = None
         self._subagents = {}
         # _thread_manager and _agency_instance are injected by Agency
 
