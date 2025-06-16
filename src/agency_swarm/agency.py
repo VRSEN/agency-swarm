@@ -22,6 +22,16 @@ logger = logging.getLogger(__name__)
 AgencyChartEntry = Agent | list[Agent]
 AgencyChart = list[AgencyChartEntry]
 
+# --- Import visualization dependencies (with fallbacks) ---
+try:
+    import matplotlib.patches as mpatches
+    import matplotlib.pyplot as plt
+    import networkx as nx
+
+    HAS_VISUALIZATION_DEPS = True
+except ImportError:
+    HAS_VISUALIZATION_DEPS = False
+
 
 # --- Agency Class ---
 class Agency:
@@ -234,6 +244,9 @@ class Agency:
             raise ValueError("Agency must contain at least one agent.")
         logger.info(f"Registered agents: {list(self.agents.keys())}")
         logger.info(f"Designated entry points: {[ep.name for ep in self.entry_points]}")
+
+        # --- Store communication flows for visualization ---
+        self._derived_communication_flows = _derived_communication_flows
 
         # --- Configure Agents & Communication ---
         # _configure_agents will now use _derived_communication_flows determined above
@@ -750,3 +763,473 @@ class Agency:
             "Use get_response_stream() for actual streaming functionality. "
             "This method will be removed in v1.1."
         )
+
+    def get_agency_structure(
+        self, include_tools: bool = True, layout_algorithm: str = "hierarchical"
+    ) -> dict[str, Any]:
+        """
+        Returns a ReactFlow-compatible JSON structure representing the agency's organization.
+
+        Args:
+            include_tools (bool): Whether to include agent tools as separate nodes
+            layout_algorithm (str): Layout algorithm hint ("hierarchical", "circular", "force-directed")
+
+        Returns:
+            dict: ReactFlow-compatible structure with nodes and edges
+
+        Example:
+            {
+                "nodes": [
+                    {
+                        "id": "agent1",
+                        "type": "agent",
+                        "position": {"x": 100, "y": 100},
+                        "data": {
+                            "label": "Agent Name",
+                            "description": "Agent description",
+                            "isEntryPoint": True,
+                            "toolCount": 3,
+                            "instructions": "Brief instructions..."
+                        }
+                    }
+                ],
+                "edges": [
+                    {
+                        "id": "agent1->agent2",
+                        "source": "agent1",
+                        "target": "agent2",
+                        "type": "communication"
+                    }
+                ]
+            }
+        """
+        nodes = []
+        edges = []
+        node_positions = self._calculate_node_positions(layout_algorithm)
+
+        # Create agent nodes
+        for i, (agent_name, agent) in enumerate(self.agents.items()):
+            # Get tools info
+            tools_info = self._extract_agent_tools_info(agent) if include_tools else []
+
+            # Create agent node
+            agent_node = {
+                "id": agent_name,
+                "type": "agent",
+                "position": node_positions.get(agent_name, {"x": i * 200, "y": 100}),
+                "data": {
+                    "label": agent.name,
+                    "description": getattr(agent, "description", None) or "No description",
+                    "isEntryPoint": agent in self.entry_points,
+                    "toolCount": len(tools_info),
+                    "tools": tools_info,
+                    "instructions": self._truncate_text(getattr(agent, "instructions", "") or "", 100),
+                    "model": self._get_agent_model_info(agent),
+                    "hasSubagents": len(getattr(agent, "_subagents", {})) > 0,
+                },
+            }
+            nodes.append(agent_node)
+
+            # Create tool nodes if requested
+            if include_tools:
+                tool_y_offset = 150
+                for j, tool_info in enumerate(tools_info):
+                    tool_node = {
+                        "id": f"{agent_name}_tool_{j}",
+                        "type": "tool",
+                        "position": {
+                            "x": node_positions.get(agent_name, {"x": i * 200})["x"] + (j * 120) - 60,
+                            "y": node_positions.get(agent_name, {"y": 100})["y"] + tool_y_offset,
+                        },
+                        "data": {
+                            "label": tool_info["name"],
+                            "description": tool_info["description"],
+                            "type": tool_info["type"],
+                            "parentAgent": agent_name,
+                        },
+                    }
+                    nodes.append(tool_node)
+
+                    # Edge from agent to tool
+                    edges.append(
+                        {
+                            "id": f"{agent_name}->{agent_name}_tool_{j}",
+                            "source": agent_name,
+                            "target": f"{agent_name}_tool_{j}",
+                            "type": "owns",
+                        }
+                    )
+
+        # Create communication edges from defined flows (primary method)
+        communication_edges_added = set()  # Track to avoid duplicates
+
+        if hasattr(self, "_derived_communication_flows") and self._derived_communication_flows:
+            for sender, receiver in self._derived_communication_flows:
+                edge_key = f"{sender.name}->{receiver.name}"
+                if edge_key not in communication_edges_added:
+                    edges.append(
+                        {
+                            "id": edge_key,
+                            "source": sender.name,
+                            "target": receiver.name,
+                            "type": "communication",
+                            "data": {"label": "can send messages to", "bidirectional": False},
+                        }
+                    )
+                    communication_edges_added.add(edge_key)
+        else:
+            # Fallback: extract from current agency setup if no explicit flows
+            for agent_name, agent in self.agents.items():
+                subagents = getattr(agent, "_subagents", {})
+                for subagent_name in subagents:
+                    if subagent_name in self.agents:
+                        edge_key = f"{agent_name}->{subagent_name}"
+                        if edge_key not in communication_edges_added:
+                            edges.append(
+                                {
+                                    "id": edge_key,
+                                    "source": agent_name,
+                                    "target": subagent_name,
+                                    "type": "communication",
+                                    "data": {"label": "can send messages to", "bidirectional": False},
+                                }
+                            )
+                            communication_edges_added.add(edge_key)
+
+        return {
+            "nodes": nodes,
+            "edges": edges,
+            "metadata": {
+                "agencyName": getattr(self, "name", None) or "Unnamed Agency",
+                "totalAgents": len(self.agents),
+                "totalTools": sum(len(self._extract_agent_tools_info(agent)) for agent in self.agents.values()),
+                "entryPoints": [ep.name for ep in self.entry_points],
+                "sharedInstructions": self.shared_instructions,
+                "layoutAlgorithm": layout_algorithm,
+            },
+        }
+
+    def plot_agency_chart(
+        self,
+        figsize: tuple[int, int] = (12, 8),
+        show_tools: bool = True,
+        save_path: str | None = None,
+        layout: str = "spring",
+        show_plot: bool = True,
+    ) -> None:
+        """
+        Generates a visual chart of the agency structure using matplotlib and networkx.
+        Reuses the same data structure as get_agency_structure() for consistency.
+
+        Args:
+            figsize: Figure size as (width, height)
+            show_tools: Whether to include agent tools in the visualization
+            save_path: Optional path to save the chart image
+            layout: Graph layout algorithm ("spring", "circular", "hierarchical", "shell")
+            show_plot: Whether to display the plot (set False for headless environments)
+        """
+        if not HAS_VISUALIZATION_DEPS:
+            raise ImportError("Visualization dependencies are required. Install with: pip install matplotlib networkx")
+
+        # Get the standardized agency structure data
+        layout_algorithm = "hierarchical" if layout == "hierarchical" else "force_directed"
+        agency_data = self.get_agency_structure(include_tools=show_tools, layout_algorithm=layout_algorithm)
+
+        # Create directed graph from the standardized data
+        G = nx.DiGraph()
+
+        # Add nodes from agency data
+        for node in agency_data["nodes"]:
+            node_id = node["id"]
+            node_data = node["data"]
+            node_type = node["type"]
+
+            G.add_node(
+                node_id,
+                node_type=node_type,
+                is_entry=node_data.get("isEntryPoint", False),
+                tool_count=node_data.get("toolCount", 0),
+                description=node_data.get("description", ""),
+                tool_name=node_data.get("label", "") if node_type == "tool" else None,
+                parent_agent=node_data.get("parentAgent", None) if node_type == "tool" else None,
+            )
+
+        # Add edges from agency data
+        for edge in agency_data["edges"]:
+            edge_type = "communication" if edge["type"] == "communication" else "owns"
+            G.add_edge(edge["source"], edge["target"], edge_type=edge_type)
+
+        # Calculate layout
+        if layout == "spring":
+            pos = nx.spring_layout(G, k=2, iterations=50)
+        elif layout == "circular":
+            pos = nx.circular_layout(G)
+        elif layout == "shell":
+            # Group by node type for shell layout
+            agent_nodes = [n for n, d in G.nodes(data=True) if d.get("node_type") == "agent"]
+            tool_nodes = [n for n, d in G.nodes(data=True) if d.get("node_type") == "tool"]
+            pos = nx.shell_layout(G, nlist=[agent_nodes, tool_nodes] if tool_nodes else [agent_nodes])
+        elif layout == "hierarchical":
+            pos = self._hierarchical_layout(G)
+        else:
+            pos = nx.spring_layout(G)
+
+        # Create the plot
+        plt.figure(figsize=figsize)
+        plt.title(
+            f"Agency Structure: {getattr(self, 'name', 'Unnamed Agency')}", fontsize=16, fontweight="bold", pad=20
+        )
+
+        # Separate nodes by type
+        agent_nodes = [n for n, d in G.nodes(data=True) if d.get("node_type") == "agent"]
+        tool_nodes = [n for n, d in G.nodes(data=True) if d.get("node_type") == "tool"]
+        entry_point_nodes = [n for n, d in G.nodes(data=True) if d.get("is_entry", False)]
+
+        # Draw edges
+        comm_edges = [(u, v) for u, v, d in G.edges(data=True) if d.get("edge_type") == "communication"]
+        owns_edges = [(u, v) for u, v, d in G.edges(data=True) if d.get("edge_type") == "owns"]
+
+        if comm_edges:
+            nx.draw_networkx_edges(
+                G,
+                pos,
+                edgelist=comm_edges,
+                edge_color="blue",
+                arrows=True,
+                arrowsize=20,
+                arrowstyle="->",
+                width=2,
+                alpha=0.7,
+            )
+
+        if owns_edges:
+            nx.draw_networkx_edges(
+                G,
+                pos,
+                edgelist=owns_edges,
+                edge_color="gray",
+                arrows=True,
+                arrowsize=15,
+                arrowstyle="->",
+                width=1,
+                alpha=0.5,
+                style="dashed",
+            )
+
+        # Draw nodes
+        if agent_nodes:
+            # Entry points in red, regular agents in blue
+            regular_agents = [n for n in agent_nodes if n not in entry_point_nodes]
+
+            if entry_point_nodes:
+                nx.draw_networkx_nodes(G, pos, nodelist=entry_point_nodes, node_color="red", node_size=3000, alpha=0.8)
+
+            if regular_agents:
+                nx.draw_networkx_nodes(
+                    G, pos, nodelist=regular_agents, node_color="lightblue", node_size=2500, alpha=0.8
+                )
+
+        if tool_nodes:
+            nx.draw_networkx_nodes(
+                G, pos, nodelist=tool_nodes, node_color="lightgreen", node_size=1500, node_shape="s", alpha=0.7
+            )
+
+        # Add labels
+        labels = {}
+        for node, data in G.nodes(data=True):
+            if data.get("node_type") == "agent":
+                tool_count = data.get("tool_count", 0)
+                labels[node] = f"{node}\n({tool_count} tools)" if show_tools else node
+            else:
+                labels[node] = data.get("tool_name", node)
+
+        nx.draw_networkx_labels(G, pos, labels=labels, font_size=9, font_weight="bold")
+
+        # Create legend
+        legend_elements = [
+            mpatches.Patch(color="red", label="Entry Point Agents", alpha=0.8),
+            mpatches.Patch(color="lightblue", label="Regular Agents", alpha=0.8),
+        ]
+
+        if tool_nodes:
+            legend_elements.append(mpatches.Patch(color="lightgreen", label="Tools", alpha=0.7))
+
+        legend_elements.extend(
+            [
+                mpatches.Patch(color="blue", label="Communication Flow", alpha=0.7),
+            ]
+        )
+
+        if owns_edges:
+            legend_elements.append(mpatches.Patch(color="gray", label="Tool Ownership", alpha=0.5))
+
+        plt.legend(handles=legend_elements, loc="upper left", bbox_to_anchor=(1, 1))
+
+        # Add agency info
+        info_text = f"Agents: {len(self.agents)}\n"
+        if self.entry_points:
+            info_text += f"Entry Points: {', '.join(ep.name for ep in self.entry_points)}\n"
+        if self.shared_instructions:
+            info_text += "Shared Instructions: Yes"
+
+        plt.figtext(
+            0.02,
+            0.02,
+            info_text,
+            fontsize=9,
+            alpha=0.7,
+            bbox={"boxstyle": "round,pad=0.3", "facecolor": "white", "alpha": 0.8},
+        )
+
+        plt.axis("off")
+        plt.tight_layout()
+
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches="tight")
+            logger.info(f"Agency chart saved to {save_path}")
+
+        if show_plot:
+            plt.show()
+        else:
+            plt.close()  # Clean up the figure to prevent memory leaks
+
+    def _extract_agent_tools_info(self, agent: Agent) -> list[dict[str, Any]]:
+        """Extract structured information about an agent's tools, excluding communication tools."""
+        tools_info = []
+
+        if not hasattr(agent, "tools") or not agent.tools:
+            return tools_info
+
+        for tool in agent.tools:
+            tool_name = getattr(tool, "name", type(tool).__name__)
+            tool_type = type(tool).__name__
+
+            # Skip communication tools (send_message_to_* tools)
+            if (
+                tool_name.startswith("send_message_to_")
+                or tool_type == "SendMessage"
+                or "send_message" in tool_name.lower()
+            ):
+                continue
+
+            tool_info = {
+                "name": tool_name,
+                "type": tool_type,
+                "description": self._truncate_text(
+                    getattr(tool, "description", "") or getattr(tool, "__doc__", "") or "No description available", 80
+                ),
+            }
+            tools_info.append(tool_info)
+
+        return tools_info
+
+    def _get_agent_model_info(self, agent: Agent) -> str:
+        """Extract model information from an agent."""
+        if hasattr(agent, "model_settings") and agent.model_settings:
+            if hasattr(agent.model_settings, "model"):
+                return agent.model_settings.model
+
+        if hasattr(agent, "model") and agent.model:
+            return agent.model
+
+        return "unknown"
+
+    def _truncate_text(self, text: str, max_length: int) -> str:
+        """Truncate text to specified length with ellipsis."""
+        if not text:
+            return ""
+        return text[:max_length] + "..." if len(text) > max_length else text
+
+    def _calculate_node_positions(self, layout_algorithm: str) -> dict[str, dict[str, int]]:
+        """Calculate node positions based on layout algorithm."""
+        positions = {}
+        agent_count = len(self.agents)
+
+        if layout_algorithm == "hierarchical":
+            # Entry points at top, others below
+            entry_points = [ep.name for ep in self.entry_points]
+            regular_agents = [name for name in self.agents.keys() if name not in entry_points]
+
+            # Position entry points
+            for i, agent_name in enumerate(entry_points):
+                positions[agent_name] = {"x": i * 300 + 100, "y": 50}
+
+            # Position regular agents below
+            for i, agent_name in enumerate(regular_agents):
+                positions[agent_name] = {"x": i * 300 + 100, "y": 250}
+
+        elif layout_algorithm == "circular":
+            import math
+
+            for i, agent_name in enumerate(self.agents.keys()):
+                angle = 2 * math.pi * i / agent_count
+                radius = 200
+                positions[agent_name] = {
+                    "x": int(300 + radius * math.cos(angle)),
+                    "y": int(300 + radius * math.sin(angle)),
+                }
+        else:  # force-directed or default
+            for i, agent_name in enumerate(self.agents.keys()):
+                positions[agent_name] = {"x": i * 250, "y": 100}
+
+        return positions
+
+    def _hierarchical_layout(self, G: Any) -> dict[str, tuple[float, float]]:
+        """Create a hierarchical layout for the graph."""
+        if not HAS_VISUALIZATION_DEPS:
+            return {}
+
+        # Try to create layers based on entry points and communication flows
+        try:
+            layers = {}
+            entry_points = [
+                node
+                for node, data in G.nodes(data=True)
+                if data.get("is_entry", False) and data.get("node_type") == "agent"
+            ]
+
+            if entry_points:
+                # Entry points at layer 0
+                for ep in entry_points:
+                    layers[ep] = 0
+
+                # BFS to assign layers
+                visited = set(entry_points)
+                queue = [(ep, 0) for ep in entry_points]
+
+                while queue:
+                    node, layer = queue.pop(0)
+                    for successor in G.successors(node):
+                        if successor not in visited and G.nodes[successor].get("node_type") == "agent":
+                            layers[successor] = layer + 1
+                            visited.add(successor)
+                            queue.append((successor, layer + 1))
+
+            # Convert to positions
+            pos = {}
+            layer_counts = {}
+
+            for node, layer in layers.items():
+                if layer not in layer_counts:
+                    layer_counts[layer] = 0
+
+                x = layer_counts[layer] * 300 + 100
+                y = layer * 150 + 50
+                pos[node] = (x, y)
+                layer_counts[layer] += 1
+
+            # Add tools below their parent agents
+            for node, data in G.nodes(data=True):
+                if data.get("node_type") == "tool":
+                    parent = data.get("parent_agent")
+                    if parent in pos:
+                        parent_x, parent_y = pos[parent]
+                        # Offset tools below parent
+                        tool_index = len([n for n in pos.keys() if n.startswith(f"{parent}_tool")])
+                        pos[node] = (parent_x + (tool_index * 80) - 40, parent_y + 120)
+
+            return pos
+
+        except Exception:
+            # Fallback to spring layout
+            return nx.spring_layout(G)
