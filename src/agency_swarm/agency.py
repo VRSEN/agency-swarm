@@ -1,4 +1,5 @@
 # --- agency.py ---
+import concurrent.futures
 import logging
 import warnings
 from collections.abc import AsyncGenerator
@@ -687,11 +688,9 @@ class Agency:
         # Handle event loop edge cases for synchronous wrapper
         try:
             # Check if we're already in an event loop
-            loop = asyncio.get_running_loop()
+            asyncio.get_running_loop()
             # If we reach here, there's already a running loop
             # We need to create a new thread to run the async function
-            import concurrent.futures
-            import threading
 
             def run_in_thread():
                 # Create new event loop in the thread

@@ -26,40 +26,52 @@ from agency_swarm import Agency, Agent  # noqa: E402
 PERSISTENCE_DIR = Path(tempfile.mkdtemp(prefix="thread_persistence_"))
 
 
-def save_thread_data_to_file(all_threads_data: dict[str, Any]):
+def save_threads(new_threads: dict[str, Any]):
     """
     Save all threads data to a file.
 
-    all_threads_data is a dictionary mapping thread_ids to their conversation data.
-    Thread IDs follow the format "sender->recipient", for example:
-    - "user->AssistantAgent" for user interactions with AssistantAgent
-    - "AssistantAgent->HelperAgent" for agent-to-agent communication
+    Args:
+        new_threads: Dictionary mapping thread_ids to their conversation data.
+                    Thread IDs follow the format "sender->recipient", for example:
+                    - "user->AssistantAgent" for user interactions with AssistantAgent
+                    - "AssistantAgent->HelperAgent" for agent-to-agent communication
 
     Each thread maintains completely isolated conversation history.
+
+    Note: In production, you would typically use a closure to capture chat_id
+    or use a database with user/session context for saving threads.
     """
     file_path = PERSISTENCE_DIR / "thread_data.json"
     with open(file_path, "w") as f:
-        json.dump(all_threads_data, f, indent=2)
+        json.dump(new_threads, f, indent=2)
 
     # Log the structure for demonstration
-    print(f"Saved thread data with {len(all_threads_data)} thread(s):")
-    for thread_id in all_threads_data.keys():
+    print(f"Saved thread data with {len(new_threads)} thread(s):")
+    for thread_id in new_threads.keys():
         print(f"  - Thread: {thread_id}")
 
 
-def load_thread_data_from_file() -> dict[str, Any]:
+def load_threads(chat_id: str) -> dict[str, Any]:
     """
-    Load ALL threads data from file.
+    Load ALL threads data from file for a specific chat session.
+
+    Args:
+        chat_id: The chat session identifier to load threads for.
 
     Returns:
         Dictionary mapping thread_ids to their conversation data.
         Each thread data dict should have 'items' and 'metadata' keys.
         Returns empty dict if no data exists.
 
-    Note: This demonstrates the correct callback signature where load_threads_callback
-    takes NO parameters and returns ALL threads for the current context.
+    Note: This demonstrates the correct callback signature where the load_threads
+    function accepts a chat_id parameter, which is passed via lambda closure.
     """
+    # In this demo, we use a simple file for simplicity, but in production
+    # you would typically use the chat_id to load session-specific data from a database
     file_path = PERSISTENCE_DIR / "thread_data.json"
+
+    print(f"Loading threads for chat_id: {chat_id}")
+
     if not file_path.exists():
         print("No existing thread data file found - starting with empty threads")
         return {}
@@ -82,12 +94,15 @@ assistant_agent = Agent(
     model_settings=ModelSettings(temperature=0.0),  # Deterministic responses
 )
 
+# Define chat_id for demonstration - in production, this would come from your session management
+chat_id = "demo_session"
+
 # --- Create Agency Instance (v1.x Pattern) ---
 agency = Agency(
     assistant_agent,  # AssistantAgent is the entry point (positional argument)
     shared_instructions="Be helpful and concise in your responses.",
-    load_threads_callback=load_thread_data_from_file,
-    save_threads_callback=save_thread_data_to_file,
+    load_threads_callback=lambda: load_threads(chat_id),
+    save_threads_callback=lambda new_threads: save_threads(new_threads),
 )
 
 # Create a second agent instance for the reloaded agency (to avoid agent reuse)
@@ -101,8 +116,8 @@ assistant_agent_reloaded = Agent(
 agency_reloaded = Agency(
     assistant_agent_reloaded,  # Use NEW agent instance to prevent reuse error
     shared_instructions="Be helpful and concise in your responses.",
-    load_threads_callback=load_thread_data_from_file,
-    save_threads_callback=save_thread_data_to_file,
+    load_threads_callback=lambda: load_threads(chat_id),
+    save_threads_callback=lambda new_threads: save_threads(new_threads),
 )
 
 TEST_INFO = "blue and lucky number is 77"

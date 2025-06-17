@@ -202,19 +202,28 @@ if __name__ == "__main__":
 
 Remember, each tool code snippet you create must be IMMIDIATELY ready to use by the user. It must not contain any mocks, placeholders or hypothetical examples.
 
-### Shared State
+### Agency Context
 
-Tools can access and modify a global state across the agency to store and share data without using extra tokens in conversations.
+Tools can access and modify agency-wide context to store and share data without using extra tokens in conversations.
 
 ```python
-def run(self):
-    self._shared_state.set("my_key", "my_value")  # Store data
-    data = self._shared_state.get("my_key", "default_value")  # Retrieve data with a default
+from agents import function_tool, RunContextWrapper
+from agency_swarm import MasterContext
+
+@function_tool
+async def my_tool(ctx: RunContextWrapper[MasterContext], param: str) -> str:
+    # Access the agency context
+    context: MasterContext = ctx.context
+
+    context.set("my_key", "my_value")  # Store data
+    data = context.get("my_key", "default_value")  # Retrieve data with a default
+
+    return f"Processed {param} with context data: {data}"
 ```
 
 Use this for:
 - Large data structures expensive to pass between agents
-- Maintaining state across multiple tool calls
+- Maintaining context across multiple tool calls
 - Sharing data among tools and agents
 
 Best Practices:

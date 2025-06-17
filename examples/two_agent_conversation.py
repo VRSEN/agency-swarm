@@ -8,8 +8,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 
 from agents import function_tool
 
-from agency_swarm.agency import Agency
-from agency_swarm.agent import Agent
+from agency_swarm import Agency, Agent
 
 # Configure basic logging
 logging.basicConfig(level=logging.WARNING, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")

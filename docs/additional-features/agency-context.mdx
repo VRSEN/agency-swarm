@@ -1,0 +1,307 @@
+---
+title: "Agency Context"
+description: "Sharing data and state across tools and agents using agency context."
+icon: "database"
+---
+
+`Agency Context` is a centralized data store accessible by all tools and agents within an agency. It allows you to share data between agents, control execution flow, and maintain state across tool calls without passing large data structures in messages.
+
+<Note>
+Agency context is available when tools are deployed together with agents. If tools are deployed as separate APIs, they won't share the same context, and you'll need to implement your own state management solution.
+</Note>
+
+## Understanding Agency Context
+
+Agency context is particularly useful when your agents interact with multiple tools that need to exchange information. Here's why:
+
+- **Without Agency Context**: Suppose `Tool A` collects data that `Tool B` needs. The agent must explicitly pass this data as a parameter to `Tool B`, consuming tokens and potentially hitting message limits.
+
+![Without Agency Context](/images/shared-state-without.png)
+
+- **With Agency Context**: `Tool A` can store the required data in the agency context, and `Tool B` can retrieve it without needing direct parameter passing. This approach reduces complexity, saves tokens, and enables more sophisticated workflows.
+
+![With Agency Context](/images/shared-state-with.png)
+
+## Using Agency Context in v1.0.0-beta.1
+
+The agency context is accessed through the `MasterContext` object in function tools. The two basic operations are:
+- **Setting** a value: `ctx.context.set('key', value)`
+- **Getting** a value: `ctx.context.get('key', default_value)`
+
+You can use agency context in your function tools and access it in agents. Here's how:
+
+<Tabs>
+
+<Tab title="Function Tool: Setting a value">
+  To set a value in the agency context within a function tool, use `ctx.context.set`. For example, you can store retrieved database context:
+    ```python
+    from agents import function_tool, RunContextWrapper
+    from agency_swarm.context import MasterContext
+
+    @function_tool
+    async def query_database(ctx: RunContextWrapper[MasterContext], question: str) -> str:
+        """
+        Retrieves data from the database and stores it in agency context.
+        """
+        # Fetch data based on the question
+        context = query_database_api(question)
+
+        # Store the context in agency context
+        ctx.context.set('database_context', context)
+        ctx.context.set('last_query', question)
+
+        return "Database context has been retrieved and stored successfully."
+    ```
+</Tab>
+
+<Tab title="Function Tool: Using the value">
+  To get a value from agency context within a function tool, use `ctx.context.get`. Continuing the previous example, you can ensure that the database was queried before proceeding:
+    ```python
+    @function_tool
+    async def answer_question(ctx: RunContextWrapper[MasterContext]) -> str:
+        """
+        Provides answers based on the context stored in agency context.
+        """
+        # Access the stored context
+        context = ctx.context.get('database_context')
+        if not context:
+            return "Database context is missing. Please call query_database tool first."
+
+        # Generate an answer using the context
+        answer = f"Answer derived from context: {context}"
+        return answer
+    ```
+</Tab>
+
+<Tab title="Legacy BaseTool (Deprecated)">
+  For legacy BaseTool classes (v0.x compatibility), you can still access agency context, but this pattern is deprecated:
+    ```python
+    from agency_swarm.tools import BaseTool
+    from pydantic import Field
+
+    class QueryDatabase(BaseTool):
+        """
+        Retrieves data from the database and stores it in agency context.
+        Note: This is deprecated. Use function_tool instead.
+        """
+        question: str = Field(..., description="The query to execute.")
+
+        def run(self):
+            # Fetch data based on the question
+            context = query_database_api(self.question)
+            # Store the context in agency context (legacy way - deprecated)
+            self._shared_state.set('database_context', context)
+            return "Context has been retrieved and stored successfully."
+    ```
+</Tab>
+
+<Tab title="Agent: Accessing in Response Validation">
+  You can access agency context within your agent's response validation or other methods:
+    ```python
+    from agency_swarm import Agent
+
+    class MyAgent(Agent):
+        """
+        An agent that utilizes agency context for validation.
+        """
+        def response_validator(self, message: str) -> str:
+            """Validate the response before returning it."""
+            # Access agency context through the master context
+            # Note: This requires the agent to have access to the current context
+            context = self.shared_state.get('database_context')
+            if message not in context:
+                raise ValueError(f"Invalid response: {message} is not in context: {context}")
+            return message
+    ```
+</Tab>
+
+</Tabs>
+
+## Advanced Agency Context Patterns
+
+### Complex Data Structures
+Agency context can store any Python object, making it perfect for complex workflows:
+
+```python
+@function_tool
+async def analyze_market_data(ctx: RunContextWrapper[MasterContext], symbols: str) -> str:
+    """Analyzes multiple stocks and stores comprehensive data."""
+    symbol_list = symbols.split(',')
+
+    market_analysis = {
+        'timestamp': datetime.now().isoformat(),
+        'symbols': {},
+        'summary': {},
+        'analyst': ctx.context.current_agent_name
+    }
+
+    for symbol in symbol_list:
+        # Simulate market data fetch
+        market_analysis['symbols'][symbol] = {
+            'price': 150.0,
+            'volume': 1000000,
+            'trend': 'bullish'
+        }
+
+    # Store in agency context
+    ctx.context.set('market_analysis', market_analysis)
+    ctx.context.set('analysis_complete', True)
+
+    return f"Market analysis complete for {len(symbol_list)} symbols"
+```
+
+### Workflow Coordination
+Use agency context to coordinate multi-step workflows:
+
+```python
+@function_tool
+async def step_1_data_collection(ctx: RunContextWrapper[MasterContext], params: str) -> str:
+    """First step in a multi-step workflow."""
+    # Perform step 1
+    result = collect_data(params)
+
+    # Store progress in agency context
+    ctx.context.set('workflow_step_1', result)
+    ctx.context.set('workflow_status', 'step_1_complete')
+
+    return "Step 1 complete. Ready for step 2."
+
+@function_tool
+async def step_2_data_processing(ctx: RunContextWrapper[MasterContext]) -> str:
+    """Second step that depends on first step."""
+    # Check if step 1 is complete
+    if ctx.context.get('workflow_status') != 'step_1_complete':
+        return "Error: Step 1 must be completed first"
+
+    # Get data from step 1
+    step_1_data = ctx.context.get('workflow_step_1')
+
+    # Process the data
+    result = process_data(step_1_data)
+
+    # Update progress
+    ctx.context.set('workflow_step_2', result)
+    ctx.context.set('workflow_status', 'step_2_complete')
+
+    return "Step 2 complete. Workflow finished."
+```
+
+### Session Management
+Agency context is perfect for maintaining session state:
+
+```python
+# Initialize agency with session context
+agency = Agency(
+    entry_agent,
+    communication_flows=[(entry_agent, worker_agent)],
+    user_context={
+        'session_id': 'user_123',
+        'user_preferences': {
+            'language': 'en',
+            'timezone': 'UTC',
+            'risk_tolerance': 'moderate'
+        },
+        'session_start': datetime.now().isoformat()
+    }
+)
+```
+
+## Best Practices
+
+### Use Descriptive Keys
+Use clear, descriptive keys to avoid conflicts between different agents and workflows:
+
+```python
+# Good: Descriptive keys
+ctx.context.set('user_portfolio_analysis_2024', data)
+ctx.context.set('market_data_AAPL_realtime', market_data)
+
+# Avoid: Generic keys that might conflict
+ctx.context.set('data', data)
+ctx.context.set('result', result)
+```
+
+### Provide Default Values
+Always provide sensible defaults when retrieving data:
+
+```python
+# Good: Provides default
+user_prefs = ctx.context.get('user_preferences', {})
+risk_level = ctx.context.get('risk_tolerance', 'moderate')
+
+# Risky: No default, might return None
+risk_level = ctx.context.get('risk_tolerance')
+```
+
+### Clean Up Unneeded Data
+For long-running sessions, clean up temporary data to avoid memory issues:
+
+```python
+@function_tool
+async def cleanup_temporary_data(ctx: RunContextWrapper[MasterContext]) -> str:
+    """Cleans up temporary analysis data."""
+    temp_keys = ['temp_calculation_1', 'temp_calculation_2', 'scratch_data']
+
+    for key in temp_keys:
+        if key in ctx.context.user_context:
+            del ctx.context.user_context[key]
+
+    return "Temporary data cleaned up successfully"
+```
+
+### Monitor Context Size
+For debugging and monitoring, create tools to inspect agency context:
+
+```python
+@function_tool
+async def show_context_status(ctx: RunContextWrapper[MasterContext]) -> str:
+    """Shows current agency context status for debugging."""
+    context_data = ctx.context.user_context
+
+    status = f"Agency Context Status:\n"
+    status += f"Keys: {len(context_data)}\n"
+    status += f"Current Agent: {ctx.context.current_agent_name}\n"
+
+    for key, value in context_data.items():
+        if isinstance(value, (dict, list)):
+            status += f"  {key}: {type(value).__name__} with {len(value)} items\n"
+        else:
+            status += f"  {key}: {type(value).__name__}\n"
+
+    return status
+```
+
+## Migration from v0.x
+
+If you're migrating from Agency Swarm v0.x, here's how to update your shared state usage:
+
+**Old Pattern (v0.x):**
+```python
+class MyTool(BaseTool):
+    def run(self):
+        self._shared_state.set("key", "value")
+        data = self._shared_state.get("key", "default")
+        return "Done"
+```
+
+**New Pattern (v1.x):**
+```python
+@function_tool
+async def my_tool(ctx: RunContextWrapper[MasterContext], param: str) -> str:
+    """Updated tool using agency context."""
+    ctx.context.set("key", "value")
+    data = ctx.context.get("key", "default")
+    return "Done"
+```
+
+## Example: Complete Workflow
+
+For a comprehensive example showing agency context in action, see the [Agency Context Workflow Example](/examples/agency_context_workflow.py) which demonstrates:
+
+- Multi-step data collection and analysis
+- Cross-agent data sharing
+- Session management
+- Workflow coordination
+- Context monitoring and debugging
+
+Agency context eliminates the need for complex parameter passing and enables sophisticated multi-agent workflows while maintaining clean separation of concerns.

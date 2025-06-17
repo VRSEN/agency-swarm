@@ -394,8 +394,8 @@ class Agent(BaseAgent[MasterContext]):
 
         # --- Internal State Init ---
         self._openai_client = None
-        # Needed for file operations
-        self._openai_client_sync = OpenAI()
+        # Sync OpenAI client is lazily initialised when required
+        self._openai_client_sync = None
         self._subagents = {}
         # _thread_manager and _agency_instance are injected by Agency
 
@@ -404,7 +404,6 @@ class Agent(BaseAgent[MasterContext]):
         self.file_manager._parse_files_folder_for_vs_id()
         self._parse_schemas()
         self._load_tools_from_folder()
-        # The full async _init_file_handling (with VS retrieval) should be called by Agency or explicitly in tests.
 
     # --- Properties ---
     def __repr__(self) -> str:
@@ -623,46 +622,6 @@ class Agent(BaseAgent[MasterContext]):
         logger.debug(f"Dynamically added tool '{tool_name}' to agent '{self.name}'.")
 
     # --- File Handling ---
-    async def _init_file_handling(self) -> None:
-        """
-        Asynchronously initializes file handling by verifying/retrieving the
-        associated Vector Store on OpenAI if an ID was parsed.
-        This method should be called after agent instantiation in an async context.
-        """
-        # Ensure synchronous parts have run (idempotent checks or rely on __init__ call)
-        if self.files_folder and not self.files_folder_path:
-            self.file_manager._parse_files_folder_for_vs_id()  # Ensure path and tentative VS ID are set
-
-        if not self._associated_vector_store_id or not self.files_folder_path:
-            logger.debug(f"Agent {self.name}: Skipping async VS check. No VS ID parsed or files_folder_path not set.")
-            return
-
-        # If a vector store ID is associated AND local folder path is valid
-        try:
-            # Attempt to retrieve the Vector Store by ID
-            vector_store = await self.client.vector_stores.retrieve(vector_store_id=self._associated_vector_store_id)
-            logger.info(
-                f"Agent {self.name}: Successfully retrieved existing Vector Store '{vector_store.id}' ('{vector_store.name}')."
-            )
-        except NotFoundError:
-            logger.error(
-                f"Agent {self.name}: Vector Store ID '{self._associated_vector_store_id}' provided in files_folder was not found on OpenAI. "
-                f"FileSearchTool might not be effective or may need manual VS creation and ID update."
-            )
-            # Decide if we should nullify _associated_vector_store_id here or just warn.
-            # For now, keep the ID but log error. User might create it later.
-            # Or, to be safer and prevent use of a non-existent VS:
-            # self._associated_vector_store_id = None
-            # self.tools = [t for t in self.tools if not isinstance(t, FileSearchTool)] # Remove FileSearchTool
-        except Exception as e_retrieve:
-            logger.error(
-                f"Agent {self.name}: Error retrieving Vector Store '{self._associated_vector_store_id}': {e_retrieve}"
-            )
-            # Similar decision: nullify or just warn.
-            # self._associated_vector_store_id = None
-            # self.tools = [t for t in self.tools if not isinstance(t, FileSearchTool)]
-
-    # Expose the upload_file method from the file_manager for ease of access
     def upload_file(self, file_path: str, include_in_vector_store: bool = True) -> str:
         """Upload a file using the agent's file manager."""
         return self.file_manager.upload_file(file_path, include_in_vector_store)
