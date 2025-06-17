@@ -23,16 +23,21 @@ def get_verify_token(app_token):
 
 
 # Non‑streaming completion endpoint
-def make_completion_endpoint(request_model, current_agency: Agency, verify_token):
+# TODO: change current agency to callable
+def make_response_endpoint(request_model, current_agency: Agency, verify_token):
     async def handler(request: request_model, token: str = Depends(verify_token)):
+        # TODO: Init agency agency_instance = current_agency()
         response = await current_agency.get_response(
             message=request.message,
             recipient_agent=request.recipient_agent,
-            chat_id=request.chat_id,
-            context_override=request.context_override,
-            hooks_override=request.hooks_override,
+            additional_instructions=request.additional_instructions,
+            message_files=request.message_files,
+            file_ids=request.file_ids,
+            attachments=request.attachments,
         )
-        return {"response": response.final_output}
+        # TODO: extract history
+        # TODO: chat_history = agency_instance.thread_manager._thread
+        return {"response": response.final_output, "chat_history": "history placeholder"}
 
     return handler
 
@@ -40,30 +45,28 @@ def make_completion_endpoint(request_model, current_agency: Agency, verify_token
 # Streaming SSE endpoint
 def make_stream_endpoint(request_model, current_agency: Agency, verify_token):
     async def handler(request: request_model, token: str = Depends(verify_token)):
+        # TODO: Init agency agency_instance = current_agency()
         async def event_generator():
             try:
-                # Call the agency's streaming method directly
                 async for event in current_agency.get_response_stream(
                     message=request.message,
                     recipient_agent=request.recipient_agent,
-                    chat_id=request.chat_id,
-                    context_override=request.context_override,
-                    hooks_override=request.hooks_override,
-                    # Not yet implemented
-                    # message_files=getattr(request, "message_files", None),
-                    # additional_instructions=getattr(request, "additional_instructions", None),
-                    # attachments=getattr(request, "attachments", None),
-                    # tool_choice=getattr(request, "tool_choice", None),
-                    # response_format=getattr(request, "response_format", None),
+                    additional_instructions=request.additional_instructions,
+                    message_files=request.message_files,
+                    file_ids=request.file_ids,
+                    attachments=request.attachments,
                 ):
                     print("Yielding event:", event)
                     # Try to serialize the event
+                    # TODO: add chat history to the output
                     try:
                         # If event has a .model_dump() or .dict() method, use it
                         if hasattr(event, "model_dump"):
                             data = event.model_dump()
                         elif hasattr(event, "dict"):
                             data = event.dict()
+                        elif isinstance(event, dict):
+                            data = event
                         else:
                             data = str(event)
                         yield "data: " + json.dumps({"data": data}) + "\n\n"

@@ -1,6 +1,7 @@
 from typing import Any
 
-from pydantic import BaseModel, field_validator
+from agents import TResponseInputItem
+from pydantic import BaseModel, Field, field_validator
 
 
 class AttachmentTool(BaseModel):
@@ -12,19 +13,25 @@ class Attachment(BaseModel):
     tools: list[AttachmentTool]
 
 
+class ConversationThread(BaseModel):
+    items: list[TResponseInputItem]
+    metadata: dict[str, Any] = {}
+
+
 class BaseRequest(BaseModel):
     message: str
+    chat_history: dict[str, ConversationThread] = Field(
+        None,
+        description=(
+            "Entire chat history containing previous messages across all threads. "
+            "Should be provided in a form of {'thread_1': ConversationThread, 'thread_2': ConversationThread, ...}"
+        ),
+    )
     recipient_agent: str = None  # Will be automatically converted to the Agent instance
-    chat_id: str = None
-    context_override: dict[str, Any] = None
-    hooks_override: str = None
-
-    # Not yet implemented
-    # files: list[str] = None
-    # additional_instructions: str = None
-    # attachments: List[Attachment] = []
-    # tool_choice: dict = None
-    # response_format: dict = None
+    file_ids: list[str] = None
+    additional_instructions: str = None
+    attachments: list[Attachment] = []
+    message_files: list[str] = None
 
 
 def add_agent_validator(model, agent_instances):

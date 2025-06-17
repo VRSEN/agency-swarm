@@ -1,4 +1,5 @@
 import os
+from typing import List
 
 from agents.tool import FunctionTool
 from dotenv import load_dotenv
@@ -15,6 +16,8 @@ def run_fastapi(
     host: str = "0.0.0.0",
     port: int = 8000,
     app_token_env: str = "APP_TOKEN",
+    return_app: bool = False,
+    cors_origins: List[str] = ["*"],
 ):
     """
     Launch a FastAPI server exposing endpoints for multiple agencies and tools.
@@ -33,7 +36,7 @@ def run_fastapi(
         from .fastapi_utils.endpoint_handlers import (
             exception_handler,
             get_verify_token,
-            make_completion_endpoint,
+            make_response_endpoint,
             make_stream_endpoint,
             make_tool_endpoint,
         )
@@ -51,7 +54,7 @@ def run_fastapi(
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=cors_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -64,7 +67,7 @@ def run_fastapi(
         for idx, agency in enumerate(agencies):
             agency_name = getattr(agency, "name", None)
             if agency_name is None:
-                agency_name = "agency" if len(agencies) == 1 else f"agency_{idx + 1}"
+                agency_name = "agency" if len(agencies) == 1 else f"agency_{idx+1}"
             agency_name = agency_name.replace(" ", "_")
             if agency_name in agency_names:
                 raise ValueError(
@@ -84,7 +87,7 @@ def run_fastapi(
 
             app.add_api_route(
                 f"/{agency_name}/get_completion",
-                make_completion_endpoint(AgencyRequest, agency, verify_token),
+                make_response_endpoint(AgencyRequest, agency, verify_token),
                 methods=["POST"],
             )
             app.add_api_route(
@@ -104,6 +107,11 @@ def run_fastapi(
 
     app.add_exception_handler(Exception, exception_handler)
 
-    print(f"Starting FastAPI server at http://{host}:{port}")
     print("Created endpoints:\n" + "\n".join(endpoints))
+
+    if return_app:
+        return app
+
+    print(f"Starting FastAPI server at http://{host}:{port}")
+
     uvicorn.run(app, host=host, port=port)
