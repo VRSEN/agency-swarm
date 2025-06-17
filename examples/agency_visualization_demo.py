@@ -106,7 +106,7 @@ def demo_static_visualization():
     agency = create_demo_agency()
 
     # Generate different layout types
-    layouts = ["hierarchical", "circular", "force_directed"]
+    layouts = ["hierarchical", "force_directed"]
 
     for layout in layouts:
         print(f"Generating {layout} layout chart...")
@@ -134,7 +134,7 @@ def demo_reactflow_json():
     agency = create_demo_agency()
 
     # Generate ReactFlow-compatible JSON for different layouts
-    layouts = ["hierarchical", "circular", "force_directed"]
+    layouts = ["hierarchical", "force_directed"]
 
     for layout in layouts:
         print(f"Generating {layout} ReactFlow JSON...")

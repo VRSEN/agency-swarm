@@ -772,7 +772,7 @@ class Agency:
 
         Args:
             include_tools (bool): Whether to include agent tools as separate nodes
-            layout_algorithm (str): Layout algorithm hint ("hierarchical", "circular", "force-directed")
+            layout_algorithm (str): Layout algorithm hint ("hierarchical", "force-directed")
 
         Returns:
             dict: ReactFlow-compatible structure with nodes and edges
@@ -925,7 +925,7 @@ class Agency:
             figsize: Figure size as (width, height)
             show_tools: Whether to include agent tools in the visualization
             save_path: Optional path to save the chart image
-            layout: Graph layout algorithm ("spring", "circular", "hierarchical", "shell")
+            layout: Graph layout algorithm ("spring", "hierarchical", "shell")
             show_plot: Whether to display the plot (set False for headless environments)
         """
         if not HAS_VISUALIZATION_DEPS:
@@ -962,8 +962,6 @@ class Agency:
         # Calculate layout
         if layout == "spring":
             pos = nx.spring_layout(G, k=2, iterations=50)
-        elif layout == "circular":
-            pos = nx.circular_layout(G)
         elif layout == "shell":
             # Group by node type for shell layout
             agent_nodes = [n for n, d in G.nodes(data=True) if d.get("node_type") == "agent"]
@@ -1158,19 +1156,95 @@ class Agency:
             for i, agent_name in enumerate(regular_agents):
                 positions[agent_name] = {"x": i * 300 + 100, "y": 250}
 
-        elif layout_algorithm == "circular":
+        else:  # force-directed layout
+            # Implement proper force-directed layout with collision detection
             import math
+            import random
 
-            for i, agent_name in enumerate(self.agents.keys()):
-                angle = 2 * math.pi * i / agent_count
-                radius = 200
+            # Initialize positions randomly
+            width, height = 800, 600
+            node_radius = 80  # Minimum distance between nodes to prevent intersections
+
+            agent_names = list(self.agents.keys())
+
+            # Use random seed for reproducible layouts
+            random.seed(42)
+
+            # Initial random placement
+            for agent_name in agent_names:
                 positions[agent_name] = {
-                    "x": int(300 + radius * math.cos(angle)),
-                    "y": int(300 + radius * math.sin(angle)),
+                    "x": random.randint(node_radius, width - node_radius),
+                    "y": random.randint(node_radius, height - node_radius),
                 }
-        else:  # force-directed or default
-            for i, agent_name in enumerate(self.agents.keys()):
-                positions[agent_name] = {"x": i * 250, "y": 100}
+
+            # Force-directed algorithm iterations
+            iterations = 150  # More iterations for better convergence
+            for iteration in range(iterations):
+                forces = {agent: {"x": 0, "y": 0} for agent in agent_names}
+
+                # Repulsive forces between all nodes (prevents intersections)
+                for i, agent1 in enumerate(agent_names):
+                    for j, agent2 in enumerate(agent_names):
+                        if i != j:
+                            pos1 = positions[agent1]
+                            pos2 = positions[agent2]
+
+                            dx = pos1["x"] - pos2["x"]
+                            dy = pos1["y"] - pos2["y"]
+                            distance = math.sqrt(dx * dx + dy * dy)
+
+                            # Stronger repulsion forces to ensure minimum spacing
+                            if distance < node_radius * 2.5:  # Extended danger zone
+                                repulsion_force = 5000 / max(distance, 5)  # Very strong repulsion
+                            elif distance < node_radius * 3:  # Medium danger zone
+                                repulsion_force = 2500 / max(distance, 10)
+                            else:
+                                repulsion_force = 1000 / max(distance, 20)
+
+                            if distance > 0:
+                                forces[agent1]["x"] += (dx / distance) * repulsion_force
+                                forces[agent1]["y"] += (dy / distance) * repulsion_force
+
+                # Attractive forces for communication flows (if they exist)
+                if hasattr(self, "_derived_communication_flows") and self._derived_communication_flows:
+                    for sender, receiver in self._derived_communication_flows:
+                        pos1 = positions[sender.name]
+                        pos2 = positions[receiver.name]
+
+                        dx = pos2["x"] - pos1["x"]
+                        dy = pos2["y"] - pos1["y"]
+                        distance = math.sqrt(dx * dx + dy * dy)
+
+                        # Attractive force (but not too strong to maintain spacing)
+                        attractive_force = distance * 0.1
+                        if distance > 0:
+                            forces[sender.name]["x"] += (dx / distance) * attractive_force
+                            forces[sender.name]["y"] += (dy / distance) * attractive_force
+                            forces[receiver.name]["x"] -= (dx / distance) * attractive_force
+                            forces[receiver.name]["y"] -= (dy / distance) * attractive_force
+
+                # Apply forces with cooling and damping
+                cooling = max(0.1, 1.0 - (iteration / iterations))  # Maintain minimum movement
+                damping = 0.8  # Slightly less damping for better movement
+
+                for agent_name in agent_names:
+                    force = forces[agent_name]
+
+                    # Apply force with cooling and damping
+                    force_magnitude = math.sqrt(force["x"] ** 2 + force["y"] ** 2)
+                    if force_magnitude > 0:
+                        # Scale down very large forces to prevent overshooting
+                        max_force = 50
+                        if force_magnitude > max_force:
+                            force["x"] = (force["x"] / force_magnitude) * max_force
+                            force["y"] = (force["y"] / force_magnitude) * max_force
+
+                    positions[agent_name]["x"] += int(force["x"] * cooling * damping)
+                    positions[agent_name]["y"] += int(force["y"] * cooling * damping)
+
+                    # Keep within bounds with padding
+                    positions[agent_name]["x"] = max(node_radius, min(width - node_radius, positions[agent_name]["x"]))
+                    positions[agent_name]["y"] = max(node_radius, min(height - node_radius, positions[agent_name]["y"]))
 
         return positions
 
