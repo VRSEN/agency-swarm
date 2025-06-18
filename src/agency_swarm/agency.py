@@ -1091,6 +1091,43 @@ class Agency:
         else:
             plt.close()  # Clean up the figure to prevent memory leaks
 
+    def create_interactive_visualization(
+        self,
+        output_file: str = "agency_visualization.html",
+        layout_algorithm: str = "force_directed",
+        include_tools: bool = True,
+        open_browser: bool = True,
+    ) -> str:
+        """
+        Create an HTML visualization using the visualization system.
+
+        This method uses templates and layout algorithms.
+
+        Args:
+            output_file: Path to save the HTML file
+            layout_algorithm: Layout algorithm ("hierarchical", "force_directed", "circular")
+            include_tools: Whether to include agent tools in visualization
+            open_browser: Whether to automatically open in browser
+
+        Returns:
+            Path to the generated HTML file
+        """
+        try:
+            from .visualization import HTMLVisualizationGenerator
+
+            return HTMLVisualizationGenerator.create_visualization_from_agency(
+                agency=self,
+                output_file=output_file,
+                layout_algorithm=layout_algorithm,
+                include_tools=include_tools,
+                open_browser=open_browser,
+            )
+        except ImportError as e:
+            raise ImportError(
+                "Visualization module not available. "
+                "This suggests an installation issue with the visualization components."
+            ) from e
+
     def _extract_agent_tools_info(self, agent: Agent) -> list[dict[str, Any]]:
         """Extract structured information about an agent's tools, excluding communication tools."""
         tools_info = []
