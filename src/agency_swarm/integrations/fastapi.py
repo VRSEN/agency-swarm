@@ -87,12 +87,7 @@ def run_fastapi(
             # Store agent instances for easy lookup
             preview_instance = agency_factory(load_threads_callback=lambda: {})
             AGENT_INSTANCES: dict[str, Agent] = dict(preview_instance.agents.items())
-
-            class VerboseRequest(BaseRequest):
-                verbose: bool = False
-
-            AgencyRequest = add_agent_validator(VerboseRequest, AGENT_INSTANCES)
-            AgencyRequestStreaming = add_agent_validator(BaseRequest, AGENT_INSTANCES)
+            AgencyRequest = add_agent_validator(BaseRequest, AGENT_INSTANCES)
 
             app.add_api_route(
                 f"/{agency_name}/get_completion",
@@ -101,7 +96,7 @@ def run_fastapi(
             )
             app.add_api_route(
                 f"/{agency_name}/get_completion_stream",
-                make_stream_endpoint(AgencyRequestStreaming, agency_factory, verify_token),
+                make_stream_endpoint(AgencyRequest, agency_factory, verify_token),
                 methods=["POST"],
             )
             endpoints.append(f"/{agency_name}/get_completion")

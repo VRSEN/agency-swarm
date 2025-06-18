@@ -26,15 +26,20 @@ def get_verify_token(app_token):
 # Non‑streaming completion endpoint
 def make_response_endpoint(request_model, agency_factory: Callable[..., Agency], verify_token):
     async def handler(request: request_model, token: str = Depends(verify_token)):
-        load_callback = lambda: request.chat_history or {}
+        if request.chat_history is not None:
+            chat_history_dict = {}
+            for key, value in request.chat_history.items():
+                chat_history_dict[key] = json.loads(value.model_dump_json())
+
+            load_callback = lambda: chat_history_dict
+        else:
+            load_callback = {}
         agency_instance = agency_factory(load_threads_callback=load_callback)
         response = await agency_instance.get_response(
             message=request.message,
             recipient_agent=request.recipient_agent,
             additional_instructions=request.additional_instructions,
-            message_files=request.message_files,
             file_ids=request.file_ids,
-            attachments=request.attachments,
         )
         history = {
             thread_id: {"items": thread.items, "metadata": thread.metadata}
@@ -48,18 +53,22 @@ def make_response_endpoint(request_model, agency_factory: Callable[..., Agency],
 # Streaming SSE endpoint
 def make_stream_endpoint(request_model, agency_factory: Callable[..., Agency], verify_token):
     async def handler(request: request_model, token: str = Depends(verify_token)):
-        load_callback = lambda: request.chat_history or {}
-        agency_instance = agency_factory(load_threads_callback=load_callback)
+        if request.chat_history is not None:
+            chat_history_dict = {}
+            for key, value in request.chat_history.items():
+                chat_history_dict[key] = json.loads(value.model_dump_json())
 
+            load_callback = lambda: chat_history_dict
+        else:
+            load_callback = {}
+        agency_instance = agency_factory(load_threads_callback=load_callback)
         async def event_generator():
             try:
                 async for event in agency_instance.get_response_stream(
                     message=request.message,
                     recipient_agent=request.recipient_agent,
                     additional_instructions=request.additional_instructions,
-                    message_files=request.message_files,
                     file_ids=request.file_ids,
-                    attachments=request.attachments,
                 ):
                     try:
                         if hasattr(event, "model_dump"):
