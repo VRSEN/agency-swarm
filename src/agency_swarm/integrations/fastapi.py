@@ -90,17 +90,17 @@ def run_fastapi(
             AgencyRequest = add_agent_validator(BaseRequest, AGENT_INSTANCES)
 
             app.add_api_route(
-                f"/{agency_name}/get_completion",
+                f"/{agency_name}/get_response",
                 make_response_endpoint(AgencyRequest, agency_factory, verify_token),
                 methods=["POST"],
             )
             app.add_api_route(
-                f"/{agency_name}/get_completion_stream",
+                f"/{agency_name}/get_response_stream",
                 make_stream_endpoint(AgencyRequest, agency_factory, verify_token),
                 methods=["POST"],
             )
-            endpoints.append(f"/{agency_name}/get_completion")
-            endpoints.append(f"/{agency_name}/get_completion_stream")
+            endpoints.append(f"/{agency_name}/get_response")
+            endpoints.append(f"/{agency_name}/get_response_stream")
 
     if tools:
         for tool in tools:

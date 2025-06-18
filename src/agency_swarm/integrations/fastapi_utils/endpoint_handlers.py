@@ -23,7 +23,7 @@ def get_verify_token(app_token):
     return verify_token
 
 
-# Non‑streaming completion endpoint
+# Non‑streaming response endpoint
 def make_response_endpoint(request_model, agency_factory: Callable[..., Agency], verify_token):
     async def handler(request: request_model, token: str = Depends(verify_token)):
         if request.chat_history is not None:
