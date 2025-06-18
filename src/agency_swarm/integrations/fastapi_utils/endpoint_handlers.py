@@ -33,7 +33,7 @@ def make_response_endpoint(request_model, agency_factory: Callable[..., Agency],
 
             load_callback = lambda: chat_history_dict
         else:
-            load_callback = {}
+            load_callback = lambda: {}
         agency_instance = agency_factory(load_threads_callback=load_callback)
         response = await agency_instance.get_response(
             message=request.message,
@@ -60,8 +60,9 @@ def make_stream_endpoint(request_model, agency_factory: Callable[..., Agency], v
 
             load_callback = lambda: chat_history_dict
         else:
-            load_callback = {}
+            load_callback = lambda: {}
         agency_instance = agency_factory(load_threads_callback=load_callback)
+
         async def event_generator():
             try:
                 async for event in agency_instance.get_response_stream(
