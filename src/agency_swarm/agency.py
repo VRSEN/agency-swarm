@@ -578,8 +578,23 @@ class Agency:
         else:
             raise TypeError("recipient_agent must be an Agent instance or agent name string.")
 
-    def run_fastapi(self, host: str = "0.0.0.0", port: int = 8000, app_token_env: str = "APP_TOKEN"):
-        """Serve this agency via the FastAPI integration."""
+    def run_fastapi(
+        self,
+        host: str = "0.0.0.0",
+        port: int = 8000,
+        app_token_env: str = "APP_TOKEN",
+        cors_origins: list[str] | None = None,
+    ):
+        """Serve this agency via the FastAPI integration.
+
+        Parameters
+        ----------
+        host, port, app_token_env : str
+            Standard FastAPI configuration options.
+        cors_origins : list[str] | None
+            Optional list of allowed CORS origins passed through to
+            :func:`run_fastapi`.
+        """
         from agency_swarm.integrations.fastapi import run_fastapi
 
         run_fastapi(
@@ -587,6 +602,7 @@ class Agency:
             host=host,
             port=port,
             app_token_env=app_token_env,
+            cors_origins=cors_origins,
         )
 
     # --- Deprecated Methods ---
