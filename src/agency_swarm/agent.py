@@ -1129,24 +1129,36 @@ class Agent(BaseAgent[MasterContext]):
                 preservation_content = (
                     f"[TOOL_RESULT_PRESERVATION] Tool Call ID: {tool_call.id}\nTool Type: file_search\n"
                 )
-                # Find file citations in assistant messages
+
                 file_count = 0
-                for msg_item in assistant_messages:
-                    message = msg_item.raw_item
-                    if hasattr(message, "content") and message.content:
-                        for content_item in message.content:
-                            if hasattr(content_item, "annotations") and content_item.annotations:
-                                for annotation in content_item.annotations:
-                                    if hasattr(annotation, "type") and annotation.type == "file_citation":
-                                        file_count += 1
-                                        file_id = getattr(annotation, "file_id", "unknown")
-                                        content_text = getattr(content_item, "text", "")[:200]
-                                        preservation_content += (
-                                            f"File {file_count}: {file_id}\nContent: {content_text}...\n"
-                                        )
+
+                # First: try direct results from tool call (most complete)
+                if hasattr(tool_call, "results") and tool_call.results:
+                    for result in tool_call.results:
+                        file_count += 1
+                        file_id = getattr(result, "file_id", "unknown")
+                        # Capture FULL content (not truncated to 200 chars)
+                        content_text = getattr(result, "text", "")
+                        preservation_content += f"File {file_count}: {file_id}\nContent: {content_text}\n\n"
+
+                # Fallback: parse assistant messages for annotations
+                if file_count == 0:
+                    for msg_item in assistant_messages:
+                        message = msg_item.raw_item
+                        if hasattr(message, "content") and message.content:
+                            for content_item in message.content:
+                                if hasattr(content_item, "annotations") and content_item.annotations:
+                                    for annotation in content_item.annotations:
+                                        if hasattr(annotation, "type") and annotation.type == "file_citation":
+                                            file_count += 1
+                                            file_id = getattr(annotation, "file_id", "unknown")
+                                            # Capture FULL content (not truncated to 200 chars)
+                                            content_text = getattr(content_item, "text", "")
+                                            preservation_content += (
+                                                f"File {file_count}: {file_id}\nContent: {content_text}\n\n"
+                                            )
 
                 if file_count > 0:
-                    preservation_content = f"[TOOL_RESULT_PRESERVATION] Tool Call ID: {tool_call.id}\nTool Type: file_search\nResults: {file_count} files found\n{preservation_content[preservation_content.find('File 1:') :]}"
                     synthetic_outputs.append({"role": "assistant", "content": preservation_content})
                     logger.debug(f"Created file_search preservation message for call_id: {tool_call.id}")
 
@@ -1154,14 +1166,14 @@ class Agent(BaseAgent[MasterContext]):
                 preservation_content = (
                     f"[TOOL_RESULT_PRESERVATION] Tool Call ID: {tool_call.id}\nTool Type: web_search\n"
                 )
-                # Find search content in assistant messages
+
+                # Capture FULL search results (not truncated to 500 chars)
                 for msg_item in assistant_messages:
                     message = msg_item.raw_item
                     if hasattr(message, "content") and message.content:
                         for content_item in message.content:
                             if hasattr(content_item, "text") and content_item.text:
-                                search_content = content_item.text[:500]
-                                preservation_content += f"Search Results:\n{search_content}...\n"
+                                preservation_content += f"Search Results:\n{content_item.text}\n"
                                 synthetic_outputs.append({"role": "assistant", "content": preservation_content})
                                 logger.debug(f"Created web_search preservation message for call_id: {tool_call.id}")
                                 break
