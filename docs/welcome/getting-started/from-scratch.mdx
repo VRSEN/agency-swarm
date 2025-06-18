@@ -64,9 +64,11 @@ icon: "code"
   </Step>
 
   <Step title="Create Tools">
-    Define your custom tools by extending the `BaseTool` class and implementing the `run` method.
+    Define your custom tools by extending the `BaseTool` class and implementing
+    the `run` method. Starting with **v1.x** you can also create plain functions
+    decorated with `@function_tool`.
 
-    **MyCustomTool.py:**
+    **Class-based example:**
 
     ```python
     from agency_swarm.tools import BaseTool
@@ -101,6 +103,18 @@ icon: "code"
             return "Result of MyCustomTool operation"
     ```
 
+    **Function-based example:**
+
+    ```python
+    from agents import function_tool
+
+    @function_tool
+    def my_custom_tool(example_field: str) -> str:
+        """Description of what the custom tool does."""
+        # Implement the tool's functionality
+        return f"Processed {example_field}"
+    ```
+
   </Step>
 
   <Step title="Define Agent Roles">
@@ -126,7 +140,9 @@ icon: "code"
             )
     ```
 
-    Tools will be imported automatically from the `tools` folder.
+    Tools will be imported automatically from the `tools` folder. Each
+    tool file may define a class that inherits from `BaseTool` or a
+    function decorated with `@function_tool`.
 
     **instructions.md:**
 

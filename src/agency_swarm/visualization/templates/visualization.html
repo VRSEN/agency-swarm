@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ agency_name }} - Agency Swarm Visualization</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="header">
+        <h1>🚀 {{ agency_name }}</h1>
+        <p>Interactive visualization of agent communication flows and tool relationships</p>
+    </div>
+
+    <div class="container">
+        <div class="controls">
+            <div class="control-group">
+                <h3>View Options</h3>
+                <button onclick="toggleTools()" id="btn-tools">Hide Tools</button>
+                <button onclick="fitView()">Fit to View</button>
+                <button onclick="resetZoom()">Reset Zoom</button>
+            </div>
+
+            <div class="stats">
+                <h4>Agency Statistics</h4>
+                <div id="stats-agents">Agents: 0</div>
+                <div id="stats-tools">Tools: 0</div>
+                <div id="stats-flows">Communication Flows: 0</div>
+                <div id="stats-entry-points">Entry Points: 0</div>
+            </div>
+        </div>
+
+        <div class="visualization-wrapper">
+            <svg id="visualization-svg" viewBox="0 0 800 600">
+                <defs>
+                    <linearGradient id="agentGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" style="stop-color:#667eea;stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:#764ba2;stop-opacity:1" />
+                    </linearGradient>
+                    <linearGradient id="toolGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" style="stop-color:#ffeaa7;stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:#fab1a0;stop-opacity:1" />
+                    </linearGradient>
+                    <linearGradient id="entryGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" style="stop-color:#00b894;stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:#00cec9;stop-opacity:1" />
+                    </linearGradient>
+                    <marker id="arrowhead" markerWidth="10" markerHeight="7"
+                            refX="9" refY="3.5" orient="auto">
+                        <polygon points="0 0, 10 3.5, 0 7" fill="#667eea" />
+                    </marker>
+                </defs>
+                <g id="edges-group"></g>
+                <g id="nodes-group"></g>
+            </svg>
+
+            <div class="zoom-controls">
+                <button class="zoom-btn" onclick="zoomIn()">+</button>
+                <button class="zoom-btn" onclick="zoomOut()">−</button>
+                <button class="zoom-btn" onclick="resetZoom()" title="Reset Zoom">⌂</button>
+            </div>
+
+            <div class="loading-overlay" id="loading-overlay">
+                <div class="loading-spinner"></div>
+                <p>Calculating layout...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Agency data will be injected here
+        const agencyData = {AGENCY_DATA_PLACEHOLDER};
+    </script>
+    <script src="visualization.js"></script>
+</body>
+</html>

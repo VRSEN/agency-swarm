@@ -100,7 +100,11 @@ To create a custom tool, typically you need to follow these steps:
       ```
 
       <Note>
-        Each file in the `tools_folder` should contain a class that is named exactly the same as the file name. For example, `Calculator.py` should contain a `Calculator` class.
+        Each file in the `tools_folder` should contain a class that is named
+        exactly the same as the file name. For example, `Calculator.py` should
+        contain a `Calculator` class. Alternatively, a file may define a
+        function decorated with `@function_tool`. Both styles are loaded
+        automatically, and class-based tools must inherit from `BaseTool`.
       </Note>
     </Accordion>
   </Step>

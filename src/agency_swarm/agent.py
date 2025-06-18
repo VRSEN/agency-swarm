@@ -1,8 +1,10 @@
 import asyncio
+import importlib.util
 import inspect
 import json
 import logging
 import os
+import sys
 import warnings
 from collections.abc import AsyncGenerator, Callable
 from pathlib import Path
@@ -31,7 +33,7 @@ from agents.run import DEFAULT_MAX_TURNS
 from agents.stream_events import RunItemStreamEvent
 from agents.strict_schema import ensure_strict_json_schema
 from agents.tool import FunctionTool
-from openai import AsyncOpenAI, NotFoundError, OpenAI
+from openai import AsyncOpenAI, OpenAI
 from openai.types.responses import ResponseFileSearchToolCall, ResponseFunctionWebSearch
 
 from .context import MasterContext
@@ -392,8 +394,8 @@ class Agent(BaseAgent[MasterContext]):
 
         # --- Internal State Init ---
         self._openai_client = None
-        # Needed for file operations
-        self._openai_client_sync = OpenAI()
+        # Sync OpenAI client is lazily initialised when required
+        self._openai_client_sync = None
         self._subagents = {}
         # _thread_manager and _agency_instance are injected by Agency
 
@@ -401,7 +403,7 @@ class Agent(BaseAgent[MasterContext]):
 
         self.file_manager._parse_files_folder_for_vs_id()
         self._parse_schemas()
-        # The full async _init_file_handling (with VS retrieval) should be called by Agency or explicitly in tests.
+        self._load_tools_from_folder()
 
     # --- Properties ---
     def __repr__(self) -> str:
@@ -458,17 +460,59 @@ class Agent(BaseAgent[MasterContext]):
         logger.debug(f"Tool '{getattr(tool, 'name', '(unknown)')}' added to agent '{self.name}'")
 
     def _load_tools_from_folder(self) -> None:
-        """Placeholder: Loads tools from tools_folder (future Task)."""
-        if self.tools_folder:
-            logger.warning("Tool loading from folder is not fully implemented yet.")
-            # Placeholder logic using ToolFactoryPlaceholder (replace when implemented)
-            # try:
-            #     folder_path = Path(self.tools_folder).resolve()
-            #     loaded_tools = ToolFactory.load_tools_from_folder(folder_path)
-            #     for tool in loaded_tools:
-            #         self.add_tool(tool)
-            # except Exception as e:
-            #     logger.error(f"Error loading tools from folder {self.tools_folder}: {e}")
+        """Load tools defined in ``tools_folder`` and add them to the agent.
+
+        Supports both legacy ``BaseTool`` subclasses and ``FunctionTool``
+        instances created via the ``@function_tool`` decorator. This restores the
+        automatic discovery behavior from Agency Swarm v0.x while also handling
+        the new function-based tools.
+        """
+
+        if not self.tools_folder:
+            return
+
+        folder_path = Path(self.tools_folder)
+        if not folder_path.is_dir():
+            folder_path = Path(self._get_class_folder_path()) / folder_path
+
+        if not folder_path.is_dir():
+            logger.warning("Tools folder path is not a directory. Skipping... %s", folder_path)
+            return
+
+        for file in folder_path.iterdir():
+            if not file.is_file() or file.suffix != ".py" or file.name.startswith("_"):
+                continue
+
+            module_name = file.stem
+            try:
+                spec = importlib.util.spec_from_file_location(module_name, file)
+                if spec and spec.loader:
+                    module = importlib.util.module_from_spec(spec)
+                    sys.modules[f"{module_name}_{id(self)}"] = module
+                    spec.loader.exec_module(module)
+                else:
+                    logger.error("Unable to import tool module %s", file)
+                    continue
+            except Exception as e:
+                logger.error("Error importing tool module %s: %s", file, e)
+                continue
+
+            # Legacy BaseTool: expect class with same name as file
+            legacy_class = getattr(module, module_name, None)
+            if inspect.isclass(legacy_class) and issubclass(legacy_class, BaseTool) and legacy_class is not BaseTool:
+                try:
+                    tool = self._adapt_legacy_tool(legacy_class)
+                    self.add_tool(tool)
+                except Exception as e:
+                    logger.error("Error adapting tool %s: %s", module_name, e)
+
+            # FunctionTool instances defined in the module
+            for obj in module.__dict__.values():
+                if isinstance(obj, FunctionTool):
+                    try:
+                        self.add_tool(obj)
+                    except Exception as e:
+                        logger.error("Error adding function tool from %s: %s", file, e)
 
     def _parse_schemas(self):
         schemas_folders = self.schemas_folder if isinstance(self.schemas_folder, list) else [self.schemas_folder]
@@ -578,46 +622,6 @@ class Agent(BaseAgent[MasterContext]):
         logger.debug(f"Dynamically added tool '{tool_name}' to agent '{self.name}'.")
 
     # --- File Handling ---
-    async def _init_file_handling(self) -> None:
-        """
-        Asynchronously initializes file handling by verifying/retrieving the
-        associated Vector Store on OpenAI if an ID was parsed.
-        This method should be called after agent instantiation in an async context.
-        """
-        # Ensure synchronous parts have run (idempotent checks or rely on __init__ call)
-        if self.files_folder and not self.files_folder_path:
-            self.file_manager._parse_files_folder_for_vs_id()  # Ensure path and tentative VS ID are set
-
-        if not self._associated_vector_store_id or not self.files_folder_path:
-            logger.debug(f"Agent {self.name}: Skipping async VS check. No VS ID parsed or files_folder_path not set.")
-            return
-
-        # If a vector store ID is associated AND local folder path is valid
-        try:
-            # Attempt to retrieve the Vector Store by ID
-            vector_store = await self.client.vector_stores.retrieve(vector_store_id=self._associated_vector_store_id)
-            logger.info(
-                f"Agent {self.name}: Successfully retrieved existing Vector Store '{vector_store.id}' ('{vector_store.name}')."
-            )
-        except NotFoundError:
-            logger.error(
-                f"Agent {self.name}: Vector Store ID '{self._associated_vector_store_id}' provided in files_folder was not found on OpenAI. "
-                f"FileSearchTool might not be effective or may need manual VS creation and ID update."
-            )
-            # Decide if we should nullify _associated_vector_store_id here or just warn.
-            # For now, keep the ID but log error. User might create it later.
-            # Or, to be safer and prevent use of a non-existent VS:
-            # self._associated_vector_store_id = None
-            # self.tools = [t for t in self.tools if not isinstance(t, FileSearchTool)] # Remove FileSearchTool
-        except Exception as e_retrieve:
-            logger.error(
-                f"Agent {self.name}: Error retrieving Vector Store '{self._associated_vector_store_id}': {e_retrieve}"
-            )
-            # Similar decision: nullify or just warn.
-            # self._associated_vector_store_id = None
-            # self.tools = [t for t in self.tools if not isinstance(t, FileSearchTool)]
-
-    # Expose the upload_file method from the file_manager for ease of access
     def upload_file(self, file_path: str, include_in_vector_store: bool = True) -> str:
         """Upload a file using the agent's file manager."""
         return self.file_manager.upload_file(file_path, include_in_vector_store)

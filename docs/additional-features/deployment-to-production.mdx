@@ -43,17 +43,18 @@ from agency_swarm import Agency
 
 app = FastAPI()
 
-def load_threads(chat_id):
-    # Load threads from your database using the chat_id
-    threads = load_threads_from_db(chat_id)
-    return threads
-
-def save_threads(new_threads):
-    # Save updated threads to your database
-    save_threads_to_db(new_threads)
-
 @app.post("/chat/{chat_id}")
 async def handle_chat(chat_id: str, message: str):
+    
+    def load_threads(chat_id):
+        # Load threads from your database using the chat_id
+        threads = load_threads_from_db(chat_id)
+        return threads
+    
+    def save_threads(new_threads):
+        # Save updated threads to your database
+        save_threads_to_db(new_threads)
+
     agency = Agency(
         ceo, dev,  # your agents
         load_threads_callback=lambda: load_threads(chat_id),
@@ -69,7 +70,11 @@ async def handle_chat(chat_id: str, message: str):
 
 ```python
 @app.post("/chat/{chat_id}")
-async def handle_chat(chat_id: str, message: str):
+def handle_chat(chat_id: str, message: str):
+
+    # define callbacks the same way
+    # ...
+
     agency = Agency(
         ceo, dev,  # your agents
         threads_callbacks={
@@ -78,8 +83,8 @@ async def handle_chat(chat_id: str, message: str):
         },
     )
 
-    response = await agency.get_response(message, recipient_agent="CEO")
-    return {"response": response.final_output}
+    response = agency.get_completion(message)
+    return {"response": response}
 ```
 
 </Tab>
