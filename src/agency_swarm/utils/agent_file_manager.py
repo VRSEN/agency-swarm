@@ -383,7 +383,7 @@ class AgentFileManager:
         Adds a file to the agent's Vector Store if one is linked to this agent via files_folder
         """
         if self.agent._associated_vector_store_id:
-            existing_files = self.agent._openai_client_sync.vector_stores.files.list(
+            existing_files = self.agent.client_sync.vector_stores.files.list(
                 vector_store_id=self.agent._associated_vector_store_id
             )
             existing_file_ids = [file.id for file in existing_files.data]
@@ -396,7 +396,7 @@ class AgentFileManager:
                     continue
 
                 try:
-                    self.agent._openai_client_sync.vector_stores.files.create(
+                    self.agent.client_sync.vector_stores.files.create(
                         vector_store_id=self.agent._associated_vector_store_id, file_id=file_id
                     )
                     logger.info(
@@ -416,7 +416,7 @@ class AgentFileManager:
         """
         Get the filename of a file by its ID
         """
-        file_data = self.agent._openai_client_sync.files.retrieve(file_id)
+        file_data = self.agent.client_sync.files.retrieve(file_id)
         return file_data.filename
 
     def init_attachments_vs(self, vs_name: str = "attachments_vs"):
@@ -426,12 +426,12 @@ class AgentFileManager:
         """
         # First find if attachments_vs already exists
         logger.info(f"Using a fallback vector store for agent {self.agent.name}: {vs_name}")
-        existing_vs = self.agent._openai_client_sync.vector_stores.list()
+        existing_vs = self.agent.client_sync.vector_stores.list()
         existing_vs_names = [vs.name for vs in existing_vs.data]
         if vs_name in existing_vs_names:
             return existing_vs.data[existing_vs_names.index(vs_name)].id
         else:
-            created_vs = self.agent._openai_client_sync.vector_stores.create(name=vs_name)
+            created_vs = self.agent.client_sync.vector_stores.create(name=vs_name)
             return created_vs.id
 
     def sort_file_attachments(self, file_ids: list[str]) -> list[dict]:
