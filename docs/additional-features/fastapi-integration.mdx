@@ -75,7 +75,7 @@ if __name__ == "__main__":
     run_fastapi({"company": create_agency})
 ```
 
-- The mapping key (here, `"company"`) becomes the endpoint path: `/company/get_completion` and `/company/get_completion_stream`.
+- The mapping key (here, `"company"`) becomes the endpoint path: `/company/get_response` and `/company/get_response_stream`.
 - Each request initializes a fresh agency using your factory.
 - Always pass the `load_threads_callback` argument through to the `Agency` constructor so chat history is restored per request.
 
@@ -121,7 +121,7 @@ import requests
 
 history = {}
 payload = {"message": "Hello", "chat_history": history}
-resp = requests.post("http://127.0.0.1:8000/company/get_completion", json=payload)
+resp = requests.post("http://127.0.0.1:8000/company/get_response", json=payload)
 history = resp.json()["chat_history"]
 ```
 
@@ -130,7 +130,7 @@ history = resp.json()["chat_history"]
 ## Endpoint Structure
 
 - **Agency Endpoints:**
-  - `/your_agency_name/get_completion` (POST)
-  - `/your_agency_name/get_completion_stream` (POST, streaming responses)
+  - `/your_agency_name/get_response` (POST)
+  - `/your_agency_name/get_response_stream` (POST, streaming responses)
 - **Tool Endpoints:**
   - `/tool/ToolClassName` (POST)
