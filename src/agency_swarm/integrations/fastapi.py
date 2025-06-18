@@ -1,4 +1,5 @@
 import os
+import logging
 from collections.abc import Callable, Mapping
 
 from agents.tool import FunctionTool
@@ -6,6 +7,8 @@ from dotenv import load_dotenv
 
 from agency_swarm.agency import Agency
 from agency_swarm.agent import Agent
+
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -34,7 +37,7 @@ def run_fastapi(
         Standard FastAPI configuration options.
     """
     if (agencies is None or len(agencies) == 0) and (tools is None or len(tools) == 0):
-        print("No endpoints to deploy. Please provide at least one agency or tool.")
+        logger.warning("No endpoints to deploy. Please provide at least one agency or tool.")
         return
 
     try:
@@ -51,12 +54,12 @@ def run_fastapi(
         )
         from .fastapi_utils.request_models import BaseRequest, add_agent_validator
     except ImportError:
-        print("FastAPI deployment dependencies are missing. Please install agency-swarm[fastapi] package")
+        logger.error("FastAPI deployment dependencies are missing. Please install agency-swarm[fastapi] package")
         return
 
     app_token = os.getenv(app_token_env)
     if app_token is None or app_token == "":
-        print(f"Warning: {app_token_env} is not set. Authentication will be disabled.")
+        logger.warning(f"{app_token_env} is not set. Authentication will be disabled.")
     verify_token = get_verify_token(app_token)
 
     app = FastAPI()
@@ -114,11 +117,11 @@ def run_fastapi(
 
     app.add_exception_handler(Exception, exception_handler)
 
-    print("Created endpoints:\n" + "\n".join(endpoints))
+    logger.info("Created endpoints:\n" + "\n".join(endpoints))
 
     if return_app:
         return app
 
-    print(f"Starting FastAPI server at http://{host}:{port}")
+    logger.info(f"Starting FastAPI server at http://{host}:{port}")
 
     uvicorn.run(app, host=host, port=port)
