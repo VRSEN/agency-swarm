@@ -18,73 +18,97 @@ pip install agency-swarm[fastapi]
 
 You can expose your agencies and tools as API endpoints using the `run_fastapi()` function.
 
-### Example: Create an API endpoint for a single agency using the instance method
+### Function Signature
 
 ```python
-from agency_swarm.agency import Agency
-
-agency = Agency([ceo], name="test_agency")
-
-agency.run_fastapi()
+run_fastapi(
+    agencies: Mapping[str, Callable[..., Agency]] | None = None,
+    tools: list[type[FunctionTool]] | None = None,
+    host: str = "0.0.0.0",
+    port: int = 8000,
+    app_token_env: str = "APP_TOKEN",
+    return_app: bool = False,
+    cors_origins: list[str] = ["*"],
+)
 ```
 
-You can also pass optional arguments:
-- `host` (default: `"0.0.0.0"`)
-- `port` (default: `8000`)
-- `app_token_env` (default: `"APP_TOKEN"`)
+- **agencies**: Mapping of endpoint name to a factory that returns an `Agency`. The factory receives a `load_threads_callback` argument and is invoked on each request to provide a fresh agency instance with the conversation history preloaded.
+- **tools**: Optional list of tool classes (subclasses of `FunctionTool`) to expose under `/tool` routes.
+- **host**: Host address to bind the FastAPI server (default: `"0.0.0.0"`).
+- **port**: Port to run the FastAPI server on (default: `8000`).
+- **app_token_env**: Name of the environment variable for the bearer token (default: `"APP_TOKEN"`). If set, a bearer token is required for all requests.
+- **return_app**: If `True`, returns the FastAPI app instance instead of running the server (default: `False`).
+- **cors_origins**: List of allowed CORS origins (default: `["*"]`).
 
-This creates two endpoints:
-- `/test_agency/get_completion`
-- `/test_agency/get_completion_stream`
-
-Both endpoints accept parameters such as `message`, `recipient_agent`, `additional_instructions`, `message_files`, and more. You should also pass the previous `chat_history` dictionary (see hooks documentation for the exact format).
-Responses include a `response` field with the agent reply and a `chat_history` field
-containing the serialized conversation threads. The streaming endpoint sends
-`chat_history` as the final event once generation is complete.
+Agency endpoints accept parameters such as `message`, `recipient_agent`, `additional_instructions` and `message_files`. You should also pass the previous `chat_history` dictionary (see hooks documentation for the exact format).
+Responses include a `response` field with the agent reply and a `chat_history` field containing the serialized conversation threads. The streaming endpoint sends `chat_history` as the final event once generation is complete.
 
 If the environment variable specified by `app_token_env` is set, a bearer token is required for all requests. Otherwise, authentication is disabled.
 
 ### Example: Serving Multiple Agencies and Tools with Factory Functions
 
-Create factory functions in an `agency.py` file (or files) that build and return `Agency` instances. These factories should accept a `load_threads_callback` keyword argument so the integration can restore conversation history from each request. Import these factories in `main.py` and pass them to `run_fastapi` as a mapping:
+A **factory function** is a callable that returns a fresh `Agency` instance for each request. This is important for stateless HTTP APIs, so each request gets a new, isolated agency with the correct conversation history loaded. The factory should accept a `load_threads_callback` argument, which is used by the FastAPI integration to restore chat history for each request.
+
+#### Step-by-step Example
 
 ```python
-from pydantic import Field
+# agency.py
+from agency_swarm import Agent, Agency
 
-from agency_swarm.agency import Agency
-from agency_swarm.tools import BaseTool
-from agency_swarm.integrations.fastapi import run_fastapi
-from agency import create_agency_1, create_agency_2
-
-# Example tools
-class ExampleTool(BaseTool):
-    example_field: str = Field(..., description="Example input.")
-    def run(self):
-        return "Result of ExampleTool operation"
-
-class TestTool(BaseTool):
-    example_field: str = Field(..., description="Example input.")
-    def run(self):
-        return "Result of TestTool operation"
-
-run_fastapi(
-    agencies={
-        "agency_1": create_agency_1,
-        "agency_2": create_agency_2,
-    },
-    tools=[ExampleTool, TestTool],
-)
+def create_agency(load_threads_callback=None) -> Agency:
+    ceo = Agent(name="CEO", instructions="Lead the team")
+    dev = Agent(name="Developer", instructions="Write code")
+    return Agency(
+        ceo,
+        dev,
+        communication_flows=[(ceo, dev)],
+        load_threads_callback=load_threads_callback,  # <-- this is important!
+    )
 ```
 
-This launches endpoints:
-- `/agency_1/get_completion`
-- `/agency_1/get_completion_stream`
-- `/agency_2/get_completion`
-- `/agency_2/get_completion_stream`
-- `/tool/ExampleTool`
-- `/tool/TestTool`
+```python
+# main.py
+from agency_swarm.integrations.fastapi import run_fastapi
+from agency import create_agency
 
-Inputs for tool endpoints follow their Pydantic schemas.
+if __name__ == "__main__":
+    run_fastapi({"company": create_agency})
+```
+
+- The mapping key (here, `"company"`) becomes the endpoint path: `/company/get_completion` and `/company/get_completion_stream`.
+- Each request initializes a fresh agency using your factory.
+- Always pass the `load_threads_callback` argument through to the `Agency` constructor so chat history is restored per request.
+
+#### Multiple Agency Types
+If you want to serve multiple agency types, you can use a selector function:
+
+```python
+# agency.py
+def make_agency(name: str, load_threads_callback=None) -> Agency:
+    if name == "company":
+        return create_agency(load_threads_callback=load_threads_callback)
+    raise ValueError("Unknown agency")
+
+# main.py
+from agency_swarm.integrations.fastapi import run_fastapi
+from agency import make_agency
+
+run_fastapi({"company": lambda load_threads_callback=None: make_agency("company", load_threads_callback)})
+```
+
+#### Including Tools
+You can also expose tools as endpoints:
+
+```python
+from mytools import MyTool
+run_fastapi({"company": create_agency}, tools=[MyTool])
+```
+
+#### Tips & Gotchas
+- **Always accept and pass `load_threads_callback`** in your factory, or chat history will not be restored.
+- The mapping key must be URL-friendly (no spaces or special characters).
+- Each request gets a new agency instance - do not store state in the agency object itself.
+- Use the returned `chat_history` in your client to persist and send back for the next request.
 
 ---
 
@@ -95,23 +119,10 @@ You can interact with your agents and tools using HTTP requests. Here's an examp
 ```python
 import requests
 
-agency_url = "http://127.0.0.1:8000/agency_1/get_completion"
-payload = {
-    "message": "Hello",
-    "chat_history": {},  # send previous threads here
-}
-headers = {"Authorization": "Bearer 123"}
-
-agency_response = requests.post(agency_url, json=payload, headers=headers)
-print("Status code:", agency_response.status_code)
-print("Response:", agency_response.json())
-
-tool_url = "http://127.0.0.1:8000/tool/ExampleTool"
-payload = {"example_field": "test"}
-
-tool_response = requests.post(tool_url, json=payload, headers=headers)
-print("Status code:", tool_response.status_code)
-print("Response:", tool_response.json())
+history = {}
+payload = {"message": "Hello", "chat_history": history}
+resp = requests.post("http://127.0.0.1:8000/company/get_completion", json=payload)
+history = resp.json()["chat_history"]
 ```
 
 ---
