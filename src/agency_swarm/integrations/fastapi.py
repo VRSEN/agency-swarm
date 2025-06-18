@@ -23,7 +23,7 @@ def run_fastapi(
 
     Parameters
     ----------
-    agencies : dict[str, Callable[[Callable[[], dict[str, Any]] | None], Agency]] | None
+    agencies : Mapping[str, Callable[..., Agency]] | None
         Mapping of endpoint name to a factory that returns an :class:`Agency`.
         The factory receives a ``load_threads_callback`` argument and is invoked
         on each request to provide a fresh agency instance with the
