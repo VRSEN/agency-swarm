@@ -41,14 +41,14 @@ def create_interactive_visualization(
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `output_file` | `str` | `"agency_visualization.html"` | Path to save the HTML file |
-| `layout_algorithm` | `str` | `"hierarchical"` | Layout: `"hierarchical"`, `"force_directed"`, `"circular"` |
+| `layout_algorithm` | `str` | `"hierarchical"` | Layout: `"hierarchical"`, `"force_directed"` |
 | `include_tools` | `bool` | `True` | Whether to include agent tools |
 | `open_browser` | `bool` | `True` | Whether to automatically open in browser |
 
 #### Features
 
 - **🎨 Professional Design**: Gradients, shadows, and responsive layout
-- **🎯 Intelligent Layouts**: Hierarchical (default), force-directed, and circular algorithms
+- **🎯 Intelligent Layouts**: Hierarchical (default) and force-directed algorithms
 - **🧠 Smart Tool Positioning**: Manager tools positioned to the right, leaf agent tools below
 - **⚡ Collision Detection**: Optimized spacing (120px minimum) prevents node overlaps
 - **🎮 Interactive Controls**: Drag nodes, zoom, pan, and layout switching
@@ -98,11 +98,7 @@ print(f"Visualization saved to: {html_file}")
 - Clear visual hierarchy and delegation patterns
 - Ideal for management-style organizations
 
-**Circular Layout**:
-- Agents arranged in a circle with entry points at top
-- Tools positioned inside the circle near parent agents
-- Good for peer-to-peer communication patterns
-- Symmetrical and balanced appearance
+
 
 ## ReactFlow Integration
 

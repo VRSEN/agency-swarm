@@ -1105,7 +1105,7 @@ class Agency:
 
         Args:
             output_file: Path to save the HTML file
-            layout_algorithm: Layout algorithm ("hierarchical", "force_directed", "circular")
+            layout_algorithm: Layout algorithm ("hierarchical", "force_directed")
             include_tools: Whether to include agent tools in visualization
             open_browser: Whether to automatically open in browser
 
