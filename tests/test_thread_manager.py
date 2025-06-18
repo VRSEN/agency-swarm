@@ -57,7 +57,7 @@ def test_get_thread_loads_from_callback(mocker):
 
     manager = ThreadManager(load_threads_callback=mock_load)
 
-    # First call should trigger load - callback called with NO parameters
+    # Callback should have been invoked during initialization
     thread = manager.get_thread(test_id)
     mock_load.assert_called_once_with()  # NO parameters
 
@@ -75,7 +75,9 @@ def test_get_thread_creates_new_if_load_fails(mocker):
     manager = ThreadManager(load_threads_callback=mock_load)
     thread = manager.get_thread(test_id)
 
-    mock_load.assert_called_once_with()  # NO parameters
+    # Callback is invoked during initialization and again when get_thread()
+    # attempts to load the missing thread
+    assert mock_load.call_count == 2
 
     # Should have created a new thread since load returned empty
     assert thread.thread_id == test_id

@@ -2,7 +2,7 @@
 Layout algorithms for agency visualization.
 """
 
-from typing import Any, Dict, List
+from typing import Any
 
 
 class LayoutAlgorithms:
@@ -12,8 +12,8 @@ class LayoutAlgorithms:
 
     @staticmethod
     def hierarchical_layout(
-        nodes: List[Dict[str, Any]], edges: List[Dict[str, Any]], width: int = 800, height: int = 600
-    ) -> Dict[str, Dict[str, float]]:
+        nodes: list[dict[str, Any]], edges: list[dict[str, Any]], width: int = 800, height: int = 600
+    ) -> dict[str, dict[str, float]]:
         """
         Create a hierarchical layout.
         Entry points at top, subsequent layers below.
@@ -159,8 +159,8 @@ class LayoutAlgorithms:
 
     @staticmethod
     def apply_layout(
-        agency_data: Dict[str, Any], algorithm: str = "hierarchical", width: int = 800, height: int = 600
-    ) -> Dict[str, Any]:
+        agency_data: dict[str, Any], algorithm: str = "hierarchical", width: int = 800, height: int = 600
+    ) -> dict[str, Any]:
         """
         Apply hierarchical layout algorithm to agency data and return updated structure.
         """
