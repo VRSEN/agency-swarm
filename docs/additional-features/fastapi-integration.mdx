@@ -79,21 +79,19 @@ if __name__ == "__main__":
 - Each request initializes a fresh agency using your factory.
 - Always pass the `load_threads_callback` argument through to the `Agency` constructor so chat history is restored per request.
 
-#### Multiple Agency Types
-If you want to serve multiple agency types, you can use a selector function:
+#### Serving Multiple Agencies
+Pass additional factories in the dictionary to expose several agencies at once:
 
 ```python
-# agency.py
-def make_agency(name: str, load_threads_callback=None) -> Agency:
-    if name == "agency_name":
-        return create_agency(load_threads_callback=load_threads_callback)
-    raise ValueError("Unknown agency")
-
 # main.py
 from agency_swarm.integrations.fastapi import run_fastapi
-from agency import make_agency
+from agency import create_agency, create_other_agency
 
-run_fastapi({"agency_name": lambda load_threads_callback=None: make_agency("agency_name", load_threads_callback)})
+if __name__ == "__main__":
+    run_fastapi({
+        "agency_name": create_agency,
+        "other_agency": create_other_agency,
+    })
 ```
 
 #### Including Tools
