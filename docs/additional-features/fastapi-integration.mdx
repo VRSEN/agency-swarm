@@ -28,7 +28,7 @@ run_fastapi(
     port: int = 8000,
     app_token_env: str = "APP_TOKEN",
     return_app: bool = False,
-    cors_origins: list[str] = ["*"],
+    cors_origins: list[str] | None = None,
 )
 ```
 
@@ -38,7 +38,7 @@ run_fastapi(
 - **port**: Port to run the FastAPI server on (default: `8000`).
 - **app_token_env**: Name of the environment variable for the bearer token (default: `"APP_TOKEN"`). If set, a bearer token is required for all requests.
 - **return_app**: If `True`, returns the FastAPI app instance instead of running the server (default: `False`).
-- **cors_origins**: List of allowed CORS origins (default: `["*"]`).
+- **cors_origins**: List of allowed CORS origins. If omitted, all origins are allowed (`["*"]`).
 
 Agency endpoints accept parameters such as `message`, `recipient_agent`, `additional_instructions` and `message_files`. You should also pass the previous `chat_history` dictionary (see hooks documentation for the exact format).
 Responses include a `response` field with the agent reply and a `chat_history` field containing the serialized conversation threads. The streaming endpoint sends `chat_history` as the final event once generation is complete.
