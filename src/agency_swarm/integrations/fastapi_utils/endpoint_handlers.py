@@ -1,5 +1,6 @@
 import asyncio
 import json
+from collections.abc import Callable
 
 from fastapi import Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -23,44 +24,54 @@ def get_verify_token(app_token):
 
 
 # Non‑streaming completion endpoint
-# TODO: change current agency to callable
-def make_response_endpoint(request_model, current_agency: Agency, verify_token):
+def make_response_endpoint(request_model, agency_factory: Callable[..., Agency], verify_token):
     async def handler(request: request_model, token: str = Depends(verify_token)):
-        # TODO: Init agency agency_instance = current_agency()
-        response = await current_agency.get_response(
+        if request.chat_history is not None:
+            chat_history_dict = {}
+            for key, value in request.chat_history.items():
+                chat_history_dict[key] = json.loads(value.model_dump_json())
+
+            load_callback = lambda: chat_history_dict
+        else:
+            load_callback = lambda: {}
+        agency_instance = agency_factory(load_threads_callback=load_callback)
+        response = await agency_instance.get_response(
             message=request.message,
             recipient_agent=request.recipient_agent,
             additional_instructions=request.additional_instructions,
-            message_files=request.message_files,
             file_ids=request.file_ids,
-            attachments=request.attachments,
         )
-        # TODO: extract history
-        # TODO: chat_history = agency_instance.thread_manager._thread
-        return {"response": response.final_output, "chat_history": "history placeholder"}
+        history = {
+            thread_id: {"items": thread.items, "metadata": thread.metadata}
+            for thread_id, thread in agency_instance.thread_manager._threads.items()
+        }
+        return {"response": response.final_output, "chat_history": history}
 
     return handler
 
 
 # Streaming SSE endpoint
-def make_stream_endpoint(request_model, current_agency: Agency, verify_token):
+def make_stream_endpoint(request_model, agency_factory: Callable[..., Agency], verify_token):
     async def handler(request: request_model, token: str = Depends(verify_token)):
-        # TODO: Init agency agency_instance = current_agency()
+        if request.chat_history is not None:
+            chat_history_dict = {}
+            for key, value in request.chat_history.items():
+                chat_history_dict[key] = json.loads(value.model_dump_json())
+
+            load_callback = lambda: chat_history_dict
+        else:
+            load_callback = lambda: {}
+        agency_instance = agency_factory(load_threads_callback=load_callback)
+
         async def event_generator():
             try:
-                async for event in current_agency.get_response_stream(
+                async for event in agency_instance.get_response_stream(
                     message=request.message,
                     recipient_agent=request.recipient_agent,
                     additional_instructions=request.additional_instructions,
-                    message_files=request.message_files,
                     file_ids=request.file_ids,
-                    attachments=request.attachments,
                 ):
-                    print("Yielding event:", event)
-                    # Try to serialize the event
-                    # TODO: add chat history to the output
                     try:
-                        # If event has a .model_dump() or .dict() method, use it
                         if hasattr(event, "model_dump"):
                             data = event.model_dump()
                         elif hasattr(event, "dict"):
@@ -74,6 +85,12 @@ def make_stream_endpoint(request_model, current_agency: Agency, verify_token):
                         yield "data: " + json.dumps({"error": f"Failed to serialize event: {e}"}) + "\n\n"
             except Exception as exc:
                 yield "data: " + json.dumps({"error": str(exc)}) + "\n\n"
+
+            history = {
+                thread_id: {"items": thread.items, "metadata": thread.metadata}
+                for thread_id, thread in agency_instance.thread_manager._threads.items()
+            }
+            yield "data: " + json.dumps({"chat_history": history}) + "\n\n"
 
         return StreamingResponse(
             event_generator(),
@@ -93,7 +110,6 @@ def make_tool_endpoint(tool, verify_token, context=None):
     async def handler(request: Request, token: str = Depends(verify_token)):
         try:
             data = await request.json()
-            print("data:", data)
             # If this is a FunctionTool (from @function_tool), use on_invoke_tool
             if hasattr(tool, "on_invoke_tool"):
                 # Ensure 'args' key is present for function tools
@@ -101,7 +117,6 @@ def make_tool_endpoint(tool, verify_token, context=None):
                     input_json = json.dumps({"args": data})
                 else:
                     input_json = json.dumps(data)
-                print("input_json:", input_json)
                 result = await tool.on_invoke_tool(context, input_json)
             elif isinstance(tool, type):
                 tool_instance = tool(**data)

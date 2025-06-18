@@ -1,5 +1,5 @@
 import os
-from typing import List
+from collections.abc import Callable, Mapping
 
 from agents.tool import FunctionTool
 from dotenv import load_dotenv
@@ -11,18 +11,27 @@ load_dotenv()
 
 
 def run_fastapi(
-    agencies: list[Agency] | None = None,
+    agencies: Mapping[str, Callable[..., Agency]] | None = None,
     tools: list[type[FunctionTool]] | None = None,
     host: str = "0.0.0.0",
     port: int = 8000,
     app_token_env: str = "APP_TOKEN",
     return_app: bool = False,
-    cors_origins: List[str] = ["*"],
+    cors_origins: list[str] = ["*"],
 ):
-    """
-    Launch a FastAPI server exposing endpoints for multiple agencies and tools.
-    Each agency is deployed at /[agency-name]/get_completion and /[agency-name]/get_completion_stream.
-    Each tool is deployed at /tool/[tool-name].
+    """Launch a FastAPI server exposing endpoints for multiple agencies and tools.
+
+    Parameters
+    ----------
+    agencies : Mapping[str, Callable[..., Agency]] | None
+        Mapping of endpoint name to a factory that returns an :class:`Agency`.
+        The factory receives a ``load_threads_callback`` argument and is invoked
+        on each request to provide a fresh agency instance with the
+        conversation history preloaded.
+    tools : list[type[FunctionTool]] | None
+        Optional tools to expose under ``/tool`` routes.
+    host, port, app_token_env, return_app, cors_origins :
+        Standard FastAPI configuration options.
     """
     if (agencies is None or len(agencies) == 0) and (tools is None or len(tools) == 0):
         print("No endpoints to deploy. Please provide at least one agency or tool.")
@@ -64,10 +73,9 @@ def run_fastapi(
     agency_names = []
 
     if agencies:
-        for idx, agency in enumerate(agencies):
-            agency_name = getattr(agency, "name", None)
-            if agency_name is None:
-                agency_name = "agency" if len(agencies) == 1 else f"agency_{idx+1}"
+        for agency_name, agency_factory in agencies.items():
+            if agency_name is None or agency_name == "":
+                agency_name = "agency"
             agency_name = agency_name.replace(" ", "_")
             if agency_name in agency_names:
                 raise ValueError(
@@ -77,22 +85,18 @@ def run_fastapi(
             agency_names.append(agency_name)
 
             # Store agent instances for easy lookup
-            AGENT_INSTANCES: dict[str, Agent] = dict(agency.agents.items())
-
-            class VerboseRequest(BaseRequest):
-                verbose: bool = False
-
-            AgencyRequest = add_agent_validator(VerboseRequest, AGENT_INSTANCES)
-            AgencyRequestStreaming = add_agent_validator(BaseRequest, AGENT_INSTANCES)
+            preview_instance = agency_factory(load_threads_callback=lambda: {})
+            AGENT_INSTANCES: dict[str, Agent] = dict(preview_instance.agents.items())
+            AgencyRequest = add_agent_validator(BaseRequest, AGENT_INSTANCES)
 
             app.add_api_route(
                 f"/{agency_name}/get_completion",
-                make_response_endpoint(AgencyRequest, agency, verify_token),
+                make_response_endpoint(AgencyRequest, agency_factory, verify_token),
                 methods=["POST"],
             )
             app.add_api_route(
                 f"/{agency_name}/get_completion_stream",
-                make_stream_endpoint(AgencyRequestStreaming, agency, verify_token),
+                make_stream_endpoint(AgencyRequest, agency_factory, verify_token),
                 methods=["POST"],
             )
             endpoints.append(f"/{agency_name}/get_completion")

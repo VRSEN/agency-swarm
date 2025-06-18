@@ -226,7 +226,7 @@ class TestAgentToAgentPersistence:
         task1_id = f"task1_{uuid.uuid4().hex[:6]}"
         task2_id = f"task2_{uuid.uuid4().hex[:6]}"
 
-        print(f"\n--- Testing Multiple Agent-to-Agent Thread Isolation ---")
+        print("\n--- Testing Multiple Agent-to-Agent Thread Isolation ---")
         print(f"Task1: {task1_id} (Coordinator->Worker)")
         print(f"Task2: {task2_id} (Coordinator->Worker2)")
 
@@ -261,7 +261,7 @@ class TestAgentToAgentPersistence:
         assert task2_id.lower() in thread2_content, f"Thread2 should contain {task2_id}"
         assert task2_id.lower() not in thread1_content, f"Thread1 should NOT contain {task2_id} (isolation breach)"
 
-        print(f"✅ SUCCESS: Agent-to-agent threads properly isolated:")
+        print("✅ SUCCESS: Agent-to-agent threads properly isolated:")
         print(f"  {thread1_id}: {len(thread1.items)} items (contains {task1_id})")
         print(f"  {thread2_id}: {len(thread2.items)} items (contains {task2_id})")
 
@@ -274,7 +274,7 @@ class TestAgentToAgentPersistence:
         """
         task_id = f"content_test_{uuid.uuid4().hex[:6]}"
 
-        print(f"\n--- Testing Conversation Content Preservation ---")
+        print("\n--- Testing Conversation Content Preservation ---")
 
         await coordinator_worker_agency.get_response(f"Please delegate task {task_id} to worker")
 
@@ -309,7 +309,7 @@ class TestAgentToAgentPersistence:
         thread_content = str(agent_thread.items).lower()
         assert task_id.lower() in thread_content, f"Task {task_id} should be referenced in conversation"
 
-        print(f"✅ SUCCESS: Conversation content properly preserved in agent-to-agent thread")
+        print("✅ SUCCESS: Conversation content properly preserved in agent-to-agent thread")
 
     @pytest.mark.asyncio
     async def test_agent_to_agent_thread_isolation_from_user_context(self, coordinator_worker_agency):
@@ -322,7 +322,7 @@ class TestAgentToAgentPersistence:
         private_info = f"PRIVATE_{uuid.uuid4().hex[:6]}"
         relay_info = f"RELAY_{uuid.uuid4().hex[:6]}"
 
-        print(f"\n--- Testing Agent-to-Agent Thread Isolation ---")
+        print("\n--- Testing Agent-to-Agent Thread Isolation ---")
         print(f"Private info (user only): {private_info}")
         print(f"Relay info (for worker): {relay_info}")
 
@@ -353,11 +353,11 @@ class TestAgentToAgentPersistence:
         user_content = str(user_thread.items).lower()
         agent_content = str(agent_thread.items).lower()
 
-        print(f"User thread content check:")
+        print("User thread content check:")
         print(f"  Contains private info: {private_info.lower() in user_content}")
         print(f"  Contains relay info: {relay_info.lower() in user_content}")
 
-        print(f"Agent thread content check:")
+        print("Agent thread content check:")
         print(f"  Contains private info: {private_info.lower() in agent_content}")
         print(f"  Contains relay info: {relay_info.lower() in agent_content}")
 
@@ -369,6 +369,6 @@ class TestAgentToAgentPersistence:
         assert relay_info.lower() in agent_content, f"Agent thread should contain relay info {relay_info}"
         assert private_info.lower() not in agent_content, f"Agent thread should NOT contain private info {private_info}"
 
-        print(f"✅ SUCCESS: Agent-to-agent thread properly isolated:")
+        print("✅ SUCCESS: Agent-to-agent thread properly isolated:")
         print(f"  User thread: {len(user_thread.items)} items (has both secrets)")
         print(f"  Agent thread: {len(agent_thread.items)} items (only has relayed info, not private info)")

@@ -256,6 +256,7 @@ class ThreadManager:
         self._threads = {}
         self._load_threads_callback = load_threads_callback
         self._save_threads_callback = save_threads_callback
+        self.init_threads()
         logger.info("ThreadManager initialized.")
 
     def get_thread(self, thread_id: str | None = None) -> ConversationThread:
@@ -292,7 +293,7 @@ class ThreadManager:
                     # Validate the loaded thread data structure
                     if not isinstance(loaded_thread_data, dict):
                         logger.error(
-                            f"Invalid thread data format for {thread_id}: expected dict, got {type(loaded_thread_data)}"
+                            f"Invalid thread data format for {thread_id}: expected dict, got {type(loaded_thread_data)}: {loaded_thread_data}"
                         )
                     elif not all(key in loaded_thread_data for key in ["items", "metadata"]):
                         logger.error(
@@ -379,3 +380,22 @@ class ThreadManager:
                 logger.error(
                     f"Error saving threads using callback (triggered by thread {thread.thread_id}): {e}", exc_info=True
                 )
+
+    # TODO: Figure out why thread is not properly loaded in Persistence Hooks
+    def init_threads(self):
+        """
+        Loads all threads from the load callback into memory.
+        """
+        if self._load_threads_callback:
+            try:
+                loaded_all_threads_data: dict[str, Any] = self._load_threads_callback()
+                self._threads = {}
+                for tid, tdata in loaded_all_threads_data.items():
+                    self._threads[tid] = ConversationThread(
+                        thread_id=tid,
+                        items=tdata.get("items", []),
+                        metadata=tdata.get("metadata", {}),
+                    )
+                logger.info(f"Initialized {len(self._threads)} threads from load callback.")
+            except Exception as e:
+                logger.error(f"Error initializing threads from callback: {e}")
