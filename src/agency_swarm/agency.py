@@ -772,7 +772,7 @@ class Agency:
 
         Args:
             include_tools (bool): Whether to include agent tools as separate nodes
-            layout_algorithm (str): Layout algorithm hint ("hierarchical", "circular", "force-directed")
+            layout_algorithm (str): Layout algorithm hint ("hierarchical", "force-directed")
 
         Returns:
             dict: ReactFlow-compatible structure with nodes and edges
@@ -925,7 +925,7 @@ class Agency:
             figsize: Figure size as (width, height)
             show_tools: Whether to include agent tools in the visualization
             save_path: Optional path to save the chart image
-            layout: Graph layout algorithm ("spring", "circular", "hierarchical", "shell")
+            layout: Graph layout algorithm ("spring", "hierarchical", "shell")
             show_plot: Whether to display the plot (set False for headless environments)
         """
         if not HAS_VISUALIZATION_DEPS:
@@ -962,8 +962,7 @@ class Agency:
         # Calculate layout
         if layout == "spring":
             pos = nx.spring_layout(G, k=2, iterations=50)
-        elif layout == "circular":
-            pos = nx.circular_layout(G)
+
         elif layout == "shell":
             # Group by node type for shell layout
             agent_nodes = [n for n, d in G.nodes(data=True) if d.get("node_type") == "agent"]
@@ -1158,16 +1157,6 @@ class Agency:
             for i, agent_name in enumerate(regular_agents):
                 positions[agent_name] = {"x": i * 300 + 100, "y": 250}
 
-        elif layout_algorithm == "circular":
-            import math
-
-            for i, agent_name in enumerate(self.agents.keys()):
-                angle = 2 * math.pi * i / agent_count
-                radius = 200
-                positions[agent_name] = {
-                    "x": int(300 + radius * math.cos(angle)),
-                    "y": int(300 + radius * math.sin(angle)),
-                }
         else:  # force-directed or default
             for i, agent_name in enumerate(self.agents.keys()):
                 positions[agent_name] = {"x": i * 250, "y": 100}

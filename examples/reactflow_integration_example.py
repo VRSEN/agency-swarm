@@ -329,7 +329,7 @@ def generate_reactflow_html(agency_data, output_file="agency_reactflow_visualiza
             <div class="control-group">
                 <h3>Layout Algorithms</h3>
                 <button onclick="updateLayout('hierarchical')" class="active" id="btn-hierarchical">Hierarchical</button>
-                <button onclick="updateLayout('circular')" id="btn-circular">Circular</button>
+
                 <button onclick="updateLayout('force_directed')" id="btn-force_directed">Force Directed</button>
             </div>
 
@@ -714,19 +714,7 @@ def generate_reactflow_html(agency_data, output_file="agency_reactflow_visualiza
             }});
         }}
 
-        function applyCircularLayout() {{
-            const allNodes = agencyData.nodes;
-            const centerX = 400;
-            const centerY = 300;
-            const radius = 150;
 
-            allNodes.forEach((node, i) => {{
-                const angle = (i / allNodes.length) * 2 * Math.PI;
-                const x = centerX + radius * Math.cos(angle);
-                const y = centerY + radius * Math.sin(angle);
-                nodePositions.set(node.id, {{ x, y }});
-            }});
-        }}
 
         function applyForceDirectedLayout() {{
             const agents = agencyData.nodes.filter(n => n.type === 'agent');
@@ -758,8 +746,7 @@ def generate_reactflow_html(agency_data, output_file="agency_reactflow_visualiza
                 case 'hierarchical':
                     applyHierarchicalLayout();
                     break;
-                case 'circular':
-                    applyCircularLayout();
+
                     break;
                 case 'force_directed':
                     applyForceDirectedLayout();

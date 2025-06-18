@@ -38,7 +38,7 @@ def get_agency_structure(
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `include_tools` | `bool` | `True` | Whether to include agent tools as separate nodes |
-| `layout_algorithm` | `str` | `"hierarchical"` | Layout algorithm: `"hierarchical"`, `"circular"`, `"force-directed"` |
+| `layout_algorithm` | `str` | `"hierarchical"` | Layout algorithm: `"hierarchical"`, `"force-directed"` |
 
 #### Returns
 
@@ -129,7 +129,7 @@ structure = agency.get_agency_structure(
 Available layout algorithms:
 
 - `"hierarchical"` - Entry points at top, others positioned below
-- `"circular"` - Agents arranged in a circle
+
 - `"force-directed"` - Linear arrangement
 
 ## Visual Chart Generation
@@ -156,7 +156,7 @@ def plot_agency_chart(
 | `figsize` | `tuple[int, int]` | `(12, 8)` | Figure size as (width, height) |
 | `show_tools` | `bool` | `True` | Whether to include agent tools |
 | `save_path` | `str \| None` | `None` | Optional path to save the chart |
-| `layout` | `str` | `"spring"` | Graph layout: `"spring"`, `"circular"`, `"hierarchical"`, `"shell"` |
+| `layout` | `str` | `"spring"` | Graph layout: `"spring"`, `"hierarchical"`, `"shell"` |
 | `show_plot` | `bool` | `True` | Whether to display the plot |
 
 #### Example Usage
@@ -273,10 +273,7 @@ function AgencyVisualization() {
 - Workflow-based agencies (orchestrator pattern)
 - Organizations with management hierarchies
 
-**Circular layouts** work best for:
-- Peer-to-peer collaboration patterns
-- Agencies where all agents have similar roles
-- Small agencies (3-6 agents)
+
 
 **Spring layouts** work best for:
 - Complex communication patterns
