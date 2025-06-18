@@ -1,5 +1,5 @@
 import os
-from typing import List
+from collections.abc import Callable, Mapping
 
 from agents.tool import FunctionTool
 from dotenv import load_dotenv
@@ -11,13 +11,13 @@ load_dotenv()
 
 
 def run_fastapi(
-    agencies: list[Agency] | None = None,
+    agencies: Mapping[str, Callable[..., Agency]] | None = None,
     tools: list[type[FunctionTool]] | None = None,
     host: str = "0.0.0.0",
     port: int = 8000,
     app_token_env: str = "APP_TOKEN",
     return_app: bool = False,
-    cors_origins: List[str] = ["*"],
+    cors_origins: list[str] = ["*"],
 ):
     """
     Launch a FastAPI server exposing endpoints for multiple agencies and tools.
@@ -64,10 +64,9 @@ def run_fastapi(
     agency_names = []
 
     if agencies:
-        for idx, agency in enumerate(agencies):
-            agency_name = getattr(agency, "name", None)
-            if agency_name is None:
-                agency_name = "agency" if len(agencies) == 1 else f"agency_{idx+1}"
+        for agency_name, agency_factory in agencies.items():
+            if agency_name is None or agency_name == "":
+                agency_name = "agency"
             agency_name = agency_name.replace(" ", "_")
             if agency_name in agency_names:
                 raise ValueError(
@@ -77,7 +76,8 @@ def run_fastapi(
             agency_names.append(agency_name)
 
             # Store agent instances for easy lookup
-            AGENT_INSTANCES: dict[str, Agent] = dict(agency.agents.items())
+            preview_instance = agency_factory(load_threads_callback=lambda: {})
+            AGENT_INSTANCES: dict[str, Agent] = dict(preview_instance.agents.items())
 
             class VerboseRequest(BaseRequest):
                 verbose: bool = False
@@ -87,12 +87,12 @@ def run_fastapi(
 
             app.add_api_route(
                 f"/{agency_name}/get_completion",
-                make_response_endpoint(AgencyRequest, agency, verify_token),
+                make_response_endpoint(AgencyRequest, agency_factory, verify_token),
                 methods=["POST"],
             )
             app.add_api_route(
                 f"/{agency_name}/get_completion_stream",
-                make_stream_endpoint(AgencyRequestStreaming, agency, verify_token),
+                make_stream_endpoint(AgencyRequestStreaming, agency_factory, verify_token),
                 methods=["POST"],
             )
             endpoints.append(f"/{agency_name}/get_completion")

@@ -565,12 +565,15 @@ class Agency:
             raise TypeError("recipient_agent must be an Agent instance or agent name string.")
 
     def run_fastapi(self, host: str = "0.0.0.0", port: int = 8000, app_token_env: str = "APP_TOKEN"):
-        """
-        Launch a FastAPI server exposing the agency's completion and streaming endpoints using the shared integrations.fastapi.run_fastapi utility.
-        """
+        """Serve this agency via the FastAPI integration."""
         from agency_swarm.integrations.fastapi import run_fastapi
 
-        run_fastapi(agencies=[self], host=host, port=port, app_token_env=app_token_env)
+        run_fastapi(
+            agencies={self.name or "agency": lambda **kwargs: self},
+            host=host,
+            port=port,
+            app_token_env=app_token_env,
+        )
 
     # --- Deprecated Methods ---
     async def _async_get_completion(
@@ -691,7 +694,6 @@ class Agency:
             # If we reach here, there's already a running loop
             # We need to create a new thread to run the async function
             import concurrent.futures
-            import threading
 
             def run_in_thread():
                 # Create new event loop in the thread
