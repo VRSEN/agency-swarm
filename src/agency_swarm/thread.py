@@ -381,7 +381,8 @@ class ThreadManager:
                     f"Error saving threads using callback (triggered by thread {thread.thread_id}): {e}", exc_info=True
                 )
 
-    # TODO: Figure out why thread is not properly loaded in Persistence Hooks
+    # TODO: Investigate why threads loaded via PersistenceHooks sometimes fail
+    # to populate self._threads correctly.
     def init_threads(self):
         """
         Loads all threads from the load callback into memory.
