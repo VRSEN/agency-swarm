@@ -19,10 +19,19 @@ def run_fastapi(
     return_app: bool = False,
     cors_origins: list[str] = ["*"],
 ):
-    """
-    Launch a FastAPI server exposing endpoints for multiple agencies and tools.
-    Each agency is deployed at /[agency-name]/get_completion and /[agency-name]/get_completion_stream.
-    Each tool is deployed at /tool/[tool-name].
+    """Launch a FastAPI server exposing endpoints for multiple agencies and tools.
+
+    Parameters
+    ----------
+    agencies : dict[str, Callable[[Callable[[], dict[str, Any]] | None], Agency]] | None
+        Mapping of endpoint name to a factory that returns an :class:`Agency`.
+        The factory receives a ``load_threads_callback`` argument and is invoked
+        on each request to provide a fresh agency instance with the
+        conversation history preloaded.
+    tools : list[type[FunctionTool]] | None
+        Optional tools to expose under ``/tool`` routes.
+    host, port, app_token_env, return_app, cors_origins :
+        Standard FastAPI configuration options.
     """
     if (agencies is None or len(agencies) == 0) and (tools is None or len(tools) == 0):
         print("No endpoints to deploy. Please provide at least one agency or tool.")
