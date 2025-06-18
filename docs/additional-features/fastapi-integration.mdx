@@ -62,25 +62,19 @@ def create_agency(load_threads_callback=None) -> Agency:
         ceo,
         dev,
         communication_flows=[(ceo, dev)],
-        load_threads_callback=load_threads_callback,  # <-- this is important!
+        load_threads_callback=load_threads_callback,  # restores chat history per request
+    )
+
+def create_other_agency(load_threads_callback=None) -> Agency:
+    pm = Agent(name="Project Manager", instructions="Coordinate tasks")
+    qa = Agent(name="QA", instructions="Test the code")
+    return Agency(
+        pm,
+        qa,
+        communication_flows=[(pm, qa)],
+        load_threads_callback=load_threads_callback,
     )
 ```
-
-```python
-# main.py
-from agency_swarm.integrations.fastapi import run_fastapi
-from agency import create_agency
-
-if __name__ == "__main__":
-    run_fastapi({"agency_name": create_agency})
-```
-
-- The mapping key (here, `"agency_name"`) becomes the endpoint path: `/agency_name/get_response` and `/agency_name/get_response_stream`.
-- Each request initializes a fresh agency using your factory.
-- Always pass the `load_threads_callback` argument through to the `Agency` constructor so chat history is restored per request.
-
-#### Serving Multiple Agencies
-Pass additional factories in the dictionary to expose several agencies at once:
 
 ```python
 # main.py
@@ -89,10 +83,14 @@ from agency import create_agency, create_other_agency
 
 if __name__ == "__main__":
     run_fastapi({
-        "agency_name": create_agency,
-        "other_agency": create_other_agency,
+        "agency_name": create_agency,           # Exposed at /agency_name/get_response(_stream)
+        "other_agency": create_other_agency,    # Exposed at /other_agency/get_response(_stream)
     })
 ```
+
+- The mapping key (here, `"agency_name"`) becomes the endpoint path: `/agency_name/get_response` and `/agency_name/get_response_stream`.
+- Each request initializes a fresh agency using your factory.
+- Always pass the `load_threads_callback` argument through to the `Agency` constructor so chat history is restored per request.
 
 #### Including Tools
 You can also expose tools as endpoints:
