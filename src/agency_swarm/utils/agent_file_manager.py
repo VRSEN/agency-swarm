@@ -13,8 +13,25 @@ logger = logging.getLogger(__name__)
 
 class AgentFileManager:
     code_interpreter_file_extensions = [
-        ".c", ".cs", ".cpp", ".html", ".java", ".php", ".py", ".rb", ".tex", ".css",
-        ".js", ".sh", ".ts", ".csv",".pkl", ".tar", ".xlsx", ".xml", ".zip"
+        ".c",
+        ".cs",
+        ".cpp",
+        ".html",
+        ".java",
+        ".php",
+        ".py",
+        ".rb",
+        ".tex",
+        ".css",
+        ".js",
+        ".sh",
+        ".ts",
+        ".csv",
+        ".pkl",
+        ".tar",
+        ".xlsx",
+        ".xml",
+        ".zip",
     ]
 
     def __init__(self, agent):
@@ -276,7 +293,9 @@ class AgentFileManager:
             logger.debug(f"Agent {self.agent.name}: No associated vector store ID; FileSearchTool setup skipped.")
             return
         elif not self.agent._associated_vector_store_id and not file_search_tool_exists and file_ids:
-            self.agent._associated_vector_store_id = self.init_attachments_vs(vs_name=f"attachments_vs_{self.agent.name}")
+            self.agent._associated_vector_store_id = self.init_attachments_vs(
+                vs_name=f"attachments_vs_{self.agent.name}"
+            )
 
         if not file_search_tool_exists:
             logger.info(
@@ -285,9 +304,7 @@ class AgentFileManager:
             )
             if file_ids:
                 self.add_files_to_vector_store(file_ids)
-            self.agent.add_tool(
-                FileSearchTool(vector_store_ids=[self.agent._associated_vector_store_id])
-            )
+            self.agent.add_tool(FileSearchTool(vector_store_ids=[self.agent._associated_vector_store_id]))
             logger.info(
                 f"Agent {self.agent.name}: FileSearchTool added with vector store ID: "
                 f"'{self.agent._associated_vector_store_id}'"
@@ -362,37 +379,38 @@ class AgentFileManager:
                     break  # Assume only one CodeInterpreterTool
 
     def add_files_to_vector_store(self, file_ids: list[str]):
-            """
-            Adds a file to the agent's Vector Store if one is linked to this agent via files_folder
-            """
-            if self.agent._associated_vector_store_id:
-                existing_files = self.agent._openai_client_sync.vector_stores.files.list(
-                    vector_store_id=self.agent._associated_vector_store_id
-                )
-                existing_file_ids = [file.id for file in existing_files.data]
-                for file_id in file_ids:
-                    if file_id in existing_file_ids:
-                        logger.info(
-                            f"Agent {self.agent.name}: File {file_id} already in "
-                            f"Vector Store {self.agent._associated_vector_store_id}, skipping..."
-                        )
-                        continue
+        """
+        Adds a file to the agent's Vector Store if one is linked to this agent via files_folder
+        """
+        if self.agent._associated_vector_store_id:
+            existing_files = self.agent._openai_client_sync.vector_stores.files.list(
+                vector_store_id=self.agent._associated_vector_store_id
+            )
+            existing_file_ids = [file.id for file in existing_files.data]
+            for file_id in file_ids:
+                if file_id in existing_file_ids:
+                    logger.info(
+                        f"Agent {self.agent.name}: File {file_id} already in "
+                        f"Vector Store {self.agent._associated_vector_store_id}, skipping..."
+                    )
+                    continue
 
-                    try:
-                        self.agent._openai_client_sync.vector_stores.files.create(
-                            vector_store_id=self.agent._associated_vector_store_id, file_id=file_id)
-                        logger.info(
-                            f"Agent {self.agent.name}: Added file {file_id} "
-                            f"to Vector Store {self.agent._associated_vector_store_id}."
-                        )
-                    except Exception as e:
-                        logger.error(
-                            f"Agent {self.agent.name}: Failed to add file {file_id} "
-                            f"to Vector Store {self.agent._associated_vector_store_id}: {e}"
-                        )
-                        raise AgentsException(
-                            f"Failed to add file {file_id} to Vector Store {self.agent._associated_vector_store_id}: {e}"
-                        ) from e
+                try:
+                    self.agent._openai_client_sync.vector_stores.files.create(
+                        vector_store_id=self.agent._associated_vector_store_id, file_id=file_id
+                    )
+                    logger.info(
+                        f"Agent {self.agent.name}: Added file {file_id} "
+                        f"to Vector Store {self.agent._associated_vector_store_id}."
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"Agent {self.agent.name}: Failed to add file {file_id} "
+                        f"to Vector Store {self.agent._associated_vector_store_id}: {e}"
+                    )
+                    raise AgentsException(
+                        f"Failed to add file {file_id} to Vector Store {self.agent._associated_vector_store_id}: {e}"
+                    ) from e
 
     def get_filename_by_id(self, file_id: str) -> str:
         """
