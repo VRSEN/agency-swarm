@@ -456,9 +456,7 @@ class AgentFileManager:
         content_list = []
         for file_id in pdf_file_ids:
             if isinstance(file_id, str) and file_id.startswith("file-"):
-                logger.debug(
-                    f"Adding pdf file content item for file_id: {file_id}"
-                )
+                logger.debug(f"Adding pdf file content item for file_id: {file_id}")
                 file_content_item = {
                     "type": "input_file",
                     "file_id": file_id,
@@ -466,18 +464,14 @@ class AgentFileManager:
                 content_list.append(file_content_item)
                 logger.debug(f"Added file content item for file_id: {file_id}")
             else:
-                logger.warning(
-                    f"Invalid file_id format: {file_id} for agent {self.agent.name}"
-                )
+                logger.warning(f"Invalid file_id format: {file_id} for agent {self.agent.name}")
 
         # ------------------------------------------------------------
         # Temporary solution until openai supports other file types.
         # ------------------------------------------------------------
         # Add file search and code interpreter tools if needed (will not overwrite existing tools)
         if file_search_ids:
-            logger.info(
-                f"Adding file search tool for agent {self.agent.name} with file ids: {file_search_ids}"
-            )
+            logger.info(f"Adding file search tool for agent {self.agent.name} with file ids: {file_search_ids}")
             self.add_file_search_tool(file_search_ids)
         if code_interpreter_ids:
             logger.info(

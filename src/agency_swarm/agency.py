@@ -707,7 +707,6 @@ class Agency:
             asyncio.get_running_loop()
             # If we reach here, there's already a running loop
             # We need to create a new thread to run the async function
-            import concurrent.futures
 
             def run_in_thread():
                 # Create new event loop in the thread

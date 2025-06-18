@@ -8,7 +8,7 @@ using templates.
 import json
 import webbrowser
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 
 class HTMLVisualizationGenerator:
@@ -22,7 +22,7 @@ class HTMLVisualizationGenerator:
 
     def generate_interactive_html(
         self,
-        agency_data: Dict[str, Any],
+        agency_data: dict[str, Any],
         output_file: str = "agency_visualization.html",
         open_browser: bool = True,
         layout_algorithm: str = "force_directed",
@@ -78,10 +78,10 @@ class HTMLVisualizationGenerator:
 
     def generate_component_files(
         self,
-        agency_data: Dict[str, Any],
+        agency_data: dict[str, Any],
         output_dir: str = "agency_visualization",
         layout_algorithm: str = "force_directed",
-    ) -> Dict[str, str]:
+    ) -> dict[str, str]:
         """
         Generate separate HTML, CSS, and JS files for web development.
 
@@ -140,7 +140,7 @@ class HTMLVisualizationGenerator:
         if not template_path.exists():
             raise FileNotFoundError(f"Template not found: {template_path}")
 
-        with open(template_path, "r", encoding="utf-8") as f:
+        with open(template_path, encoding="utf-8") as f:
             return f.read()
 
     def _open_in_browser(self, file_path: Path) -> None:
