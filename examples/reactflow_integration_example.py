@@ -326,12 +326,7 @@ def generate_reactflow_html(agency_data, output_file="agency_reactflow_visualiza
 
     <div class="container">
         <div class="controls">
-            <div class="control-group">
-                <h3>Layout Algorithms</h3>
-                <button onclick="updateLayout('hierarchical')" class="active" id="btn-hierarchical">Hierarchical</button>
 
-                <button onclick="updateLayout('force_directed')" id="btn-force_directed">Force Directed</button>
-            </div>
 
             <div class="control-group">
                 <h3>View Options</h3>
@@ -447,6 +442,9 @@ def generate_reactflow_html(agency_data, output_file="agency_reactflow_visualiza
         // Initialize visualization
         function initVisualization() {{
             console.log('✅ Initializing SVG visualization...');
+
+            // Apply force-directed layout
+            applyForceDirectedLayout();
 
             // Update stats
             updateStats();
@@ -694,70 +692,109 @@ def generate_reactflow_html(agency_data, output_file="agency_reactflow_visualiza
             edgesGroup.setAttribute('transform', transform);
         }}
 
-        // Layout algorithms
-        function applyHierarchicalLayout() {{
-            const agents = agencyData.nodes.filter(n => n.type === 'agent');
-            const tools = agencyData.nodes.filter(n => n.type === 'tool');
-
-            // Position agents in a hierarchy
-            agents.forEach((agent, i) => {{
-                const x = 100 + (i % 2) * 300;
-                const y = 50 + Math.floor(i / 2) * 200;
-                nodePositions.set(agent.id, {{ x, y }});
-            }});
-
-            // Position tools around their agents
-            tools.forEach((tool, i) => {{
-                const x = 50 + (i % 4) * 150;
-                const y = 300 + Math.floor(i / 4) * 100;
-                nodePositions.set(tool.id, {{ x, y }});
-            }});
-        }}
+        // Layout algorithm
 
 
 
         function applyForceDirectedLayout() {{
-            const agents = agencyData.nodes.filter(n => n.type === 'agent');
-            const tools = agencyData.nodes.filter(n => n.type === 'tool');
+            const allNodes = agencyData.nodes;
+            const width = 800;
+            const height = 600;
+            const nodeRadius = 80; // Minimum distance between nodes to prevent intersections
 
-            // Spread agents across the canvas
-            agents.forEach((agent, i) => {{
-                const x = 100 + Math.random() * 600;
-                const y = 100 + Math.random() * 400;
-                nodePositions.set(agent.id, {{ x, y }});
+            // Initialize positions randomly
+            allNodes.forEach(node => {{
+                nodePositions.set(node.id, {{
+                    x: nodeRadius + Math.random() * (width - 2 * nodeRadius),
+                    y: nodeRadius + Math.random() * (height - 2 * nodeRadius)
+                }});
             }});
 
-            // Position tools randomly but clustered
-            tools.forEach((tool, i) => {{
-                const x = 200 + Math.random() * 400;
-                const y = 200 + Math.random() * 200;
-                nodePositions.set(tool.id, {{ x, y }});
-            }});
+            // Force-directed algorithm iterations
+            const iterations = 50; // Reduced for performance in browser
+            for (let iteration = 0; iteration < iterations; iteration++) {{
+                const forces = new Map();
+                allNodes.forEach(node => {{
+                    forces.set(node.id, {{ x: 0, y: 0 }});
+                }});
+
+                // Repulsive forces between all nodes (prevents intersections)
+                for (let i = 0; i < allNodes.length; i++) {{
+                    for (let j = i + 1; j < allNodes.length; j++) {{
+                        const node1 = allNodes[i];
+                        const node2 = allNodes[j];
+
+                        const pos1 = nodePositions.get(node1.id);
+                        const pos2 = nodePositions.get(node2.id);
+
+                        const dx = pos1.x - pos2.x;
+                        const dy = pos1.y - pos2.y;
+                        const distance = Math.sqrt(dx * dx + dy * dy);
+
+                        if (distance > 0) {{
+                            let repulsionForce = distance < nodeRadius * 2 ?
+                                                2000 / Math.max(distance, 10) :
+                                                1000 / Math.max(distance, 10);
+
+                            const force1 = forces.get(node1.id);
+                            const force2 = forces.get(node2.id);
+
+                            force1.x += (dx / distance) * repulsionForce;
+                            force1.y += (dy / distance) * repulsionForce;
+                            force2.x -= (dx / distance) * repulsionForce;
+                            force2.y -= (dy / distance) * repulsionForce;
+                        }}
+                    }}
+                }}
+
+                // Attractive forces for communication edges (if visible)
+                if (agencyData.edges) {{
+                    agencyData.edges.forEach(edge => {{
+                        if (edge.type === 'communication') {{
+                            const pos1 = nodePositions.get(edge.source);
+                            const pos2 = nodePositions.get(edge.target);
+
+                            if (pos1 && pos2) {{
+                                const dx = pos2.x - pos1.x;
+                                const dy = pos2.y - pos1.y;
+                                const distance = Math.sqrt(dx * dx + dy * dy);
+
+                                if (distance > 0) {{
+                                    const attractiveForce = distance * 0.05;
+
+                                    const force1 = forces.get(edge.source);
+                                    const force2 = forces.get(edge.target);
+
+                                    force1.x += (dx / distance) * attractiveForce;
+                                    force1.y += (dy / distance) * attractiveForce;
+                                    force2.x -= (dx / distance) * attractiveForce;
+                                    force2.y -= (dy / distance) * attractiveForce;
+                                }}
+                            }}
+                        }}
+                    }});
+                }}
+
+                // Apply forces with cooling
+                const cooling = 1.0 - (iteration / iterations);
+                const damping = 0.9;
+
+                allNodes.forEach(node => {{
+                    const force = forces.get(node.id);
+                    const pos = nodePositions.get(node.id);
+
+                    // Apply force with cooling and damping
+                    pos.x += force.x * cooling * damping;
+                    pos.y += force.y * cooling * damping;
+
+                    // Keep within bounds
+                    pos.x = Math.max(nodeRadius, Math.min(width - nodeRadius, pos.x));
+                    pos.y = Math.max(nodeRadius, Math.min(height - nodeRadius, pos.y));
+                }});
+            }}
         }}
 
         // Control functions
-        function updateLayout(layoutType) {{
-            // Update active button
-            document.querySelectorAll('.control-group button').forEach(btn => btn.classList.remove('active'));
-            document.getElementById(`btn-${{layoutType}}`).classList.add('active');
-
-            // Apply the selected layout
-            switch(layoutType) {{
-                case 'hierarchical':
-                    applyHierarchicalLayout();
-                    break;
-
-                    break;
-                case 'force_directed':
-                    applyForceDirectedLayout();
-                    break;
-            }}
-
-            // Redraw with new positions
-            drawVisualization();
-
-            console.log(`Applied ${{layoutType}} layout`);
-        }}
 
         function toggleTools() {{
             showTools = !showTools;

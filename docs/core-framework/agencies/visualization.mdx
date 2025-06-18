@@ -4,10 +4,11 @@ description: "Visualize agency structure and communication flows with ReactFlow 
 icon: "chart-network"
 ---
 
-Agency Swarm v1.x provides two methods for visualizing agency structure:
+Agency Swarm v1.x provides three methods for visualizing agency structure:
 
-1. **`get_agency_structure()`** - Returns ReactFlow-compatible JSON data
-2. **`plot_agency_chart()`** - Generates visual charts using matplotlib
+1. **`create_interactive_visualization()`** - Creates interactive HTML visualizations
+2. **`get_agency_structure()`** - Returns ReactFlow-compatible JSON data
+3. **`plot_agency_chart()`** - Generates basic static charts using matplotlib
 
 ## Overview
 
@@ -15,9 +16,89 @@ These visualization methods help you:
 
 - **Understand Agency Organization**: See how agents, tools, and communication flows are structured
 - **Frontend Integration**: Use ReactFlow-compatible data to build interactive web UIs
-- **Documentation & Presentations**: Generate professional charts for documentation
+- **Documentation & Presentations**: Generate charts for documentation
 - **Debugging & Development**: Visualize complex agency relationships during development
 - **Team Collaboration**: Share visual representations of system architecture
+
+## Interactive HTML Visualization ⭐
+
+### `create_interactive_visualization()`
+
+Creates interactive HTML visualizations with features and styling.
+
+```python
+def create_interactive_visualization(
+    self,
+    output_file: str = "agency_visualization.html",
+    layout_algorithm: str = "force_directed",
+    include_tools: bool = True,
+    open_browser: bool = True
+) -> str
+```
+
+#### Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `output_file` | `str` | `"agency_visualization.html"` | Path to save the HTML file |
+| `layout_algorithm` | `str` | `"hierarchical"` | Layout: `"hierarchical"`, `"force_directed"` |
+| `include_tools` | `bool` | `True` | Whether to include agent tools |
+| `open_browser` | `bool` | `True` | Whether to automatically open in browser |
+
+#### Features
+
+- **🎨 Professional Design**: Gradients, shadows, and responsive layout
+- **🎯 Intelligent Layouts**: Hierarchical (default) and force-directed algorithms
+- **🧠 Smart Tool Positioning**: Manager tools positioned to the right, leaf agent tools below
+- **⚡ Collision Detection**: Optimized spacing (120px minimum) prevents node overlaps
+- **🎮 Interactive Controls**: Drag nodes, zoom, pan, and layout switching
+- **📊 Real-time Statistics**: Live agent, tool, and communication flow counts
+- **💾 Export Options**: Download as SVG or PNG
+- **📱 Responsive Design**: Works on desktop, tablet, and mobile
+- **🛠️ Tool Management**: Toggle tool visibility dynamically
+
+#### Example Usage
+
+```python
+from agency_swarm import Agency, Agent
+
+# Create your agency
+agency = Agency(
+    agent1, agent2,
+    communication_flows=[(agent1, agent2)],
+    name="My Agency"
+)
+
+# Generate interactive visualization
+html_file = agency.create_interactive_visualization(
+    output_file="my_agency.html",
+    layout_algorithm="hierarchical",
+    include_tools=True,
+    open_browser=True
+)
+
+print(f"Visualization saved to: {html_file}")
+```
+
+#### Layout Algorithms
+
+**Force-Directed Layout**:
+- Force-based simulation with collision detection
+- Prevents node overlaps using repulsive forces
+- Spacing based on communication relationships
+- Self-organizing with animations
+
+**Hierarchical Layout** (Default):
+- Entry points positioned at the top
+- Subsequent layers arranged by communication flows with optimized spacing (120px minimum)
+- **Intelligent tool positioning** based on agent roles:
+  - Manager agents (multiple outgoing connections): tools positioned to the right
+  - Leaf agents (single/no outgoing connections): tools positioned below
+- Collision detection prevents node overlaps and intersections
+- Clear visual hierarchy and delegation patterns
+- Ideal for management-style organizations
+
+
 
 ## ReactFlow Integration
 
@@ -129,8 +210,7 @@ structure = agency.get_agency_structure(
 Available layout algorithms:
 
 - `"hierarchical"` - Entry points at top, others positioned below
-
-- `"force-directed"` - Linear arrangement
+- `"force-directed"` - Physics-based layout with collision detection to prevent node intersections
 
 ## Visual Chart Generation
 
@@ -254,17 +334,24 @@ function AgencyVisualization() {
 
 ### When to Use Each Method
 
+**Use `create_interactive_visualization()` when:**
+- Creating presentations or demos
+- Sharing agency architecture with stakeholders
+- Interactive debugging and development
+- Generating visualizations
+- Need responsive design with interactivity
+
 **Use `get_agency_structure()` when:**
-- Building interactive web applications
-- Need programmatic access to agency structure
-- Creating custom visualizations
-- Integrating with frontend frameworks
+- Building custom web applications with specific requirements
+- Need programmatic access to agency structure data
+- Integrating with existing frontend frameworks
+- Creating specialized visualizations
 
 **Use `plot_agency_chart()` when:**
-- Creating documentation or presentations
-- Need quick visual debugging during development
-- Generating static images for reports
-- Sharing agency architecture with stakeholders
+- Need quick static images for documentation
+- Working in headless environments without browsers
+- Creating simple diagrams for internal notes
+- matplotlib/networkx integration is preferred
 
 ### Layout Selection
 
@@ -272,17 +359,21 @@ function AgencyVisualization() {
 - Agencies with clear entry points and delegation patterns
 - Workflow-based agencies (orchestrator pattern)
 - Organizations with management hierarchies
+- **Any agency structure** - intelligent tool positioning automatically adapts to agent roles
 
-
+**Force-directed layouts** work best for:
+- Complex communication patterns with intersection avoidance
+- Agencies where communication flows determine positioning
+- When you need physics-based automatic positioning with no overlaps
 
 **Spring layouts** work best for:
-- Complex communication patterns
+- General-purpose automatic positioning using NetworkX algorithms
 - Large agencies with many interconnections
-- When you need general-purpose automatic positioning
+- Quick visualization without custom force calculations
 
 ### Performance Considerations
 
-- **Large agencies** (>10 agents): Consider setting `include_tools=False` for cleaner visualizations
+- **Large agencies** (>10 agents): Consider setting `include_tools=False` for simpler visualizations
 - **Complex tool sets**: Use `show_tools=False` in charts to reduce visual complexity
 - **Frontend integration**: Cache structure results to avoid repeated computation
 
@@ -305,6 +396,7 @@ pip install matplotlib networkx
 
 **Positioning issues:**
 - Try different layout algorithms
+- Hierarchical layout automatically prevents overlaps with intelligent tool positioning
 - For frontend use, consider overriding positions in ReactFlow
 
 **Large/cluttered charts:**
