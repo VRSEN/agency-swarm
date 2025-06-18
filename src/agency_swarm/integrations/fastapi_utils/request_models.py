@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field, field_validator
 
 class ConversationThread(BaseModel):
     items: list[TResponseInputItem]
-    metadata: dict[str, Any] = {}
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class BaseRequest(BaseModel):
