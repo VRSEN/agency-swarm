@@ -737,20 +737,12 @@ class Agent(BaseAgent[MasterContext]):
                         else:
                             content_list = []
 
-                        # Add file items to content
-                        for file_id in files_to_attach:
-                            if isinstance(file_id, str) and file_id.startswith("file-"):
-                                file_content_item = {
-                                    "type": "input_file",
-                                    "file_id": file_id,
-                                }
-                                content_list.append(file_content_item)
-                                logger.debug(f"Added file content item for file_id: {file_id}")
-                            else:
-                                logger.warning(f"Invalid file_id format: {file_id} for agent {self.name}")
+                        file_content_items = self.file_manager.sort_file_attachments(files_to_attach)
+                        content_list.extend(file_content_items)
 
                         # Update the message content
-                        last_message["content"] = content_list
+                        if content_list != []:
+                            last_message["content"] = content_list
                     else:
                         logger.warning(f"Cannot attach files: Last message is not a user message for agent {self.name}")
                 else:
@@ -957,17 +949,12 @@ class Agent(BaseAgent[MasterContext]):
                             content_list = list(current_content)
                         else:
                             content_list = []
-                        for file_id in files_to_attach:
-                            if isinstance(file_id, str) and file_id.startswith("file-"):
-                                file_content_item = {
-                                    "type": "input_file",
-                                    "file_id": file_id,
-                                }
-                                content_list.append(file_content_item)
-                                logger.debug(f"Added file content item for file_id: {file_id}")
-                            else:
-                                logger.warning(f"Invalid file_id format: {file_id} for agent {self.name}")
-                        last_message["content"] = content_list
+
+                        file_content_items = self.file_manager.sort_file_attachments(files_to_attach)
+                        content_list.extend(file_content_items)
+
+                        if content_list != []:
+                            last_message["content"] = content_list
                     else:
                         logger.warning(f"Cannot attach files: Last message is not a user message for agent {self.name}")
                 else:

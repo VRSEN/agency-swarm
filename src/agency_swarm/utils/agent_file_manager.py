@@ -12,6 +12,11 @@ logger = logging.getLogger(__name__)
 
 
 class AgentFileManager:
+    code_interpreter_file_extensions = [
+        ".c", ".cs", ".cpp", ".html", ".java", ".php", ".py", ".rb", ".tex", ".css",
+        ".js", ".sh", ".ts", ".csv",".pkl", ".tar", ".xlsx", ".xml", ".zip"
+    ]
+
     def __init__(self, agent):
         self.agent = agent
 
@@ -226,31 +231,9 @@ class AgentFileManager:
 
         code_interpreter_file_ids = []
 
-        code_interpreter_file_extensions = [
-            ".c",
-            ".cs",
-            ".cpp",
-            ".html",
-            ".java",
-            ".php",
-            ".py",
-            ".rb",
-            ".tex",
-            ".css",
-            ".js",
-            ".sh",
-            ".ts",
-            ".csv",
-            ".pkl",
-            ".tar",
-            ".xlsx",
-            ".xml",
-            ".zip",
-        ]
-
         # Process existing files in vector store directory
         for file in os.listdir(self.agent.files_folder_path):
-            if Path(file).suffix.lower() in code_interpreter_file_extensions:
+            if Path(file).suffix.lower() in self.code_interpreter_file_extensions:
                 file_id = self.upload_file(
                     os.path.join(self.agent.files_folder_path, file), include_in_vector_store=False
                 )
@@ -263,7 +246,7 @@ class AgentFileManager:
             logger.info(f"Agent {self.agent.name}: Processing new file {new_file.name}")
 
             # Upload the new file (this will automatically rename it with file ID and move to vector store dir)
-            if new_file.suffix.lower() in code_interpreter_file_extensions:
+            if new_file.suffix.lower() in self.code_interpreter_file_extensions:
                 file_id = self.upload_file(str(new_file), include_in_vector_store=False)
                 code_interpreter_file_ids.append(file_id)
             else:
@@ -271,53 +254,70 @@ class AgentFileManager:
 
         # Add FileSearchTool tentatively if VS ID is parsed. Actual VS check is async.
         if self.agent._associated_vector_store_id:
-            self._add_file_search_tool()  # This method is synchronous
+            self.add_file_search_tool()  # This method is synchronous
         else:
             logger.error(f"Agent {self.agent.name}: No associated vector store ID; FileSearchTool setup skipped.")
 
         if code_interpreter_file_ids:
-            self._add_code_interpreter_tool(code_interpreter_file_ids)
+            self.add_code_interpreter_tool(code_interpreter_file_ids)
 
-    def _add_file_search_tool(self):
+    def add_file_search_tool(self, file_ids: list[str] = None):
         """
         Ensures that a FileSearchTool is available and configured if the agent
         has an associated Vector Store ID (`self.agent._associated_vector_store_id`).
+        If optional file_ids provided, they will be added to the associated vector store.
 
         If the tool is not present, it will be added. If present but not configured with
         the agent's Vector Store ID, the ID is added to its configuration.
         """
-        if not self.agent._associated_vector_store_id:
+        file_search_tool_exists = any(isinstance(tool, FileSearchTool) for tool in self.agent.tools)
+
+        if not self.agent._associated_vector_store_id and not file_search_tool_exists and not file_ids:
             logger.debug(f"Agent {self.agent.name}: No associated vector store ID; FileSearchTool setup skipped.")
             return
-
-        file_search_tool_exists = any(isinstance(tool, FileSearchTool) for tool in self.agent.tools)
+        elif not self.agent._associated_vector_store_id and not file_search_tool_exists and file_ids:
+            self.agent._associated_vector_store_id = self.init_attachments_vs(vs_name=f"attachments_vs_{self.agent.name}")
 
         if not file_search_tool_exists:
             logger.info(
                 f"Agent {self.agent.name}: Adding FileSearchTool with vector store ID: "
                 f"'{self.agent._associated_vector_store_id}'"
             )
+            if file_ids:
+                self.add_files_to_vector_store(file_ids)
             self.agent.add_tool(
-                FileSearchTool(vector_store_ids=[self.agent._associated_vector_store_id], include_search_results=True)
+                FileSearchTool(vector_store_ids=[self.agent._associated_vector_store_id])
+            )
+            logger.info(
+                f"Agent {self.agent.name}: FileSearchTool added with vector store ID: "
+                f"'{self.agent._associated_vector_store_id}'"
             )
         else:
             for tool in self.agent.tools:
                 if isinstance(tool, FileSearchTool):
                     if not tool.vector_store_ids:
-                        tool.vector_store_ids = [self.agent._associated_vector_store_id]
-                        logger.info(
-                            f"Agent {self.agent.name}: Configured existing FileSearchTool with "
-                            f"vector store ID '{self.agent._associated_vector_store_id}'."
+                        raise AgentsException(
+                            f"Agent {self.agent.name}: FileSearchTool has no vector store IDs. "
+                            "Please provide vector store IDs when adding the tool."
                         )
-                    elif self.agent._associated_vector_store_id not in tool.vector_store_ids:
+
+                    # If tool was provided without files folder, associate agent's vs with one of the tool's vs ids.
+                    if not self.agent._associated_vector_store_id:
+                        self.agent._associated_vector_store_id = tool.vector_store_ids[0]
+
+                    # Add files folder vs id to the tool if it's not already there.
+                    if self.agent._associated_vector_store_id not in tool.vector_store_ids:
                         tool.vector_store_ids.append(self.agent._associated_vector_store_id)
                         logger.info(
                             f"Agent {self.agent.name}: Added vector store ID "
                             f"'{self.agent._associated_vector_store_id}' to existing FileSearchTool."
                         )
+                    if file_ids and self.agent._associated_vector_store_id:
+                        self.add_files_to_vector_store(file_ids)
+
                     break  # Assume only one FileSearchTool
 
-    def _add_code_interpreter_tool(self, code_interpreter_file_ids: list[str]):
+    def add_code_interpreter_tool(self, code_interpreter_file_ids: list[str]):
         """
         Checks that a CodeInterpreterTool is available and configured.
 
@@ -346,10 +346,117 @@ class AgentFileManager:
                         )
                     elif code_interpreter_file_ids:
                         existing_file_ids = tool.tool_config.container.get("file_ids", [])
-                        existing_file_ids.extend(code_interpreter_file_ids)
+                        for file_id in code_interpreter_file_ids:
+                            if file_id in existing_file_ids:
+                                logger.info(
+                                    f"Agent {self.agent.name}: File {file_id} already in "
+                                    f"CodeInterpreterTool, skipping..."
+                                )
+                                continue
+                            existing_file_ids.append(file_id)
                         tool.tool_config.container["file_ids"] = existing_file_ids
                         logger.info(
                             f"Agent {self.agent.name}: Added file IDs "
                             f"{code_interpreter_file_ids} to existing CodeInterpreter."
                         )
                     break  # Assume only one CodeInterpreterTool
+
+    def add_files_to_vector_store(self, file_ids: list[str]):
+            """
+            Adds a file to the agent's Vector Store if one is linked to this agent via files_folder
+            """
+            if self.agent._associated_vector_store_id:
+                existing_files = self.agent._openai_client_sync.vector_stores.files.list(
+                    vector_store_id=self.agent._associated_vector_store_id
+                )
+                existing_file_ids = [file.id for file in existing_files.data]
+                for file_id in file_ids:
+                    if file_id in existing_file_ids:
+                        logger.info(
+                            f"Agent {self.agent.name}: File {file_id} already in "
+                            f"Vector Store {self.agent._associated_vector_store_id}, skipping..."
+                        )
+                        continue
+
+                    try:
+                        self.agent._openai_client_sync.vector_stores.files.create(
+                            vector_store_id=self.agent._associated_vector_store_id, file_id=file_id)
+                        logger.info(
+                            f"Agent {self.agent.name}: Added file {file_id} "
+                            f"to Vector Store {self.agent._associated_vector_store_id}."
+                        )
+                    except Exception as e:
+                        logger.error(
+                            f"Agent {self.agent.name}: Failed to add file {file_id} "
+                            f"to Vector Store {self.agent._associated_vector_store_id}: {e}"
+                        )
+                        raise AgentsException(
+                            f"Failed to add file {file_id} to Vector Store {self.agent._associated_vector_store_id}: {e}"
+                        ) from e
+
+    def get_filename_by_id(self, file_id: str) -> str:
+        """
+        Get the filename of a file by its ID
+        """
+        file_data = self.agent._openai_client_sync.files.retrieve(file_id)
+        return file_data.filename
+
+    def init_attachments_vs(self, vs_name: str = "attachments_vs"):
+        """
+        Fallback function that would create (or retrieve) a new vector store in case
+        no vector stores were provided by the user.
+        """
+        # First find if attachments_vs already exists
+        logger.info(f"Using a fallback vector store for agent {self.agent.name}: {vs_name}")
+        existing_vs = self.agent._openai_client_sync.vector_stores.list()
+        existing_vs_names = [vs.name for vs in existing_vs.data]
+        if vs_name in existing_vs_names:
+            return existing_vs.data[existing_vs_names.index(vs_name)].id
+        else:
+            created_vs = self.agent._openai_client_sync.vector_stores.create(name=vs_name)
+            return created_vs.id
+
+    def sort_file_attachments(self, file_ids: list[str]) -> list[dict]:
+        """
+        Helper function to correctly distribute file ids into file search, code interpreter and pdf file ids.
+        If any files can be included in the message, they will be returned in the content_list.
+        """
+        file_search_ids = []
+        pdf_file_ids = []
+        code_interpreter_ids = []
+        for file_id in file_ids:
+            filename = self.get_filename_by_id(file_id)
+            extension = Path(filename).suffix.lower()
+            if extension in self.code_interpreter_file_extensions:
+                code_interpreter_ids.append(file_id)
+            elif extension == ".pdf":
+                pdf_file_ids.append(file_id)
+            else:
+                file_search_ids.append(file_id)
+
+        # Add file items to content
+        content_list = []
+        for file_id in pdf_file_ids:
+            if isinstance(file_id, str) and file_id.startswith("file-"):
+                print(f"Adding pdf file content item for file_id: {file_id}")
+                file_content_item = {
+                    "type": "input_file",
+                    "file_id": file_id,
+                }
+                content_list.append(file_content_item)
+                logger.debug(f"Added file content item for file_id: {file_id}")
+            else:
+                logger.warning(f"Invalid file_id format: {file_id} for agent {self.agent.name}")
+
+        # ------------------------------------------------------------
+        # Temporary solution until openai supports other file types.
+        # ------------------------------------------------------------
+        # Add file search and code interpreter tools if needed (will not overwrite existing tools)
+        if file_search_ids:
+            print(f"Adding file search tool for agent {self.agent.name} with file ids: {file_search_ids}")
+            self.add_file_search_tool(file_search_ids)
+        if code_interpreter_ids:
+            print(f"Adding code interpreter tool for agent {self.agent.name} with file ids: {code_interpreter_ids}")
+            self.add_code_interpreter_tool(code_interpreter_ids)
+
+        return content_list
