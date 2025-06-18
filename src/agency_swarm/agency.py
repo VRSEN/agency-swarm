@@ -583,6 +583,10 @@ class Agency:
         from agency_swarm.integrations.fastapi import run_fastapi
 
         run_fastapi(
+            # TODO: agency_factory should create a new Agency instance each call
+            # to properly load conversation history via the callback.
+            # Returning `self` preserves old behaviour but may skip persistence
+            # loading. Consider refactoring.
             agencies={self.name or "agency": lambda **kwargs: self},
             host=host,
             port=port,
@@ -920,6 +924,8 @@ class Agency:
         layout: str = "spring",
         show_plot: bool = True,
     ) -> None:
+        # TODO: This method exceeds 100 lines. Refactor into smaller helpers
+        # for layout creation and plotting to satisfy codebase guidelines.
         """
         Generates a visual chart of the agency structure using matplotlib and networkx.
         Reuses the same data structure as get_agency_structure() for consistency.
@@ -1180,6 +1186,8 @@ class Agency:
 
     def _calculate_node_positions(self, layout_algorithm: str) -> dict[str, dict[str, int]]:
         """Calculate node positions based on layout algorithm."""
+        # TODO: This helper is over 100 lines long. Break into smaller
+        # functions (e.g., _force_directed_layout) to improve readability.
         positions = {}
         agent_count = len(self.agents)
 
