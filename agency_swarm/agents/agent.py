@@ -634,7 +634,7 @@ class Agent:
             # Get tools from the MCP server
             mcp_tools = ToolFactory.from_mcp(server)
             try:
-                logger.info(f"\n--- Adding Tools from MCP Server: {server.name} ---")
+                logger.info(f"--- Adding Tools from MCP Server: {server.name} ---")
                 # Add each tool to the agent and print its name
                 for tool in mcp_tools:
                     self.add_tool(tool)

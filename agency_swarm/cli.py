@@ -1,9 +1,12 @@
 import argparse
 import os
+import sys
 
 from dotenv import load_dotenv
 
 from agency_swarm.util.helpers import list_available_agents
+
+from .integrations.mcp_server import run_mcp
 
 
 def main():
@@ -29,6 +32,30 @@ def main():
     )
     create_parser.add_argument("--name", type=str, help="Name of agent.")
     create_parser.add_argument("--description", type=str, help="Description of agent.")
+
+    # mcp-server
+    mcp_parser = subparsers.add_parser("mcp-server", help="Run the MCP server.")
+    mcp_parser.add_argument(
+        "--tools-dir", type=str, required=True, help="Directory containing tool modules"
+    )
+    mcp_parser.add_argument(
+        "--host", type=str, default="0.0.0.0", help="Host to bind the server to"
+    )
+    mcp_parser.add_argument(
+        "--port", type=int, default=8000, help="Port to bind the server to"
+    )
+    mcp_parser.add_argument(
+        "--app-token-env", type=str, default="APP_TOKEN", 
+        help="Environment variable name for authentication token"
+    )
+    mcp_parser.add_argument(
+        "--server-name", type=str, default="mcp-tools-server", 
+        help="Name identifier for the MCP server"
+    )
+    mcp_parser.add_argument(
+        "--cors-origins", type=str, default="*", 
+        help="Comma-separated list of allowed CORS origins"
+    )
 
     # genesis-agency
     genesis_parser = subparsers.add_parser("genesis", help="Start genesis agency.")
@@ -67,6 +94,20 @@ def main():
         from agency_swarm.util import create_agent_template
 
         create_agent_template(args.name, args.description, args.path, args.use_txt)
+    elif args.command == "mcp-server":
+        cors_origins_list = [origin.strip() for origin in args.cors_origins.split(',')]
+        try:
+            run_mcp(
+                tools=args.tools_dir,  # Pass directory path directly
+                host=args.host,
+                port=args.port,
+                app_token_env=args.app_token_env,
+                server_name=args.server_name,
+                cors_origins=cors_origins_list
+            )
+        except ValueError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
     elif args.command == "genesis":
         load_dotenv()
         if not os.getenv("OPENAI_API_KEY") and not args.openai_key:

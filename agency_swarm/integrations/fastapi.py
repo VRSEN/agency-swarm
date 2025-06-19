@@ -19,6 +19,7 @@ def run_fastapi(
     port: int = 8000,
     app_token_env: str = "APP_TOKEN",
     return_app: bool = False,
+    cors_origins: List[str] = None,
 ):
     """
     Launch a FastAPI server exposing endpoints for multiple agencies and tools.
@@ -78,7 +79,7 @@ def run_fastapi(
     
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=cors_origins or ["*"],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
