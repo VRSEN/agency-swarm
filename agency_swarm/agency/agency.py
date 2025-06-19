@@ -1153,18 +1153,19 @@ class Agency:
             port: int = 8000, 
             app_token_env: str = "APP_TOKEN", 
             return_app: bool = False,
-            cors_origins: List[str] = ["*"]
+            cors_origins: List[str] = None,
         ):
         """
         Launch a FastAPI server exposing the agency's completion and 
         streaming endpoints using the shared integrations.fastapi.run_fastapi utility.
         """
         from agency_swarm.integrations.fastapi import run_fastapi
+
         return run_fastapi(
             agencies=[self],
             host=host,
             port=port,
             app_token_env=app_token_env,
             return_app=return_app,
-            cors_origins=cors_origins,
+            cors_origins=cors_origins or ["*"],
         )
