@@ -18,8 +18,7 @@ from agents import (
     output_guardrail,
 )
 
-from agency_swarm.agency import Agency
-from agency_swarm.agent import Agent
+from agency_swarm import Agency, Agent
 
 # Configure basic logging
 logging.basicConfig(level=logging.WARNING)
@@ -31,7 +30,9 @@ load_dotenv()
 
 # Checks agent's response
 @output_guardrail
-async def agent_output_guardrail(ctx: RunContextWrapper, agent: Agent, response_text: str) -> GuardrailFunctionOutput:
+async def agent_output_guardrail(
+    context: RunContextWrapper, agent: Agent, response_text: str
+) -> GuardrailFunctionOutput:
     tripwire_triggered = False
     output_info = ""
     if not response_text.startswith("Hello, User!"):
@@ -47,7 +48,7 @@ async def agent_output_guardrail(ctx: RunContextWrapper, agent: Agent, response_
 # Checks user's input
 @input_guardrail
 async def agent_input_guardrail(
-    ctx: RunContextWrapper, agent: Agent, input_text: list[dict]
+    context: RunContextWrapper, agent: Agent, input_text: list[dict]
 ) -> GuardrailFunctionOutput:
     tripwire_triggered = False
     output_info = ""

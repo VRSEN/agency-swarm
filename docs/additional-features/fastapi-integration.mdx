@@ -1,0 +1,132 @@
+---
+title: "FastAPI Integration"
+description: "Serving your agencies and tools as APIs with FastAPI."
+icon: "server"
+---
+
+Agency Swarm supports serving your agencies and tools as production-ready HTTP APIs using [FastAPI](https://fastapi.tiangolo.com/). This enables you to integrate your agents with other services or connect them to web frontends.
+
+## Installation
+
+FastAPI integration is an **optional installation**. To install all required dependencies, run:
+
+```bash
+pip install agency-swarm[fastapi]
+```
+
+## Setting Up FastAPI Endpoints
+
+You can expose your agencies and tools as API endpoints using the `run_fastapi()` function.
+
+### Function Signature
+
+```python
+run_fastapi(
+    agencies: Mapping[str, Callable[..., Agency]] | None = None,
+    tools: list[type[FunctionTool]] | None = None,
+    host: str = "0.0.0.0",
+    port: int = 8000,
+    app_token_env: str = "APP_TOKEN",
+    return_app: bool = False,
+    cors_origins: list[str] | None = None,
+)
+```
+
+- **agencies**: Mapping of endpoint name to a factory that returns an `Agency`. The factory receives a `load_threads_callback` argument and is invoked on each request to provide a fresh agency instance with the conversation history preloaded.
+- **tools**: Optional list of tool classes (subclasses of `FunctionTool`) to expose under `/tool` routes.
+- **host**: Host address to bind the FastAPI server (default: `"0.0.0.0"`).
+- **port**: Port to run the FastAPI server on (default: `8000`).
+- **app_token_env**: Name of the environment variable for the bearer token (default: `"APP_TOKEN"`). If set, a bearer token is required for all requests.
+- **return_app**: If `True`, returns the FastAPI app instance instead of running the server (default: `False`).
+- **cors_origins**: List of allowed CORS origins. If omitted, all origins are allowed (`["*"]`).
+
+Agency endpoints accept parameters such as `message`, `recipient_agent`, `additional_instructions` and `message_files`. You should also pass the previous `chat_history` dictionary (see hooks documentation for the exact format).
+Responses include a `response` field with the agent reply and a `chat_history` field containing the serialized conversation threads. The streaming endpoint sends `chat_history` as the final event once generation is complete.
+
+If the environment variable specified by `app_token_env` is set, a bearer token is required for all requests. Otherwise, authentication is disabled.
+
+### Example: Serving Multiple Agencies and Tools with Factory Functions
+
+A **factory function** is a callable that returns a fresh `Agency` instance for each request. This is important for stateless HTTP APIs, so each request gets a new, isolated agency with the correct conversation history loaded. The factory should accept a `load_threads_callback` argument, which is used by the FastAPI integration to restore chat history for each request.
+
+#### Step-by-step Example
+
+```python
+# agency.py
+from agency_swarm import Agent, Agency
+
+def create_agency(load_threads_callback=None) -> Agency:
+    ceo = Agent(name="CEO", instructions="Lead the team")
+    dev = Agent(name="Developer", instructions="Write code")
+    return Agency(
+        ceo,
+        dev,
+        communication_flows=[(ceo, dev)],
+        load_threads_callback=load_threads_callback,  # restores chat history per request
+    )
+
+def create_other_agency(load_threads_callback=None) -> Agency:
+    pm = Agent(name="Project Manager", instructions="Coordinate tasks")
+    qa = Agent(name="QA", instructions="Test the code")
+    return Agency(
+        pm,
+        qa,
+        communication_flows=[(pm, qa)],
+        load_threads_callback=load_threads_callback,
+    )
+```
+
+```python
+# main.py
+from agency_swarm.integrations.fastapi import run_fastapi
+from agency import create_agency, create_other_agency
+
+if __name__ == "__main__":
+    run_fastapi({
+        "agency_name": create_agency,           # Exposed at /agency_name/get_response(_stream)
+        "other_agency": create_other_agency,    # Exposed at /other_agency/get_response(_stream)
+    })
+```
+
+- The mapping key (here, `"agency_name"`) becomes the endpoint path: `/agency_name/get_response` and `/agency_name/get_response_stream`.
+- Each request initializes a fresh agency using your factory.
+- Always pass the `load_threads_callback` argument through to the `Agency` constructor so chat history is restored per request.
+
+#### Including Tools
+You can also expose tools as endpoints:
+
+```python
+from mytools import MyTool
+run_fastapi({"agency_name": create_agency}, tools=[MyTool])
+```
+
+#### Tips & Gotchas
+- **Always accept and pass `load_threads_callback`** in your factory, or chat history will not be restored.
+- The mapping key must be URL-friendly (no spaces or special characters).
+- Each request gets a new agency instance - do not store state in the agency object itself.
+- Use the returned `chat_history` in your client to persist and send back for the next request.
+
+---
+
+## API Usage Example
+
+You can interact with your agents and tools using HTTP requests. Here's an example using Python's `requests` library:
+
+```python
+import requests
+
+history = {}
+payload = {"message": "Hello", "chat_history": history}
+resp = requests.post("http://127.0.0.1:8000/agency_name/get_response", json=payload)
+history = resp.json()["chat_history"]
+```
+
+---
+
+## Endpoint Structure
+
+- **Agency Endpoints:**
+  - `/your_agency_name/get_response` (POST)
+  - `/your_agency_name/get_response_stream` (POST, streaming responses)
+- **Tool Endpoints:**
+  - `/tool/ToolClassName` (POST)

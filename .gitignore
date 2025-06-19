@@ -176,3 +176,12 @@ tasks/
 
 # Temporary file_search directories
 file_search_*/
+
+# Agency Swarm visualization outputs
+agency_*.html
+agency_*.png
+agency_*.json
+*_visualization.html
+debug_agency_data.json
+
+.taskmaster/

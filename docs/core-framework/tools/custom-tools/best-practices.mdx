@@ -50,19 +50,27 @@ class QueryDatabase(BaseTool):
             return context
 ```
 
-### Use Shared State to Control the Tool Flow
+### Use Agency Context to Control the Tool Flow
 
-Use `shared_state` to validate previous actions taken by this or other agents, before allowing it to proceed with the next action.
+Use `Agency Context` to validate previous actions taken by this or other agents, before allowing it to proceed with the next action.
 
 ```python
-class Action2(BaseTool):
-    input: str = Field(...)
+from agents import function_tool, RunContextWrapper
+from agency_swarm import MasterContext
 
-    def run(self):
-        if self._shared_state.get("action_1_result", None) is "failure":
-            raise ValueError("Please proceed with the Action1 tool first.")
-        else:
-            return "Success. The action has been taken."
+@function_tool
+async def action_2(ctx: RunContextWrapper[MasterContext], input_data: str) -> str:
+    """Performs action 2, but only if action 1 was successful."""
+    # Access the agency context
+    context: MasterContext = ctx.context
+
+    # Check if previous action was successful
+    if context.get("action_1_result") == "failure":
+        raise ValueError("Please proceed with the action_1 tool first.")
+
+    # Perform the action and store result
+    context.set("action_2_result", "success")
+    return "Success. Action 2 has been completed."
 ```
 
 ### Use Special Types

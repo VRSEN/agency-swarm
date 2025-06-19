@@ -252,8 +252,8 @@ class BaseTool(BaseModel, ABC):
         strict: bool = False  # Enable strict schema validation
         one_call_at_a_time: bool = False  # Prevent concurrent calls
 
-    # Shared state and caller agent properties
-    _shared_state: ClassVar[SharedState] = None  # Manages shared state between tools
+    # Agency context and caller agent properties
+    _shared_state: ClassVar[SharedState] = None  # Legacy: Manages agency context between tools (deprecated, use context inside of Function Tools)
     _caller_agent: Any = None  # Reference to the agent using the tool
     _event_handler: Any = None  # Handles tool events
 ```

@@ -83,7 +83,9 @@ class SendMessage(FunctionTool):
         }
 
         # Combine own rich docstring with the recipient-specific description part
-        recipient_role_description = getattr(self.recipient_agent, "description", "No description provided")
+        recipient_role_description = (
+            getattr(self.recipient_agent, "description", "No description provided") or "No description provided"
+        )
         final_description = f"{self.__doc__}\n\nThis agent's role is: {recipient_role_description}"
 
         super().__init__(
