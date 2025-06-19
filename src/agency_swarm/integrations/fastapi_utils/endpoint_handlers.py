@@ -1,4 +1,5 @@
 import asyncio
+import dataclasses
 import json
 from collections.abc import Callable
 
@@ -31,9 +32,14 @@ def make_response_endpoint(request_model, agency_factory: Callable[..., Agency],
             for key, value in request.chat_history.items():
                 chat_history_dict[key] = json.loads(value.model_dump_json())
 
-            load_callback = lambda: chat_history_dict
+            def load_callback() -> dict:
+                return chat_history_dict
+
         else:
-            load_callback = lambda: {}
+
+            def load_callback() -> dict:
+                return {}
+
         agency_instance = agency_factory(load_threads_callback=load_callback)
         response = await agency_instance.get_response(
             message=request.message,
@@ -58,9 +64,14 @@ def make_stream_endpoint(request_model, agency_factory: Callable[..., Agency], v
             for key, value in request.chat_history.items():
                 chat_history_dict[key] = json.loads(value.model_dump_json())
 
-            load_callback = lambda: chat_history_dict
+            def load_callback() -> dict:
+                return chat_history_dict
+
         else:
-            load_callback = lambda: {}
+
+            def load_callback() -> dict:
+                return {}
+
         agency_instance = agency_factory(load_threads_callback=load_callback)
 
         async def event_generator():
@@ -76,7 +87,12 @@ def make_stream_endpoint(request_model, agency_factory: Callable[..., Agency], v
                             data = event.model_dump()
                         elif hasattr(event, "dict"):
                             data = event.dict()
+                        elif dataclasses.is_dataclass(event):
+                            data = dataclasses.asdict(event)
                         elif isinstance(event, dict):
+                            # Agent streams may yield plain dictionaries for
+                            # error notifications. Preserve them so the client
+                            # receives valid JSON instead of a stringified dict.
                             data = event
                         else:
                             data = str(event)
