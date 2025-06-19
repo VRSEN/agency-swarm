@@ -90,6 +90,9 @@ def make_stream_endpoint(request_model, agency_factory: Callable[..., Agency], v
                         elif dataclasses.is_dataclass(event):
                             data = dataclasses.asdict(event)
                         elif isinstance(event, dict):
+                            # Agent streams may yield plain dictionaries for
+                            # error notifications. Preserve them so the client
+                            # receives valid JSON instead of a stringified dict.
                             data = event
                         else:
                             data = str(event)
