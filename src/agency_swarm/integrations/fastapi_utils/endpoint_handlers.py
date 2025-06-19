@@ -6,6 +6,7 @@ from collections.abc import Callable
 from fastapi import Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import BaseModel
 
 from agency_swarm.agency import Agency
 
@@ -83,19 +84,7 @@ def make_stream_endpoint(request_model, agency_factory: Callable[..., Agency], v
                     file_ids=request.file_ids,
                 ):
                     try:
-                        if hasattr(event, "model_dump"):
-                            data = event.model_dump()
-                        elif hasattr(event, "dict"):
-                            data = event.dict()
-                        elif dataclasses.is_dataclass(event):
-                            data = dataclasses.asdict(event)
-                        elif isinstance(event, dict):
-                            # Agent streams may yield plain dictionaries for
-                            # error notifications. Preserve them so the client
-                            # receives valid JSON instead of a stringified dict.
-                            data = event
-                        else:
-                            data = str(event)
+                        data = serialize(event)
                         yield "data: " + json.dumps({"data": data}) + "\n\n"
                     except Exception as e:
                         yield "data: " + json.dumps({"error": f"Failed to serialize event: {e}"}) + "\n\n"
@@ -155,3 +144,15 @@ async def exception_handler(request, exc):
     if isinstance(exc, tuple):
         error_message = str(exc[1]) if len(exc) > 1 else str(exc[0])
     return JSONResponse(status_code=500, content={"error": error_message})
+
+def serialize(obj):
+    if dataclasses.is_dataclass(obj):
+        return {k: serialize(v) for k, v in dataclasses.asdict(obj).items()}
+    elif isinstance(obj, BaseModel):
+        return {k: serialize(v) for k, v in obj.model_dump().items()}
+    elif isinstance(obj, list | tuple):
+        return [serialize(item) for item in obj]
+    elif isinstance(obj, dict):
+        return {k: serialize(v) for k, v in obj.items()}
+    else:
+        return str(obj)
