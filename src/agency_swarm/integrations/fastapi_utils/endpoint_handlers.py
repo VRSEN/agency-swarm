@@ -138,6 +138,12 @@ def make_tool_endpoint(tool, verify_token, context=None):
 
     return handler
 
+def make_metadata_endpoint(agency_metadata: dict, verify_token):
+    async def handler(token: str = Depends(verify_token)):
+        return {"metadata": agency_metadata}
+
+    return handler
+
 
 async def exception_handler(request, exc):
     error_message = str(exc)

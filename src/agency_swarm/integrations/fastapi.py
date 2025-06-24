@@ -1,5 +1,5 @@
-import os
 import logging
+import os
 from collections.abc import Callable, Mapping
 
 from agents.tool import FunctionTool
@@ -48,6 +48,7 @@ def run_fastapi(
         from .fastapi_utils.endpoint_handlers import (
             exception_handler,
             get_verify_token,
+            make_metadata_endpoint,
             make_response_endpoint,
             make_stream_endpoint,
             make_tool_endpoint,
@@ -94,6 +95,7 @@ def run_fastapi(
             preview_instance = agency_factory(load_threads_callback=lambda: {})
             AGENT_INSTANCES: dict[str, Agent] = dict(preview_instance.agents.items())
             AgencyRequest = add_agent_validator(BaseRequest, AGENT_INSTANCES)
+            agency_metadata = preview_instance.get_agency_structure()
 
             app.add_api_route(
                 f"/{agency_name}/get_response",
@@ -105,8 +107,14 @@ def run_fastapi(
                 make_stream_endpoint(AgencyRequest, agency_factory, verify_token),
                 methods=["POST"],
             )
+            app.add_api_route(
+                f"/{agency_name}/get_metadata",
+                make_metadata_endpoint(agency_metadata, verify_token),
+                methods=["GET"],
+            )
             endpoints.append(f"/{agency_name}/get_response")
             endpoints.append(f"/{agency_name}/get_response_stream")
+            endpoints.append(f"/{agency_name}/get_metadata")
 
     if tools:
         for tool in tools:
