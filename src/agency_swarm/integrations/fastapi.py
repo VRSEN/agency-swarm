@@ -1,5 +1,5 @@
-import os
 import logging
+import os
 from collections.abc import Callable, Mapping
 
 from agents.tool import FunctionTool
@@ -21,6 +21,7 @@ def run_fastapi(
     app_token_env: str = "APP_TOKEN",
     return_app: bool = False,
     cors_origins: list[str] | None = None,
+    enable_agui: bool = False,
 ):
     """Launch a FastAPI server exposing endpoints for multiple agencies and tools.
 
@@ -48,11 +49,12 @@ def run_fastapi(
         from .fastapi_utils.endpoint_handlers import (
             exception_handler,
             get_verify_token,
+            make_agui_chat_endpoint,
             make_response_endpoint,
             make_stream_endpoint,
             make_tool_endpoint,
         )
-        from .fastapi_utils.request_models import BaseRequest, add_agent_validator
+        from .fastapi_utils.request_models import BaseRequest, RunAgentInput, add_agent_validator
     except ImportError:
         logger.error("FastAPI deployment dependencies are missing. Please install agency-swarm[fastapi] package")
         return
@@ -95,18 +97,26 @@ def run_fastapi(
             AGENT_INSTANCES: dict[str, Agent] = dict(preview_instance.agents.items())
             AgencyRequest = add_agent_validator(BaseRequest, AGENT_INSTANCES)
 
-            app.add_api_route(
-                f"/{agency_name}/get_response",
-                make_response_endpoint(AgencyRequest, agency_factory, verify_token),
-                methods=["POST"],
-            )
-            app.add_api_route(
-                f"/{agency_name}/get_response_stream",
-                make_stream_endpoint(AgencyRequest, agency_factory, verify_token),
-                methods=["POST"],
-            )
-            endpoints.append(f"/{agency_name}/get_response")
-            endpoints.append(f"/{agency_name}/get_response_stream")
+            if enable_agui:
+                app.add_api_route(
+                    f"/{agency_name}/get_response_stream",
+                    make_agui_chat_endpoint(RunAgentInput, agency_factory, verify_token),
+                    methods=["POST"],
+                )
+                endpoints.append(f"/{agency_name}/get_response_stream")
+            else:
+                app.add_api_route(
+                    f"/{agency_name}/get_response",
+                    make_response_endpoint(AgencyRequest, agency_factory, verify_token),
+                    methods=["POST"],
+                )
+                app.add_api_route(
+                    f"/{agency_name}/get_response_stream",
+                    make_stream_endpoint(AgencyRequest, agency_factory, verify_token),
+                    methods=["POST"],
+                )
+                endpoints.append(f"/{agency_name}/get_response")
+                endpoints.append(f"/{agency_name}/get_response_stream")
 
     if tools:
         for tool in tools:
@@ -122,6 +132,6 @@ def run_fastapi(
     if return_app:
         return app
 
-    logger.info(f"Starting FastAPI server at http://{host}:{port}")
+    logger.info(f"Starting FastAPI {'AG-UI ' if enable_agui else ''}server at http://{host}:{port}")
 
     uvicorn.run(app, host=host, port=port)
