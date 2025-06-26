@@ -24,7 +24,7 @@ dependencies = [
     "jsonref==1.1.0",
     "python-dotenv==1.0.1",
     "termcolor>=2.3.0",
-    "rich>=13.9.4,<14.0.0",
+    "rich>=13.9.4, <14.0.0",
 ]
 classifiers = [
     "Typing :: Typed",
