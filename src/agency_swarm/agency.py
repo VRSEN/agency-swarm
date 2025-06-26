@@ -11,7 +11,6 @@ from agents import (
     RunHooks,
     RunResult,
 )
-from rich.console import Console
 
 from .agent import Agent
 from .hooks import PersistenceHooks
@@ -33,8 +32,6 @@ try:
     HAS_VISUALIZATION_DEPS = True
 except ImportError:
     HAS_VISUALIZATION_DEPS = False
-
-console = Console()
 
 
 # --- Agency Class ---
@@ -1377,92 +1374,6 @@ class Agency:
         except Exception:
             # Fallback to spring layout
             return nx.spring_layout(G)
-
-    def run_demo(self):
-        """
-        Executes agency in the terminal with autocomplete for recipient agent names.
-        """
-        from .utils.message_output import MessageOutputLive
-        self.recipient_agents = [str(agent.name) for agent in self.entry_points]
-
-        async def main_loop():
-            while True:
-                console.rule()
-                message = input("👤 USER: ")
-                response_buffer = ""
-
-                if not message:
-                    continue
-
-                recipient_agent = None
-                if "@" in message:
-                    recipient_agent_name = message.split("@")[1].split(" ")[0]
-                    message = message.replace(f"@{recipient_agent_name}", "").strip()
-                    try:
-                        recipient_agent = [
-                            agent
-                            for agent in self.recipient_agents
-                            if agent.lower() == recipient_agent_name.lower()
-                        ][0]
-                    except Exception as e:
-                        logger.error(
-                            f"Recipient agent {recipient_agent_name} not found.", exc_info=True
-                        )
-                        continue
-
-                message_output = None
-
-                # Default to first entry point if not specified
-                if recipient_agent is None and self.entry_points:
-                    recipient_agent = self.entry_points[0].name
-
-                try:
-                    async for event in self.get_response_stream(
-                        message=message,
-                        recipient_agent=recipient_agent,
-                    ):
-                        if hasattr(event, "data"):
-                            event_type = event.type
-                            # Handle raw_response_event
-                            if event_type == "raw_response_event":
-                                data = event.data
-                                data_type = data.type
-                                if data_type == "response.output_text.delta":
-                                    if message_output is None:
-                                        message_output = MessageOutputLive(
-                                            "text", recipient_agent, "user", ""
-                                        )
-                                    response_buffer += data.delta
-                                    message_output.cprint_update(response_buffer)
-                                elif data_type == "response.output_text.done":
-                                    message_output = None
-                                    response_buffer = ""
-                                elif data_type == "response.output_item.done":
-                                    message_output = None
-                                    item = data.item
-                                    if hasattr(item, "arguments"):
-                                        message_output = MessageOutputLive(
-                                            "function", recipient_agent, "user", ""
-                                        )
-                                        message_output.cprint_update(f"Calling {item.name} tool with: {item.arguments}")
-                                        message_output = None
-
-                        # Handle run_item_stream_event
-                        elif hasattr(event, "item"):
-                            event_type = event.type
-                            if event_type == "run_item_stream_event":
-                                item = event.item
-                                if item.type == "tool_call_output_item":
-                                    message_output = MessageOutputLive(
-                                        "function_output", recipient_agent, "user", ""
-                                    )
-                                    message_output.cprint_update(str(item.output))
-                                    message_output = None
-
-                except Exception as e:
-                    logger.error(f"Error during streaming: {e}", exc_info=True)
-
-        asyncio.run(main_loop())
 
     def copilot_demo(self, host: str = "0.0.0.0", port: int = 8000, frontend_port: int = 3000, cors_origins: list[str] | None = None):
         import atexit
