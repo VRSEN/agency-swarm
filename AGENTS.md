@@ -24,45 +24,28 @@ For OpenAI Codex working on the agency-swarm framework codebase.
 - **Composition over inheritance** where appropriate
 - **Meaningful names** that explain intent without comments
 
-## 🚨 CRITICAL GIT OPERATIONS
+## 🚨 CORE AI OPERATING PRINCIPLES
 
-### NEVER Use `git revert` for Incomplete Commits
-- **WRONG**: `git revert HEAD` - Creates messy commit history with revert commits
-- **CORRECT**: `git reset --mixed HEAD~1` - Undo commit but keep local changes to fix properly
-- **WHY**: When user says "revert and try again" they mean undo the commit and redo it correctly, NOT create a revert commit
+### Always Read This File First
+- **MANDATORY**: Read @AGENTS.md completely before starting any work
+- **UPDATE CONTINUOUSLY**: Apply learnings from user feedback with appropriate learning rate
 
-### Proper Workflow for Fixing Incomplete Commits
-1. **First**: `git reset --mixed HEAD~1` (undo last commit, keep changes)
-2. **Then**: Properly review ALL modified files (use `git diff --stat` and `git diff` for each file)
-3. **Finally**: Stage and commit all changes together properly
+### Continuous Verification Workflow
+- **VERIFY CONSTANTLY**: Run `git diff --stat` and `git diff <file>` after major changes
+- **FRESH PERSPECTIVE**: Review changes with fresh eyes to catch errors
+- **COMPLETE PICTURE**: Never make decisions without seeing ALL modified files
 
-### Critical Git Commands
-- `git diff --stat` - See which files changed and how many lines
-- `git diff <file>` - See exact changes in each file
-- `git reset --mixed HEAD~1` - Undo last commit, keep changes
-- `git reset --hard HEAD~1` - Undo last commit, LOSE changes (dangerous)
-- **NEVER** use `git revert` unless you actually want to create a revert commit in history
+### Learning & Adaptation Protocol
+- **LEARN RATE**: Determine learning rate (0 to maximum) based on feedback severity
+- **ZERO**: No changes if feedback is minor or incorrect
+- **MINIMAL**: Small targeted updates to @AGENTS.md for valid feedback
+- **MAXIMUM**: Major principle updates for critical errors
+- **ADAPT**: Every user feedback is a learning opportunity
 
-## 🚨 MANDATORY: COMPLETE PICTURE BEFORE DECISIONS
-
-### NEVER Make Decisions Without Complete Data
-- **ALWAYS** run `git diff --stat` to see ALL modified files and line counts
-- **ALWAYS** run `git diff <file>` for EVERY modified file to understand changes
-- **NEVER** assume or hallucinate what changes might be - READ THE ACTUAL DIFFS
-- **NEVER** make commits without reviewing ALL files that will be included
-
-### Human-Like Systematic Review Process
-- **Step 1**: `git status` - See which files are modified/deleted/added
-- **Step 2**: `git diff --stat` - Get overview of all changes
-- **Step 3**: `git diff <file>` - Review EVERY single modified file
-- **Step 4**: Understand the complete scope before making ANY decisions
-- **CRITICAL**: This is what humans do naturally - be systematic, not careless
-
-### Commit Messages: Be The Author, Not The Apologizer
-- **MINIMALISTIC**: Concise, professional, no explanations of mistakes
-- **AUTHORITATIVE**: Write as the codebase author, not someone fixing errors
-- **NO APOLOGIES**: Never apologize in commits - just state what changed, not why you made mistakes
-- **FOCUS ON CHANGES**: Describe what changed, not why you made mistakes
+### Commit Standards
+- **MINIMALISTIC**: Professional, concise commit messages
+- **AUTHORITATIVE**: Write as codebase author, never apologize
+- **FOCUS**: Describe what changed, not mistakes made
 
 ## 🚨 CRITICAL: v1.x Agent Initialization Pattern
 
