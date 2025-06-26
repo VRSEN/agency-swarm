@@ -27,9 +27,9 @@ try:
         ToolCallStartEvent,
         ToolMessage,
     )
-except ModuleNotFoundError as exc:
-    raise ModuleNotFoundError(
-        "ag_ui.core is required for the OpenAI→AG-UI adapter. Install with `pip install ag-ui-protocol`."
+except ImportError as exc:
+    raise ImportError(
+        "FastAPI deployment dependencies are missing. Please install agency-swarm[fastapi] package"
     ) from exc
 
 

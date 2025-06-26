@@ -179,7 +179,6 @@ def make_agui_chat_endpoint(request_model, agency_factory: Callable[..., Agency]
             )
 
             try:
-                print(f"messages: {request}")
                 # Store in dict format to avoid converting to classes
                 snapshot_messages = [message.model_dump() for message in request.messages]
                 async for event in agency.get_response_stream(
@@ -194,7 +193,6 @@ def make_agui_chat_endpoint(request_model, agency_factory: Callable[..., Agency]
                         for event in events:
                             if isinstance(event, MessagesSnapshotEvent):
                                 snapshot_messages.append(event.messages[0].model_dump())
-                                print(f"snapshot_messages: {snapshot_messages}")
                                 yield encoder.encode(MessagesSnapshotEvent(type=EventType.MESSAGES_SNAPSHOT, messages=snapshot_messages))
                             else:
                                 yield encoder.encode(event)
@@ -209,7 +207,6 @@ def make_agui_chat_endpoint(request_model, agency_factory: Callable[..., Agency]
 
             except Exception as exc:
                 import traceback
-                print(f"error: {exc}")
                 # Surface error as AG-UI event so the frontend can react.
                 tb_str = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
                 error_message = f"{str(exc)}\n\nTraceback:\n{tb_str}"
