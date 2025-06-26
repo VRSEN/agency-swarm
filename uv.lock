@@ -3,7 +3,7 @@ requires-python = ">=3.10"
 
 [[package]]
 name = "agency-swarm"
-version = "1.0.0b1"
+version = "1.0.0b2"
 source = { editable = "." }
 dependencies = [
     { name = "datamodel-code-generator" },

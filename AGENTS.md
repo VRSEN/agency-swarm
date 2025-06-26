@@ -24,6 +24,68 @@ For OpenAI Codex working on the agency-swarm framework codebase.
 - **Composition over inheritance** where appropriate
 - **Meaningful names** that explain intent without comments
 
+## 🚨 CRITICAL GIT OPERATIONS
+
+### NEVER Use `git revert` for Incomplete Commits
+- **WRONG**: `git revert HEAD` - Creates messy commit history with revert commits
+- **CORRECT**: `git reset --mixed HEAD~1` - Undo commit but keep local changes to fix properly
+- **WHY**: When user says "revert and try again" they mean undo the commit and redo it correctly, NOT create a revert commit
+
+### Proper Workflow for Fixing Incomplete Commits
+1. **First**: `git reset --mixed HEAD~1` (undo last commit, keep changes)
+2. **Then**: Properly review ALL modified files (use `git diff --stat` and `git diff` for each file)
+3. **Finally**: Stage and commit all changes together properly
+
+### Critical Git Commands
+- `git diff --stat` - See which files changed and how many lines
+- `git diff <file>` - See exact changes in each file
+- `git reset --mixed HEAD~1` - Undo last commit, keep changes
+- `git reset --hard HEAD~1` - Undo last commit, LOSE changes (dangerous)
+- **NEVER** use `git revert` unless you actually want to create a revert commit in history
+
+## 🚨 MANDATORY: COMPLETE PICTURE BEFORE DECISIONS
+
+### NEVER Make Decisions Without Complete Data
+- **ALWAYS** run `git diff --stat` to see ALL modified files and line counts
+- **ALWAYS** run `git diff <file>` for EVERY modified file to understand changes
+- **NEVER** assume or hallucinate what changes might be - READ THE ACTUAL DIFFS
+- **NEVER** make commits without reviewing ALL files that will be included
+
+### Human-Like Systematic Review Process
+- **Step 1**: `git status` - See which files are modified/deleted/added
+- **Step 2**: `git diff --stat` - Get overview of all changes
+- **Step 3**: `git diff <file>` - Review EVERY single modified file
+- **Step 4**: Understand the complete scope before making ANY decisions
+- **CRITICAL**: This is what humans do naturally - be systematic, not careless
+
+### Commit Messages: Be The Author, Not The Apologizer
+- **MINIMALISTIC**: Concise, professional, no explanations of mistakes
+- **AUTHORITATIVE**: Write as the codebase author, not someone fixing errors
+- **NO APOLOGIES**: Never apologize in commits - just state what changed, not why you made mistakes
+- **FOCUS ON CHANGES**: Describe what changed, not why you made mistakes
+
+## 🚨 CRITICAL: v1.x Agent Initialization Pattern
+
+### NEVER Use v0.x Inheritance Pattern in v1.x
+- **WRONG (v0.x pattern)**: `class MyAgent(Agent): def __init__(self): super().__init__(...)`
+- **CORRECT (v1.x pattern)**: `agent = Agent(name="...", description="...", tools=[...])`
+
+### v1.x Examples Must Use Direct Instantiation
+```python
+# ❌ WRONG - v0.x pattern (inheritance)
+class CEOAgent(Agent):
+    def __init__(self):
+        super().__init__(name="CEO", ...)
+
+# ✅ CORRECT - v1.x pattern (direct instantiation)
+ceo = Agent(
+    name="CEO",
+    description="Chief Executive Officer",
+    instructions="...",
+    tools=[]
+)
+```
+
 ## Critical Import Pattern
 ```python
 from agents import function_tool, ModelSettings  # openai-agents package imported as 'agents'
@@ -32,7 +94,7 @@ from agency_swarm import Agency, Agent           # this framework
 
 ## Core Files & Public Methods
 
-### `src/agency_swarm/agency.py` (1347 lines) ⚠️ **NEEDS REFACTORING**
+### `src/agency_swarm/agency.py` (1123 lines) ⚠️ **NEEDS REFACTORING**
 **Core class**: `Agency` - Orchestrates multiple agents with communication flows
 **Key Public Methods:**
 - `__init__(*entry_points_args, communication_flows=None, **kwargs)` - Initialize agency structure
@@ -42,12 +104,11 @@ from agency_swarm import Agency, Agent           # this framework
 - `get_completion(message, **kwargs)` - Sync completion method (deprecated)
 - `get_completion_stream(*args, **kwargs)` - Sync streaming (deprecated)
 - `get_agency_structure(include_tools=True, layout_algorithm="hierarchical")` - Agency visualization data
-- `plot_agency_chart(figsize=(12,8), show_tools=True, **kwargs)` - Generate matplotlib chart
 - `create_interactive_visualization(output_file="agency_visualization.html", **kwargs)` - HTML visualization
 
 **Dependencies**: `Agent`, `ThreadManager`, `PersistenceHooks`, `MasterContext`
 
-### `src/agency_swarm/agent.py` (1444 lines) ⚠️ **NEEDS REFACTORING**
+### `src/agency_swarm/agent.py` (1443 lines) ⚠️ **NEEDS REFACTORING**
 **Core class**: `Agent(BaseAgent[MasterContext])` - Individual agent with tools and communication
 **Key Public Methods:**
 - `__init__(**kwargs)` - Initialize agent with tools, instructions, model settings
@@ -63,7 +124,7 @@ from agency_swarm import Agency, Agent           # this framework
 
 **Dependencies**: `BaseAgent` (from agents), `ThreadManager`, `MasterContext`, `SendMessage`, `AgentFileManager`
 
-### `src/agency_swarm/thread.py` (382 lines)
+### `src/agency_swarm/thread.py` (403 lines)
 **Core classes**: `ConversationThread`, `ThreadManager` - Conversation state management
 **ConversationThread Public Methods:**
 - `add_item(item_dict: TResponseInputItem)` - Add single message/tool call
@@ -111,6 +172,7 @@ from agency_swarm import Agency, Agent           # this framework
 
 ## Framework Architecture
 - **Extends** `openai-agents` SDK (imported as `agents`)
+- **Built on OpenAI Responses API** by default for all agent interactions. The only exception is `examples/chat_completion_provider.py`.
 - **Agency** orchestrates multiple **Agent** instances
 - **ThreadManager** isolates conversations by sender->receiver pairs
 - **MasterContext** provides shared state across agents
