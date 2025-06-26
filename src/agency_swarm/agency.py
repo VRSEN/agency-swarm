@@ -1482,9 +1482,14 @@ class Agency:
             )
 
         if not (fe_path / "node_modules").exists():
-            raise RuntimeError(
-                f"`node_modules` directory not found in {fe_path}. Run 'npm install' inside that folder to install frontend dependencies before launching the demo."
-            )
+            print("\033[93m[Copilot Demo] 'node_modules' not found in copilot app directory. Running 'npm install' to install frontend dependencies...\033[0m")
+            try:
+                subprocess.check_call([npm_exe, "install"], cwd=fe_path)
+                print("\033[92m[Copilot Demo] Frontend dependencies installed successfully. Frontend might take a few seconds to load.\033[0m")
+            except subprocess.CalledProcessError as e:
+                raise RuntimeError(
+                    f"Failed to install frontend dependencies in {fe_path}. Please check your npm setup and try again."
+                ) from e
 
         # Start the frontend
         proc = subprocess.Popen(
