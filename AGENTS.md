@@ -24,6 +24,56 @@ For OpenAI Codex working on the agency-swarm framework codebase.
 - **Composition over inheritance** where appropriate
 - **Meaningful names** that explain intent without comments
 
+## 🚨 CORE AI OPERATING PRINCIPLES
+
+### Always Read This File First
+- **MANDATORY**: Read @AGENTS.md completely before starting any work
+- **UPDATE CONTINUOUSLY**: Apply learnings from user feedback with appropriate learning rate
+
+### Continuous Verification Workflow
+- **VERIFY CONSTANTLY**: Run `git diff --stat` and `git diff <file>` after major changes
+- **FRESH PERSPECTIVE**: Review changes with fresh eyes to catch errors
+- **COMPLETE PICTURE**: Never make decisions without seeing ALL modified files
+- **HUMAN-LIKE REVIEW**: Before committing, ALWAYS review:
+  - `git status` - See what files are modified/staged/untracked
+  - `git diff` - Review ALL unstaged changes
+  - `git diff --cached` - Review ALL staged changes
+  - Both unstaged AND staged must be reviewed before any commit
+
+### Learning & Adaptation Protocol
+- **LEARN RATE**: Determine learning rate (0 to maximum) based on feedback severity
+- **ZERO**: No changes if feedback is minor or incorrect
+- **MINIMAL**: Small targeted updates to @AGENTS.md for valid feedback
+- **MAXIMUM**: Major principle updates for critical errors
+- **ADAPT**: Every user feedback is a learning opportunity
+
+### Commit Standards
+- **MINIMALISTIC**: Professional, concise commit messages
+- **AUTHORITATIVE**: Write as codebase author, never apologize
+- **FOCUS**: Describe what changed, not mistakes made
+
+## 🚨 CRITICAL: v1.x Agent Initialization Pattern
+
+### NEVER Use v0.x Inheritance Pattern in v1.x
+- **WRONG (v0.x pattern)**: `class MyAgent(Agent): def __init__(self): super().__init__(...)`
+- **CORRECT (v1.x pattern)**: `agent = Agent(name="...", description="...", tools=[...])`
+
+### v1.x Examples Must Use Direct Instantiation
+```python
+# ❌ WRONG - v0.x pattern (inheritance)
+class CEOAgent(Agent):
+    def __init__(self):
+        super().__init__(name="CEO", ...)
+
+# ✅ CORRECT - v1.x pattern (direct instantiation)
+ceo = Agent(
+    name="CEO",
+    description="Chief Executive Officer",
+    instructions="...",
+    tools=[]
+)
+```
+
 ## Critical Import Pattern
 ```python
 from agents import function_tool, ModelSettings  # openai-agents package imported as 'agents'
@@ -32,7 +82,7 @@ from agency_swarm import Agency, Agent           # this framework
 
 ## Core Files & Public Methods
 
-### `src/agency_swarm/agency.py` (1347 lines) ⚠️ **NEEDS REFACTORING**
+### `src/agency_swarm/agency.py` (1123 lines) ⚠️ **NEEDS REFACTORING**
 **Core class**: `Agency` - Orchestrates multiple agents with communication flows
 **Key Public Methods:**
 - `__init__(*entry_points_args, communication_flows=None, **kwargs)` - Initialize agency structure
@@ -42,12 +92,11 @@ from agency_swarm import Agency, Agent           # this framework
 - `get_completion(message, **kwargs)` - Sync completion method (deprecated)
 - `get_completion_stream(*args, **kwargs)` - Sync streaming (deprecated)
 - `get_agency_structure(include_tools=True, layout_algorithm="hierarchical")` - Agency visualization data
-- `plot_agency_chart(figsize=(12,8), show_tools=True, **kwargs)` - Generate matplotlib chart
 - `create_interactive_visualization(output_file="agency_visualization.html", **kwargs)` - HTML visualization
 
 **Dependencies**: `Agent`, `ThreadManager`, `PersistenceHooks`, `MasterContext`
 
-### `src/agency_swarm/agent.py` (1444 lines) ⚠️ **NEEDS REFACTORING**
+### `src/agency_swarm/agent.py` (1443 lines) ⚠️ **NEEDS REFACTORING**
 **Core class**: `Agent(BaseAgent[MasterContext])` - Individual agent with tools and communication
 **Key Public Methods:**
 - `__init__(**kwargs)` - Initialize agent with tools, instructions, model settings
@@ -63,7 +112,7 @@ from agency_swarm import Agency, Agent           # this framework
 
 **Dependencies**: `BaseAgent` (from agents), `ThreadManager`, `MasterContext`, `SendMessage`, `AgentFileManager`
 
-### `src/agency_swarm/thread.py` (382 lines)
+### `src/agency_swarm/thread.py` (403 lines)
 **Core classes**: `ConversationThread`, `ThreadManager` - Conversation state management
 **ConversationThread Public Methods:**
 - `add_item(item_dict: TResponseInputItem)` - Add single message/tool call
@@ -111,6 +160,7 @@ from agency_swarm import Agency, Agent           # this framework
 
 ## Framework Architecture
 - **Extends** `openai-agents` SDK (imported as `agents`)
+- **Built on OpenAI Responses API** by default for all agent interactions. The only exception is `examples/chat_completion_provider.py`.
 - **Agency** orchestrates multiple **Agent** instances
 - **ThreadManager** isolates conversations by sender->receiver pairs
 - **MasterContext** provides shared state across agents
