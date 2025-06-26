@@ -1421,7 +1421,6 @@ class Agency:
                         message=message,
                         recipient_agent=recipient_agent,
                     ):
-                        # print(event)
                         if hasattr(event, "data"):
                             event_type = event.type
                             # Handle raw_response_event
@@ -1448,19 +1447,6 @@ class Agency:
                                         message_output.cprint_update(f"Calling {item.name} tool with: {item.arguments}")
                                         message_output = None
 
-                                elif data_type == "response.error":
-                                    print(f"\n[Error] {data.error}")
-
-                            # Handle other event types
-                            elif event_type == "text":
-                                print(event.get("data"), end="", flush=True)
-                            elif event_type == "function":
-                                print(f"\n[Function Call] {event.data}")
-                            elif event_type == "error":
-                                print(f"\n[Error] {event.content}")
-                            else:
-                                print(f"\n[Other Event] {event}")
-
                         # Handle run_item_stream_event
                         elif hasattr(event, "item"):
                             event_type = event.type
@@ -1473,24 +1459,22 @@ class Agency:
                                     message_output.cprint_update(str(item.output))
                                     message_output = None
 
-                    print()  # Newline after stream
                 except Exception as e:
                     logger.error(f"Error during streaming: {e}", exc_info=True)
 
         asyncio.run(main_loop())
 
     def copilot_demo(self, host: str = "0.0.0.0", port: int = 8000, frontend_port: int = 3000, cors_origins: list[str] | None = None):
-        from .integrations.fastapi import run_fastapi
-        import subprocess, atexit, sys
+        import atexit
+        import shutil
+        import subprocess
         from pathlib import Path
+
+        from .integrations.fastapi import run_fastapi
 
         fe_path = Path(__file__).parent / "utils" / "copilot-demo-app"
 
-        # ------------------------------------------------------------------
         # Safety checks – ensure Node.js environment is ready
-        # ------------------------------------------------------------------
-        import shutil
-
         npm_exe = shutil.which("npm") or shutil.which("npm.cmd")
         if npm_exe is None:
             raise RuntimeError(
@@ -1502,6 +1486,7 @@ class Agency:
                 f"`node_modules` directory not found in {fe_path}. Run 'npm install' inside that folder to install frontend dependencies before launching the demo."
             )
 
+        # Start the frontend
         proc = subprocess.Popen(
             [npm_exe, "run", "dev", "--", "-p", str(frontend_port)],
             cwd=fe_path,
@@ -1512,6 +1497,7 @@ class Agency:
         atexit.register(proc.terminate)
         print(f"\n\033[92;1m🚀  Copilot UI running at http://localhost:{frontend_port}\033[0m\n")
 
+        # Start the backend
         run_fastapi(
             agencies={self.name or "agency": lambda **kwargs: self},
             host=host,
@@ -1520,7 +1506,3 @@ class Agency:
             cors_origins=cors_origins,
             enable_agui=True
         )
-
-        
-
-        
