@@ -34,6 +34,11 @@ For OpenAI Codex working on the agency-swarm framework codebase.
 - **VERIFY CONSTANTLY**: Run `git diff --stat` and `git diff <file>` after major changes
 - **FRESH PERSPECTIVE**: Review changes with fresh eyes to catch errors
 - **COMPLETE PICTURE**: Never make decisions without seeing ALL modified files
+- **HUMAN-LIKE REVIEW**: Before committing, ALWAYS review:
+  - `git status` - See what files are modified/staged/untracked
+  - `git diff` - Review ALL unstaged changes
+  - `git diff --cached` - Review ALL staged changes
+  - Both unstaged AND staged must be reviewed before any commit
 
 ### Learning & Adaptation Protocol
 - **LEARN RATE**: Determine learning rate (0 to maximum) based on feedback severity
