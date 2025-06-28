@@ -14,17 +14,14 @@ from pathlib import Path
 # Add the src directory to the path so we can import agency_swarm
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from agency_swarm import Agency, Agent, BaseTool
+from agents import function_tool, RunContextWrapper
+from agency_swarm import Agency, Agent
 
 
-class ExampleTool(BaseTool):
-    """Example tool for demonstration"""
-
-    def __init__(self):
-        super().__init__(name="ExampleTool", description="An example tool for visualization demo")
-
-    def run(self, **kwargs):
-        return "Example tool executed"
+@function_tool()
+async def example_tool(wrapper: RunContextWrapper, **kwargs) -> str:
+    """Example tool for visualization demo"""
+    return "Example tool executed"
 
 
 def create_demo_agency():
@@ -42,21 +39,21 @@ def create_demo_agency():
         name="ProjectManager",
         description="Manages project timelines and coordinates between teams",
         instructions="You manage projects, timelines, and coordinate between different teams.",
-        tools=[ExampleTool()],
+        tools=[example_tool],
     )
 
     dev = Agent(
         name="Developer",
         description="Writes and maintains code",
         instructions="You write, test, and maintain code for various projects.",
-        tools=[ExampleTool()],
+        tools=[example_tool],
     )
 
     qa = Agent(
         name="QA",
         description="Tests software and ensures quality",
         instructions="You test software, find bugs, and ensure quality standards.",
-        tools=[ExampleTool()],
+        tools=[example_tool],
     )
 
     # Create agency with communication flows (v1.x pattern)

@@ -16,17 +16,9 @@ from agents import ModelSettings
 from agency_swarm import Agency, Agent
 
 
-class CEOAgent(Agent):
-    pass
-
-
-class DeveloperAgent(Agent):
-    pass
-
-
 @pytest.fixture
 def ceo_agent_instance():
-    return CEOAgent(
+    return Agent(
         name="CEO",
         description="Chief Executive Officer",
         instructions="You are the CEO. Remember information and delegate tasks.",
@@ -36,7 +28,7 @@ def ceo_agent_instance():
 
 @pytest.fixture
 def developer_agent_instance():
-    return DeveloperAgent(
+    return Agent(
         name="Developer",
         description="Software Developer",
         instructions="You are a Developer. Remember technical details.",
