@@ -14,27 +14,9 @@ from agents import ModelSettings
 from agency_swarm import Agency, Agent
 
 
-class CoordinatorAgent(Agent):
-    """Agent that coordinates tasks by delegating to workers."""
-
-    pass
-
-
-class WorkerAgent(Agent):
-    """Agent that performs work tasks."""
-
-    pass
-
-
-class MemoryAgent(Agent):
-    """Agent with memory storage capabilities for testing persistence."""
-
-    pass
-
-
 @pytest.fixture
 def coordinator_agent():
-    return CoordinatorAgent(
+    return Agent(
         name="Coordinator",
         instructions="You coordinate tasks. When asked to delegate, use send_message_to_Worker to ask the Worker agent to perform the task. Always include the full task details in your message.",
         model_settings=ModelSettings(temperature=0.0),
@@ -43,7 +25,7 @@ def coordinator_agent():
 
 @pytest.fixture
 def worker_agent():
-    return WorkerAgent(
+    return Agent(
         name="Worker",
         instructions="You perform tasks. When you receive a task, respond with 'TASK_COMPLETED: [task description]' to confirm completion.",
         model_settings=ModelSettings(temperature=0.0),
@@ -52,7 +34,7 @@ def worker_agent():
 
 @pytest.fixture
 def memory_agent():
-    return MemoryAgent(
+    return Agent(
         name="Memory",
         instructions="You have perfect memory. When told to remember something, confirm with 'REMEMBERED: [item]'. When asked to recall, respond with 'RECALLED: [item]'.",
         model_settings=ModelSettings(temperature=0.0),
@@ -195,19 +177,19 @@ class TestAgentToAgentPersistence:
         Verifies that different agent pairs maintain separate conversation histories.
         """
         # Create coordinator and two workers
-        coordinator = CoordinatorAgent(
+        coordinator = Agent(
             name="Coordinator",
             instructions="You coordinate tasks. Use send_message_to_Worker or send_message_to_Worker2 to delegate tasks.",
             model_settings=ModelSettings(temperature=0.0),
         )
 
-        worker1 = WorkerAgent(
+        worker1 = Agent(
             name="Worker",
             instructions="You are Worker. Respond with 'WORKER_COMPLETED: [task]' when given tasks.",
             model_settings=ModelSettings(temperature=0.0),
         )
 
-        worker2 = WorkerAgent(
+        worker2 = Agent(
             name="Worker2",
             instructions="You are Worker2. Respond with 'WORKER2_COMPLETED: [task]' when given tasks.",
             model_settings=ModelSettings(temperature=0.0),
