@@ -1122,7 +1122,15 @@ class Agency:
 
         return positions
 
-    def copilot_demo(self, host: str = "0.0.0.0", port: int = 8000, frontend_port: int = 3000, cors_origins: list[str] | None = None):
+    def copilot_demo(
+        self,
+        host: str = "0.0.0.0",
+        port: int = 8000,
+        frontend_port: int = 3000,
+        cors_origins: list[str] | None = None,
+    ):
+        """Launch the Copilot UI demo with backend and frontend servers."""
+        # TODO: Refactor into smaller helpers to keep method concise
         import atexit
         import shutil
         import subprocess
