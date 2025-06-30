@@ -55,7 +55,7 @@ def run_fastapi(
             make_stream_endpoint,
             make_tool_endpoint,
         )
-        from .fastapi_utils.request_models import BaseRequest, RunAgentInput, add_agent_validator
+        from .fastapi_utils.request_models import BaseRequest, RunAgentInputCustom, add_agent_validator
     except ImportError:
         logger.error("FastAPI deployment dependencies are missing. Please install agency-swarm[fastapi] package")
         return
@@ -102,7 +102,7 @@ def run_fastapi(
             if enable_agui:
                 app.add_api_route(
                     f"/{agency_name}/get_response_stream",
-                    make_agui_chat_endpoint(RunAgentInput, agency_factory, verify_token),
+                    make_agui_chat_endpoint(RunAgentInputCustom, agency_factory, verify_token),
                     methods=["POST"],
                 )
                 endpoints.append(f"/{agency_name}/get_response_stream")
