@@ -601,7 +601,7 @@ class Agency:
             port=port,
             app_token_env=app_token_env,
             cors_origins=cors_origins,
-            enable_agui=enable_agui
+            enable_agui=enable_agui,
         )
 
     # --- Deprecated Methods ---
@@ -1121,15 +1121,3 @@ class Agency:
                     positions[agent_name]["y"] = max(node_radius, min(height - node_radius, positions[agent_name]["y"]))
 
         return positions
-
-    def copilot_demo(
-        self,
-        host: str = "0.0.0.0",
-        port: int = 8000,
-        frontend_port: int = 3000,
-        cors_origins: list[str] | None = None,
-    ):
-        """Launch the Copilot UI demo with backend and frontend servers."""
-        from .ui.demos.launcher import CopilotDemoLauncher
-        launcher = CopilotDemoLauncher()
-        return launcher.start(self, host, port, frontend_port, cors_origins)

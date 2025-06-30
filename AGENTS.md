@@ -175,7 +175,7 @@ from agency_swarm import Agency, Agent           # this framework
 
 ## Build System
 ```bash
-make ci        # lint + mypy + tests + coverage (86%)
+make ci        # lint + mypy + tests + coverage
 make tests     # pytest
 ```
 

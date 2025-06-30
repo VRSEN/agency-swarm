@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from agents import RunContextWrapper, function_tool
 
 from agency_swarm import Agency, Agent
+from agency_swarm.ui.demos.launcher import CopilotDemoLauncher
 
 
 @function_tool()
@@ -59,9 +60,11 @@ def main():
     print()
 
     try:
-
         agency = create_demo_agency()
-        agency.copilot_demo()
+        # Launch the Copilot UI demo with backend and frontend servers.
+        launcher = CopilotDemoLauncher()
+        launcher.start(agency)
+
     except Exception as e:
         print(f"❌ Demo failed with error: {e}")
         import traceback
