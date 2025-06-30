@@ -62,7 +62,7 @@ def run_fastapi(
 
     app_token = os.getenv(app_token_env)
     if app_token is None or app_token == "":
-        logger.warning(f"{app_token_env} is not set. Authentication will be disabled.")
+        logger.warning("App token is not set. Authentication will be disabled.")
     verify_token = get_verify_token(app_token)
 
     app = FastAPI()

@@ -7,8 +7,10 @@ import {
 } from "@copilotkit/runtime";
 import { NextRequest } from "next/server";
 
-// Point this to your AG‑UI backend URL
-const myAgent = new HttpAgent({ url: "http://localhost:8080/agency1/get_response_stream/" });
+// Read from environment variable, fallback to default if not set
+const AG_UI_BACKEND_URL = process.env.NEXT_PUBLIC_AG_UI_BACKEND_URL || "";
+
+const myAgent = new HttpAgent({ url: AG_UI_BACKEND_URL });
 
 const runtime = new CopilotRuntime({ agents: { myAgent } });
 
