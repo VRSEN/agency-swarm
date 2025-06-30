@@ -105,6 +105,8 @@ To create a custom tool, typically you need to follow these steps:
         contain a `Calculator` class. Alternatively, a file may define a
         function decorated with `@function_tool`. Both styles are loaded
         automatically, and class-based tools must inherit from `BaseTool`.
+        If the path provided to `tools_folder` is not absolute, it will be
+        resolved relative to the file where the agent class is defined.
       </Note>
     </Accordion>
   </Step>

@@ -472,7 +472,7 @@ class Agent(BaseAgent[MasterContext]):
             return
 
         folder_path = Path(self.tools_folder)
-        if not folder_path.is_dir():
+        if not folder_path.is_absolute():
             folder_path = Path(self._get_class_folder_path()) / folder_path
 
         if not folder_path.is_dir():

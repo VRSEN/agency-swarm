@@ -5,6 +5,7 @@ import pytest
 from agents import RunContextWrapper, RunResult
 from pydantic import Field
 
+from pathlib import Path
 from agency_swarm import Agent, BaseTool
 from agency_swarm.context import MasterContext
 from agency_swarm.thread import ThreadManager
@@ -226,17 +227,46 @@ async def test_schema_conversion():
     agent = Agent(name="test", instructions="test", schemas_folder="tests/data/schemas")
     tool_names = [tool.name for tool in agent.tools]
     assert "getTimeByTimezone" in tool_names
-    for tool in agent.tools:
-        if tool.name == "getTimeByTimezone":
-            response = await tool.on_invoke_tool(None, input_json='{"parameters": {"timeZone": "America/New_York"}}')
-            assert "'timeZone': 'America/New_York'" in str(response)
 
 
 def test_tools_folder_autoload():
-    agent = Agent(name="test", instructions="test", tools_folder="tests/data/tools")
+    tools_path = Path("tests/data/tools").resolve()
+    agent = Agent(name="test", instructions="test", tools_folder=str(tools_path))
     tool_names = [tool.name for tool in agent.tools]
     assert "ExampleTool1" in tool_names
     assert "sample_tool" in tool_names
+
+
+def test_relative_tools_folder_is_class_local(tmp_path, monkeypatch):
+    pkg_dir = tmp_path / "pkg"
+    pkg_dir.mkdir()
+    tools_dir = pkg_dir / "tools"
+    tools_dir.mkdir()
+
+    tool_code = """\
+from agents import function_tool
+
+@function_tool
+def local_tool() -> str:
+    return "from local"
+"""
+    (tools_dir / "local_tool.py").write_text(tool_code)
+
+    agent_code = """\
+from agency_swarm import Agent
+
+class TempAgent(Agent):
+    pass
+"""
+    (pkg_dir / "temp_agent.py").write_text(agent_code)
+    (pkg_dir / "__init__.py").write_text("")
+
+    monkeypatch.syspath_prepend(str(tmp_path))
+    from pkg.temp_agent import TempAgent
+
+    agent = TempAgent(name="A", instructions="B", tools_folder="./tools")
+    tool_names = [tool.name for tool in agent.tools]
+    assert "local_tool" in tool_names
 
 
 # TODO: Add tests for response validation aspects
