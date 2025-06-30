@@ -14,12 +14,13 @@ from pathlib import Path
 # Add the src directory to the path so we can import agency_swarm
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from agents import function_tool, RunContextWrapper
+from agents import RunContextWrapper, function_tool
+
 from agency_swarm import Agency, Agent
 
 
 @function_tool()
-async def example_tool(wrapper: RunContextWrapper, **kwargs) -> str:
+async def example_tool(wrapper: RunContextWrapper) -> str:
     """Example tool for visualization demo"""
     return "Example tool executed"
 
