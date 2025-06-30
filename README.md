@@ -49,7 +49,7 @@ pip install -U agency-swarm==1.0.0-beta.3
 
 > **Note:** The v1.x beta represents a major architectural change built on the OpenAI Agents SDK.
 > While feature-complete and functional, it's marked as beta for wider testing before becoming the default version.
-> See our [Migration Guide](./docs/migration_guide.mdx) for details on migrating from v0.x to v1.x.
+> See our [Migration Guide](https://agency-swarm.ai/migration/guide) for details on migrating from v0.x to v1.x.
 
 ## Getting Started
 
