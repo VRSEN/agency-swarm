@@ -4,7 +4,20 @@
 
 ## Overview
 
-Agency Swarm started as a desire and effort of Arsenii Shatokhin (aka VRSEN) to fully automate his AI Agency with AI. By building this framework, we aim to simplify the agent creation process and enable anyone to create collaborative swarm of agents (Agencies), each with distinct roles and capabilities. By thinking about automation in terms of real world entities, such as agencies and specialized agent roles, we make it a lot more intuitive for both the agents and the users.
+The **Agency Swarm Framework** is an advanced system for building multi-agent applications. It leverages and extends the foundational capabilities of the [OpenAI Agents SDK](https://github.com/openai/openai-agents-python), providing specialized features for creating, orchestrating, and managing collaborative swarms of AI agents.
+
+By default, Agency Swarm is built on the **OpenAI Responses API** to handle complex, multi-turn interactions, with `examples/chat_completion_provider.py` being the only exception that uses the Chat Completions API.
+
+Agency Swarm enhances the underlying SDK by introducing:
+- True agent collaboration with flexible, user-defined communication flows (orchestrator-workers pattern with async execution support).
+- An `Agency` that uses an `agency_chart` to define complex communication flows and interaction patterns between agents.
+- Flexible conversation persistence: Manage conversation history by providing `load_threads_callback` and `save_threads_callback` functions to the `Agency`, enabling threads to be loaded from and saved to external storage (e.g., a database). This allows conversations to continue across sessions, which is essential for production environments.
+- A specialized `send_message` tool automatically configured for agents, enabling them to communicate based on the defined `agency_chart`.
+- `agency_swarm.Agent` which extends the base SDK `Agent` with built-in file handling and sub-agent registration capabilities.
+
+This framework continues the original vision of Arsenii Shatokhin (aka VRSEN) to simplify the creation of sophisticated AI agencies by thinking about automation in terms of real-world organizational structures.
+
+**Migrating from v0.x?** Please see our [Migration Guide](./docs/migration_guide.mdx) for details on adapting your project to this new SDK-based version.
 
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1qGVyK-vIoxZD0dMrMVqCxCsgL1euMLKj)
 [![Docs](https://img.shields.io/website?label=Docs&up_message=available&url=https://vrsen.github.io/agency-swarm/)](https://vrsen.github.io/agency-swarm/)
@@ -15,18 +28,28 @@ Agency Swarm started as a desire and effort of Arsenii Shatokhin (aka VRSEN) to 
 
 ### Key Features
 
-- **Customizable Agent Roles**: Define roles like CEO, virtual assistant, developer, etc., and customize their functionalities with [OpenAI Assistants API](https://platform.openai.com/docs/assistants/overview).
-- **Full Control Over Prompts**: Avoid conflicts and restrictions of pre-defined prompts, allowing full customization.
-- **Type-Safe Tools**: Create reliable tools with automatic type validation and error correction.
-- **Efficient Communication**: Agents communicate through a specially designed messaging tool based on their own descriptions.
-- **State Management**: Agency Swarm efficiently manages the state of your assistants on OpenAI, maintaining it in a special `settings.json` file.
-- **Production Ready**: Built for reliability and easy deployment in production environments.
+- **Customizable Agent Roles**: Define distinct agent roles (e.g., CEO, Developer) with tailored instructions, tools, and capabilities within the Agency Swarm framework, leveraging the underlying OpenAI Agents SDK.
+- **Full Control Over Agent Instructions**: Maintain complete control over each agent's guiding prompts (instructions) for precise behavior customization.
+- **Type-Safe Tools**: Develop robust tools using Pydantic models for automatic argument validation, compatible with the OpenAI Agents SDK's `FunctionTool` format.
+- **Orchestrated Agent Communication**: Agents communicate via a dedicated `send_message` tool, with interactions governed by an `agency_chart` that defines allowed communication pathways within the `Agency`.
+- **Flexible State Persistence**: Manage conversation history by providing `load_threads_callback` and `save_threads_callback` functions to the `Agency`. This allows for loading and saving conversation threads to external storage, enabling persistence across sessions.
+- **Robust Multi-Agent Orchestration**: Build complex and reliable agent workflows by leveraging the OpenAI Agents SDK foundation, enhanced by Agency Swarm's structured orchestration layer.
 
 ## Installation
 
+### Stable Version (v0.x)
 ```bash
 pip install -U agency-swarm
 ```
+
+### Beta Version (v1.x - OpenAI Agents SDK Based)
+```bash
+pip install -U agency-swarm==1.0.0-beta.3
+```
+
+> **Note:** The v1.x beta represents a major architectural change built on the OpenAI Agents SDK.
+> While feature-complete and functional, it's marked as beta for wider testing before becoming the default version.
+> See our [Migration Guide](./docs/migration_guide.mdx) for details on migrating from v0.x to v1.x.
 
 ## Getting Started
 
@@ -211,7 +234,7 @@ When you run the `create-agent-template` command, it creates the following folde
     ├── AgentName.py            # The main agent class file
     ├── __init__.py             # Initializes the agent folder as a Python package
     ├── instructions.md or .txt # Instruction document for the agent
-    └── tools.py                # Custom tools specific to the agent
+    └── tools.py                # Custom tools specific to the agent's role.
 
 ```
 
