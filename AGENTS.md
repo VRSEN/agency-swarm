@@ -147,6 +147,79 @@ cd tests && pytest -v  # run tests with verbose output
 - `add_tool(tool: Tool)` - Add function tool to agent
 - `register_subagent(recipient_agent)` - Enable communication to another agent
 - `upload_file(file_path, include_in_vector_store=True)` - File management
+- `async get_response(message, sender_name=None, **kwargs)` - Main agent execution
+- `async get_response_stream(message, sender_name=None, **kwargs)` - Streaming execution
+- `get_thread_id(sender_name=None)` - Get conversation thread ID
+- `get_class_folder_path()` - Agent's file folder path
+
+**Dependencies**: `BaseAgent` (from agents), `ThreadManager`, `MasterContext`, `SendMessage`, `AgentFileManager`
+
+### `src/agency_swarm/thread.py` (403 lines)
+**Core classes**: `ConversationThread`, `ThreadManager` - Conversation state management
+**ConversationThread Public Methods:**
+- `add_item(item_dict: TResponseInputItem)` - Add single message/tool call
+- `add_items(items: Sequence[TResponseInputItem])` - Add multiple items
+- `add_user_message(message: str | TResponseInputItem)` - Add user message
+- `get_history(max_items=None)` - Get formatted history for agents.Runner
+- `get_full_log()` - Get complete raw message list
+- `get_items()` - Get copy of thread items
+- `clear()` - Remove all items
+- `__len__()`, `__bool__()` - Length and truth value
+
+**ThreadManager Public Methods:**
+- `__init__(load_threads_callback=None, save_threads_callback=None)` - Initialize with persistence
+- `get_thread(thread_id=None)` - Retrieve or create conversation thread
+- `add_item_and_save(thread, item)` - Add item and persist
+- `add_items_and_save(thread, items)` - Add items and persist
+
+**Dependencies**: `TResponseInputItem` (from agents)
+
+### `src/agency_swarm/context.py` (52 lines) ✅
+**Core class**: `MasterContext` - Shared context across agent runs
+**Public Methods:**
+- `__init__(thread_manager, agents, user_context={})` - Initialize shared state
+- `get(key, default=None)` - Access user context with default
+- `set(key, value)` - Set user context field
+
+**Dependencies**: `ThreadManager`, `Agent` instances
+
+### `src/agency_swarm/hooks.py` (133 lines) ✅
+**Core class**: `PersistenceHooks(RunHooks[MasterContext])` - Load/save thread state
+**Public Methods:**
+- `__init__(load_threads_callback, save_threads_callback)` - Initialize persistence hooks
+- `on_run_start(context: MasterContext, **kwargs)` - Load threads at run start
+- `on_run_end(context: MasterContext, result: RunResult, **kwargs)` - Save threads at run end
+
+**Dependencies**: `RunHooks`, `MasterContext`, `ConversationThread`
+
+### `src/agency_swarm/tools/send_message.py` (164 lines) ✅
+**Core class**: `SendMessage(FunctionTool)` - Inter-agent communication tool
+**Public Methods:**
+- `__init__(sender_agent, recipient_agent, tool_name)` - Initialize communication tool
+- `async on_invoke_tool(wrapper, arguments_json_string)` - Handle tool invocation
+
+**Dependencies**: `FunctionTool`, `RunContextWrapper`, `MasterContext`
+
+## Framework Architecture
+- **Extends** `openai-agents` SDK (imported as `agents`)
+- **Built on OpenAI Responses API** by default for all agent interactions. The only exception is `examples/chat_completion_provider.py`.
+- **Agency** orchestrates multiple **Agent** instances
+- **ThreadManager** isolates conversations by sender->receiver pairs
+- **MasterContext** provides shared state across agents
+- **PersistenceHooks** for state management
+- **SendMessage** tools enable inter-agent communication
+
+## Testing (NO MOCKS in integration/)
+- `tests/integration/test_communication.py` - Agent messaging
+- `tests/integration/test_thread_isolation_basic.py` - Thread separation
+- `tests/integration/test_persistence.py` - State management
+- `tests/integration/test_file_handling.py` - File operations
+
+## Build System
+```bash
+make ci        # lint + mypy + tests + coverage
+make tests     # pytest
+```
 
 **Thread Management** (`thread.py`):
 - `ConversationThread.add_user_message(message)` - Add user message

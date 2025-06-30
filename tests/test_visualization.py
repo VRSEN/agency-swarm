@@ -9,8 +9,7 @@ from unittest.mock import patch
 import pytest
 
 from agency_swarm import Agency, Agent
-from agency_swarm.visualization.html_generator import HTMLVisualizationGenerator
-from agency_swarm.visualization.layout_algorithms import LayoutAlgorithms
+from agency_swarm.ui import HTMLVisualizationGenerator, LayoutAlgorithms
 
 
 @pytest.fixture
@@ -377,7 +376,7 @@ class TestAgencyVisualizationIntegration:
 
     def test_visualization_module_import(self):
         """Test that visualization modules can be imported."""
-        from agency_swarm.visualization import HTMLVisualizationGenerator, LayoutAlgorithms
+        from agency_swarm.ui import HTMLVisualizationGenerator, LayoutAlgorithms
 
         assert HTMLVisualizationGenerator is not None
         assert LayoutAlgorithms is not None

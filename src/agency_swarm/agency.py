@@ -1,4 +1,5 @@
 # --- agency.py ---
+import asyncio
 import concurrent.futures
 import logging
 import warnings
@@ -576,6 +577,7 @@ class Agency:
         port: int = 8000,
         app_token_env: str = "APP_TOKEN",
         cors_origins: list[str] | None = None,
+        enable_agui: bool = False,
     ):
         """Serve this agency via the FastAPI integration.
 
@@ -599,6 +601,7 @@ class Agency:
             port=port,
             app_token_env=app_token_env,
             cors_origins=cors_origins,
+            enable_agui=enable_agui,
         )
 
     # --- Deprecated Methods ---
@@ -946,7 +949,7 @@ class Agency:
             Path to the generated HTML file
         """
         try:
-            from .visualization import HTMLVisualizationGenerator
+            from .ui import HTMLVisualizationGenerator
 
             return HTMLVisualizationGenerator.create_visualization_from_agency(
                 agency=self,

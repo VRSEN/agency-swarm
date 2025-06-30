@@ -1,14 +1,16 @@
 import asyncio
-import dataclasses
 import json
-from collections.abc import Callable
+from collections.abc import AsyncGenerator, Callable
 
+from ag_ui.core import EventType, MessagesSnapshotEvent, RunErrorEvent, RunFinishedEvent, RunStartedEvent
+from ag_ui.encoder import EventEncoder
 from fastapi import Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseModel
 
 from agency_swarm.agency import Agency
+
+from agency_swarm.ui.core.converters import AguiConverter, serialize
 
 
 def get_verify_token(app_token):
@@ -138,21 +140,92 @@ def make_tool_endpoint(tool, verify_token, context=None):
 
     return handler
 
+def make_agui_chat_endpoint(request_model, agency_factory: Callable[..., Agency], verify_token):
+    async def handler(request: request_model, token: str = Depends(verify_token)):
+        """Accepts AG-UI `RunAgentInput`, returns an AG-UI event stream."""
+
+        encoder = EventEncoder()
+
+        if request.chat_history is not None:
+            chat_history_dict = {}
+            for key, value in request.chat_history.items():
+                chat_history_dict[key] = json.loads(value.model_dump_json())
+
+            def load_callback() -> dict:
+                return chat_history_dict
+
+        elif request.messages is not None:
+            # Pull the default agent from the agency
+            agency = agency_factory()
+            default_agent = agency.entry_points[0]
+            def load_callback() -> dict:
+                return {f"user->{default_agent.name}": {"items": AguiConverter.agui_messages_to_chat_history(request.messages), "metadata": {}}}
+        else:
+            def load_callback() -> dict:
+                return {}
+
+
+        # Choose / build an agent – here we just create a demo agent each time.
+        agency = agency_factory(load_threads_callback=load_callback)
+
+        async def event_generator() -> AsyncGenerator[str, None]:
+            # Emit RUN_STARTED first.
+            yield encoder.encode(
+                RunStartedEvent(
+                    type=EventType.RUN_STARTED,
+                    thread_id=request.thread_id,
+                    run_id=request.run_id,
+                )
+            )
+
+            try:
+                # Store in dict format to avoid converting to classes
+                snapshot_messages = [message.model_dump() for message in request.messages]
+                async for event in agency.get_response_stream(
+                    message=request.messages[-1].content,
+                ):
+                    agui_event = AguiConverter.openai_to_agui_events(
+                        event,
+                        run_id=request.run_id,
+                    )
+                    if agui_event:
+                        events = agui_event if isinstance(agui_event, list) else [agui_event]
+                        for event in events:
+                            if isinstance(event, MessagesSnapshotEvent):
+                                snapshot_messages.append(event.messages[0].model_dump())
+                                yield encoder.encode(MessagesSnapshotEvent(type=EventType.MESSAGES_SNAPSHOT, messages=snapshot_messages))
+                            else:
+                                yield encoder.encode(event)
+
+                yield encoder.encode(
+                    RunFinishedEvent(
+                        type=EventType.RUN_FINISHED,
+                        thread_id=request.thread_id,
+                        run_id=request.run_id,
+                    )
+                )
+
+            except Exception as exc:
+                import traceback
+                # Surface error as AG-UI event so the frontend can react.
+                tb_str = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+                error_message = f"{str(exc)}\n\nTraceback:\n{tb_str}"
+                yield encoder.encode(
+                    RunErrorEvent(type=EventType.RUN_ERROR, message=error_message)
+                )
+
+        return StreamingResponse(event_generator(), media_type=encoder.get_content_type())
+
+    return handler
+
+def make_metadata_endpoint(agency_metadata: dict, verify_token):
+    async def handler(token: str = Depends(verify_token)):
+        return {"metadata": agency_metadata}
+
+    return handler
 
 async def exception_handler(request, exc):
     error_message = str(exc)
     if isinstance(exc, tuple):
         error_message = str(exc[1]) if len(exc) > 1 else str(exc[0])
     return JSONResponse(status_code=500, content={"error": error_message})
-
-def serialize(obj):
-    if dataclasses.is_dataclass(obj):
-        return {k: serialize(v) for k, v in dataclasses.asdict(obj).items()}
-    elif isinstance(obj, BaseModel):
-        return {k: serialize(v) for k, v in obj.model_dump().items()}
-    elif isinstance(obj, list | tuple):
-        return [serialize(item) for item in obj]
-    elif isinstance(obj, dict):
-        return {k: serialize(v) for k, v in obj.items()}
-    else:
-        return str(obj)
