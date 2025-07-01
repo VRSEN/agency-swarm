@@ -6,17 +6,17 @@ icon: "chart-network"
 
 Agency Swarm provides two visualization methods:
 
-1. **`create_interactive_visualization()`** - Creates interactive HTML files
+1. **`visualize()`** - Creates interactive HTML files
 2. **`get_agency_structure()`** - Returns ReactFlow-compatible JSON
 
 ## Interactive HTML Visualization
 
-### `create_interactive_visualization()`
+### `visualize()`
 
 Creates a self-contained HTML file with interactive agency visualization.
 
 ```python
-def create_interactive_visualization(
+def visualize(
     self,
     output_file: str = "agency_visualization.html",
     include_tools: bool = True,
@@ -61,7 +61,7 @@ agency = Agency(
 )
 
 # Create visualization
-html_file = agency.create_interactive_visualization()
+html_file = agency.visualize()
 print(f"Saved to: {html_file}")
 ```
 
@@ -188,7 +188,7 @@ agency = Agency(
 )
 
 # Generate HTML visualization
-html_file = agency.create_interactive_visualization(
+html_file = agency.visualize(
     output_file="data_agency.html",
     include_tools=True,
     open_browser=True

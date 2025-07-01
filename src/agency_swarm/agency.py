@@ -927,7 +927,7 @@ class Agency:
             },
         }
 
-    def create_interactive_visualization(
+    def visualize(
         self,
         output_file: str = "agency_visualization.html",
         layout_algorithm: str = "force_directed",
