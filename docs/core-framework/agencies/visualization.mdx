@@ -1,36 +1,24 @@
 ---
 title: "Agency Visualization"
-description: "Visualize agency structure and communication flows with ReactFlow compatibility"
+description: "Create interactive HTML visualizations and get ReactFlow-compatible data"
 icon: "chart-network"
 ---
 
-Agency Swarm v1.x provides three methods for visualizing agency structure:
+Agency Swarm provides two visualization methods:
 
-1. **`create_interactive_visualization()`** - Creates interactive HTML visualizations
-2. **`get_agency_structure()`** - Returns ReactFlow-compatible JSON data
-3. **`plot_agency_chart()`** - Generates basic static charts using matplotlib
+1. **`create_interactive_visualization()`** - Creates interactive HTML files
+2. **`get_agency_structure()`** - Returns ReactFlow-compatible JSON
 
-## Overview
-
-These visualization methods help you:
-
-- **Understand Agency Organization**: See how agents, tools, and communication flows are structured
-- **Frontend Integration**: Use ReactFlow-compatible data to build interactive web UIs
-- **Documentation & Presentations**: Generate charts for documentation
-- **Debugging & Development**: Visualize complex agency relationships during development
-- **Team Collaboration**: Share visual representations of system architecture
-
-## Interactive HTML Visualization ⭐
+## Interactive HTML Visualization
 
 ### `create_interactive_visualization()`
 
-Creates interactive HTML visualizations with features and styling.
+Creates a self-contained HTML file with interactive agency visualization.
 
 ```python
 def create_interactive_visualization(
     self,
     output_file: str = "agency_visualization.html",
-    layout_algorithm: str = "force_directed",
     include_tools: bool = True,
     open_browser: bool = True
 ) -> str
@@ -40,234 +28,11 @@ def create_interactive_visualization(
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `output_file` | `str` | `"agency_visualization.html"` | Path to save the HTML file |
-| `layout_algorithm` | `str` | `"hierarchical"` | Layout: `"hierarchical"`, `"force_directed"` |
+| `output_file` | `str` | `"agency_visualization.html"` | Path to save HTML file |
 | `include_tools` | `bool` | `True` | Whether to include agent tools |
-| `open_browser` | `bool` | `True` | Whether to automatically open in browser |
+| `open_browser` | `bool` | `True` | Whether to open in browser |
 
-#### Features
-
-- **🎨 Professional Design**: Gradients, shadows, and responsive layout
-- **🎯 Intelligent Layouts**: Hierarchical (default) and force-directed algorithms
-- **🧠 Smart Tool Positioning**: Manager tools positioned to the right, leaf agent tools below
-- **⚡ Collision Detection**: Optimized spacing (120px minimum) prevents node overlaps
-- **🎮 Interactive Controls**: Drag nodes, zoom, pan, and layout switching
-- **📊 Real-time Statistics**: Live agent, tool, and communication flow counts
-- **💾 Export Options**: Download as SVG or PNG
-- **📱 Responsive Design**: Works on desktop, tablet, and mobile
-- **🛠️ Tool Management**: Toggle tool visibility dynamically
-
-#### Example Usage
-
-```python
-from agency_swarm import Agency, Agent
-
-# Create your agency
-agency = Agency(
-    agent1, agent2,
-    communication_flows=[(agent1, agent2)],
-    name="My Agency"
-)
-
-# Generate interactive visualization
-html_file = agency.create_interactive_visualization(
-    output_file="my_agency.html",
-    layout_algorithm="hierarchical",
-    include_tools=True,
-    open_browser=True
-)
-
-print(f"Visualization saved to: {html_file}")
-```
-
-#### Layout Algorithms
-
-**Force-Directed Layout**:
-- Force-based simulation with collision detection
-- Prevents node overlaps using repulsive forces
-- Spacing based on communication relationships
-- Self-organizing with animations
-
-**Hierarchical Layout** (Default):
-- Entry points positioned at the top
-- Subsequent layers arranged by communication flows with optimized spacing (120px minimum)
-- **Intelligent tool positioning** based on agent roles:
-  - Manager agents (multiple outgoing connections): tools positioned to the right
-  - Leaf agents (single/no outgoing connections): tools positioned below
-- Collision detection prevents node overlaps and intersections
-- Clear visual hierarchy and delegation patterns
-- Ideal for management-style organizations
-
-
-
-## ReactFlow Integration
-
-### `get_agency_structure()`
-
-Returns a JSON structure compatible with ReactFlow.
-
-```python
-def get_agency_structure(
-    self,
-    include_tools: bool = True,
-    layout_algorithm: str = "hierarchical"
-) -> dict[str, Any]
-```
-
-#### Parameters
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `include_tools` | `bool` | `True` | Whether to include agent tools as separate nodes |
-| `layout_algorithm` | `str` | `"hierarchical"` | Layout algorithm: `"hierarchical"`, `"force-directed"` |
-
-#### Returns
-
-Dictionary with `nodes`, `edges`, and `metadata` arrays.
-
-#### Example Usage
-
-```python
-from agency_swarm import Agency, Agent
-
-# Create your agency
-agency = Agency(
-    agent1, agent2,
-    communication_flows=[(agent1, agent2)],
-    name="My Agency"
-)
-
-# Get structure
-structure = agency.get_agency_structure(
-    include_tools=True,
-    layout_algorithm="hierarchical"
-)
-```
-
-#### Output Structure
-
-```json
-{
-  "nodes": [
-    {
-      "id": "AgentName",
-      "type": "agent",
-      "position": {"x": 100, "y": 50},
-      "data": {
-        "label": "AgentName",
-        "description": "Agent description",
-        "isEntryPoint": true,
-        "toolCount": 2,
-        "tools": [...],
-        "instructions": "Agent instructions...",
-        "model": "gpt-4o",
-        "hasSubagents": true
-      }
-    }
-  ],
-  "edges": [
-    {
-      "id": "comm_0",
-      "source": "Agent1",
-      "target": "Agent2",
-      "type": "communication"
-    }
-  ],
-  "metadata": {
-    "agencyName": "Agency Name",
-    "totalAgents": 2,
-    "totalTools": 4,
-    "entryPoints": ["Agent1"],
-    "sharedInstructions": "Shared instructions...",
-    "layoutAlgorithm": "hierarchical"
-  }
-}
-```
-
-#### Node Types
-
-**Agent Nodes:**
-- `type`: `"agent"`
-- `data.isEntryPoint`: Boolean indicating entry point status
-- `data.toolCount`: Number of tools owned by the agent
-
-**Tool Nodes:**
-- `type`: `"tool"`
-- `data.parentAgent`: Name of the agent that owns this tool
-
-#### Edge Types
-
-**Communication Edges:**
-- `type`: `"communication"`
-- Represent communication flows between agents
-
-**Ownership Edges:**
-- `type`: `"owns"`
-- Connect agents to their tools
-
-### Layout Algorithms
-
-Available layout algorithms:
-
-- `"hierarchical"` - Entry points at top, others positioned below
-- `"force-directed"` - Physics-based layout with collision detection to prevent node intersections
-
-## Visual Chart Generation
-
-### `plot_agency_chart()`
-
-Generates visual charts using matplotlib and networkx.
-
-```python
-def plot_agency_chart(
-    self,
-    figsize: tuple[int, int] = (12, 8),
-    show_tools: bool = True,
-    save_path: str | None = None,
-    layout: str = "spring",
-    show_plot: bool = True
-) -> None
-```
-
-#### Parameters
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `figsize` | `tuple[int, int]` | `(12, 8)` | Figure size as (width, height) |
-| `show_tools` | `bool` | `True` | Whether to include agent tools |
-| `save_path` | `str \| None` | `None` | Optional path to save the chart |
-| `layout` | `str` | `"spring"` | Graph layout: `"spring"`, `"hierarchical"`, `"shell"` |
-| `show_plot` | `bool` | `True` | Whether to display the plot |
-
-#### Example Usage
-
-```python
-# Basic chart
-agency.plot_agency_chart()
-
-# Save to file
-agency.plot_agency_chart(
-    figsize=(16, 12),
-    save_path="agency_chart.png",
-    show_plot=False
-)
-```
-
-#### Visual Elements
-
-- Red circles: Entry point agents
-- Blue circles: Regular agents
-- Green squares: Tools
-- Blue arrows: Communication flows
-- Gray dashed arrows: Tool ownership
-
-## Installation Requirements
-
-```bash
-pip install matplotlib networkx
-```
-
-## Complete Example
+#### Example
 
 ```python
 from agents import function_tool
@@ -275,6 +40,7 @@ from agency_swarm import Agency, Agent
 
 @function_tool
 def analyze_data(data: str) -> str:
+    """Analyze data"""
     return f"Analysis: {data}"
 
 analyst = Agent(
@@ -294,35 +60,83 @@ agency = Agency(
     name="Analysis Agency"
 )
 
-# Get structure
-structure = agency.get_agency_structure()
-
-# Generate chart
-agency.plot_agency_chart(
-    save_path="chart.png",
-    show_plot=False
-)
+# Create visualization
+html_file = agency.create_interactive_visualization()
+print(f"Saved to: {html_file}")
 ```
+
+## ReactFlow Integration
+
+### `get_agency_structure()`
+
+Returns ReactFlow-compatible JSON data.
+
+```python
+def get_agency_structure(
+    self,
+    include_tools: bool = True
+) -> dict[str, Any]
+```
+
+#### Returns
+
+```python
+{
+    "nodes": [
+        {
+            "id": "Manager",
+            "type": "agent",
+            "position": {"x": 100, "y": 50},
+            "data": {
+                "label": "Manager",
+                "description": "Agent description",
+                "isEntryPoint": True,
+                "toolCount": 0
+            }
+        }
+    ],
+    "edges": [
+        {
+            "id": "Manager->Analyst",
+            "source": "Manager",
+            "target": "Analyst",
+            "type": "communication"
+        }
+    ],
+    "metadata": {
+        "agencyName": "Analysis Agency",
+        "totalAgents": 2,
+        "totalTools": 1,
+        "entryPoints": ["Manager"]
+    }
+}
+```
+
+#### Node Types
+
+- **Agent nodes**: `type: "agent"` with agent metadata
+- **Tool nodes**: `type: "tool"` with parent agent reference
+
+#### Edge Types
+
+- **Communication**: `type: "communication"` between agents
+- **Ownership**: `type: "owns"` from agent to tool
 
 ## Frontend Integration
 
-The ReactFlow-compatible output can be directly used in React applications:
+Use the JSON directly in React:
 
 ```tsx
-import React from 'react';
-import ReactFlow, { Node, Edge } from 'reactflow';
+import ReactFlow from 'reactflow';
 
-// Get structure from your Agency Swarm backend
-const agencyStructure = await fetch('/api/agency-structure').then(r => r.json());
+const agencyData = await fetch('/api/agency-structure').then(r => r.json());
 
 function AgencyVisualization() {
-  const { nodes, edges } = agencyStructure;
-
   return (
     <div style={{ height: '600px' }}>
       <ReactFlow
-        nodes={nodes}
-        edges={edges}
+        nodes={agencyData.nodes}
+        edges={agencyData.edges}
         fitView
       />
     </div>
@@ -330,94 +144,75 @@ function AgencyVisualization() {
 }
 ```
 
-## Best Practices
+## Complete Example
 
-### When to Use Each Method
+```python
+from agents import function_tool
+from agency_swarm import Agency, Agent
 
-**Use `create_interactive_visualization()` when:**
-- Creating presentations or demos
-- Sharing agency architecture with stakeholders
-- Interactive debugging and development
-- Generating visualizations
-- Need responsive design with interactivity
+@function_tool
+def process_data(data: str) -> str:
+    return f"Processed: {data}"
 
-**Use `get_agency_structure()` when:**
-- Building custom web applications with specific requirements
-- Need programmatic access to agency structure data
-- Integrating with existing frontend frameworks
-- Creating specialized visualizations
+@function_tool
+def create_report(data: str) -> str:
+    return f"Report: {data}"
 
-**Use `plot_agency_chart()` when:**
-- Need quick static images for documentation
-- Working in headless environments without browsers
-- Creating simple diagrams for internal notes
-- matplotlib/networkx integration is preferred
+# Create agents
+processor = Agent(
+    name="Processor",
+    instructions="Process data efficiently.",
+    tools=[process_data]
+)
 
-### Layout Selection
+reporter = Agent(
+    name="Reporter",
+    instructions="Create detailed reports.",
+    tools=[create_report]
+)
 
-**Hierarchical layouts** work best for:
-- Agencies with clear entry points and delegation patterns
-- Workflow-based agencies (orchestrator pattern)
-- Organizations with management hierarchies
-- **Any agency structure** - intelligent tool positioning automatically adapts to agent roles
+coordinator = Agent(
+    name="Coordinator",
+    instructions="Coordinate the workflow."
+)
 
-**Force-directed layouts** work best for:
-- Complex communication patterns with intersection avoidance
-- Agencies where communication flows determine positioning
-- When you need physics-based automatic positioning with no overlaps
+# Create agency
+agency = Agency(
+    coordinator,
+    communication_flows=[
+        (coordinator, processor),
+        (coordinator, reporter),
+        (processor, reporter)
+    ],
+    name="Data Processing Agency"
+)
 
-**Spring layouts** work best for:
-- General-purpose automatic positioning using NetworkX algorithms
-- Large agencies with many interconnections
-- Quick visualization without custom force calculations
+# Generate HTML visualization
+html_file = agency.create_interactive_visualization(
+    output_file="data_agency.html",
+    include_tools=True,
+    open_browser=True
+)
 
-### Performance Considerations
+# Get JSON for custom apps
+structure = agency.get_agency_structure(include_tools=True)
 
-- **Large agencies** (>10 agents): Consider setting `include_tools=False` for simpler visualizations
-- **Complex tool sets**: Use `show_tools=False` in charts to reduce visual complexity
-- **Frontend integration**: Cache structure results to avoid repeated computation
+print(f"HTML visualization: {html_file}")
+print(f"Found {len(structure['nodes'])} nodes")
+```
 
 ## Troubleshooting
 
-### Common Issues
+**HTML not opening**: Check `open_browser=True` or open file manually
 
-**ImportError for visualization dependencies:**
-```bash
-pip install matplotlib networkx
-```
+**Missing tools**: Verify agents have tools and `include_tools=True`
 
-**Empty communication flows:**
-- Ensure `communication_flows` parameter is properly set in Agency constructor
-- Check that agents are registered as subagents correctly
+**No communication flows**: Ensure `communication_flows` parameter is set in Agency constructor
 
-**Tools not appearing:**
-- Verify agents have tools assigned in their constructor
-- Check that `include_tools=True` (default) in `get_agency_structure()`
-
-**Positioning issues:**
-- Try different layout algorithms
-- Hierarchical layout automatically prevents overlaps with intelligent tool positioning
-- For frontend use, consider overriding positions in ReactFlow
-
-**Large/cluttered charts:**
-- Use larger `figsize` parameter
-- Set `show_tools=False` for simpler visualization
-- Consider visualizing subsets of large agencies
-
-### Debug Information
-
-Both methods include extensive debug information:
-
+**Debug structure**:
 ```python
-# Check structure metadata
 structure = agency.get_agency_structure()
-print("Debug info:", structure['metadata'])
-
-# Verify node and edge counts
-print(f"Nodes: {len(structure['nodes'])}")
-print(f"Edges: {len(structure['edges'])}")
-
-# Check for missing communication flows
-if not structure['edges']:
-    print("Warning: No communication flows detected")
+print(f"Agents: {structure['metadata']['totalAgents']}")
+print(f"Tools: {structure['metadata']['totalTools']}")
+print(f"Entry points: {structure['metadata']['entryPoints']}")
 ```
