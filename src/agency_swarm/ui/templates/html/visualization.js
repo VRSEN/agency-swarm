@@ -231,7 +231,7 @@ class AgencyVisualization {
         const visibleNodes = this.showTools ? this.agencyData.nodes : this.agencyData.nodes.filter(n => n.type === 'agent');
         const agents = visibleNodes.filter(n => n.type === 'agent').length;
         const tools = visibleNodes.filter(n => n.type === 'tool').length;
-        const flows = this.agencyData.edges.length;
+        const flows = this.agencyData.edges.filter(e => e.type === 'communication').length;
         const entryPoints = this.agencyData.metadata?.entryPoints?.length || 0;
 
         document.getElementById('stats-agents').textContent = `Agents: ${agents}`;
