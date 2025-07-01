@@ -18,7 +18,7 @@ class HTMLVisualizationGenerator:
     """
 
     def __init__(self):
-        self.template_dir = Path(__file__).parent / "templates"
+        self.template_dir = Path(__file__).parents[1] / "templates" / "html"
 
     def generate_interactive_html(
         self,
@@ -40,7 +40,7 @@ class HTMLVisualizationGenerator:
             Path to the generated HTML file
         """
         # Apply layout algorithm to the data
-        from .layout_algorithms import LayoutAlgorithms
+        from ..core.layout_algorithms import LayoutAlgorithms
 
         positioned_data = LayoutAlgorithms.apply_layout(agency_data, algorithm=layout_algorithm, width=800, height=600)
 
@@ -94,7 +94,7 @@ class HTMLVisualizationGenerator:
             Dictionary with paths to generated files
         """
         # Apply layout algorithm
-        from .layout_algorithms import LayoutAlgorithms
+        from ..core.layout_algorithms import LayoutAlgorithms
 
         positioned_data = LayoutAlgorithms.apply_layout(agency_data, algorithm=layout_algorithm, width=800, height=600)
 

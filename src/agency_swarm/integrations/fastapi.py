@@ -1,5 +1,5 @@
-import os
 import logging
+import os
 from collections.abc import Callable, Mapping
 
 from agents.tool import FunctionTool
@@ -21,6 +21,7 @@ def run_fastapi(
     app_token_env: str = "APP_TOKEN",
     return_app: bool = False,
     cors_origins: list[str] | None = None,
+    enable_agui: bool = False,
 ):
     """Launch a FastAPI server exposing endpoints for multiple agencies and tools.
 
@@ -48,18 +49,20 @@ def run_fastapi(
         from .fastapi_utils.endpoint_handlers import (
             exception_handler,
             get_verify_token,
+            make_agui_chat_endpoint,
+            make_metadata_endpoint,
             make_response_endpoint,
             make_stream_endpoint,
             make_tool_endpoint,
         )
-        from .fastapi_utils.request_models import BaseRequest, add_agent_validator
+        from .fastapi_utils.request_models import BaseRequest, RunAgentInputCustom, add_agent_validator
     except ImportError:
         logger.error("FastAPI deployment dependencies are missing. Please install agency-swarm[fastapi] package")
         return
 
     app_token = os.getenv(app_token_env)
     if app_token is None or app_token == "":
-        logger.warning(f"{app_token_env} is not set. Authentication will be disabled.")
+        logger.warning("App token is not set. Authentication will be disabled.")
     verify_token = get_verify_token(app_token)
 
     app = FastAPI()
@@ -94,19 +97,35 @@ def run_fastapi(
             preview_instance = agency_factory(load_threads_callback=lambda: {})
             AGENT_INSTANCES: dict[str, Agent] = dict(preview_instance.agents.items())
             AgencyRequest = add_agent_validator(BaseRequest, AGENT_INSTANCES)
+            agency_metadata = preview_instance.get_agency_structure()
+
+            if enable_agui:
+                app.add_api_route(
+                    f"/{agency_name}/get_response_stream",
+                    make_agui_chat_endpoint(RunAgentInputCustom, agency_factory, verify_token),
+                    methods=["POST"],
+                )
+                endpoints.append(f"/{agency_name}/get_response_stream")
+            else:
+                app.add_api_route(
+                    f"/{agency_name}/get_response",
+                    make_response_endpoint(AgencyRequest, agency_factory, verify_token),
+                    methods=["POST"],
+                )
+                app.add_api_route(
+                    f"/{agency_name}/get_response_stream",
+                    make_stream_endpoint(AgencyRequest, agency_factory, verify_token),
+                    methods=["POST"],
+                )
+                endpoints.append(f"/{agency_name}/get_response")
+                endpoints.append(f"/{agency_name}/get_response_stream")
 
             app.add_api_route(
-                f"/{agency_name}/get_response",
-                make_response_endpoint(AgencyRequest, agency_factory, verify_token),
-                methods=["POST"],
+                f"/{agency_name}/get_metadata",
+                make_metadata_endpoint(agency_metadata, verify_token),
+                methods=["GET"],
             )
-            app.add_api_route(
-                f"/{agency_name}/get_response_stream",
-                make_stream_endpoint(AgencyRequest, agency_factory, verify_token),
-                methods=["POST"],
-            )
-            endpoints.append(f"/{agency_name}/get_response")
-            endpoints.append(f"/{agency_name}/get_response_stream")
+            endpoints.append(f"/{agency_name}/get_metadata")
 
     if tools:
         for tool in tools:
@@ -122,6 +141,6 @@ def run_fastapi(
     if return_app:
         return app
 
-    logger.info(f"Starting FastAPI server at http://{host}:{port}")
+    logger.info(f"Starting FastAPI {'AG-UI ' if enable_agui else ''}server at http://{host}:{port}")
 
     uvicorn.run(app, host=host, port=port)

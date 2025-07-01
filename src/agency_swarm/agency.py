@@ -1,4 +1,5 @@
 # --- agency.py ---
+import asyncio
 import concurrent.futures
 import logging
 import warnings
@@ -22,15 +23,7 @@ logger = logging.getLogger(__name__)
 AgencyChartEntry = Agent | list[Agent]
 AgencyChart = list[AgencyChartEntry]
 
-# --- Import visualization dependencies (with fallbacks) ---
-try:
-    import matplotlib.patches as mpatches
-    import matplotlib.pyplot as plt
-    import networkx as nx
-
-    HAS_VISUALIZATION_DEPS = True
-except ImportError:
-    HAS_VISUALIZATION_DEPS = False
+# --- Import visualization dependencies (for modern HTML visualization only) ---
 
 
 # --- Agency Class ---
@@ -584,6 +577,7 @@ class Agency:
         port: int = 8000,
         app_token_env: str = "APP_TOKEN",
         cors_origins: list[str] | None = None,
+        enable_agui: bool = False,
     ):
         """Serve this agency via the FastAPI integration.
 
@@ -607,6 +601,7 @@ class Agency:
             port=port,
             app_token_env=app_token_env,
             cors_origins=cors_origins,
+            enable_agui=enable_agui,
         )
 
     # --- Deprecated Methods ---
@@ -932,190 +927,6 @@ class Agency:
             },
         }
 
-    def plot_agency_chart(
-        self,
-        figsize: tuple[int, int] = (12, 8),
-        show_tools: bool = True,
-        save_path: str | None = None,
-        layout: str = "spring",
-        show_plot: bool = True,
-    ) -> None:
-        # TODO: This method exceeds 100 lines. Refactor into smaller helpers
-        # for layout creation and plotting to satisfy codebase guidelines.
-        """
-        Generates a visual chart of the agency structure using matplotlib and networkx.
-        Reuses the same data structure as get_agency_structure() for consistency.
-
-        Args:
-            figsize: Figure size as (width, height)
-            show_tools: Whether to include agent tools in the visualization
-            save_path: Optional path to save the chart image
-            layout: Graph layout algorithm ("spring", "hierarchical", "shell")
-            show_plot: Whether to display the plot (set False for headless environments)
-        """
-        if not HAS_VISUALIZATION_DEPS:
-            raise ImportError("Visualization dependencies are required. Install with: pip install matplotlib networkx")
-
-        # Get the standardized agency structure data
-        layout_algorithm = "hierarchical" if layout == "hierarchical" else "force_directed"
-        agency_data = self.get_agency_structure(include_tools=show_tools, layout_algorithm=layout_algorithm)
-
-        # Create directed graph from the standardized data
-        G = nx.DiGraph()
-
-        # Add nodes from agency data
-        for node in agency_data["nodes"]:
-            node_id = node["id"]
-            node_data = node["data"]
-            node_type = node["type"]
-
-            G.add_node(
-                node_id,
-                node_type=node_type,
-                is_entry=node_data.get("isEntryPoint", False),
-                tool_count=node_data.get("toolCount", 0),
-                description=node_data.get("description", ""),
-                tool_name=node_data.get("label", "") if node_type == "tool" else None,
-                parent_agent=node_data.get("parentAgent", None) if node_type == "tool" else None,
-            )
-
-        # Add edges from agency data
-        for edge in agency_data["edges"]:
-            edge_type = "communication" if edge["type"] == "communication" else "owns"
-            G.add_edge(edge["source"], edge["target"], edge_type=edge_type)
-
-        # Calculate layout
-        if layout == "spring":
-            pos = nx.spring_layout(G, k=2, iterations=50)
-        elif layout == "shell":
-            # Group by node type for shell layout
-            agent_nodes = [n for n, d in G.nodes(data=True) if d.get("node_type") == "agent"]
-            tool_nodes = [n for n, d in G.nodes(data=True) if d.get("node_type") == "tool"]
-            pos = nx.shell_layout(G, nlist=[agent_nodes, tool_nodes] if tool_nodes else [agent_nodes])
-        elif layout == "hierarchical":
-            pos = self._hierarchical_layout(G)
-        else:
-            pos = nx.spring_layout(G)
-
-        # Create the plot
-        plt.figure(figsize=figsize)
-        plt.title(
-            f"Agency Structure: {getattr(self, 'name', 'Unnamed Agency')}", fontsize=16, fontweight="bold", pad=20
-        )
-
-        # Separate nodes by type
-        agent_nodes = [n for n, d in G.nodes(data=True) if d.get("node_type") == "agent"]
-        tool_nodes = [n for n, d in G.nodes(data=True) if d.get("node_type") == "tool"]
-        entry_point_nodes = [n for n, d in G.nodes(data=True) if d.get("is_entry", False)]
-
-        # Draw edges
-        comm_edges = [(u, v) for u, v, d in G.edges(data=True) if d.get("edge_type") == "communication"]
-        owns_edges = [(u, v) for u, v, d in G.edges(data=True) if d.get("edge_type") == "owns"]
-
-        if comm_edges:
-            nx.draw_networkx_edges(
-                G,
-                pos,
-                edgelist=comm_edges,
-                edge_color="blue",
-                arrows=True,
-                arrowsize=20,
-                arrowstyle="->",
-                width=2,
-                alpha=0.7,
-            )
-
-        if owns_edges:
-            nx.draw_networkx_edges(
-                G,
-                pos,
-                edgelist=owns_edges,
-                edge_color="gray",
-                arrows=True,
-                arrowsize=15,
-                arrowstyle="->",
-                width=1,
-                alpha=0.5,
-                style="dashed",
-            )
-
-        # Draw nodes
-        if agent_nodes:
-            # Entry points in red, regular agents in blue
-            regular_agents = [n for n in agent_nodes if n not in entry_point_nodes]
-
-            if entry_point_nodes:
-                nx.draw_networkx_nodes(G, pos, nodelist=entry_point_nodes, node_color="red", node_size=3000, alpha=0.8)
-
-            if regular_agents:
-                nx.draw_networkx_nodes(
-                    G, pos, nodelist=regular_agents, node_color="lightblue", node_size=2500, alpha=0.8
-                )
-
-        if tool_nodes:
-            nx.draw_networkx_nodes(
-                G, pos, nodelist=tool_nodes, node_color="lightgreen", node_size=1500, node_shape="s", alpha=0.7
-            )
-
-        # Add labels
-        labels = {}
-        for node, data in G.nodes(data=True):
-            if data.get("node_type") == "agent":
-                tool_count = data.get("tool_count", 0)
-                labels[node] = f"{node}\n({tool_count} tools)" if show_tools else node
-            else:
-                labels[node] = data.get("tool_name", node)
-
-        nx.draw_networkx_labels(G, pos, labels=labels, font_size=9, font_weight="bold")
-
-        # Create legend
-        legend_elements = [
-            mpatches.Patch(color="red", label="Entry Point Agents", alpha=0.8),
-            mpatches.Patch(color="lightblue", label="Regular Agents", alpha=0.8),
-        ]
-
-        if tool_nodes:
-            legend_elements.append(mpatches.Patch(color="lightgreen", label="Tools", alpha=0.7))
-
-        legend_elements.extend(
-            [
-                mpatches.Patch(color="blue", label="Communication Flow", alpha=0.7),
-            ]
-        )
-
-        if owns_edges:
-            legend_elements.append(mpatches.Patch(color="gray", label="Tool Ownership", alpha=0.5))
-
-        plt.legend(handles=legend_elements, loc="upper left", bbox_to_anchor=(1, 1))
-
-        # Add agency info
-        info_text = f"Agents: {len(self.agents)}\n"
-        if self.entry_points:
-            info_text += f"Entry Points: {', '.join(ep.name for ep in self.entry_points)}\n"
-        if self.shared_instructions:
-            info_text += "Shared Instructions: Yes"
-
-        plt.figtext(
-            0.02,
-            0.02,
-            info_text,
-            fontsize=9,
-            alpha=0.7,
-            bbox={"boxstyle": "round,pad=0.3", "facecolor": "white", "alpha": 0.8},
-        )
-
-        plt.axis("off")
-        plt.tight_layout()
-
-        if save_path:
-            plt.savefig(save_path, dpi=300, bbox_inches="tight")
-            logger.info(f"Agency chart saved to {save_path}")
-
-        if show_plot:
-            plt.show()
-        else:
-            plt.close()  # Clean up the figure to prevent memory leaks
-
     def create_interactive_visualization(
         self,
         output_file: str = "agency_visualization.html",
@@ -1138,7 +949,7 @@ class Agency:
             Path to the generated HTML file
         """
         try:
-            from .visualization import HTMLVisualizationGenerator
+            from .ui import HTMLVisualizationGenerator
 
             return HTMLVisualizationGenerator.create_visualization_from_agency(
                 agency=self,
@@ -1205,7 +1016,6 @@ class Agency:
         # TODO: This helper is over 100 lines long. Break into smaller
         # functions (e.g., _force_directed_layout) to improve readability.
         positions = {}
-        agent_count = len(self.agents)
 
         if layout_algorithm == "hierarchical":
             # Entry points at top, others below
@@ -1311,63 +1121,3 @@ class Agency:
                     positions[agent_name]["y"] = max(node_radius, min(height - node_radius, positions[agent_name]["y"]))
 
         return positions
-
-    def _hierarchical_layout(self, G: Any) -> dict[str, tuple[float, float]]:
-        """Create a hierarchical layout for the graph."""
-        if not HAS_VISUALIZATION_DEPS:
-            return {}
-
-        # Try to create layers based on entry points and communication flows
-        try:
-            layers = {}
-            entry_points = [
-                node
-                for node, data in G.nodes(data=True)
-                if data.get("is_entry", False) and data.get("node_type") == "agent"
-            ]
-
-            if entry_points:
-                # Entry points at layer 0
-                for ep in entry_points:
-                    layers[ep] = 0
-
-                # BFS to assign layers
-                visited = set(entry_points)
-                queue = [(ep, 0) for ep in entry_points]
-
-                while queue:
-                    node, layer = queue.pop(0)
-                    for successor in G.successors(node):
-                        if successor not in visited and G.nodes[successor].get("node_type") == "agent":
-                            layers[successor] = layer + 1
-                            visited.add(successor)
-                            queue.append((successor, layer + 1))
-
-            # Convert to positions
-            pos = {}
-            layer_counts = {}
-
-            for node, layer in layers.items():
-                if layer not in layer_counts:
-                    layer_counts[layer] = 0
-
-                x = layer_counts[layer] * 300 + 100
-                y = layer * 150 + 50
-                pos[node] = (x, y)
-                layer_counts[layer] += 1
-
-            # Add tools below their parent agents
-            for node, data in G.nodes(data=True):
-                if data.get("node_type") == "tool":
-                    parent = data.get("parent_agent")
-                    if parent in pos:
-                        parent_x, parent_y = pos[parent]
-                        # Offset tools below parent
-                        tool_index = len([n for n in pos.keys() if n.startswith(f"{parent}_tool")])
-                        pos[node] = (parent_x + (tool_index * 80) - 40, parent_y + 120)
-
-            return pos
-
-        except Exception:
-            # Fallback to spring layout
-            return nx.spring_layout(G)

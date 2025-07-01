@@ -6,21 +6,9 @@ from agents import ModelSettings, RunResult
 from agency_swarm import Agency, Agent
 
 
-class PlannerAgent(Agent):
-    pass
-
-
-class WorkerAgent(Agent):
-    pass
-
-
-class ReporterAgent(Agent):
-    pass
-
-
 @pytest.fixture
 def planner_agent_instance():
-    return PlannerAgent(
+    return Agent(
         name="Planner",
         description="Plans the work.",
         instructions="You are a Planner. You will receive a task. Determine the steps. Delegate the execution step to the Worker agent using the send_message tool. Ensure your message to the Worker clearly includes the full and exact task description you received.",
@@ -30,7 +18,7 @@ def planner_agent_instance():
 
 @pytest.fixture
 def worker_agent_instance():
-    return WorkerAgent(
+    return Agent(
         name="Worker",
         description="Does the work.",
         instructions="You are a Worker. You will receive execution instructions from the Planner including a task description. Perform the task (simulate by creating a result string like 'Work done for: [task description]'). Send the result string to the Reporter agent using the send_message tool. Ensure your message clearly references the specific task description you were given by the Planner.",
@@ -40,7 +28,7 @@ def worker_agent_instance():
 
 @pytest.fixture
 def reporter_agent_instance():
-    return ReporterAgent(
+    return Agent(
         name="Reporter",
         description="Reports the results.",
         instructions="You are a Reporter. You will receive results from the Worker, which should reference a specific task description. Format this into a final report string. Ensure your final report clearly identifies the specific task description that was processed along with the results.",

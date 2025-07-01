@@ -86,13 +86,9 @@ def file_load_callback_error(thread_id: str, base_dir: Path) -> dict[str, Any] |
 
 
 # --- Test Agent ---
-class PersistenceTestAgent(Agent):
-    pass
-
-
 @pytest.fixture
 def persistence_agent():
-    return PersistenceTestAgent(
+    return Agent(
         name="PersistenceTester",
         instructions="Remember the secret code word I tell you. In the next turn, repeat the code word.",
     )
@@ -196,7 +192,7 @@ async def test_persistence_callbacks_called(temp_persistence_dir, persistence_ag
 
     # Turn 2 - new agency instance should load previous history
     print(f"\n--- Callback Test Turn 2 (Thread: {expected_thread_id}) --- MSG: {message2}")
-    persistence_agent2 = PersistenceTestAgent(
+    persistence_agent2 = Agent(
         name="PersistenceTester",
         instructions="Remember the secret code word I tell you. In the next turn, repeat the code word.",
     )
@@ -229,8 +225,8 @@ async def test_multi_thread_isolation_with_persistence(temp_persistence_dir, fil
     chat_id = "isolation_test_456"
 
     # Create two different agents
-    agent1 = PersistenceTestAgent(name="Agent1", instructions="You are Agent1.")
-    agent2 = PersistenceTestAgent(name="Agent2", instructions="You are Agent2.")
+    agent1 = Agent(name="Agent1", instructions="You are Agent1.")
+    agent2 = Agent(name="Agent2", instructions="You are Agent2.")
 
     # Get callback functions
     load_threads_for_chat, save_threads_for_chat = file_persistence_callbacks
@@ -296,8 +292,8 @@ async def test_persistence_load_all_threads(temp_persistence_dir, file_persisten
     chat_id = "multi_thread_test_789"
 
     # Create test agents
-    ceo = PersistenceTestAgent(name="CEO", instructions="You are the CEO.")
-    dev = PersistenceTestAgent(name="Developer", instructions="You are the Developer.")
+    ceo = Agent(name="CEO", instructions="You are the CEO.")
+    dev = Agent(name="Developer", instructions="You are the Developer.")
 
     # Get callback functions
     load_threads_for_chat, save_threads_for_chat = file_persistence_callbacks
@@ -373,7 +369,7 @@ async def test_persistence_error_handling(temp_persistence_dir, persistence_agen
     assert result is not None, "Should continue working despite load error"
 
     # Test save error handling - create separate agent instance
-    persistence_agent2 = PersistenceTestAgent(
+    persistence_agent2 = Agent(
         name="PersistenceTester",
         instructions="Remember the secret code word I tell you. In the next turn, repeat the code word.",
     )
@@ -411,7 +407,7 @@ async def test_no_persistence_no_callbacks(persistence_agent, temp_persistence_d
 
     # Agency Instance 2 - Turn 2 (No callbacks)
     print("\n--- No Persistence Test - Instance 2 - Turn 2 --- Creating Agency 2")
-    persistence_agent2 = PersistenceTestAgent(
+    persistence_agent2 = Agent(
         name="PersistenceTester",
         instructions="Remember the secret code word I tell you. In the next turn, repeat the code word.",
     )
