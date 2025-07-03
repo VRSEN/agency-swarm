@@ -51,14 +51,14 @@ AGENT_PARAMS = {
     # New/Current
     "files_folder",
     "tools_folder",
+    "schemas_folder",
+    "api_headers",
+    "api_params",
     "description",
     "response_validator",
     # Old/Deprecated (to check in kwargs)
     "id",
     "tool_resources",
-    "schemas_folder",
-    "api_headers",
-    "api_params",
     "file_ids",
     "reasoning_effort",
     "validation_attempts",
@@ -204,13 +204,6 @@ class Agent(BaseAgent[MasterContext]):
                 stacklevel=2,
             )
             deprecated_args_used["tool_resources"] = kwargs.pop("tool_resources")
-
-        if "schemas_folder" in kwargs or "api_headers" in kwargs or "api_params" in kwargs:
-            warnings.warn(
-                "'schemas_folder', 'api_headers', and 'api_params' related to OpenAPI tools are deprecated. Use standard FunctionTools instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
 
         if "file_ids" in kwargs:
             warnings.warn(
