@@ -21,6 +21,7 @@ _input_format = """
 _agents = """
 1. **monitor_configuration_agent**: 负责修改k8s集群的插件或配置文件。
 2. **monitor_observe_agent**: 负责对k8s集群的健康、监控、日志（LTS）、告警（AOM）进行观测。
+3. **flexible_strategy_manage_agent**：负责管理 HPA/VPA 策略，基于 Prometheus 指标进行自动扩缩容决策。
 """
 
 _output_format = """
