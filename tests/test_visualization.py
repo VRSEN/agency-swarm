@@ -274,14 +274,14 @@ class TestHTMLVisualizationGenerator:
 class TestAgencyVisualizationIntegration:
     """Test Agency class visualization methods."""
 
-    def test_create_interactive_visualization(self, sample_agency):
-        """Test Agency.create_interactive_visualization method."""
+    def test_visualize(self, sample_agency):
+        """Test Agency.visualize method."""
         with tempfile.NamedTemporaryFile(mode="w", suffix=".html", delete=False) as tmp:
             output_file = tmp.name
 
         try:
             with patch("webbrowser.open"):
-                result_path = sample_agency.create_interactive_visualization(
+                result_path = sample_agency.visualize(
                     output_file=output_file, layout_algorithm="hierarchical", include_tools=True, open_browser=False
                 )
 
@@ -300,13 +300,13 @@ class TestAgencyVisualizationIntegration:
             if Path(output_file).exists():
                 Path(output_file).unlink()
 
-    def test_create_interactive_visualization_import_error(self, sample_agency):
+    def test_visualize_import_error(self, sample_agency):
         """Test handling of import errors in visualization."""
-        # Patch the import inside the create_interactive_visualization method
-        with patch("agency_swarm.agency.Agency.create_interactive_visualization") as mock_method:
+        # Patch the import inside the visualize method
+        with patch("agency_swarm.agency.Agency.visualize") as mock_method:
             mock_method.side_effect = ImportError("Visualization module not available")
             with pytest.raises(ImportError, match="Visualization module not available"):
-                sample_agency.create_interactive_visualization()
+                sample_agency.visualize()
 
     def test_get_agency_structure_basic(self, sample_agency):
         """Test basic agency structure generation."""

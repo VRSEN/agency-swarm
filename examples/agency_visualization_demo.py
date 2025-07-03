@@ -89,7 +89,7 @@ def main():
         agency = create_demo_agency()
 
         # Generate interactive HTML visualization
-        html_file = agency.create_interactive_visualization(
+        html_file = agency.visualize(
             output_file="agency_interactive_demo.html",
             layout_algorithm="hierarchical",
             include_tools=True,
