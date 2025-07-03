@@ -56,6 +56,7 @@ from agents.k8s_group_agents.storage_group.disk_agent import disk_agent
 
 from agents.k8s_group_agents.monitor_group.monitor_configuration_agent import monitor_configuration_agent
 from agents.k8s_group_agents.monitor_group.monitor_observe_agent import monitor_observe_agent
+from agents.k8s_group_agents.monitor_group.flexible_strategy_manage_agent import flexible_strategy_manage_agent
 
 from agents.k8s_group_agents.software_manage_group.software_config_modify_agent import software_config_modify_agent
 from agents.k8s_group_agents.software_manage_group.software_install_agent import software_install_agent
@@ -140,6 +141,7 @@ def main():
 
         monitor_configuration_agent_instance = monitor_configuration_agent.create_agent()
         monitor_observe_agent_instance = monitor_observe_agent.create_agent()
+        flexible_strategy_manage_agent_instance = flexible_strategy_manage_agent.create_agent()
 
         software_config_modify_agent_instance = software_config_modify_agent.create_agent()
         software_install_agent_instance = software_install_agent.create_agent()
@@ -173,7 +175,7 @@ def main():
             pod_orchestration_scheduling_planner_instance, pod_orchestration_scheduling_step_scheduler_instance,
             config_manage_planner_instance, config_manage_step_scheduler_instance,
             storage_planner_instance, storage_step_scheduler_instance,
-            monitor_planner_instance, monitor_step_scheduler_instance,
+            monitor_planner_instance, monitor_step_scheduler_instance,flexible_strategy_manage_agent_instance,
             software_manage_planner_instance, software_manage_step_scheduler_instance,
 
             # pod管理能力 agent
@@ -244,12 +246,12 @@ def main():
             "pod管理能力群": [pod_manage_agent_instance, resource_grouping_agent_instance,],
             "pod编排调度能力群": [stateful_workload_manage_agent_instance, stateless_workload_manage_agent_instance, task_manage_agent_instance, daemonSet_manage_agent_instance, affinity_antiAffinity_scheduling_agent_instance],
             "配置管理能力群": [env_config_manage_agent_instance, privacy_manage_agent_instance],
-            "监控能力群": [monitor_configuration_agent_instance, monitor_observe_agent_instance],
+            "监控能力群": [monitor_configuration_agent_instance, monitor_observe_agent_instance,flexible_strategy_manage_agent_instance],
             "软件管理能力群": [software_config_modify_agent_instance, software_install_agent_instance, software_monitor_agent_instance],
             "存储能力群": [pv_agent_instance, pvc_agent_instance, storageclass_agent_instance, csi_agent_instance, emptydir_agent_instance, hostpath_agent_instance, disk_agent_instance,],
         }
 
-        text ="""我需要在k8s集群上用Operator部署一个3实例的PostgreSQL集群，包括一个主节点，两个从节点，PostgreSQL版本为13.8，使用华为云EVS磁盘存储，每个节点有10GB的存储空间。"""
+        text ="""我需要对集群中名为my-namespace 的Namespace添加一个名为env，值为test的标签"""
         
         agency.task_planning(original_request=text, plan_agents=plan_agents, cap_group_agents=cap_group_agents, cap_agents=cap_agents)
     
