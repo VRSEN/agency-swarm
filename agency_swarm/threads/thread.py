@@ -855,7 +855,12 @@ class Thread:
             if run_id:
                 self._run = self.client.beta.threads.runs.retrieve(thread_id=self.id, run_id=run_id)
 
-        # Handle the active run
+        # If run is in requires_action state, submit dummy outputs to unblock it
+        if self._run and self._run.status == "requires_action":
+            self._resolve_requires_action_run()
+            # Update status after submitting error output
+            self._run = self.client.beta.threads.runs.retrieve(thread_id=self.id, run_id=self._run.id)
+
         if action == "cancel":
             self.cancel_run()  # poll() inside guarantees termination
         else:
@@ -1044,3 +1049,24 @@ class Thread:
                     # Re-raise the validation exception when retry attempts are exceeded
                     raise e
         return None
+
+    def _resolve_requires_action_run(self):
+        """Submit dummy outputs so a run waiting for tool outputs can finish."""
+
+        required_action = getattr(self._run, "required_action", None)
+        if not required_action:
+            return  # No required_action attribute – nothing to resolve
+
+        submit_tool_outputs_obj = getattr(required_action, "submit_tool_outputs", None)
+        if not submit_tool_outputs_obj or not hasattr(submit_tool_outputs_obj, "tool_calls"):
+            return  # No pending tool calls to resolve
+
+        tool_calls = submit_tool_outputs_obj.tool_calls  # type: ignore
+
+        dummy_outputs = [
+            {"tool_call_id": tc.id, "output": "Error: openai run timed out. You can try again one more time."}
+            for tc in tool_calls
+        ]
+
+        # Submit and poll until the backend processes them so the run reaches a terminal state.
+        self.submit_tool_outputs(dummy_outputs, poll=True)
