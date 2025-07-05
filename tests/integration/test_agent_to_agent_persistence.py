@@ -18,7 +18,12 @@ from agency_swarm import Agency, Agent
 def coordinator_agent():
     return Agent(
         name="Coordinator",
-        instructions="You coordinate tasks. When asked to delegate, use send_message_to_Worker to ask the Worker agent to perform the task. Always include the full task details in your message.",
+        instructions=(
+            "You are a coordinator agent. Your job is to receive tasks and delegate them. "
+            "When you receive a task, use the `send_message_to_Worker` tool "
+            "to ask the Worker agent to perform the task. Always include the full "
+            "task details in your message."
+        ),
         model_settings=ModelSettings(temperature=0.0),
     )
 

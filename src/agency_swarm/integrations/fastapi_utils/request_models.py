@@ -1,4 +1,4 @@
-from typing import Any, List
+from typing import Any
 
 from agents import TResponseInputItem
 from pydantic import BaseModel, Field, field_validator
@@ -10,15 +10,18 @@ except ModuleNotFoundError as exc:
         "ag_ui.core is required for the OpenAI→AG-UI adapter. Install with `pip install ag-ui-protocol`."
     ) from exc
 
+
 class ConversationThread(BaseModel):
     items: list[TResponseInputItem]
     metadata: dict[str, Any] = Field(default_factory=dict)
+
 
 # Extended version of the ag-ui RunAgentInput with added chat_history field
 class RunAgentInputCustom(RunAgentInput):
     """
     Input for running an agent.
     """
+
     chat_history: dict[str, ConversationThread] = Field(
         None,
         description=(
@@ -26,6 +29,7 @@ class RunAgentInputCustom(RunAgentInput):
             "Should be provided in a form of {'thread_1': ConversationThread, 'thread_2': ConversationThread, ...}"
         ),
     )
+
 
 class BaseRequest(BaseModel):
     message: str
@@ -53,14 +57,17 @@ def add_agent_validator(model, agent_instances):
 
     return ModifiedRequest
 
+
 if __name__ == "__main__":
-    print(RunAgentInputCustom(
-        thread_id="test",
-        run_id="test",
-        state=None,
-        messages=[],
-        tools=[],
-        context=[],
-        forwarded_props=None,
-        chat_history="test"
-        ))
+    print(
+        RunAgentInputCustom(
+            thread_id="test",
+            run_id="test",
+            state=None,
+            messages=[],
+            tools=[],
+            context=[],
+            forwarded_props=None,
+            chat_history="test",
+        )
+    )

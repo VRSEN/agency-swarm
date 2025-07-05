@@ -9,7 +9,6 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from agency_swarm.agency import Agency
-
 from agency_swarm.ui.core.converters import AguiConverter, serialize
 
 
@@ -140,6 +139,7 @@ def make_tool_endpoint(tool, verify_token, context=None):
 
     return handler
 
+
 def make_agui_chat_endpoint(request_model, agency_factory: Callable[..., Agency], verify_token):
     async def handler(request: request_model, token: str = Depends(verify_token)):
         """Accepts AG-UI `RunAgentInput`, returns an AG-UI event stream."""
@@ -158,17 +158,23 @@ def make_agui_chat_endpoint(request_model, agency_factory: Callable[..., Agency]
             # Pull the default agent from the agency
             agency = agency_factory()
             default_agent = agency.entry_points[0]
+
             def load_callback() -> dict:
-                return {f"user->{default_agent.name}": {"items": AguiConverter.agui_messages_to_chat_history(request.messages), "metadata": {}}}
+                return {
+                    f"user->{default_agent.name}": {
+                        "items": AguiConverter.agui_messages_to_chat_history(request.messages),
+                        "metadata": {},
+                    }
+                }
         else:
+
             def load_callback() -> dict:
                 return {}
-
 
         # Choose / build an agent – here we just create a demo agent each time.
         agency = agency_factory(load_threads_callback=load_callback)
 
-        async def event_generator() -> AsyncGenerator[str, None]:
+        async def event_generator() -> AsyncGenerator[str]:
             # Emit RUN_STARTED first.
             yield encoder.encode(
                 RunStartedEvent(
@@ -193,7 +199,9 @@ def make_agui_chat_endpoint(request_model, agency_factory: Callable[..., Agency]
                         for event in events:
                             if isinstance(event, MessagesSnapshotEvent):
                                 snapshot_messages.append(event.messages[0].model_dump())
-                                yield encoder.encode(MessagesSnapshotEvent(type=EventType.MESSAGES_SNAPSHOT, messages=snapshot_messages))
+                                yield encoder.encode(
+                                    MessagesSnapshotEvent(type=EventType.MESSAGES_SNAPSHOT, messages=snapshot_messages)
+                                )
                             else:
                                 yield encoder.encode(event)
 
@@ -207,22 +215,23 @@ def make_agui_chat_endpoint(request_model, agency_factory: Callable[..., Agency]
 
             except Exception as exc:
                 import traceback
+
                 # Surface error as AG-UI event so the frontend can react.
                 tb_str = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
                 error_message = f"{str(exc)}\n\nTraceback:\n{tb_str}"
-                yield encoder.encode(
-                    RunErrorEvent(type=EventType.RUN_ERROR, message=error_message)
-                )
+                yield encoder.encode(RunErrorEvent(type=EventType.RUN_ERROR, message=error_message))
 
         return StreamingResponse(event_generator(), media_type=encoder.get_content_type())
 
     return handler
+
 
 def make_metadata_endpoint(agency_metadata: dict, verify_token):
     async def handler(token: str = Depends(verify_token)):
         return {"metadata": agency_metadata}
 
     return handler
+
 
 async def exception_handler(request, exc):
     error_message = str(exc)

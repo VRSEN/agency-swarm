@@ -146,7 +146,8 @@ class Agency:
             deprecated_args_used["send_message_tool_class"] = kwargs.pop("send_message_tool_class")
         if "settings_path" in kwargs or "settings_callbacks" in kwargs:
             warnings.warn(
-                "'settings_path' and 'settings_callbacks' are deprecated. Agency settings are no longer persisted this way.",
+                "'settings_path' and 'settings_callbacks' are deprecated. "
+                "Agency settings are no longer persisted this way.",
                 DeprecationWarning,
                 stacklevel=2,
             )
@@ -174,8 +175,8 @@ class Agency:
 
         if agency_chart is not None:
             warnings.warn(
-                "'agency_chart' parameter is deprecated. "
-                "Use positional arguments for entry points and the 'communication_flows' keyword argument for defining communication paths.",
+                "'agency_chart' parameter is deprecated. Use positional arguments for entry points and the "
+                "'communication_flows' keyword argument for defining communication paths.",
                 DeprecationWarning,
                 stacklevel=2,
             )
@@ -696,20 +697,28 @@ class Agency:
 
         Parameters:
             message (str): The message for which completion is to be retrieved.
-            message_files (list, optional): A list of file ids to be sent as attachments with the message. When using this parameter, files will be assigned both to file_search and code_interpreter tools if available. It is recommended to assign files to the most suitable tool manually, using the attachments parameter. Defaults to None.
-            yield_messages (bool, optional): Flag to determine if intermediate messages should be yielded. Defaults to False.
-            recipient_agent (Agent, optional): The agent to which the message should be sent. Defaults to the first agent in the agency chart.
-            additional_instructions (str, optional): Additional instructions to be sent with the message. Defaults to None.
-            attachments (List[dict], optional): A list of attachments to be sent with the message, following openai format. Defaults to None.
+            message_files (list, optional): A list of file ids to be sent as attachments with the message.
+                                            When using this parameter, files will be assigned both to
+                                            file_search and code_interpreter tools if available. It is
+                                            recommended to assign files to the most suitable tool manually,
+                                            using the attachments parameter. Defaults to None.
+            yield_messages (bool, optional): Flag to determine if intermediate messages should be yielded.
+                                             Defaults to False.
+            recipient_agent (Agent, optional): The agent to which the message should be sent. Defaults to the
+                                               first agent in the agency chart.
+            additional_instructions (str, optional): Additional instructions to be sent with the message.
+                                                     Defaults to None.
+            attachments (List[dict], optional): A list of attachments to be sent with the message, following
+                                                openai format. Defaults to None.
             tool_choice (dict, optional): The tool choice for the recipient agent to use. Defaults to None.
             verbose (bool, optional): Whether to print the intermediary messages in console. Defaults to False.
             response_format (dict, optional): The response format to use for the completion.
 
         Returns:
-            Generator or final response: Depending on the 'yield_messages' flag, this method returns either a generator yielding intermediate messages (when yield_messages=True) or the final response from the main thread.
+            Generator or final response: Depending on the 'yield_messages' flag, this method returns either
+                                         a generator yielding intermediate messages (when
+                                         yield_messages=True) or the final response from the main thread.
         """
-        import asyncio
-
         warnings.warn(
             "Method 'get_completion' is deprecated. Use 'get_response' instead.",
             DeprecationWarning,

@@ -347,7 +347,6 @@ async def test_persistence_error_handling(temp_persistence_dir, persistence_agen
     """
     Test graceful error handling when persistence callbacks fail.
     """
-    chat_id = "error_test_999"
 
     def load_with_error():
         """Load callback that raises an error."""

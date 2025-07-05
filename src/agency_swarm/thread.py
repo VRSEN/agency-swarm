@@ -139,7 +139,8 @@ class ConversationThread:
         else:
             logger.error(f"Invalid type for add_user_message: {type(message)} in thread {self.thread_id}")
             raise TypeError(
-                f"Unsupported message type for add_user_message: {type(message)}. Expecting str or TResponseInputItem dict."
+                f"Unsupported message type for add_user_message: {type(message)}. "
+                f"Expecting str or TResponseInputItem dict."
             )
         # Add the dictionary directly
         self.add_item(item_dict)

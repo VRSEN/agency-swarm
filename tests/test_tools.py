@@ -1,11 +1,11 @@
 import json
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from agents import RunContextWrapper, RunResult
 from pydantic import Field
 
-from pathlib import Path
 from agency_swarm import Agent, BaseTool
 from agency_swarm.context import MasterContext
 from agency_swarm.thread import ThreadManager
