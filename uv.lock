@@ -66,22 +66,22 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "ag-ui-protocol", marker = "extra == 'fastapi'", specifier = ">=0.1.4" },
-    { name = "datamodel-code-generator", specifier = "==0.28.5" },
-    { name = "deepdiff", specifier = "==6.7.1" },
-    { name = "docstring-parser", specifier = ">=0.16" },
+    { name = "datamodel-code-generator", specifier = ">=0.28.5,<0.29.0" },
+    { name = "deepdiff", specifier = ">=6.7.1,<9.0.0" },
+    { name = "docstring-parser", specifier = ">=0.16,<1.0.0" },
     { name = "fastapi", marker = "extra == 'fastapi'", specifier = ">=0.115.0" },
     { name = "graphviz", marker = "extra == 'viz'", specifier = ">=0.17" },
     { name = "griffe", specifier = ">=1.5.6,<2" },
-    { name = "jsonref", specifier = "==1.1.0" },
+    { name = "jsonref", specifier = ">=1.1.0,<2.0.0" },
     { name = "litellm", marker = "extra == 'litellm'", specifier = ">=1.65.0,<2" },
     { name = "numpy", marker = "python_full_version >= '3.10' and extra == 'voice'", specifier = ">=2.2.0,<3" },
     { name = "openai", specifier = ">=1.76.0" },
-    { name = "openai-agents", specifier = "==0.1.0" },
+    { name = "openai-agents", specifier = ">=0.1.0,<0.2.0" },
     { name = "pydantic", specifier = ">=2.10,<3" },
-    { name = "python-dotenv", specifier = "==1.0.1" },
+    { name = "python-dotenv", specifier = ">=1.0.1,<2.0.0" },
     { name = "requests", specifier = ">=2.0,<3" },
     { name = "rich", specifier = ">=13.9.4,<14.0.0" },
-    { name = "termcolor", specifier = ">=2.3.0" },
+    { name = "termcolor", specifier = ">=2.3.0,<3.0.0" },
     { name = "types-requests", specifier = ">=2.0,<3" },
     { name = "typing-extensions", specifier = ">=4.12.2,<5" },
     { name = "uvicorn", extras = ["standard"], marker = "extra == 'fastapi'", specifier = ">=0.34.0" },
@@ -1964,11 +1964,11 @@ wheels = [
 
 [[package]]
 name = "termcolor"
-version = "3.1.0"
+version = "2.5.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/ca/6c/3d75c196ac07ac8749600b60b03f4f6094d54e132c4d94ebac6ee0e0add0/termcolor-3.1.0.tar.gz", hash = "sha256:6a6dd7fbee581909eeec6a756cff1d7f7c376063b14e4a298dc4980309e55970", size = 14324, upload-time = "2025-04-30T11:37:53.791Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/37/72/88311445fd44c455c7d553e61f95412cf89054308a1aa2434ab835075fc5/termcolor-2.5.0.tar.gz", hash = "sha256:998d8d27da6d48442e8e1f016119076b690d962507531df4890fcd2db2ef8a6f", size = 13057, upload-time = "2024-10-06T19:50:04.115Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/4f/bd/de8d508070629b6d84a30d01d57e4a65c69aa7f5abe7560b8fad3b50ea59/termcolor-3.1.0-py3-none-any.whl", hash = "sha256:591dd26b5c2ce03b9e43f391264626557873ce1d379019786f99b0c2bee140aa", size = 7684, upload-time = "2025-04-30T11:37:52.382Z" },
+    { url = "https://files.pythonhosted.org/packages/7f/be/df630c387a0a054815d60be6a97eb4e8f17385d5d6fe660e1c02750062b4/termcolor-2.5.0-py3-none-any.whl", hash = "sha256:37b17b5fc1e604945c2642c872a3764b5d547a48009871aea3edd3afa180afb8", size = 7755, upload-time = "2024-10-06T19:50:02.097Z" },
 ]
 
 [[package]]

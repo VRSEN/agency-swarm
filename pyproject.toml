@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agency-swarm"
-version = "1.0.0-beta.3"
+version = "1.0.0-beta.4"
 description = "Agency Swarm framework"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -12,18 +12,18 @@ license = "MIT"
 authors = [{ name = "Vrsen AI Solutions", email = "me@vrsen.ai" }]
 dependencies = [
     "openai>=1.76.0",
-    "openai-agents==0.1.0",
+    "openai-agents>=0.1.0,<0.2.0",
     "pydantic>=2.10, <3",
     "griffe>=1.5.6, <2",
     "typing-extensions>=4.12.2, <5",
     "requests>=2.0, <3",
     "types-requests>=2.0, <3",
-    "docstring-parser>=0.16",
-    "datamodel-code-generator==0.28.5",
-    "deepdiff==6.7.1",
-    "jsonref==1.1.0",
-    "python-dotenv==1.0.1",
-    "termcolor>=2.3.0",
+    "docstring-parser>=0.16,<1.0.0",
+    "datamodel-code-generator>=0.28.5,<0.29.0",
+    "deepdiff>=6.7.1,<9.0.0",
+    "jsonref>=1.1.0,<2.0.0",
+    "python-dotenv>=1.0.1,<2.0.0",
+    "termcolor>=2.3.0,<3.0.0",
     "rich>=13.9.4, <14.0.0",
 ]
 classifiers = [
@@ -90,6 +90,8 @@ convention = "google"
 
 [tool.ruff.lint.per-file-ignores]
 "examples/**/*.py" = ["E501"]
+"tests/test_agency.py" = ["F403"]
+"tests/test_agent.py" = ["F403"]
 
 [tool.mypy]
 strict = true

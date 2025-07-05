@@ -44,7 +44,7 @@ pip install -U agency-swarm
 
 ### Beta Version (v1.x - OpenAI Agents SDK Based)
 ```bash
-pip install -U agency-swarm==1.0.0-beta.3
+pip install -U "agency-swarm>=1.0.0-beta"
 ```
 
 > **Note:** The v1.x beta represents a major architectural change built on the OpenAI Agents SDK.

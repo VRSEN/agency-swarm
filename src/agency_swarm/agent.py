@@ -51,14 +51,14 @@ AGENT_PARAMS = {
     # New/Current
     "files_folder",
     "tools_folder",
+    "schemas_folder",
+    "api_headers",
+    "api_params",
     "description",
     "response_validator",
     # Old/Deprecated (to check in kwargs)
     "id",
     "tool_resources",
-    "schemas_folder",
-    "api_headers",
-    "api_params",
     "file_ids",
     "reasoning_effort",
     "validation_attempts",
@@ -180,7 +180,6 @@ class Agent(BaseAgent[MasterContext]):
             )
             deprecated_args_used["validation_attempts"] = val_attempts
 
-        # Handle other deprecated parameters
         if "id" in kwargs:
             warnings.warn(
                 "'id' parameter (OpenAI Assistant ID) is deprecated and no longer used for loading. Agent state is managed via PersistenceHooks.",
@@ -204,13 +203,6 @@ class Agent(BaseAgent[MasterContext]):
                 stacklevel=2,
             )
             deprecated_args_used["tool_resources"] = kwargs.pop("tool_resources")
-
-        if "schemas_folder" in kwargs or "api_headers" in kwargs or "api_params" in kwargs:
-            warnings.warn(
-                "'schemas_folder', 'api_headers', and 'api_params' related to OpenAPI tools are deprecated. Use standard FunctionTools instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
 
         if "file_ids" in kwargs:
             warnings.warn(
@@ -445,16 +437,15 @@ class Agent(BaseAgent[MasterContext]):
         Raises:
             TypeError: If the provided `tool` is not an instance of `agents.Tool`.
         """
-        # Simplified: Assumes tool is already a valid Tool instance
-        if not isinstance(tool, Tool):
-            raise TypeError(f"Expected an instance of agents.Tool, got {type(tool)}")
-
-        # Check for existing tool with the same name before adding
         if any(getattr(t, "name", None) == getattr(tool, "name", None) for t in self.tools):
             logger.warning(
-                f"Tool with name '{getattr(tool, 'name', '(unknown)')}' already exists for agent '{self.name}'. Skipping."
+                f"Tool with name '{getattr(tool, 'name', '(unknown)')}' already exists for agent "
+                f"'{self.name}'. Skipping."
             )
             return
+
+        if not isinstance(tool, Tool):
+            raise TypeError(f"Expected an instance of Tool, got {type(tool)}")
 
         self.tools.append(tool)
         logger.debug(f"Tool '{getattr(tool, 'name', '(unknown)')}' added to agent '{self.name}'")
@@ -585,12 +576,15 @@ class Agent(BaseAgent[MasterContext]):
         """
         if not isinstance(recipient_agent, Agent):
             raise TypeError(
-                f"Expected an instance of Agent, got {type(recipient_agent)}. Ensure agents are initialized before registration."
+                f"Expected an instance of Agent, got {type(recipient_agent)}. "
+                f"Ensure agents are initialized before registration."
             )
         if not hasattr(recipient_agent, "name") or not isinstance(recipient_agent.name, str):
-            raise TypeError("Subagent must be an Agent instance with a valid name.")
+            raise TypeError("Recipient agent must have a 'name' attribute of type str.")
 
         recipient_name = recipient_agent.name
+
+        # Prevent an agent from registering itself as a subagent
         if recipient_name == self.name:
             raise ValueError("Agent cannot register itself as a subagent.")
 
@@ -600,7 +594,8 @@ class Agent(BaseAgent[MasterContext]):
 
         if recipient_name in self._subagents:
             logger.warning(
-                f"Agent '{recipient_name}' is already registered as a subagent for '{self.name}'. Skipping tool creation."
+                f"Agent '{recipient_name}' is already registered as a subagent for '{self.name}'. "
+                f"Skipping tool creation."
             )
             return
 
@@ -669,6 +664,7 @@ class Agent(BaseAgent[MasterContext]):
         Returns:
             RunResult: The complete execution result
         """
+        logger.info(f"Agent '{self.name}' starting run.")
         # Ensure ThreadManager exists (for direct agent usage without Agency)
         self._ensure_thread_manager()
 
@@ -762,21 +758,15 @@ class Agent(BaseAgent[MasterContext]):
             # It should include user, assistant (possibly with tool_calls), and tool messages if they are part of the conversation.
             # No filtering is applied here based on user instruction.
 
-            # Sanitize tool_calls for OpenAI /v1/responses API compliance
             history_for_runner = self._sanitize_tool_calls_in_history(history_for_runner)
-
-            # Additional safety: ensure no null content for messages with tool_calls
             history_for_runner = self._ensure_tool_calls_content_safety(history_for_runner)
-
-            logger.info(
-                f"AGENT_GET_RESPONSE: History for Runner in agent '{self.name}' for thread '{thread_id}' (length {len(history_for_runner)}):"
-            )
-            for i, history_item in enumerate(history_for_runner):
-                # Limiting log length for potentially long content
-                content_preview = str(history_item.get("content"))[:100]
-                tool_calls_preview = str(history_item.get("tool_calls"))[:100]
-                logger.info(
-                    f"AGENT_GET_RESPONSE: History item [{i}]: role={history_item.get('role')}, content='{content_preview}...', tool_calls='{tool_calls_preview}...'"
+            logger.debug(f"Running agent '{self.name}' for thread '{thread_id}' (length {len(history_for_runner)}):")
+            for i, m in enumerate(history_for_runner):
+                content_preview = str(m.get("content", ""))[:70] if m.get("content") else ""
+                tool_calls_preview = str(m.get("tool_calls", ""))[:70] if m.get("tool_calls") else ""
+                logger.debug(
+                    f"  [History #{i}] role={m.get('role')}, content='{content_preview}...', "
+                    f"tool_calls='{tool_calls_preview}...'"
                 )
 
             try:
@@ -914,7 +904,8 @@ class Agent(BaseAgent[MasterContext]):
             if not isinstance(additional_instructions, str):
                 raise ValueError("additional_instructions must be a string")
             logger.debug(
-                f"Appending additional instructions to agent '{self.name}' for streaming: {additional_instructions[:100]}..."
+                f"Appending additional instructions to agent '{self.name}' for streaming: "
+                f"{additional_instructions[:100]}..."
             )
             if self.instructions:
                 self.instructions = self.instructions + "\n\n" + additional_instructions
@@ -1015,7 +1006,8 @@ class Agent(BaseAgent[MasterContext]):
                 if self._thread_manager:
                     items_to_save_from_stream: list[TResponseInputItem] = []
                     logger.debug(
-                        f"Preparing to save {len(final_result_items)} new items from stream result for agent '{self.name}' to thread {thread.thread_id}"
+                        f"Preparing to save {len(final_result_items)} new items from stream result for agent "
+                        f"'{self.name}' to thread {thread.thread_id}"
                     )
 
                     # Only extract hosted tool results if hosted tools were actually used
