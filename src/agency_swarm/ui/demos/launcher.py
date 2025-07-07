@@ -70,3 +70,60 @@ class CopilotDemoLauncher:
             cors_origins=cors_origins,
             enable_agui=True,
         )
+
+
+class TerminalDemoLauncher:
+    def start(agency_instance):
+        """
+        Executes agency in the terminal with autocomplete for recipient agent names.
+        """
+        import asyncio
+        import logging
+        import uuid
+
+        from ..core.converters import ConsoleEventConverter
+
+        logger = logging.getLogger(__name__)
+
+        recipient_agents = [str(agent.name) for agent in agency_instance.entry_points]
+
+        chat_id = f"run_demo_chat_{uuid.uuid4()}"
+
+        event_converter = ConsoleEventConverter()
+
+        async def main_loop():
+            while True:
+                event_converter.console.rule()
+                message = input("👤 USER: ")
+
+                if not message:
+                    continue
+
+                recipient_agent = None
+                if "@" in message:
+                    recipient_agent_name = message.split("@")[1].split(" ")[0]
+                    message = message.replace(f"@{recipient_agent_name}", "").strip()
+                    try:
+                        recipient_agent = [
+                            agent for agent in recipient_agents if agent.lower() == recipient_agent_name.lower()
+                        ][0]
+                    except Exception:
+                        logger.error(f"Recipient agent {recipient_agent_name} not found.")
+                        continue
+
+                # Default to first entry point if not specified
+                if recipient_agent is None and agency_instance.entry_points:
+                    recipient_agent = agency_instance.entry_points[0].name
+
+                try:
+                    async for event in agency_instance.get_response_stream(
+                        message=message,
+                        recipient_agent=recipient_agent,
+                        chat_id=chat_id,
+                    ):
+                        event_converter.openai_to_message_output(event, recipient_agent)
+                    print()  # Newline after stream
+                except Exception as e:
+                    logger.error(f"Error during streaming: {e}", exc_info=True)
+
+        asyncio.run(main_loop())

@@ -1121,3 +1121,10 @@ class Agency:
                     positions[agent_name]["y"] = max(node_radius, min(height - node_radius, positions[agent_name]["y"]))
 
         return positions
+
+    def terminal_demo(self):
+        """
+        Run a terminal demo of the agency.
+        """
+        from .ui.demos.launcher import TerminalDemoLauncher
+        TerminalDemoLauncher.start(self)
