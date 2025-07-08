@@ -1400,6 +1400,7 @@ class Agency:
     context_index_path = os.path.join(files_path, "context_index.json")
     contexts_path = os.path.join(files_path, "api_results")
     error_path = os.path.join(files_path, "error.json")
+    text_path = os.path.join(files_path,"text.txt")
 
     def init_files(self):
         self._init_dir(self.files_path)
@@ -1409,6 +1410,7 @@ class Agency:
         self._init_file(self.completed_subtask_path)
         self._init_file(self.completed_task_path)
         self._init_file(self.context_index_path)
+        self._init_file(self.text_path)
 
     def create_cap_group_agent_threads(self, cap_group_agents: Dict[str, List]) -> Dict[str, List[Thread]]:
         capgroup_thread = {}
@@ -1714,12 +1716,13 @@ class Agency:
                     break
                 # 本次task调度结束
             
-            # 本用户请求的所有task结束
 
             if not original_request_error_flag:
                 console.rule()
                 print(f"original request complete")
                 break
+                # 本用户请求的所有task结束
+                
             else:
                 console.rule()
                 print(f"original request failed, error: {original_request_error_message}")
