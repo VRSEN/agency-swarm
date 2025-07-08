@@ -33,14 +33,13 @@ _instruction = f"""作为审查者，你将从task_planner那里收到一个 JSO
 输入格式为:
 {_input_format}
 
-同时，你需要先通过`ReadJsonFile`从completed_sub_tasks.json读取已完成的子任务，从context_index.json中读取已完成任务产生的环境信息。
+同时，你需要先通过`ReadJsonFile`从completed_sub_tasks.json读取已完成的子任务，从context_index.json中读取之前已完成的所有步骤的上下文信息。
 
 获得以上信息后，请谨慎专业地一步步思考: 
 1. 你需要确保输入中的 <task_graph> 是JSON格式；
 2. 你需要检查<user_request>是否可以分解为<task_graph>，且确保<task_graph>任务的拆分和执行顺序合理；
-3. 确保<task_graph>中所有操作都可通过**执行kubectl命令行**实现；
-4. 除非<user_request>或context_index.json中有说明，否则任务执行环境最开始应该没有创建**任何资源**，确保每个任务所需资源应该在**前置任务**中有所创建；
-5. 你需要保证任务规划中没有**多余**的确认或查询步骤。
+3. 确保<task_graph>中所有操作都可通过**用中文文字进行回复或者执行kubectl命令行**实现；
+4. 你需要保证任务规划中没有**多余**的确认或查询步骤。
 
 你应该按照以下json格式评估<task_graph>: 
 {_output_format}
@@ -49,6 +48,7 @@ _instruction = f"""作为审查者，你将从task_planner那里收到一个 JSO
 
 """
 
+# 4. 除非<user_request>或context_index.json中有说明，否则任务执行环境最开始应该没有创建**任何资源**，确保每个任务所需资源应该在**前置任务**中有所创建；
 
 _tools = [ReadJsonFile]
 

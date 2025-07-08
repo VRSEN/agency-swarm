@@ -1381,7 +1381,7 @@ class Agency:
     
     def _init_file(self, file_path):
         try:
-            with open(file_path, "w") as f:
+            with open(file_path, "w", encoding='utf-8') as f:
                 pass
         except Exception as e:
             print(f"Creating {file_path}...")
@@ -1402,13 +1402,13 @@ class Agency:
     error_path = os.path.join(files_path, "error.json")
 
     def init_files(self):
-        self._init_dir(self.files_path)
-        self._init_dir(self.contexts_path)
+        # self._init_dir(self.files_path)
+        # self._init_dir(self.contexts_path)
         self._init_file(self.error_path)
         self._init_file(self.completed_step_path)
         self._init_file(self.completed_subtask_path)
         self._init_file(self.completed_task_path)
-        self._init_file(self.context_index_path)
+        # self._init_file(self.context_index_path)
 
     def create_cap_group_agent_threads(self, cap_group_agents: Dict[str, List]) -> Dict[str, List[Thread]]:
         capgroup_thread = {}
@@ -1726,7 +1726,7 @@ class Agency:
                 continue # 重新规划用户请求
     
     def update_error(self, error_id: int, error: str, step: dict):
-        with open(self.error_path, 'r') as file:
+        with open(self.error_path, 'r', encoding='utf-8') as file:
             try:    # 尝试读取 JSON 数据
                 data = json.load(file)
             except json.JSONDecodeError:    # 如果文件为空或格式错误，则创建一个空字典
@@ -1735,11 +1735,11 @@ class Agency:
             "step": step,
             "error": error
         }
-        with open(self.error_path, 'w') as file:
+        with open(self.error_path, 'w', encoding='utf-8') as file:
             json.dump(data, file, indent=4, ensure_ascii=False)
     
     def update_context(self, context_id: int, context: str, step: dict):
-        with open(self.context_index_path, 'r') as file:
+        with open(self.context_index_path, 'r', encoding='utf-8') as file:
             try:    # 尝试读取 JSON 数据
                 data = json.load(file)
             except json.JSONDecodeError:    # 如果文件为空或格式错误，则创建一个空字典
@@ -1748,11 +1748,11 @@ class Agency:
             "task_information": step,
             "context": context
         }
-        with open(self.context_index_path, 'w') as file:
+        with open(self.context_index_path, 'w', encoding='utf-8') as file:
             json.dump(data, file, indent=4, ensure_ascii=False)
 
     def update_completed_step(self, step_id: str, step: dict):
-        with open(self.completed_step_path, 'r') as file:
+        with open(self.completed_step_path, 'r', encoding='utf-8') as file:
             try:    # 尝试读取 JSON 数据
                 data = json.load(file)
             except json.JSONDecodeError:    # 如果文件为空或格式错误，则创建一个空字典
@@ -1760,11 +1760,11 @@ class Agency:
         data['step_id'] = {
             "step": step
         }
-        with open(self.completed_step_path, 'w') as file:
+        with open(self.completed_step_path, 'w', encoding='utf-8') as file:
             json.dump(data, file, indent=4, ensure_ascii=False)
     
     def update_completed_sub_task(self, subtask_id: str, subtask: dict):
-        with open(self.completed_subtask_path, 'r') as file:
+        with open(self.completed_subtask_path, 'r', encoding='utf-8') as file:
             try:    # 尝试读取 JSON 数据
                 data = json.load(file)
             except json.JSONDecodeError:    # 如果文件为空或格式错误，则创建一个空字典
@@ -1772,11 +1772,11 @@ class Agency:
         data[subtask_id] = {
             "subtask": subtask
         }
-        with open(self.completed_subtask_path, 'w') as file:
+        with open(self.completed_subtask_path, 'w', encoding='utf-8') as file:
             json.dump(data, file, indent=4, ensure_ascii=False)
 
     def update_completed_task(self, task_id: str, task: dict):
-        with open(self.completed_task_path, 'r') as file:
+        with open(self.completed_task_path, 'r', encoding='utf-8') as file:
             try:    # 尝试读取 JSON 数据
                 data = json.load(file)
             except json.JSONDecodeError:    # 如果文件为空或格式错误，则创建一个空字典
@@ -1784,7 +1784,7 @@ class Agency:
         data[task_id] = {
             "task": task
         }
-        with open(self.completed_task_path, 'w') as file:
+        with open(self.completed_task_path, 'w', encoding='utf-8') as file:
             json.dump(data, file, indent=4, ensure_ascii=False)
 
     def capability_agents_processor(self, step: dict, cap_group: str, cap_agent_threads: dict):

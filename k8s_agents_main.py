@@ -251,9 +251,21 @@ def main():
             "存储能力群": [pv_agent_instance, pvc_agent_instance, storageclass_agent_instance, csi_agent_instance, emptydir_agent_instance, hostpath_agent_instance, disk_agent_instance,],
         }
 
-        text ="""我需要对集群中名为my-namespace 的Namespace添加一个名为env，值为test的标签"""
-        
-        agency.task_planning(original_request=text, plan_agents=plan_agents, cap_group_agents=cap_group_agents, cap_agents=cap_agents)
+        text ="""我需要对集群中名为my-namespace 的Namespace添加一个名为env，值为test的标签。"""
+
+        file_path = os.path.join("agents", "files", "context_index.json")
+        try:
+            with open(file_path, "w", encoding='utf-8') as f:
+                pass
+        except Exception as e:
+            print(f"Creating {file_path}...")
+
+        while True:
+            agency.task_planning(original_request=text, plan_agents=plan_agents, cap_group_agents=cap_group_agents, cap_agents=cap_agents)
+            text= input("请输入新的请求描述（或输入exit退出）：")
+            if text.lower() == 'exit':
+                break
+            
     
     finally:
         # 关闭日志文件和恢复标准输出

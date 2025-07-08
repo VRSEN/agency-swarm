@@ -4,16 +4,16 @@ def planner_instruction(_group_name, _input_format, _agents, _output_format):
 输入格式如下: 
 {_input_format}
 
-其中，"title"和"description"字段描述了本次需要规划的子任务，"total_subtask_graph"将描述所有subtask的规划图，包括子任务信息和依赖关系。你接下来对本subtask中各个step的规划不要与其它的subtask冲突或重叠。
+其中，"title"和"description"字段描述了本次需要规划的子任务，"total_subtask_graph"将描述所有subtask的规划图，包括子任务信息和依赖关系。你接下来对本subtask中各个step的规划不要与其它的subtask冲突或重复。
 
-同时，你需要先通过`ReadJsonFile`从completed_sub_tasks.json读取已完成的子任务，从context_index.json中读取已完成任务产生的环境信息。（直接调用工具，不要把它规划为一个step）
+同时，你需要先调用工具`ReadJsonFile`从completed_sub_tasks.json读取已完成的子任务，从context_index.json中读取之前已完成的所有步骤的上下文信息。（直接调用工具，不要把它规划为一个step）
 
 获得以上信息后，请严谨专业地一步步思考: 完成该任务需要哪些步骤(step)，每个步骤分别需要哪个能力Agent来操作。
 
 作为{_group_name}的步骤规划者，你所管理的能力群中每个能力都对应一个Agent。你的能力群中包含的能力Agent如下:
 {_agents}
 
-请注意，能力Agent只能通过执行kubectl命令行进行操作。如果需要使用配置文件，**不要单独创建配置文件**，而是将完整的配置文件内容以`<<EOF`方式附在命令最后。
+请注意，能力Agent只能通过中文文字形式进行回复或者通过执行kubectl命令行进行操作。如果执行命令需要使用配置文件，**不要单独创建配置文件**，而是将完整的配置文件内容以`<<EOF`方式附在命令最后。
 
 你应该按照以下JSON格式进行步骤规划: 
 {_output_format}
