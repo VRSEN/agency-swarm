@@ -15,10 +15,10 @@ from dotenv import load_dotenv
 # Path setup for standalone examples
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
-from pydantic import BaseModel, Field
+import agentops  # noqa: E402
 from agents import ModelSettings, RunConfig, RunContextWrapper, function_tool, trace  # noqa: E402
 from langfuse import observe  # noqa: E402
-import agentops  # noqa: E402
+from pydantic import BaseModel, Field
 
 from agency_swarm import Agency, Agent  # noqa: E402
 
@@ -42,6 +42,7 @@ async def test_tool(ctx: RunContextWrapper[Any], args: MySDKToolArgs) -> str:
 # ────────────────────────────────
 # Agency definition (agents + flows)
 # ────────────────────────────────
+
 
 def create_agency() -> Agency:
     """Create agency with CEO, Developer, and Analyst."""
@@ -124,10 +125,5 @@ async def agentops_tracing(input_message: str) -> str:
 # Entry point
 # ────────────────────────────────
 if __name__ == "__main__":
-    if not os.getenv("OPENAI_API_KEY"):
-        print("❌ Set OPENAI_API_KEY environment variable")
-        sys.exit(1)
-
     msg = "Hi, use the test tool please."
     print(f"Agentops tracing: {asyncio.run(agentops_tracing(msg))}\n")
-

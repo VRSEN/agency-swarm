@@ -10,7 +10,6 @@ This example demonstrates Agency Swarm's built-in capabilities for:
 
 import asyncio
 import base64
-import os
 from pathlib import Path
 
 from agents import ModelSettings
@@ -225,8 +224,4 @@ async def main():
 
 
 if __name__ == "__main__":
-    if not os.getenv("OPENAI_API_KEY"):
-        print("❌ Error: OPENAI_API_KEY environment variable not set.")
-        print("   Please set your OpenAI API key to run this example.")
-    else:
-        asyncio.run(main())
+    asyncio.run(main())

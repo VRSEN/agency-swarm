@@ -139,8 +139,4 @@ async def run_demo():
 
 
 if __name__ == "__main__":
-    if not os.getenv("OPENAI_API_KEY"):
-        print("❌ Set OPENAI_API_KEY environment variable")
-        sys.exit(1)
-
     asyncio.run(run_demo())
