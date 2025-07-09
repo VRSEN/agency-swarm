@@ -1394,12 +1394,15 @@ class Agency:
         os.mkdir(dir_path)
     
     files_path = os.path.join("agents", "files")
+    request_path = os.path.join(files_path, "completed_requests.json")
     completed_step_path = os.path.join(files_path, "completed_steps.json")
     completed_subtask_path = os.path.join(files_path, "completed_sub_tasks.json")
     completed_task_path = os.path.join(files_path, "completed_tasks.json")
     context_index_path = os.path.join(files_path, "context_index.json")
     contexts_path = os.path.join(files_path, "api_results")
     error_path = os.path.join(files_path, "error.json")
+    text_path = os.path.join(files_path,"text.txt")
+    
 
     def init_files(self):
         # self._init_dir(self.files_path)
@@ -1444,7 +1447,7 @@ class Agency:
         # task_id = 0
         result, new_context = self.capability_agents_processor(step=step, cap_group=cap_group, cap_agent_threads=cap_agent_threads)
 
-    def task_planning(self, original_request: str, plan_agents: Dict[str, Agent], cap_group_agents: Dict[str, List], cap_agents: Dict[str, List]):
+    def task_planning(self, original_request: str, plan_agents: Dict[str, Agent], cap_group_agents: Dict[str, List], cap_agents: Dict[str, List], request_id: int):
         """
         用户请求 -> 事务*n1 -> 子任务*n2 -> 步骤*n3
         事务是不可分割（指完成过程中）的任务，如安装软件等，必须完成之后才能进行其他操作；
@@ -1489,7 +1492,7 @@ class Agency:
         # cap_agent_threads[能力群名称][能力agent名称] = 该能力agent的Thread
 
         # task_id = 0
-        context_id = 0
+        context_id = self.get_next_context_id()
         original_request_error_flag = False
         original_request_error_message = ""
         error_id = 0
@@ -1632,7 +1635,7 @@ class Agency:
                                                     if result == 'SUCCESS':
                                                         # 更新已完成step和context
                                                         context_id = context_id + 1
-                                                        self.update_context(context_id=context_id, context=new_context, step=next_step)
+                                                        self.update_context(context_id=context_id, context=new_context, step=next_step,request_id=request_id, task_id=next_task_id, subtask_id=next_subtask_id)
                                                         self.update_completed_step(step_id=next_step_id, step=next_step)
                                                     elif result == 'FAIL':
                                                         # 更新error
@@ -1714,12 +1717,14 @@ class Agency:
                     break
                 # 本次task调度结束
             
-            # 本用户请求的所有task结束
 
             if not original_request_error_flag:
                 console.rule()
                 print(f"original request complete")
+                self.update_request(request_id=request_id, content=original_request)
                 break
+                # 本用户请求的所有task结束
+                
             else:
                 console.rule()
                 print(f"original request failed, error: {original_request_error_message}")
@@ -1738,13 +1743,47 @@ class Agency:
         with open(self.error_path, 'w', encoding='utf-8') as file:
             json.dump(data, file, indent=4, ensure_ascii=False)
     
-    def update_context(self, context_id: int, context: str, step: dict):
+    def update_request(self, request_id: int, content: str):
+        try:
+            with open(self.request_path, 'r', encoding='utf-8') as file:
+                try:
+                    data = json.load(file)
+                except json.JSONDecodeError:
+                    data = {}
+        except FileNotFoundError:
+            data = {}
+        data["request_" + str(request_id)] = {
+            "request_id": "request_" + str(request_id),
+            "content": content
+        }
+        with open(self.request_path, 'w', encoding='utf-8') as file:
+            json.dump(data, file, indent=4, ensure_ascii=False)
+        
+    def get_next_context_id(self):
+    # 获取 context_index.json 里最新的 context_id
+        try:
+            with open(self.context_index_path, 'r', encoding='utf-8') as file:
+                try:
+                    data = json.load(file)
+                except json.JSONDecodeError:
+                    data = {}
+        except FileNotFoundError:
+            data = {}
+        if not data:
+            return 0
+        max_id = max([int(k.replace("index_", "")) for k in data.keys()])
+        return max_id
+
+    def update_context(self, context_id: int, context: str, step: dict, request_id: int, task_id: str, subtask_id: str):
         with open(self.context_index_path, 'r', encoding='utf-8') as file:
             try:    # 尝试读取 JSON 数据
                 data = json.load(file)
             except json.JSONDecodeError:    # 如果文件为空或格式错误，则创建一个空字典
                 data = {}
         data["index_" + str(context_id)] = {
+            "request_id": "request_" + str(request_id),
+            "task_id" : task_id,
+            "subtask_id": subtask_id,
             "task_information": step,
             "context": context
         }
