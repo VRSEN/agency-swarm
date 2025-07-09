@@ -8,7 +8,7 @@ The **Agency Swarm Framework** is an advanced system for building multi-agent ap
 
 By default, Agency Swarm is built on the **OpenAI Responses API** to handle complex, multi-turn interactions, with `examples/chat_completion_provider.py` being the only exception that uses the Chat Completions API.
 Observability tracking via Langfuse and AgentOps is demonstrated in `examples/observability_demo.py`.
-See [`examples/README.md`](examples/README.md) for a full list of runnable demos.
+See `examples/README.md` for a full list of runnable demos.
 
 Agency Swarm enhances the underlying SDK by introducing:
 - True agent collaboration with flexible, user-defined communication flows (orchestrator-workers pattern with async execution support).
