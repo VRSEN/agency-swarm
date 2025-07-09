@@ -172,13 +172,10 @@ async def run_conversation():
 
 # --- Main Execution --- #
 if __name__ == "__main__":
-    if not os.getenv("OPENAI_API_KEY"):
-        print("Error: OPENAI_API_KEY environment variable not set.")
-    else:
-        print("\n=== Agency Swarm v1.x Multi-Agent Communication Demo ===")
-        print("This example demonstrates:")
-        print("• Multi-agent communication flows")
-        print("• Automatic thread isolation using 'sender->recipient' identifiers")
-        print("• Inter-agent tool delegation")
-        print("=" * 60)
-        asyncio.run(run_conversation())
+    print("\n=== Agency Swarm v1.x Multi-Agent Communication Demo ===")
+    print("This example demonstrates:")
+    print("• Multi-agent communication flows")
+    print("• Automatic thread isolation using 'sender->recipient' identifiers")
+    print("• Inter-agent tool delegation")
+    print("=" * 60)
+    asyncio.run(run_conversation())

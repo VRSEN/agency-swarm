@@ -63,12 +63,3 @@ def test_agency_initialization_persistence_hooks(mock_agent):
     # The callbacks are passed to ThreadManager and PersistenceHooks, not stored directly
 
 
-def test_agency_placeholder():
-    """Placeholder test to ensure Agency class can be imported and instantiated."""
-    # This test ensures the Agency class is properly defined and can be instantiated
-    # with minimal parameters. More comprehensive tests should be added as needed.
-    agent = MagicMock(spec=Agent)
-    agent.name = "TestAgent"
-    agency = Agency(agent)
-    assert agency is not None
-    assert "TestAgent" in agency.agents
