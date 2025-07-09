@@ -65,7 +65,7 @@ def create_agency() -> Agency:
     )
 
     analyst = Agent(
-        name="Data Analyst",
+        name="DataAnalyst",
         instructions="You are the Data Analyst.",
         description="Analyzes data and provides insights",
         model="gpt-4.1",
