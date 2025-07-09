@@ -473,7 +473,7 @@ class Agent(BaseAgent[MasterContext]):
 
         folder_path = Path(self.tools_folder)
         if not folder_path.is_absolute():
-            folder_path = Path(self._get_class_folder_path()) / folder_path
+            folder_path = Path(self.get_class_folder_path()) / folder_path
 
         if not folder_path.is_dir():
             logger.warning("Tools folder path is not a directory. Skipping... %s", folder_path)
@@ -522,7 +522,7 @@ class Agent(BaseAgent[MasterContext]):
                 f_path = schemas_folder
 
                 if not os.path.isdir(f_path):
-                    f_path = os.path.join(self._get_class_folder_path(), schemas_folder)
+                    f_path = os.path.join(self.get_class_folder_path(), schemas_folder)
                     f_path = os.path.normpath(f_path)
 
                 if os.path.isdir(f_path):
@@ -1416,7 +1416,7 @@ class Agent(BaseAgent[MasterContext]):
             strict_json_schema=legacy_tool.ToolConfig.strict,
         )
 
-    def _get_class_folder_path(self) -> str:
+    def get_class_folder_path(self) -> str:
         """Return the absolute path to the folder containing this class."""
         module = sys.modules.get(self.__class__.__module__)
         if module and getattr(module, "__file__", None):
@@ -1427,7 +1427,3 @@ class Agent(BaseAgent[MasterContext]):
         except (TypeError, OSError, AttributeError):
             return "./"
         return os.path.abspath(os.path.realpath(os.path.dirname(class_file)))
-
-    def get_class_folder_path(self) -> str:
-        """Return the absolute path to the folder containing this agent's class."""
-        return self._get_class_folder_path()
