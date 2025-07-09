@@ -131,10 +131,6 @@ async def run_demo():
 
 async def main():
     """Main function."""
-    if not os.getenv("OPENAI_API_KEY"):
-        print("❌ Set OPENAI_API_KEY environment variable")
-        sys.exit(1)
-
     try:
         await run_demo()
     except Exception as e:

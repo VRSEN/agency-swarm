@@ -169,20 +169,14 @@ async def run_persistent_conversation():
 
 
 if __name__ == "__main__":
-    if not os.getenv("OPENAI_API_KEY"):
-        print("\n\nCRITICAL ERROR: OPENAI_API_KEY environment variable not set.")
-        print("Please set the OPENAI_API_KEY environment variable to run this example.")
-        print("Example: export OPENAI_API_KEY='your_api_key_here'\n")
-    else:
-        print("OPENAI_API_KEY found. Proceeding with example...")
-        print("\n=== Agency Swarm v1.x Thread Isolation & Persistence Demo ===")
-        print("This example demonstrates:")
-        print("• Automatic thread isolation using 'sender->recipient' identifiers")
-        print("• Complete conversation persistence across application restarts")
-        print("• Correct callback signatures: load() -> all_threads, save(all_threads) -> None")
-        print("=" * 60)
+    print("\n=== Agency Swarm v1.x Thread Isolation & Persistence Demo ===")
+    print("This example demonstrates:")
+    print("• Automatic thread isolation using 'sender->recipient' identifiers")
+    print("• Complete conversation persistence across application restarts")
+    print("• Correct callback signatures: load() -> all_threads, save(all_threads) -> None")
+    print("=" * 60)
 
-        if os.name == "nt":
-            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    if os.name == "nt":
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
-        asyncio.run(run_persistent_conversation())
+    asyncio.run(run_persistent_conversation())
