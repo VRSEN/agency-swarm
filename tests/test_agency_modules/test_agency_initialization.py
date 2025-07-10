@@ -63,3 +63,18 @@ def test_agency_initialization_persistence_hooks(mock_agent):
     # The callbacks are passed to ThreadManager and PersistenceHooks, not stored directly
 
 
+def test_agency_duplicate_agent_names_forbidden():
+    """Test that Agency raises ValueError when trying to register two agents with the same name but different instances."""
+    # Create two different mock agents with the same name
+    agent1 = MagicMock(spec=Agent)
+    agent1.name = "DuplicateName"
+
+    agent2 = MagicMock(spec=Agent)
+    agent2.name = "DuplicateName"
+
+    # Verify they are different instances
+    assert id(agent1) != id(agent2)
+
+    # Attempting to create an Agency with two agents having the same name should raise ValueError
+    with pytest.raises(ValueError, match=r"Duplicate agent name 'DuplicateName' with different instances found"):
+        Agency(agent1, agent2)

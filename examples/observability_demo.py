@@ -1,5 +1,5 @@
 """
-Observability demo showing Langfuse and AgentOps tracing.
+Observability demo showing OpenAI (built-in), Langfuse and AgentOps tracing.
 
 Run with: python examples/observability_demo.py
 """
@@ -8,6 +8,7 @@ import asyncio
 import logging
 import os
 import sys
+from statistics import mean, stdev
 from typing import Any
 
 from dotenv import load_dotenv
@@ -16,9 +17,8 @@ from dotenv import load_dotenv
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
 import agentops  # noqa: E402
-from agents import ModelSettings, RunConfig, RunContextWrapper, function_tool, trace  # noqa: E402
+from agents import ModelSettings, RunContextWrapper, function_tool, trace  # noqa: E402
 from langfuse import observe  # noqa: E402
-from pydantic import BaseModel, Field
 
 from agency_swarm import Agency, Agent  # noqa: E402
 
@@ -29,14 +29,13 @@ logging.basicConfig(level=logging.INFO)
 # ────────────────────────────────
 # Tool definition
 # ────────────────────────────────
-class MySDKToolArgs(BaseModel):
-    param1: str = Field(..., description="Test input for the tool. Does nothing")
 
 
 @function_tool
-async def test_tool(ctx: RunContextWrapper[Any], args: MySDKToolArgs) -> str:
-    """Return a predictable ID."""
-    return "Unique ID: 12332211"
+async def analyze_dataset(ctx: RunContextWrapper[Any], dataset: list[int]) -> str:
+    """Analyze a dataset and return basic statistics."""
+    print(f"DATASET ANALYZED by {ctx.context.current_agent_name}: {dataset}")
+    return f"Mean: {mean(dataset):.1f}, Standard Deviation: {stdev(dataset):.1f}"
 
 
 # ────────────────────────────────
@@ -48,50 +47,44 @@ def create_agency() -> Agency:
     """Create agency with CEO, Developer, and Analyst."""
     ceo = Agent(
         name="CEO",
-        instructions="You are the CEO.",
+        instructions="You are the CEO. NEVER execute tasks yourself. Instead, DELEGATE all tasks: coding tasks to Developer and data analysis to DataAnalyst.",
         description="Manages projects and coordinates between team members",
         model="gpt-4.1",
-        tools=[test_tool],
-        model_settings=ModelSettings(temperature=0.3),
+        model_settings=ModelSettings(temperature=0.0),
     )
 
     developer = Agent(
         name="Developer",
-        instructions="You are the Developer.",
+        instructions="You are the Developer. Solve coding problems by implementing solutions and writing code.",
         description="Implements technical solutions and writes code",
         model="gpt-4.1",
-        tools=[test_tool],
-        model_settings=ModelSettings(temperature=0.3),
+        model_settings=ModelSettings(temperature=0.0),
     )
 
     analyst = Agent(
         name="DataAnalyst",
-        instructions="You are the Data Analyst.",
+        instructions="You are the Data Analyst. Analyze data and provide insights. Always use analyze_dataset in your response to process the dataset.",
         description="Analyzes data and provides insights",
         model="gpt-4.1",
-        tools=[test_tool],
-        model_settings=ModelSettings(temperature=0.3),
+        tools=[analyze_dataset],
+        model_settings=ModelSettings(temperature=0.0),
     )
 
     return Agency(
         ceo,
-        developer,
-        analyst,
         communication_flows=[
             (ceo, developer),
             (ceo, analyst),
-            (developer, analyst),
         ],
-        temperature=0.01,
     )
 
 
 # ────────────────────────────────
-# Tracing wrappers
+# Example tracing wrappers
 # ────────────────────────────────
 async def openai_tracing(input_message: str) -> str:
     agency_instance = create_agency()
-    with trace("Openai tracing"):
+    with trace("OpenAI tracing"):
         response = await agency_instance.get_response(message=input_message)
     return response.final_output
 
@@ -104,7 +97,6 @@ async def langfuse_tracing(input_message: str) -> str:
     async def get_response_wrapper(message: str):
         return await agency_instance.get_response(
             message=message,
-            run_config=RunConfig(tracing_disabled=True),
         )
 
     response = await get_response_wrapper(input_message)
@@ -116,7 +108,9 @@ async def agentops_tracing(input_message: str) -> str:
     tracer = agentops.start_trace(trace_name="Agentops tracing", tags=["openai", "agentops-example"])
 
     agency_instance = create_agency()
-    response = await agency_instance.get_response(message=input_message)
+    response = await agency_instance.get_response(
+        message=input_message,
+    )
     agentops.end_trace(tracer, end_state="Success")
     return response.final_output
 
@@ -125,5 +119,13 @@ async def agentops_tracing(input_message: str) -> str:
 # Entry point
 # ────────────────────────────────
 if __name__ == "__main__":
-    msg = "Hi, use the test tool please."
-    print(f"Agentops tracing: {asyncio.run(agentops_tracing(msg))}\n")
+    test_message = "Create a function to calculate factorial and analyze the dataset [10, 25, 15, 30, 20]."
+
+    print("Running OpenAI tracing...")
+    print(asyncio.run(openai_tracing(test_message)))
+
+    print("\nRunning Langfuse tracing...")
+    print(asyncio.run(langfuse_tracing(test_message)))
+
+    print("\nRunning AgentOps tracing...")
+    print(asyncio.run(agentops_tracing(test_message)))
