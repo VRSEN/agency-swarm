@@ -1,0 +1,246 @@
+---
+title: "Hybrid Patterns: Combining SendMessage and Handoffs"
+description: "Learn how to effectively combine Agency Swarm's SendMessage tools with OpenAI SDK Handoffs for sophisticated multi-agent coordination."
+icon: "arrows-split-up-and-left"
+---
+
+Agency Swarm supports two powerful paradigms for inter-agent communication that can work together seamlessly: **SendMessage tools** (orchestrator pattern) and **OpenAI SDK Handoffs** (sequential pattern). This guide explains how these patterns interact and provides practical examples for building sophisticated multi-agent systems.
+
+## Understanding the Two Paradigms
+
+### SendMessage Tools (Orchestrator Pattern)
+- **Control Flow**: Control **returns** to the calling agent
+- **Use Case**: Delegation with oversight and coordination
+- **Implementation**: Via `SendMessage` tool variants
+- **Example**: `Orchestrator -> Worker -> Response to Orchestrator`
+
+### Handoffs (Sequential Pattern)
+- **Control Flow**: Control **transfers** to the handoff target
+- **Use Case**: Complete task delegation and specialization
+- **Implementation**: Via agent `handoffs` attribute + OpenAI SDK
+- **Example**: `Worker -> Specialist` (control stays with Specialist)
+
+## The Hybrid Resolution
+
+When both patterns are used together, Agency Swarm implements a **sophisticated hybrid approach** that allows both to coexist without conflicts:
+
+### How It Works
+
+1. **Orchestrator Pattern Dominates at Tool Level**
+   - `SendMessage.on_invoke_tool()` always returns results to the calling agent
+   - The orchestrator pattern's contract is preserved
+
+2. **Sequential Handoffs Work Within Recipient Execution**
+   - During the recipient's `get_response()` execution, handoffs can occur
+   - The OpenAI SDK handles handoffs internally
+   - Specialist insights are incorporated into the recipient's response
+
+3. **Hybrid Behavior Emerges**
+   - The recipient coordinates with specialists via handoffs
+   - The recipient formulates a comprehensive response including handoff results
+   - The orchestrator receives full visibility into the handoff process
+
+## Practical Example
+
+Here's a real-world scenario demonstrating the hybrid pattern:
+
+```python
+from agency_swarm import Agency, Agent
+
+# Create specialized agents
+orchestrator = Agent(
+    name="ProjectManager",
+    instructions="Coordinate project tasks and oversee completion",
+    # ... other config
+)
+
+worker = Agent(
+    name="Developer",
+    instructions="Handle development tasks, consult specialists when needed",
+    # ... other config
+)
+
+specialist = Agent(
+    name="SecurityExpert",
+    instructions="Provide security expertise and recommendations",
+    # ... other config
+)
+
+# Configure handoffs: Developer can hand off to SecurityExpert
+worker.handoffs = [specialist]
+
+# Create agency with communication flows
+agency = Agency(
+    orchestrator,
+    communication_flows=[
+        (orchestrator, worker),      # Creates send_message_to_Developer tool
+        (orchestrator, specialist),  # Creates send_message_to_SecurityExpert tool
+    ]
+)
+```
+
+### Execution Flow
+
+1. **ProjectManager** uses `send_message_to_Developer`: *"Implement user authentication with security best practices"*
+
+2. **Developer** receives the task and decides to consult the security expert
+
+3. **Developer** hands off to **SecurityExpert** (internal to Developer's execution)
+
+4. **SecurityExpert** provides security recommendations
+
+5. **Developer** incorporates the expert advice and responds to **ProjectManager**
+
+6. **ProjectManager** receives a comprehensive response with security considerations included
+
+## Configuration Verification
+
+You can verify your hybrid setup is working correctly:
+
+```python
+# Check tool configuration
+orchestrator_tools = [tool.name for tool in orchestrator.tools if hasattr(tool, 'name')]
+print(f"Orchestrator tools: {orchestrator_tools}")
+# Expected: ['send_message_to_Developer', 'send_message_to_SecurityExpert']
+
+# Check handoff configuration
+print(f"Developer handoffs: {[h.name for h in worker.handoffs]}")
+# Expected: ['SecurityExpert']
+
+# Specialist should have no communication tools
+specialist_tools = [tool.name for tool in specialist.tools if hasattr(tool, 'name')]
+print(f"Specialist tools: {specialist_tools}")
+# Expected: [] (no SendMessage tools)
+```
+
+## Advanced Patterns
+
+### Multi-Level Handoffs with Orchestration
+
+```python
+# Complex hierarchy: Manager -> Developer -> SecurityExpert -> ComplianceOfficer
+developer.handoffs = [security_expert]
+security_expert.handoffs = [compliance_officer]
+
+# Manager can still orchestrate while allowing deep specialization chains
+agency = Agency(
+    manager,
+    communication_flows=[
+        (manager, developer),
+        (manager, security_expert),
+        (manager, compliance_officer),
+    ]
+)
+```
+
+### Selective Handoff Triggers
+
+```python
+class ConditionalHandoffAgent(Agent):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.handoffs = [specialist_agent]
+
+    async def get_response(self, message, **kwargs):
+        # Custom logic to determine when to use handoffs
+        if "security" in message.lower() or "compliance" in message.lower():
+            # Let handoff mechanism handle this
+            return await super().get_response(message, **kwargs)
+        else:
+            # Handle directly without handoff
+            return await super().get_response(message, **kwargs)
+```
+
+## Thread Management
+
+The hybrid pattern includes sophisticated conversation thread management:
+
+- **Top-level calls** (`sender_name=None`): History saved to shared thread
+- **Agent-to-agent calls** (`sender_name` provided): History NOT saved to shared thread
+- **Handoff coordination**: Context flows through handoff chain without polluting main thread
+
+This prevents tool responses from cluttering the main conversation while preserving context flow.
+
+## When to Use Hybrid Patterns
+
+### ✅ Ideal Use Cases
+
+- **Hierarchical task delegation with oversight**: Manager needs visibility but workers need specialist consultation
+- **Expert consultation workflows**: Agents can consult specialists while maintaining orchestrator control
+- **Complex approval processes**: Multiple specialists review work before returning to orchestrator
+- **Quality assurance pipelines**: Work flows through specialists but orchestrator tracks progress
+
+### 🎯 Design Guidelines
+
+**Use SendMessage when you need**:
+- Orchestrator control and visibility
+- Coordination between multiple agents
+- Responses back to the calling agent
+- Workflow orchestration
+
+**Use Sequential Handoffs when you need**:
+- Internal agent decision-making
+- Specialized task delegation within agent execution
+- Expert consultation during task processing
+- Seamless specialist integration
+
+**Combine both when you need**:
+- Sophisticated multi-agent coordination
+- Hierarchical delegation with oversight
+- Expert consultation with orchestrator visibility
+- Complex workflows requiring both control patterns
+
+## Testing Your Hybrid Implementation
+
+Agency Swarm includes comprehensive tests for hybrid patterns. You can run them to verify your setup:
+
+```bash
+# Test hybrid pattern behavior
+python -m pytest tests/test_control_transfer_behavior.py -v
+
+# Test handoffs with communication flows
+python -m pytest tests/test_handoffs_with_communication_flows.py -v
+```
+
+Key test files:
+- [`tests/test_control_transfer_behavior.py`](https://github.com/VRSEN/agency-swarm/blob/main/tests/test_control_transfer_behavior.py) - Comprehensive hybrid pattern testing
+- [`tests/test_handoffs_with_communication_flows.py`](https://github.com/VRSEN/agency-swarm/blob/main/tests/test_handoffs_with_communication_flows.py) - Configuration verification tests
+
+## Implementation Details
+
+### SendMessage Tool Behavior
+```python
+class SendMessage(FunctionTool):
+    async def on_invoke_tool(self, context, args_json):
+        # Always calls recipient and returns result to caller
+        result = await self.recipient_agent.get_response(
+            message=message,
+            sender_name=self.sender_agent.name,  # Key: preserves orchestrator pattern
+            # ... other args
+        )
+        return str(result.final_output)  # Always returns to caller
+```
+
+### Sequential Handoff Integration
+- Handoffs configured via `agent.handoffs = [target_agent]`
+- Handled by OpenAI SDK during agent execution
+- Can occur within `get_response()` call triggered by SendMessage
+- Results incorporated into agent's response
+
+## Benefits of the Hybrid Approach
+
+✅ **No Paradigm Conflicts**: Both patterns work together seamlessly
+✅ **Orchestrator Visibility**: Calling agents get informed about sequential handoff decisions
+✅ **Internal Delegation**: Agents can use sequential handoffs for specialized processing
+✅ **Maintained Control**: Orchestrator pattern contract is preserved
+✅ **Context Preservation**: Information flows correctly through the system
+
+## Conclusion
+
+Agency Swarm's hybrid paradigm resolution enables sophisticated multi-agent architectures that would be difficult to achieve with either pattern alone. By understanding how SendMessage tools and Sequential Handoffs work together, you can build powerful systems that combine the best of both orchestration and sequential delegation patterns.
+
+The hybrid approach maintains the strengths of both paradigms while eliminating conflicts, giving you the flexibility to design complex multi-agent workflows with confidence.
+
+<Note>
+For more details on individual patterns, see the [Overview](./overview) page. For implementation examples, check the [Common Use Cases](./common-use-cases) page.
+</Note>

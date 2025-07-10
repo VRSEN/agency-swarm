@@ -1,0 +1,218 @@
+---
+title: "Agency Visualization"
+description: "Create interactive HTML visualizations and get ReactFlow-compatible data"
+icon: "chart-network"
+---
+
+Agency Swarm provides two visualization methods:
+
+1. **`visualize()`** - Creates interactive HTML files
+2. **`get_agency_structure()`** - Returns ReactFlow-compatible JSON
+
+## Interactive HTML Visualization
+
+### `visualize()`
+
+Creates a self-contained HTML file with interactive agency visualization.
+
+```python
+def visualize(
+    self,
+    output_file: str = "agency_visualization.html",
+    include_tools: bool = True,
+    open_browser: bool = True
+) -> str
+```
+
+#### Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `output_file` | `str` | `"agency_visualization.html"` | Path to save HTML file |
+| `include_tools` | `bool` | `True` | Whether to include agent tools |
+| `open_browser` | `bool` | `True` | Whether to open in browser |
+
+#### Example
+
+```python
+from agents import function_tool
+from agency_swarm import Agency, Agent
+
+@function_tool
+def analyze_data(data: str) -> str:
+    """Analyze data"""
+    return f"Analysis: {data}"
+
+analyst = Agent(
+    name="Analyst",
+    instructions="You analyze data.",
+    tools=[analyze_data]
+)
+
+manager = Agent(
+    name="Manager",
+    instructions="You coordinate work."
+)
+
+agency = Agency(
+    manager,
+    communication_flows=[(manager, analyst)],
+    name="Analysis Agency"
+)
+
+# Create visualization
+html_file = agency.visualize()
+print(f"Saved to: {html_file}")
+```
+
+## ReactFlow Integration
+
+### `get_agency_structure()`
+
+Returns ReactFlow-compatible JSON data.
+
+```python
+def get_agency_structure(
+    self,
+    include_tools: bool = True
+) -> dict[str, Any]
+```
+
+#### Returns
+
+```python
+{
+    "nodes": [
+        {
+            "id": "Manager",
+            "type": "agent",
+            "position": {"x": 100, "y": 50},
+            "data": {
+                "label": "Manager",
+                "description": "Agent description",
+                "isEntryPoint": True,
+                "toolCount": 0
+            }
+        }
+    ],
+    "edges": [
+        {
+            "id": "Manager->Analyst",
+            "source": "Manager",
+            "target": "Analyst",
+            "type": "communication"
+        }
+    ],
+    "metadata": {
+        "agencyName": "Analysis Agency",
+        "totalAgents": 2,
+        "totalTools": 1,
+        "entryPoints": ["Manager"]
+    }
+}
+```
+
+#### Node Types
+
+- **Agent nodes**: `type: "agent"` with agent metadata
+- **Tool nodes**: `type: "tool"` with parent agent reference
+
+#### Edge Types
+
+- **Communication**: `type: "communication"` between agents
+- **Ownership**: `type: "owns"` from agent to tool
+
+## Frontend Integration
+
+Use the JSON directly in React:
+
+```tsx
+import ReactFlow from 'reactflow';
+
+const agencyData = await fetch('/api/agency-structure').then(r => r.json());
+
+function AgencyVisualization() {
+  return (
+    <div style={{ height: '600px' }}>
+      <ReactFlow
+        nodes={agencyData.nodes}
+        edges={agencyData.edges}
+        fitView
+      />
+    </div>
+  );
+}
+```
+
+## Complete Example
+
+```python
+from agents import function_tool
+from agency_swarm import Agency, Agent
+
+@function_tool
+def process_data(data: str) -> str:
+    return f"Processed: {data}"
+
+@function_tool
+def create_report(data: str) -> str:
+    return f"Report: {data}"
+
+# Create agents
+processor = Agent(
+    name="Processor",
+    instructions="Process data efficiently.",
+    tools=[process_data]
+)
+
+reporter = Agent(
+    name="Reporter",
+    instructions="Create detailed reports.",
+    tools=[create_report]
+)
+
+coordinator = Agent(
+    name="Coordinator",
+    instructions="Coordinate the workflow."
+)
+
+# Create agency
+agency = Agency(
+    coordinator,
+    communication_flows=[
+        (coordinator, processor),
+        (coordinator, reporter),
+        (processor, reporter)
+    ],
+    name="Data Processing Agency"
+)
+
+# Generate HTML visualization
+html_file = agency.visualize(
+    output_file="data_agency.html",
+    include_tools=True,
+    open_browser=True
+)
+
+# Get JSON for custom apps
+structure = agency.get_agency_structure(include_tools=True)
+
+print(f"HTML visualization: {html_file}")
+print(f"Found {len(structure['nodes'])} nodes")
+```
+
+## Troubleshooting
+
+**HTML not opening**: Check `open_browser=True` or open file manually
+
+**Missing tools**: Verify agents have tools and `include_tools=True`
+
+**No communication flows**: Ensure `communication_flows` parameter is set in Agency constructor
+
+**Debug structure**:
+```python
+structure = agency.get_agency_structure()
+print(f"Agents: {structure['metadata']['totalAgents']}")
+print(f"Tools: {structure['metadata']['totalTools']}")
+print(f"Entry points: {structure['metadata']['entryPoints']}")
+```
