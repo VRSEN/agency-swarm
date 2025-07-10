@@ -1,5 +1,5 @@
 """
-Observability demo showing Langfuse and AgentOps tracing.
+Observability demo showing OpenAI (built-in), Langfuse and AgentOps tracing.
 
 Run with: python examples/observability_demo.py
 """
@@ -97,8 +97,6 @@ async def langfuse_tracing(input_message: str) -> str:
     async def get_response_wrapper(message: str):
         return await agency_instance.get_response(
             message=message,
-            # Uncomment this to disable OpenAI tracing:
-            # run_config=RunConfig(tracing_disabled=True),
         )
 
     response = await get_response_wrapper(input_message)
@@ -112,8 +110,6 @@ async def agentops_tracing(input_message: str) -> str:
     agency_instance = create_agency()
     response = await agency_instance.get_response(
         message=input_message,
-        # Uncomment this to disable OpenAI tracing:
-        # run_config=RunConfig(tracing_disabled=True),
     )
     agentops.end_trace(tracer, end_state="Success")
     return response.final_output
@@ -126,19 +122,10 @@ if __name__ == "__main__":
     test_message = "Create a function to calculate factorial and analyze the dataset [10, 25, 15, 30, 20]."
 
     print("Running OpenAI tracing...")
-    try:
-        print(asyncio.run(openai_tracing(test_message)))
-    except Exception as e:
-        print(f"Error with OpenAI tracing: {e}")
+    print(asyncio.run(openai_tracing(test_message)))
 
     print("\nRunning Langfuse tracing...")
-    try:
-        print(asyncio.run(langfuse_tracing(test_message)))
-    except Exception as e:
-        print(f"Error with Langfuse tracing: {e}")
+    print(asyncio.run(langfuse_tracing(test_message)))
 
     print("\nRunning AgentOps tracing...")
-    try:
-        print(asyncio.run(agentops_tracing(test_message)))
-    except Exception as e:
-        print(f"Error with AgentOps tracing: {e}")
+    print(asyncio.run(agentops_tracing(test_message)))
