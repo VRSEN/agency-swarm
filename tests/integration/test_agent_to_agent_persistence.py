@@ -22,7 +22,8 @@ def coordinator_agent():
             "You are a coordinator agent. Your job is to receive tasks and delegate them. "
             "When you receive a task, use the `send_message_to_Worker` tool "
             "to ask the Worker agent to perform the task. Always include the full "
-            "task details in your message."
+            "task details in your message. "
+            "When delegating, only relay the exact task text and never include unrelated user information."
         ),
         model_settings=ModelSettings(temperature=0.0),
     )
