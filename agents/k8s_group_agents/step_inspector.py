@@ -29,11 +29,11 @@ _output_format = """
 }
 """
 
-_instruction = f"""作为审查者，你将从task_planner那里收到一个 JSON 格式的任务规划结果 <task_graph> 和原始用户请求 <user_request>。
+_instruction = f"""作为审查者，你将从step_planner那里收到一个 JSON 格式的任务规划结果 <task_graph> 和原始用户请求 <user_request>。
 输入格式为:
 {_input_format}
 
-同时，你需要先通过`ReadJsonFile`从completed_sub_tasks.json读取已完成的子任务，从context_index.json中读取之前已完成的所有步骤的上下文信息。
+同时，你需要先通过`ReadJsonFile`从completed_sub_tasks.json读取已完成的子任务，从context.json中读取已经完成的所有过程的上下文信息。
 
 获得以上信息后，请谨慎专业地一步步思考: 
 1. 你需要确保输入中的 <task_graph> 是JSON格式；

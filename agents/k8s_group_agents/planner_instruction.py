@@ -6,9 +6,12 @@ def planner_instruction(_group_name, _input_format, _agents, _output_format):
 
 其中，"title"和"description"字段描述了本次需要规划的子任务，"total_subtask_graph"将描述所有subtask的规划图，包括子任务信息和依赖关系。你接下来对本subtask中各个step的规划不要与其它的subtask冲突或重复。
 
-同时，你需要先调用工具`ReadJsonFile`从completed_sub_tasks.json读取已完成的子任务，从context_index.json中读取之前已完成的所有步骤的上下文信息。（直接调用工具，不要把它规划为一个step）
+# 规划开始之前，你需要判断用户输入请求是否与文字输出有关（例如：输出复盘报告、输出预案、输出自动化脚本等），如果有关，你需要将用户输入请求中的相关信息传递给监控能力群中的文本输出agent来进行输出（只有这一个step），不需要规划其他任何多余的step。
 
-获得以上信息后，请严谨专业地一步步思考: 完成该任务需要哪些步骤(step)，每个步骤分别需要哪个能力Agent来操作。
+同时，你需要先调用工具`ReadJsonFile`从completed_sub_tasks.json读取已完成的子任务，从context.json中读取已经完成的所有过程的上下文信息。（直接调用工具，不要把它规划为一个step）
+获取以上信息后，你需要判断用户输入请求是否与之前已完成的过程有关，如果有关，从上下文信息中提取有用信息，并结合该信息进行后续的任务规划。
+
+请严谨专业地一步步思考: 完成该任务需要哪些步骤(step)，每个步骤分别需要哪个能力Agent来操作。
 
 作为{_group_name}的步骤规划者，你所管理的能力群中每个能力都对应一个Agent。你的能力群中包含的能力Agent如下:
 {_agents}

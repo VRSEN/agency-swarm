@@ -253,15 +253,18 @@ def main():
             "存储能力群": [pv_agent_instance, pvc_agent_instance, storageclass_agent_instance, csi_agent_instance, emptydir_agent_instance, hostpath_agent_instance, disk_agent_instance,],
         }
 
-        text ="""我需要对集群中名为my-namespace 的Namespace添加一个名为env，值为test的标签。"""
+        text ="""对集群中名为my-namespace 的Namespace添加一个名为env，值为test的标签。"""
 
-        # 只在agency循环调用时清空request.json和context_index.json
+        # 只在agency循环调用时清空completed_requests.json和context_index.json
         files_path = os.path.join("agents", "files")
         request_path = os.path.join(files_path, "completed_requests.json")
         context_index_path = os.path.join(files_path, "context_index.json")
+        context_path = os.path.join(files_path, "context.json")
         with open(request_path, "w", encoding='utf-8') as f:
             pass
         with open(context_index_path, "w", encoding='utf-8') as f:
+            pass
+        with open(context_path, "w", encoding='utf-8') as f:
             pass
 
         request_id = 0
