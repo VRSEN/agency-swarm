@@ -1,6 +1,5 @@
 class CopilotDemoLauncher:
     def start(
-        self,
         agency_instance,
         host: str = "0.0.0.0",
         port: int = 8000,
