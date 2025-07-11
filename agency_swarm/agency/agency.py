@@ -2030,7 +2030,8 @@ class Agency:
         """
         发送消息给某个agent线程并确保返回json格式，必要时通过inspector人工/自动检查
         """
-        _ = False
+        flag = False
+        count_flag_false = 0
         original_message = message
         while True:
             # 1. 先请求一次agent输出
@@ -2038,12 +2039,16 @@ class Agency:
             response_information = self.my_get_completion(res)
 
             # 2. 尝试从返回内容解析json
-            _, result = self.get_json_from_str(message=response_information)
+            flag, result = self.get_json_from_str(message=response_information)
             print(f"THREAD output:\n{result}")
-            if _ == False:
+            if flag == False:
+                count_flag_false = count_flag_false + 1
                 # 没找到json，构造提示重新请求agent
                 message = "用户原始输入为: \n```\n" + original_message + "\n```\n" + "你之前的回答是:\n```\n" + result + "\n```\n" + "你之前的回答用户评价为: \n```\n" + "Your output format is wrong." + "\n```\n"
-                continue
+                if count_flag_false <= 3:
+                    continue
+                else:
+                    return json.dumps({})
 
             # 3. 如果有inspector，需额外走一轮人工/自动审核
             if inspector_thread is not None:
