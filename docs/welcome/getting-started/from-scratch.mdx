@@ -4,6 +4,222 @@ description: "Quick start guide to building an Agency from scratch."
 icon: "code"
 ---
 
+<Info>
+Agency Swarm has two major versions with different approaches. Choose the version that best fits your needs.
+</Info>
+
+<Tabs defaultValue="v1.x (Latest)">
+<Tab title="v1.x (Latest)">
+
+<Warning>
+v1.x is currently in **beta preview**. Install with: `pip install -U "agency-swarm>=1.0.0-beta"`
+</Warning>
+
+<Steps>
+  <Step title="Set Your OpenAI Key">
+    Begin by setting your OpenAI API key.
+
+    ```python
+    from agency import set_openai_key
+    set_openai_key("YOUR_API_KEY")
+    ```
+
+    Alternatively, you can set the API key in the `.env` file.
+
+    ```
+    OPENAI_API_KEY=sk-...
+    ```
+
+  </Step>
+
+  <Step title="Create Project Structure">
+    Use the `create-agent-template` command to create the recommended directory structure for each agent.
+
+    **Command Syntax:**
+
+    ```bash
+    agency-swarm create-agent-template --name "AgentName" --description "Agent Description" [--path "/path/to/directory"] [--use_txt]
+    ```
+
+    **Agent Folder Structure:**
+
+    When you run the create-agent-template command, it creates the following folder structure for your agent:
+
+    ```
+    /your-agency-path/
+    └── AgentName/                    # Directory for the specific agent
+        ├── files/                    # Directory for files that will be uploaded to openai
+        ├── schemas/                  # Directory for OpenAPI schemas to be converted into tools
+        ├── tools/                    # Directory for tools to be imported by default.
+        ├── AgentName.py              # The main agent class file
+        ├── __init__.py               # Initializes the agent folder as a Python package
+        └── instructions.md or .txt   # Instruction document for the agent
+    ```
+
+    This structure ensures that each agent has its dedicated space with all necessary files to start working on its specific tasks.
+
+    **Agency Folder Structure:**
+
+    The full structure of the project will look like this:
+
+    ```
+    AgencyName/
+    ├── AgentName/            # Agent folder created with the command above
+    ├── AnotherAgent/         # Another agent folder
+    ├── agency.py             # Main file where agents are imported and the agency is defined
+    ├── agency_manifesto.md   # Shared instructions and guidelines for all agents
+    ├── requirements.txt      # File listing all dependencies
+    └── ...
+    ```
+
+  </Step>
+
+  <Step title="Create Tools">
+    Define your custom tools using the `@function_tool` decorator.
+
+    **my_custom_tool.py:**
+
+    ```python
+    from agents import function_tool
+
+    @function_tool
+    def my_custom_tool(example_field: str) -> str:
+        """
+        A brief description of what the custom tool does.
+        The docstring should clearly explain the tool's purpose and functionality.
+        It will be used by the agent to determine when to use this tool.
+        
+        Args:
+            example_field: Description of the example field, explaining its purpose and usage for the Agent.
+        
+        Returns:
+            Result of the tool's operation as a string.
+        """
+        
+        # Your custom tool logic goes here
+        do_something(example_field)
+        
+        # Return the result of the tool's operation as a string
+        return "Result of MyCustomTool operation"
+    ```
+
+  </Step>
+
+  <Step title="Define Agent Roles">
+    Adjust the parameters and instructions for each agent.
+
+    **Developer.py:**
+
+    ```python
+    from agency_swarm import Agent
+    from agents import ModelSettings
+    from .tools.my_custom_tool import my_custom_tool
+
+    class Developer(Agent):
+        def __init__(self):
+            super().__init__(
+                name="Developer",
+                description="Responsible for executing tasks.",
+                instructions="./instructions.md",
+                tools=[my_custom_tool],  # Import tools directly
+                model_settings=ModelSettings(
+                    temperature=0.3,
+                    max_completion_tokens=25000,
+                    model="gpt-4o"
+                )
+            )
+    ```
+
+    Tools are imported directly into the agent instead of from a folder.
+
+    **instructions.md:**
+
+    ```md
+    You are a Developer agent responsible for executing tasks.
+
+    # Role
+    You are responsible for writing clean, efficient, and reusable code.
+
+    # Process
+    1. How to handle incoming requests
+    2. When and how to use available tools
+    3. How to collaborate with other agents
+    ```
+
+  </Step>
+
+  <Step title="Create Agency">
+    Import your agents and initialize the Agency class.
+
+    **agency.py:**
+
+    ```python
+    from agency_swarm import Agency
+    from .Developer import Developer
+    from .CEO import CEO
+
+    developer = Developer()
+    ceo = CEO()
+
+    agency = Agency(
+        ceo,  # Entry point agent as positional argument
+        communication_flows=[
+            (ceo, developer),  # CEO can initiate communication with Developer
+        ],
+        shared_instructions='./agency_manifesto.md'  # shared instructions for all agents
+    )
+    ```
+
+    The first positional argument is the entry point agent that users interact with directly. Communication flows are defined separately.
+
+    <Note title="Note on Communication Flows">
+      In Agency Swarm, communication flows are directional tuples. For instance, in the example above, the CEO can initiate a chat with the Developer (`(ceo, developer)`), and the Developer can respond in this chat. However, the Developer cannot initiate a chat with the CEO.
+    </Note>
+
+  </Step>
+
+  <Step title="Run Demo">
+
+    There are multiple ways to run the demo. Add one of the following to your `agency.py` file:
+
+    **Web Interface:**
+
+    ```python
+    agency.copilot_demo()
+    ```
+
+    <Warning>
+    Copilot demo is currently minimal and will be updated in future patches
+    </Warning>
+
+    **Terminal Version:**
+
+    ```python
+    agency.terminal_demo()
+    ```
+
+    **Backend Version (Async):**
+
+    ```python
+    import asyncio
+
+    async def main():
+        result = await agency.get_response("Please create a new website for our client.")
+        print(result.final_output)
+
+    asyncio.run(main())
+    ```
+
+  </Step>
+</Steps>
+
+</Tab>
+<Tab title="v0.x (Production)">
+
+<Info>
+v0.x is the **current production version**. Install with: `pip install "agency-swarm<1.0.0"`
+</Info>
+
 <Steps>
   <Step title="Set Your OpenAI Key">
     Begin by setting your OpenAI API key.
@@ -198,6 +414,9 @@ icon: "code"
 
   </Step>
 </Steps>
+
+</Tab>
+</Tabs>
 
 ## Next Steps
 

@@ -57,17 +57,7 @@ agency = Agency([
 ])
 ```
 
-All agents added inside the top-level list of `agency_chart` (`ceo, dev`), can talk to the user.
-
-To allow Developer to initiate communication with the CEO, you need to simply add it to the `agency_chart` list:
-
-```python
-agency = Agency([
-    ceo, dev, [dev, ceo]  # Developer can initiate communication with the CEO
-])
-```
-
-You can add as many levels of communication as you want.
+All agents added inside the top-level list of `agency_chart` (`ceo, dev`), can talk to the user. You can add as many levels of communication as you want.
 
 ## Under the Hood
 

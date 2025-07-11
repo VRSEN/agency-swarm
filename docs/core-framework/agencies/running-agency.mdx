@@ -6,19 +6,28 @@ icon: "rocket"
 
 When it comes to running your agency, you have 3 options:
 
-1. **Gradio Interface**: The most convenient way to get started.
+1. **CopilotKit/AG-UI Interface**: The most modern and recommended way to get started.
 2. **Get Completion**: For backend or custom integrations.
 3. **Terminal Version**: Best for quick debugging and testing.
 
-## Gradio Interface
+## Pre-requisites for CopilotKit/AG-UI Demo
 
-To open a convenient Gradio interface in your browser, use the `demo_gradio` method:
+To use the CopilotKit/AG-UI demo (`copilot_demo()`), make sure you have the following installed:
+
+- **Node.js** (v18 or newer recommended): [Download Node.js](https://nodejs.org/)
+- **npm** (comes with Node.js)
+
+If these requirements are not met, the demo will not start and you will see an error message.
+
+## CopilotKit/AG-UI Interface
+
+To open a CopilotKit interface, use the `copilot_demo` method:
 
 ```python
-agency.demo_gradio(height=700)
+agency.copilot_demo()
 ```
 
-Simply follow the `localhost` link from the terminal to start using your agency.
+This will launch both the backend and a Next.js frontend. Simply follow the `localhost` link from the terminal to start using your agency in a chat-based UI.
 
 ## Get Completion
 
@@ -42,36 +51,12 @@ print(response)
 - `attachments` (optional): A list of attachments to be sent with the message, following [OpenAI format](https://platform.openai.com/docs/api-reference/messages/createMessage#messages-createmessage-attachments).
 - `recipient_agent` (optional): The agent to which the message should be sent.
 
-### Image attachments
-
-When using the `get_completion` method, you can also pass an array of message objects to use vision capabilities (if your llm model supports it):
-
-```python
-message_objects = [
-    {
-        "type": "text",
-        "text": "What is presented on these pictures?"
-    },
-    {
-        "type": "image_file",
-        "image_file": {"file_id": file_id}
-    },
-    {
-        "type": "image_url",
-        "image_url": {"url": "https://example.com/image.png"}
-    }
-]
-
-response = agency.get_completion(message=message_objects)
-print(response)
-```
-
 ## Terminal Version
 
-To run the agency directly from your terminal, use the `run_demo` method:
+To run the agency directly from your terminal, use the `terminal_demo` method:
 
 ```bash
-agency.run_demo()
+agency.terminal_demo()
 ```
 <Tip>
 When using the terminal to run the agency, you can send messages directly to any top-level agent by using the "mentions" feature. To do this, start your message with the agent's name preceded by an @ symbol (for example, `@Developer I want you to build me a website`). This directs your message to the specified agent instead of the CEO. You can also press the tab key to autocomplete the agent's name.
