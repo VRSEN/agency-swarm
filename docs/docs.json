@@ -88,7 +88,7 @@
                         "group": "Additional Features",
                         "pages": [
                             "additional-features/asynchronous-execution",
-                            "additional-features/shared-state",
+                            "additional-features/agency-context",
                             "additional-features/few-shot-examples",
                             "additional-features/output-validation",
                             "additional-features/streaming",
