@@ -250,7 +250,7 @@ async def validate_response(
     ctx: RunContextWrapper, agent: Agent, agent_response: str
 ) -> GuardrailFunctionOutput:
     # User-defined validation logic
-    error_msg, tripwire_triggered = check_errors(agent_response):
+    error_msg, tripwire_triggered = check_errors(agent_response)
 
     return GuardrailFunctionOutput(
         output_info=error_msg,
