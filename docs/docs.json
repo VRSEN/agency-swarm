@@ -78,7 +78,8 @@
                                     "core-framework/agencies/overview",
                                     "core-framework/agencies/communication-flows",
                                     "core-framework/agencies/agency-parameters",
-                                    "core-framework/agencies/running-agency"
+                                    "core-framework/agencies/running-agency",
+                                    "core-framework/agencies/visualization"
                                 ]
                             },
                             "core-framework/state-management"
@@ -99,7 +100,8 @@
                                 "icon": "comments",
                                 "pages": [
                                     "additional-features/custom-communication-flows/overview",
-                                    "additional-features/custom-communication-flows/common-use-cases"
+                                    "additional-features/custom-communication-flows/common-use-cases",
+                                    "additional-features/custom-communication-flows/hybrid-patterns"
                                 ]
                             },
                             "additional-features/azure-openai",
