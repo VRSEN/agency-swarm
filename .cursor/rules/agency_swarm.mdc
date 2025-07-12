@@ -214,30 +214,30 @@ if __name__ == "__main__":
 
 Remember, each tool code snippet you create must be IMMIDIATELY ready to use by the user. It must not contain any mocks, placeholders or hypothetical examples.
 
-### Shared State
+### Agency Context (Shared State)
 
-Tools can access and modify a global state across the agency to store and share data without using extra tokens in conversations.
+Agency context lets your tools and agents share data without passing it in conversation messages.
 
 ```python
 from agents import function_tool, RunContextWrapper
-from typing import Any
+from agency_swarm.context import MasterContext
 
 @function_tool
-async def my_tool(ctx: RunContextWrapper[Any], arg1: str) -> str:
-    ctx.context.shared_state.set("my_key", "my_value")  # Store data
-    data = ctx.context.shared_state.get("my_key", "default_value")
+async def my_tool(ctx: RunContextWrapper[MasterContext], arg1: str) -> str:
+    ctx.context.set("my_key", arg1)            # Store data
+    data = ctx.context.get("my_key", "default")  # Retrieve data
     return data
 ```
 
-Use this for:
-- Large data structures expensive to pass between agents
+Use agency context for:
+- Large data structures that are expensive to pass between agents
 - Maintaining state across multiple tool calls
 - Sharing data among tools and agents
 
-Best Practices:
+Best practices:
 - Use descriptive keys to avoid conflicts
-- Provide default values when retrieving
-- Clean up unneeded data
+- Provide default values when calling `get`
+- Clean up unneeded data to keep the context small
 
 ### MCP Integration
 
