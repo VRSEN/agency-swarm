@@ -92,15 +92,15 @@ from agents import function_tool, ModelSettings  # openai-agents package
 from agency_swarm import Agency, Agent           # this framework
 ```
 
-### Tool Definition Migration
+### Tool Definition Options
 ```python
-# ❌ WRONG - v0.x pattern (BaseTool classes)
+# ✅ OPTION 1 - BaseTool class (Pydantic-based, explicit field definitions)
 class MyTool(BaseTool):
     arg1: str = Field(..., description="Description")
     def run(self):
         return f"Result: {self.arg1}"
 
-# ✅ CORRECT - v1.x pattern (@function_tool decorator)
+# ✅ OPTION 2 - @function_tool decorator (OpenAI Agents SDK style)
 @function_tool
 def my_tool(arg1: str) -> str:
     """Tool description.
@@ -231,9 +231,9 @@ make tests     # pytest
 - **`/docs`** - **OUTDATED** v0.x patterns - use with caution
 
 ### Framework Migration Notes
-- `BaseTool` (deprecated) → `@function_tool` from `agents`
 - `response_format` → `output_type`
 - `agency_chart` → entry points + `communication_flows`
+- Both `BaseTool` and `@function_tool` are supported for tool creation
 
 ---
 

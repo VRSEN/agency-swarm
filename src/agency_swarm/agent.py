@@ -89,10 +89,15 @@ class Agent(BaseAgent[MasterContext]):
                                           If the folder name follows the pattern `*_vs_<vector_store_id>`,
                                           files uploaded via `upload_file` will also be added to the specified
                                           OpenAI Vector Store, and a `FileSearchTool` will be automatically added.
-        tools_folder (str | Path | None): Placeholder for future functionality to load tools from a directory.
+        tools_folder (str | Path | None): Path to a directory containing tool definitions. Tools are automatically
+                                           discovered and loaded from this directory. Supports both legacy BaseTool
+                                           subclasses and modern FunctionTool instances. Python files starting with
+                                           underscore are ignored.
         description (str | None): A description of the agent's role or purpose, used when generating
                                   dynamic `send_message` tools for other agents.
         output_type (type[Any] | None): The type of the agent's final output.
+        send_message_tool_class (type | None): Custom SendMessage tool class to use for inter-agent communication.
+                                               If None, uses the default SendMessage class.
         _thread_manager (ThreadManager | None): Internal reference to the agency's `ThreadManager`.
                                                 Set by the parent `Agency`.
         _agency_instance (Any | None): Internal reference to the parent `Agency` instance. Set by the parent `Agency`.
@@ -108,9 +113,10 @@ class Agent(BaseAgent[MasterContext]):
 
     # --- Agency Swarm Specific Parameters ---
     files_folder: str | Path | None
-    tools_folder: str | Path | None  # Placeholder for future ToolFactory
+    tools_folder: str | Path | None  # Directory path for automatic tool discovery and loading
     description: str | None
     output_type: type[Any] | None
+    send_message_tool_class: type | None  # Custom SendMessage tool class for inter-agent communication
 
     # --- Internal State ---
     _thread_manager: ThreadManager | None = None
@@ -264,11 +270,6 @@ class Agent(BaseAgent[MasterContext]):
             tools_list = kwargs["tools"]
             for i, tool in enumerate(tools_list):
                 if isinstance(tool, type) and issubclass(tool, BaseTool):
-                    warnings.warn(
-                        "'BaseTool' class is deprecated. Consider switching to FunctionTool.",
-                        DeprecationWarning,
-                        stacklevel=2,
-                    )
                     tools_list[i] = self._adapt_legacy_tool(tool)
 
         # Merge deprecated model settings into existing model_settings
@@ -347,6 +348,7 @@ class Agent(BaseAgent[MasterContext]):
                 "api_headers",
                 "api_params",
                 "description",
+                "send_message_tool_class",
                 "load_threads_callback",
                 "save_threads_callback",
             }:
@@ -378,6 +380,8 @@ class Agent(BaseAgent[MasterContext]):
         self.api_params = current_agent_params.get("api_params", {})
         # Set description directly from current_agent_params, default to None if not provided
         self.description = current_agent_params.get("description")
+        # Set custom send_message_tool_class, default to None (will use default SendMessage)
+        self.send_message_tool_class = current_agent_params.get("send_message_tool_class")
         # output_type is handled by the base Agent constructor, no need to set it here
 
         # --- Persistence Callbacks ---
@@ -606,7 +610,10 @@ class Agent(BaseAgent[MasterContext]):
 
         tool_name = f"{SEND_MESSAGE_TOOL_PREFIX}{recipient_name}"
 
-        send_message_tool_instance = SendMessage(
+        # Use custom send_message_tool_class if provided, otherwise use default SendMessage
+        send_message_tool_class = self.send_message_tool_class or SendMessage
+
+        send_message_tool_instance = send_message_tool_class(
             tool_name=tool_name,
             sender_agent=self,
             recipient_agent=recipient_agent,
@@ -1359,7 +1366,7 @@ class Agent(BaseAgent[MasterContext]):
 
     def _adapt_legacy_tool(self, legacy_tool: type[BaseTool]):
         """
-        Adapts a legacy BaseTool (class-based) to a FunctionTool (function-based).
+        Adapts a BaseTool (class-based) to a FunctionTool (function-based).
         Args:
             legacy_tool: A class inheriting from BaseTool.
         Returns:
