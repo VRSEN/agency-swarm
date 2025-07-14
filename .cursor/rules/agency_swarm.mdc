@@ -72,11 +72,7 @@ After the user provides the requested details, proceed to drafting the PRD file 
 
 # Step 2: Folder Structure and Template Creation
 
-After creating the PRD file, create the folder structure and agent templates, for each agent using the CLI command below:
-
-```bash
-agency-swarm create-agent-template --name "AgentName" --description "Agent Description" --path "agency_name"
-```
+After creating the PRD file, create the folder structure and agent templates, for each agent.
 
 Repeat this step for each agent in the agency. Make sure to correctly specify the path to the agency folder.
 
