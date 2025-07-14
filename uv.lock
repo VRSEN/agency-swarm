@@ -16,7 +16,7 @@ wheels = [
 
 [[package]]
 name = "agency-swarm"
-version = "1.0.0b4"
+version = "1.0.0b5"
 source = { editable = "." }
 dependencies = [
     { name = "datamodel-code-generator" },
