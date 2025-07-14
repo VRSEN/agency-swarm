@@ -89,7 +89,10 @@ class Agent(BaseAgent[MasterContext]):
                                           If the folder name follows the pattern `*_vs_<vector_store_id>`,
                                           files uploaded via `upload_file` will also be added to the specified
                                           OpenAI Vector Store, and a `FileSearchTool` will be automatically added.
-        tools_folder (str | Path | None): Placeholder for future functionality to load tools from a directory.
+        tools_folder (str | Path | None): Path to a directory containing tool definitions. Tools are automatically
+                                           discovered and loaded from this directory. Supports both legacy BaseTool
+                                           subclasses and modern FunctionTool instances. Python files starting with
+                                           underscore are ignored.
         description (str | None): A description of the agent's role or purpose, used when generating
                                   dynamic `send_message` tools for other agents.
         output_type (type[Any] | None): The type of the agent's final output.
@@ -108,7 +111,7 @@ class Agent(BaseAgent[MasterContext]):
 
     # --- Agency Swarm Specific Parameters ---
     files_folder: str | Path | None
-    tools_folder: str | Path | None  # Placeholder for future ToolFactory
+    tools_folder: str | Path | None  # Directory path for automatic tool discovery and loading
     description: str | None
     output_type: type[Any] | None
 
