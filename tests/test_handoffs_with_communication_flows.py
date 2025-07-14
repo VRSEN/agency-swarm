@@ -184,12 +184,11 @@ class TestHandoffsWithCommunicationFlows:
         # AgentA should have 2 send_message tools (to AgentB and AgentC)
         assert len(agent_a.tools) == 2, f"AgentA should have 2 send_message tools, got: {len(agent_a.tools)}"
 
-        # AgentB should have no tools (handoffs are handled by SDK, not as tools)
-        # Unless other tools are explicitly added to AgentB
-        assert len(agent_b.tools) >= 0, f"AgentB tool count should be non-negative, got: {len(agent_b.tools)}"
+        # AgentB should have no tools added automatically (handoffs do not create tools)
+        assert len(agent_b.tools) == 0, f"AgentB should have no tools, got: {len(agent_b.tools)}"
 
-        # AgentC should have no communication tools (receives only)
-        assert len(agent_c.tools) >= 0, "AgentC tool count should be non-negative"
+        # AgentC should also have no communication tools (only receives messages)
+        assert len(agent_c.tools) == 0, f"AgentC should have no tools, got: {len(agent_c.tools)}"
 
     @pytest.mark.asyncio
     async def test_orchestrator_pattern_with_handoffs(self, mixed_communication_agency):
