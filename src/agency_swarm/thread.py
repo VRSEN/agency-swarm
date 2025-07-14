@@ -3,12 +3,9 @@ import time
 import uuid
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from agents import TResponseInputItem
-
-if TYPE_CHECKING:
-    pass  # Use forward reference
 
 logger = logging.getLogger(__name__)
 

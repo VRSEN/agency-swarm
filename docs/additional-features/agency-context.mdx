@@ -73,8 +73,8 @@ You can use agency context in your function tools and access it in agents. Here'
     ```
 </Tab>
 
-<Tab title="Legacy BaseTool (Deprecated)">
-  For legacy BaseTool classes (v0.x compatibility), you can still access agency context, but this pattern is deprecated:
+<Tab title="BaseTool Class">
+For BaseTool classes, you can access agency context using the following pattern:
     ```python
     from agency_swarm.tools import BaseTool
     from pydantic import Field
