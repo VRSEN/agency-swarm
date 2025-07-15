@@ -1697,7 +1697,7 @@ class Agency:
                                                             "stage": "step_execution",
                                                             "error_message": step_error_message,
                                                             "step_id": next_step_id,
-                                                            "request_id": request_id,
+                                                            "request_id": "request_" + str(request_id),
                                                         })
                                                 except Exception as e:
                                                     # 更新error
@@ -1708,7 +1708,7 @@ class Agency:
                                                         "stage": "step_execution",
                                                         "error_message": step_error_message,
                                                         "step_id": next_step_id,
-                                                        "request_id": request_id,
+                                                        "request_id": "request_" + str(request_id),
                                                     })
 
                                                 # 如果没有错误则退出该step循环，否则进入下一级错误处理
