@@ -1,6 +1,6 @@
 from agency_swarm import Agent
 from agents.tools.read_json_file.ReadJsonFile import ReadJsonFile
-from agents.tools.read_context_index.ReadContextIndex import ReadContextIndex
+# from agents.tools.read_context_index.ReadContextIndex import ReadContextIndex
 
 _name = "subtask_planner"
 
@@ -76,7 +76,7 @@ _instruction = f"""作为子任务规划者，你将接收到一个任务，并�
 """
 
 
-_tools = [ReadJsonFile, ReadContextIndex]
+_tools = [ReadJsonFile]
 
 _file_folder = ""
 

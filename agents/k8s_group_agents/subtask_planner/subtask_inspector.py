@@ -33,7 +33,7 @@ _instruction = f"""作为审查者，你将从subtask_planner那里收到一个 
 输入格式为:
 {_input_format}
 
-注意：每次得到输入时，你都需要通过`ReadJsonFile`从completed_tasks.json读取已完成的任务，从context_index.json中读取已完成的所有步骤所产生的上下文信息。
+注意：每次得到输入时，你都需要通过`ReadJsonFile`从completed_tasks.json读取已完成的任务，从context.json中读取已完成的所有步骤所产生的上下文信息。
 
 请严谨专业地一步步思考: 
 1. 首先，你需要确保**输入中的 <task_graph> 是JSON格式**；

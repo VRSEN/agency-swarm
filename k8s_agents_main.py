@@ -253,16 +253,14 @@ def main():
             "存储能力群": [pv_agent_instance, pvc_agent_instance, storageclass_agent_instance, csi_agent_instance, emptydir_agent_instance, hostpath_agent_instance, disk_agent_instance,],
         }
 
-        text ="""对集群中名为my-namespace 的Namespace添加一个名为env，值为test的标签。"""
+        text ="""我们在华为云CCE集群上部署了一个 4 节点的 MySQL Galera Cluster (1主3从)，使用 StatefulSet 部署。近期我们发现集群偶尔出现脑裂问题，需要制定一个预案，以便在出现问题时 DBA 能在智能体的协助下快速恢复服务。
+"""
 
-        # 只在agency循环调用时清空completed_requests.json和context_index.json
+        # 只在agency循环调用时清空completed_requests.json和context.json
         files_path = os.path.join("agents", "files")
         request_path = os.path.join(files_path, "completed_requests.json")
-        context_index_path = os.path.join(files_path, "context_index.json")
         context_path = os.path.join(files_path, "context.json")
         with open(request_path, "w", encoding='utf-8') as f:
-            pass
-        with open(context_index_path, "w", encoding='utf-8') as f:
             pass
         with open(context_path, "w", encoding='utf-8') as f:
             pass
