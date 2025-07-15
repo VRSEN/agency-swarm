@@ -3,12 +3,9 @@ import time
 import uuid
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from agents import TResponseInputItem
-
-if TYPE_CHECKING:
-    pass  # Use forward reference
 
 logger = logging.getLogger(__name__)
 
@@ -139,7 +136,8 @@ class ConversationThread:
         else:
             logger.error(f"Invalid type for add_user_message: {type(message)} in thread {self.thread_id}")
             raise TypeError(
-                f"Unsupported message type for add_user_message: {type(message)}. Expecting str or TResponseInputItem dict."
+                f"Unsupported message type for add_user_message: {type(message)}. "
+                f"Expecting str or TResponseInputItem dict."
             )
         # Add the dictionary directly
         self.add_item(item_dict)

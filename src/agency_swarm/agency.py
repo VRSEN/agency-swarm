@@ -49,6 +49,8 @@ class Agency:
         shared_instructions (str | None): Optional instructions prepended to every agent's system prompt.
         user_context (dict[str, Any]): A dictionary for shared user-defined context accessible
                                         within `MasterContext` during runs.
+        send_message_tool_class (type | None): Custom SendMessage tool class to use for all agents
+                                               that don't have their own send_message_tool_class set.
     """
 
     agents: dict[str, Agent]
@@ -58,6 +60,7 @@ class Agency:
     persistence_hooks: PersistenceHooks | None
     shared_instructions: str | None
     user_context: dict[str, Any]  # Shared user context for MasterContext
+    send_message_tool_class: type | None  # Custom SendMessage tool class for all agents
 
     def __init__(
         self,
@@ -66,6 +69,7 @@ class Agency:
         agency_chart: AgencyChart | None = None,
         name: str | None = None,
         shared_instructions: str | None = None,
+        send_message_tool_class: type | None = None,
         load_threads_callback: ThreadLoadCallback | None = None,
         save_threads_callback: ThreadSaveCallback | None = None,
         user_context: dict[str, Any] | None = None,
@@ -91,6 +95,9 @@ class Agency:
                                                             communication_flows, issuing a warning.
                                                             Defaults to None.
             shared_instructions (str | None, optional): Instructions prepended to all agents' system prompts.
+            send_message_tool_class (type | None, optional): Custom SendMessage tool class to use for all agents
+                                                            that don't have their own send_message_tool_class set.
+                                                            Enables enhanced inter-agent communication patterns.
             load_threads_callback (ThreadLoadCallback | None, optional): A callable to load conversation threads.
             save_threads_callback (ThreadSaveCallback | None, optional): A callable to save conversation threads.
             user_context (dict[str, Any] | None, optional): Initial shared context accessible to all agents.
@@ -137,16 +144,10 @@ class Agency:
                 stacklevel=2,
             )
             deprecated_args_used["async_mode"] = kwargs.pop("async_mode")
-        if "send_message_tool_class" in kwargs:
-            warnings.warn(
-                "'send_message_tool_class' is deprecated. The send_message tool is configured automatically.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            deprecated_args_used["send_message_tool_class"] = kwargs.pop("send_message_tool_class")
         if "settings_path" in kwargs or "settings_callbacks" in kwargs:
             warnings.warn(
-                "'settings_path' and 'settings_callbacks' are deprecated. Agency settings are no longer persisted this way.",
+                "'settings_path' and 'settings_callbacks' are deprecated. "
+                "Agency settings are no longer persisted this way.",
                 DeprecationWarning,
                 stacklevel=2,
             )
@@ -174,8 +175,8 @@ class Agency:
 
         if agency_chart is not None:
             warnings.warn(
-                "'agency_chart' parameter is deprecated. "
-                "Use positional arguments for entry points and the 'communication_flows' keyword argument for defining communication paths.",
+                "'agency_chart' parameter is deprecated. Use positional arguments for entry points and the "
+                "'communication_flows' keyword argument for defining communication paths.",
                 DeprecationWarning,
                 stacklevel=2,
             )
@@ -218,6 +219,7 @@ class Agency:
         self.name = name
         self.shared_instructions = shared_instructions
         self.user_context = user_context or {}
+        self.send_message_tool_class = send_message_tool_class
 
         # --- Initialize Core Components ---
         self.thread_manager = ThreadManager(
@@ -383,6 +385,11 @@ class Agency:
                 if not agent_instance.instructions.startswith(self.shared_instructions):
                     agent_instance.instructions = self.shared_instructions + "\n\n---\n\n" + agent_instance.instructions
                 logger.debug(f"Applied shared instructions to agent: {agent_name}")
+
+            # Propagate send_message_tool_class if agent doesn't have one set
+            if self.send_message_tool_class and not agent_instance.send_message_tool_class:
+                agent_instance.send_message_tool_class = self.send_message_tool_class
+                logger.debug(f"Applied send_message_tool_class to agent: {agent_name}")
 
             # Register subagents based on the explicit communication map
             allowed_recipients = communication_map.get(agent_name, [])
@@ -696,20 +703,28 @@ class Agency:
 
         Parameters:
             message (str): The message for which completion is to be retrieved.
-            message_files (list, optional): A list of file ids to be sent as attachments with the message. When using this parameter, files will be assigned both to file_search and code_interpreter tools if available. It is recommended to assign files to the most suitable tool manually, using the attachments parameter. Defaults to None.
-            yield_messages (bool, optional): Flag to determine if intermediate messages should be yielded. Defaults to False.
-            recipient_agent (Agent, optional): The agent to which the message should be sent. Defaults to the first agent in the agency chart.
-            additional_instructions (str, optional): Additional instructions to be sent with the message. Defaults to None.
-            attachments (List[dict], optional): A list of attachments to be sent with the message, following openai format. Defaults to None.
+            message_files (list, optional): A list of file ids to be sent as attachments with the message.
+                                            When using this parameter, files will be assigned both to
+                                            file_search and code_interpreter tools if available. It is
+                                            recommended to assign files to the most suitable tool manually,
+                                            using the attachments parameter. Defaults to None.
+            yield_messages (bool, optional): Flag to determine if intermediate messages should be yielded.
+                                             Defaults to False.
+            recipient_agent (Agent, optional): The agent to which the message should be sent. Defaults to the
+                                               first agent in the agency chart.
+            additional_instructions (str, optional): Additional instructions to be sent with the message.
+                                                     Defaults to None.
+            attachments (List[dict], optional): A list of attachments to be sent with the message, following
+                                                openai format. Defaults to None.
             tool_choice (dict, optional): The tool choice for the recipient agent to use. Defaults to None.
             verbose (bool, optional): Whether to print the intermediary messages in console. Defaults to False.
             response_format (dict, optional): The response format to use for the completion.
 
         Returns:
-            Generator or final response: Depending on the 'yield_messages' flag, this method returns either a generator yielding intermediate messages (when yield_messages=True) or the final response from the main thread.
+            Generator or final response: Depending on the 'yield_messages' flag, this method returns either
+                                         a generator yielding intermediate messages (when
+                                         yield_messages=True) or the final response from the main thread.
         """
-        import asyncio
-
         warnings.warn(
             "Method 'get_completion' is deprecated. Use 'get_response' instead.",
             DeprecationWarning,

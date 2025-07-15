@@ -127,19 +127,13 @@ Regional Performance:
 
 
 if __name__ == "__main__":
-    if not os.getenv("OPENAI_API_KEY"):
-        print("\n\nCRITICAL ERROR: OPENAI_API_KEY environment variable not set.")
-        print("Please set the OPENAI_API_KEY environment variable to run this example.")
-        print("Example: export OPENAI_API_KEY='your_api_key_here'\n")
-    else:
-        print("OPENAI_API_KEY found. Proceeding with example...")
-        print("\n=== Agency Swarm v1.x Hosted Tool Preservation Demo ===")
-        print("This example demonstrates:")
-        print("• Hosted tool output preservation in multi-turn conversations")
-        print("• FileSearch results maintained across conversation turns")
-        print("=" * 60)
+    print("\n=== Agency Swarm v1.x Hosted Tool Preservation Demo ===")
+    print("This example demonstrates:")
+    print("• Hosted tool output preservation in multi-turn conversations")
+    print("• FileSearch results maintained across conversation turns")
+    print("=" * 60)
 
-        if os.name == "nt":
-            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    if os.name == "nt":
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
-        asyncio.run(run_hosted_tool_preservation_demo())
+    asyncio.run(run_hosted_tool_preservation_demo())

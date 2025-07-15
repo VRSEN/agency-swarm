@@ -35,11 +35,6 @@ async def main():
     print("   • Citation-backed responses")
     print()
 
-    if not os.getenv("OPENAI_API_KEY"):
-        print("❌ Error: OPENAI_API_KEY environment variable not set.")
-        print("   Please set your OpenAI API key to run this example.")
-        return
-
     # Use the data directory - framework handles file preservation automatically
     examples_dir = Path(__file__).parent
     data_dir = examples_dir / "data"

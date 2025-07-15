@@ -3,7 +3,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import logging
-from typing import Any, Dict, List
+from typing import Any
 
 from pydantic import BaseModel
 from rich.console import Console
@@ -59,7 +59,7 @@ class AguiAdapter:
     """
 
     # Internal per-run bookkeeping so consecutive calls can share context.
-    _RUN_STATE: Dict[str, Dict[str, Any]] = {}
+    _RUN_STATE: dict[str, dict[str, Any]] = {}
     _TOOL_TYPES = {"function_call", "file_search_call", "code_interpreter_call"}
     _TOOL_ARG_DELTA_TYPES = {
         "response.function_call_arguments.delta",
@@ -75,7 +75,7 @@ class AguiAdapter:
     ) -> BaseEvent | list[BaseEvent] | None:
         """Convert a single OpenAI Agents SDK *StreamEvent* into one or more AG-UI events."""
         state = cls._RUN_STATE.setdefault(run_id, {"call_id_by_item": {}})
-        call_id_by_item: Dict[str, str] = state["call_id_by_item"]
+        call_id_by_item: dict[str, str] = state["call_id_by_item"]
 
         logger.debug("Received event: %s", event)
         try:
@@ -96,7 +96,7 @@ class AguiAdapter:
             return RunErrorEvent(type=EventType.RUN_ERROR, message=str(exc))
 
     @staticmethod
-    def agui_messages_to_chat_history(message_list: List[Message]):
+    def agui_messages_to_chat_history(message_list: list[Message]):
         """
         Convert a list of AG-UI messages to an agency-swarm-compatible message list.
         """
@@ -233,7 +233,7 @@ class AguiAdapter:
         )
 
     @classmethod
-    def _handle_raw_response(cls, oe: Any, call_id_by_item: Dict[str, str]) -> BaseEvent | list[BaseEvent] | None:
+    def _handle_raw_response(cls, oe: Any, call_id_by_item: dict[str, str]) -> BaseEvent | list[BaseEvent] | None:
         """Translate low-level `raw_response_event.data` into AG-UI events."""
         etype = getattr(oe, "type", "")
 

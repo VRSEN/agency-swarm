@@ -127,7 +127,4 @@ async def run_conversation():
 
 # --- Main Execution --- #
 if __name__ == "__main__":
-    if not os.getenv("OPENAI_API_KEY"):
-        print("Error: OPENAI_API_KEY environment variable not set.")
-    else:
-        asyncio.run(run_conversation())
+    asyncio.run(run_conversation())

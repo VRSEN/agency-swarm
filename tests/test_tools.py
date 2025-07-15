@@ -1,11 +1,11 @@
 import json
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from agents import RunContextWrapper, RunResult
 from pydantic import Field
 
-from pathlib import Path
 from agency_swarm import Agent, BaseTool
 from agency_swarm.context import MasterContext
 from agency_swarm.thread import ThreadManager
@@ -267,6 +267,46 @@ class TempAgent(Agent):
     agent = TempAgent(name="A", instructions="B", tools_folder="./tools")
     tool_names = [tool.name for tool in agent.tools]
     assert "local_tool" in tool_names
+
+
+def test_tools_folder_edge_cases(tmp_path):
+    """Test tools_folder handles edge cases correctly."""
+    tools_dir = tmp_path / "tools"
+    tools_dir.mkdir()
+
+    # Create files that should be ignored
+    (tools_dir / "_private_tool.py").write_text("# Should be ignored")
+    (tools_dir / "readme.txt").write_text("Not a Python file")
+    (tools_dir / "invalid_tool.py").write_text("invalid python syntax !")
+
+    # Create valid tool
+    (tools_dir / "valid_tool.py").write_text("""
+from agents import function_tool
+
+@function_tool
+def valid_tool() -> str:
+    return "works"
+""")
+
+    agent = Agent(name="test", instructions="test", tools_folder=str(tools_dir))
+    tool_names = [tool.name for tool in agent.tools]
+
+    # Only valid_tool should be loaded
+    assert "valid_tool" in tool_names
+    assert "_private_tool" not in tool_names
+    assert len(tool_names) == 1
+
+
+def test_tools_folder_none():
+    """Test agent works with no tools_folder."""
+    agent = Agent(name="test", instructions="test", tools_folder=None)
+    assert agent.tools == []
+
+
+def test_tools_folder_nonexistent_path():
+    """Test agent handles nonexistent tools_folder gracefully."""
+    agent = Agent(name="test", instructions="test", tools_folder="/nonexistent/path")
+    assert agent.tools == []
 
 
 # TODO: Add tests for response validation aspects

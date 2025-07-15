@@ -71,11 +71,11 @@ class TestLayoutAlgorithms:
         assert "Worker" in positions
 
         # Check that positions have x and y coordinates
-        for node_id, pos in positions.items():
+        for _node_id, pos in positions.items():
             assert "x" in pos
             assert "y" in pos
-            assert isinstance(pos["x"], (int, float))
-            assert isinstance(pos["y"], (int, float))
+            assert isinstance(pos["x"], int | float)
+            assert isinstance(pos["y"], int | float)
 
     def test_hierarchical_layout_entry_points_on_top(self, sample_agency_data):
         """Test that entry points are positioned at the top."""

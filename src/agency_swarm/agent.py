@@ -89,10 +89,15 @@ class Agent(BaseAgent[MasterContext]):
                                           If the folder name follows the pattern `*_vs_<vector_store_id>`,
                                           files uploaded via `upload_file` will also be added to the specified
                                           OpenAI Vector Store, and a `FileSearchTool` will be automatically added.
-        tools_folder (str | Path | None): Placeholder for future functionality to load tools from a directory.
+        tools_folder (str | Path | None): Path to a directory containing tool definitions. Tools are automatically
+                                           discovered and loaded from this directory. Supports both legacy BaseTool
+                                           subclasses and modern FunctionTool instances. Python files starting with
+                                           underscore are ignored.
         description (str | None): A description of the agent's role or purpose, used when generating
                                   dynamic `send_message` tools for other agents.
         output_type (type[Any] | None): The type of the agent's final output.
+        send_message_tool_class (type | None): Custom SendMessage tool class to use for inter-agent communication.
+                                               If None, uses the default SendMessage class.
         _thread_manager (ThreadManager | None): Internal reference to the agency's `ThreadManager`.
                                                 Set by the parent `Agency`.
         _agency_instance (Any | None): Internal reference to the parent `Agency` instance. Set by the parent `Agency`.
@@ -108,9 +113,10 @@ class Agent(BaseAgent[MasterContext]):
 
     # --- Agency Swarm Specific Parameters ---
     files_folder: str | Path | None
-    tools_folder: str | Path | None  # Placeholder for future ToolFactory
+    tools_folder: str | Path | None  # Directory path for automatic tool discovery and loading
     description: str | None
     output_type: type[Any] | None
+    send_message_tool_class: type | None  # Custom SendMessage tool class for inter-agent communication
 
     # --- Internal State ---
     _thread_manager: ThreadManager | None = None
@@ -180,7 +186,6 @@ class Agent(BaseAgent[MasterContext]):
             )
             deprecated_args_used["validation_attempts"] = val_attempts
 
-        # Handle other deprecated parameters
         if "id" in kwargs:
             warnings.warn(
                 "'id' parameter (OpenAI Assistant ID) is deprecated and no longer used for loading. Agent state is managed via PersistenceHooks.",
@@ -265,11 +270,6 @@ class Agent(BaseAgent[MasterContext]):
             tools_list = kwargs["tools"]
             for i, tool in enumerate(tools_list):
                 if isinstance(tool, type) and issubclass(tool, BaseTool):
-                    warnings.warn(
-                        "'BaseTool' class is deprecated. Consider switching to FunctionTool.",
-                        DeprecationWarning,
-                        stacklevel=2,
-                    )
                     tools_list[i] = self._adapt_legacy_tool(tool)
 
         # Merge deprecated model settings into existing model_settings
@@ -348,6 +348,7 @@ class Agent(BaseAgent[MasterContext]):
                 "api_headers",
                 "api_params",
                 "description",
+                "send_message_tool_class",
                 "load_threads_callback",
                 "save_threads_callback",
             }:
@@ -379,6 +380,8 @@ class Agent(BaseAgent[MasterContext]):
         self.api_params = current_agent_params.get("api_params", {})
         # Set description directly from current_agent_params, default to None if not provided
         self.description = current_agent_params.get("description")
+        # Set custom send_message_tool_class, default to None (will use default SendMessage)
+        self.send_message_tool_class = current_agent_params.get("send_message_tool_class")
         # output_type is handled by the base Agent constructor, no need to set it here
 
         # --- Persistence Callbacks ---
@@ -438,16 +441,15 @@ class Agent(BaseAgent[MasterContext]):
         Raises:
             TypeError: If the provided `tool` is not an instance of `agents.Tool`.
         """
-        # Simplified: Assumes tool is already a valid Tool instance
-        if not isinstance(tool, Tool):
-            raise TypeError(f"Expected an instance of agents.Tool, got {type(tool)}")
-
-        # Check for existing tool with the same name before adding
         if any(getattr(t, "name", None) == getattr(tool, "name", None) for t in self.tools):
             logger.warning(
-                f"Tool with name '{getattr(tool, 'name', '(unknown)')}' already exists for agent '{self.name}'. Skipping."
+                f"Tool with name '{getattr(tool, 'name', '(unknown)')}' already exists for agent "
+                f"'{self.name}'. Skipping."
             )
             return
+
+        if not isinstance(tool, Tool):
+            raise TypeError(f"Expected an instance of Tool, got {type(tool)}")
 
         self.tools.append(tool)
         logger.debug(f"Tool '{getattr(tool, 'name', '(unknown)')}' added to agent '{self.name}'")
@@ -466,7 +468,7 @@ class Agent(BaseAgent[MasterContext]):
 
         folder_path = Path(self.tools_folder)
         if not folder_path.is_absolute():
-            folder_path = Path(self._get_class_folder_path()) / folder_path
+            folder_path = Path(self.get_class_folder_path()) / folder_path
 
         if not folder_path.is_dir():
             logger.warning("Tools folder path is not a directory. Skipping... %s", folder_path)
@@ -515,7 +517,7 @@ class Agent(BaseAgent[MasterContext]):
                 f_path = schemas_folder
 
                 if not os.path.isdir(f_path):
-                    f_path = os.path.join(self._get_class_folder_path(), schemas_folder)
+                    f_path = os.path.join(self.get_class_folder_path(), schemas_folder)
                     f_path = os.path.normpath(f_path)
 
                 if os.path.isdir(f_path):
@@ -578,12 +580,15 @@ class Agent(BaseAgent[MasterContext]):
         """
         if not isinstance(recipient_agent, Agent):
             raise TypeError(
-                f"Expected an instance of Agent, got {type(recipient_agent)}. Ensure agents are initialized before registration."
+                f"Expected an instance of Agent, got {type(recipient_agent)}. "
+                f"Ensure agents are initialized before registration."
             )
         if not hasattr(recipient_agent, "name") or not isinstance(recipient_agent.name, str):
-            raise TypeError("Subagent must be an Agent instance with a valid name.")
+            raise TypeError("Recipient agent must have a 'name' attribute of type str.")
 
         recipient_name = recipient_agent.name
+
+        # Prevent an agent from registering itself as a subagent
         if recipient_name == self.name:
             raise ValueError("Agent cannot register itself as a subagent.")
 
@@ -593,7 +598,8 @@ class Agent(BaseAgent[MasterContext]):
 
         if recipient_name in self._subagents:
             logger.warning(
-                f"Agent '{recipient_name}' is already registered as a subagent for '{self.name}'. Skipping tool creation."
+                f"Agent '{recipient_name}' is already registered as a subagent for '{self.name}'. "
+                f"Skipping tool creation."
             )
             return
 
@@ -604,7 +610,10 @@ class Agent(BaseAgent[MasterContext]):
 
         tool_name = f"{SEND_MESSAGE_TOOL_PREFIX}{recipient_name}"
 
-        send_message_tool_instance = SendMessage(
+        # Use custom send_message_tool_class if provided, otherwise use default SendMessage
+        send_message_tool_class = self.send_message_tool_class or SendMessage
+
+        send_message_tool_instance = send_message_tool_class(
             tool_name=tool_name,
             sender_agent=self,
             recipient_agent=recipient_agent,
@@ -662,6 +671,7 @@ class Agent(BaseAgent[MasterContext]):
         Returns:
             RunResult: The complete execution result
         """
+        logger.info(f"Agent '{self.name}' starting run.")
         # Ensure ThreadManager exists (for direct agent usage without Agency)
         self._ensure_thread_manager()
 
@@ -755,21 +765,15 @@ class Agent(BaseAgent[MasterContext]):
             # It should include user, assistant (possibly with tool_calls), and tool messages if they are part of the conversation.
             # No filtering is applied here based on user instruction.
 
-            # Sanitize tool_calls for OpenAI /v1/responses API compliance
             history_for_runner = self._sanitize_tool_calls_in_history(history_for_runner)
-
-            # Additional safety: ensure no null content for messages with tool_calls
             history_for_runner = self._ensure_tool_calls_content_safety(history_for_runner)
-
-            logger.info(
-                f"AGENT_GET_RESPONSE: History for Runner in agent '{self.name}' for thread '{thread_id}' (length {len(history_for_runner)}):"
-            )
-            for i, history_item in enumerate(history_for_runner):
-                # Limiting log length for potentially long content
-                content_preview = str(history_item.get("content"))[:100]
-                tool_calls_preview = str(history_item.get("tool_calls"))[:100]
-                logger.info(
-                    f"AGENT_GET_RESPONSE: History item [{i}]: role={history_item.get('role')}, content='{content_preview}...', tool_calls='{tool_calls_preview}...'"
+            logger.debug(f"Running agent '{self.name}' for thread '{thread_id}' (length {len(history_for_runner)}):")
+            for i, m in enumerate(history_for_runner):
+                content_preview = str(m.get("content", ""))[:70] if m.get("content") else ""
+                tool_calls_preview = str(m.get("tool_calls", ""))[:70] if m.get("tool_calls") else ""
+                logger.debug(
+                    f"  [History #{i}] role={m.get('role')}, content='{content_preview}...', "
+                    f"tool_calls='{tool_calls_preview}...'"
                 )
 
             try:
@@ -907,7 +911,8 @@ class Agent(BaseAgent[MasterContext]):
             if not isinstance(additional_instructions, str):
                 raise ValueError("additional_instructions must be a string")
             logger.debug(
-                f"Appending additional instructions to agent '{self.name}' for streaming: {additional_instructions[:100]}..."
+                f"Appending additional instructions to agent '{self.name}' for streaming: "
+                f"{additional_instructions[:100]}..."
             )
             if self.instructions:
                 self.instructions = self.instructions + "\n\n" + additional_instructions
@@ -1008,7 +1013,8 @@ class Agent(BaseAgent[MasterContext]):
                 if self._thread_manager:
                     items_to_save_from_stream: list[TResponseInputItem] = []
                     logger.debug(
-                        f"Preparing to save {len(final_result_items)} new items from stream result for agent '{self.name}' to thread {thread.thread_id}"
+                        f"Preparing to save {len(final_result_items)} new items from stream result for agent "
+                        f"'{self.name}' to thread {thread.thread_id}"
                     )
 
                     # Only extract hosted tool results if hosted tools were actually used
@@ -1360,7 +1366,7 @@ class Agent(BaseAgent[MasterContext]):
 
     def _adapt_legacy_tool(self, legacy_tool: type[BaseTool]):
         """
-        Adapts a legacy BaseTool (class-based) to a FunctionTool (function-based).
+        Adapts a BaseTool (class-based) to a FunctionTool (function-based).
         Args:
             legacy_tool: A class inheriting from BaseTool.
         Returns:
@@ -1409,27 +1415,14 @@ class Agent(BaseAgent[MasterContext]):
             strict_json_schema=legacy_tool.ToolConfig.strict,
         )
 
-    def _get_class_folder_path(self):
-        try:
-            # First, try to use the __file__ attribute of the module
-            return os.path.abspath(os.path.dirname(self.__module__.__file__))
-        except (TypeError, OSError, AttributeError):
-            # If that fails, fall back to inspect
-            try:
-                class_file = inspect.getfile(self.__class__)
-            except (TypeError, OSError, AttributeError):
-                return "./"
-            return os.path.abspath(os.path.realpath(os.path.dirname(class_file)))
+    def get_class_folder_path(self) -> str:
+        """Return the absolute path to the folder containing this class."""
+        module = sys.modules.get(self.__class__.__module__)
+        if module and getattr(module, "__file__", None):
+            return os.path.abspath(os.path.dirname(module.__file__))
 
-    def get_class_folder_path(self):
-        """Public method to get the class folder path."""
         try:
-            # First, try to use the __file__ attribute of the module
-            return os.path.abspath(os.path.dirname(self.__module__.__file__))
+            class_file = inspect.getfile(self.__class__)
         except (TypeError, OSError, AttributeError):
-            # If that fails, fall back to inspect
-            try:
-                class_file = inspect.getfile(self.__class__)
-            except (TypeError, OSError, AttributeError):
-                return "./"
-            return os.path.abspath(os.path.realpath(os.path.dirname(class_file)))
+            return "./"
+        return os.path.abspath(os.path.realpath(os.path.dirname(class_file)))

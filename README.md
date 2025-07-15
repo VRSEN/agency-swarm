@@ -7,6 +7,8 @@
 The **Agency Swarm Framework** is an advanced system for building multi-agent applications. It leverages and extends the foundational capabilities of the [OpenAI Agents SDK](https://github.com/openai/openai-agents-python), providing specialized features for creating, orchestrating, and managing collaborative swarms of AI agents.
 
 By default, Agency Swarm is built on the **OpenAI Responses API** to handle complex, multi-turn interactions, with `examples/chat_completion_provider.py` being the only exception that uses the Chat Completions API.
+Observability tracking via Langfuse and AgentOps is demonstrated in `examples/observability_demo.py`.
+See `examples/README.md` for a full list of runnable demos.
 
 Agency Swarm enhances the underlying SDK by introducing:
 - True agent collaboration with flexible, user-defined communication flows (orchestrator-workers pattern with async execution support).
@@ -44,7 +46,7 @@ pip install -U agency-swarm
 
 ### Beta Version (v1.x - OpenAI Agents SDK Based)
 ```bash
-pip install -U agency-swarm==1.0.0-beta.3
+pip install -U "agency-swarm>=1.0.0-beta"
 ```
 
 > **Note:** The v1.x beta represents a major architectural change built on the OpenAI Agents SDK.

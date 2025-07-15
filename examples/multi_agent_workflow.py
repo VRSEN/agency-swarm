@@ -284,10 +284,7 @@ async def run_workflow():
 
 
 if __name__ == "__main__":
-    if not os.getenv("OPENAI_API_KEY"):
-        print("Error: OPENAI_API_KEY environment variable not set.")
-    else:
-        success = asyncio.run(run_workflow())
-        exit_code = 0 if success else 1
-        print(f"\nExiting with code: {exit_code}")
-        sys.exit(exit_code)
+    success = asyncio.run(run_workflow())
+    exit_code = 0 if success else 1
+    print(f"\nExiting with code: {exit_code}")
+    sys.exit(exit_code)
