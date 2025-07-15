@@ -8,7 +8,7 @@ from typing import Any, Dict, List
 from pydantic import BaseModel
 from rich.console import Console
 
-from .message_output import MessageOutputLive
+from .console_renderer import LiveConsoleRenderer
 
 try:
     from ag_ui.core import (
@@ -52,7 +52,7 @@ def serialize(obj):
         return str(obj)
 
 
-class AguiConverter:
+class AguiAdapter:
     """
     Contains class methods for converting between AG-UI and other formats (e.g., OpenAI Agents SDK),
     as well as helpers for translating events and messages for AG-UI integration.
@@ -396,7 +396,7 @@ class AguiConverter:
         return None
 
 
-class ConsoleEventConverter:
+class ConsoleEventAdapter:
     """
     Converts OpenAI Agents SDK events int console message outputs.
     """
@@ -410,6 +410,10 @@ class ConsoleEventConverter:
         self.message_output = None
         self.console = Console()
 
+    def _update_console(self, msg_type: str, sender: str, receiver: str, content: str):
+        renderer = LiveConsoleRenderer(msg_type, sender, receiver, "", console=self.console)
+        renderer.cprint_update(content)
+
     def openai_to_message_output(self, event: Any, recipient_agent: str):
         if hasattr(event, "data"):
             event_type = event.type
@@ -419,26 +423,25 @@ class ConsoleEventConverter:
                 data_type = data.type
                 if data_type == "response.output_text.delta":
                     if self.message_output is None:
-                        self.message_output = MessageOutputLive(
+                        self.message_output = LiveConsoleRenderer(
                             "text", recipient_agent, "user", "", console=self.console
                         )
                     self.response_buffer += data.delta
                     self.message_output.cprint_update(self.response_buffer)
+
                 elif data_type == "response.output_text.done":
                     self.message_output = None
                     self.response_buffer = ""
+
                 elif data_type == "response.output_item.added":
                     if data.item.type == "mcp_call":
                         self.mcp_calls[data.item.id] = data.item.name
+
                 elif data_type == "response.mcp_call_arguments.done":
-                    self.message_output = MessageOutputLive(
-                        "function", recipient_agent, "user", "", console=self.console
-                    )
-                    self.message_output.cprint_update(
-                        f"Calling {self.mcp_calls[data.item_id]} tool with: {data.arguments}"
-                    )
-                    self.message_output = None
+                    content = f"Calling {self.mcp_calls[data.item_id]} tool with: {data.arguments}"
+                    self._update_console("function", recipient_agent, "user", content)
                     self.mcp_calls.pop(data.item_id)
+
                 elif data_type == "response.output_item.done":
                     self.message_output = None
                     item = data.item
@@ -446,28 +449,19 @@ class ConsoleEventConverter:
                         # Handle agent to agent communication
                         if len(parsed_name := item.name.split("send_message_to_")) > 1:
                             called_agent = parsed_name[1]
-                            self.message_output = MessageOutputLive(
-                                "text", recipient_agent, called_agent, "", console=self.console
-                            )
-                            self.message_output.cprint_update(json.loads(item.arguments)["message"])
-                            self.message_output = None
+                            message = json.loads(item.arguments)["message"]  # Parse once
+                            self._update_console("text", recipient_agent, called_agent, message)
                             self.agent_to_agent_communication[item.call_id] = {
                                 "sender": recipient_agent,
                                 "receiver": called_agent,
-                                "message": json.loads(item.arguments)["message"],
+                                "message": message,
                             }
                         else:
                             if item.type == "mcp_call":
-                                self.message_output = MessageOutputLive(
-                                    "function_output", recipient_agent, "user", "", console=self.console
-                                )
-                                self.message_output.cprint_update(item.output)
+                                self._update_console("function_output", recipient_agent, "user", item.output)
                             else:
-                                self.message_output = MessageOutputLive(
-                                    "function", recipient_agent, "user", "", console=self.console
-                                )
-                                self.message_output.cprint_update(f"Calling {item.name} tool with: {item.arguments}")
-                            self.message_output = None
+                                content = f"Calling {item.name} tool with: {item.arguments}"
+                                self._update_console("function", recipient_agent, "user", content)
 
                 elif data_type == "response.error":
                     print(f"\n[Error] {data.error}")
@@ -478,18 +472,10 @@ class ConsoleEventConverter:
             if event_type == "run_item_stream_event":
                 item = event.item
                 if item.type in "tool_call_output_item":
-                    if (call_id := item.raw_item["call_id"]) in self.agent_to_agent_communication:
-                        self.message_output = MessageOutputLive(
-                            "text",
-                            self.agent_to_agent_communication[call_id]["receiver"],
-                            self.agent_to_agent_communication[call_id]["sender"],
-                            "",
-                            console=self.console,
-                        )
-                        self.agent_to_agent_communication.pop(call_id)
+                    call_id = item.raw_item["call_id"]
+
+                    if call_id in self.agent_to_agent_communication:
+                        comm_data = self.agent_to_agent_communication.pop(call_id)
+                        self._update_console("text", comm_data["receiver"], comm_data["sender"], str(item.output))
                     else:
-                        self.message_output = MessageOutputLive(
-                            "function_output", recipient_agent, "user", "", console=self.console
-                        )
-                    self.message_output.cprint_update(str(item.output))
-                    self.message_output = None
+                        self._update_console("function_output", recipient_agent, "user", str(item.output))

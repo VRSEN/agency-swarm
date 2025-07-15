@@ -10,7 +10,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from agency_swarm.agency import Agency
 
-from agency_swarm.ui.core.converters import AguiConverter, serialize
+from agency_swarm.ui.core.converters import AguiAdapter, serialize
 
 
 def get_verify_token(app_token):
@@ -159,7 +159,7 @@ def make_agui_chat_endpoint(request_model, agency_factory: Callable[..., Agency]
             agency = agency_factory()
             default_agent = agency.entry_points[0]
             def load_callback() -> dict:
-                return {f"user->{default_agent.name}": {"items": AguiConverter.agui_messages_to_chat_history(request.messages), "metadata": {}}}
+                return {f"user->{default_agent.name}": {"items": AguiAdapter.agui_messages_to_chat_history(request.messages), "metadata": {}}}
         else:
             def load_callback() -> dict:
                 return {}
@@ -184,7 +184,7 @@ def make_agui_chat_endpoint(request_model, agency_factory: Callable[..., Agency]
                 async for event in agency.get_response_stream(
                     message=request.messages[-1].content,
                 ):
-                    agui_event = AguiConverter.openai_to_agui_events(
+                    agui_event = AguiAdapter.openai_to_agui_events(
                         event,
                         run_id=request.run_id,
                     )

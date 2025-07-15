@@ -80,7 +80,7 @@ class TerminalDemoLauncher:
         import logging
         import uuid
 
-        from ..core.converters import ConsoleEventConverter
+        from ..core.converters import ConsoleEventAdapter
 
         logger = logging.getLogger(__name__)
 
@@ -88,7 +88,7 @@ class TerminalDemoLauncher:
 
         chat_id = f"run_demo_chat_{uuid.uuid4()}"
 
-        event_converter = ConsoleEventConverter()
+        event_converter = ConsoleEventAdapter()
 
         async def main_loop():
             while True:
