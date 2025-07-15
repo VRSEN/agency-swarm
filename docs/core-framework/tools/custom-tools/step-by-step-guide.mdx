@@ -4,7 +4,164 @@ description: "Learn how to create custom tools in Agency Swarm framework."
 icon: "map"
 ---
 
-In Agency Swarm, tools are Python classes that inherit from `BaseTool`. They are defined using [Pydantic](https://docs.pydantic.dev/latest/), a data validation library. Each BaseTool must implement the `run` method, which is the main method that will be called when the tool is invoked by an agent.
+In Agency Swarm, tools enable agents to perform specific actions and interact with external systems. The framework supports two approaches for creating custom tools depending on the version you're using.
+
+<Tabs defaultValue="v1.x (Latest)">
+<Tab title="v1.x (Latest)">
+
+<Warning>
+v1.x is currently in **beta preview**. Install with: `pip install -U "agency-swarm>=1.0.0-beta"`
+</Warning>
+
+In the latest version, tools are created using the `@function_tool` decorator with async functions. This approach provides better performance and easier context management.
+
+## Step-by-step Guide
+
+<Steps>
+  <Step title="Add Import Statements">
+    Import the necessary modules for the new function-based approach.
+
+    ```python
+    from agents import function_tool, RunContextWrapper
+    from pydantic import BaseModel, Field, field_validator
+    from agency_swarm import MasterContext
+    ```
+  </Step>
+
+  <Step title="Define Args Schema">
+    Create a Pydantic model to define your tool's input parameters.
+
+    ```python
+    class CalculatorArgs(BaseModel):
+        expression: str = Field(..., description="The mathematical expression to evaluate")
+        
+        @field_validator("expression")
+        @classmethod
+        def validate_expression(cls, v):
+            if "/0" in v:
+                raise ValueError("Division by zero is not permitted")
+            return v
+    ```
+  </Step>
+
+  <Step title="Create the Tool Function">
+    Define an async function with the `@function_tool` decorator.
+
+    ```python
+    @function_tool
+    async def calculator_tool(ctx: RunContextWrapper[MasterContext], args: CalculatorArgs) -> str:
+        """
+        A calculator tool that evaluates mathematical expressions.
+        Use this when you need to perform mathematical calculations.
+        """
+        # Access shared context if needed
+        calculation_count = ctx.context.get("calculations", 0)
+        ctx.context.set("calculations", calculation_count + 1)
+        
+        # Perform the calculation
+        result = eval(args.expression)
+        return f"Result: {result}"
+    ```
+    <Note>
+    This example mentions tool context, which can be used as a shared storage for all agents and tools.
+    For more info on agent context, refer to [this page](/additional-features/agency-context)
+    </Note>
+  </Step>
+
+  <Step title="Test the Tool">
+    Test your tool function independently.
+
+    ```python
+    if __name__ == "__main__":
+        import asyncio
+        import json
+        
+        async def test_tool():
+            ctx = MasterContext(user_context={"calculations": 1}, thread_manager=None, agents={})
+            run_ctx = RunContextWrapper(context=ctx)
+
+            args = CalculatorArgs(expression="2 + 2 * 3")
+            # Wrap in args to comply with oai expected inputs
+            args_json = {"args": args.model_dump()}
+
+            result = await calculator_tool.on_invoke_tool(run_ctx, json.dumps(args_json))
+            print(result)
+        
+        asyncio.run(test_tool())
+    ```
+  </Step>
+
+  <Step title="Add Tool to Agent">
+    Pass the function directly to the agent's tools list.
+
+    ```python
+    from agency_swarm import Agent
+    
+    agent = Agent(
+        name="MathAgent",
+        instructions="You are a helpful math assistant",
+        tools=[calculator_tool],  # Pass function directly
+        model="gpt-4.1"
+    )
+    ```
+  </Step>
+</Steps>
+
+## Full Code Example
+
+```python
+# calculator_tool.py
+from agents import function_tool, RunContextWrapper
+from pydantic import BaseModel, Field, field_validator
+from agency_swarm import MasterContext
+
+class CalculatorArgs(BaseModel):
+    expression: str = Field(..., description="The mathematical expression to evaluate")
+    
+    @field_validator("expression")
+    @classmethod
+    def validate_expression(cls, v):
+        if "/0" in v:
+            raise ValueError("Division by zero is not permitted")
+        return v
+
+@function_tool
+async def calculator_tool(ctx: RunContextWrapper[MasterContext], args: CalculatorArgs) -> str:
+    """
+    A calculator tool that evaluates mathematical expressions.
+    Use this when you need to perform mathematical calculations.
+    """
+    # Access shared context if needed
+    calculation_count = ctx.context.get("calculations", 0)
+    ctx.context.set("calculations", calculation_count + 1)
+    
+    # Perform the calculation
+    result = eval(args.expression)
+    return f"Result: {result} (Calculation #{calculation_count + 1})"
+
+if __name__ == "__main__":
+    import asyncio
+    import json
+    
+    async def test_tool():
+        ctx = MasterContext(user_context={"calculations": 1}, thread_manager=None, agents={})
+        run_ctx = RunContextWrapper(context=ctx)
+        args = CalculatorArgs(expression="2 + 2 * 3")
+        args_json = {"args": args.model_dump()}
+        result = await calculator_tool.on_invoke_tool(run_ctx, json.dumps(args_json))
+        print(result)
+    
+    asyncio.run(test_tool())
+```
+
+</Tab>
+<Tab title="v0.x (Production)">
+
+<Info>
+v0.x is the **current production version**. Install with: `pip install "agency-swarm<1.0.0"`
+</Info>
+
+In the production version, tools are Python classes that inherit from `BaseTool`. They are defined using [Pydantic](https://docs.pydantic.dev/latest/), a data validation library. Each BaseTool must implement the `run` method, which is the main method that will be called when the tool is invoked by an agent.
 
 ## Step-by-step Guide
 
@@ -134,6 +291,9 @@ if __name__ == "__main__":
     calc = Calculator(expression="2 + 2 * 3")
     print(calc.run())  # Output should be '8'
 ```
+
+</Tab>
+</Tabs>
 
 ## Next Steps
 

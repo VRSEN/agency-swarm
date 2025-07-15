@@ -14,6 +14,182 @@ Think of MCP as a universal translator that lets your agent talk to specialized 
 *   **Connect to Custom Services:** Integrate with proprietary APIs or internal tools without writing specific Agency Swarm tool wrappers for each one, provided an MCP server exists.
 *   **Leverage Existing MCP Tools:** Utilize third-party tools that already support MCP.
 
+<Tabs defaultValue="v1.x (Latest)">
+<Tab title="v1.x (Latest)">
+
+<Warning>
+v1.x is currently in **beta preview**. Install with: `pip install -U "agency-swarm>=1.0.0-beta"`
+</Warning>
+
+## Supported MCP Server Types
+
+In v1.x, Agency Swarm provides helpers to connect to MCP servers using the openai-agents library. Choose the server type based on how your tool provider operates:
+
+<Accordion title="MCPServerStdio: For Command-Line Tools" icon="terminal">
+Use this if your tool server is a **command-line program or script**. Agency Swarm will start this program for you and communicate with it directly using its standard input/output.
+
+*   **When to use:** Your tool is a local script, an executable, or requires running a specific command to be activated.
+
+```python
+from agents.mcp.server import MCPServerStdio, MCPServerStdioParams
+
+stdio_server = MCPServerStdio(
+    MCPServerStdioParams(
+        command="python", # or 'npx' if available
+        args=["./path/to/your/mcp_server.py"]
+    ),
+    cache_tools_list=True
+)
+```
+</Accordion>
+
+<Accordion title="MCPServerSse: For Web Service Tools" icon="globe-pointer">
+Use this if your tool server is already **running as a web service** at a specific **HTTP URL**. Agency Swarm connects to this URL to access tools exposed via Server-Sent Events (SSE).
+
+*   **When to use:** Your tool is provided by a web API, a microservice, or any server accessible via an HTTP endpoint that speaks MCP+SSE.
+
+```python
+from agents.mcp.server import MCPServerSse, MCPServerSseParams
+
+sse_server = MCPServerSse(
+    MCPServerSseParams(
+        url="http://localhost:8000/sse/",
+        headers={
+            "Authorization": "Bearer secret-token"
+        }
+    )
+)
+```
+</Accordion>
+
+<Accordion title="MCPServerStreamableHttp: For HTTP Streaming Tools" icon="globe-pointer">
+Use this if your tool server is a **web service** that implements the **Streamable HTTP** transport protocol. This uses HTTP POST requests with optional Server-Sent Events (SSE) streaming for responses.
+
+*   **When to use:** Your tool server operates as an independent web service, supports multiple client connections, needs stateful or stateless operation, or requires server-to-client streaming capabilities.
+
+```python
+from agents.mcp.server import MCPServerStreamableHttp, MCPServerStreamableHttpParams
+
+streamable_http_server = MCPServerStreamableHttp(
+    MCPServerStreamableHttpParams(
+        url="http://localhost:8000/mcp/",
+        headers={
+            "Authorization": "Bearer secret-token"
+        }
+    )
+)
+```
+</Accordion>
+
+<Accordion title="HostedMCPTool: For Public Web Servers" icon="globe">
+Use this if your tool server is a **publicly accessible web service**. This approach uses OpenAI's hosted MCP tool capabilities.
+
+*   **When to use:** Your tool server is accessible from the internet and you want to leverage OpenAI's infrastructure for MCP connections.
+
+```python
+from agents import HostedMCPTool
+
+hosted_tool = HostedMCPTool(
+    tool_config={
+        "type": "mcp",
+        "server_label": "mcp-tools-server",
+        # For http servers:
+        "server_url": "https://your-server.com/mcp/",
+        # For sse servers
+        # "server_url": "https://your-server.com/sse/",
+        "require_approval": "never",
+        "headers": {
+            "Authorization": f"Bearer secret-token"
+        }
+    }
+)
+```
+
+<Note>
+Server specified in the HostedMCPTool should be publicly accessible for the agent to be able to use this tool
+</Note>
+</Accordion>
+
+## Connecting Agents to MCP Servers
+
+To give an agent access to MCP tools, you define the server connections and pass them to the agent's `mcp_servers` list or `tools` list during initialization. Follow these steps:
+
+<Accordion title="Step 1: Define Local Server Connections">
+Configure local MCP servers (stdio, local SSE, or streamable HTTP) that will run on your machine.
+
+```python
+from agents.mcp.server import MCPServerStdio, MCPServerStdioParams
+
+# Example: Stdio server for local tools
+stdio_server = MCPServerStdio(
+    MCPServerStdioParams(
+        command="python",
+        args=["./examples/utils/stdio_mcp_server.py"]
+    ),
+    cache_tools_list=True
+)
+```
+</Accordion>
+
+<Accordion title="Step 2: Define Hosted Server Tools (Optional)">
+Configure hosted MCP tools for publicly accessible servers.
+
+```python
+from agents import HostedMCPTool
+
+hosted_tool = HostedMCPTool(
+    tool_config={
+        "type": "mcp",
+        "server_label": "mcp-tools-server",
+        "server_url": "https://your-public-server.com/mcp/",
+        "require_approval": "never",
+        "headers": {
+            "Authorization": f"Bearer {os.getenv('APP_TOKEN', 'your-token')}"
+        }
+    }
+)
+```
+</Accordion>
+
+<Accordion title="Step 3: Initialize Agent with Servers">
+Pass the configured server connections to the appropriate parameter when creating your `Agent`.
+
+```python
+from agency_swarm import Agent
+
+# For local MCP servers, use mcp_servers parameter
+local_agent = Agent(
+    name="LocalMCPAgent",
+    description="An agent that can use local MCP tools.",
+    instructions="Use the available MCP tools to help users.",
+    mcp_servers=[stdio_server],  # Local servers go here
+    model="gpt-4.1",
+)
+
+# For hosted MCP servers, use tools parameter
+hosted_agent = Agent(
+    name="HostedMCPAgent", 
+    description="An agent that can use hosted MCP tools.",
+    instructions="Use the available hosted MCP tools to help users.",
+    tools=[hosted_tool],  # Hosted tools go here
+    model="gpt-4.1",
+)
+```
+</Accordion>
+
+## Runnable Demo
+
+For a practical, runnable example using both local and hosted MCP servers, see the complete example above or the `mcp_server_example.py` script located in the `examples/` directory of the Agency Swarm repository.
+
+*   **Remember:** The demo requires you exposing port 8000 through ngrok prior to running it.
+
+</Tab>
+<Tab title="v0.x (Production)">
+
+<Info>
+v0.x is the **current production version**. Install with: `pip install "agency-swarm<1.0.0"`
+</Info>
+
 ## Supported MCP Server Types
 
 Agency Swarm provides helpers to connect to the three common MCP transport protocols. Choose the server type based on how your tool provider operates:
@@ -30,7 +206,7 @@ Use this if your tool server is already **running as a web service** at a specif
 *   **When to use:** Your tool is provided by a web API, a microservice, or any server accessible via an HTTP endpoint that speaks MCP+SSE (like the Python server in the demo).
 </Accordion>
 
-<Accordion title="MCPServerStreamableHttp: For HTTP Streaming Tools" icon="stream">
+<Accordion title="MCPServerStreamableHttp: For HTTP Streaming Tools" icon="globe-pointer">
 Use this if your tool server is a **web service** that implements the **Streamable HTTP** transport protocol. This replaces the deprecated HTTP+SSE transport and uses HTTP POST requests with optional Server-Sent Events (SSE) streaming for responses.
 
 *   **When to use:** Your tool server operates as an independent web service, supports multiple client connections, needs stateful or stateless operation, or requires server-to-client streaming capabilities.
@@ -147,18 +323,18 @@ my_mcp_agent = Agent(
 ```
 </Accordion>
 
-
 ## Runnable Demo
 
 For a practical, runnable example using both `MCPServerStdio` and `MCPServerSse`, see the `demo_mcp.py` script located in the `tests/demos/` directory of the Agency Swarm repository.
 
 *   **Remember:** The demo requires you to run the example SSE server ([sse_server.py](https://github.com/VRSEN/agency-swarm/blob/main/tests/scripts/sse_server.py)) in a separate terminal first.
 
+</Tab>
+</Tabs>
+
 ## Key Takeaways
 
 *   MCP connects agents to external tools/data via standard protocols (Stdio, SSE, Streamable HTTP).
-*   Use `MCPServerStdio` for command-line tool servers, `MCPServerSse` for SSE-based web servers, and `MCPServerStreamableHttp` for HTTP streaming servers.
-*   Define server connections using the appropriate class, providing `name`, `params`, and optionally configuring `strict` and `cache_tools_list`.
-*   Pass configured server instances to the `Agent`'s `mcp_servers` parameter during initialization.
-*   The `name` you give a server connection becomes the prefix for its tools (e.g., `MyServerName.tool_name`).
-*   External MCP servers (especially SSE and streaming HTTP ones) must be running separately for the agent to connect to them.
+*   **v1.x:** Use mcp_server for local mcp servers and `HostedMCPTool` for web-based servers, since the latter allows you to avoid maintaining server lifecycle.
+*   **v0.x:** Use `MCPServerStdio` for command-line tools, `MCPServerSse` for SSE servers, and `MCPServerStreamableHttp` for HTTP streaming servers.
+*   External MCP servers must be running separately for the agent to connect to them.
