@@ -19,8 +19,7 @@ _instuction = f"""
 
 ### step 1. 读取日志信息
 
-你收到用户发输入请求后，需要先调用工具`ReadJsonFile`从completed_requests.json中读取已完成的请求，从context_index.json中读取之前请求完成过程中的上下文信息，
-从context.json中读取完整的上下文信息。
+你收到用户发输入请求后，需要先调用工具`ReadJsonFile`从completed_requests.json中读取已完成的请求，从context.json中读取完整的上下文信息。
 获取以上信息后继续执行下列流程。
 
 ### step 2. 生成文本信息
