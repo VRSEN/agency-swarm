@@ -1683,21 +1683,33 @@ class Agency:
                                                     })
 
                                                     if result == 'SUCCESS':
-                                                        # 如果step成功，更新context与已完成step
+                                                        # 如果step成功，更新已完成step
                                                         context_id = context_id + 1
-                                                        self.update_context_index(context_id=context_id, context=new_context, step=next_step,request_id=request_id, task_id=next_task_id, subtask_id=next_subtask_id)
+                                                        # self.update_context_index(context_id=context_id, context=new_context, step=next_step,request_id=request_id, task_id=next_task_id, subtask_id=next_subtask_id)
                                                         self.update_completed_step(step_id=next_step_id, step=next_step)
                                                     elif result == 'FAIL':
                                                         # 如果失败，记录并更新error
                                                         error_id = error_id + 1
                                                         step_error_flag = True
                                                         step_error_message = new_context
-                                                        # self.update_error(error_id=error_id, error=new_context, step=next_step)
+                                                        self.update_error(error_id=error_id, error=new_context, step=next_step)
+                                                        self.update_context("error", {
+                                                            "stage": "step_execution",
+                                                            "error_message": step_error_message,
+                                                            "step_id": next_step_id,
+                                                            "request_id": request_id,
+                                                        })
                                                 except Exception as e:
                                                     # 更新error
                                                     error_id = error_id + 1
                                                     step_error_flag = True
                                                     step_error_message = str(e)
+                                                    self.update_context("error", {
+                                                        "stage": "step_execution",
+                                                        "error_message": step_error_message,
+                                                        "step_id": next_step_id,
+                                                        "request_id": request_id,
+                                                    })
 
                                                 # 如果没有错误则退出该step循环，否则进入下一级错误处理
                                                 if not step_error_flag:
@@ -2042,7 +2054,7 @@ class Agency:
             flag, result = self.get_json_from_str(message=response_information)
             print(f"THREAD output:\n{result}")
             if flag == False:
-                count_flag_false = count_flag_false + 1
+                count_flag_false += 1
                 # 没找到json，构造提示重新请求agent
                 message = "用户原始输入为: \n```\n" + original_message + "\n```\n" + "你之前的回答是:\n```\n" + result + "\n```\n" + "你之前的回答用户评价为: \n```\n" + "Your output format is wrong." + "\n```\n"
                 if count_flag_false <= 3:

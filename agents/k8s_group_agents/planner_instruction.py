@@ -27,7 +27,7 @@ def planner_instruction(_group_name, _input_format, _agents, _output_format):
 
 # 注意：你不允许调用`multi_tool_use.parallel`；
 
-# 注意：**关注执行核心任务**，非必要时不需要确认信息是否正确、验证命令执行结果等。不要设置用户输入中未提到的配置项。
+# 注意：只**关注执行核心任务**，非必要时不需要确认信息是否正确、验证命令执行结果等。不要设置用户输入中未提到的配置项。
 
 # 注意，你只能考虑**你的能力群内**包含的Agent。
 """
