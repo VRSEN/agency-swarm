@@ -26,7 +26,7 @@ dependencies = [
     "termcolor>=2.3.0,<3.0.0",
     "rich>=13.9.4, <14.0.0",
     "mcp>=1.6.0,<2.0.0",
-    "starlette>=0.46.0",
+    "fastmcp>=2.0.0",
 ]
 classifiers = [
     "Typing :: Typed",
