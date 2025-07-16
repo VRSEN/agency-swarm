@@ -2,8 +2,10 @@ from agency_swarm import Agent
 from agents.k8s_group_agents.k8s_agent_instruction import k8s_agent_instruction
 from agents.tools.read_json_file.ReadJsonFile import ReadJsonFile
 from agents.k8s_group_agents.tools.WriteFile import WriteFile
+from datetime import datetime
 
-
+timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+file_name_ = f"text_{timestamp}.txt"
 
 _name = "text_output_agent"
 
@@ -24,7 +26,7 @@ _instuction = f"""
 
 ### step 2. 生成文本信息
 
-仔细分析初始的用户输入请求和所获取到的上下文信息，生成一份尽可能满足用户需求的文字信息，并将结果用`WriteFile`工具写入text.txt文件中，并获取执行结果
+仔细分析初始的用户输入请求和所获取到的上下文信息，生成一份尽可能满足用户需求的文字信息，并将结果用`WriteFile`工具写入{file_name_}文件中，并获取执行结果
 
 你必须**执行工具**，而不能直接返回结果。
 
