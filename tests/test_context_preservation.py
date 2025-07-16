@@ -103,8 +103,3 @@ async def test_thread_id_generation(send_message_tool, mock_recipient_agent, mas
     # Verify that get_response was called with sender_name for thread identifier generation
     call_args = mock_recipient_agent.get_response.call_args
     assert call_args.kwargs["sender_name"] == "OrchestratorAgent"
-
-
-# The following test previously only printed explanatory text without performing
-# any meaningful assertions. It has been removed to avoid false confidence and
-# reduce unnecessary test runtime.
