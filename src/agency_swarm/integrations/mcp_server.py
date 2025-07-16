@@ -1,8 +1,10 @@
 import asyncio
+import importlib
 import inspect
 import json
 import logging
 import os
+import sys
 from typing import Any, List, Type, Union
 
 from agents.strict_schema import ensure_strict_json_schema
@@ -21,8 +23,46 @@ from agency_swarm import BaseTool
 logger = logging.getLogger(__name__)
 load_dotenv()
 
+def _load_tools_from_directory(tools_dir: str) -> List[Union[type[BaseTool], type[FunctionTool]]]:
+    """Load BaseTool classes from a directory."""
+    tools: List[Union[type[BaseTool], type[FunctionTool]]] = []
+
+    # Add tools directory to Python path if it's not already there
+    if tools_dir not in sys.path:
+        sys.path.insert(0, tools_dir)
+
+    # Find all Python files in the tools directory
+    for root, _, files in os.walk(tools_dir):
+        for file in files:
+            if file.endswith('.py') and not file.startswith('__'):
+                module_path = os.path.join(root, file)
+                module_name = os.path.splitext(file)[0]
+
+                # Import the module
+                try:
+                    spec = importlib.util.spec_from_file_location(module_name, module_path)
+                    if spec and spec.loader:
+                        module = importlib.util.module_from_spec(spec)
+                        spec.loader.exec_module(module)
+
+                        # Find BaseTool subclasses in the module
+                        for item_name, item in inspect.getmembers(module):
+                            if (
+                                (
+                                    inspect.isclass(item)
+                                    and issubclass(item, BaseTool)
+                                    and item != BaseTool
+                                ) or
+                                isinstance(item, FunctionTool)
+                            ):
+                                tools.append(item)
+                except Exception as e:
+                    logger.error(f"Could not load module {module_name}: {e}")
+
+    return tools
+
 def run_mcp(
-    tools: List[Union[Type[BaseTool], Type[FunctionTool]]],
+    tools: Union[List[Union[Type[BaseTool], Type[FunctionTool]]], str],
     host: str = "0.0.0.0",
     port: int = 8000,
     app_token_env: str | None = "APP_TOKEN",
@@ -33,7 +73,7 @@ def run_mcp(
     """
     Launch a FastMCP server exposing BaseTool and FunctionTool instances.
     Args:
-        tools: List of BaseTool/FunctionTool classes
+        tools: List of BaseTool/FunctionTool classes or path to directory containing tools.
         host: Host to bind the server to.
         port: Port to bind the server to.
         app_token_env: Environment variable name for authentication token. Provide None to disable authentication.
@@ -43,8 +83,18 @@ def run_mcp(
     Returns:
         FastMCP instance if return_app=True, otherwise None
     """
-    if not tools or len(tools) == 0:
-        raise ValueError("No tools provided. Please provide at least one tool class.")
+    # Handle tools input - either list of classes or directory path
+    if isinstance(tools, str):
+        # It's a directory path
+        tools_list = _load_tools_from_directory(tools)
+        if not tools_list:
+            raise ValueError(f"No BaseTool classes found in directory: {tools}")
+        logger.info(f"Found {len(tools_list)} tools in {tools}")
+    else:
+        # It's a list of tool classes
+        tools_list = tools
+        if not tools_list or len(tools_list) == 0:
+            raise ValueError("No tools provided. Please provide at least one tool class.")
 
     # stateless_http is required for oai agents
     mcp = FastMCP(server_name, stateless_http=True)
@@ -79,7 +129,7 @@ def run_mcp(
 
     tool_registry = {}
 
-    for tool in tools:
+    for tool in tools_list:
         tool_name = getattr(tool, 'name', None) or tool.__name__
         if tool_name in tool_registry:
             raise ValueError(f"Duplicate tool name detected: {tool_name}. Please use a different tool name.")
