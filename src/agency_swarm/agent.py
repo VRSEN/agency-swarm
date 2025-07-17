@@ -42,6 +42,7 @@ from .tools import BaseTool
 from .tools.send_message import SendMessage
 from .tools.utils import from_openapi_schema, validate_openapi_spec
 from .utils.agent_file_manager import AgentFileManager
+from .utils.citation_extractor import extract_direct_file_annotations
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +99,8 @@ class Agent(BaseAgent[MasterContext]):
         output_type (type[Any] | None): The type of the agent's final output.
         send_message_tool_class (type | None): Custom SendMessage tool class to use for inter-agent communication.
                                                If None, uses the default SendMessage class.
+        include_search_results (bool): Whether to include search results in FileSearchTool output for citation extraction.
+                                      Defaults to False for backward compatibility.
         _thread_manager (ThreadManager | None): Internal reference to the agency's `ThreadManager`.
                                                 Set by the parent `Agency`.
         _agency_instance (Any | None): Internal reference to the parent `Agency` instance. Set by the parent `Agency`.
@@ -117,6 +120,7 @@ class Agent(BaseAgent[MasterContext]):
     description: str | None
     output_type: type[Any] | None
     send_message_tool_class: type | None  # Custom SendMessage tool class for inter-agent communication
+    include_search_results: bool = False
 
     # --- Internal State ---
     _thread_manager: ThreadManager | None = None
@@ -351,6 +355,7 @@ class Agent(BaseAgent[MasterContext]):
                 "send_message_tool_class",
                 "load_threads_callback",
                 "save_threads_callback",
+                "include_search_results",
             }:
                 current_agent_params[key] = value
             else:
@@ -383,6 +388,7 @@ class Agent(BaseAgent[MasterContext]):
         # Set custom send_message_tool_class, default to None (will use default SendMessage)
         self.send_message_tool_class = current_agent_params.get("send_message_tool_class")
         # output_type is handled by the base Agent constructor, no need to set it here
+        self.include_search_results = current_agent_params.get("include_search_results", False)
 
         # --- Persistence Callbacks ---
         self._load_threads_callback = current_agent_params.get("load_threads_callback")
@@ -835,7 +841,7 @@ class Agent(BaseAgent[MasterContext]):
                 if hosted_tool_outputs:
                     items_to_save.extend(hosted_tool_outputs)
                     logger.info(
-                        f"Added {len(hosted_tool_outputs)} synthetic hosted tool output items to preserve results"
+                        f"Added {len(hosted_tool_outputs)} synthetic hosted tool output items to capture search results"
                     )
 
                 if items_to_save:
@@ -1045,7 +1051,7 @@ class Agent(BaseAgent[MasterContext]):
                     if hosted_tool_outputs:
                         items_to_save_from_stream.extend(hosted_tool_outputs)
                         logger.info(
-                            f"Added {len(hosted_tool_outputs)} synthetic hosted tool output items to preserve results"
+                            f"Added {len(hosted_tool_outputs)} synthetic hosted tool output items to capture search results"
                         )
 
                     if items_to_save_from_stream:
@@ -1104,7 +1110,7 @@ class Agent(BaseAgent[MasterContext]):
     def _extract_hosted_tool_results(self, run_items: list[RunItem]) -> list[TResponseInputItem]:
         """
         Extract hosted tool results (FileSearch, WebSearch) from assistant message content
-        and create special assistant messages to preserve results in conversation history.
+        and create special assistant messages to capture search results in conversation history.
         """
         synthetic_outputs = []
 
@@ -1123,43 +1129,23 @@ class Agent(BaseAgent[MasterContext]):
         for tool_call_item in hosted_tool_calls:
             tool_call = tool_call_item.raw_item
 
-            # Create preservation message based on tool type
+            # Capture search results for tool output persistence
             if isinstance(tool_call, ResponseFileSearchToolCall):
-                preservation_content = (
-                    f"[TOOL_RESULT_PRESERVATION] Tool Call ID: {tool_call.id}\nTool Type: file_search\n"
-                )
+                search_results_content = f"[SEARCH_RESULTS] Tool Call ID: {tool_call.id}\nTool Type: file_search\n"
 
                 file_count = 0
 
-                # First: try direct results from tool call (most complete)
+                # Extract results directly from tool call response
                 if hasattr(tool_call, "results") and tool_call.results:
                     for result in tool_call.results:
                         file_count += 1
                         file_id = getattr(result, "file_id", "unknown")
-                        # Capture FULL content (not truncated to 200 chars)
                         content_text = getattr(result, "text", "")
-                        preservation_content += f"File {file_count}: {file_id}\nContent: {content_text}\n\n"
-
-                # Fallback: parse assistant messages for annotations
-                if file_count == 0:
-                    for msg_item in assistant_messages:
-                        message = msg_item.raw_item
-                        if hasattr(message, "content") and message.content:
-                            for content_item in message.content:
-                                if hasattr(content_item, "annotations") and content_item.annotations:
-                                    for annotation in content_item.annotations:
-                                        if hasattr(annotation, "type") and annotation.type == "file_citation":
-                                            file_count += 1
-                                            file_id = getattr(annotation, "file_id", "unknown")
-                                            # Capture FULL content (not truncated to 200 chars)
-                                            content_text = getattr(content_item, "text", "")
-                                            preservation_content += (
-                                                f"File {file_count}: {file_id}\nContent: {content_text}\n\n"
-                                            )
+                        search_results_content += f"File {file_count}: {file_id}\nContent: {content_text}\n\n"
 
                 if file_count > 0:
-                    synthetic_outputs.append({"role": "assistant", "content": preservation_content})
-                    logger.debug(f"Created file_search preservation message for call_id: {tool_call.id}")
+                    synthetic_outputs.append({"role": "assistant", "content": search_results_content})
+                    logger.debug(f"Created file_search results message for call_id: {tool_call.id}")
 
             elif isinstance(tool_call, ResponseFunctionWebSearch):
                 preservation_content = (
@@ -1175,7 +1161,11 @@ class Agent(BaseAgent[MasterContext]):
                                 preservation_content += f"Search Results:\n{content_item.text}\n"
                                 synthetic_outputs.append({"role": "assistant", "content": preservation_content})
                                 logger.debug(f"Created web_search preservation message for call_id: {tool_call.id}")
-                                break
+                                break  # Process only first text content item to avoid duplicates
+
+        # Extract direct file annotations from assistant messages
+        annotation_results = extract_direct_file_annotations(assistant_messages)
+        synthetic_outputs.extend(annotation_results)
 
         return synthetic_outputs
 

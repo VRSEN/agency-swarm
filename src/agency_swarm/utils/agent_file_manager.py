@@ -304,10 +304,18 @@ class AgentFileManager:
             )
             if file_ids:
                 self.add_files_to_vector_store(file_ids)
-            self.agent.add_tool(FileSearchTool(vector_store_ids=[self.agent._associated_vector_store_id]))
+
+            # Create FileSearchTool with include_search_results from agent configuration
+            file_search_tool = FileSearchTool(
+                vector_store_ids=[self.agent._associated_vector_store_id],
+                include_search_results=getattr(self.agent, "include_search_results", False),
+            )
+            self.agent.add_tool(file_search_tool)
+
             logger.info(
                 f"Agent {self.agent.name}: FileSearchTool added with vector store ID: "
-                f"'{self.agent._associated_vector_store_id}'"
+                f"'{self.agent._associated_vector_store_id}' and include_search_results="
+                f"{getattr(self.agent, 'include_search_results', False)}"
             )
         else:
             for tool in self.agent.tools:

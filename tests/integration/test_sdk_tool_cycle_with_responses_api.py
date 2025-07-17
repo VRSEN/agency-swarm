@@ -315,6 +315,7 @@ Product Sales:
             model="gpt-4.1",
             model_settings=ModelSettings(temperature=0.0),
             files_folder=str(temp_dir),
+            include_search_results=True,
         )
 
         # Set up thread manager and agency instance
@@ -355,11 +356,11 @@ Product Sales:
             item_type = item.get("type", f"role={item.get('role')}")
             logger.info(f"Item {i + 1}: {item_type}")
 
-            # Look for hosted tool preservation messages
-            if item.get("role") == "assistant" and "[TOOL_RESULT_PRESERVATION]" in str(item.get("content", "")):
+            # Look for hosted tool search results messages
+            if item.get("role") == "assistant" and "[SEARCH_RESULTS]" in str(item.get("content", "")):
                 hosted_tool_outputs_found += 1
                 preservation_items.append(item)
-                logger.info(f"  Found preservation message: {str(item.get('content', ''))[:100]}...")
+                logger.info(f"  Found search results message: {str(item.get('content', ''))[:100]}...")
 
         logger.info(f"Found {hosted_tool_outputs_found} hosted tool preservation items")
 
