@@ -273,8 +273,8 @@ To create an agent:
        description="Responsible for client communication, task planning and management.",
        instructions="./instructions.md",
        tools_folder="./tools",
-       model="gpt-4o",
        model_settings=ModelSettings(
+           model="gpt-4o",
            temperature=0.5,
            max_completion_tokens=25000,
        ),
@@ -284,7 +284,7 @@ To create an agent:
    - **name**: The agent's name, reflecting its role.
    - **description**: A brief summary of the agent's responsibilities.
    - **instructions**: Path to a markdown file containing detailed instructions for the agent.
-   - **tools_folder**: Folder containing the tools for the agent. Tool modules are automatically imported.
+   - **tools_folder**: Folder containing the tools for the agent. Tool modules are automatically imported. Each tool class must be named the same as the tool file. For example, if the tool class is named `MyTool`, the tool file must be named `MyTool.py`.
    - **Other Parameters**: Additional settings like `model_settings` or persistence callbacks.
 
    Make sure to create a separate folder for each agent, as described in the folder structure above. After creating the agent, you need to import it into the agency.py file.
