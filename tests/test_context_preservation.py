@@ -103,33 +103,3 @@ async def test_thread_id_generation(send_message_tool, mock_recipient_agent, mas
     # Verify that get_response was called with sender_name for thread identifier generation
     call_args = mock_recipient_agent.get_response.call_args
     assert call_args.kwargs["sender_name"] == "OrchestratorAgent"
-
-
-@pytest.mark.asyncio
-async def test_context_propagation_through_communication():
-    """
-    Test that demonstrates how context flows through agent-to-agent communication
-    using sender->recipient thread identifiers for conversation isolation.
-    """
-    # The architecture uses sender->recipient patterns for thread identification:
-    # - User conversation with Agent A: "user->AgentA"
-    # - Agent A to Agent B: "AgentA->AgentB"
-    # - Agent B to Agent C: "AgentB->AgentC"
-
-    # Each communication pair has its own thread, which provides:
-    # 1. Better isolation between different communication flows
-    # 2. Clearer tracking of who's talking to whom
-    # 3. Context propagation through the context_override parameter
-
-    user_to_agent_thread = "user->OrchestratorAgent"
-    orchestrator_to_worker = "OrchestratorAgent->WorkerAgent"
-    worker_to_specialist = "WorkerAgent->SpecialistAgent"
-
-    # These are all different threads, which is the intended behavior
-    assert user_to_agent_thread != orchestrator_to_worker
-    assert orchestrator_to_worker != worker_to_specialist
-
-    # Context is propagated through the context_override parameter
-    # rather than through shared thread identifiers
-    print("Architecture uses sender->recipient thread isolation with context propagation")
-    assert True

@@ -16,7 +16,7 @@ assignees: ''
 A clear and concise description of what the bug is.
 
 ### Debug information
-- Agency Swarm version: (e.g. `v1.0.0-beta.4`)
+- Agency Swarm version: (e.g. `v1.0.0`)
 - Python version (e.g. Python 3.13)
 
 ### Repro steps

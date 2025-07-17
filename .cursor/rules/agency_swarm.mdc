@@ -3,7 +3,15 @@ description: AI Agent Creator Instructions for Agency Swarm Framework
 alwaysApply: true
 ---
 
-Agency Swarm is a framework that allows anyone to create a collaborative swarm of agents (Agencies), each with distinct roles and capabilities. Your primary role is to architect tools and agents that fulfill specific needs within the agency. This involves:
+Agency Swarm **v1.0.0** is the latest version of the framework built on the OpenAI Agents SDK. It allows anyone to create a collaborative swarm of agents (Agencies), each with distinct roles and capabilities. Your primary role is to architect tools and agents that fulfill specific needs within the agency. Helpful references for building agents include:
+
+- Official docs: <https://agency-swarm.ai>
+- Source code: <https://github.com/VRSEN/agency-swarm>
+- Examples repository: <https://github.com/VRSEN/agency-swarm/tree/main/examples>
+- Migration guide: <https://agency-swarm.ai/migration/guide>
+
+Use these resources to familiarize yourself with v1.x patterns (the `/examples` directory is up to date, while `/docs` may still contain v0.x references). The following steps outline how to build agents from a single prompt:
+
 
 1. **PRD Creation:** Gather information to draft a Product Requirements Document (PRD) for the agency.
 2. **Folder Structure and Template Creation:** Create the Agent Templates for each agent using the CLI Commands provided below.
@@ -72,11 +80,7 @@ After the user provides the requested details, proceed to drafting the PRD file 
 
 # Step 2: Folder Structure and Template Creation
 
-After creating the PRD file, create the folder structure and agent templates, for each agent using the CLI command below:
-
-```bash
-agency-swarm create-agent-template --name "AgentName" --description "Agent Description" --path "agency_name"
-```
+After creating the PRD file, create the folder structure and agent templates, for each agent.
 
 Repeat this step for each agent in the agency. Make sure to correctly specify the path to the agency folder.
 
@@ -136,21 +140,21 @@ Follow this folder structure when further creating or modifying any files.
 
 # Step 3: Tool Creation
 
-Tools are the specific actions that agents can perform. They are defined using pydantic, which provides a convenient interface and automatic type validation. To create a tool:
+Tools are the specific actions that agents can perform. They are defined using pydantic, which provides a convenient interface and automatic type validation. In v1.x you may also use the `@function_tool` decorator to define tools as simple functions. To create a tool:
 
-1. Import Necessary Modules  
+1. Import Necessary Modules
    Start by importing `BaseTool` from `agency_swarm.tools` and `Field` from `pydantic`. These imports will serve as the foundation for your custom tool class. Import any additional packages necessary to implement the tool's logic based on the user's requirements. Import `load_dotenv` from `dotenv` to load the environment variables.
 
-2. Define Your Tool Class and Docstring  
+2. Define Your Tool Class and Docstring
    Create a new class that inherits from `BaseTool`. Write a clear docstring describing the tool's purpose. This docstring is crucial as it helps agents understand how to use the tool. `BaseTool` extends `BaseModel` from pydantic.
 
-3. Specify Tool Fields  
+3. Specify Tool Fields
    Define the fields your tool will use, utilizing Pydantic's `Field` for clear descriptions and validation. These fields represent the inputs your tool will work with, including only variables that vary with each use. Define any constant variables globally.
 
-4. Implement the `run` Method  
+4. Implement the `run` Method
    The `run` method is where your tool's logic is executed. Use the fields defined earlier to perform the tool's intended task. It must contain the actual fully functional correct python code. It can utilize various python packages, previously imported in step 1.
 
-5. Test the Tool  
+5. Test the Tool
    Add a test case at the bottom of the file in if **name** == "**main**": block. It will be used to test the tool later.
 
 ### Best Practices
@@ -159,7 +163,7 @@ Tools are the specific actions that agents can perform. They are defined using p
 - **Documentation**: The documentation should clearly describe the purpose and functionality of the tool, as well as how to use it.
 - **Code Reliability**: Write actual functional code, without placeholders or hypothetical examples.
 - **NEVER include API keys as tool inputs**: If a tool needs an API key or access token, always retrieve it from environment variables using the `os` package inside the `run` method. Do not define API keys or tokens as input fields for the tool.
-- **Use global variables for constants**: If a tool requires a constant global variable, that does not change from use to use, (for example, ad_account_id, pull_request_id, etc.), define them as constant global variables above the tool class, instead of inside Pydantic `Field`.
+- **Use global variables for constants**: If a tool requires a constant value that doesn't change from use to use (for example, `ad_account_id`, `pull_request_id`, etc.), define it above the tool function instead of passing it as a parameter.
 - **Add a test case at the bottom of the file**: Add a test case for each tool in if **name** == "**main**": block. It will be used to test the tool later.
 
 ### Complete Example of a Tool File
@@ -203,27 +207,53 @@ if __name__ == "__main__":
     print(tool.run())
 ```
 
-Remember, each tool code snippet you create must be IMMIDIATELY ready to use by the user. It must not contain any mocks, placeholders or hypothetical examples.
+### Using `function_tool` Decorator
 
-### Shared State
-
-Tools can access and modify a global state across the agency to store and share data without using extra tokens in conversations.
+Alternatively, tools can be implemented as simple functions using the `@function_tool` decorator from the `agents` package.
 
 ```python
-def run(self):
-    self._shared_state.set("my_key", "my_value")  # Store data
-    data = self._shared_state.get("my_key", "default_value")  # Retrieve data with a default
+from agents import function_tool
+import os
+from dotenv import load_dotenv
+
+load_dotenv()  # always load environment variables
+
+@function_tool
+def my_custom_tool(example_field: str) -> str:
+    """A brief description of what the custom tool does."""
+    # Your custom tool logic goes here
+    return f"Result: {example_field}"
+
+if __name__ == "__main__":
+    print(my_custom_tool("example value"))
 ```
 
-Use this for:
-- Large data structures expensive to pass between agents
+Remember, each tool code snippet you create must be IMMIDIATELY ready to use by the user. It must not contain any mocks, placeholders or hypothetical examples.
+
+### Agency Context (Shared State)
+
+Agency context lets your tools and agents share data without passing it in conversation messages.
+
+```python
+from agents import function_tool, RunContextWrapper
+from agency_swarm.context import MasterContext
+
+@function_tool
+async def my_tool(ctx: RunContextWrapper[MasterContext], arg1: str) -> str:
+    ctx.context.set("my_key", arg1)            # Store data
+    data = ctx.context.get("my_key", "default")  # Retrieve data
+    return data
+```
+
+Use agency context for:
+- Large data structures that are expensive to pass between agents
 - Maintaining state across multiple tool calls
 - Sharing data among tools and agents
 
-Best Practices:
+Best practices:
 - Use descriptive keys to avoid conflicts
-- Provide default values when retrieving
-- Clean up unneeded data
+- Provide default values when calling `get`
+- Clean up unneeded data to keep the context small
 
 ### MCP Integration
 
@@ -250,30 +280,32 @@ filesystem_server = MCPServerStdio(
 
 To create an agent:
 
-1. **Create an Agent class in the agent's folder.**
+1. **Create an agent module.**
 
-   To create an agent, import `Agent` from `agency_swarm` and create a class that inherits from `Agent`. Inside the class you can adjust the following parameters:
+   In v1.x you instantiate `Agent` directly rather than subclassing. Create a Python file (e.g., `ceo.py`) and instantiate the agent as follows:
 
    ```python
+   from agents import ModelSettings
    from agency_swarm import Agent
 
-   class CEO(Agent):
-       def __init__(self):
-           super().__init__(
-               name="CEO",
-               description="Responsible for client communication, task planning and management.",
-               instructions="./instructions.md", # instructions for the agent
-               tools_folder="./tools", # folder containing the tools for the agent
-               temperature=0.5,
-               max_prompt_tokens=25000,
-           )
+   ceo = Agent(
+       name="CEO",
+       description="Responsible for client communication, task planning and management.",
+       instructions="./instructions.md",
+       tools_folder="./tools",
+       model_settings=ModelSettings(
+           model="gpt-4o",
+           temperature=0.5,
+           max_completion_tokens=25000,
+       ),
+   )
    ```
 
    - **name**: The agent's name, reflecting its role.
    - **description**: A brief summary of the agent's responsibilities.
    - **instructions**: Path to a markdown file containing detailed instructions for the agent.
-   - **tools_folder**: A folder containing the tools for the agent. Tools will be imported automatically. Each tool class must be named the same as the tool file. For example, if the tool class is named `MyTool`, the tool file must be named `MyTool.py`.
-   - **Other Parameters**: Additional settings like temperature, max_prompt_tokens, etc.
+   - **tools_folder**: Folder containing the tools for the agent. Tool modules are automatically imported. Each tool class must be named the same as the tool file. For example, if the tool class is named `MyTool`, the tool file must be named `MyTool.py`.
+   - **Other Parameters**: Additional settings like `model_settings` or persistence callbacks.
 
    Make sure to create a separate folder for each agent, as described in the folder structure above. After creating the agent, you need to import it into the agency.py file.
 
@@ -308,40 +340,34 @@ Agencies are collections of agents that work together to achieve a common goal. 
 
 1. **Create an `agency.py` file in the agency folder.**
 
-   To create an agency, import `Agency` from `agency_swarm` and create a class that inherits from `Agency`. Import all agents from the agency folder.
+   Import `Agency` from `agency_swarm` and instantiate it with your agents. The first argument is the entry point for user communication.
 
    ```python
-   from agency_swarm import Agency
-   from CEO import CEO
-   from Developer import Developer
-   from VirtualAssistant import VirtualAssistant
    from dotenv import load_dotenv
+   from agency_swarm import Agency
+   from ceo import ceo
+   from developer import developer
+   from virtual_assistant import virtual_assistant
 
    load_dotenv()
 
-   dev = Developer()
-   va = VirtualAssistant()
-
-   agency = Agency([
-           ceo,  # CEO will be the entry point for communication with the user
-           [ceo, dev],  # CEO can initiate communication with Developer
-           [ceo, va],   # CEO can initiate communication with Virtual Assistant
-           [dev, va]    # Developer can initiate communication with Virtual Assistant
-           ],
-           shared_instructions='agency_manifesto.md', #shared instructions for all agents
-           temperature=0.5, # default temperature for all agents
-           max_prompt_tokens=25000 # default max tokens in conversation history
+   agency = Agency(
+       ceo,
+       communication_flows=[
+           (ceo, developer),
+           (ceo, virtual_assistant),
+           (developer, virtual_assistant),
+       ],
+       shared_instructions="agency_manifesto.md",
    )
 
    if __name__ == "__main__":
-       agency.run_demo() # starts the agency in terminal
+       agency.run_demo()
    ```
 
    **A Note on Communication Flows**:
 
-   In Agency Swarm, communication flows are directional, meaning they are established from left to right in the `agency_chart` definition. For instance, in the example above, the CEO can initiate a chat with the developer (dev), and the developer can respond in this chat. However, the developer cannot initiate a chat with the CEO. The developer can initiate a chat with the virtual assistant (va) and assign new tasks.
-
-   To allow agents to communicate with each other, simply add them in the second level list inside the `agency_chart` like this: `[ceo, dev], [ceo, va], [dev, va]`. The agent on the left will be able to communicate with the agent on the right.
+   Communication flows are directional. In the `communication_flows` parameter above, the agent on the left can initiate conversations with the agent on the right.
 
 2. **Define the `agency_manifesto.md` file.**
 
