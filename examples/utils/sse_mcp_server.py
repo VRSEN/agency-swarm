@@ -10,7 +10,7 @@ from agency_swarm.integrations.mcp_server import run_mcp
 load_dotenv()
 
 
-# Legacy tool example
+# v0.X BaseTool-style tool example (equally supported)
 class GetSecretWordTool(BaseTool):
     seed: int = Field(..., description="The seed for the random number generator")
 
