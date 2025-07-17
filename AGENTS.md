@@ -65,6 +65,10 @@ This guide explains the core structure and best practices for working on the Age
 - **Question ALL NotImplementedErrors** before removing them
 - **NEVER comment out code** - remove it cleanly instead
 - **Avoid code smells** - long parameter lists, nested conditionals, duplicate code
+- **ALWAYS explain root causes FIRST** before fixing any issue
+- **NEVER trust yourself** - always review everything from scratch
+- **Use temperature=0** for deterministic LLM behavior when debugging "inconsistent" features
+- **Test ALL code paths** including edge cases before claiming completion
 
 ---
 
