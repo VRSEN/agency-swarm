@@ -17,17 +17,17 @@ v1.x is currently in **beta preview**. Install with: `pip install -U "agency-swa
 
 <Steps>
   <Step title="Set Your OpenAI Key">
-    Begin by setting your OpenAI API key.
-
-    ```python
-    from agency import set_openai_key
-    set_openai_key("YOUR_API_KEY")
-    ```
-
-    Alternatively, you can set the API key in the `.env` file.
+    Begin by setting your OpenAI API key in the `.env` file.
 
     ```
     OPENAI_API_KEY=sk-...
+    ```
+
+    Then load it in your main script using:
+
+    ```python
+    from dotenv import load_dotenv
+    load_dotenv()
     ```
 
   </Step>

@@ -13,7 +13,7 @@ To deploy your agency to production, typically the process is as follows:
 </Note>
 
 <Warning>
-  Before deploying your agency, ensure you have thoroughly tested all tools and agents in isolation and in combination. Run the test cases in each tool file and verify the agency works end-to-end using the `run_demo()` or `demo_gradio` methods.
+  Before deploying your agency, ensure you have thoroughly tested all tools and agents in isolation and in combination. Run the test cases in each tool file and verify the agency works end-to-end using demo methods.
 </Warning>
 
 <Steps>
@@ -27,6 +27,42 @@ In Agency Swarm, threads are stored in a dictionary that contains all conversati
 </Info>
 
 Loading threads from a database before processing a new request allows you to continue conversations from where they left off, even if you are using stateless backend.
+
+<Tabs>
+<Tab title="v1.x (Latest)">
+
+<Warning>
+v1.x is currently in **beta preview**. Install with: `pip install -U "agency-swarm>=1.0.0-beta"`
+</Warning>
+
+In v1.x, persistence is handled through callback functions that are passed directly as parameters to the Agency constructor:
+
+```python
+from agents import ConversationThread
+
+def save_threads(thread_dict: dict[str, ConversationThread], chat_id: str):
+    # Save updated threads to your database
+    save_threads_to_db(new_threads)
+
+def load_threads(chat_id: str) -> dict[str, ConversationThread]:
+    threads = load_threads_from_db(chat_id)
+    return threads
+
+agency = Agency(
+    agent1,
+    agent2,
+    communication_flows=[(agent1, agent2)],
+    load_threads_callback=lambda: load_threads(chat_id),
+    save_threads_callback=lambda thread_dict: save_threads(thread_dict, chat_id),
+)
+```
+
+</Tab>
+<Tab title="v0.x (Production)">
+
+<Info>
+This is the current production version. Install with: `pip install agency-swarm`
+</Info>
 
 <Info>
 Callbacks are functions that are called by the framework automatically when Agency is initialized.
@@ -53,14 +89,27 @@ agency = Agency(
 )
 ```
 
+</Tab>
+</Tabs>
+
 </Step>
 
 <Step title="Step 2: Dynamically Load Assistant Settings" icon="gear">
+<Warning>
+This step only applies to older versions of the library (v0.7 and earlier)
+</Warning>
 
 By default, agencies store assistant settings (such as name, description, instructions, tools, and model) in a local file defined in the `settings_path` parameter (`settings.json` by default). While this works well for development, in production environments, we recommend storing these settings in a database to persist changes between deployments.
 
 <Info>
 Settings is a list of dictionaries that contains settings of all agents. If a change is detected in the settings, the framework will automatically save the new settings to a local file and trigger the `save` callback.
+</Info>
+
+<Tabs>
+<Tab title="v0.x (Production)">
+
+<Info>
+This is the current production version. Install with: `pip install agency-swarm`
 </Info>
 
 `settings_callbacks` are executed every time agent settings are loaded or saved. Just like `threads_callbacks`, you can use it to load or save agent configurations based on your identifier (e.g. user_id):
@@ -83,6 +132,9 @@ agency = Agency(
     },
 )
 ```
+
+</Tab>
+</Tabs>
 
 <Note>
 Make sure you load and return settings and threads in the exact same format as they are saved.

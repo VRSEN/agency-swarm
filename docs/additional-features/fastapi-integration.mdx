@@ -10,23 +10,48 @@ Agency Swarm supports serving your agencies and tools as production-ready HTTP A
 
 FastAPI integration is an **optional installation**. To install all required dependencies, run:
 
-```bash
+<CodeGroup>
+
+```bash v1.x (Latest)
+pip install "agency-swarm[fastapi]>=1.0.0-beta"
+```
+
+```bash v0.x (Production)
 pip install agency-swarm[fastapi]
 ```
+
+</CodeGroup>
 
 ## Setting Up FastAPI Endpoints
 
 You can expose your agencies and tools as API endpoints using the `run_fastapi()` function.
 
-### Example: Create an api endpoint for a single agency using instance method
+### Example: Create an API endpoint for a single agency
 
-```python
+<CodeGroup>
+
+```python v1.x (Latest)
+from agency_swarm import Agency, Agent
+
+agent = Agent(
+    name="Assistant", 
+    instructions="You are a helpful assistant."
+)
+
+agency = Agency(agent, name="test_agency")
+
+agency.run_fastapi()
+```
+
+```python v0.x (Production)
 from agency_swarm.agency import Agency
 
 agency = Agency([ceo], name="test_agency")
 
 agency.run_fastapi()
 ```
+
+</CodeGroup>
 
 Optionally, you can specify following parameters: 
 - host (default: `"0.0.0.0"`)
@@ -40,7 +65,19 @@ This will create 2 endpoints for the agency:
 - `/test_agency/get_completion_stream`
 
 Both of these endpoints will accept following input parameters:
-```python
+
+<CodeGroup>
+
+```python v1.x (Latest)
+message: str
+# Entire chat history containing previous messages across all threads in a form of {'thread_1': ConversationThread, 'thread_2': ConversationThread, ...}
+chat_history: dict[str, ConversationThread] = None
+recipient_agent: str = None
+file_ids: list[str] = None
+additional_instructions: str = None
+```
+
+```python v0.x (Production)
 message: str
 message_files: List[str] = None
 # Name of the agent, as defined within it's name attribute
@@ -53,12 +90,45 @@ response_format: dict = None
 verbose: bool = False
 ```
 
+</CodeGroup>
+
 Additionally, you will need to provide a bearer token in the authorization if you have `"APP_TOKEN"` specified (or a differently named variable if you provided app_token_env). If the token is **not specified** in the env variables, **authentication will be disabled**.
 
 ### Example: Serving Multiple Agencies and Tools
-You can deploy multiple agencies **and** tools in a single function call by using run_fastapi function from the integrations directory
 
-```python
+<CodeGroup>
+
+```python v1.x (Latest)
+from agents import function_tool
+from agency_swarm import Agency, Agent
+from agency_swarm.integrations.fastapi import run_fastapi
+
+# Example tools using agents SDK
+@function_tool
+def example_tool(example_field: str) -> str:
+    """Example tool with input field."""
+    return f"Result of ExampleTool operation with {example_field}"
+
+@function_tool
+def test_tool(example_field: str) -> str:
+    """Test tool with input field."""
+    return f"Result of TestTool operation with {example_field}"
+
+# Create agents
+agent1 = Agent(name="Assistant1", instructions="You are assistant 1.")
+agent2 = Agent(name="Assistant2", instructions="You are assistant 2.")
+
+# Create agencies
+agency1 = Agency(agent1, name="test_agency_1")
+agency2 = Agency(agent2, name="test_agency_2")
+
+run_fastapi(
+    agencies=[agency1, agency2],
+    tools=[example_tool, test_tool],
+)
+```
+
+```python v0.x (Production)
 from pydantic import Field
 
 from agency_swarm.agency import Agency
@@ -87,15 +157,17 @@ run_fastapi(
 )
 ```
 
+</CodeGroup>
+
 This will create 6 following endpoints: 
 - `/test_agency_1/get_completion`
 - `/test_agency_1/get_completion_stream`
 - `/test_agency_2/get_completion`
 - `/test_agency_2/get_completion_stream`
-- `/tool/ExampleTool`
-- `/tool/TestTool`
+- `/tool/ExampleTool` (v0.x) or `/tool/example_tool` (v1.x)
+- `/tool/TestTool` (v0.x) or `/tool/test_tool` (v1.x)
 
-Inputs for the tool endpoints will follow their pydantic schemas respectively.
+Inputs for the tool endpoints will follow their respective schemas.
 
 ---
 
@@ -103,7 +175,35 @@ Inputs for the tool endpoints will follow their pydantic schemas respectively.
 
 You can interact with your agents and tools using HTTP requests. Here's an example using Python's `requests` library:
 
-```python
+<CodeGroup>
+
+```python v1.x (Latest)
+import requests
+
+agency_url = "http://127.0.0.1:8000/test_agency_1/get_completion"
+payload = {
+    "message": "Hello",
+}
+
+headers = {
+    "Authorization": "Bearer 123"  # Replace with your actual token if needed
+}
+
+agency_response = requests.post(agency_url, json=payload, headers=headers)
+print("Status code:", agency_response.status_code)
+print("Response:", agency_response.json()) 
+
+tool_url = "http://127.0.0.1:8000/tool/example_tool"
+payload = {
+    "example_field": "test",
+}
+
+tool_response = requests.post(tool_url, json=payload, headers=headers)
+print("Status code:", tool_response.status_code)
+print("Response:", tool_response.json()) 
+```
+
+```python v0.x (Production)
 import requests
 
 agency_url = "http://127.0.0.1:8000/test_agency_1/get_completion"
@@ -124,10 +224,12 @@ payload = {
     "example_field": "test",
 }
 
-tool_response = requests.post(url, json=payload, headers=headers)
+tool_response = requests.post(agency_url, json=payload, headers=headers)
 print("Status code:", tool_response.status_code)
 print("Response:", tool_response.json()) 
 ```
+
+</CodeGroup>
 
 ---
 
@@ -140,6 +242,7 @@ print("Response:", tool_response.json())
 
 - **Tool Endpoints:**  
   Each tool is served at:
-  - `/tool/ToolClassName` (POST)
+  - `/tool/ToolClassName` (POST) - v0.x
+  - `/tool/function_name` (POST) - v1.x
 
 ---
