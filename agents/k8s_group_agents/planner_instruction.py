@@ -8,7 +8,7 @@ def planner_instruction(_group_name, _input_format, _agents, _output_format):
 
 # 规划开始之前，你需要判断用户输入请求是否与文字输出有关（例如：输出复盘报告、输出预案、输出自动化脚本等），如果有关，你需要将用户输入请求中的相关信息传递给监控能力群中的文本输出agent来进行输出（只有这一个step），不需要规划其他任何多余的step。
 
-同时，你需要先调用工具`ReadJsonFile`从completed_sub_tasks.json读取已完成的子任务，从context.json中读取已经完成的所有过程的上下文信息。（直接调用工具，不要把它规划为一个step）
+同时，你需要先调用工具`ReadJsonFile`从context.json中读取已经完成的所有过程的上下文信息。（直接调用工具，不要把它规划为一个step）
 获取以上信息后，你需要判断用户输入请求是否与之前已完成的过程有关，如果有关，从上下文信息中提取有用信息，并结合该信息进行后续的任务规划。
 
 请严谨专业地一步步思考: 完成该任务需要哪些步骤(step)，每个步骤分别需要哪个能力Agent来操作。
@@ -20,6 +20,8 @@ def planner_instruction(_group_name, _input_format, _agents, _output_format):
 
 你应该按照以下JSON格式进行步骤规划: 
 {_output_format}
+
+# 请注意，你必须严格按照上述json格式输出步骤规划结果。
 
 对于每个step，你需要在 "id" 字段中以"step_正整数"的形式为其分配一个单独的step ID，并在"agent"字段填入完成该step所需的所有能力agent名称列表 (注意**agent名称列表不应该为空，即每个step都至少需要一个agent**，所有用到的能力agent应该都在你能力范围之内)，并在 "description" 字段中描述step内容，并在 "dep" 字段中写入该step依赖的前置step ID 列表（如果没有前置step，则写入 []）。
 

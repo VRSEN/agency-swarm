@@ -256,12 +256,12 @@ def main():
         text ="""我们在华为云CCE集群上部署了一个 4 节点的 MySQL Galera Cluster (1主3从)，使用 StatefulSet 部署。近期我们发现集群偶尔出现脑裂问题，需要制定一个预案，以便在出现问题时 DBA 能在智能体的协助下快速恢复服务。
 """
 
-        # 只在agency循环调用时清空completed_requests.json和context.json
         files_path = os.path.join("agents", "files")
-        request_path = os.path.join(files_path, "completed_requests.json")
         context_path = os.path.join(files_path, "context.json")
-        with open(request_path, "w", encoding='utf-8') as f:
-            pass
+        # 确保文件目录存在
+        if not os.path.exists(files_path):  
+            os.mkdir(files_path)    
+        # 清空context.json
         with open(context_path, "w", encoding='utf-8') as f:
             pass
 

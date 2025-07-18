@@ -1395,11 +1395,11 @@ class Agency:
         os.mkdir(dir_path)
     
     files_path = os.path.join("agents", "files")
-    request_path = os.path.join(files_path, "completed_requests.json")
-    completed_step_path = os.path.join(files_path, "completed_steps.json")
-    completed_subtask_path = os.path.join(files_path, "completed_sub_tasks.json")
-    completed_task_path = os.path.join(files_path, "completed_tasks.json")
-    context_index_path = os.path.join(files_path, "context_index.json")
+    # request_path = os.path.join(files_path, "completed_requests.json")
+    # completed_step_path = os.path.join(files_path, "completed_steps.json")
+    # completed_subtask_path = os.path.join(files_path, "completed_sub_tasks.json")
+    # completed_task_path = os.path.join(files_path, "completed_tasks.json")
+    # context_index_path = os.path.join(files_path, "context_index.json")
     # contexts_path = os.path.join(files_path, "api_results")
     error_path = os.path.join(files_path, "error.json")
     text_path = os.path.join(files_path,"text.txt")
@@ -1410,9 +1410,9 @@ class Agency:
         # self._init_dir(self.files_path)
         # self._init_dir(self.contexts_path)
         self._init_file(self.error_path)
-        self._init_file(self.completed_step_path)
-        self._init_file(self.completed_subtask_path)
-        self._init_file(self.completed_task_path)
+        # self._init_file(self.completed_step_path)
+        # self._init_file(self.completed_subtask_path)
+        # self._init_file(self.completed_task_path)
         # self._init_file(self.context_index_path)
 
     def create_cap_group_agent_threads(self, cap_group_agents: Dict[str, List]) -> Dict[str, List[Thread]]:
@@ -1503,7 +1503,7 @@ class Agency:
         # cap_agent_threads[能力群名称][能力agent名称] = 该能力agent的Thread
 
         # task_id = 0
-        context_id = self.get_next_context_id()
+        # context_id = self.get_next_context_id()
         original_request_error_flag = False
         original_request_error_message = ""
         error_id = 0
@@ -1518,6 +1518,7 @@ class Agency:
             # 重置错误标志，清理错误文件
             original_request_error_flag = False
             self._init_file(self.error_path)
+
 
             # id2task 用于记录task_id到task对象的映射
             id2task = {}
@@ -1676,17 +1677,18 @@ class Agency:
                                                     assert result == 'SUCCESS' or result == 'FAIL', f"Unknown result: {result}"
                                                     
                                                     self.update_context("agent_completion_result", {
-                                                        "step_id": next_step_id,
-                                                        "step_title": next_step['title'],
-                                                        "result": result,
-                                                        "context": new_context  
-                                                    })
+                                                            "step_id": next_step_id,
+                                                            "step_title": next_step['title'],
+                                                            "result": result,
+                                                            "context": new_context  
+                                                        })
 
                                                     if result == 'SUCCESS':
                                                         # 如果step成功，更新已完成step
-                                                        context_id = context_id + 1
+                                                        # context_id = context_id + 1
                                                         # self.update_context_index(context_id=context_id, context=new_context, step=next_step,request_id=request_id, task_id=next_task_id, subtask_id=next_subtask_id)
-                                                        self.update_completed_step(step_id=next_step_id, step=next_step)
+                                                        # self.update_completed_step(step_id=next_step_id, step=next_step)
+                                                        pass
                                                     elif result == 'FAIL':
                                                         # 如果失败，记录并更新error
                                                         error_id = error_id + 1
@@ -1739,12 +1741,12 @@ class Agency:
                                         # 本次step调度结束
                                     
                                     # 本subtask的所有step结束
-                                    self._init_file(self.completed_step_path) 
+                                    # self._init_file(self.completed_step_path) 
                                     if not subtask_error_flag:
                                         # 如果step全都正常完成，更新已完成subtask
                                         console.rule()
                                         print(f"  {next_subtask_id} ({next_subtask['title']}) complete")
-                                        self.update_completed_sub_task(next_subtask_id, next_subtask)
+                                        # self.update_completed_sub_task(next_subtask_id, next_subtask)
                                         break
                                     else:
                                         console.rule()
@@ -1769,12 +1771,12 @@ class Agency:
                             # 本次subtask调度结束
                         
                         # 本次task的所有subtask结束
-                        self._init_file(self.completed_subtask_path)
+                        # self._init_file(self.completed_subtask_path)
                         if not task_error_flag:
                             # 如果subtask全都正常完成，更新已完成task
                             console.rule()
                             print(f"{next_task_id} ({next_task['title']}) complete")
-                            self.update_completed_task(next_task_id, next_task)
+                            # self.update_completed_task(next_task_id, next_task)
                             break
                         else:
                             console.rule()
@@ -1797,7 +1799,7 @@ class Agency:
             if not original_request_error_flag:
                 console.rule()
                 print(f"original request complete")
-                self.update_request(request_id=request_id, content=original_request)
+                # self.update_request(request_id=request_id, content=original_request)
                 self.update_context("original_request_complete", {
                     "request_id": "request_" + str(request_id),
                     "result": "completed"
@@ -1815,7 +1817,9 @@ class Agency:
                 data = json.load(file)
             except json.JSONDecodeError:    # 如果文件为空或格式错误，则创建一个空字典
                 data = {}
+        data = {}
         data[error_id] = {
+            "error_id": "error_" + str(error_id),
             "step": step,
             "error": error
         }
