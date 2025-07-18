@@ -1,8 +1,8 @@
 """
-Agency Swarm Copilot Demo
+Agency Swarm Terminal Demo
 
-This example demonstrates the Copilot UI capabilities of Agency Swarm v1.x.
-Sets up a frontend and backend server for the Copilot UI chat demo.
+This example demonstrates the Terminal UI capabilities of Agency Swarm v1.x.
+Sets up a frontend and backend server for the Terminal UI chat demo.
 """
 
 import sys
@@ -21,12 +21,12 @@ load_dotenv()
 
 @function_tool()
 async def example_tool(wrapper: RunContextWrapper) -> str:
-    """Example tool for copilot demo"""
+    """Example tool for terminal demo"""
     return "Example tool executed"
 
 
 def create_demo_agency():
-    """Create a demo agency for copilot demo"""
+    """Create a demo agency for terminal demo"""
 
     # Create agents using v1.x pattern (direct instantiation)
     ceo = Agent(
@@ -49,7 +49,7 @@ def create_demo_agency():
         communication_flows=[
             (ceo, worker),
         ],
-        name="CopilotDemoAgency",
+        name="TerminalDemoAgency",
     )
 
     return agency
