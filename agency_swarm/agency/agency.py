@@ -1,7 +1,7 @@
 import inspect
 import json
 import os
-import datetime
+from datetime import datetime
 import queue
 import threading
 import uuid
@@ -1386,6 +1386,7 @@ class Agency:
                 pass
         except Exception as e:
             print(f"Creating {file_path}...")
+
     def _init_dir(self, dir_path):
         import shutil
         try:
@@ -1394,13 +1395,19 @@ class Agency:
             pass
         os.mkdir(dir_path)
     
+    def _rm_file(self, file_path):
+        if os.path.exists(file_path):
+            os.remove(file_path)
+    
     files_path = os.path.join("agents", "files")
-    # request_path = os.path.join(files_path, "completed_requests.json")
-    # completed_step_path = os.path.join(files_path, "completed_steps.json")
-    # completed_subtask_path = os.path.join(files_path, "completed_sub_tasks.json")
-    # completed_task_path = os.path.join(files_path, "completed_tasks.json")
-    # context_index_path = os.path.join(files_path, "context_index.json")
-    # contexts_path = os.path.join(files_path, "api_results")
+    # 未使用的文件路径
+    request_path = os.path.join(files_path, "completed_requests.json")
+    completed_step_path = os.path.join(files_path, "completed_steps.json")
+    completed_subtask_path = os.path.join(files_path, "completed_sub_tasks.json")
+    completed_task_path = os.path.join(files_path, "completed_tasks.json")
+    context_index_path = os.path.join(files_path, "context_index.json")
+    contexts_path = os.path.join(files_path, "api_results")
+    # 使用的文件路径
     error_path = os.path.join(files_path, "error.json")
     text_path = os.path.join(files_path,"text.txt")
     context_path = os.path.join(files_path, "context.json")
@@ -1414,6 +1421,11 @@ class Agency:
         # self._init_file(self.completed_subtask_path)
         # self._init_file(self.completed_task_path)
         # self._init_file(self.context_index_path)
+        self._rm_file(self.request_path)
+        self._rm_file(self.completed_step_path)
+        self._rm_file(self.completed_subtask_path)
+        self._rm_file(self.completed_task_path)
+        self._rm_file(self.context_index_path)
 
     def create_cap_group_agent_threads(self, cap_group_agents: Dict[str, List]) -> Dict[str, List[Thread]]:
         capgroup_thread = {}
@@ -1912,7 +1924,7 @@ class Agency:
     def update_context(self, event: str, data: dict):
         
         context_entry = {
-            "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+            "timestamp": datetime.now().isoformat() + "Z",
             "event": event,
             "data": data
         }
@@ -2073,7 +2085,7 @@ class Agency:
                 if inspector_type is not None and inspector_type == "off": # 不使用inspector
                     return result
 
-                if _ == True:
+                if flag == True:
                     inspect_query = {
                         "user_request": inspector_request,
                         "task_graph": json.loads(result)
