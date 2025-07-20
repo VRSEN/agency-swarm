@@ -1,4 +1,4 @@
-# examples/hosted_tool_preservation.py
+# examples/file_search_persistence.py
 import asyncio
 import json
 import logging

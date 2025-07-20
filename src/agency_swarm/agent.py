@@ -1148,9 +1148,7 @@ class Agent(BaseAgent[MasterContext]):
                     logger.debug(f"Created file_search results message for call_id: {tool_call.id}")
 
             elif isinstance(tool_call, ResponseFunctionWebSearch):
-                preservation_content = (
-                    f"[TOOL_RESULT_PRESERVATION] Tool Call ID: {tool_call.id}\nTool Type: web_search\n"
-                )
+                search_results_content = f"[WEB_SEARCH_RESULTS] Tool Call ID: {tool_call.id}\nTool Type: web_search\n"
 
                 # Capture FULL search results (not truncated to 500 chars)
                 for msg_item in assistant_messages:
@@ -1158,9 +1156,9 @@ class Agent(BaseAgent[MasterContext]):
                     if hasattr(message, "content") and message.content:
                         for content_item in message.content:
                             if hasattr(content_item, "text") and content_item.text:
-                                preservation_content += f"Search Results:\n{content_item.text}\n"
-                                synthetic_outputs.append({"role": "assistant", "content": preservation_content})
-                                logger.debug(f"Created web_search preservation message for call_id: {tool_call.id}")
+                                search_results_content += f"Search Results:\n{content_item.text}\n"
+                                synthetic_outputs.append({"role": "assistant", "content": search_results_content})
+                                logger.debug(f"Created web_search results message for call_id: {tool_call.id}")
                                 break  # Process only first text content item to avoid duplicates
 
         # Extract direct file annotations from assistant messages
