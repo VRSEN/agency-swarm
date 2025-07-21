@@ -3,9 +3,6 @@ title: "Azure OpenAI"
 description: "Integrate Azure OpenAI with Agency Swarm to ensure secure data processing and enhanced privacy."
 icon: "microsoft"
 ---
-<Warning>
-This feature is only available for older versions of the library (v0.7 and earlier)
-</Warning>
 
 Many organizations prioritize data privacy and are cautious about sharing their data with any third-parties. By leveraging Azure OpenAI, you can ensure that your data is processed only within your own secure Azure environment, and not even shared with OpenAI itself.
 
@@ -24,7 +21,64 @@ Before you begin, ensure you have the following:
 
 ## Setting Up Azure OpenAI with Agency Swarm
 
+<Tabs>
+<Tab title="v1.x (Latest)">
+<Steps>
+<Step title="Configure the Azure OpenAI Client">
+To use Azure OpenAI, you need to configure the client to connect to your Azure OpenAI resource as follows:
 
+
+```python
+import os
+from openai import AsyncOpenAI
+
+azure_agent = AsyncOpenAI(
+    api_key=os.getenv("AZURE_OPENAI_KEY"),
+    default_query={"api-version": "preview"}, 
+    base_url=os.getenv("AZURE_ENDPOINT") + "/openai/v1/",
+)
+```
+
+
+</Step>
+
+<Step title="Update Agent Model Parameters">
+
+Set the `model` parameter inside each agent to use your custom client and model:
+
+```python
+from agency_swarm import Agent
+from agents import OpenAIChatCompletionsModel
+
+azure_agent = Agent(
+    name="AzureAgent",
+    instructions="You are a helpful assistant",
+    model=OpenAIChatCompletionsModel(model="gpt-4.1", openai_client=custom_client),
+)
+```
+<Note>
+Model deployment name might be different from the stadard OpenAI model names. It is set by you when you deploy a model to Azure.
+</Note>
+
+</Step>
+
+<Step title="Run Your Agency">
+
+After configuring the client and updating the agents, you can run your agency as usual:
+
+```python
+import asyncio
+from agency_swarm import Agency
+
+agency=Agency(azure_agent)
+
+agency.terminal_demo()
+```
+</Step>
+</Steps>
+</Tab>
+
+<Tab title="v0.x (Production)">
 <Steps>
 <Step title="Configure the Azure OpenAI Client">
 To use Azure OpenAI, you need to replace the default OpenAI client with the configured `AzureOpenAI` client:
@@ -51,7 +105,7 @@ set_openai_client(client)
 
 <Step title="Update Agent Model Parameters">
 
-Replace the `model` parameter inside each agent with your model deployment name from Azure.t:
+Replace the `model` parameter inside each agent with your model deployment name from Azure:
 
 ```python
 from agency_swarm import Agent
@@ -80,6 +134,8 @@ agency.run_demo()
 ```
 </Step>
 </Steps>
+</Tab>
+</Tabs>
 
 ## Example Notebook
 
