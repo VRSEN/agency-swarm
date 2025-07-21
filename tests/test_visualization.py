@@ -130,7 +130,7 @@ class TestLayoutAlgorithms:
 
     def test_apply_layout(self, sample_agency_data):
         """Test the apply_layout method."""
-        result = LayoutAlgorithms.apply_layout(sample_agency_data, algorithm="hierarchical")
+        result = LayoutAlgorithms.apply_layout(sample_agency_data)
 
         # Check that structure is preserved
         assert "nodes" in result
@@ -262,7 +262,6 @@ class TestHTMLVisualizationGenerator:
         result = HTMLVisualizationGenerator.create_visualization_from_agency(
             agency=sample_agency,
             output_file="test.html",
-            layout_algorithm="hierarchical",
             include_tools=True,
             open_browser=False,
         )
@@ -282,7 +281,7 @@ class TestAgencyVisualizationIntegration:
         try:
             with patch("webbrowser.open"):
                 result_path = sample_agency.visualize(
-                    output_file=output_file, layout_algorithm="hierarchical", include_tools=True, open_browser=False
+                    output_file=output_file, include_tools=True, open_browser=False
                 )
 
             assert result_path == str(Path(output_file).resolve())
@@ -362,14 +361,13 @@ class TestAgencyVisualizationIntegration:
         tool_edges = [e for e in structure["edges"] if e["type"] == "tool"]
         assert len(tool_edges) == 0
 
-    def test_get_agency_structure_layout_algorithms(self, sample_agency):
-        """Test different layout algorithms in get_agency_structure."""
+    def test_get_agency_structure_hierarchical_layout(self, sample_agency):
+        """Test hierarchical layout in get_agency_structure."""
         # Test hierarchical layout
-        structure_hier = sample_agency.get_agency_structure(layout_algorithm="hierarchical")
-        assert structure_hier["metadata"]["layoutAlgorithm"] == "hierarchical"
+        structure = sample_agency.get_agency_structure()
 
         # Check that nodes have positions
-        for node in structure_hier["nodes"]:
+        for node in structure["nodes"]:
             assert "position" in node
             assert "x" in node["position"]
             assert "y" in node["position"]
