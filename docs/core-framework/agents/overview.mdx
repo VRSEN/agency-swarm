@@ -49,7 +49,7 @@ The new `Agent` class extends the base `agents.Agent` with Agency Swarm-specific
 | Name | Parameter | Description |
 |------|-----------|-------------|
 | Files Folder *(optional)* | `files_folder` | Path to a local folder for managing files associated with this agent. If the folder name follows the pattern `*_vs_<vector_store_id>`, files uploaded via `upload_file` will also be added to the specified OpenAI Vector Store, and a `FileSearchTool` will be automatically added. Default: `None` |
-| Tools Folder *(optional)* | `tools_folder` | Path to a directory containing tool definitions. Tools are automatically discovered and loaded from this directory. Supports both legacy BaseTool subclasses and modern FunctionTool instances. Default: `None` |
+| Tools Folder *(optional)* | `tools_folder` | Path to a directory containing tool definitions. Tools are automatically discovered and loaded from this directory. Supports both BaseTool subclasses and modern FunctionTool instances. Default: `None` |
 | Description *(optional)* | `description` | A description of the agent's role or purpose, used to convey agent's role to other agents. Default: `None` |
 | Send Message Tool Class *(optional)* | `send_message_tool_class` | Custom SendMessage tool class to use for inter-agent communication. If None, uses the default SendMessage class. Default: `None` |
 

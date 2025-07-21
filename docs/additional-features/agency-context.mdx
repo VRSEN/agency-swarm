@@ -77,7 +77,7 @@ You can use agency context in your function tools and access it in agents. Here'
     ```
 </Tab>
 
-<Tab title="Legacy BaseTool (Deprecated)">
+<Tab title="BaseTool">
   <Warning>
   This section applies only to version 0.x of the Agency Swarm library. For 1.x library versions, use the agency context patterns shown in the other tabs.
   </Warning>
@@ -93,15 +93,14 @@ You can use agency context in your function tools and access it in agents. Here'
     class QueryDatabase(BaseTool):
         """
         Retrieves data from the database and stores it in agency context.
-        Note: This is deprecated. Use function_tool instead.
         """
         question: str = Field(..., description="The query to execute.")
 
         def run(self):
             # Fetch data based on the question
             context = query_database_api(self.question)
-            # Store the context in agency context (legacy way - deprecated)
-            self._shared_state.set('database_context', context)
+            # Store the context in agency context
+            context = ctx.context.set('database_context')
             return "Context has been retrieved and stored successfully."
     ```
 
