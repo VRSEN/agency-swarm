@@ -69,7 +69,46 @@ echo "Test coverage:" && find tests/ -name "*.py" | wc -l
 
 **CRITICAL SAFETY REQUIREMENT: NO EXCEPTIONS**
 
-#### After EVERY Critical Change
+## 🔴 MANDATORY WORKFLOW PROCESS
+
+### Python Version Requirement
+- **PYTHON 3.13 REQUIRED** - This codebase strictly uses Python 3.13 features
+- **ULTRA-MODERN TYPE SYNTAX** - Always use the newest type syntax: `str | int | None` never `Union[str, int, None]`
+- **NO LEGACY TYPE IMPORTS** - Never import `Union` from typing - use pipe syntax exclusively
+- **NO FROM __future__ IMPORTS** - Never use `from __future__ import annotations` - Python 3.13 supports modern syntax natively
+- **TYPE ANNOTATIONS MANDATORY** - All function parameters and return values must use modern type hints
+
+### 1. BEFORE STARTING ANY TASK
+
+**🔴 STEP 0: BUILD PROJECT STRUCTURE (MANDATORY BEFORE ANY ANALYSIS)**
+```bash
+find src/ -name "*.py" | grep -v __pycache__ | sort  # Full file inventory
+find src/ -name "*.py" | grep -v node_modules | grep -v __pycache__ | xargs wc -l | sort -nr  # Line counts
+```
+- **MANDATORY BEFORE** reading any file contents or making changes
+- **PREVENTS missing files** during consolidation or refactoring
+- **IDENTIFIES all file size violations** (>500 lines) immediately
+- **MAPS complete codebase scope** before any architectural decisions
+
+**🔴 STEP 1: COMPLETE CHANGE REVIEW (MANDATORY)**
+```bash
+git diff --cached | cat  # MUST review ALL staged changes - NO EXCEPTIONS
+git diff | cat           # MUST review ALL unstaged changes - NO EXCEPTIONS
+git status --porcelain   # MUST check status of ALL files including untracked
+```
+- **NEVER proceed** without reviewing what actually changed in BOTH staged and unstaged
+- **VERIFY** changes match intent exactly across ALL files
+- **CHECK** for unintended modifications and missing files
+- **READ EVERY SINGLE CHANGE** - no exceptions for "small" changes
+- **INCLUDE untracked files** in the analysis
+
+**🔴 STEP 2: PROACTIVE ANALYSIS (MANDATORY)**
+- **SEARCH for ALL similar patterns** across entire codebase
+- **IDENTIFY all related changes** needed
+- **CREATE comprehensive plan** for all similar patterns
+- **PREVENT piecemeal changes** - fix all instances at once
+
+**🔴 STEP 3: VALIDATION (MANDATORY)**
 - **MUST run full test suite** (`make tests` or `cd tests && pytest -v`) before proceeding
 - **MUST verify examples still work** - run at least 2-3 relevant examples from `/examples/`
 - **MUST check integration tests pass** - especially in `tests/integration/`
@@ -88,13 +127,33 @@ echo "Test coverage:" && find tests/ -name "*.py" | wc -l
 - **NEVER skip testing** due to time pressure
 - **IMMEDIATELY fix failing tests** - do not proceed with other work
 
-**Remember: Lives depend on reliability. Test everything. Trust nothing.**
+**Remember: System reliability is critical. Review everything. Test everything. Trust nothing.**
 
-### Testing Rules (MANDATORY)
-- **Before every change:** `make ci` (lint + mypy + tests + coverage)
-- **After critical changes:** Run 2-3 relevant examples from `/examples/`
-- **Integration tests:** Must pass - they test real system behavior
-- **Never commit** without running tests first
+### Testing Rules (MANDATORY - NO EXCEPTIONS)
+**🔴 EXACT COMMANDS AFTER EVERY SINGLE CHANGE:**
+```bash
+# STEP 1: MANDATORY - Full test suite (NO EXCEPTIONS)
+make ci                    # REQUIRED: lint + mypy + tests + coverage
+
+# STEP 2: MANDATORY - Run existing examples (NO MANUAL TESTS)
+python examples/agency_terminal_demo.py          # Basic functionality
+python examples/multi_agent_workflow.py          # Multi-agent communication
+python examples/agency_context.py                # Context sharing
+
+# STEP 3: MANDATORY - Integration tests specifically
+python -m pytest tests/integration/ -v          # Real system behavior tests
+
+# STEP 4: MANDATORY - Critical module tests
+python -m pytest tests/test_agent_modules/ -v   # Agent functionality
+python -m pytest tests/test_agency_modules/ -v  # Agency functionality
+```
+
+**CRITICAL SAFETY RULES:**
+- **NEVER write manual Python tests** - use existing test infrastructure only
+- **NEVER commit** without running ALL above commands successfully
+- **NEVER proceed** if ANY test fails
+- **ALWAYS run examples** to verify real-world usage patterns work
+- **ONE LINE CHANGE = FULL TEST SUITE** - no exceptions
 
 ### Code Safety Rules
 - **Never remove** error handling without permission
@@ -107,6 +166,73 @@ echo "Test coverage:" && find tests/ -name "*.py" | wc -l
 - **Test ALL code paths** including edge cases before claiming completion
 - **FORBIDDEN: NO NEWS/UPDATES in AGENTS.md** - This is a reference document, not a changelog. Never add "Latest Changes", "Recent Updates", "Critical API Changes" or similar news sections
 
+### Critical Self-Improvement Protocol (MANDATORY - NO EXCEPTIONS)
+- **🚨 CRITICAL VIOLATION: FAKING PROGRESS OR LYING ABOUT RESULTS** - Always report actual results, even minor issues. Decommissioning offense.
+- **BRUTAL HONESTY REQUIRED** - Be extremely pessimistic and skeptical. Report ALL issues encountered during operations
+- **SCIENTIFIC APPROACH MANDATORY** - Base ALL decisions on real data and evidence, never assumptions or hallucinations
+- **NEGATIVE FEEDBACK = IMMEDIATE AGENTS.MD UPDATE** - The moment you receive ANY criticism, update this file FIRST before any other work
+- **SELF-IMPROVEMENT ALWAYS GOES FIRST** - Update protocols, rules, and procedures before attempting to fix anything else
+- **🚨 CRITICAL ARCHITECTURAL FAILURE LESSON** - NEVER do superficial file shuffling instead of proper architectural analysis
+- **THINK BEFORE TOUCHING CODE** - Analyze EVERY file's true responsibilities before making ANY changes
+- **SEPARATION OF CONCERNS IS MANDATORY** - Streaming, execution, utilities, persistence must be properly separated
+- **QUESTION EVERY METHOD** - Methods like `_set_persistence_callbacks` might be unnecessary complexity
+- **NO "BUNCH OF CHANGES" APPROACH** - Always find the smartest, most surgical approach instead of widespread modifications
+- **ARCHITECTURAL THINKING FIRST** - Understand the ENTIRE system before making any structural changes
+- **🚨 CRITICAL CODE QUALITY DISASTER (2024-12-19)** - User extremely upset about code worse than ever seen
+- **USELESS STUB FILES FORBIDDEN** - NEVER create tiny stub files like `util/integrations.py` that just return status messages - this violates common sense
+- **IMMEDIATE DELETION REQUIRED** - All stub files in `util/` directory must be deleted immediately - they serve no purpose
+- **SERVICE LAYER ARCHITECTURE REQUIRED** - When files exceed 500 lines, extract business logic to service classes, not useless stubs
+- **FILE CONSOLIDATION VIOLATIONS CRITICAL** - Multiple files showing both staged/unstaged changes indicates improper file management
+- **UNTRACKED DIRECTORY CREATION FORBIDDEN** - Creating `execution/`, `streaming/`, `util/` directories without proper integration is architectural failure
+- **IMMEDIATE CLEANUP REQUIRED** - Delete all useless code, consolidate properly, follow 500-line rule with proper service extraction
+
+### 🚨 CRITICAL REFACTORING PROTOCOL - ZERO FUNCTIONAL CHANGES ALLOWED
+
+**🔴 NUCLEAR-LEVEL SAFETY REQUIREMENT: ZERO FUNCTIONAL CHANGES DURING REFACTORING**
+
+This is the **MOST CRITICAL RULE** in the entire codebase. Violation will result in **IMMEDIATE DECOMMISSIONING**.
+
+#### Refactoring Definition
+- **ALLOWED**: Moving code between files, extracting methods, renaming for clarity, splitting large files
+- **FORBIDDEN**: Changing ANY logic, behavior, API, return values, error handling, or functionality
+
+#### Mandatory Verification Protocol (UP TO 1000 TIMES)
+1. **BEFORE ANY REFACTOR**: Save complete file contents snapshot
+2. **COMPARE LINE-BY-LINE**: Use `git diff` to verify EVERY single change
+3. **LOGIC PRESERVATION**: The old code and new code must be FUNCTIONALLY IDENTICAL
+4. **USE agent_legacy.py**: Reference this file to verify original behavior
+5. **CHECK COMMIT 54491685065bc657c358be3f2899da707e5ed94f**: Verify against this baseline
+
+#### Verification Commands (RUN ALL - NO EXCEPTIONS)
+```bash
+# MANDATORY: Run up to 1000 times until ZERO functional changes detected
+git diff --cached | grep -E "^[+-]" | grep -v "^[+-]import" | grep -v "^[+-]from"
+git diff | grep -E "^[+-]" | grep -v "^[+-]import" | grep -v "^[+-]from"
+
+# Compare with legacy file
+diff -u src/agency_swarm/agent_legacy.py src/agency_swarm/agent.py
+
+# Check specific commit
+git show 54491685065bc657c358be3f2899da707e5ed94f
+```
+
+#### Refactoring Rules
+- **ONLY GOAL**: Reduce cognitive load from agency.py and agent.py
+- **NO NEW FEATURES**: Zero additions to functionality
+- **NO BUG FIXES**: Even if you spot bugs, DO NOT fix them during refactoring
+- **NO OPTIMIZATIONS**: Keep exact same performance characteristics
+- **PRESERVE ALL QUIRKS**: Even weird behavior must be preserved exactly
+
+#### Red Flags (STOP IMMEDIATELY)
+- Any change in return values
+- Any change in error messages
+- Any change in method signatures
+- Any change in exception types
+- Any change in side effects
+- Any change in execution order
+
+**REMEMBER: The ONLY change allowed is structural organization to reduce file sizes. NOTHING ELSE.**
+
 ### Code Deduplication Policy (MANDATORY)
 - **ALWAYS check for code/test/example duplication** across the entire codebase before implementing
 - **Perform at least 10 searches + 10 greps with various queries** to verify no duplication exists
@@ -116,6 +242,17 @@ echo "Test coverage:" && find tests/ -name "*.py" | wc -l
 - **Remove duplicate code immediately** when found during development
 - **This applies to ALL projects and ALL files** - no exceptions
 
+### File Consolidation Policy (MANDATORY)
+- **IMMEDIATE CONSOLIDATION REQUIRED** for helper files < 100 lines that just delegate functionality
+- **PATTERNS TO CONSOLIDATE**: `_helper_class` → separate file → import and delegate pattern
+- **CRITICAL FILE SIZE VIOLATIONS** (PRIORITY 1):
+  - ⚠️ `agency.py` - EXCEEDS 500 line limit
+  - ⚠️ `agent.py` - EXCEEDS 500 line limit
+- **CONSOLIDATION RULES**:
+  - Files < 100 lines that only delegate → consolidate immediately
+  - Files 100-150 lines → evaluate case by case
+  - Files > 150 lines → keep separate
+- **MANDATORY SEARCH PATTERNS** when consolidating: `_compatibility`, `_integrations`, `_visualizer`, `_demos`, `_tools_loader`, `_context_manager`
 ---
 
 ## 5. 💻 Development Guidelines
@@ -124,6 +261,8 @@ echo "Test coverage:" && find tests/ -name "*.py" | wc -l
 - **Max 500 lines per file** - Current violators: `agency.py`, `agent.py` - MUST be refactored
 - **Max 100 lines per method/function** - Prefer 10-40 lines
 - **Single responsibility** per class/function
+- **DRY Principle: 3+ repetitions = immediate refactoring** - Extract common patterns into reusable functions
+- **Reliability over convenience** - Thorough testing and validation beats quick implementation
 
 ### Code Quality Standards
 - **Single Responsibility Principle** - one job per class/function
@@ -287,30 +426,6 @@ make tests     # pytest
 - **`docs/migration_guide.mdx`** - **MUST READ** for v1.x patterns and breaking changes
 - **`examples/`** - **UPDATED** v1.x implementation examples
 - **`/docs`** - **OUTDATED** v0.x patterns - use with caution
-
-### Framework Migration Notes
-- `response_format` → `output_type`
-- `agency_chart` → entry points + `communication_flows`
-- Both `BaseTool` and `@function_tool` are supported for tool creation
-
-### Essential APIs
-```python
-# Agency - Multi-agent orchestration
-agency = Agency(ceo, communication_flows=[(ceo, dev)])
-result = await agency.get_response("Hello")
-
-# Agent - Individual execution
-agent = Agent(name="Dev", instructions="...", tools=[])
-result = await agent.get_response("Task")
-
-# Thread - Conversation management
-thread = thread_manager.get_thread(thread_id)
-thread.add_user_message("Hello")
-
-# Visualization - Agency structure visualization (hierarchical layout only)
-structure = agency.get_agency_structure(include_tools=True)
-html_file = agency.visualize(output_file="agency.html", include_tools=True, open_browser=True)
-```
 
 ### Key Commands
 ```bash
