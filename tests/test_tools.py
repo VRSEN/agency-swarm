@@ -211,12 +211,12 @@ async def test_send_message_target_agent_error(specific_send_message_tool, mock_
 @pytest.mark.asyncio
 async def test_legacy_tool(legacy_tool):
     """
-    Test that a legacy BaseTool can be used via the on_invoke_tool method of the adapted FunctionTool.
+    Test that BaseTool can be used via the on_invoke_tool method of the adapted FunctionTool.
     """
     from agency_swarm.agent import Agent
+    from agency_swarm.tools.ToolFactory import ToolFactory
 
-    agent = Agent(name="test", instructions="test")
-    function_tool = agent._adapt_legacy_tool(legacy_tool)
+    function_tool = ToolFactory.adapt_base_tool(legacy_tool)
     input_json = '{"input": "hello"}'
     result = await function_tool.on_invoke_tool(None, input_json)
     assert result == "hello"

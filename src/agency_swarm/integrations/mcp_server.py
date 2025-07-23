@@ -1,5 +1,4 @@
 import asyncio
-import importlib
 import inspect
 import json
 import logging
@@ -19,6 +18,7 @@ from fastmcp.tools.tool import Tool, ToolResult
 from mcp.types import ErrorData
 
 from agency_swarm import BaseTool
+from agency_swarm.tools import ToolFactory
 
 logger = logging.getLogger(__name__)
 load_dotenv()
@@ -36,28 +36,10 @@ def _load_tools_from_directory(tools_dir: str) -> List[Union[type[BaseTool], typ
         for file in files:
             if file.endswith('.py') and not file.startswith('__'):
                 module_path = os.path.join(root, file)
-                module_name = os.path.splitext(file)[0]
 
                 # Import the module
-                try:
-                    spec = importlib.util.spec_from_file_location(module_name, module_path)
-                    if spec and spec.loader:
-                        module = importlib.util.module_from_spec(spec)
-                        spec.loader.exec_module(module)
-
-                        # Find BaseTool subclasses in the module
-                        for item_name, item in inspect.getmembers(module):
-                            if (
-                                (
-                                    inspect.isclass(item)
-                                    and issubclass(item, BaseTool)
-                                    and item != BaseTool
-                                ) or
-                                isinstance(item, FunctionTool)
-                            ):
-                                tools.append(item)
-                except Exception as e:
-                    logger.error(f"Could not load module {module_name}: {e}")
+                file_tools = ToolFactory.from_file(module_path)
+                tools.extend(file_tools)
 
     return tools
 
@@ -140,7 +122,7 @@ def run_mcp(
         # Handle different tool types
         if inspect.isclass(tool) and issubclass(tool, BaseTool):
             logger.info(f"Converting BaseTool: {tool}")
-            tool = _adapt_legacy_tool(tool)
+            tool = ToolFactory.adapt_base_tool(tool)
 
         # on_invoke_tool does not contain input type hints
         # Create a custom tool to maintain input schema
@@ -180,54 +162,3 @@ def run_mcp(
         mcp.run(transport=transport)
     else:
         mcp.run(transport=transport, host=host, port=port)
-
-def _adapt_legacy_tool(legacy_tool: type[BaseTool]):
-        """
-        Adapts a legacy BaseTool (class-based) to a FunctionTool (function-based).
-        Args:
-            legacy_tool: A class inheriting from BaseTool.
-        Returns:
-            A FunctionTool instance.
-        """
-        name = legacy_tool.__name__
-        description = legacy_tool.__doc__ or ""
-        if bool(getattr(legacy_tool, "__abstractmethods__", set())):
-            raise TypeError(f"Legacy tool '{name}' must implement all abstract methods.")
-        if description == "":
-            logger.warning(f"Warning: Tool {name} has no docstring.")
-        # Use the Pydantic model schema for parameters
-        params_json_schema = legacy_tool.model_json_schema()
-        if legacy_tool.ToolConfig.strict:
-            params_json_schema = ensure_strict_json_schema(params_json_schema)
-        # Remove title/description at the top level, keep only in properties
-        params_json_schema = {k: v for k, v in params_json_schema.items() if k not in ("title", "description")}
-        params_json_schema["additionalProperties"] = False
-
-        # The on_invoke_tool function
-        async def on_invoke_tool(ctx: Any, input_json: str):
-            # Parse input_json to dict
-            import json
-
-            try:
-                args = json.loads(input_json) if input_json else {}
-            except Exception as e:
-                return f"Error: Invalid JSON input: {e}"
-            try:
-                # Instantiate the legacy tool with args
-                tool_instance = legacy_tool(**args)
-                if inspect.iscoroutinefunction(tool_instance.run):
-                    result = await tool_instance.run()
-                else:
-                    # Always run sync run() in a thread for async compatibility
-                    result = await asyncio.to_thread(tool_instance.run)
-                return str(result)
-            except Exception as e:
-                return f"Error running legacy tool: {e}"
-
-        return FunctionTool(
-            name=name,
-            description=description.strip(),
-            params_json_schema=params_json_schema,
-            on_invoke_tool=on_invoke_tool,
-            strict_json_schema=legacy_tool.ToolConfig.strict,
-        )
