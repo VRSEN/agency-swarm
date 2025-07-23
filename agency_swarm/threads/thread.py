@@ -936,18 +936,33 @@ class Thread:
         parent_run_id: str | None,
     ) -> bool:
         """Attempts to recover from run failures if they match common errors (up to 3 times)."""
-        error_message = self._run.last_error.message.lower() if self._run.last_error else ""
+        error_message = (
+            self._run.last_error.message.lower() if self._run.last_error else ""
+        )
         common_errors = [
             "something went wrong",
             "the server had an error processing your request",
-            "rate limit reached",
         ]
-        if error_attempts < 3 and any(e in error_message for e in common_errors):
-            if error_attempts < 2:
-                time.sleep(1 + error_attempts)
-            else:
-                # Make one last try with a 'Continue.' user prompt
-                self.create_message(message="Continue.", role="user")
+
+        rate_limit = "rate limit" in error_message
+        if rate_limit:
+            match = re.search(r"try again in (\d+) second", error_message)
+            if match:
+                try:
+                    wait_time = int(match.group(1))
+                    time.sleep(wait_time)
+                except ValueError:
+                    time.sleep(1 + error_attempts)
+
+        if error_attempts < 3 and (
+            any(e in error_message for e in common_errors) or rate_limit
+        ):
+            if not rate_limit:
+                if error_attempts < 2:
+                    time.sleep(1 + error_attempts)
+                else:
+                    # Make one last try with a 'Continue.' user prompt
+                    self.create_message(message="Continue.", role="user")
 
             self._create_run(
                 recipient_agent,
