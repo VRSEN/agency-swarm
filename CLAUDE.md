@@ -185,53 +185,36 @@ This is the **MOST CRITICAL RULE**. During refactoring:
 - `agent.py`: 1444 lines (VIOLATES 500 line limit)
 - Multiple tests failing due to attempted functional changes
 
-### Refactoring Strategy
+### Refactoring Strategy - Domain-Driven Design
 
-#### 1. **Agent Module Split** (agent.py → 300-400 lines each)
-```
-src/agency_swarm/agent/
-├── __init__.py         # Import and attach methods to Agent class
-├── agent.py            # Core Agent class, initialization, tools
-├── execution.py        # get_response, get_response_stream methods
-├── communication.py    # register_subagent, send_message handling
-└── file_management.py  # upload_file, file operations
-```
+The goal is to split large files into focused domains while maintaining exact functionality. This is a suggested approach that should be adapted based on actual code analysis and optimal design decisions.
 
-**Key Pattern**: Use monkey-patching in `__init__.py`:
-```python
-from . import execution, communication, file_management
-from .agent import Agent
+#### Suggested Domain Boundaries
 
-# Attach domain methods to Agent class
-Agent.get_response = execution.get_response
-Agent.get_response_stream = execution.get_response_stream
-Agent.register_subagent = communication.register_subagent
-Agent.upload_file = file_management.upload_file
-```
+**For Agent (currently 1444 lines):**
+- **Core Domain**: Agent initialization, configuration, tool management
+- **Run Domain**: Everything that happens during a run (get_response cycle)
+- **Communication Domain**: Inter-agent messaging and subagent registration
+- **File Management Domain**: File operations and vector store handling
 
-#### 2. **Agency Service Layer** (agency.py → ~300 lines)
-```
-src/agency_swarm/services/
-├── __init__.py
-├── agency_execution_service.py     # get_response, streaming
-├── agency_registration_service.py  # agent registration, flows
-├── agency_integration_service.py   # FastAPI, demos
-└── agency_visualization_service.py # structure, visualization
-```
+**For Agency (currently 792 lines):**
+- **Core Domain**: Agency initialization and agent orchestration
+- **Run Services**: Coordinating agent runs and response handling
+- **Registration Services**: Managing agent registration and communication flows
+- **Integration Services**: External integrations (FastAPI, demos)
+- **Visualization Services**: Structure representation and visualization
 
-#### 3. **Supporting Modules** (extract from large files)
-```
-src/agency_swarm/execution/
-├── __init__.py
-├── common.py           # Shared execution logic
-├── context_manager.py  # Context preparation
-└── result_handler.py   # Result processing
+**Supporting Domains to Consider:**
+- **Context Management**: Shared state and context preparation
+- **Streaming**: Event streaming and conversion
+- **Persistence**: Thread and state management
 
-src/agency_swarm/streaming/
-├── __init__.py
-├── handler.py          # Stream handling logic
-└── event_converter.py  # Event conversion
-```
+#### Design Principles
+
+1. **Domain Cohesion**: Each module should represent a coherent business domain
+2. **Clean Interfaces**: Clear boundaries between domains
+3. **Flexible Implementation**: Choose the best approach during actual refactoring
+4. **Maintain Public API**: External interfaces must remain unchanged
 
 ### Critical Rules
 
