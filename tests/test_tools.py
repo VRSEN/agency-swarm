@@ -236,9 +236,9 @@ async def test_basetool_context_support():
         message: str = Field(..., description="Message to process")
 
         def run(self):
-            if self._context is not None:
-                # Access user context from the RunContextWrapper
-                user_val = self._context.context.user_context.get("test_key", "no_value")
+            if self.context is not None:
+                # Access user context using the cleaner API
+                user_val = self.context.get("test_key", "no_value")
                 return f"Message: {self.message}, Context: {user_val}"
             else:
                 return f"Message: {self.message}, Context: None"
@@ -249,6 +249,7 @@ async def test_basetool_context_support():
     # Create mock context
     mock_master_context = MagicMock()
     mock_master_context.user_context = {"test_key": "test_value"}
+    mock_master_context.get = lambda key, default=None: mock_master_context.user_context.get(key, default)
 
     mock_wrapper = MagicMock()
     mock_wrapper.context = mock_master_context

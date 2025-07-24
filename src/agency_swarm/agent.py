@@ -1146,16 +1146,14 @@ class Agent(BaseAgent[MasterContext]):
         if not self._thread_manager:
             raise RuntimeError("Cannot prepare context: ThreadManager missing.")
 
-        # Start with base user context from agency, if it exists
+        # Use reference for persistence, or create merged copy if override provided
         base_user_context = getattr(self._agency_instance, "user_context", {})
-        merged_user_context = base_user_context.copy()
-        if context_override:
-            merged_user_context.update(context_override)
+        user_context = {**base_user_context, **context_override} if context_override else base_user_context
 
         return MasterContext(
             thread_manager=self._thread_manager,
             agents=self._agency_instance.agents,
-            user_context=merged_user_context,
+            user_context=user_context,
             current_agent_name=self.name,
         )
 

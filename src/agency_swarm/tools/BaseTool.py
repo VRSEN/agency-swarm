@@ -91,6 +91,13 @@ class BaseTool(BaseModel, ABC):
 
         return schema
 
+    @property
+    def context(self):
+        """Get the MasterContext if available, providing clean access to shared state."""
+        if self._context is not None:
+            return self._context.context
+        return None
+
     @abstractmethod
     def run(self):
         pass
