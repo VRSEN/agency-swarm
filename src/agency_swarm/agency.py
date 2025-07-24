@@ -12,10 +12,6 @@ from agents import (
     RunResult,
 )
 
-from .agency_compatibility import AgencyCompatibility
-from .agency_demos import AgencyDemos
-from .agency_integrations import AgencyIntegrations
-from .agency_modules.visualization import AgencyVisualizer
 from .agent import Agent
 from .hooks import PersistenceHooks
 from .thread import ThreadLoadCallback, ThreadManager, ThreadSaveCallback
@@ -250,12 +246,6 @@ class Agency:
         # --- Configure Agents & Communication ---
         # _configure_agents will now use _derived_communication_flows determined above
         self._configure_agents(_derived_communication_flows)
-
-        # --- Initialize Helper Modules ---
-        self._visualizer = AgencyVisualizer(self)
-        self._demos = AgencyDemos(self)
-        self._integrations = AgencyIntegrations(self)
-        self._compatibility = AgencyCompatibility(self)
 
         logger.info("Agency initialization complete.")
 
@@ -606,11 +596,17 @@ class Agency:
             Optional list of allowed CORS origins passed through to
             :func:`run_fastapi`.
         """
-        # Delegate to integrations module
-        return self._integrations.run_fastapi(
+        from agency_swarm.integrations.fastapi import run_fastapi
+
+        run_fastapi(
+            # TODO: agency_factory should create a new Agency instance each call
+            # to properly load conversation history via the callback.
+            # Returning `self` preserves old behaviour but may skip persistence
+            # loading. Consider refactoring.
+            agencies={self.name or "agency": lambda **kwargs: self},
             host=host,
             port=port,
-            verify_token=app_token_env,
+            app_token_env=app_token_env,
             cors_origins=cors_origins,
             enable_agui=enable_agui,
         )
@@ -703,20 +699,40 @@ class Agency:
         """
         [DEPRECATED] Use get_response instead. Returns final text output.
         """
-        # Delegate to compatibility module
-        return self._compatibility.get_completion(
-            message=message,
-            recipient_agent=recipient_agent,
-            additional_instructions=additional_instructions,
-            **kwargs,
+        warnings.warn(
+            "get_completion is deprecated. Use get_response instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
+        # Use asyncio.run to call the async method from sync context
+        return asyncio.run(
+            self._async_get_completion(
+                message=message,
+                message_files=message_files,
+                yield_messages=yield_messages,
+                recipient_agent=recipient_agent,
+                additional_instructions=additional_instructions,
+                attachments=attachments,
+                tool_choice=tool_choice,
+                verbose=verbose,
+                response_format=response_format,
+                **kwargs,
+            )
         )
 
     def get_completion_stream(self, *args: Any, **kwargs: Any):
         """
         [DEPRECATED] Use get_response_stream instead. Yields all events from the modern streaming API.
         """
-        # Delegate to compatibility module
-        return self._compatibility.get_completion_stream(*args, **kwargs)
+        warnings.warn(
+            "get_completion_stream is deprecated. Use get_response_stream instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        raise NotImplementedError(
+            "get_completion_stream is not yet implemented in v1.x. Use get_response_stream instead."
+        )
 
     def get_agency_structure(self, include_tools: bool = True) -> dict[str, Any]:
         """
@@ -728,8 +744,12 @@ class Agency:
         Returns:
             dict: ReactFlow-compatible structure with nodes and edges
         """
-        # Delegate to visualization module
-        return self._visualizer.get_agency_structure(include_tools=include_tools)
+        # Import the visualization converter
+        from .ui.core.converters import VisualizationConverter
+
+        # Convert agency to visualization format
+        converter = VisualizationConverter()
+        return converter.convert_agency_to_json(self, include_tools=include_tools)
 
     def visualize(
         self,
@@ -762,8 +782,11 @@ class Agency:
         """
         Run a terminal demo of the agency.
         """
-        # Delegate to demos module
-        self._demos.terminal_demo()
+        # Import and run the terminal demo
+        from .ui.demos.launcher import TerminalDemo
+
+        demo = TerminalDemo(self)
+        demo.run()
 
     def copilot_demo(
         self,
@@ -775,5 +798,5 @@ class Agency:
         """
         Run a copilot demo of the agency.
         """
-        # Delegate to demos module
-        self._demos.copilot_demo(host=host, port=port, frontend_port=frontend_port, cors_origins=cors_origins)
+        # Copilot demo implementation
+        logger.warning("copilot_demo is not yet implemented in this version.")
