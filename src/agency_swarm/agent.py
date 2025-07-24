@@ -38,9 +38,8 @@ from openai.types.responses import ResponseFileSearchToolCall, ResponseFunctionW
 
 from .context import MasterContext
 from .thread import ThreadManager
-from .tools import BaseTool
+from .tools import BaseTool, ToolFactory
 from .tools.send_message import SendMessage
-from .tools.utils import from_openapi_schema, validate_openapi_spec
 from .utils.agent_file_manager import AgentFileManager
 from .utils.citation_extractor import extract_direct_file_annotations
 
@@ -91,8 +90,8 @@ class Agent(BaseAgent[MasterContext]):
                                           files uploaded via `upload_file` will also be added to the specified
                                           OpenAI Vector Store, and a `FileSearchTool` will be automatically added.
         tools_folder (str | Path | None): Path to a directory containing tool definitions. Tools are automatically
-                                           discovered and loaded from this directory. Supports both legacy BaseTool
-                                           subclasses and modern FunctionTool instances. Python files starting with
+                                           discovered and loaded from this directory. Supports both BaseTool
+                                           subclasses and FunctionTool instances. Python files starting with
                                            underscore are ignored.
         description (str | None): A description of the agent's role or purpose, used when generating
                                   dynamic `send_message` tools for other agents.
@@ -274,7 +273,7 @@ class Agent(BaseAgent[MasterContext]):
             tools_list = kwargs["tools"]
             for i, tool in enumerate(tools_list):
                 if isinstance(tool, type) and issubclass(tool, BaseTool):
-                    tools_list[i] = self._adapt_legacy_tool(tool)
+                    tools_list[i] = ToolFactory.adapt_base_tool(tool)
 
         # Merge deprecated model settings into existing model_settings
         if deprecated_model_settings:
@@ -463,10 +462,8 @@ class Agent(BaseAgent[MasterContext]):
     def _load_tools_from_folder(self) -> None:
         """Load tools defined in ``tools_folder`` and add them to the agent.
 
-        Supports both legacy ``BaseTool`` subclasses and ``FunctionTool``
-        instances created via the ``@function_tool`` decorator. This restores the
-        automatic discovery behavior from Agency Swarm v0.x while also handling
-        the new function-based tools.
+        Supports both ``BaseTool`` subclasses and ``FunctionTool``
+        instances created via the ``@function_tool`` decorator.
         """
 
         if not self.tools_folder:
@@ -484,36 +481,15 @@ class Agent(BaseAgent[MasterContext]):
             if not file.is_file() or file.suffix != ".py" or file.name.startswith("_"):
                 continue
 
-            module_name = file.stem
-            try:
-                spec = importlib.util.spec_from_file_location(module_name, file)
-                if spec and spec.loader:
-                    module = importlib.util.module_from_spec(spec)
-                    sys.modules[f"{module_name}_{id(self)}"] = module
-                    spec.loader.exec_module(module)
-                else:
-                    logger.error("Unable to import tool module %s", file)
-                    continue
-            except Exception as e:
-                logger.error("Error importing tool module %s: %s", file, e)
-                continue
-
-            # Legacy BaseTool: expect class with same name as file
-            legacy_class = getattr(module, module_name, None)
-            if inspect.isclass(legacy_class) and issubclass(legacy_class, BaseTool) and legacy_class is not BaseTool:
-                try:
-                    tool = self._adapt_legacy_tool(legacy_class)
-                    self.add_tool(tool)
-                except Exception as e:
-                    logger.error("Error adapting tool %s: %s", module_name, e)
-
-            # FunctionTool instances defined in the module
-            for obj in module.__dict__.values():
-                if isinstance(obj, FunctionTool):
+            tools = ToolFactory.from_file(file)
+            for tool in tools:
+                if issubclass(tool, BaseTool):
                     try:
-                        self.add_tool(obj)
+                        tool = ToolFactory.adapt_base_tool(tool)
                     except Exception as e:
-                        logger.error("Error adding function tool from %s: %s", file, e)
+                        logger.error("Error adapting tool %s: %s", file, e)
+                        continue
+                self.add_tool(tool)
 
     def _parse_schemas(self):
         schemas_folders = self.schemas_folder if isinstance(self.schemas_folder, list) else [self.schemas_folder]
@@ -538,7 +514,7 @@ class Agent(BaseAgent[MasterContext]):
                             openapi_spec = f.read()
                             f.close()  # fix permission error on windows
                         try:
-                            validate_openapi_spec(openapi_spec)
+                            ToolFactory.validate_openapi_spec(openapi_spec)
                         except Exception as e:
                             logger.error("Invalid OpenAPI schema: " + os.path.basename(f_path))
                             raise e
@@ -549,7 +525,7 @@ class Agent(BaseAgent[MasterContext]):
                                 headers = self.api_headers[os.path.basename(f_path)]
                             if os.path.basename(f_path) in self.api_params:
                                 params = self.api_params[os.path.basename(f_path)]
-                            tools = from_openapi_schema(openapi_spec, headers=headers, params=params)
+                            tools = ToolFactory.from_openapi_schema(openapi_spec, headers=headers, params=params)
                         except Exception as e:
                             logger.error(
                                 "Error parsing OpenAPI schema: " + os.path.basename(f_path),
@@ -1351,57 +1327,6 @@ class Agent(BaseAgent[MasterContext]):
             self._thread_manager = ThreadManager(
                 load_threads_callback=self._load_threads_callback, save_threads_callback=self._save_threads_callback
             )
-
-    def _adapt_legacy_tool(self, legacy_tool: type[BaseTool]):
-        """
-        Adapts a BaseTool (class-based) to a FunctionTool (function-based).
-        Args:
-            legacy_tool: A class inheriting from BaseTool.
-        Returns:
-            A FunctionTool instance.
-        """
-        name = legacy_tool.__name__
-        description = legacy_tool.__doc__ or ""
-        if bool(getattr(legacy_tool, "__abstractmethods__", set())):
-            raise TypeError(f"Legacy tool '{name}' must implement all abstract methods.")
-        if description == "":
-            logger.warning(f"Warning: Tool {name} has no docstring.")
-        # Use the Pydantic model schema for parameters
-        params_json_schema = legacy_tool.model_json_schema()
-        if legacy_tool.ToolConfig.strict:
-            params_json_schema = ensure_strict_json_schema(params_json_schema)
-        # Remove title/description at the top level, keep only in properties
-        params_json_schema = {k: v for k, v in params_json_schema.items() if k not in ("title", "description")}
-        params_json_schema["additionalProperties"] = False
-
-        # The on_invoke_tool function
-        async def on_invoke_tool(ctx, input_json: str):
-            # Parse input_json to dict
-            import json
-
-            try:
-                args = json.loads(input_json) if input_json else {}
-            except Exception as e:
-                return f"Error: Invalid JSON input: {e}"
-            try:
-                # Instantiate the legacy tool with args
-                tool_instance = legacy_tool(**args)
-                if inspect.iscoroutinefunction(tool_instance.run):
-                    result = await tool_instance.run()
-                else:
-                    # Always run sync run() in a thread for async compatibility
-                    result = await asyncio.to_thread(tool_instance.run)
-                return str(result)
-            except Exception as e:
-                return f"Error running legacy tool: {e}"
-
-        return FunctionTool(
-            name=name,
-            description=description.strip(),
-            params_json_schema=params_json_schema,
-            on_invoke_tool=on_invoke_tool,
-            strict_json_schema=legacy_tool.ToolConfig.strict,
-        )
 
     def get_class_folder_path(self) -> str:
         """Return the absolute path to the folder containing this class."""
