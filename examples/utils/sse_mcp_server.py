@@ -18,12 +18,15 @@ class GetSecretWordTool(BaseTool):
         """Returns a secret word based on the seed"""
         return "Strawberry" if self.seed % 2 == 0 else "Apple"
 
+
 @function_tool
 async def list_directory() -> str:
     """Returns the contents of the current directory"""
     import os
+
     dir_path = os.path.dirname(os.path.abspath(__file__))
     return os.listdir(dir_path)
+
 
 if __name__ == "__main__":
     if not os.getenv("APP_TOKEN") or os.getenv("APP_TOKEN") == "":

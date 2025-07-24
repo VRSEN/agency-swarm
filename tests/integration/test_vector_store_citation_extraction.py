@@ -14,7 +14,6 @@ import tempfile
 from pathlib import Path
 
 import pytest
-from agents import FileSearchTool
 
 from agency_swarm import Agency, Agent
 from agency_swarm.utils.citation_extractor import extract_vector_store_citations

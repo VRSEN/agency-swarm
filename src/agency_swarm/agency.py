@@ -1,6 +1,5 @@
 # --- agency.py ---
 import asyncio
-import concurrent.futures
 import logging
 import warnings
 from collections.abc import AsyncGenerator
@@ -744,12 +743,84 @@ class Agency:
         Returns:
             dict: ReactFlow-compatible structure with nodes and edges
         """
-        # Import the visualization converter
-        from .ui.core.converters import VisualizationConverter
+        from .ui.core.layout_algorithms import LayoutAlgorithms
 
-        # Convert agency to visualization format
-        converter = VisualizationConverter()
-        return converter.convert_agency_to_json(self, include_tools=include_tools)
+        nodes = []
+        edges = []
+
+        # Create agent nodes
+        for agent_name, agent in self.agents.items():
+            node = {
+                "id": agent_name,
+                "data": {
+                    "label": agent_name,
+                    "description": agent.instructions[:100] + "..."
+                    if agent.instructions and len(agent.instructions) > 100
+                    else agent.instructions or "",
+                    "model": agent.model,
+                    "tools": [],
+                },
+                "type": "agent",
+                "position": {"x": 0, "y": 0},  # Will be set by layout
+            }
+
+            # Add tools if requested
+            if include_tools and agent.tools:
+                for tool in agent.tools:
+                    tool_name = getattr(tool, "__name__", str(tool))
+                    node["data"]["tools"].append(tool_name)
+
+                    # Create tool node
+                    tool_node = {
+                        "id": f"{agent_name}_{tool_name}",
+                        "data": {
+                            "label": tool_name,
+                            "agentId": agent_name,
+                        },
+                        "type": "tool",
+                        "position": {"x": 0, "y": 0},
+                    }
+                    nodes.append(tool_node)
+
+                    # Create tool edge
+                    tool_edge = {
+                        "id": f"{agent_name}-{tool_name}",
+                        "source": agent_name,
+                        "target": f"{agent_name}_{tool_name}",
+                        "type": "tool",
+                    }
+                    edges.append(tool_edge)
+
+            nodes.append(node)
+
+        # Create communication edges from flows
+        for sender, receiver in self._derived_communication_flows:
+            edge = {
+                "id": f"{sender.name}-{receiver.name}",
+                "source": sender.name,
+                "target": receiver.name,
+                "type": "communication",
+            }
+            edges.append(edge)
+
+        # Create metadata
+        metadata = {
+            "totalAgents": len(self.agents),
+            "totalTools": sum(len(agent.tools) if agent.tools else 0 for agent in self.agents.values()),
+            "entryPoints": [ep.name for ep in self.entry_points],
+            "layout": "hierarchical",
+        }
+
+        # Create initial structure
+        agency_data = {
+            "nodes": nodes,
+            "edges": edges,
+            "metadata": metadata,
+        }
+
+        # Apply layout
+        layout = LayoutAlgorithms()
+        return layout.apply_layout(agency_data)
 
     def visualize(
         self,

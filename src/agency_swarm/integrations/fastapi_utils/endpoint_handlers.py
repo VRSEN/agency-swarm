@@ -9,7 +9,6 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from agency_swarm.agency import Agency
-
 from agency_swarm.ui.core.converters import AguiAdapter, serialize
 
 
@@ -161,7 +160,12 @@ def make_agui_chat_endpoint(request_model, agency_factory: Callable[..., Agency]
             default_agent = agency.entry_points[0]
 
             def load_callback() -> dict:
-                return {f"user->{default_agent.name}": {"items": AguiAdapter.agui_messages_to_chat_history(request.messages), "metadata": {}}}
+                return {
+                    f"user->{default_agent.name}": {
+                        "items": AguiAdapter.agui_messages_to_chat_history(request.messages),
+                        "metadata": {},
+                    }
+                }
 
         else:
 

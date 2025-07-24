@@ -1,5 +1,3 @@
-import asyncio
-import importlib.util
 import inspect
 import json
 import logging
@@ -31,8 +29,6 @@ from agents.items import (
 )
 from agents.run import DEFAULT_MAX_TURNS
 from agents.stream_events import RunItemStreamEvent
-from agents.strict_schema import ensure_strict_json_schema
-from agents.tool import FunctionTool
 from openai import AsyncOpenAI, OpenAI
 from openai.types.responses import ResponseFileSearchToolCall, ResponseFunctionWebSearch
 

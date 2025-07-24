@@ -1,5 +1,3 @@
-from typing import Optional
-
 from agents import function_tool
 from pydantic import BaseModel, Field
 
@@ -8,7 +6,7 @@ from agency_swarm.integrations.mcp_server import run_mcp
 
 class TimeArgs(BaseModel):
     time_zone: str = Field(..., description="The time zone to get the current time for used in")
-    time_format: Optional[str] = Field(None, description="The format of the time to return")
+    time_format: str | None = Field(None, description="The format of the time to return")
 
 
 # Define the async function that implements the tool logic using the decorator
@@ -16,6 +14,7 @@ class TimeArgs(BaseModel):
 async def get_unique_id() -> str:
     """Returns a unique id"""
     return "Unique ID: 12332211"
+
 
 @function_tool
 async def get_current_time(args: TimeArgs) -> str:
@@ -37,6 +36,7 @@ async def get_current_time(args: TimeArgs) -> str:
         return f"Current time in {args.time_zone}: {formatted_time}"
     except Exception as e:
         return f"Error getting time for timezone {args.time_zone}: {str(e)}"
+
 
 if __name__ == "__main__":
     run_mcp(tools=[get_unique_id, get_current_time], transport="stdio")

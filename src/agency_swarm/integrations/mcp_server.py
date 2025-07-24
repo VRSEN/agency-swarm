@@ -1,12 +1,10 @@
-import asyncio
 import inspect
 import json
 import logging
 import os
 import sys
-from typing import Any, List, Type, Union
+from typing import Any
 
-from agents.strict_schema import ensure_strict_json_schema
 from agents.tool import FunctionTool
 from dotenv import load_dotenv
 from fastmcp import FastMCP
@@ -23,9 +21,10 @@ from agency_swarm.tools import ToolFactory
 logger = logging.getLogger(__name__)
 load_dotenv()
 
-def _load_tools_from_directory(tools_dir: str) -> List[Union[type[BaseTool], type[FunctionTool]]]:
+
+def _load_tools_from_directory(tools_dir: str) -> list[type[BaseTool] | type[FunctionTool]]:
     """Load BaseTool classes from a directory."""
-    tools: List[Union[type[BaseTool], type[FunctionTool]]] = []
+    tools: list[type[BaseTool] | type[FunctionTool]] = []
 
     # Add tools directory to Python path if it's not already there
     if tools_dir not in sys.path:
@@ -34,7 +33,7 @@ def _load_tools_from_directory(tools_dir: str) -> List[Union[type[BaseTool], typ
     # Find all Python files in the tools directory
     for root, _, files in os.walk(tools_dir):
         for file in files:
-            if file.endswith('.py') and not file.startswith('__'):
+            if file.endswith(".py") and not file.startswith("__"):
                 module_path = os.path.join(root, file)
 
                 # Import the module
@@ -43,8 +42,9 @@ def _load_tools_from_directory(tools_dir: str) -> List[Union[type[BaseTool], typ
 
     return tools
 
+
 def run_mcp(
-    tools: Union[List[Union[Type[BaseTool], Type[FunctionTool]]], str],
+    tools: list[type[BaseTool] | type[FunctionTool]] | str,
     host: str = "0.0.0.0",
     port: int = 8000,
     app_token_env: str | None = "APP_TOKEN",
@@ -89,6 +89,7 @@ def run_mcp(
         if transport == "stdio":
             logger.warning("Stdio servers do not support authentication.")
         else:
+
             class StaticBearer(Middleware):
                 def __init__(self, token: str) -> None:
                     self.expected = f"Bearer {token}"
@@ -112,7 +113,7 @@ def run_mcp(
     tool_registry = {}
 
     for tool in tools_list:
-        tool_name = getattr(tool, 'name', None) or tool.__name__
+        tool_name = getattr(tool, "name", None) or tool.__name__
         if tool_name in tool_registry:
             raise ValueError(f"Duplicate tool name detected: {tool_name}. Please use a different tool name.")
         tool_registry[tool_name] = tool
@@ -127,7 +128,6 @@ def run_mcp(
         # on_invoke_tool does not contain input type hints
         # Create a custom tool to maintain input schema
         if isinstance(tool, FunctionTool):
-
             # Create a custom tool class that extends Tool
             class CustomTool(Tool):
                 def __init__(self, function_tool):
@@ -136,10 +136,10 @@ def run_mcp(
                         name=function_tool.name,
                         description=function_tool.description,
                         parameters=function_tool.params_json_schema,  # Use your existing JSON schema directly
-                        enabled=True
+                        enabled=True,
                     )
                     # Store the function_tool reference after super().__init__
-                    object.__setattr__(self, '_function_tool', function_tool)
+                    object.__setattr__(self, "_function_tool", function_tool)
 
                 async def run(self, arguments: dict[str, Any]) -> ToolResult:
                     # Convert to JSON string format expected by FunctionTool

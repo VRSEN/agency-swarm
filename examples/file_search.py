@@ -71,7 +71,7 @@ async def main():
     except Exception as e:
         print(f"❌ Error: {e}")
 
-    print(f"\n🎯 Usage Tips:")
+    print("\n🎯 Usage Tips:")
     print("   • Add more .txt files to the data/ directory")
     print("   • Citations show which files contain the answers")
     print("   • Vector store persists between runs")

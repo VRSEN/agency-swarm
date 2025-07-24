@@ -280,9 +280,7 @@ class TestAgencyVisualizationIntegration:
 
         try:
             with patch("webbrowser.open"):
-                result_path = sample_agency.visualize(
-                    output_file=output_file, include_tools=True, open_browser=False
-                )
+                result_path = sample_agency.visualize(output_file=output_file, include_tools=True, open_browser=False)
 
             assert result_path == str(Path(output_file).resolve())
             assert Path(output_file).exists()
