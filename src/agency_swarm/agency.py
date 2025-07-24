@@ -63,7 +63,7 @@ class Agency:
 
     def __init__(
         self,
-        *entry_points_args: Agent,
+        *entry_point_agents: Agent,
         communication_flows: list[tuple[Agent, Agent]] | None = None,
         agency_chart: AgencyChart | None = None,
         name: str | None = None,
@@ -83,14 +83,14 @@ class Agency:
         shared instructions, and establishes communication pathways between agents.
 
         Args:
-            *entry_points_args (Agent): Positional arguments representing Agent instances that
+            *entry_point_agents (Agent): Positional arguments representing Agent instances that
                                          serve as entry points for external interaction.
             communication_flows (list[tuple[Agent, Agent]] | None, optional):
                                          Keyword argument defining allowed agent-to-agent
                                          (sender, receiver) message paths. Defaults to None.
             agency_chart (AgencyChart | None, optional): Deprecated keyword argument for defining
                                                             the agency structure. If provided, it takes
-                                                            precedence over entry_points_args and
+                                                            precedence over entry_point_agents and
                                                             communication_flows, issuing a warning.
                                                             Defaults to None.
             shared_instructions (str | None, optional): Instructions prepended to all agents' system prompts.
@@ -180,17 +180,17 @@ class Agency:
                 stacklevel=2,
             )
             deprecated_args_used["agency_chart"] = agency_chart  # Log that it was used
-            if entry_points_args or communication_flows is not None:
+            if entry_point_agents or communication_flows is not None:
                 logger.warning(
-                    "'agency_chart' was provided along with new 'entry_points_args' or 'communication_flows'. "
+                    "'agency_chart' was provided along with new 'entry_point_agents' or 'communication_flows'. "
                     "'agency_chart' will be used for backward compatibility, and the new parameters will be ignored."
                 )
             # Parse the deprecated chart regardless if it was provided
             _derived_entry_points, _derived_communication_flows = self._parse_deprecated_agency_chart(agency_chart)
 
-        elif entry_points_args or communication_flows is not None:
+        elif entry_point_agents or communication_flows is not None:
             # Using new method
-            _derived_entry_points = list(entry_points_args)
+            _derived_entry_points = list(entry_point_agents)
             _derived_communication_flows = communication_flows or []
             # Validate inputs for new method
             if not all(isinstance(ep, Agent) for ep in _derived_entry_points):
