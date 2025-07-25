@@ -481,7 +481,12 @@ class Agent(BaseAgent[MasterContext]):
             return
 
         for file in folder_path.iterdir():
-            if not file.is_file() or file.suffix != ".py" or file.name.startswith("_"):
+            if (
+                not file.is_file()
+                or file.suffix != ".py"
+                or any(file.stem.startswith(prefix) for prefix in ["_", ".", "test_"])
+                or any(file.stem.endswith(suffix) for suffix in ["_test"])
+            ):
                 continue
 
             module_name = file.stem
