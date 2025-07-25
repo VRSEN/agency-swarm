@@ -1,6 +1,14 @@
 # Agency Swarm Codebase Navigation
 
-> **📖 Quick Start:** Read sections 1-3, then reference sections 4-6 as needed.
+> **🔴 CRITICAL:** This file has been consolidated with CLAUDE.md. Please refer to CLAUDE.md for all development guidelines, safety protocols, and architectural documentation.
+
+> **➡️ REDIRECT TO: [CLAUDE.md](./CLAUDE.md)**
+
+---
+
+## Legacy Reference Only
+
+The content below is kept for historical reference. All active development should follow the protocols in CLAUDE.md.
 
 ---
 

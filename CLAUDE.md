@@ -255,3 +255,92 @@ The goal is to split large files into focused domains while maintaining exact fu
 - ❌ Change any APIs or signatures
 - ❌ Create stub files < 50 lines
 - ❌ Mix functional changes with refactoring
+
+# Critical Safety Protocols (MANDATORY - NO EXCEPTIONS)
+
+## 🔴 MANDATORY WORKFLOW PROCESS
+
+### Python Version Requirement
+- **PYTHON 3.13 REQUIRED** - This codebase strictly uses Python 3.13 features
+- **ULTRA-MODERN TYPE SYNTAX** - Always use the newest type syntax: `str | int | None` never `Union[str, int, None]`
+- **NO LEGACY TYPE IMPORTS** - Never import `Union` from typing - use pipe syntax exclusively
+- **TYPE ANNOTATIONS MANDATORY** - All function parameters and return values must use modern type hints
+
+### 1. BEFORE STARTING ANY TASK
+
+**🔴 STEP 0: BUILD PROJECT STRUCTURE (MANDATORY BEFORE ANY ANALYSIS)**
+```bash
+find src/ -name "*.py" | grep -v __pycache__ | sort  # Full file inventory
+find src/ -name "*.py" | xargs wc -l | sort -nr     # Check for >500 line violations
+```
+
+**🔴 STEP 1: COMPLETE CHANGE REVIEW (MANDATORY)**
+```bash
+git diff --cached | cat  # MUST review ALL staged changes - NO EXCEPTIONS
+git diff | cat           # MUST review ALL unstaged changes - NO EXCEPTIONS
+git status --porcelain   # MUST check status of ALL files including untracked
+```
+
+**🔴 STEP 2: PROACTIVE ANALYSIS (MANDATORY)**
+- **SEARCH for ALL similar patterns** across entire codebase
+- **IDENTIFY all related changes** needed
+- **CREATE comprehensive plan** for all similar patterns
+- **PREVENT piecemeal changes** - fix all instances at once
+
+**🔴 STEP 3: VALIDATION (MANDATORY)**
+```bash
+make ci                                          # Full lint + mypy + tests + coverage
+python examples/agency_terminal_demo.py          # Basic functionality
+python examples/multi_agent_workflow.py          # Multi-agent communication
+python -m pytest tests/integration/ -v          # Integration tests
+```
+
+### Critical Safety Rules
+- **NEVER commit major changes** without running tests first
+- **NEVER claim "it works"** without actual test execution results
+- **ONE LINE CHANGE = FULL TEST SUITE** - no exceptions
+- **IMMEDIATELY fix failing tests** - do not proceed with other work
+- **NEVER remove error handling** without explicit permission
+- **Test ALL code paths** including edge cases before claiming completion
+
+### 🚨 CRITICAL REFACTORING PROTOCOL - ZERO FUNCTIONAL CHANGES ALLOWED
+
+**🔴 NUCLEAR-LEVEL SAFETY REQUIREMENT: ZERO FUNCTIONAL CHANGES DURING REFACTORING**
+
+This is the **MOST CRITICAL RULE** in the entire codebase.
+
+#### Refactoring Definition
+- **ALLOWED**: Moving code between files, extracting methods, renaming for clarity, splitting large files
+- **FORBIDDEN**: Changing ANY logic, behavior, API, return values, error handling, or functionality
+
+#### Mandatory Verification Protocol
+1. **BEFORE ANY REFACTOR**: Save complete file contents snapshot
+2. **COMPARE LINE-BY-LINE**: Use `git diff` to verify EVERY single change
+3. **LOGIC PRESERVATION**: The old code and new code must be FUNCTIONALLY IDENTICAL
+4. **CHECK COMMIT 54491685065bc657c358be3f2899da707e5ed94f**: Verify against this baseline
+
+#### Refactoring Rules
+- **ONLY GOAL**: Reduce file sizes below 500 lines
+- **NO NEW FEATURES**: Zero additions to functionality
+- **NO BUG FIXES**: Even if you spot bugs, DO NOT fix them during refactoring
+- **PRESERVE ALL QUIRKS**: Even weird behavior must be preserved exactly
+
+### Git Best Practices (20 Years of Experience)
+- **ALWAYS use `git status --porcelain`** to check all files including untracked
+- **NEVER use `git reset --hard`** without first saving important changes
+- **MODEL CAUSALITY THOROUGHLY** before any git operation
+- **Group commits logically** - separate refactoring from bug fixes from features
+- **Write descriptive commit messages** that explain the WHY, not just the WHAT
+
+### File & Method Limits
+- **Max 500 lines per file** - Current violators: `agency.py` (437 lines - OK), `agent.py` (1335 lines - MUST refactor)
+- **Max 100 lines per method/function** - Prefer 10-40 lines
+- **Single responsibility** per class/function
+- **DRY Principle: 3+ repetitions = immediate refactoring**
+
+# important-instruction-reminders
+Do what has been asked; nothing more, nothing less.
+NEVER create files unless they're absolutely necessary for achieving your goal.
+ALWAYS prefer editing an existing file to creating a new one.
+NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User.
+ALWAYS model causality thoroughly before acting - understand what each command will do and its consequences.
