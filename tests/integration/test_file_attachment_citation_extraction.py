@@ -65,9 +65,12 @@ async def test_file_attachment_citation_extraction():
         file_id = uploaded_file.id
         assert file_id.startswith("file-"), f"Expected file ID to start with 'file-', got: {file_id}"
 
+        # Give time for file to be processed
+        await asyncio.sleep(6)
+
         # Test direct file attachment with citation-generating question
         result = await agent.get_response(
-            message="Please analyze the attached financial report and tell me the exact quarterly revenue figure. Quote the specific text from the document that contains this revenue information.",
+            message="Please analyze the attached financial report and tell me the exact revenue figure. Quote the specific text from the document that contains this revenue information.",
             file_ids=[file_id],
         )
 
