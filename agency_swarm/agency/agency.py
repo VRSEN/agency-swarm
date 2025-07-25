@@ -1,5 +1,6 @@
 import inspect
 import json
+import re
 import os
 from datetime import datetime
 import queue
@@ -2139,19 +2140,37 @@ class Agency:
         从字符串中提取json，支持带markdown代码块格式
         返回：(是否找到json, json字符串)
         """
+        # try:
+        #     json_res = json.loads(message)
+        #     return True, message
+        # except json.decoder.JSONDecodeError:
+        #     # 尝试从markdown代码块中截取
+        #     start_str = "```json\n"
+        #     end_str = "\n```"
+        #     try:
+        #         start_index = message.rfind(start_str) + len(start_str)
+        #         end_index = message.index(end_str, start_index)
+        #         return True, message[start_index: end_index]
+        #     except ValueError:
+        #         return False, message
+
+        # 1. 尝试直接解析
         try:
             json_res = json.loads(message)
             return True, message
         except json.decoder.JSONDecodeError:
-            # 尝试从markdown代码块中截取
-            start_str = "```json\n"
-            end_str = "\n```"
+            pass
+        # 2. 尝试用正则匹配代码块
+        match = re.search(r"```json\s*(\{.*?\})\s*```", message, re.DOTALL)
+        if match:
+            json_str = match.group(1)
             try:
-                start_index = message.rfind(start_str) + len(start_str)
-                end_index = message.index(end_str, start_index)
-                return True, message[start_index: end_index]
-            except ValueError:
-                return False, message
+                json_res = json.loads(json_str)
+                return True, json_str
+            except Exception:
+                return False, json_str
+        # 返回False和原始消息  
+        return False, message
     
     def my_get_completion(self, res):
         """

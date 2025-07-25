@@ -14,7 +14,7 @@ _input_format = """
 {
     "title": <任务名称>,
     "description": <任务描述>,
-    "total_subtask_graph": <所有子任务的规划图>,
+    "total_subtask_graph": <所有子任务的规划图>
 }
 """
 
