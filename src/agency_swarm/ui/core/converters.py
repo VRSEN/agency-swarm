@@ -6,9 +6,9 @@ import logging
 from typing import Any
 
 from pydantic import BaseModel
-from rich.console import Console
-
-from .console_renderer import LiveConsoleRenderer
+from rich.console import Console, Group
+from rich.live import Live
+from rich.markdown import Markdown
 
 try:
     from ag_ui.core import (
@@ -409,27 +409,42 @@ class ConsoleEventAdapter:
         self.response_buffer = ""
         self.message_output = None
         self.console = Console()
+        self.last_live_display = None
 
     def _update_console(self, msg_type: str, sender: str, receiver: str, content: str):
-        renderer = LiveConsoleRenderer(msg_type, sender, receiver, "", console=self.console)
-        renderer.cprint_update(content)
+        # Print a separator only for function, function_output, and agent-to-agent messages
+        emoji = "👤" if sender.lower() == "user" else "🤖"
+        if msg_type == "function":
+            header = f"{emoji} {sender} 🛠️ Executing Function"
+        elif msg_type == "function_output":
+            header = f"{sender} ⚙️ Function Output"
+        else:
+            header = f"{emoji} {sender} 🗣️ @{receiver}"
+        self.console.print(f"[bold]{header}[/bold]\n{content}")
+        self.console.rule()
 
     def openai_to_message_output(self, event: Any, recipient_agent: str):
         if hasattr(event, "data"):
             event_type = event.type
-            # Handle raw_response_event
             if event_type == "raw_response_event":
                 data = event.data
                 data_type = data.type
                 if data_type == "response.output_text.delta":
+                    # Use Live as a context manager for the live region
                     if self.message_output is None:
-                        self.message_output = LiveConsoleRenderer(
-                            "text", recipient_agent, "user", "", console=self.console
-                        )
+                        self.response_buffer = ""
+                        self.message_output = Live("", console=self.console, refresh_per_second=10)
+                        self.message_output.__enter__()
                     self.response_buffer += data.delta
-                    self.message_output.cprint_update(self.response_buffer)
-
+                    header_text = f"🤖 {recipient_agent} 🗣️ @user"
+                    md_content = Markdown(self.response_buffer)
+                    self.message_output.update(Group(header_text, md_content))
                 elif data_type == "response.output_text.done":
+                    if self.message_output is not None:
+                        header_text = f"🤖 {recipient_agent} 🗣️ @user"
+                        md_content = Markdown(self.response_buffer)
+                        self.message_output.update(Group(header_text, md_content))
+                        self.message_output.__exit__(None, None, None)
                     self.message_output = None
                     self.response_buffer = ""
 

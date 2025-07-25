@@ -72,6 +72,7 @@ class CopilotDemoLauncher:
 
 
 class TerminalDemoLauncher:
+    @staticmethod
     def start(agency_instance):
         """
         Executes agency in the terminal with autocomplete for recipient agent names.
@@ -89,11 +90,13 @@ class TerminalDemoLauncher:
         chat_id = f"run_demo_chat_{uuid.uuid4()}"
 
         event_converter = ConsoleEventAdapter()
+        event_converter.console.rule()
 
         async def main_loop():
             while True:
-                event_converter.console.rule()
+
                 message = input("👤 USER: ")
+                event_converter.console.rule()
 
                 if not message:
                     continue
@@ -115,14 +118,21 @@ class TerminalDemoLauncher:
                     recipient_agent = agency_instance.entry_points[0].name
 
                 try:
+                    response_buffer = ""
                     async for event in agency_instance.get_response_stream(
                         message=message,
                         recipient_agent=recipient_agent,
                         chat_id=chat_id,
                     ):
                         event_converter.openai_to_message_output(event, recipient_agent)
-                    print()  # Newline after stream
+                        # Accumulate the response if it's a text delta
+                        if hasattr(event, "data") and getattr(event.data, "type", None) == "response.output_text.delta":
+                            response_buffer += event.data.delta
+                    event_converter.console.rule()
                 except Exception as e:
                     logger.error(f"Error during streaming: {e}", exc_info=True)
 
-        asyncio.run(main_loop())
+        try:
+            asyncio.run(main_loop())
+        except (KeyboardInterrupt, EOFError):
+            print("\n\nExiting terminal demo...")
