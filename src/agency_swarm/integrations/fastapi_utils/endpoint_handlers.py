@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from agency_swarm.agency import Agency
-
+from agency_swarm.integrations.fastapi_utils.file_handler import upload_from_urls
 from agency_swarm.ui.core.converters import AguiAdapter, serialize
 
 
@@ -43,18 +43,33 @@ def make_response_endpoint(request_model, agency_factory: Callable[..., Agency],
             def load_callback() -> dict:
                 return {}
 
+        combined_file_ids = request.file_ids
+        if request.file_urls is not None:
+            file_ids_map = await upload_from_urls(request.file_urls)
+            combined_file_ids = (combined_file_ids or []) + list(file_ids_map.values())
+            await asyncio.sleep(6) # Wait until files are ready for retrieval
+
         agency_instance = agency_factory(load_threads_callback=load_callback)
         response = await agency_instance.get_response(
             message=request.message,
             recipient_agent=request.recipient_agent,
             additional_instructions=request.additional_instructions,
-            file_ids=request.file_ids,
+            file_ids=combined_file_ids,
         )
         history = {
             thread_id: {"items": thread.items, "metadata": thread.metadata}
             for thread_id, thread in agency_instance.thread_manager._threads.items()
         }
-        return {"response": response.final_output, "chat_history": history}
+
+        result = {
+            "response": response.final_output,
+            "chat_history": history,
+        }
+
+        if request.file_urls is not None and file_ids_map is not None:
+            result["file_ids_map"] = file_ids_map
+
+        return result
 
     return handler
 
@@ -75,6 +90,12 @@ def make_stream_endpoint(request_model, agency_factory: Callable[..., Agency], v
             def load_callback() -> dict:
                 return {}
 
+        combined_file_ids = request.file_ids
+        if request.file_urls is not None:
+            file_ids_map = await upload_from_urls(request.file_urls)
+            combined_file_ids = (combined_file_ids or []) + list(file_ids_map.values())
+            await asyncio.sleep(6) # Wait until files are ready for retrieval
+
         agency_instance = agency_factory(load_threads_callback=load_callback)
 
         async def event_generator():
@@ -83,7 +104,7 @@ def make_stream_endpoint(request_model, agency_factory: Callable[..., Agency], v
                     message=request.message,
                     recipient_agent=request.recipient_agent,
                     additional_instructions=request.additional_instructions,
-                    file_ids=request.file_ids,
+                    file_ids=combined_file_ids,
                 ):
                     try:
                         data = serialize(event)
@@ -97,7 +118,12 @@ def make_stream_endpoint(request_model, agency_factory: Callable[..., Agency], v
                 thread_id: {"items": thread.items, "metadata": thread.metadata}
                 for thread_id, thread in agency_instance.thread_manager._threads.items()
             }
-            yield "data: " + json.dumps({"chat_history": history}) + "\n\n"
+            result = {
+                "chat_history": history,
+            }
+            if request.file_urls is not None and file_ids_map is not None:
+                result["file_ids_map"] = file_ids_map
+            yield "data: " + json.dumps(result) + "\n\n"
 
         return StreamingResponse(
             event_generator(),
@@ -119,11 +145,7 @@ def make_tool_endpoint(tool, verify_token, context=None):
             data = await request.json()
             # If this is a FunctionTool (from @function_tool), use on_invoke_tool
             if hasattr(tool, "on_invoke_tool"):
-                # Ensure 'args' key is present for function tools
-                if "args" not in data:
-                    input_json = json.dumps({"args": data})
-                else:
-                    input_json = json.dumps(data)
+                input_json = json.dumps(data)
                 result = await tool.on_invoke_tool(context, input_json)
             elif isinstance(tool, type):
                 tool_instance = tool(**data)
@@ -161,7 +183,12 @@ def make_agui_chat_endpoint(request_model, agency_factory: Callable[..., Agency]
             default_agent = agency.entry_points[0]
 
             def load_callback() -> dict:
-                return {f"user->{default_agent.name}": {"items": AguiAdapter.agui_messages_to_chat_history(request.messages), "metadata": {}}}
+                return {
+                    f"user->{default_agent.name}": {
+                        "items": AguiAdapter.agui_messages_to_chat_history(request.messages),
+                        "metadata": {},
+                    },
+                }
 
         else:
 

@@ -727,6 +727,7 @@ class Agent(BaseAgent[MasterContext]):
 
             # Handle file attachments - support both old message_files and new file_ids
             files_to_attach = file_ids or message_files or kwargs.get("file_ids") or kwargs.get("message_files")
+            logger.debug(f"Processing file attachments for agent {self.name}: {files_to_attach}")
             if files_to_attach and isinstance(files_to_attach, list):
                 # Warn about deprecated message_files usage
                 if message_files or kwargs.get("message_files"):
@@ -751,6 +752,7 @@ class Agent(BaseAgent[MasterContext]):
                             content_list = []
 
                         file_content_items = self.file_manager.sort_file_attachments(files_to_attach)
+                        # Content list will contain pdf files to be attached as input_file items
                         content_list.extend(file_content_items)
 
                         # Update the message content
@@ -812,6 +814,9 @@ class Agent(BaseAgent[MasterContext]):
             except Exception as e:
                 logger.error(f"Error during Runner.run for agent '{self.name}': {e}", exc_info=True)
                 raise AgentsException(f"Runner execution failed for agent {self.name}") from e
+
+            finally:
+                self.file_manager.attachments_cleanup()
 
             # Always save response items to thread (both user and agent-to-agent calls)
             if self._thread_manager and run_result.new_items:

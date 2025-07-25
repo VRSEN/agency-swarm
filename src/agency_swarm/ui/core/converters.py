@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from rich.console import Console
 
 from .console_renderer import LiveConsoleRenderer
+from agency_swarm.agent import Agent
 
 try:
     from ag_ui.core import (
@@ -40,8 +41,15 @@ logger = logging.getLogger(__name__)
 
 # Universal function to serialize any object to a JSON-compatible format
 def serialize(obj):
-    if dataclasses.is_dataclass(obj):
-        return {k: serialize(v) for k, v in dataclasses.asdict(obj).items()}
+    if isinstance(obj, Agent):
+        return {
+            "name": getattr(obj, "name", None),
+            "description": getattr(obj, "description", None),
+            "model": getattr(obj, "model", None),
+        }
+    elif dataclasses.is_dataclass(obj):
+        # Manually walk fields to avoid deepcopy and allow custom serialization
+        return {field.name: serialize(getattr(obj, field.name)) for field in dataclasses.fields(obj)}
     elif isinstance(obj, BaseModel):
         return {k: serialize(v) for k, v in obj.model_dump().items()}
     elif isinstance(obj, list | tuple):

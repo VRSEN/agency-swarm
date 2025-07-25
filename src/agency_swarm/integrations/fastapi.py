@@ -129,7 +129,7 @@ def run_fastapi(
 
     if tools:
         for tool in tools:
-            tool_name = tool.name
+            tool_name = tool.name if hasattr(tool, "name") else tool.__name__
             tool_handler = make_tool_endpoint(tool, verify_token)
             app.add_api_route(f"/tool/{tool_name}", tool_handler, methods=["POST"], name=tool_name)
             endpoints.append(f"/tool/{tool_name}")
