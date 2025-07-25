@@ -11,7 +11,7 @@ from agents import (
     RunResult,
 )
 
-from .agent import Agent
+from .agent import SEND_MESSAGE_TOOL_PREFIX, Agent
 from .hooks import PersistenceHooks
 from .thread import ThreadLoadCallback, ThreadManager, ThreadSaveCallback
 
@@ -767,7 +767,13 @@ class Agency:
             # Add tools if requested
             if include_tools and agent.tools:
                 for tool in agent.tools:
-                    tool_name = getattr(tool, "__name__", str(tool))
+                    # Get tool name - FunctionTool has 'name' attribute
+                    tool_name = getattr(tool, "name", getattr(tool, "__name__", str(tool)))
+
+                    # Skip send_message tools in visualization
+                    if tool_name.startswith(SEND_MESSAGE_TOOL_PREFIX):
+                        continue
+
                     node["data"]["tools"].append(tool_name)
 
                     # Create tool node
@@ -854,10 +860,9 @@ class Agency:
         Run a terminal demo of the agency.
         """
         # Import and run the terminal demo
-        from .ui.demos.launcher import TerminalDemo
+        from .ui.demos.launcher import TerminalDemoLauncher
 
-        demo = TerminalDemo(self)
-        demo.run()
+        TerminalDemoLauncher.start(self)
 
     def copilot_demo(
         self,
