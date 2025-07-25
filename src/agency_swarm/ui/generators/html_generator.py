@@ -25,7 +25,6 @@ class HTMLVisualizationGenerator:
         agency_data: dict[str, Any],
         output_file: str = "agency_visualization.html",
         open_browser: bool = True,
-        layout_algorithm: str = "force_directed",
     ) -> str:
         """
         Generate a complete interactive HTML visualization.
@@ -34,15 +33,14 @@ class HTMLVisualizationGenerator:
             agency_data: The agency structure data from get_agency_structure()
             output_file: Path to save the HTML file
             open_browser: Whether to automatically open in browser
-            layout_algorithm: Layout algorithm to use initially
 
         Returns:
             Path to the generated HTML file
         """
-        # Apply layout algorithm to the data
+        # Apply hierarchical layout to the data
         from ..core.layout_algorithms import LayoutAlgorithms
 
-        positioned_data = LayoutAlgorithms.apply_layout(agency_data, algorithm=layout_algorithm, width=800, height=600)
+        positioned_data = LayoutAlgorithms.apply_layout(agency_data, width=800, height=600)
 
         # Load templates
         html_template = self._load_template("visualization.html")
@@ -80,7 +78,6 @@ class HTMLVisualizationGenerator:
         self,
         agency_data: dict[str, Any],
         output_dir: str = "agency_visualization",
-        layout_algorithm: str = "force_directed",
     ) -> dict[str, str]:
         """
         Generate separate HTML, CSS, and JS files for web development.
@@ -88,15 +85,14 @@ class HTMLVisualizationGenerator:
         Args:
             agency_data: The agency structure data
             output_dir: Directory to save the files
-            layout_algorithm: Layout algorithm to use
 
         Returns:
             Dictionary with paths to generated files
         """
-        # Apply layout algorithm
+        # Apply hierarchical layout
         from ..core.layout_algorithms import LayoutAlgorithms
 
-        positioned_data = LayoutAlgorithms.apply_layout(agency_data, algorithm=layout_algorithm, width=800, height=600)
+        positioned_data = LayoutAlgorithms.apply_layout(agency_data, width=800, height=600)
 
         # Create output directory
         output_path = Path(output_dir)
@@ -155,7 +151,6 @@ class HTMLVisualizationGenerator:
     def create_visualization_from_agency(
         agency,
         output_file: str = "agency_visualization.html",
-        layout_algorithm: str = "force_directed",
         include_tools: bool = True,
         open_browser: bool = True,
     ) -> str:
@@ -165,7 +160,6 @@ class HTMLVisualizationGenerator:
         Args:
             agency: The Agency instance
             output_file: Path to save the HTML file
-            layout_algorithm: Layout algorithm to use
             include_tools: Whether to include tools in visualization
             open_browser: Whether to open in browser
 
@@ -173,7 +167,7 @@ class HTMLVisualizationGenerator:
             Path to the generated HTML file
         """
         # Get agency structure data
-        agency_data = agency.get_agency_structure(include_tools=include_tools, layout_algorithm=layout_algorithm)
+        agency_data = agency.get_agency_structure(include_tools=include_tools)
 
         # Generate HTML
         generator = HTMLVisualizationGenerator()
@@ -181,5 +175,4 @@ class HTMLVisualizationGenerator:
             agency_data=agency_data,
             output_file=output_file,
             open_browser=open_browser,
-            layout_algorithm=layout_algorithm,
         )

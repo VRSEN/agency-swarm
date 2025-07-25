@@ -158,16 +158,14 @@ class LayoutAlgorithms:
         return positions
 
     @staticmethod
-    def apply_layout(
-        agency_data: dict[str, Any], algorithm: str = "hierarchical", width: int = 800, height: int = 600
-    ) -> dict[str, Any]:
+    def apply_layout(agency_data: dict[str, Any], width: int = 800, height: int = 600) -> dict[str, Any]:
         """
         Apply hierarchical layout algorithm to agency data and return updated structure.
         """
         nodes = agency_data.get("nodes", [])
         edges = agency_data.get("edges", [])
 
-        # Only hierarchical layout is supported now
+        # Apply hierarchical layout
         positions = LayoutAlgorithms.hierarchical_layout(nodes, edges, width, height)
 
         # Update node positions in the data structure

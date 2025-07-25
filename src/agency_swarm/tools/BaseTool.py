@@ -26,6 +26,7 @@ class BaseTool(BaseModel, ABC):
     _caller_agent: Any = None
     _event_handler: Any = None
     _tool_call: ToolCall = None
+    _context: Any = None  # Will hold RunContextWrapper when available
     openai_schema: ClassVar[dict[str, Any]]
 
     def __init__(self, **kwargs):
@@ -89,6 +90,13 @@ class BaseTool(BaseModel, ABC):
                     def_["additionalProperties"] = False
 
         return schema
+
+    @property
+    def context(self):
+        """Get the MasterContext if available, providing clean access to shared state."""
+        if self._context is not None:
+            return self._context.context
+        return None
 
     @abstractmethod
     def run(self):

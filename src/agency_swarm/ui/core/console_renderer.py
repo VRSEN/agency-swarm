@@ -73,7 +73,7 @@ class LiveConsoleRenderer(ConsoleRenderer):
 
     def __del__(self):
         """Clean up live display on deletion."""
-        if hasattr(self, 'live_display') and self.live_display:
+        if hasattr(self, "live_display") and self.live_display:
             self.live_display.stop()
 
     def cprint_update(self, snapshot):
