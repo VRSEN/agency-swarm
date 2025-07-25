@@ -332,6 +332,7 @@ class Thread:
                     run_id=self._run.id,
                 )
         except APIError as e:
+            # Handle active run conflicts
             match = re.search(r"Thread (\w+) already has an active run (\w+)", e.message)
             if match:
                 self.cancel_run(
@@ -348,7 +349,8 @@ class Thread:
                     temperature=temperature,
                     response_format=response_format,
                 )
-            elif "The server had an error processing your request" in e.message and self._num_run_retries < 3:
+
+            elif "The server had an error processing your request" in e.message and self._num_run_retries < 10:
                 time.sleep(1)
                 self._num_run_retries += 1
                 return self._create_run(
@@ -935,10 +937,9 @@ class Thread:
         response_format: dict | None,
         parent_run_id: str | None,
     ) -> bool:
-        """Attempts to recover from run failures if they match common errors (up to 3 times)."""
-        error_message = (
-            self._run.last_error.message.lower() if self._run.last_error else ""
-        )
+        """Attempts to recover from run failures if they match common errors (up to 10 times)."""
+        error_message = self._run.last_error.message.lower() if self._run.last_error else ""
+
         common_errors = [
             "something went wrong",
             "the server had an error processing your request",
@@ -953,12 +954,12 @@ class Thread:
                     time.sleep(wait_time)
                 except ValueError:
                     time.sleep(1 + error_attempts)
+            else:
+                time.sleep(1 + error_attempts)
 
-        if error_attempts < 3 and (
-            any(e in error_message for e in common_errors) or rate_limit
-        ):
+        if error_attempts < 10 and (any(e in error_message for e in common_errors) or rate_limit):
             if not rate_limit:
-                if error_attempts < 2:
+                if error_attempts < 9:
                     time.sleep(1 + error_attempts)
                 else:
                     # Make one last try with a 'Continue.' user prompt
