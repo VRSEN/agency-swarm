@@ -33,12 +33,4 @@ if __name__=="__main__":
     tool = SSHExecuteCommand(command="for i in $(seq 1 3); do echo 'Line $i (yield)'; sleep 1; done")
     print(tool.run())
 
-    # res = tool.run(\\)
-    # print(res)
-    # res = tool.run("ls -l /")
-    # print(res)
-    # res = exec.execute_command_common("this_command_does_not_exist_123")
-    # print(res)
-    # res = exec.execute_command_common("cat /etc/shadow")
-    # print(res)
-    # res = exec.execute_command_common("for i in $(seq 1 3); do echo 'Line $i (yield)'; sleep 1; done")
+ 
