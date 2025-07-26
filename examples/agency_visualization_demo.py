@@ -36,17 +36,24 @@ def create_demo_agency():
         tools=[],
     )
 
-    manager = Agent(
-        name="Manager",
-        description="Manages projects and teams",
-        instructions="You manage projects, coordinate teams, and report to the CEO.",
+    pm = Agent(
+        name="ProjectManager",
+        description="Manages project timelines and coordinates between teams",
+        instructions="You manage projects, timelines, and coordinate between different teams.",
         tools=[example_tool],
     )
 
-    worker = Agent(
-        name="Worker",
-        description="Executes tasks and projects",
-        instructions="You execute tasks, complete projects, and report to the Manager.",
+    dev = Agent(
+        name="Developer",
+        description="Writes and maintains code",
+        instructions="You write, test, and maintain code for various projects.",
+        tools=[example_tool],
+    )
+
+    qa = Agent(
+        name="QA",
+        description="Tests software and ensures quality",
+        instructions="You test software, find bugs, and ensure quality standards.",
         tools=[example_tool],
     )
 
@@ -54,8 +61,10 @@ def create_demo_agency():
     agency = Agency(
         ceo,  # Entry point agent (positional argument)
         communication_flows=[
-            (ceo, manager),  # CEO can communicate with Manager
-            (manager, worker),  # Manager can communicate with Worker
+            (ceo, pm),  # CEO can communicate with PM
+            (pm, dev),  # PM can communicate with Developer
+            (pm, qa),  # PM can communicate with QA
+            (dev, qa),  # Developer can communicate with QA
         ],
         name="Software Development Agency",
         shared_instructions="This is a software development agency with clear hierarchy and communication flows.",

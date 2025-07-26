@@ -327,6 +327,8 @@ This is the **MOST CRITICAL RULE** in the entire codebase.
 
 ### Git Best Practices (20 Years of Experience)
 - **ALWAYS use `git status --porcelain`** to check all files including untracked
+- **ALWAYS ensure working tree is clean** before continuing work - commit or properly handle all changes
+- **BEFORE EVERY COMMIT**: Check `git status` to see ALL related changed files
 - **NEVER use `git reset --hard`** without first saving important changes
 - **MODEL CAUSALITY THOROUGHLY** before any git operation
 - **Group commits logically** - separate refactoring from bug fixes from features
@@ -337,6 +339,20 @@ This is the **MOST CRITICAL RULE** in the entire codebase.
 - **Max 100 lines per method/function** - Prefer 10-40 lines
 - **Single responsibility** per class/function
 - **DRY Principle: 3+ repetitions = immediate refactoring**
+
+## Codebase Design Principles
+
+### Domain-Driven Structure
+- **Service Layer Pattern**: Extract business logic into focused service modules
+- **Clear Domain Boundaries**: Each module represents a coherent business domain
+- **No Circular Dependencies**: Services depend on interfaces, not implementations
+- **Delegation Pattern**: Main classes delegate to services, maintaining clean APIs
+
+### Refactoring Philosophy
+- **Zero Functional Changes**: Preserve all behavior, including bugs and quirks
+- **Extract, Don't Rewrite**: Move code as-is, don't "improve" during refactoring
+- **Test Continuously**: Run full suite after every structural change
+- **Incremental Progress**: Small, tested steps over large rewrites
 
 # important-instruction-reminders
 Do what has been asked; nothing more, nothing less.

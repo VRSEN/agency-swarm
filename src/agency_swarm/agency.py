@@ -750,6 +750,9 @@ class Agency:
 
         # Create agent nodes
         for agent_name, agent in self.agents.items():
+            # Check if this agent is an entry point
+            is_entry_point = agent in self.entry_points
+
             node = {
                 "id": agent_name,
                 "data": {
@@ -759,6 +762,7 @@ class Agency:
                     else agent.instructions or "",
                     "model": agent.model,
                     "tools": [],
+                    "isEntryPoint": is_entry_point,
                 },
                 "type": "agent",
                 "position": {"x": 0, "y": 0},  # Will be set by layout
@@ -782,6 +786,7 @@ class Agency:
                         "data": {
                             "label": tool_name,
                             "agentId": agent_name,
+                            "parentAgent": agent_name,  # Required for layout algorithm
                         },
                         "type": "tool",
                         "position": {"x": 0, "y": 0},
