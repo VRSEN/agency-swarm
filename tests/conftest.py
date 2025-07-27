@@ -35,7 +35,7 @@ def mock_thread_manager():
     manager.get_thread.side_effect = get_thread_side_effect
 
     def add_items_and_save_side_effect(thread_obj, items_to_add):
-        if hasattr(thread_obj, "items") and isinstance(thread_obj.items, list):
+        if hasattr(thread_obj, "items") and isinstance(thread_obj.items, list) and items_to_add is not None:
             thread_obj.items.extend(items_to_add)
         else:
             pass
