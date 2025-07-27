@@ -34,7 +34,7 @@ from openai import AsyncOpenAI
 
 azure_agent = AsyncOpenAI(
     api_key=os.getenv("AZURE_OPENAI_KEY"),
-    default_query={"api-version": "preview"}, 
+    default_query={"api-version": "preview"},
     base_url=os.getenv("AZURE_ENDPOINT") + "/openai/v1/",
 )
 ```
@@ -57,7 +57,7 @@ azure_agent = Agent(
 )
 ```
 <Note>
-Model deployment name might be different from the stadard OpenAI model names. It is set by you when you deploy a model to Azure.
+Model deployment name might be different from the standard OpenAI model names. It is set by you when you deploy a model to Azure.
 </Note>
 
 </Step>
@@ -117,7 +117,7 @@ ceo = Agent(
 )
 ```
 <Note>
-Model deployment name might be different from the stadard OpenAI model names. It is set by you when you deploy a model to Azure.
+Model deployment name might be different from the standard OpenAI model names. It is set by you when you deploy a model to Azure.
 </Note>
 
 </Step>

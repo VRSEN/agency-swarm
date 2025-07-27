@@ -50,7 +50,7 @@ Add your API keys to your environment variables:
 
 ```bash
 export GEMINI_API_KEY="your-gemini-api-key"
-export ANTHROPIC_API_KEY="your-anthropic-api-key" 
+export ANTHROPIC_API_KEY="your-anthropic-api-key"
 export GROQ_API_KEY="your-groq-api-key"
 ```
 </Step>
@@ -83,7 +83,7 @@ gemini_agent = Agent(
     name="GeminiAgent",
     instructions="You are a helpful assistant",
     model=OpenAIChatCompletionsModel(
-        model="gemini/gemini-2.0-flash", 
+        model="gemini/gemini-2.0-flash",
         openai_client=custom_client
     )
 )
@@ -300,7 +300,7 @@ agency.get_completion("I am the CEO")
 Be aware of the limitations when using open-source models.
 </Warning>
 
-- **Function calling may not supported by some open-source models**: This limitation prevents the agent from communicating with other agents in the agency. Therefore, it must be positioned at the end of the agency chart and cannot utilize any tools.
+- **Function calling may not be supported by some open-source models**: This limitation prevents the agent from communicating with other agents in the agency. Therefore, it must be positioned at the end of the agency chart and cannot utilize any tools.
 - **RAG is typically limited**: Most open-source implementations have restricted Retrieval-Augmented Generation capabilities. It is recommended to develop a custom tool with your own vector database.
 
 ## Future Plans
