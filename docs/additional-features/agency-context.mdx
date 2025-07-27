@@ -100,7 +100,7 @@ You can use agency context in your function tools and access it in agents. Here'
             # Fetch data based on the question
             context = query_database_api(self.question)
             # Store the context in agency context
-            context = self.shared_state.set('database_context', context)
+            self.shared_state.set('database_context', context)
             return "Context has been retrieved and stored successfully."
     ```
 
