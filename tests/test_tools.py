@@ -121,7 +121,6 @@ async def test_send_message_success(specific_send_message_tool, mock_wrapper, mo
     mock_recipient_agent.get_response.assert_called_once_with(
         message=message_content,
         sender_name=specific_send_message_tool.sender_agent.name,
-        context_override=mock_context.user_context,
         additional_instructions="Additional instructions for test.",
     )
 
