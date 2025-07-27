@@ -168,7 +168,7 @@ local_agent = Agent(
 
 # For hosted MCP servers, use tools parameter
 hosted_agent = Agent(
-    name="HostedMCPAgent", 
+    name="HostedMCPAgent",
     description="An agent that can use hosted MCP tools.",
     instructions="Use the available hosted MCP tools to help users.",
     tools=[hosted_tool],  # Hosted tools go here
@@ -269,17 +269,17 @@ This example shows how to configure `MCPServerStreamableHttp` to connect to a we
 from agency_swarm.tools.mcp import MCPServerStreamableHttp, MCPToolParams
 
 read_file_tool = MCPToolParams(
-    name="read_file", 
-    description="Read the contents of a file", 
+    name="read_file",
+    description="Read the contents of a file",
     # Schema can also be a pydantic's BaseModel
     schema={
-        "type": "object", 
+        "type": "object",
         "properties": {
             "filename": {
                 "type": "string",
                 "description": "The path to the file to read"
             }
-        }, 
+        },
         "required": ["filename"]
     }
 )

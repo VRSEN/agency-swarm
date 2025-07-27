@@ -34,7 +34,7 @@ In the latest version, tools are created using the `@function_tool` decorator wi
     ```python
     class CalculatorArgs(BaseModel):
         expression: str = Field(..., description="The mathematical expression to evaluate")
-        
+
         @field_validator("expression")
         @classmethod
         def validate_expression(cls, v):
@@ -57,7 +57,7 @@ In the latest version, tools are created using the `@function_tool` decorator wi
         # Access shared context if needed
         calculation_count = ctx.context.get("calculations", 0)
         ctx.context.set("calculations", calculation_count + 1)
-        
+
         # Perform the calculation
         result = eval(args.expression)
         return f"Result: {result}"
@@ -75,7 +75,7 @@ In the latest version, tools are created using the `@function_tool` decorator wi
     if __name__ == "__main__":
         import asyncio
         import json
-        
+
         async def test_tool():
             ctx = MasterContext(user_context={"calculations": 1}, thread_manager=None, agents={})
             run_ctx = RunContextWrapper(context=ctx)
@@ -86,7 +86,7 @@ In the latest version, tools are created using the `@function_tool` decorator wi
 
             result = await calculator_tool.on_invoke_tool(run_ctx, json.dumps(args_json))
             print(result)
-        
+
         asyncio.run(test_tool())
     ```
   </Step>
@@ -96,7 +96,7 @@ In the latest version, tools are created using the `@function_tool` decorator wi
 
     ```python
     from agency_swarm import Agent
-    
+
     agent = Agent(
         name="MathAgent",
         instructions="You are a helpful math assistant",
@@ -117,7 +117,7 @@ from agency_swarm import MasterContext
 
 class CalculatorArgs(BaseModel):
     expression: str = Field(..., description="The mathematical expression to evaluate")
-    
+
     @field_validator("expression")
     @classmethod
     def validate_expression(cls, v):
@@ -134,7 +134,7 @@ async def calculator_tool(ctx: RunContextWrapper[MasterContext], args: Calculato
     # Access shared context if needed
     calculation_count = ctx.context.get("calculations", 0)
     ctx.context.set("calculations", calculation_count + 1)
-    
+
     # Perform the calculation
     result = eval(args.expression)
     return f"Result: {result} (Calculation #{calculation_count + 1})"
@@ -142,7 +142,7 @@ async def calculator_tool(ctx: RunContextWrapper[MasterContext], args: Calculato
 if __name__ == "__main__":
     import asyncio
     import json
-    
+
     async def test_tool():
         ctx = MasterContext(user_context={"calculations": 1}, thread_manager=None, agents={})
         run_ctx = RunContextWrapper(context=ctx)
@@ -150,7 +150,7 @@ if __name__ == "__main__":
         args_json = {"args": args.model_dump()}
         result = await calculator_tool.on_invoke_tool(run_ctx, json.dumps(args_json))
         print(result)
-    
+
     asyncio.run(test_tool())
 ```
 

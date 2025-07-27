@@ -133,13 +133,13 @@ app = FastAPI()
 @app.post("/chat")
 async def chat(user_request: UserRequest):
     chat_id = user_request.chat_id or str(uuid4())
-    
+
     agency = Agency(
         agent,
         load_threads_callback=lambda: load_threads(chat_id),
         save_threads_callback=lambda thread_dict: save_threads(thread_dict, chat_id)
     )
-    
+
     response = await agency.get_response(user_request.message)
     return {"chat_id": chat_id, "response": response.final_output}
 
@@ -156,13 +156,13 @@ app = FastAPI()
 @app.post("/chat")
 async def chat(user_request: UserRequest):
     chat_id = user_request.chat_id or str(uuid4())
-    
+
     agency = Agency([...],
         threads_callbacks={
             'load': lambda: load_threads(chat_id),
             'save': lambda new_threads: save_threads(new_threads, chat_id)
         })
-    
+
     response = agency.get_completion(user_request.message)
     return {"chat_id": chat_id, "response": response}
 ```

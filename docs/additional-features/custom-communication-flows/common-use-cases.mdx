@@ -22,10 +22,10 @@ from agency_swarm.tools.send_message import SendMessage
 
 class SendMessageTask(SendMessage):
     """Use this tool to send tasks to other agents within your agency."""
-    
+
     def __init__(self, sender_agent, recipient_agent, tool_name):
         super().__init__(sender_agent, recipient_agent, tool_name)
-        
+
         # Replace the existing schema with custom parameters
         self.params_json_schema = {
             "type": "object",
@@ -35,7 +35,7 @@ class SendMessageTask(SendMessage):
                     "description": "Think step-by-step about how to solve your current task, then break it down into smaller steps for the recipient agent."
                 },
                 "task": {
-                    "type": "string", 
+                    "type": "string",
                     "description": "Specify the task required for the recipient agent to complete. Focus on clarifying what the task entails rather than providing exact instructions."
                 }
             },

@@ -4,7 +4,7 @@ description: "Serving your tools as MCP (Model Context Protocol) endpoints."
 icon: "server"
 ---
 
-Agency Swarm supports serving your tools as production-ready MCP (Model Context Protocol) endpoints.  
+Agency Swarm supports serving your tools as production-ready MCP (Model Context Protocol) endpoints.
 This enables AI models to interact with your tools remotely over HTTP, making them accessible to any MCP-compatible client or AI system.
 
 <Tabs defaultValue="v1.x (Latest)">
@@ -16,7 +16,7 @@ v1.x is currently in **beta preview**. Install with: `pip install -U "agency-swa
 
 ## Setting Up MCP Server
 
-To expose tools as a standalone MCP endpoint, use the `run_mcp()` function from the integrations module.  
+To expose tools as a standalone MCP endpoint, use the `run_mcp()` function from the integrations module.
 This will create an MCP server that will serve provided tools over the streamable HTTP protocol.
 
 ### Example: Serving Individual Tools
@@ -35,7 +35,7 @@ async def echo_function(args: InputArgs) -> str:
     """Returns a unique id"""
     return f"Tool called with input: {args.input_field}"
 
-# Start MCP server with individual tools. 
+# Start MCP server with individual tools.
 # This will setup a streamable-http server by default on port 8000
 run_mcp(tools=[echo_function])
 ```
@@ -122,7 +122,7 @@ from agency_swarm import Agency, Agent
 
 # Create agent with hosted MCP server
 mcp_agent = Agent(
-    name="HostedMCPAgent", 
+    name="HostedMCPAgent",
     tools=[
         HostedMCPTool(
             tool_config={
@@ -153,7 +153,7 @@ if __name__ == "__main__":
 ```
 
 <Note>
-For hosted MCP servers, ensure your server is accessible from the internet. 
+For hosted MCP servers, ensure your server is accessible from the internet.
 You can use tools like ngrok for local development.
 </Note>
 
@@ -169,7 +169,7 @@ v0.x is the **current production version**. Install with: `pip install "agency-s
 
 ## Setting Up MCP Server
 
-To expose tools as a standalone MCP endpoint, use the `run_mcp()` function from the integrations module.  
+To expose tools as a standalone MCP endpoint, use the `run_mcp()` function from the integrations module.
 This will create an MCP server that will serve provided tools over the streamable HTTP protocol.
 
 ### Example: Serving Individual Tools
@@ -234,7 +234,7 @@ from agency_swarm.tools.mcp import MCPServerStreamableHttp
 client = MCPServerStreamableHttp(
     name="ToolsClient",
     params={
-        "url": "http://localhost:8000/mcp", 
+        "url": "http://localhost:8000/mcp",
         "headers": {"Authorization": "Bearer your-secret-token"}
     },
 )
