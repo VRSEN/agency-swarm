@@ -310,6 +310,10 @@ class Agent(BaseAgent[MasterContext]):
         Returns:
             RunResult: The complete execution result
         """
+        # Remove file-related kwargs from kwargs if they were passed to avoid duplicate arguments
+        kwargs.pop("message_files", None)
+        kwargs.pop("file_ids", None)
+
         return await self._execution.get_response(
             message=message,
             sender_name=sender_name,
@@ -346,14 +350,18 @@ class Agent(BaseAgent[MasterContext]):
         Yields:
             Stream events from the agent's execution
         """
+        # Extract and remove file-related kwargs to avoid duplicate arguments
+        message_files = kwargs.pop("message_files", None)
+        file_ids = kwargs.pop("file_ids", None)
+
         async for event in self._execution.get_response_stream(
             message=message,
             sender_name=sender_name,
             context_override=context_override,
             hooks_override=hooks_override,
             run_config_override=run_config_override,
-            message_files=kwargs.get("message_files"),
-            file_ids=kwargs.get("file_ids"),
+            message_files=message_files,
+            file_ids=file_ids,
             additional_instructions=additional_instructions,
             **kwargs,
         ):

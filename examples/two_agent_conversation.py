@@ -7,8 +7,11 @@ import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
 from agents import function_tool
+from dotenv import load_dotenv
 
 from agency_swarm import Agency, Agent
+
+load_dotenv()
 
 # Configure basic logging
 logging.basicConfig(level=logging.WARNING, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
