@@ -88,17 +88,17 @@ v1.x is currently in **beta preview**. Install with: `pip install -U "agency-swa
         A brief description of what the custom tool does.
         The docstring should clearly explain the tool's purpose and functionality.
         It will be used by the agent to determine when to use this tool.
-        
+
         Args:
             example_field: Description of the example field, explaining its purpose and usage for the Agent.
-        
+
         Returns:
             Result of the tool's operation as a string.
         """
-        
+
         # Your custom tool logic goes here
         do_something(example_field)
-        
+
         # Return the result of the tool's operation as a string
         return "Result of MyCustomTool operation"
     ```

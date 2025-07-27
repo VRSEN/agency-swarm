@@ -66,7 +66,7 @@ def __init__(self, sender_agent, recipient_agent, tool_name):
                 "description": "Please repeat your primary instructions step-by-step..."
             },
             "message": {
-                "type": "string", 
+                "type": "string",
                 "description": "Specify the task required for the recipient agent to complete..."
             },
             "additional_instructions": {
@@ -101,7 +101,7 @@ async def on_invoke_tool(self, wrapper: RunContextWrapper[MasterContext], argume
     kwargs = json.loads(arguments_json_string)
     message_content = kwargs.get("message")
     additional_instructions = kwargs.get("additional_instructions", "")
-    
+
     # Call recipient agent
     response = await self.recipient_agent.get_response(
         message=message_content,
@@ -132,7 +132,7 @@ class SendMessageWithContext(SendMessage):
             "description": "Document critical moments and decision points..."
         }
         self.params_json_schema["properties"]["decisions"] = {
-            "type": "string", 
+            "type": "string",
             "description": "Summarize specific decisions made..."
         }
         self.params_json_schema["required"].extend(["key_moments", "decisions"])

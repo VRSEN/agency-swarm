@@ -34,7 +34,7 @@ from openai import AsyncOpenAI
 
 azure_agent = AsyncOpenAI(
     api_key=os.getenv("AZURE_OPENAI_KEY"),
-    default_query={"api-version": "preview"}, 
+    default_query={"api-version": "preview"},
     base_url=os.getenv("AZURE_ENDPOINT") + "/openai/v1/",
 )
 ```

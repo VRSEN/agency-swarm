@@ -129,7 +129,7 @@ async def action_2_tool(ctx: RunContextWrapper[MasterContext], args: Action2Args
     """
     # Access shared context to check previous action
     action_1_result = ctx.context.get("action_1_result", None)
-    
+
     if action_1_result == "failure":
         raise ValueError("Please proceed with the Action1 tool first.")
     else:
@@ -304,23 +304,23 @@ if __name__ == "__main__":
     import json
     from agents import RunContextWrapper
     from agency_swarm import MasterContext
-    
+
     async def test_email_sender():
         # Test the email sender tool
         ctx = MasterContext(user_context={}, thread_manager=None, agents={})
         run_ctx = RunContextWrapper(context=ctx)
-        
+
         args = EmailSenderArgs(
             recipient="user@example.com",
             subject="Project Update",
             body="The project is on track."
         )
         args_json = {"args": args.model_dump()}
-        
+
         result = await email_sender_tool.on_invoke_tool(run_ctx, json.dumps(args_json))
         assert "Email sent" in result
         print("Test passed!")
-    
+
     asyncio.run(test_email_sender())
 ```
 

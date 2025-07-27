@@ -185,7 +185,7 @@ agent = Agent(
 class ProcessData(BaseTool):
     """Processes input data."""
     input_data: str = Field(..., description="Data to process")
-    
+
     def run(self):
         return f"Processed: {self.input_data}"
 ```
@@ -204,7 +204,7 @@ def process_data(input_data: str) -> str:
 ```python v0.x
 class AdvancedTool(BaseTool):
     data: str = Field(..., description="Input data")
-    
+
     def run(self):
         # Access shared state
         shared_data = self._shared_state.get("key", "default")
@@ -324,7 +324,7 @@ from pydantic import Field
 class DataProcessor(BaseTool):
     """Processes data."""
     data: str = Field(..., description="Input data")
-    
+
     def run(self):
         return f"Processed: {self.data}"
 
@@ -336,7 +336,7 @@ class Analyst(Agent):
             tools=[DataProcessor],
             temperature=0.7
         )
-    
+
     def response_validator(self, message):
         if "error" in message.lower():
             raise ValueError("Invalid response")

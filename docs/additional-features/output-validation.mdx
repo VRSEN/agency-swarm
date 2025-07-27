@@ -46,7 +46,7 @@ async def response_content_guardrail(
 ) -> GuardrailFunctionOutput:
     tripwire_triggered = False
     output_info = ""
-    
+
     if "bad word" in response_text.lower():
         tripwire_triggered = True
         output_info = "Please avoid using inappropriate language."

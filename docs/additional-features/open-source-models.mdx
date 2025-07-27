@@ -50,7 +50,7 @@ Add your API keys to your environment variables:
 
 ```bash
 export GEMINI_API_KEY="your-gemini-api-key"
-export ANTHROPIC_API_KEY="your-anthropic-api-key" 
+export ANTHROPIC_API_KEY="your-anthropic-api-key"
 export GROQ_API_KEY="your-groq-api-key"
 ```
 </Step>
@@ -83,7 +83,7 @@ gemini_agent = Agent(
     name="GeminiAgent",
     instructions="You are a helpful assistant",
     model=OpenAIChatCompletionsModel(
-        model="gemini/gemini-2.0-flash", 
+        model="gemini/gemini-2.0-flash",
         openai_client=custom_client
     )
 )
