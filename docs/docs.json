@@ -100,8 +100,7 @@
                                 "icon": "comments",
                                 "pages": [
                                     "additional-features/custom-communication-flows/overview",
-                                    "additional-features/custom-communication-flows/common-use-cases",
-                                    "additional-features/custom-communication-flows/hybrid-patterns"
+                                    "additional-features/custom-communication-flows/common-use-cases"
                                 ]
                             },
                             "additional-features/azure-openai",
