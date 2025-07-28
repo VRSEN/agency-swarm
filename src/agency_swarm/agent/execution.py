@@ -228,6 +228,10 @@ class Execution:
                 # Only extract hosted tool results if hosted tools were actually used
                 hosted_tool_outputs = self._extract_hosted_tool_results_if_needed(run_result.new_items)
 
+                # Extract direct file annotations from assistant messages
+                assistant_messages = [item for item in run_result.new_items if isinstance(item, MessageOutputItem)]
+                annotation_outputs = extract_direct_file_annotations(assistant_messages) if assistant_messages else []
+
                 for i, run_item_obj in enumerate(run_result.new_items):
                     # _run_item_to_tresponse_input_item converts RunItem to TResponseInputItem (dict)
                     item_dict = self._run_item_to_tresponse_input_item(run_item_obj)
@@ -239,6 +243,7 @@ class Execution:
                         )
 
                 items_to_save.extend(hosted_tool_outputs)
+                items_to_save.extend(annotation_outputs)
 
                 # Save items to thread
                 self.agent._thread_manager.add_items_and_save(thread, items_to_save)
@@ -423,12 +428,17 @@ class Execution:
                 # Only extract hosted tool results if hosted tools were actually used
                 hosted_tool_outputs = self._extract_hosted_tool_results_if_needed(collected_items)
 
+                # Extract direct file annotations from assistant messages
+                assistant_messages = [item for item in collected_items if isinstance(item, MessageOutputItem)]
+                annotation_outputs = extract_direct_file_annotations(assistant_messages) if assistant_messages else []
+
                 for run_item_obj in collected_items:
                     item_dict = self._run_item_to_tresponse_input_item(run_item_obj)
                     if item_dict:
                         items_to_save.append(item_dict)
 
                 items_to_save.extend(hosted_tool_outputs)
+                items_to_save.extend(annotation_outputs)
 
                 # Save items to thread
                 self.agent._thread_manager.add_items_and_save(thread, items_to_save)
@@ -526,10 +536,6 @@ class Execution:
                                 synthetic_outputs.append({"role": "assistant", "content": search_results_content})
                                 logger.debug(f"Created web_search results message for call_id: {tool_call.id}")
                                 break  # Process only first text content item to avoid duplicates
-
-        # Extract direct file annotations from assistant messages
-        annotation_results = extract_direct_file_annotations(assistant_messages)
-        synthetic_outputs.extend(annotation_results)
 
         return synthetic_outputs
 

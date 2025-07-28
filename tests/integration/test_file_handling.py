@@ -309,6 +309,11 @@ async def test_file_search_tool(real_openai_client: AsyncOpenAI, tmp_path: Path)
             print(f"Cleaned up vector store {folder_path.name}")
             os.rmdir(folder_path)
             print(f"Cleaned up folder {folder_path.name}")
+
+            # Clean up the tmp directory if it's empty
+            if tmp_dir.exists() and not any(tmp_dir.iterdir()):
+                os.rmdir(tmp_dir)
+                print(f"Cleaned up tmp directory {tmp_dir}")
         except Exception as e:
             print(f"Error cleaning up: {e}, dir: {tmp_dir.glob('*')}")
 
@@ -389,6 +394,11 @@ async def test_code_interpreter_tool(real_openai_client: AsyncOpenAI, tmp_path: 
             print(f"Cleaned up vector store {folder_path.name}")
             os.rmdir(folder_path)
             print(f"Cleaned up folder {folder_path.name}")
+
+            # Clean up the tmp directory if it's empty
+            if tmp_dir.exists() and not any(tmp_dir.iterdir()):
+                os.rmdir(tmp_dir)
+                print(f"Cleaned up tmp directory {tmp_dir}")
         except Exception as e:
             print(f"Error cleaning up: {e}, dir: {tmp_dir.glob('*')}")
 

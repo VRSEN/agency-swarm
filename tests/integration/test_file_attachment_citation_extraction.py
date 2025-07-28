@@ -28,99 +28,117 @@ async def test_file_attachment_citation_extraction():
 
     This tests the file attachment citation pathway, not vector store citations.
     """
+    uploaded_file_id = None
+    agent = None
 
-    # Create test document with specific content
-    with tempfile.TemporaryDirectory(prefix="file_attachment_citation_test_") as temp_dir_str:
-        temp_dir = Path(temp_dir_str)
-        test_file = temp_dir / "quarterly_report.txt"
-        test_file.write_text("""
-        COMPANY QUARTERLY REPORT Q3 2024
+    try:
+        # Create test document with specific content
+        with tempfile.TemporaryDirectory(prefix="file_attachment_citation_test_") as temp_dir_str:
+            temp_dir = Path(temp_dir_str)
+            test_file = temp_dir / "quarterly_report.txt"
+            test_file.write_text("""
+            COMPANY QUARTERLY REPORT Q3 2024
 
-        Financial Summary:
-        - Revenue: $8,456,789.12
-        - Expenses: $3,234,567.89
-        - Net Income: $5,222,221.23
+            Financial Summary:
+            - Revenue: $8,456,789.12
+            - Expenses: $3,234,567.89
+            - Net Income: $5,222,221.23
 
-        Employee Information:
-        - Total Staff: 847 employees
-        - New Hires: 23 people
-        - Departments: Engineering, Sales, Marketing
+            Employee Information:
+            - Total Staff: 847 employees
+            - New Hires: 23 people
+            - Departments: Engineering, Sales, Marketing
 
-        Product Performance:
-        - Product X: 145% growth
-        - Product Y: 89% growth
-        - Product Z: 67% growth
-        """)
+            Product Performance:
+            - Product X: 145% growth
+            - Product Y: 89% growth
+            - Product Z: 67% growth
+            """)
 
-        # Create agent for direct file attachment processing
-        agent = Agent(
-            name="DocumentAnalyst",
-            instructions="You are a document analyst. When analyzing attached files, always cite specific information from the document. Be precise and reference exact text when providing answers.",
-            model_settings=ModelSettings(temperature=0.0),  # DETERMINISTIC BEHAVIOR
-        )
-
-        # Upload file directly to OpenAI for direct attachment (not via agent.upload_file)
-        with open(test_file, "rb") as f:
-            uploaded_file = agent.client_sync.files.create(file=f, purpose="assistants")
-        file_id = uploaded_file.id
-        assert file_id.startswith("file-"), f"Expected file ID to start with 'file-', got: {file_id}"
-
-        # Test direct file attachment with citation-generating question
-        result = await agent.get_response(
-            message="Please analyze the attached financial report and tell me the exact quarterly revenue figure. Quote the specific text from the document that contains this revenue information.",
-            file_ids=[file_id],
-        )
-
-        assert result is not None
-        assert result.final_output is not None
-
-        # Get thread to examine conversation history
-        thread = agent._thread_manager.get_thread("user->DocumentAnalyst")
-        history = thread.get_history()
-
-        # Look for direct file citation messages in history
-        citation_messages = [
-            item
-            for item in history
-            if item.get("role") == "assistant" and "[DIRECT_FILE_CITATIONS]" in str(item.get("content", ""))
-        ]
-
-        # Extract citations programmatically using centralized utility
-        extracted_citations = extract_direct_file_citations_from_history(history)
-
-        # Verify we have citation data
-        assert len(extracted_citations) > 0, (
-            "Expected to find direct file citations in conversation history. "
-            f"Found {len(citation_messages)} citation messages, but no parsed citations."
-        )
-
-        # Verify citation structure
-        for citation in extracted_citations:
-            assert "file_id" in citation, "Citation missing file_id"
-            assert "filename" in citation, "Citation missing filename"
-            assert "type" in citation, "Citation missing type"
-            assert "index" in citation, "Citation missing text index"
-
-            # Verify citation content (note: OpenAI may create different file IDs during processing)
-            assert citation["file_id"].startswith("file-"), f"Expected valid file_id format, got {citation['file_id']}"
-            # Note: OpenAI may use a different filename internally than what we specify
-            assert citation["filename"].endswith(".txt"), (
-                f"Expected filename to end with .txt, got {citation['filename']}"
+            # Create agent for direct file attachment processing
+            agent = Agent(
+                name="DocumentAnalyst",
+                instructions="You are a document analyst. When analyzing attached files, always cite specific information from the document. Be precise and reference exact text when providing answers.",
+                model_settings=ModelSettings(temperature=0.0),  # DETERMINISTIC BEHAVIOR
             )
-            assert citation["type"] == "file_citation", f"Expected type file_citation, got {citation['type']}"
-            assert isinstance(citation["index"], int), f"Expected index to be int, got {type(citation['index'])}"
 
-        # Verify the agent can access the specific data from the file
-        response_text = str(result.final_output).lower()
-        has_revenue = "8,456,789.12" in response_text or "8456789.12" in response_text
+            # Upload file directly to OpenAI for direct attachment (not via agent.upload_file)
+            with open(test_file, "rb") as f:
+                uploaded_file = await agent.client.files.create(file=f, purpose="assistants")
+            uploaded_file_id = uploaded_file.id
+            assert uploaded_file_id.startswith("file-"), (
+                f"Expected file ID to start with 'file-', got: {uploaded_file_id}"
+            )
 
-        # Note: Direct file citations may not always include specific data in the response
-        # but they should provide the citation mechanism for the user to trace back to the source
-        print(f"Agent response includes specific revenue: {has_revenue}")
-        print(f"Found {len(extracted_citations)} direct file attachment citations")
+            # Small delay to ensure file is fully processed
+            await asyncio.sleep(1)
 
-        # The key test is that citations are extracted and structured properly
-        assert len(extracted_citations) > 0, "Direct file attachment citations should be extracted and accessible"
+            # Test direct file attachment with citation-generating question
+            result = await agent.get_response(
+                message="Please analyze the attached financial report and tell me the exact quarterly revenue figure. Quote the specific text from the document that contains this revenue information.",
+                file_ids=[uploaded_file_id],
+            )
+
+            assert result is not None
+            assert result.final_output is not None
+
+            # Get thread to examine conversation history
+            thread = agent._thread_manager.get_thread("user->DocumentAnalyst")
+            history = thread.get_history()
+
+            # Look for direct file citation messages in history
+            citation_messages = [
+                item
+                for item in history
+                if item.get("role") == "assistant" and "[DIRECT_FILE_CITATIONS]" in str(item.get("content", ""))
+            ]
+
+            # Extract citations programmatically using centralized utility
+            extracted_citations = extract_direct_file_citations_from_history(history)
+
+            # Verify we have citation data
+            assert len(extracted_citations) > 0, (
+                "Expected to find direct file citations in conversation history. "
+                f"Found {len(citation_messages)} citation messages, but no parsed citations."
+            )
+
+            # Verify citation structure
+            for citation in extracted_citations:
+                assert "file_id" in citation, "Citation missing file_id"
+                assert "filename" in citation, "Citation missing filename"
+                assert "type" in citation, "Citation missing type"
+                assert "index" in citation, "Citation missing text index"
+
+                # Verify citation content (note: OpenAI may create different file IDs during processing)
+                assert citation["file_id"].startswith("file-"), (
+                    f"Expected valid file_id format, got {citation['file_id']}"
+                )
+                # Note: OpenAI may use a different filename internally than what we specify
+                assert citation["filename"].endswith(".txt"), (
+                    f"Expected filename to end with .txt, got {citation['filename']}"
+                )
+                assert citation["type"] == "file_citation", f"Expected type file_citation, got {citation['type']}"
+                assert isinstance(citation["index"], int), f"Expected index to be int, got {type(citation['index'])}"
+
+            # Verify the agent can access the specific data from the file
+            response_text = str(result.final_output).lower()
+            has_revenue = "8,456,789.12" in response_text or "8456789.12" in response_text
+
+            # Note: Direct file citations may not always include specific data in the response
+            # but they should provide the citation mechanism for the user to trace back to the source
+            print(f"Agent response includes specific revenue: {has_revenue}")
+            print(f"Found {len(extracted_citations)} direct file attachment citations")
+
+            # The key test is that citations are extracted and structured properly
+            assert len(extracted_citations) > 0, "Direct file attachment citations should be extracted and accessible"
+
+    finally:
+        # Clean up uploaded file
+        if uploaded_file_id and agent:
+            try:
+                await agent.client.files.delete(uploaded_file_id)
+            except Exception as e:
+                print(f"Failed to cleanup file {uploaded_file_id}: {e}")
 
 
 @pytest.mark.asyncio
