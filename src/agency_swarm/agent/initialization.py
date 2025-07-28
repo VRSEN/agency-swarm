@@ -17,7 +17,7 @@ from agency_swarm.tools import BaseTool, ToolFactory
 from agency_swarm.utils.agent_file_manager import AgentFileManager
 
 if TYPE_CHECKING:
-    from agency_swarm.agent import Agent
+    from agency_swarm.agent_core import Agent
 
 logger = logging.getLogger(__name__)
 
@@ -178,7 +178,7 @@ def handle_deprecated_parameters(kwargs: dict[str, Any]) -> dict[str, Any]:
             merged_model_settings.pop(key)
 
         # Resolve token setting conflicts
-        from agency_swarm.agent import resolve_token_settings
+        from .messages import resolve_token_settings
 
         resolve_token_settings(merged_model_settings, kwargs.get("name", "unknown"))
 

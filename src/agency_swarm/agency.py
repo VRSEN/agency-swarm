@@ -11,10 +11,10 @@ from agents import (
     RunResult,
 )
 
-from .agent import SEND_MESSAGE_TOOL_PREFIX
-from .agent_core import Agent
-from .hooks import PersistenceHooks
-from .thread import ThreadLoadCallback, ThreadManager, ThreadSaveCallback
+from agency_swarm.agent import SEND_MESSAGE_TOOL_PREFIX
+from agency_swarm.agent_core import Agent
+from agency_swarm.hooks import PersistenceHooks
+from agency_swarm.thread import ThreadLoadCallback, ThreadManager, ThreadSaveCallback
 
 # --- Logging ---
 logger = logging.getLogger(__name__)

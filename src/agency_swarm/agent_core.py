@@ -15,7 +15,7 @@ from agents import (
 )
 from openai import AsyncOpenAI, OpenAI
 
-from .agent import (
+from agency_swarm.agent import (
     Execution,
     add_tool,
     handle_deprecated_parameters,
@@ -25,9 +25,9 @@ from .agent import (
     separate_kwargs,
     setup_file_manager,
 )
-from .context import MasterContext
-from .thread import ThreadManager
-from .utils.agent_file_manager import AgentFileManager
+from agency_swarm.context import MasterContext
+from agency_swarm.thread import ThreadManager
+from agency_swarm.utils.agent_file_manager import AgentFileManager
 
 logger = logging.getLogger(__name__)
 

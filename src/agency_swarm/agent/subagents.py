@@ -12,7 +12,7 @@ from openai._utils._logs import logger
 from agency_swarm.tools.send_message import SendMessage
 
 if TYPE_CHECKING:
-    from agency_swarm.agent import Agent
+    from agency_swarm.agent_core import Agent
 
 # Constants for dynamic tool creation
 SEND_MESSAGE_TOOL_PREFIX = "send_message_to_"
