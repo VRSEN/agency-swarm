@@ -418,9 +418,11 @@ async def test_agent_vision_capabilities(real_openai_client: AsyncOpenAI, tmp_pa
         return encoded_string
 
     # Use the example images since they're actual image files (not text files)
+    # Resolve paths relative to the project root
+    project_root = Path(__file__).parent.parent.parent  # Go up from tests/integration/test_file_handling.py
     test_images = [
-        (Path("examples/data/shapes_and_text.png"), "How many shapes do you see in this image?", "three"),
-        (Path("examples/data/shapes_and_text.png"), "What text do you see in this image?", "VISION TEST 2024"),
+        (project_root / "examples/data/shapes_and_text.png", "How many shapes do you see in this image?", "three"),
+        (project_root / "examples/data/shapes_and_text.png", "What text do you see in this image?", "VISION TEST 2024"),
     ]
 
     # Verify test images exist
