@@ -6,7 +6,7 @@ from agents.tool import FunctionTool
 from dotenv import load_dotenv
 
 from agency_swarm.agency import Agency
-from agency_swarm.agent_core import Agent
+from agency_swarm.agent import Agent
 
 logger = logging.getLogger(__name__)
 

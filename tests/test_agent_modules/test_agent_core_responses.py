@@ -108,15 +108,3 @@ async def test_call_before_agency_setup():
         assert agent._thread_manager is not None
         assert agent._agency_instance is not None
         assert result is not None
-
-
-# --- File Handling Tests ---
-
-
-@pytest.mark.asyncio
-async def test_check_file_exists_no_vs_id():
-    """Test check_file_exists when no vector store ID is associated."""
-    agent = Agent(name="TestAgent", instructions="Test")
-    # No files_folder set, so files_folder_path should be None
-    result = await agent.check_file_exists("test.txt")
-    assert result is None

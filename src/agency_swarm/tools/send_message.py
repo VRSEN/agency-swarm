@@ -16,7 +16,7 @@ from agents import FunctionTool, RunContextWrapper
 from ..context import MasterContext
 
 if TYPE_CHECKING:
-    from ..agent import Agent
+    from ..agent_core import Agent
 
 logger = logging.getLogger(__name__)
 

@@ -1,5 +1,5 @@
 from .agency import Agency
-from .agent_core import Agent
+from .agent import Agent
 from .context import MasterContext
 from .hooks import PersistenceHooks
 from .thread import ConversationThread, ThreadManager

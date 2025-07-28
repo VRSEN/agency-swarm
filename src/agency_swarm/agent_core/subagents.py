@@ -12,7 +12,7 @@ from openai._utils._logs import logger
 from agency_swarm.tools.send_message import SendMessage
 
 if TYPE_CHECKING:
-    from agency_swarm.agent_core import Agent
+    from agency_swarm.agent import Agent
 
 # Constants for dynamic tool creation
 SEND_MESSAGE_TOOL_PREFIX = "send_message_to_"
@@ -36,7 +36,7 @@ def register_subagent(agent: "Agent", recipient_agent: "Agent") -> None:
         ValueError: If attempting to register the agent itself as a subagent
     """
     # Import here to avoid circular import
-    from agency_swarm.agent_core import Agent
+    from agency_swarm.agent import Agent
 
     if not isinstance(recipient_agent, Agent):
         raise TypeError(

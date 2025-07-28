@@ -15,7 +15,7 @@ from openai._utils._logs import logger
 from agency_swarm.tools import BaseTool, ToolFactory
 
 if TYPE_CHECKING:
-    from agency_swarm.agent_core import Agent
+    from agency_swarm.agent import Agent
 
 
 def add_tool(agent: "Agent", tool: Tool) -> None:

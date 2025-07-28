@@ -4,7 +4,7 @@ import pytest
 from agents import RunContextWrapper
 
 from agency_swarm import Agent
-from agency_swarm.agent import SEND_MESSAGE_TOOL_PREFIX
+from agency_swarm.agent_core import SEND_MESSAGE_TOOL_PREFIX
 from agency_swarm.context import MasterContext
 
 # --- Send Message Tool Tests ---

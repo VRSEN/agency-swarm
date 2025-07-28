@@ -77,7 +77,7 @@ Agency Swarm is a multi-agent orchestration framework built on top of the OpenAI
    - Provides persistence hooks for conversation history
    - Entry points: `get_response()`, `get_response_stream()` (async)
 
-2. **Agent** (`agent_core.py` - 450 lines after refactoring)
+2. **Agent** (`agent.py` - 450 lines after refactoring)
    - Extends `agents.Agent` from OpenAI SDK
    - Adds file handling, sub-agent registration, and tool management
    - Uses `send_message` tool for inter-agent communication
@@ -185,7 +185,7 @@ git show 54491685065bc657c358be3f2899da707e5ed94f
 
 ### Current State
 - `agency.py`: 792 lines (VIOLATES 500 line limit)
-- `agent_core.py`: 450 lines (OK after refactoring)
+- `agent.py`: 450 lines (OK after refactoring)
 
 ### Design Principles
 

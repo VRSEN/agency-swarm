@@ -15,7 +15,7 @@ from agents import (
 )
 from openai import AsyncOpenAI, OpenAI
 
-from .agent import (
+from .agent_core import (
     Execution,
     add_tool,
     handle_deprecated_parameters,
@@ -272,10 +272,6 @@ class Agent(BaseAgent[MasterContext]):
         """Upload a file using the agent's file manager."""
         return self.file_manager.upload_file(file_path, include_in_vector_store)
 
-    async def check_file_exists(self, file_name_or_path: str) -> str | None:
-        """Check if a file exists in the agent's files folder and upload it if necessary."""
-        return await self.file_manager.check_file_exists_and_upload(file_name_or_path)
-
     # --- Core Execution Methods ---
     async def get_response(
         self,
@@ -286,7 +282,7 @@ class Agent(BaseAgent[MasterContext]):
         run_config_override: RunConfig | None = None,
         message_files: list[str] | None = None,  # Backward compatibility
         file_ids: list[str] | None = None,  # New parameter
-        additional_instructions: str | None = None,  # New parameter for v1.x
+        additional_instructions: str | None = None,
         **kwargs: Any,
     ) -> RunResult:
         """
@@ -310,9 +306,6 @@ class Agent(BaseAgent[MasterContext]):
         Returns:
             RunResult: The complete execution result
         """
-        # Remove file-related kwargs from kwargs if they were passed to avoid duplicate arguments
-        kwargs.pop("message_files", None)
-        kwargs.pop("file_ids", None)
 
         return await self._execution.get_response(
             message=message,
@@ -333,7 +326,9 @@ class Agent(BaseAgent[MasterContext]):
         context_override: dict[str, Any] | None = None,
         hooks_override: RunHooks | None = None,
         run_config_override: RunConfig | None = None,
-        additional_instructions: str | None = None,  # New parameter for v1.x
+        message_files: list[str] | None = None,
+        file_ids: list[str] | None = None,
+        additional_instructions: str | None = None,
         **kwargs,
     ) -> AsyncGenerator[Any]:
         """Runs the agent's turn in streaming mode.
@@ -350,9 +345,6 @@ class Agent(BaseAgent[MasterContext]):
         Yields:
             Stream events from the agent's execution
         """
-        # Extract and remove file-related kwargs to avoid duplicate arguments
-        message_files = kwargs.pop("message_files", None)
-        file_ids = kwargs.pop("file_ids", None)
 
         async for event in self._execution.get_response_stream(
             message=message,
