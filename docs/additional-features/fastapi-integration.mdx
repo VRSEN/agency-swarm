@@ -74,6 +74,8 @@ message: str
 chat_history: dict[str, ConversationThread] = None
 recipient_agent: str = None
 file_ids: list[str] = None
+# Files to download and attach to the agent. Should be provided in a form of a mapping: {"filename_1":"url", "filename_2":"url", ...}
+file_urls: dict[str, str] = None
 additional_instructions: str = None
 ```
 
@@ -164,8 +166,8 @@ This will create 6 following endpoints:
 - `/test_agency_1/get_completion_stream`
 - `/test_agency_2/get_completion`
 - `/test_agency_2/get_completion_stream`
-- `/tool/ExampleTool` (v0.x) or `/tool/example_tool` (v1.x)
-- `/tool/TestTool` (v0.x) or `/tool/test_tool` (v1.x)
+- `/tool/ExampleTool` (for BaseTools) or `/tool/example_tool` (for function tools)
+- `/tool/TestTool` (for BaseTools) or `/tool/test_tool` (for function tools)
 
 Inputs for the tool endpoints will follow their respective schemas.
 

@@ -63,6 +63,16 @@ In the latest version, tools are created using the `@function_tool` decorator wi
         return f"Result: {result}"
     ```
     <Note>
+    All parameters of the function tool, except for `ctx`, are treated as input parameters and included in the tool’s schema.
+
+    For example, in the tool above, the input model `CalculatorArgs` is passed as the `args` parameter, so the input JSON would look like:
+
+    ```
+    {"args": {"expression": "input_expression"}}
+    ```
+    `args` is an example name, you can name your input parameters however you like, and you may define more than one input parameter if needed.
+    </Note>
+    <Note>
     This example mentions tool context, which can be used as a shared storage for all agents and tools.
     For more info on agent context, refer to [this page](/additional-features/agency-context)
     </Note>
