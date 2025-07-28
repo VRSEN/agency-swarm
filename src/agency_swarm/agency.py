@@ -479,7 +479,7 @@ class Agency:
             sender_name=None,
             context_override=context_override,
             hooks_override=effective_hooks,
-            run_config=run_config,
+            run_config_override=run_config,
             message_files=message_files,
             file_ids=file_ids,
             additional_instructions=additional_instructions,
