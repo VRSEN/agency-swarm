@@ -178,7 +178,7 @@ def handle_deprecated_parameters(kwargs: dict[str, Any]) -> dict[str, Any]:
             merged_model_settings.pop(key)
 
         # Resolve token setting conflicts
-        from agency_swarm.agent_core import resolve_token_settings
+        from agency_swarm.agent import resolve_token_settings
 
         resolve_token_settings(merged_model_settings, kwargs.get("name", "unknown"))
 

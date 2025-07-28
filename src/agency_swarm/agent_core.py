@@ -15,7 +15,7 @@ from agents import (
 )
 from openai import AsyncOpenAI, OpenAI
 
-from .agent_core import (
+from .agent import (
     Execution,
     add_tool,
     handle_deprecated_parameters,

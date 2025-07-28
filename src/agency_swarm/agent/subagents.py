@@ -36,7 +36,7 @@ def register_subagent(agent: "Agent", recipient_agent: "Agent") -> None:
         ValueError: If attempting to register the agent itself as a subagent
     """
     # Import here to avoid circular import
-    from agency_swarm.agent import Agent
+    from agency_swarm.agent_core import Agent
 
     if not isinstance(recipient_agent, Agent):
         raise TypeError(

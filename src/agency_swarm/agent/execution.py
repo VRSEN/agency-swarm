@@ -171,7 +171,7 @@ class Execution:
             # No filtering is applied here based on user instruction.
 
             # Import message utilities from parent module to avoid circular import
-            from agency_swarm.agent_core import ensure_tool_calls_content_safety, sanitize_tool_calls_in_history
+            from agency_swarm.agent import ensure_tool_calls_content_safety, sanitize_tool_calls_in_history
 
             history_for_runner = sanitize_tool_calls_in_history(history_for_runner)
             history_for_runner = ensure_tool_calls_content_safety(history_for_runner)
@@ -388,7 +388,7 @@ class Execution:
             history_for_runner = list(thread.items)  # Get full history after adding
 
             # Import message utilities from parent module to avoid circular import
-            from agency_swarm.agent_core import ensure_tool_calls_content_safety, sanitize_tool_calls_in_history
+            from agency_swarm.agent import ensure_tool_calls_content_safety, sanitize_tool_calls_in_history
 
             history_for_runner = sanitize_tool_calls_in_history(history_for_runner)
 

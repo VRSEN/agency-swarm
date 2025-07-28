@@ -11,8 +11,8 @@ from agents import (
     RunResult,
 )
 
-from .agent_core import SEND_MESSAGE_TOOL_PREFIX
-from .agent import Agent
+from .agent import SEND_MESSAGE_TOOL_PREFIX
+from .agent_core import Agent
 from .hooks import PersistenceHooks
 from .thread import ThreadLoadCallback, ThreadManager, ThreadSaveCallback
 
