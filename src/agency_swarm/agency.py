@@ -281,7 +281,8 @@ class Agency:
         if not temp_entry_points and all_agents_in_chart:  # all_agents_in_chart implies temp_comm_flows is not empty
             logger.warning(
                 "No explicit entry points (standalone agents) found in deprecated 'agency_chart'. "
-                "For backward compatibility, unique sender agents from communication pairs will be considered potential entry points."
+                "For backward compatibility, unique sender agents from communication "
+                "pairs will be considered potential entry points."
             )
             # Collect unique senders from communication flows as entry points
             unique_senders_as_entry_points: dict[int, Agent] = {}
@@ -453,25 +454,7 @@ class Agency:
             AgentsException: If errors occur during the underlying agent execution.
         """
         # Determine recipient agent - default to first entry point if not specified
-        target_recipient = recipient_agent
-        if target_recipient is None:
-            if self.entry_points:
-                target_recipient = self.entry_points[0]
-                logger.info(f"No recipient_agent specified, using first entry point: {target_recipient.name}")
-            else:
-                raise ValueError(
-                    "No recipient_agent specified and no entry points available. "
-                    "Specify recipient_agent or ensure agency has entry points."
-                )
-
-        target_agent = self._resolve_agent(target_recipient)
-        if not self.entry_points:
-            logger.warning("Agency has no designated entry points. Allowing call to any agent.")
-        elif target_agent not in self.entry_points:
-            logger.warning(
-                f"Recipient agent '{target_agent.name}' is not a designated entry point "
-                f"(Entry points: {[ep.name for ep in self.entry_points]}). Call allowed but may indicate unintended usage."
-            )
+        target_agent = self._resolve_recipient_agent(recipient_agent)
 
         effective_hooks = hooks_override or self.persistence_hooks
         return await target_agent.get_response(
@@ -526,27 +509,8 @@ class Agency:
             AgentsException: If errors occur during setup or execution.
         """
         # Determine recipient agent - default to first entry point if not specified
-        target_recipient = recipient_agent
-        if target_recipient is None:
-            if self.entry_points:
-                target_recipient = self.entry_points[0]
-                logger.info(
-                    f"No recipient_agent specified for stream, using first entry point: {target_recipient.name}"
-                )
-            else:
-                raise ValueError(
-                    "No recipient_agent specified and no entry points available. "
-                    "Specify recipient_agent or ensure agency has entry points."
-                )
 
-        target_agent = self._resolve_agent(target_recipient)
-        if not self.entry_points:
-            logger.warning("Agency has no designated entry points. Allowing stream call to any agent.")
-        elif target_agent not in self.entry_points:
-            logger.warning(
-                f"Recipient agent '{target_agent.name}' is not a designated entry point "
-                f"(Entry points: {[ep.name for ep in self.entry_points]}). Stream call allowed but may indicate unintended usage."
-            )
+        target_agent = self._resolve_recipient_agent(recipient_agent)
 
         effective_hooks = hooks_override or self.persistence_hooks
 
@@ -577,6 +541,29 @@ class Agency:
             return agent_instance
         else:
             raise TypeError("recipient_agent must be an Agent instance or agent name string.")
+
+    def _resolve_recipient_agent(self, recipient_agent: str | Agent | None = None) -> Agent:
+        if recipient_agent is None:
+            if self.entry_points:
+                logger.info(f"No recipient_agent specified, using first entry point: {self.entry_points[0].name}")
+                target_agent = self.entry_points[0]
+            else:
+                raise ValueError(
+                    "No recipient_agent specified and no entry points available. "
+                    "Specify recipient_agent or ensure agency has entry points."
+                )
+        else:
+            target_agent = self._resolve_agent(recipient_agent)
+
+        if not self.entry_points:
+            logger.warning("Agency has no designated entry points. Allowing call to any agent.")
+        elif target_agent not in self.entry_points:
+            logger.warning(
+                f"Recipient agent '{target_agent.name}' is not a designated entry point "
+                f"(Entry points: {[ep.name for ep in self.entry_points]}). "
+                "Call allowed but may indicate unintended usage."
+            )
+        return target_agent
 
     def run_fastapi(
         self,
@@ -662,16 +649,7 @@ class Agency:
             )
 
         # Determine recipient agent - default to first entry point if not specified
-        target_recipient = recipient_agent
-        if target_recipient is None:
-            if self.entry_points:
-                target_recipient = self.entry_points[0]
-                logger.info(f"No recipient_agent specified, using first entry point: {target_recipient.name}")
-            else:
-                raise ValueError(
-                    "No recipient_agent specified and no entry points available. "
-                    "Specify recipient_agent or ensure agency has entry points."
-                )
+        target_recipient = self._resolve_recipient_agent(recipient_agent)
 
         # Call the new get_response method with backward compatibility
         run_result = await self.get_response(
@@ -1142,17 +1120,15 @@ class Agency:
         Run a terminal demo of the agency.
         """
         from .ui.demos.launcher import TerminalDemoLauncher
+
         TerminalDemoLauncher.start(self)
 
     def copilot_demo(
-        self,
-        host: str = "0.0.0.0",
-        port: int = 8000,
-        frontend_port: int = 3000,
-        cors_origins: list[str] | None = None
+        self, host: str = "0.0.0.0", port: int = 8000, frontend_port: int = 3000, cors_origins: list[str] | None = None
     ):
         """
         Run a copilot demo of the agency.
         """
         from .ui.demos.launcher import CopilotDemoLauncher
+
         CopilotDemoLauncher.start(self, host=host, port=port, frontend_port=frontend_port, cors_origins=cors_origins)

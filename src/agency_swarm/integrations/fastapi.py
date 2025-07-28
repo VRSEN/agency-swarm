@@ -1,6 +1,7 @@
 import logging
 import os
 from collections.abc import Callable, Mapping
+from typing import Any, ParamSpec
 
 from agents.tool import FunctionTool
 from dotenv import load_dotenv
@@ -8,9 +9,102 @@ from dotenv import load_dotenv
 from agency_swarm.agency import Agency
 from agency_swarm.agent import Agent
 
+P = ParamSpec("P")
 logger = logging.getLogger(__name__)
 
+try:
+    import uvicorn
+    from fastapi import FastAPI
+    from fastapi.middleware.cors import CORSMiddleware
+    from starlette.middleware import _MiddlewareFactory
+
+    from .fastapi_utils.endpoint_handlers import (
+        exception_handler,
+        get_verify_token,
+        make_agui_chat_endpoint,
+        make_metadata_endpoint,
+        make_response_endpoint,
+        make_stream_endpoint,
+        make_tool_endpoint,
+    )
+    from .fastapi_utils.request_models import BaseRequest, RunAgentInputCustom, add_agent_validator
+except ImportError:
+    logger.error("FastAPI deployment dependencies are missing. Please install agency-swarm[fastapi] package")
+
 load_dotenv()
+
+
+class AgencySwarmFastAPIHelper:
+    agencies: Mapping[str, Callable[..., Agency]] = {}
+    app: FastAPI | None = None
+    agency_names: list[str] = []
+    tools: list[type[FunctionTool]] = []
+    route_prefix: str = "/"
+
+    def __init__(self, app: FastAPI | None = None, route_prefix: str = "", **kwargs):
+        self.app = app
+        if self.app is None:
+            self.app = FastAPI()
+
+        self.route_prefix = route_prefix or "/"
+        if not self.route_prefix.endswith("/"):
+            self.route_prefix += "/"
+        if not self.route_prefix.startswith("/"):
+            self.route_prefix = "/" + self.route_prefix
+
+    def add_middleware(self, middleware_class: _MiddlewareFactory[P], *args: P.args, **kwargs: P.kwargs) -> None:
+        self.app.add_middleware(middleware_class, *args, **kwargs)
+
+    def add_api_route(self, path: str, endpoint: Callable[..., Any], *args, **kwargs):
+        self.app.add_api_route(path, endpoint, *args, **kwargs)
+
+    def add_exception_handler(self, exception_handler: Callable[..., Any]):
+        self.app.add_exception_handler(Exception, exception_handler)
+
+    def add_agency(
+        self,
+        agency_name: str,
+        agency_factory: Callable[..., Agency],
+        handlers: Mapping[str, tuple[str, Callable[..., Any]]],
+    ) -> list[str]:
+        """
+        Add an agency to the FastAPI app.
+
+        Parameters:
+            agency_name: The name of the agency.
+            agency_factory: The factory that returns an :class:`Agency`.
+            handlers: A mapping of handler routes to their method (GET or POST) and handler function.
+
+        Returns:
+        """
+        if agency_name in self.agencies:
+            raise ValueError(
+                f"Agency name {agency_name} is already in use. "
+                "Please provide a unique name in the agency's 'name' parameter."
+            )
+        self.agencies[agency_name] = agency_factory
+        self.agency_names.append(agency_name)
+
+        endpoints_added = []
+
+        for handler_route, (method, handler) in handlers.items():
+            self.add_api_route(
+                f"{self.route_prefix}{agency_name}/{handler_route}",
+                handler,
+                methods=[method],
+            )
+            endpoints_added.append(f"{self.route_prefix}{agency_name}/{handler_route}")
+
+        return endpoints_added
+
+    def add_tool(
+        self,
+        tool: type[FunctionTool],
+        handler: Callable[..., Any],
+    ) -> str:
+        self.tools.append(tool)
+        self.add_api_route(f"{self.route_prefix}tool/{tool.name}", handler, methods=["POST"], name=tool.name)
+        return f"{self.route_prefix}tool/{tool.name}"
 
 
 def run_fastapi(
@@ -41,36 +135,17 @@ def run_fastapi(
         logger.warning("No endpoints to deploy. Please provide at least one agency or tool.")
         return
 
-    try:
-        import uvicorn
-        from fastapi import FastAPI
-        from fastapi.middleware.cors import CORSMiddleware
-
-        from .fastapi_utils.endpoint_handlers import (
-            exception_handler,
-            get_verify_token,
-            make_agui_chat_endpoint,
-            make_metadata_endpoint,
-            make_response_endpoint,
-            make_stream_endpoint,
-            make_tool_endpoint,
-        )
-        from .fastapi_utils.request_models import BaseRequest, RunAgentInputCustom, add_agent_validator
-    except ImportError:
-        logger.error("FastAPI deployment dependencies are missing. Please install agency-swarm[fastapi] package")
-        return
-
     app_token = os.getenv(app_token_env)
     if app_token is None or app_token == "":
         logger.warning("App token is not set. Authentication will be disabled.")
     verify_token = get_verify_token(app_token)
 
-    app = FastAPI()
+    helper = AgencySwarmFastAPIHelper()
 
     if cors_origins is None:
         cors_origins = ["*"]
 
-    app.add_middleware(
+    helper.add_middleware(
         CORSMiddleware,
         allow_origins=cors_origins,
         allow_credentials=True,
@@ -99,48 +174,36 @@ def run_fastapi(
             AgencyRequest = add_agent_validator(BaseRequest, AGENT_INSTANCES)
             agency_metadata = preview_instance.get_agency_structure()
 
+            handlers = {}
             if enable_agui:
-                app.add_api_route(
-                    f"/{agency_name}/get_response_stream",
+                handlers["get_response_stream"] = (
+                    "POST",
                     make_agui_chat_endpoint(RunAgentInputCustom, agency_factory, verify_token),
-                    methods=["POST"],
                 )
-                endpoints.append(f"/{agency_name}/get_response_stream")
             else:
-                app.add_api_route(
-                    f"/{agency_name}/get_response",
-                    make_response_endpoint(AgencyRequest, agency_factory, verify_token),
-                    methods=["POST"],
-                )
-                app.add_api_route(
-                    f"/{agency_name}/get_response_stream",
+                handlers["get_response"] = ("POST", make_response_endpoint(AgencyRequest, agency_factory, verify_token))
+                handlers["get_response_stream"] = (
+                    "POST",
                     make_stream_endpoint(AgencyRequest, agency_factory, verify_token),
-                    methods=["POST"],
                 )
-                endpoints.append(f"/{agency_name}/get_response")
-                endpoints.append(f"/{agency_name}/get_response_stream")
+            handlers["get_metadata"] = ("GET", make_metadata_endpoint(agency_metadata, verify_token))
 
-            app.add_api_route(
-                f"/{agency_name}/get_metadata",
-                make_metadata_endpoint(agency_metadata, verify_token),
-                methods=["GET"],
-            )
-            endpoints.append(f"/{agency_name}/get_metadata")
+            endpoints_added = helper.add_agency(agency_name, agency_factory, handlers)
+            endpoints.extend(endpoints_added)
 
     if tools:
         for tool in tools:
-            tool_name = tool.name
             tool_handler = make_tool_endpoint(tool, verify_token)
-            app.add_api_route(f"/tool/{tool_name}", tool_handler, methods=["POST"], name=tool_name)
-            endpoints.append(f"/tool/{tool_name}")
+            endpoint = helper.add_tool(tool, tool_handler)
+            endpoints.append(endpoint)
 
-    app.add_exception_handler(Exception, exception_handler)
+    helper.add_exception_handler(Exception, exception_handler)
 
     logger.info("Created endpoints:\n" + "\n".join(endpoints))
 
     if return_app:
-        return app
+        return helper.app
 
     logger.info(f"Starting FastAPI {'AG-UI ' if enable_agui else ''}server at http://{host}:{port}")
 
-    uvicorn.run(app, host=host, port=port)
+    uvicorn.run(helper.app, host=host, port=port)
