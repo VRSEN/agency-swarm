@@ -16,7 +16,6 @@ from openai import AsyncOpenAI
 from pydantic import BaseModel
 
 from agency_swarm import Agent as AgencySwarmAgent
-from agency_swarm import Agency
 from agency_swarm.thread import ThreadManager
 
 # Configure logging to see SDK and HTTP client details
@@ -370,7 +369,7 @@ Product Sales:
             message=(
                 "Now provide me the exact file search results that you found in the previous tool call. "
                 "Do not use the tool again. I'm looking for Q3 and Q4 revenue, operating costs, and total employee count."
-                )
+            )
         )
 
         assert result2 is not None

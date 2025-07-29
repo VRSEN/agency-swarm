@@ -90,11 +90,11 @@ def file_persistence_callbacks(temp_persistence_dir):
         """Load flat message list for a specific chat_id."""
         print(f"\nLOADING MESSAGES for chat_id: {chat_id}")
         file_path = temp_persistence_dir / f"messages_{chat_id}.json"
-        
+
         if not file_path.exists():
             print("LOAD: No messages file found, returning empty list")
             return []
-            
+
         try:
             with open(file_path) as f:
                 messages = json.load(f)
@@ -115,6 +115,7 @@ def file_persistence_callbacks(temp_persistence_dir):
         except Exception as e:
             print(f"SAVE ERROR for chat_id {chat_id}: {e}")
             import traceback
+
             traceback.print_exc()
 
     # Return the actual functions that take chat_id
@@ -295,7 +296,9 @@ async def test_persistence_load_all_messages(temp_persistence_dir, file_persiste
     all_loaded_messages = load_messages()
 
     assert isinstance(all_loaded_messages, list), "Load callback should return a list"
-    assert len(all_loaded_messages) >= 4, f"Should load at least 4 messages (2 user + 2 assistant), got {len(all_loaded_messages)}"
+    assert len(all_loaded_messages) >= 4, (
+        f"Should load at least 4 messages (2 user + 2 assistant), got {len(all_loaded_messages)}"
+    )
 
     # Check that we have messages from both agents
     ceo_messages = [msg for msg in all_loaded_messages if msg.get("agent") == "CEO"]
@@ -310,7 +313,9 @@ async def test_persistence_load_all_messages(temp_persistence_dir, file_persiste
         assert "agent" in msg, "Message missing 'agent'"
         assert "timestamp" in msg, "Message missing 'timestamp'"
 
-    print(f"✓ Successfully loaded {len(all_loaded_messages)} messages with agents: {set(msg.get('agent') for msg in all_loaded_messages)}")
+    print(
+        f"✓ Successfully loaded {len(all_loaded_messages)} messages with agents: {set(msg.get('agent') for msg in all_loaded_messages)}"
+    )
 
 
 @pytest.mark.asyncio
