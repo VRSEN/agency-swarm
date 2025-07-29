@@ -9,11 +9,12 @@ import logging
 
 from agents.items import MessageOutputItem
 from agents.run import TResponseInputItem
+from agency_swarm.messages.message_formatter import MessageFormatter
 
 logger = logging.getLogger(__name__)
 
 
-def extract_direct_file_annotations(assistant_messages: list[MessageOutputItem]) -> list[TResponseInputItem]:
+def extract_direct_file_annotations(assistant_messages: list[MessageOutputItem], agent_name: str) -> list[TResponseInputItem]:
     """
     Extract file citations from direct file uploads (annotations in message content).
 
@@ -62,7 +63,7 @@ def extract_direct_file_annotations(assistant_messages: list[MessageOutputItem])
                 annotation_content += f"  Text Index: {citation['index']}\n"
                 annotation_content += f"  Type: {citation['type']}\n\n"
 
-            synthetic_outputs.append({"role": "assistant", "content": annotation_content})
+            synthetic_outputs.append(MessageFormatter.add_agency_metadata({"role": "user", "content": annotation_content}, agent=agent_name, caller_agent=None))
             logger.debug(
                 f"Created direct file citations message for message_id: {message.id}, found {len(annotations_found)} citations"
             )

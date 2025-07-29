@@ -15,51 +15,39 @@ def temp_persistence_dir(tmp_path):
     yield tmp_path
 
 
-def file_save_callback(all_threads_data: dict[str, Any], base_dir: Path):
-    """Save all threads data to separate JSON files based on thread identifiers."""
-    print(f"\nFILE SAVE: Saving {len(all_threads_data)} threads to {base_dir}")
+def file_save_callback(messages: list[dict[str, Any]], base_dir: Path):
+    """Save flat message list to a JSON file."""
+    print(f"\nFILE SAVE: Saving {len(messages)} messages to {base_dir}")
     try:
-        for thread_id, thread_data in all_threads_data.items():
-            # Sanitize thread_id for filesystem (replace '->' with '_to_')
-            sanitized_thread_id = thread_id.replace("->", "_to_")
-            file_path = base_dir / f"{sanitized_thread_id}.json"
-
-            # Ensure thread_data has the expected keys, even if empty
-            data_to_save = {
-                "items": thread_data.get("items", []),
-                "metadata": thread_data.get("metadata", {}),
-            }
-
-            with open(file_path, "w") as f:
-                json.dump(data_to_save, f, indent=2)
-            print(f"FILE SAVE: Successfully saved {file_path}")
+        file_path = base_dir / "messages.json"
+        with open(file_path, "w") as f:
+            json.dump(messages, f, indent=2)
+        print(f"FILE SAVE: Successfully saved {file_path}")
     except Exception as e:
-        print(f"FILE SAVE ERROR: Failed to save thread data: {e}")
+        print(f"FILE SAVE ERROR: Failed to save messages: {e}")
         import traceback
 
         traceback.print_exc()
 
 
-def file_load_callback(thread_id: str, base_dir: Path) -> dict[str, Any] | None:
-    """Load thread data from a JSON file based on thread identifier."""
-    # Sanitize thread_id for filesystem (replace '->' with '_to_')
-    sanitized_thread_id = thread_id.replace("->", "_to_")
-    file_path = base_dir / f"{sanitized_thread_id}.json"
-    print(f"\nFILE LOAD: Attempting to load thread data for '{thread_id}' from {file_path}")
+def file_load_callback(base_dir: Path) -> list[dict[str, Any]] | None:
+    """Load flat message list from a JSON file."""
+    file_path = base_dir / "messages.json"
+    print(f"\nFILE LOAD: Attempting to load messages from {file_path}")
     if not file_path.exists():
         print("FILE LOAD: File not found.")
         return None
     try:
         with open(file_path) as f:
-            thread_dict = json.load(f)
-        # Basic validation of loaded structure
-        if not isinstance(thread_dict.get("items"), list) or not isinstance(thread_dict.get("metadata"), dict):
-            print(f"FILE LOAD ERROR: Loaded data for {thread_id} has incorrect structure.")
+            messages = json.load(f)
+        # Basic validation of loaded structure - should be a list
+        if not isinstance(messages, list):
+            print(f"FILE LOAD ERROR: Loaded data should be a list, got {type(messages)}.")
             return None
-        print(f"FILE LOAD: Successfully loaded data for thread '{thread_id}'")
-        return thread_dict  # Return the raw dictionary
+        print(f"FILE LOAD: Successfully loaded {len(messages)} messages")
+        return messages
     except Exception as e:
-        print(f"FILE LOAD ERROR: Failed to load/reconstruct thread data for {thread_id}: {e}")
+        print(f"FILE LOAD ERROR: Failed to load messages: {e}")
         # Log traceback for detailed debugging
         import traceback
 
@@ -67,22 +55,22 @@ def file_load_callback(thread_id: str, base_dir: Path) -> dict[str, Any] | None:
         return None
 
 
-def file_save_callback_error(all_threads_data: dict[str, Any], base_dir: Path):
+def file_save_callback_error(messages: list[dict[str, Any]], base_dir: Path):
     """Mock file save callback that raises an error."""
-    if not all_threads_data:
-        print("FILE SAVE ERROR (Intentional Fail): Thread data is empty.")
-        raise ValueError("Cannot simulate save error for empty thread data")
+    if not messages:
+        print("FILE SAVE ERROR (Intentional Fail): Messages list is empty.")
+        raise ValueError("Cannot simulate save error for empty messages")
 
-    file_path = base_dir / "thread_test.json"
+    file_path = base_dir / "messages_test.json"
     print(f"\nFILE SAVE ERROR: Intentionally failing at {file_path}")
     raise OSError("Simulated save error")
 
 
-def file_load_callback_error(thread_id: str, base_dir: Path) -> dict[str, Any] | None:
+def file_load_callback_error(base_dir: Path) -> list[dict[str, Any]] | None:
     """Mock file load callback that raises an error."""
-    file_path = base_dir / "thread_test.json"
+    file_path = base_dir / "messages_test.json"
     print(f"\nFILE LOAD ERROR: Intentionally failing at {file_path}")
-    raise OSError(f"Simulated load error for {thread_id}")
+    raise OSError("Simulated load error")
 
 
 # --- Test Agent ---
@@ -98,54 +86,39 @@ def persistence_agent():
 def file_persistence_callbacks(temp_persistence_dir):
     """Fixture to provide configured file callbacks that follow the correct interface."""
 
-    def load_threads_for_chat(chat_id: str) -> dict[str, Any]:
-        """Load ALL threads for a specific chat_id - this is the actual implementation."""
-        print(f"\nLOADING ALL THREADS for chat_id: {chat_id}")
-        threads_data = {}
-
-        # Look for all thread files for this chat_id (in practice, this would be a DB query)
-        for file_path in temp_persistence_dir.glob(f"*{chat_id}*.json"):
-            # Extract thread_id from filename pattern: {thread_id}_{chat_id}.json
-            filename = file_path.name
-            if filename.endswith(f"_{chat_id}.json"):
-                thread_id = filename.replace(f"_{chat_id}.json", "").replace("_to_", "->")
-                try:
-                    with open(file_path) as f:
-                        thread_data = json.load(f)
-                    threads_data[thread_id] = thread_data
-                    print(f"LOADED thread {thread_id} for chat {chat_id}")
-                except Exception as e:
-                    print(f"ERROR loading {file_path}: {e}")
-
-        print(f"TOTAL LOADED: {len(threads_data)} threads for chat_id {chat_id}")
-        return threads_data
-
-    def save_threads_for_chat(all_threads_data: dict[str, Any], chat_id: str):
-        """Save ALL threads for a specific chat_id - this is the actual implementation."""
-        print(f"\nSAVING ALL THREADS for chat_id: {chat_id} ({len(all_threads_data)} threads)")
+    def load_messages_for_chat(chat_id: str) -> list[dict[str, Any]]:
+        """Load flat message list for a specific chat_id."""
+        print(f"\nLOADING MESSAGES for chat_id: {chat_id}")
+        file_path = temp_persistence_dir / f"messages_{chat_id}.json"
+        
+        if not file_path.exists():
+            print("LOAD: No messages file found, returning empty list")
+            return []
+            
         try:
-            for thread_id, thread_data in all_threads_data.items():
-                # Sanitize thread_id for filesystem and include chat_id
-                sanitized_thread_id = thread_id.replace("->", "_to_")
-                file_path = temp_persistence_dir / f"{sanitized_thread_id}_{chat_id}.json"
+            with open(file_path) as f:
+                messages = json.load(f)
+            print(f"LOADED: {len(messages)} messages for chat_id {chat_id}")
+            return messages if isinstance(messages, list) else []
+        except Exception as e:
+            print(f"ERROR loading {file_path}: {e}")
+            return []
 
-                # Ensure thread_data has the expected keys
-                data_to_save = {
-                    "items": thread_data.get("items", []),
-                    "metadata": thread_data.get("metadata", {}),
-                }
-
-                with open(file_path, "w") as f:
-                    json.dump(data_to_save, f, indent=2)
-                print(f"SAVED thread {thread_id} for chat {chat_id} to {file_path}")
+    def save_messages_for_chat(messages: list[dict[str, Any]], chat_id: str):
+        """Save flat message list for a specific chat_id."""
+        print(f"\nSAVING MESSAGES for chat_id: {chat_id} ({len(messages)} messages)")
+        try:
+            file_path = temp_persistence_dir / f"messages_{chat_id}.json"
+            with open(file_path, "w") as f:
+                json.dump(messages, f, indent=2)
+            print(f"SAVED: {len(messages)} messages for chat {chat_id} to {file_path}")
         except Exception as e:
             print(f"SAVE ERROR for chat_id {chat_id}: {e}")
             import traceback
-
             traceback.print_exc()
 
     # Return the actual functions that take chat_id
-    return load_threads_for_chat, save_threads_for_chat
+    return load_messages_for_chat, save_messages_for_chat
 
 
 # --- Test Cases ---
@@ -160,38 +133,36 @@ async def test_persistence_callbacks_called(temp_persistence_dir, persistence_ag
     message1 = "First message for callback test."
     message2 = "Second message for callback test."
 
-    # Expected thread identifier for user->PersistenceTester communication
-    expected_thread_id = "user->PersistenceTester"
-    sanitized_thread_id = expected_thread_id.replace("->", "_to_")
-    thread_file = temp_persistence_dir / f"{sanitized_thread_id}_{chat_id}.json"
+    # Expected file for flat message storage
+    messages_file = temp_persistence_dir / f"messages_{chat_id}.json"
 
     # Get the actual callback functions
-    load_threads_for_chat, save_threads_for_chat = file_persistence_callbacks
+    load_messages_for_chat, save_messages_for_chat = file_persistence_callbacks
 
     # Define callbacks using closure pattern from deployment docs
-    def load_threads():
-        return load_threads_for_chat(chat_id)
+    def load_messages():
+        return load_messages_for_chat(chat_id)
 
-    def save_threads(all_threads_data):
-        save_threads_for_chat(all_threads_data, chat_id)
+    def save_messages(messages):
+        save_messages_for_chat(messages, chat_id)
 
     # Initialize Agency with closure-based callbacks (NO parameters in lambda)
     agency = Agency(
         persistence_agent,
-        load_threads_callback=lambda: load_threads(),
-        save_threads_callback=lambda all_threads_data: save_threads(all_threads_data),
+        load_threads_callback=lambda: load_messages(),
+        save_threads_callback=lambda messages: save_messages(messages),
     )
 
     # Turn 1
-    print(f"\n--- Callback Test Turn 1 (Thread: {expected_thread_id}) --- MSG: {message1}")
-    assert not thread_file.exists(), f"File {thread_file} should not exist before first run."
+    print(f"\n--- Callback Test Turn 1 --- MSG: {message1}")
+    assert not messages_file.exists(), f"File {messages_file} should not exist before first run."
     await agency.get_response(message=message1)
 
     # Verify save succeeded by checking file existence
-    assert thread_file.exists(), f"File {thread_file} should exist after first run."
+    assert messages_file.exists(), f"File {messages_file} should exist after first run."
 
     # Turn 2 - new agency instance should load previous history
-    print(f"\n--- Callback Test Turn 2 (Thread: {expected_thread_id}) --- MSG: {message2}")
+    print(f"\n--- Callback Test Turn 2 --- MSG: {message2}")
     persistence_agent2 = Agent(
         name="PersistenceTester",
         instructions="Remember the secret code word I tell you. In the next turn, repeat the code word.",
@@ -200,53 +171,53 @@ async def test_persistence_callbacks_called(temp_persistence_dir, persistence_ag
     # Same closure pattern for second agency
     agency2 = Agency(
         persistence_agent2,
-        load_threads_callback=lambda: load_threads(),
-        save_threads_callback=lambda all_threads_data: save_threads(all_threads_data),
+        load_threads_callback=lambda: load_messages(),
+        save_threads_callback=lambda messages: save_messages(messages),
     )
 
     await agency2.get_response(message=message2)
 
     # Verify file still exists and has more content
-    assert thread_file.exists(), f"File {thread_file} should still exist after second run."
-    with open(thread_file) as f:
+    assert messages_file.exists(), f"File {messages_file} should still exist after second run."
+    with open(messages_file) as f:
         final_data = json.load(f)
 
     # Should have at least 2 user messages (turn 1 and turn 2)
-    user_messages = [item for item in final_data.get("items", []) if item.get("role") == "user"]
+    user_messages = [item for item in final_data if item.get("role") == "user"]
     assert len(user_messages) >= 2, f"Should have at least 2 user messages, got {len(user_messages)}"
 
 
 @pytest.mark.asyncio
-async def test_multi_thread_isolation_with_persistence(temp_persistence_dir, file_persistence_callbacks):
+async def test_multi_agent_tracking_with_persistence(temp_persistence_dir, file_persistence_callbacks):
     """
-    Test that multiple threads (user->Agent1, user->Agent2) are properly isolated
-    and persisted separately within the same chat session.
+    Test that messages from different agents are properly tracked with agent metadata
+    in the flat message list.
     """
-    chat_id = "isolation_test_456"
+    chat_id = "multi_agent_test_456"
 
     # Create two different agents
     agent1 = Agent(name="Agent1", instructions="You are Agent1.")
     agent2 = Agent(name="Agent2", instructions="You are Agent2.")
 
     # Get callback functions
-    load_threads_for_chat, save_threads_for_chat = file_persistence_callbacks
+    load_messages_for_chat, save_messages_for_chat = file_persistence_callbacks
 
     # Define callbacks using closure pattern
-    def load_threads():
-        return load_threads_for_chat(chat_id)
+    def load_messages():
+        return load_messages_for_chat(chat_id)
 
-    def save_threads(all_threads_data):
-        save_threads_for_chat(all_threads_data, chat_id)
+    def save_messages(messages):
+        save_messages_for_chat(messages, chat_id)
 
     # Create agency with both agents
     agency = Agency(
         agent1,  # Entry point agent
         communication_flows=[(agent1, agent2)],
-        load_threads_callback=lambda: load_threads(),
-        save_threads_callback=lambda all_threads_data: save_threads(all_threads_data),
+        load_threads_callback=lambda: load_messages(),
+        save_threads_callback=lambda messages: save_messages(messages),
     )
 
-    # Send messages to different agents - should create separate threads
+    # Send messages to different agents
     message_to_agent1 = "Hello Agent1, remember: SECRET_CODE_ALPHA"
     message_to_agent2 = "Hello Agent2, remember: SECRET_CODE_BETA"
 
@@ -256,90 +227,90 @@ async def test_multi_thread_isolation_with_persistence(temp_persistence_dir, fil
     print(f"\n--- Sending to Agent2: {message_to_agent2}")
     await agency.get_response(message=message_to_agent2, recipient_agent="Agent2")
 
-    # Verify separate thread files exist
-    agent1_file = temp_persistence_dir / f"user_to_Agent1_{chat_id}.json"
-    agent2_file = temp_persistence_dir / f"user_to_Agent2_{chat_id}.json"
+    # Verify messages file exists
+    messages_file = temp_persistence_dir / f"messages_{chat_id}.json"
+    assert messages_file.exists(), "Messages file should exist"
 
-    assert agent1_file.exists(), "Agent1 thread file should exist"
-    assert agent2_file.exists(), "Agent2 thread file should exist"
+    # Load all messages and verify agent tracking
+    with open(messages_file) as f:
+        all_messages = json.load(f)
 
-    # Verify thread isolation - Agent1 thread should not contain Agent2's secret
-    with open(agent1_file) as f:
-        agent1_data = json.load(f)
+    # Filter messages by agent
+    agent1_messages = [msg for msg in all_messages if msg.get("agent") == "Agent1"]
+    agent2_messages = [msg for msg in all_messages if msg.get("agent") == "Agent2"]
 
-    with open(agent2_file) as f:
-        agent2_data = json.load(f)
+    # Verify we have messages for both agents
+    assert len(agent1_messages) > 0, "Should have messages for Agent1"
+    assert len(agent2_messages) > 0, "Should have messages for Agent2"
 
-    agent1_content = str(agent1_data.get("items", [])).lower()
-    agent2_content = str(agent2_data.get("items", [])).lower()
+    # Verify content isolation using agent-specific filtering
+    agent1_content = str(agent1_messages).lower()
+    agent2_content = str(agent2_messages).lower()
 
-    # Agent1 thread should contain ALPHA but not BETA
-    assert "secret_code_alpha" in agent1_content, "Agent1 thread should contain ALPHA"
-    assert "secret_code_beta" not in agent1_content, "Agent1 thread should NOT contain BETA"
+    # Agent1 messages should contain ALPHA but not BETA
+    assert "secret_code_alpha" in agent1_content, "Agent1 messages should contain ALPHA"
+    assert "secret_code_beta" not in agent1_content, "Agent1 messages should NOT contain BETA"
 
-    # Agent2 thread should contain BETA but not ALPHA
-    assert "secret_code_beta" in agent2_content, "Agent2 thread should contain BETA"
-    assert "secret_code_alpha" not in agent2_content, "Agent2 thread should NOT contain ALPHA"
+    # Agent2 messages should contain BETA but not ALPHA
+    assert "secret_code_beta" in agent2_content, "Agent2 messages should contain BETA"
+    assert "secret_code_alpha" not in agent2_content, "Agent2 messages should NOT contain ALPHA"
 
-    print("✓ Thread isolation verified - no cross-contamination")
+    print("✓ Agent tracking verified - messages properly attributed to agents")
 
 
 @pytest.mark.asyncio
-async def test_persistence_load_all_threads(temp_persistence_dir, file_persistence_callbacks):
+async def test_persistence_load_all_messages(temp_persistence_dir, file_persistence_callbacks):
     """
-    Test that load callback returns ALL threads for a chat_id correctly.
+    Test that load callback returns all messages for a chat_id correctly.
     """
-    chat_id = "multi_thread_test_789"
+    chat_id = "load_messages_test_789"
 
     # Create test agents
     ceo = Agent(name="CEO", instructions="You are the CEO.")
     dev = Agent(name="Developer", instructions="You are the Developer.")
 
     # Get callback functions
-    load_threads_for_chat, save_threads_for_chat = file_persistence_callbacks
+    load_messages_for_chat, save_messages_for_chat = file_persistence_callbacks
 
     # Define callbacks using closure pattern
-    def load_threads():
-        return load_threads_for_chat(chat_id)
+    def load_messages():
+        return load_messages_for_chat(chat_id)
 
-    def save_threads(all_threads_data):
-        save_threads_for_chat(all_threads_data, chat_id)
+    def save_messages(messages):
+        save_messages_for_chat(messages, chat_id)
 
     # Create agency with communication flow
     agency = Agency(
         ceo,
         communication_flows=[(ceo, dev)],
-        load_threads_callback=lambda: load_threads(),
-        save_threads_callback=lambda all_threads_data: save_threads(all_threads_data),
+        load_threads_callback=lambda: load_messages(),
+        save_threads_callback=lambda messages: save_messages(messages),
     )
 
-    # Create multiple threads by talking to different agents
+    # Create messages with different agents
     await agency.get_response("CEO: Plan the project", recipient_agent="CEO")
     await agency.get_response("Developer: Code the project", recipient_agent="Developer")
 
-    # Now test that load_threads returns ALL threads
-    all_loaded_threads = load_threads()
+    # Now test that load_messages returns ALL messages
+    all_loaded_messages = load_messages()
 
-    assert isinstance(all_loaded_threads, dict), "Load callback should return a dict"
-    assert len(all_loaded_threads) >= 2, f"Should load at least 2 threads, got {len(all_loaded_threads)}"
+    assert isinstance(all_loaded_messages, list), "Load callback should return a list"
+    assert len(all_loaded_messages) >= 4, f"Should load at least 4 messages (2 user + 2 assistant), got {len(all_loaded_messages)}"
 
-    # Check expected thread IDs
-    expected_threads = {"user->CEO", "user->Developer"}
-    loaded_thread_ids = set(all_loaded_threads.keys())
+    # Check that we have messages from both agents
+    ceo_messages = [msg for msg in all_loaded_messages if msg.get("agent") == "CEO"]
+    dev_messages = [msg for msg in all_loaded_messages if msg.get("agent") == "Developer"]
 
-    assert expected_threads.issubset(loaded_thread_ids), (
-        f"Expected threads {expected_threads} not found in loaded threads {loaded_thread_ids}"
-    )
+    assert len(ceo_messages) > 0, "Should have messages for CEO agent"
+    assert len(dev_messages) > 0, "Should have messages for Developer agent"
 
-    # Verify each thread has proper structure
-    for thread_id, thread_data in all_loaded_threads.items():
-        assert isinstance(thread_data, dict), f"Thread {thread_id} data should be dict"
-        assert "items" in thread_data, f"Thread {thread_id} missing 'items'"
-        assert "metadata" in thread_data, f"Thread {thread_id} missing 'metadata'"
-        assert isinstance(thread_data["items"], list), f"Thread {thread_id} items should be list"
-        assert isinstance(thread_data["metadata"], dict), f"Thread {thread_id} metadata should be dict"
+    # Verify each message has proper structure
+    for msg in all_loaded_messages:
+        assert isinstance(msg, dict), "Each message should be dict"
+        assert "agent" in msg, "Message missing 'agent'"
+        assert "timestamp" in msg, "Message missing 'timestamp'"
 
-    print(f"✓ Successfully loaded {len(all_loaded_threads)} threads: {list(all_loaded_threads.keys())}")
+    print(f"✓ Successfully loaded {len(all_loaded_messages)} messages with agents: {set(msg.get('agent') for msg in all_loaded_messages)}")
 
 
 @pytest.mark.asyncio
@@ -352,7 +323,7 @@ async def test_persistence_error_handling(temp_persistence_dir, persistence_agen
         """Load callback that raises an error."""
         raise OSError("Simulated load error")
 
-    def save_with_error(all_threads_data):
+    def save_with_error(messages):
         """Save callback that raises an error."""
         raise OSError("Simulated save error")
 
@@ -360,7 +331,7 @@ async def test_persistence_error_handling(temp_persistence_dir, persistence_agen
     agency_load_error = Agency(
         persistence_agent,
         load_threads_callback=lambda: load_with_error(),
-        save_threads_callback=lambda all_threads_data: {},  # No-op save
+        save_threads_callback=lambda messages: [],  # No-op save
     )
 
     # Should handle load error gracefully and continue (not raise error)
@@ -375,8 +346,8 @@ async def test_persistence_error_handling(temp_persistence_dir, persistence_agen
 
     agency_save_error = Agency(
         persistence_agent2,
-        load_threads_callback=lambda: {},  # Return empty threads
-        save_threads_callback=lambda all_threads_data: save_with_error(all_threads_data),
+        load_threads_callback=lambda: [],  # Return empty messages list
+        save_threads_callback=lambda messages: save_with_error(messages),
     )
 
     # Should complete successfully despite save error
@@ -390,14 +361,13 @@ async def test_no_persistence_no_callbacks(persistence_agent, temp_persistence_d
     """
     Test that history is NOT persisted between Agency instances if no callbacks are provided.
     """
-    expected_thread_id = "user->PersistenceTester"
     message1 = "First message, should be forgotten."
     message2 = "Second message, load should not happen."
 
     # Agency Instance 1 - Turn 1 (No callbacks)
     print("\n--- No Persistence Test - Instance 1 - Turn 1 --- Creating Agency 1")
     agency1 = Agency(persistence_agent, load_threads_callback=None, save_threads_callback=None)
-    print(f"--- No Persistence Test - Instance 1 - Turn 1 (Thread: {expected_thread_id}) --- MSG: {message1}")
+    print(f"--- No Persistence Test - Instance 1 - Turn 1 --- MSG: {message1}")
     await agency1.get_response(message=message1)
 
     # Check that no file was created (as no save callback was provided)
@@ -411,19 +381,19 @@ async def test_no_persistence_no_callbacks(persistence_agent, temp_persistence_d
         instructions="Remember the secret code word I tell you. In the next turn, repeat the code word.",
     )
     agency2 = Agency(persistence_agent2, load_threads_callback=None, save_threads_callback=None)
-    print(f"--- No Persistence Test - Instance 2 - Turn 2 (Thread: {expected_thread_id}) --- MSG: {message2}")
+    print(f"--- No Persistence Test - Instance 2 - Turn 2 --- MSG: {message2}")
     await agency2.get_response(message=message2)
 
-    # Verify the thread in agency2 only contains message2, not message1
-    thread_in_agency2 = agency2.thread_manager._threads.get(expected_thread_id)
-    assert thread_in_agency2 is not None
+    # Verify the messages in agency2 only contain message2, not message1
+    messages_in_agency2 = agency2.thread_manager._store.messages
+    assert messages_in_agency2 is not None
     found_message1 = any(
-        item.get("role") == "user" and message1 in item.get("content", "") for item in thread_in_agency2.items
+        item.get("role") == "user" and message1 in item.get("content", "") for item in messages_in_agency2
     )
     found_message2 = any(
-        item.get("role") == "user" and message2 in item.get("content", "") for item in thread_in_agency2.items
+        item.get("role") == "user" and message2 in item.get("content", "") for item in messages_in_agency2
     )
 
     assert not found_message1, f"Message '{message1}' (from instance 1) was unexpectedly found in instance 2."
-    assert found_message2, f"Message '{message2}' not found in instance 2 thread."
-    print("--- No Persistence Test - Verified thread history in instance 2 ---")
+    assert found_message2, f"Message '{message2}' not found in instance 2 messages."
+    print("--- No Persistence Test - Verified message history in instance 2 ---")
