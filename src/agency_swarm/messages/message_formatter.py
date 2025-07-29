@@ -26,6 +26,9 @@ class MessageFormatter:
         message["agent"] = agent
         message["callerAgent"] = caller_agent
         message["timestamp"] = int(time.time() * 1000)  # milliseconds
+        # Add type field if not present (for easier parsing/navigation)
+        if "type" not in message:
+            message["type"] = "message"
         return message
 
     @staticmethod

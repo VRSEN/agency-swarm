@@ -116,6 +116,10 @@ class Execution:
 
             processed_current_message_items: list[TResponseInputItem]
             try:
+                # Note: Agent-to-agent messages are processed as "user" role messages
+                # This is intentional - from the receiving agent's perspective, any
+                # incoming message (whether from a user or another agent) is treated
+                # as a "user" message in the OpenAI conversation format
                 processed_current_message_items = ItemHelpers.input_to_new_input_list(message)
             except Exception as e:
                 logger.error(f"Error processing current input message for get_response: {e}", exc_info=True)
@@ -229,7 +233,11 @@ class Execution:
 
                 # Extract direct file annotations from assistant messages
                 assistant_messages = [item for item in run_result.new_items if isinstance(item, MessageOutputItem)]
-                annotation_outputs = extract_direct_file_annotations(assistant_messages, agent_name=self.agent.name) if assistant_messages else []
+                annotation_outputs = (
+                    extract_direct_file_annotations(assistant_messages, agent_name=self.agent.name)
+                    if assistant_messages
+                    else []
+                )
 
                 for i, run_item_obj in enumerate(run_result.new_items):
                     # _run_item_to_tresponse_input_item converts RunItem to TResponseInputItem (dict)
@@ -441,7 +449,11 @@ class Execution:
 
                 # Extract direct file annotations from assistant messages
                 assistant_messages = [item for item in collected_items if isinstance(item, MessageOutputItem)]
-                annotation_outputs = extract_direct_file_annotations(assistant_messages, agent_name=self.agent.name) if assistant_messages else []
+                annotation_outputs = (
+                    extract_direct_file_annotations(assistant_messages, agent_name=self.agent.name)
+                    if assistant_messages
+                    else []
+                )
 
                 for run_item_obj in collected_items:
                     item_dict = self._run_item_to_tresponse_input_item(run_item_obj)
@@ -540,7 +552,13 @@ class Execution:
                         search_results_content += f"File {file_count}: {file_id}\nContent: {content_text}\n\n"
 
                 if file_count > 0:
-                    synthetic_outputs.append(MessageFormatter.add_agency_metadata({"role": "user", "content": search_results_content}, agent=self.agent.name, caller_agent=None))
+                    synthetic_outputs.append(
+                        MessageFormatter.add_agency_metadata(
+                            {"role": "user", "content": search_results_content},
+                            agent=self.agent.name,
+                            caller_agent=None,
+                        )
+                    )
                     logger.debug(f"Created file_search results message for call_id: {tool_call.id}")
 
             elif isinstance(tool_call, ResponseFunctionWebSearch):
