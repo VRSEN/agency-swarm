@@ -10,16 +10,20 @@ from agency_swarm import Agent
 
 @pytest.mark.asyncio
 @patch("agents.Runner.run", new_callable=AsyncMock)
-async def test_get_response_generates_thread_id(mock_runner_run, minimal_agent, mock_thread_manager):
-    """Test that get_response generates a consistent thread ID for user interactions."""
+async def test_get_response_saves_messages(mock_runner_run, minimal_agent, mock_thread_manager):
+    """Test that get_response saves messages to the thread manager."""
     mock_runner_run.return_value = MagicMock(new_items=[], final_output="Test response")
     result = await minimal_agent.get_response("Test message")
     assert result is not None
-    # Verify that get_thread was called with the consistent user->agent format
-    mock_thread_manager.get_thread.assert_called()
-    call_args = mock_thread_manager.get_thread.call_args[0]
-    assert len(call_args) == 1
-    assert call_args[0] == "user->TestAgent"
+    # Verify that messages were added to the thread manager
+    mock_thread_manager.add_messages.assert_called()
+    # Messages should be saved with proper agent metadata
+    call_args = mock_thread_manager.add_messages.call_args[0]
+    messages = call_args[0]
+    assert len(messages) > 0
+    # Check that messages have the agent metadata
+    for msg in messages:
+        assert msg.get("agent") == "TestAgent"
 
 
 @pytest.mark.asyncio
@@ -31,12 +35,15 @@ async def test_get_response_agent_to_agent_communication(mock_runner_run, minima
     result = await minimal_agent.get_response("Test message", sender_name="SomeAgent")
 
     assert result is not None
-    # Verify that get_thread was called with the sender->recipient format
-    mock_thread_manager.get_thread.assert_called_once()
-    call_args = mock_thread_manager.get_thread.call_args[0]
-    assert len(call_args) == 1
-    # Should be in format "SomeAgent->TestAgent"
-    assert call_args[0] == "SomeAgent->TestAgent"
+    # Verify that messages were added with proper sender metadata
+    mock_thread_manager.add_messages.assert_called()
+    call_args = mock_thread_manager.add_messages.call_args[0]
+    messages = call_args[0]
+    assert len(messages) > 0
+    # Check that messages have the correct agent and callerAgent metadata
+    for msg in messages:
+        assert msg.get("agent") == "TestAgent"
+        assert msg.get("callerAgent") == "SomeAgent"
 
 
 @pytest.mark.asyncio
