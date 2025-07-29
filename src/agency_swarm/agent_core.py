@@ -360,11 +360,6 @@ class Agent(BaseAgent[MasterContext]):
             yield event
 
     # --- Helper Methods ---
-    def get_thread_id(self, sender_name: str | None = None) -> str:
-        """Construct a thread identifier based on sender and recipient names."""
-        sender = sender_name or "user"
-        return f"{sender}->{self.name}"
-
     # _validate_response removed - use output_guardrails instead
 
     # --- Agency Configuration Methods --- (Called by Agency)

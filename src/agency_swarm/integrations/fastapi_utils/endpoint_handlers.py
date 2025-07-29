@@ -1,5 +1,6 @@
 import asyncio
 import json
+import time
 from collections.abc import AsyncGenerator, Callable
 
 from ag_ui.core import EventType, MessagesSnapshotEvent, RunErrorEvent, RunFinishedEvent, RunStartedEvent
@@ -9,6 +10,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from agency_swarm.agency import Agency
+from agency_swarm.messages import MessageFilter
 from agency_swarm.ui.core.converters import AguiAdapter, serialize
 
 
@@ -30,17 +32,13 @@ def get_verify_token(app_token):
 def make_response_endpoint(request_model, agency_factory: Callable[..., Agency], verify_token):
     async def handler(request: request_model, token: str = Depends(verify_token)):
         if request.chat_history is not None:
-            chat_history_dict = {}
-            for key, value in request.chat_history.items():
-                chat_history_dict[key] = json.loads(value.model_dump_json())
-
-            def load_callback() -> dict:
-                return chat_history_dict
-
+            # Chat history is now a flat list
+            def load_callback() -> list:
+                return request.chat_history
         else:
 
-            def load_callback() -> dict:
-                return {}
+            def load_callback() -> list:
+                return []
 
         agency_instance = agency_factory(load_threads_callback=load_callback)
         response = await agency_instance.get_response(
@@ -49,11 +47,10 @@ def make_response_endpoint(request_model, agency_factory: Callable[..., Agency],
             additional_instructions=request.additional_instructions,
             file_ids=request.file_ids,
         )
-        history = {
-            thread_id: {"items": thread.items, "metadata": thread.metadata}
-            for thread_id, thread in agency_instance.thread_manager._threads.items()
-        }
-        return {"response": response.final_output, "chat_history": history}
+        # Get flat message list and apply filtering
+        all_messages = agency_instance.thread_manager.get_all_messages()
+        filtered_messages = MessageFilter.filter_messages(all_messages)
+        return {"response": response.final_output, "chat_history": filtered_messages}
 
     return handler
 
@@ -62,17 +59,13 @@ def make_response_endpoint(request_model, agency_factory: Callable[..., Agency],
 def make_stream_endpoint(request_model, agency_factory: Callable[..., Agency], verify_token):
     async def handler(request: request_model, token: str = Depends(verify_token)):
         if request.chat_history is not None:
-            chat_history_dict = {}
-            for key, value in request.chat_history.items():
-                chat_history_dict[key] = json.loads(value.model_dump_json())
-
-            def load_callback() -> dict:
-                return chat_history_dict
-
+            # Chat history is now a flat list
+            def load_callback() -> list:
+                return request.chat_history
         else:
 
-            def load_callback() -> dict:
-                return {}
+            def load_callback() -> list:
+                return []
 
         agency_instance = agency_factory(load_threads_callback=load_callback)
 
@@ -92,11 +85,10 @@ def make_stream_endpoint(request_model, agency_factory: Callable[..., Agency], v
             except Exception as exc:
                 yield "data: " + json.dumps({"error": str(exc)}) + "\n\n"
 
-            history = {
-                thread_id: {"items": thread.items, "metadata": thread.metadata}
-                for thread_id, thread in agency_instance.thread_manager._threads.items()
-            }
-            yield "data: " + json.dumps({"chat_history": history}) + "\n\n"
+            # Get flat message list and apply filtering
+            all_messages = agency_instance.thread_manager.get_all_messages()
+            filtered_messages = MessageFilter.filter_messages(all_messages)
+            yield "data: " + json.dumps({"chat_history": filtered_messages}) + "\n\n"
 
         return StreamingResponse(
             event_generator(),
@@ -147,30 +139,32 @@ def make_agui_chat_endpoint(request_model, agency_factory: Callable[..., Agency]
         encoder = EventEncoder()
 
         if request.chat_history is not None:
-            chat_history_dict = {}
-            for key, value in request.chat_history.items():
-                chat_history_dict[key] = json.loads(value.model_dump_json())
-
-            def load_callback() -> dict:
-                return chat_history_dict
+            # Chat history is now a flat list
+            def load_callback() -> list:
+                return request.chat_history
 
         elif request.messages is not None:
             # Pull the default agent from the agency
             agency = agency_factory()
             default_agent = agency.entry_points[0]
 
-            def load_callback() -> dict:
-                return {
-                    f"user->{default_agent.name}": {
-                        "items": AguiAdapter.agui_messages_to_chat_history(request.messages),
-                        "metadata": {},
-                    }
-                }
+            # Convert AG-UI messages to flat chat history with metadata
+            def load_callback() -> list:
+                agui_messages = AguiAdapter.agui_messages_to_chat_history(request.messages)
+                # Add agency metadata to each message
+                for msg in agui_messages:
+                    if "agent" not in msg:
+                        msg["agent"] = default_agent.name
+                    if "callerAgent" not in msg:
+                        msg["callerAgent"] = None
+                    if "timestamp" not in msg:
+                        msg["timestamp"] = int(time.time() * 1000)
+                return agui_messages
 
         else:
 
-            def load_callback() -> dict:
-                return {}
+            def load_callback() -> list:
+                return []
 
         # Choose / build an agent – here we just create a demo agent each time.
         agency = agency_factory(load_threads_callback=load_callback)

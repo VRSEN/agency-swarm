@@ -5,7 +5,7 @@ from agents import RunContextWrapper, RunResult
 
 from agency_swarm.context import MasterContext
 from agency_swarm.hooks import PersistenceHooks
-from agency_swarm.thread import ConversationThread, ThreadManager
+from agency_swarm.thread import ThreadManager
 
 
 @pytest.fixture
@@ -20,9 +20,11 @@ def mock_save_callback():
 
 @pytest.fixture
 def mock_thread_manager():
-    # Simple mock, might need more sophisticated one depending on tests
+    # Mock ThreadManager with the new flat structure
     manager = MagicMock(spec=ThreadManager)
-    manager._threads = {}
+    manager._store = MagicMock()
+    manager._store.messages = []
+    manager.get_all_messages = MagicMock(return_value=[])
     return manager
 
 
@@ -40,8 +42,6 @@ def mock_run_context_wrapper(mock_master_context):
     # Mock RunContextWrapper
     wrapper = MagicMock(spec=RunContextWrapper)
     wrapper.context = mock_master_context
-    # wrapper.hooks can be set if needed
-    # wrapper.agent can be set if needed
     return wrapper
 
 
@@ -49,8 +49,7 @@ def mock_run_context_wrapper(mock_master_context):
 def mock_run_result():
     # Mock RunResult needed for on_run_end
     result = MagicMock(spec=RunResult)
-    result.final_output = "Test output"
-    # Add other attributes if needed by hooks
+    result.final_output = "mock output"
     return result
 
 
@@ -63,49 +62,10 @@ class TestPersistenceHooksUnit:
         mock_thread_manager,
         mock_run_context_wrapper,
     ):
-        """Test PersistenceHooks.on_run_start successfully loads thread data."""
+        """Test PersistenceHooks.on_run_start - messages are loaded by ThreadManager during init."""
         # Arrange
-        # Simulate load_callback returning serialized thread data (not ConversationThread objects)
-        thread_id_1 = "user->TestAgent"
-        thread_id_2 = "user->OtherAgent"
-        loaded_threads_data = {
-            thread_id_1: {"items": [{"role": "user", "content": "loaded1"}], "metadata": {}},
-            thread_id_2: {"items": [{"role": "user", "content": "loaded2"}], "metadata": {}},
-        }
-        mock_load_callback.return_value = loaded_threads_data  # Simulate successful load returning serialized data
-
-        hooks = PersistenceHooks(load_threads_callback=mock_load_callback, save_threads_callback=mock_save_callback)
-
-        # Act
-        # Call on_run_start only with context (it's synchronous)
-        hooks.on_run_start(context=mock_run_context_wrapper.context)
-
-        # Assert
-        mock_load_callback.assert_called_once_with()  # Called without arguments
-        # Verify thread_manager._threads was populated with ConversationThread objects
-        assert len(mock_thread_manager._threads) == 2
-        assert thread_id_1 in mock_thread_manager._threads
-        assert thread_id_2 in mock_thread_manager._threads
-        # Verify the threads were reconstructed correctly
-        thread_1 = mock_thread_manager._threads[thread_id_1]
-        thread_2 = mock_thread_manager._threads[thread_id_2]
-        assert thread_1.thread_id == thread_id_1
-        assert thread_1.items == [{"role": "user", "content": "loaded1"}]
-        assert thread_2.thread_id == thread_id_2
-        assert thread_2.items == [{"role": "user", "content": "loaded2"}]
-
-    @pytest.mark.asyncio
-    async def test_on_run_start_load_none(
-        self,
-        mock_load_callback,
-        mock_save_callback,
-        mock_thread_manager,
-        mock_run_context_wrapper,
-    ):
-        """Test PersistenceHooks.on_run_start when load_threads_callback returns None."""
-        # Arrange
-        mock_load_callback.return_value = None  # Simulate load returning None
-        initial_threads = mock_thread_manager._threads.copy()
+        # With the new structure, loading happens in ThreadManager.__init__
+        # PersistenceHooks.on_run_start just logs that loading already occurred
 
         hooks = PersistenceHooks(load_threads_callback=mock_load_callback, save_threads_callback=mock_save_callback)
 
@@ -113,37 +73,8 @@ class TestPersistenceHooksUnit:
         hooks.on_run_start(context=mock_run_context_wrapper.context)
 
         # Assert
-        mock_load_callback.assert_called_once_with()
-        # Verify thread_manager._threads remains unchanged
-        assert mock_thread_manager._threads == initial_threads
-
-    @pytest.mark.asyncio
-    async def test_on_run_start_load_error(
-        self,
-        mock_load_callback,
-        mock_save_callback,
-        mock_thread_manager,
-        mock_run_context_wrapper,
-    ):
-        """Test PersistenceHooks.on_run_start when load_threads_callback raises an error."""
-        # Arrange
-        load_error = OSError("Simulated load error")
-        mock_load_callback.side_effect = load_error  # Simulate load raising error
-        initial_threads = mock_thread_manager._threads.copy()
-
-        hooks = PersistenceHooks(load_threads_callback=mock_load_callback, save_threads_callback=mock_save_callback)
-
-        # Act & Assert
-        # Verify the hook runs without raising the exception itself (it should catch it)
-        try:
-            hooks.on_run_start(context=mock_run_context_wrapper.context)
-        except Exception as e:
-            pytest.fail(f"PersistenceHooks.on_run_start raised an unexpected exception: {e}")
-
-        mock_load_callback.assert_called_once_with()
-        # Verify thread_manager._threads remains unchanged
-        assert mock_thread_manager._threads == initial_threads
-        # Optional: Could capture logs to verify the error was logged, but keeping it simple for now.
+        # The hook itself doesn't call load_callback anymore (ThreadManager does during init)
+        mock_load_callback.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_on_run_end_success(
@@ -152,25 +83,30 @@ class TestPersistenceHooksUnit:
         mock_save_callback,
         mock_thread_manager,
         mock_run_context_wrapper,
-        mock_run_result,  # Add mock_run_result fixture
+        mock_run_result,
     ):
-        """Test PersistenceHooks.on_run_end successfully calls save_threads_callback."""
+        """Test PersistenceHooks.on_run_end successfully calls save_threads_callback with flat message list."""
         # Arrange
-        thread_id_1 = "user->TestAgent"
-        # Pre-populate the mock thread manager with some ConversationThread data
-        thread_obj = ConversationThread(thread_id=thread_id_1, items=[{"role": "user", "content": "to_save"}])
-        mock_thread_manager._threads = {thread_id_1: thread_obj}
+        messages = [
+            {"role": "user", "content": "Hello", "agent": "Agent1", "callerAgent": None, "timestamp": 1234567890000},
+            {
+                "role": "assistant",
+                "content": "Hi there",
+                "agent": "Agent1",
+                "callerAgent": None,
+                "timestamp": 1234567891000,
+            },
+        ]
+        mock_thread_manager.get_all_messages.return_value = messages
 
         hooks = PersistenceHooks(load_threads_callback=mock_load_callback, save_threads_callback=mock_save_callback)
 
         # Act
-        # Call on_run_end (synchronous)
         hooks.on_run_end(context=mock_run_context_wrapper.context, result=mock_run_result)
 
         # Assert
-        # Verify save_threads_callback was called with serialized data (not ConversationThread objects)
-        expected_serialized_data = {thread_id_1: {"items": [{"role": "user", "content": "to_save"}], "metadata": {}}}
-        mock_save_callback.assert_called_once_with(expected_serialized_data)
+        # Verify save_threads_callback was called with flat message list
+        mock_save_callback.assert_called_once_with(messages)
 
     @pytest.mark.asyncio
     async def test_on_run_end_save_error(
@@ -183,12 +119,18 @@ class TestPersistenceHooksUnit:
     ):
         """Test PersistenceHooks.on_run_end when save_threads_callback raises an error."""
         # Arrange
-        thread_id_1 = "user->TestAgent"
-        thread_obj = ConversationThread(thread_id=thread_id_1, items=[{"role": "user", "content": "to_save"}])
-        mock_thread_manager._threads = {thread_id_1: thread_obj}
+        messages = [
+            {
+                "role": "user",
+                "content": "Test message",
+                "agent": "Agent1",
+                "callerAgent": None,
+                "timestamp": 1234567890000,
+            }
+        ]
+        mock_thread_manager.get_all_messages.return_value = messages
 
         save_error = OSError("Simulated save error")
-        # Configure the async mock to raise an error when called
         mock_save_callback.side_effect = save_error
 
         hooks = PersistenceHooks(load_threads_callback=mock_load_callback, save_threads_callback=mock_save_callback)
@@ -200,6 +142,19 @@ class TestPersistenceHooksUnit:
         except Exception as e:
             pytest.fail(f"PersistenceHooks.on_run_end raised an unexpected exception: {e}")
 
-        # Verify save_threads_callback was called with serialized data
-        expected_serialized_data = {thread_id_1: {"items": [{"role": "user", "content": "to_save"}], "metadata": {}}}
-        mock_save_callback.assert_called_once_with(expected_serialized_data)
+        # Verify save_threads_callback was called with flat message list
+        mock_save_callback.assert_called_once_with(messages)
+
+    def test_persistence_hooks_init_validation(self, mock_load_callback, mock_save_callback):
+        """Test PersistenceHooks initialization validates callbacks are callable."""
+        # Valid initialization
+        hooks = PersistenceHooks(load_threads_callback=mock_load_callback, save_threads_callback=mock_save_callback)
+        assert hooks._load_threads_callback == mock_load_callback
+        assert hooks._save_threads_callback == mock_save_callback
+
+        # Invalid initialization - not callable
+        with pytest.raises(TypeError, match="load_threads_callback and save_threads_callback must be callable"):
+            PersistenceHooks(load_threads_callback="not_callable", save_threads_callback=mock_save_callback)
+
+        with pytest.raises(TypeError, match="load_threads_callback and save_threads_callback must be callable"):
+            PersistenceHooks(load_threads_callback=mock_load_callback, save_threads_callback="not_callable")

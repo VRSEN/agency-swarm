@@ -1,190 +1,179 @@
 import pickle
 
-import pytest
-
-from agency_swarm.thread import ConversationThread, ThreadManager
+from agency_swarm.thread import ThreadManager
 
 
 def test_thread_manager_initialization():
-    """Tests that ThreadManager initializes with an empty threads dictionary."""
+    """Tests that ThreadManager initializes with an empty message store."""
     manager = ThreadManager()
-    assert manager._threads == {}
-    assert manager._load_threads_callback is None  # Check default callbacks
+    assert len(manager._store.messages) == 0
+    assert manager._load_threads_callback is None
     assert manager._save_threads_callback is None
 
 
-def test_get_thread_generates_id():
-    """Tests that get_thread generates a UUID if no thread_id is provided."""
+def test_add_message():
+    """Tests adding a single message to the thread manager."""
     manager = ThreadManager()
-    thread = manager.get_thread()  # No ID provided
-    assert isinstance(thread, ConversationThread)
-    assert isinstance(thread.thread_id, str)
-    assert thread.thread_id.startswith("thread_")
-    assert thread.thread_id in manager._threads
-    assert manager._threads[thread.thread_id] == thread
+    message = {"role": "user", "content": "Hello", "agent": "Agent1", "callerAgent": None, "timestamp": 1234567890000}
+
+    manager.add_message(message)
+
+    assert len(manager._store.messages) == 1
+    assert manager._store.messages[0] == message
 
 
-def test_get_thread_uses_provided_id():
-    """Tests that get_thread uses the provided thread_id."""
+def test_add_messages():
+    """Tests adding multiple messages to the thread manager."""
     manager = ThreadManager()
-    test_id = "my_custom_thread_id_123"
-    thread = manager.get_thread(test_id)
-    assert isinstance(thread, ConversationThread)
-    assert thread.thread_id == test_id
-    assert test_id in manager._threads
-    assert manager._threads[test_id] == thread
-
-
-def test_get_thread_returns_existing_by_id():
-    """Tests that get_thread returns the existing thread when called with the same ID."""
-    manager = ThreadManager()
-    test_id = "existing_thread_456"
-    thread1 = manager.get_thread(test_id)
-    thread2 = manager.get_thread(test_id)
-    assert thread1 == thread2
-    assert len(manager._threads) == 1  # Should only be one thread with this ID
-
-
-def test_get_thread_loads_from_callback(mocker):
-    """Tests that get_thread attempts to load from the load_threads_callback if provided."""
-    mock_load = mocker.MagicMock()
-    test_id = "load_me_789"
-    # The callback now returns ALL threads, not just one
-    loaded_data_dict = {
-        test_id: {"items": [{"role": "system", "content": "Loaded"}], "metadata": {"source": "mock_db"}}
-    }
-    mock_load.return_value = loaded_data_dict
-
-    manager = ThreadManager(load_threads_callback=mock_load)
-
-    # Callback should have been invoked during initialization
-    thread = manager.get_thread(test_id)
-    mock_load.assert_called_once_with()  # NO parameters
-
-    # Verify the thread was constructed from the loaded data
-    assert thread.thread_id == test_id
-    assert len(thread.items) == 1
-    assert thread.items[0]["content"] == "Loaded"
-
-
-def test_get_thread_creates_new_if_load_fails(mocker):
-    """Tests that get_thread creates a new thread if load_threads_callback returns empty dict."""
-    mock_load = mocker.MagicMock(return_value={})  # Empty dict, no threads loaded
-    test_id = "load_fail_abc"
-
-    manager = ThreadManager(load_threads_callback=mock_load)
-    thread = manager.get_thread(test_id)
-
-    # Callback is invoked during initialization and again when get_thread()
-    # attempts to load the missing thread
-    assert mock_load.call_count == 2
-
-    # Should have created a new thread since load returned empty
-    assert thread.thread_id == test_id
-    assert len(thread.items) == 0
-
-
-def test_thread_manager_serialization():
-    """Tests that ThreadManager with populated threads can be serialized and deserialized."""
-    # Note: Callbacks are generally not pickleable, so test without them.
-    manager = ThreadManager()  # No callbacks for pickling test
-    thread1_id = "pickle_thread_1"
-    thread2_id = "pickle_thread_2"
-
-    thread1 = manager.get_thread(thread1_id)
-    thread1.add_item({"role": "user", "content": "Hello agent2"})
-    thread1.add_item({"role": "assistant", "content": "Hello agent1"})
-
-    thread2 = manager.get_thread(thread2_id)
-    thread2.add_item({"role": "user", "content": "Hello agent1"})
-    thread2.add_item({"role": "assistant", "content": "Hello USER"})
-
-    # Serialize
-    serialized_manager = pickle.dumps(manager)
-
-    # Deserialize
-    deserialized_manager = pickle.loads(serialized_manager)
-
-    # Verify
-    assert isinstance(deserialized_manager, ThreadManager)
-    assert deserialized_manager._load_threads_callback is None  # Callbacks shouldn't serialize
-    assert deserialized_manager._save_threads_callback is None
-    assert len(deserialized_manager._threads) == 2
-    assert thread1_id in deserialized_manager._threads
-    assert thread2_id in deserialized_manager._threads
-
-    deserialized_thread1 = deserialized_manager.get_thread(thread1_id)
-    assert len(deserialized_thread1.items) == 2
-    assert deserialized_thread1.items[0]["role"] == "user"
-    assert deserialized_thread1.items[0]["content"] == "Hello agent2"
-    assert deserialized_thread1.items[1]["role"] == "assistant"
-    assert deserialized_thread1.items[1]["content"] == "Hello agent1"
-
-    deserialized_thread2 = deserialized_manager.get_thread(thread2_id)
-    assert len(deserialized_thread2.items) == 2
-    assert deserialized_thread2.items[0]["role"] == "user"
-    assert deserialized_thread2.items[0]["content"] == "Hello agent1"
-    assert deserialized_thread2.items[1]["role"] == "assistant"
-    assert deserialized_thread2.items[1]["content"] == "Hello USER"
-
-
-def test_add_item_and_save_triggers_callback(mocker):
-    """Tests that add_item_and_save calls the save_threads_callback."""
-    mock_save = mocker.MagicMock()
-    manager = ThreadManager()  # Initialize WITHOUT callback first
-    thread_id = "save_test_thread_1"
-    thread = manager.get_thread(thread_id)
-    # Assign callback AFTER thread creation to isolate save calls
-    manager._save_threads_callback = mock_save
-
-    item = {"role": "user", "content": "Test message for save"}
-    manager.add_item_and_save(thread, item)
-
-    # Verify item was added
-    assert len(thread.items) == 1
-    assert thread.items[0] == item
-    # Verify save callback was called once with all threads data
-    expected_all_threads_data = {thread_id: {"items": thread.items, "metadata": thread.metadata}}
-    mock_save.assert_called_once_with(expected_all_threads_data)
-
-
-def test_add_items_and_save_triggers_callback(mocker):
-    """Tests that add_items_and_save calls the save_threads_callback."""
-    mock_save = mocker.MagicMock()
-    manager = ThreadManager()  # Initialize WITHOUT callback first
-    thread_id = "save_test_thread_2"
-    thread = manager.get_thread(thread_id)
-    # Assign callback AFTER thread creation
-    manager._save_threads_callback = mock_save
-
-    items = [
-        {"role": "user", "content": "Message 1"},
-        {"role": "assistant", "content": "Message 2"},
+    messages = [
+        {"role": "user", "content": "Hello", "agent": "Agent1", "callerAgent": None, "timestamp": 1234567890000},
+        {
+            "role": "assistant",
+            "content": "Hi there",
+            "agent": "Agent1",
+            "callerAgent": None,
+            "timestamp": 1234567891000,
+        },
     ]
-    manager.add_items_and_save(thread, items)
 
-    # Verify items were added
-    assert len(thread.items) == 2
-    assert thread.items[0] == items[0]
-    assert thread.items[1] == items[1]
-    # Verify save callback was called once with all threads data
-    expected_all_threads_data = {thread_id: {"items": thread.items, "metadata": thread.metadata}}
-    mock_save.assert_called_once_with(expected_all_threads_data)
+    manager.add_messages(messages)
+
+    assert len(manager._store.messages) == 2
+    assert manager._store.messages == messages
 
 
-def test_save_not_called_without_callback():
-    """Tests that save is not attempted if no callback is provided."""
-    # We can't easily mock the internal _save_thread, but we can check
-    # that no error occurs and items are added when no callback is set.
-    manager = ThreadManager()  # No save_threads_callback
-    thread = manager.get_thread("no_save_test")
-    item = {"role": "user", "content": "Test"}
-    items = [{"role": "assistant", "content": "Test 2"}]
+def test_get_conversation_history():
+    """Tests retrieving conversation history for specific agent pairs."""
+    manager = ThreadManager()
+    messages = [
+        {"role": "user", "content": "Hello Agent1", "agent": "Agent1", "callerAgent": None, "timestamp": 1234567890000},
+        {"role": "assistant", "content": "Hi user", "agent": "Agent1", "callerAgent": None, "timestamp": 1234567891000},
+        {"role": "user", "content": "Hello Agent2", "agent": "Agent2", "callerAgent": None, "timestamp": 1234567892000},
+        {
+            "role": "assistant",
+            "content": "Hi from Agent2",
+            "agent": "Agent2",
+            "callerAgent": None,
+            "timestamp": 1234567893000,
+        },
+    ]
 
-    try:
-        manager.add_item_and_save(thread, item)
-        manager.add_items_and_save(thread, items)
-    except Exception as e:
-        pytest.fail(f"add_item(s)_and_save raised unexpected exception without callback: {e}")
+    manager.add_messages(messages)
 
-    assert len(thread.items) == 2  # Item + items list
+    # Get conversation between user and Agent1
+    agent1_history = manager.get_conversation_history("Agent1", None)
+    assert len(agent1_history) == 2
+    assert all(msg["agent"] == "Agent1" for msg in agent1_history)
+
+    # Get conversation between user and Agent2
+    agent2_history = manager.get_conversation_history("Agent2", None)
+    assert len(agent2_history) == 2
+    assert all(msg["agent"] == "Agent2" for msg in agent2_history)
+
+
+def test_get_all_messages():
+    """Tests retrieving all messages from the thread manager."""
+    manager = ThreadManager()
+    messages = [
+        {"role": "user", "content": "Message 1", "agent": "Agent1", "callerAgent": None, "timestamp": 1234567890000},
+        {
+            "role": "assistant",
+            "content": "Response 1",
+            "agent": "Agent1",
+            "callerAgent": None,
+            "timestamp": 1234567891000,
+        },
+    ]
+
+    manager.add_messages(messages)
+    all_messages = manager.get_all_messages()
+
+    assert all_messages == messages
+    # Verify it returns a copy, not the original list
+    all_messages.append({"role": "user", "content": "Extra"})
+    assert len(manager._store.messages) == 2  # Original should be unchanged
+
+
+def test_save_callback_triggered_on_add(mocker):
+    """Tests that save callback is triggered when adding messages."""
+    mock_save = mocker.MagicMock()
+    manager = ThreadManager(save_threads_callback=mock_save)
+
+    message = {"role": "user", "content": "Test", "agent": "Agent1", "callerAgent": None, "timestamp": 1234567890000}
+    manager.add_message(message)
+
+    mock_save.assert_called_once_with([message])
+
+
+def test_load_callback_on_init(mocker):
+    """Tests that load callback is called during initialization."""
+    loaded_messages = [
+        {
+            "role": "user",
+            "content": "Loaded message",
+            "agent": "Agent1",
+            "callerAgent": None,
+            "timestamp": 1234567890000,
+        }
+    ]
+    mock_load = mocker.MagicMock(return_value=loaded_messages)
+
+    manager = ThreadManager(load_threads_callback=mock_load)
+
+    mock_load.assert_called_once()
+    assert manager._store.messages == loaded_messages
+
+
+def test_migrate_old_format():
+    """Tests migration from old thread-based format to flat structure."""
+    old_format = {
+        "user->Agent1": {
+            "items": [{"role": "user", "content": "Hello"}, {"role": "assistant", "content": "Hi there"}],
+            "metadata": {},
+        },
+        "Agent1->Agent2": {
+            "items": [
+                {"role": "assistant", "content": "Need help"},
+                {"role": "assistant", "content": "Sure, I can help"},
+            ],
+            "metadata": {},
+        },
+    }
+
+    mock_load = lambda: old_format
+    manager = ThreadManager(load_threads_callback=mock_load)
+
+    # Check that messages were migrated correctly
+    assert len(manager._store.messages) == 4
+
+    # Check that agency metadata was added
+    user_to_agent1 = [
+        msg for msg in manager._store.messages if msg.get("agent") == "Agent1" and msg.get("callerAgent") is None
+    ]
+    assert len(user_to_agent1) == 2
+
+    agent1_to_agent2 = [
+        msg for msg in manager._store.messages if msg.get("agent") == "Agent2" and msg.get("callerAgent") == "Agent1"
+    ]
+    assert len(agent1_to_agent2) == 2
+
+    # Check that timestamps were added
+    assert all("timestamp" in msg for msg in manager._store.messages)
+
+
+def test_thread_manager_pickleable():
+    """Tests that ThreadManager can be pickled and unpickled correctly."""
+    # Create manager without callbacks (callbacks aren't pickleable)
+    manager = ThreadManager()
+    messages = [
+        {"role": "user", "content": "Test message", "agent": "Agent1", "callerAgent": None, "timestamp": 1234567890000}
+    ]
+    manager.add_messages(messages)
+
+    # Pickle and unpickle
+    pickled_data = pickle.dumps(manager)
+    unpickled_manager = pickle.loads(pickled_data)
+
+    # Verify the data is preserved
+    assert isinstance(unpickled_manager, ThreadManager)
+    assert unpickled_manager._store.messages == messages

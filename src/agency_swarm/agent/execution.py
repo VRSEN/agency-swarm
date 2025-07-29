@@ -27,6 +27,7 @@ from openai._utils._logs import logger
 from openai.types.responses import ResponseFileSearchToolCall, ResponseFunctionWebSearch
 
 from agency_swarm.context import MasterContext
+from agency_swarm.messages import MessageFilter, MessageFormatter
 from agency_swarm.utils.citation_extractor import extract_direct_file_annotations
 
 if TYPE_CHECKING:
@@ -110,10 +111,8 @@ class Execution:
                 self.agent.instructions = additional_instructions
 
         try:
-            # Generate a thread identifier based on communication context
-            thread_id = self.agent.get_thread_id(sender_name)
-            logger.info(f"Agent '{self.agent.name}' handling get_response for thread: {thread_id}")
-            thread = self.agent._thread_manager.get_thread(thread_id)
+            # Log the conversation context
+            logger.info(f"Agent '{self.agent.name}' handling get_response from sender: {sender_name}")
 
             processed_current_message_items: list[TResponseInputItem]
             try:
@@ -160,24 +159,27 @@ class Execution:
                 else:
                     logger.warning(f"Cannot attach files: No messages to attach to for agent {self.agent.name}")
 
-            history_for_runner: list[TResponseInputItem]
-            # Always save current message items to thread (both user and agent-to-agent calls)
-            self.agent._thread_manager.add_items_and_save(thread, processed_current_message_items)
-            logger.debug(f"Added current message to thread {thread.thread_id}.")
-            history_for_runner = list(thread.items)  # Get full history after adding
+            # Add agency metadata to incoming messages
+            messages_to_save: list[TResponseInputItem] = []
+            for msg in processed_current_message_items:
+                formatted_msg = MessageFormatter.add_agency_metadata(
+                    msg, agent=self.agent.name, caller_agent=sender_name
+                )
+                messages_to_save.append(formatted_msg)
 
-            # The history_for_runner now contains OpenAI-compatible message dictionaries.
-            # It should include user, assistant (possibly with tool_calls), and tool messages if they are part of the conversation.
-            # No filtering is applied here based on user instruction.
+            # Save messages to flat storage
+            self.agent._thread_manager.add_messages(messages_to_save)
+            logger.debug(f"Added {len(messages_to_save)} messages to storage.")
 
-            # Import message utilities from parent module to avoid circular import
-            from .messages import ensure_tool_calls_content_safety, sanitize_tool_calls_in_history
+            # Get relevant conversation history for this agent pair
+            full_history = self.agent._thread_manager.get_conversation_history(self.agent.name, sender_name)
 
-            history_for_runner = sanitize_tool_calls_in_history(history_for_runner)
-            history_for_runner = ensure_tool_calls_content_safety(history_for_runner)
-            logger.debug(
-                f"Running agent '{self.agent.name}' for thread '{thread_id}' (length {len(history_for_runner)}):"
-            )
+            # Prepare history for runner (sanitize and ensure content safety)
+            history_for_runner = MessageFormatter.sanitize_tool_calls_in_history(full_history)
+            history_for_runner = MessageFormatter.ensure_tool_calls_content_safety(history_for_runner)
+            # Strip agency metadata before sending to OpenAI
+            history_for_runner = MessageFormatter.strip_agency_metadata(history_for_runner)
+            logger.debug(f"Running agent '{self.agent.name}' with history length {len(history_for_runner)}:")
             for i, m in enumerate(history_for_runner):
                 content_preview = str(m.get("content", ""))[:70] if m.get("content") else ""
                 tool_calls_preview = str(m.get("tool_calls", ""))[:70] if m.get("tool_calls") else ""
@@ -217,13 +219,10 @@ class Execution:
                 logger.error(f"Error during Runner.run for agent '{self.agent.name}': {e}", exc_info=True)
                 raise AgentsException(f"Runner execution failed for agent {self.agent.name}") from e
 
-            # Always save response items to thread (both user and agent-to-agent calls)
+            # Always save response items (both user and agent-to-agent calls)
             if self.agent._thread_manager and run_result.new_items:
-                thread = self.agent._thread_manager.get_thread(thread_id)
                 items_to_save: list[TResponseInputItem] = []
-                logger.debug(
-                    f"Preparing to save {len(run_result.new_items)} new items from RunResult to thread {thread.thread_id}"
-                )
+                logger.debug(f"Preparing to save {len(run_result.new_items)} new items from RunResult")
 
                 # Only extract hosted tool results if hosted tools were actually used
                 hosted_tool_outputs = self._extract_hosted_tool_results_if_needed(run_result.new_items)
@@ -236,7 +235,11 @@ class Execution:
                     # _run_item_to_tresponse_input_item converts RunItem to TResponseInputItem (dict)
                     item_dict = self._run_item_to_tresponse_input_item(run_item_obj)
                     if item_dict:
-                        items_to_save.append(item_dict)
+                        # Add agency metadata to the response items
+                        formatted_item = MessageFormatter.add_agency_metadata(
+                            item_dict, agent=self.agent.name, caller_agent=sender_name
+                        )
+                        items_to_save.append(formatted_item)
                         logger.debug(
                             f"  [NewItem #{i}] type={type(run_item_obj).__name__}, "
                             f"role={item_dict.get('role')}, content_preview='{str(item_dict.get('content', ''))[:50]}...'"
@@ -245,9 +248,12 @@ class Execution:
                 items_to_save.extend(hosted_tool_outputs)
                 items_to_save.extend(annotation_outputs)
 
-                # Save items to thread
-                self.agent._thread_manager.add_items_and_save(thread, items_to_save)
-                logger.debug(f"Saved {len(items_to_save)} items to thread {thread.thread_id}.")
+                # Filter out unwanted message types before saving
+                filtered_items = MessageFilter.filter_messages(items_to_save)
+
+                # Save filtered items to flat storage
+                self.agent._thread_manager.add_messages(filtered_items)
+                logger.debug(f"Saved {len(filtered_items)} items to storage (filtered from {len(items_to_save)}).")
 
             return run_result
 
@@ -336,9 +342,8 @@ class Execution:
                 self.agent.instructions = additional_instructions
 
         try:
-            thread_id = self.agent.get_thread_id(sender_name)
-            logger.info(f"Agent '{self.agent.name}' handling get_response_stream for thread: {thread_id}")
-            thread = self.agent._thread_manager.get_thread(thread_id)
+            # Log the conversation context
+            logger.info(f"Agent '{self.agent.name}' handling get_response_stream from sender: {sender_name}")
 
             processed_current_message_items: list[TResponseInputItem]
             try:
@@ -386,19 +391,26 @@ class Execution:
                     logger.warning(f"Cannot attach files: No messages to attach to for agent {self.agent.name}")
 
             # --- Input history logic (match get_response) ---
-            history_for_runner: list[TResponseInputItem]
-            # Always save current message items to thread (both user and agent-to-agent calls)
-            self.agent._thread_manager.add_items_and_save(thread, processed_current_message_items)
-            logger.debug(f"Added current message to thread {thread.thread_id}.")
-            history_for_runner = list(thread.items)  # Get full history after adding
+            # Add agency metadata to incoming messages
+            messages_to_save: list[TResponseInputItem] = []
+            for msg in processed_current_message_items:
+                formatted_msg = MessageFormatter.add_agency_metadata(
+                    msg, agent=self.agent.name, caller_agent=sender_name
+                )
+                messages_to_save.append(formatted_msg)
 
-            # Import message utilities from parent module to avoid circular import
-            from .messages import ensure_tool_calls_content_safety, sanitize_tool_calls_in_history
+            # Save messages to flat storage
+            self.agent._thread_manager.add_messages(messages_to_save)
+            logger.debug(f"Added {len(messages_to_save)} messages to storage.")
 
-            history_for_runner = sanitize_tool_calls_in_history(history_for_runner)
+            # Get relevant conversation history for this agent pair
+            full_history = self.agent._thread_manager.get_conversation_history(self.agent.name, sender_name)
 
-            # Ensure content safety (non-null content for tool calls)
-            history_for_runner = ensure_tool_calls_content_safety(history_for_runner)
+            # Prepare history for runner (sanitize and ensure content safety)
+            history_for_runner = MessageFormatter.sanitize_tool_calls_in_history(full_history)
+            history_for_runner = MessageFormatter.ensure_tool_calls_content_safety(history_for_runner)
+            # Strip agency metadata before sending to OpenAI
+            history_for_runner = MessageFormatter.strip_agency_metadata(history_for_runner)
 
             logger.debug(
                 f"Starting streaming run for agent '{self.agent.name}' with {len(history_for_runner)} history items."
@@ -420,9 +432,8 @@ class Execution:
                     collected_items.append(event.item)
                 yield event
 
-            # Save all collected items to thread after streaming completes
+            # Save all collected items after streaming completes
             if self.agent._thread_manager and collected_items:
-                thread = self.agent._thread_manager.get_thread(thread_id)
                 items_to_save: list[TResponseInputItem] = []
 
                 # Only extract hosted tool results if hosted tools were actually used
@@ -435,14 +446,23 @@ class Execution:
                 for run_item_obj in collected_items:
                     item_dict = self._run_item_to_tresponse_input_item(run_item_obj)
                     if item_dict:
-                        items_to_save.append(item_dict)
+                        # Add agency metadata to the response items
+                        formatted_item = MessageFormatter.add_agency_metadata(
+                            item_dict, agent=self.agent.name, caller_agent=sender_name
+                        )
+                        items_to_save.append(formatted_item)
 
                 items_to_save.extend(hosted_tool_outputs)
                 items_to_save.extend(annotation_outputs)
 
-                # Save items to thread
-                self.agent._thread_manager.add_items_and_save(thread, items_to_save)
-                logger.debug(f"Saved {len(items_to_save)} streamed items to thread {thread.thread_id}.")
+                # Filter out unwanted message types before saving
+                filtered_items = MessageFilter.filter_messages(items_to_save)
+
+                # Save filtered items to flat storage
+                self.agent._thread_manager.add_messages(filtered_items)
+                logger.debug(
+                    f"Saved {len(filtered_items)} streamed items to storage (filtered from {len(items_to_save)})."
+                )
 
         finally:
             # Always restore original instructions

@@ -90,9 +90,8 @@ async def test_file_attachment_citation_extraction():
             assert result is not None
             assert result.final_output is not None
 
-            # Get thread to examine conversation history
-            thread = agent._thread_manager.get_thread("user->DocumentAnalyst")
-            history = thread.get_history()
+            # Get conversation history to examine
+            history = agent._thread_manager.get_conversation_history("DocumentAnalyst", None)  # None = user
 
             # Look for direct file citation messages in history
             citation_messages = [
@@ -197,7 +196,7 @@ async def test_file_attachment_vs_vector_store_citation_distinction():
         vector_result = await vector_agent.get_response(
             "Please find and quote the exact ID mentioned in the documents."
         )
-        vector_history = vector_agent._thread_manager.get_thread("user->VectorAgent").get_history()
+        vector_history = vector_agent._thread_manager.get_conversation_history("VectorAgent", None)
 
         vector_search_results = [
             item
@@ -213,7 +212,7 @@ async def test_file_attachment_vs_vector_store_citation_distinction():
             "Please analyze the attached file and tell me the exact ID mentioned. Quote the specific text.",
             file_ids=[file_id],
         )
-        attachment_history = attachment_agent._thread_manager.get_thread("user->AttachmentAgent").get_history()
+        attachment_history = attachment_agent._thread_manager.get_conversation_history("AttachmentAgent", None)
 
         # Use centralized utility for citation extraction
         attachment_citations = extract_direct_file_citations_from_history(attachment_history)
