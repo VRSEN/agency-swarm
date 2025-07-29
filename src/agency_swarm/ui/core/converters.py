@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from rich.console import Console
 
 from .console_renderer import LiveConsoleRenderer
-from agency_swarm.agent import Agent
+from agency_swarm.agent_core import Agent
 
 try:
     from ag_ui.core import (

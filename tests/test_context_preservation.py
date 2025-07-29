@@ -81,7 +81,6 @@ async def test_send_message_communication(send_message_tool, mock_recipient_agen
     mock_recipient_agent.get_response.assert_called_once_with(
         message="Please process this user request",
         sender_name="OrchestratorAgent",
-        context_override={"user_id": "user_456", "session": "session_789"},
         additional_instructions="Use the full conversation context",
     )
 

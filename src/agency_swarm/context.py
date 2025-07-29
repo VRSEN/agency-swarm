@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from .agent import Agent
+    from .agent_core import Agent
     from .thread import ThreadManager
 
 logger = logging.getLogger(__name__)
@@ -34,9 +34,7 @@ class MasterContext:
         """Basic validation after initialization."""
         # Runtime checks are limited due to forward references.
         # More robust validation occurs in Agency during context creation.
-        if not hasattr(self.thread_manager, "get_thread"):
-            logger.warning("MasterContext received 'thread_manager' without expected 'get_thread' method.")
-            # raise TypeError("thread_manager must be an instance of ThreadManager or compatible class.")
+        # Thread manager validation is done at creation time in Agency
         if not isinstance(self.agents, dict):
             raise TypeError("MasterContext 'agents' must be a dictionary.")
         if not isinstance(self.user_context, dict):

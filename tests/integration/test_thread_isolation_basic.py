@@ -64,19 +64,17 @@ async def test_user_thread_isolation(basic_agency: Agency):
     # Step 3: Direct verification - check thread manager state
     thread_manager = basic_agency.thread_manager
 
-    # Verify both threads exist
-    ceo_thread_id = "user->CEO"
-    dev_thread_id = "user->Developer"
+    # Get messages for each conversation
+    ceo_messages = thread_manager.get_conversation_history("CEO", None)  # None = user
+    dev_messages = thread_manager.get_conversation_history("Developer", None)
 
-    assert ceo_thread_id in thread_manager._threads, f"Thread {ceo_thread_id} should exist"
-    assert dev_thread_id in thread_manager._threads, f"Thread {dev_thread_id} should exist"
+    # Verify both conversations have messages
+    assert len(ceo_messages) > 0, "CEO conversation should have messages"
+    assert len(dev_messages) > 0, "Developer conversation should have messages"
 
-    ceo_thread = thread_manager._threads[ceo_thread_id]
-    dev_thread = thread_manager._threads[dev_thread_id]
-
-    # Step 4: Verify thread isolation - each thread contains only its own messages
-    ceo_thread_content = str(ceo_thread.items).lower()
-    dev_thread_content = str(dev_thread.items).lower()
+    # Step 4: Verify thread isolation - each conversation contains only its own messages
+    ceo_thread_content = str(ceo_messages).lower()
+    dev_thread_content = str(dev_messages).lower()
 
     # CEO thread should contain CEO info but NOT Developer info
     assert unique_ceo_info.lower() in ceo_thread_content, "CEO thread missing CEO info"
@@ -115,18 +113,19 @@ async def test_agent_to_agent_thread_isolation(basic_agency: Agency):
     # Direct verification of thread separation
     thread_manager = basic_agency.thread_manager
 
-    # Verify all expected threads exist as separate objects
-    expected_thread_ids = ["user->CEO", "user->Developer", "CEO->Developer"]
+    # Get messages for each conversation flow
+    user_ceo_messages = thread_manager.get_conversation_history("CEO", None)  # user->CEO
+    user_dev_messages = thread_manager.get_conversation_history("Developer", None)  # user->Developer
+    ceo_dev_messages = thread_manager.get_conversation_history("Developer", "CEO")  # CEO->Developer
 
-    for thread_id in expected_thread_ids:
-        assert thread_id in thread_manager._threads, f"Thread {thread_id} should exist"
+    # Verify all conversations have messages
+    assert len(user_ceo_messages) > 0, "user->CEO conversation should have messages"
+    assert len(user_dev_messages) > 0, "user->Developer conversation should have messages"
+    assert len(ceo_dev_messages) > 0, "CEO->Developer conversation should have messages"
 
     # Verify user threads contain their own information and are isolated
-    user_ceo_thread = thread_manager._threads["user->CEO"]
-    user_dev_thread = thread_manager._threads["user->Developer"]
-
-    user_ceo_content = str(user_ceo_thread.items).lower()
-    user_dev_content = str(user_dev_thread.items).lower()
+    user_ceo_content = str(user_ceo_messages).lower()
+    user_dev_content = str(user_dev_messages).lower()
 
     # Core isolation verification - user threads should not share content
     assert user_ceo_info.lower() in user_ceo_content, "user->CEO thread missing its info"
@@ -134,12 +133,13 @@ async def test_agent_to_agent_thread_isolation(basic_agency: Agency):
     assert user_dev_info.lower() in user_dev_content, "user->Developer thread missing its info"
     assert user_ceo_info.lower() not in user_dev_content, "user->Developer thread contaminated"
 
-    # Verify CEO->Developer thread is separate object (structural separation)
-    ceo_dev_thread = thread_manager._threads["CEO->Developer"]
-    assert ceo_dev_thread is not user_ceo_thread, "CEO->Developer should be separate from user->CEO"
-    assert ceo_dev_thread is not user_dev_thread, "CEO->Developer should be separate from user->Developer"
+    # Verify CEO->Developer conversation is separate (content isolation)
+    ceo_dev_content = str(ceo_dev_messages).lower()
+    # Verify no cross-contamination between conversation flows
+    assert user_ceo_info.lower() not in ceo_dev_content, "CEO->Developer should not contain user->CEO info"
+    assert user_dev_info.lower() not in ceo_dev_content, "CEO->Developer should not contain user->Developer info"
 
-    print("✓ user->CEO, user->Developer, CEO->Developer are separate thread objects")
+    print("✓ user->CEO, user->Developer, CEO->Developer conversations are properly isolated")
     print("✓ User interaction threads properly isolated")
     print("✓ Agent-to-agent creates separate thread structure")
 
@@ -161,12 +161,24 @@ async def test_thread_identifier_format(basic_agency: Agency):
     developer_agent = basic_agency.agents["Developer"]
     await developer_agent.get_response(message="Test message from CEO", sender_name="CEO")
 
-    # Direct verification - check actual thread manager state
+    # Direct verification - check actual conversation flows
     thread_manager = basic_agency.thread_manager
-    actual_thread_ids = list(thread_manager._threads.keys())
-    print(f"--- Actual thread IDs created: {actual_thread_ids}")
+    all_messages = thread_manager.get_all_messages()
 
-    # Verify expected thread identifier formats exist
+    # Extract unique conversation flows from messages
+    conversation_flows = set()
+    for msg in all_messages:
+        agent = msg.get("agent", "")
+        caller = msg.get("callerAgent")
+        if agent:
+            # Convert None to "user" for display
+            caller_name = "user" if caller is None else caller
+            conversation_flows.add(f"{caller_name}->{agent}")
+
+    actual_flows = list(conversation_flows)
+    print(f"--- Actual conversation flows created: {actual_flows}")
+
+    # Verify expected conversation patterns exist
     expected_thread_patterns = [
         {"thread_id": "user->CEO", "sender": "user", "recipient": "CEO"},
         {"thread_id": "user->Developer", "sender": "user", "recipient": "Developer"},
@@ -178,8 +190,8 @@ async def test_thread_identifier_format(basic_agency: Agency):
         sender = expected["sender"]
         recipient = expected["recipient"]
 
-        # Verify thread exists
-        assert thread_id in actual_thread_ids, f"Thread identifier '{thread_id}' not found in {actual_thread_ids}"
+        # Verify conversation flow exists
+        assert thread_id in actual_flows, f"Conversation flow '{thread_id}' not found in {actual_flows}"
 
         # Verify format structure
         assert "->" in thread_id, f"Thread ID should contain '->': {thread_id}"
@@ -194,4 +206,4 @@ async def test_thread_identifier_format(basic_agency: Agency):
     print("✓ All thread identifiers follow 'sender->recipient' format")
     print("✓ User interactions use 'user->agent_name'")
     print("✓ Agent interactions use 'sender_agent->recipient_agent'")
-    print("✓ Thread identifier format verification completed through direct state inspection")
+    print("✓ Conversation flow format verification completed through message inspection")

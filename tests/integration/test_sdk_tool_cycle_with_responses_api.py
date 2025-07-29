@@ -197,10 +197,8 @@ async def test_tool_output_conversion_bug_two_turn_conversation():
     assert result1 is not None
     logger.info(f"Turn 1 result: {result1.final_output}")
 
-    # Get the thread to inspect conversation history using proper thread identifier
-    thread_identifier = "user->Calculator Agent"
-    thread = thread_manager.get_thread(thread_identifier)
-    history_after_turn1 = thread.get_history()
+    # Get the conversation history from the flat message store
+    history_after_turn1 = thread_manager._store.messages
 
     logger.info(f"=== CONVERSATION HISTORY AFTER TURN 1 ({len(history_after_turn1)} items) ===")
     for i, item in enumerate(history_after_turn1):
@@ -217,8 +215,8 @@ async def test_tool_output_conversion_bug_two_turn_conversation():
     assert result2 is not None
     logger.info(f"Turn 2 result: {result2.final_output}")
 
-    # Get the final conversation history
-    history_after_turn2 = thread.get_history()
+    # Get the final conversation history from the flat message store
+    history_after_turn2 = thread_manager._store.messages
 
     logger.info(f"=== FINAL CONVERSATION HISTORY ({len(history_after_turn2)} items) ===")
     for i, item in enumerate(history_after_turn2):
@@ -337,16 +335,14 @@ Product Sales:
         logger.info("=== TURN 1: Agent searches with FileSearch ===")
 
         result1 = await agent.get_response(
-            message="Search the company data for financial information. Just confirm you found it, don't give me the specific numbers yet."
+            message="Search the company data for financial information and employee data. Just confirm you found it, don't give me the specific numbers yet."
         )
 
         assert result1 is not None
         logger.info(f"Turn 1 result: {result1.final_output}")
 
-        # Get the thread to inspect conversation history
-        thread_identifier = "user->DataSearchAgent"
-        thread = thread_manager.get_thread(thread_identifier)
-        history_after_turn1 = thread.get_history()
+        # Get the conversation history from the flat message store
+        history_after_turn1 = agent._thread_manager._store.messages
 
         logger.info(f"=== CONVERSATION HISTORY AFTER TURN 1 ({len(history_after_turn1)} items) ===")
         hosted_tool_outputs_found = 0
@@ -357,18 +353,23 @@ Product Sales:
             logger.info(f"Item {i + 1}: {item_type}")
 
             # Look for hosted tool search results messages
-            if item.get("role") == "assistant" and "[SEARCH_RESULTS]" in str(item.get("content", "")):
+            if item.get("role") == "user" and "[SEARCH_RESULTS]" in str(item.get("content", "")):
                 hosted_tool_outputs_found += 1
                 preservation_items.append(item)
-                logger.info(f"  Found search results message: {str(item.get('content', ''))[:100]}...")
+                logger.info(f"  Found search results message: {str(item.get('content', ''))}...")
 
         logger.info(f"Found {hosted_tool_outputs_found} hosted tool preservation items")
 
         # TURN 2: Ask for exact tool output
         logger.info("=== TURN 2: Requesting exact tool output ===")
 
+        logger.info(f"History at turn 2: {agent._thread_manager._store.messages}")
+
         result2 = await agent.get_response(
-            message="Now show me the EXACT financial data you found. I need the precise numbers from your search results."
+            message=(
+                "Now provide me the exact file search results that you found in the previous tool call. "
+                "Do not use the tool again. I'm looking for Q3 and Q4 revenue, operating costs, and total employee count."
+            )
         )
 
         assert result2 is not None
