@@ -486,6 +486,34 @@ class Agency:
             **kwargs,
         )
 
+    def get_response_sync(
+        self,
+        message: str | list[dict[str, Any]],
+        recipient_agent: str | Agent | None = None,
+        context_override: dict[str, Any] | None = None,
+        hooks_override: RunHooks | None = None,
+        run_config: RunConfig | None = None,
+        message_files: list[str] | None = None,
+        file_ids: list[str] | None = None,
+        additional_instructions: str | None = None,
+        **kwargs: Any,
+    ) -> RunResult:
+        """Synchronous wrapper around :meth:`get_response`."""
+
+        return asyncio.run(
+            self.get_response(
+                message=message,
+                recipient_agent=recipient_agent,
+                context_override=context_override,
+                hooks_override=hooks_override,
+                run_config=run_config,
+                message_files=message_files,
+                file_ids=file_ids,
+                additional_instructions=additional_instructions,
+                **kwargs,
+            )
+        )
+
     async def get_response_stream(
         self,
         message: str | list[dict[str, Any]],
