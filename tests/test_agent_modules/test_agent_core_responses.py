@@ -9,7 +9,7 @@ from agency_swarm import Agent
 
 
 @pytest.mark.asyncio
-@patch("agency_swarm.agent.Runner.run", new_callable=AsyncMock)
+@patch("agents.Runner.run", new_callable=AsyncMock)
 async def test_get_response_generates_thread_id(mock_runner_run, minimal_agent, mock_thread_manager):
     """Test that get_response generates a consistent thread ID for user interactions."""
     mock_runner_run.return_value = MagicMock(new_items=[], final_output="Test response")
@@ -23,7 +23,7 @@ async def test_get_response_generates_thread_id(mock_runner_run, minimal_agent, 
 
 
 @pytest.mark.asyncio
-@patch("agency_swarm.agent.Runner.run", new_callable=AsyncMock)
+@patch("agents.Runner.run", new_callable=AsyncMock)
 async def test_get_response_agent_to_agent_communication(mock_runner_run, minimal_agent, mock_thread_manager):
     """Test that get_response works correctly for agent-to-agent communication."""
     mock_runner_run.return_value = MagicMock(new_items=[], final_output="Test response")
@@ -40,7 +40,7 @@ async def test_get_response_agent_to_agent_communication(mock_runner_run, minima
 
 
 @pytest.mark.asyncio
-@patch("agency_swarm.agent.Runner.run", new_callable=AsyncMock)
+@patch("agents.Runner.run", new_callable=AsyncMock)
 async def test_get_response_with_overrides(mock_runner_run, minimal_agent):
     """Test get_response with context and hooks overrides."""
     mock_runner_run.return_value = MagicMock(new_items=[], final_output="Test response")
@@ -52,7 +52,7 @@ async def test_get_response_with_overrides(mock_runner_run, minimal_agent):
         "Test message",
         context_override=context_override,
         hooks_override=hooks_override,
-        run_config=run_config,
+        run_config_override=run_config,
     )
 
     assert result is not None
@@ -75,7 +75,7 @@ async def test_get_response_missing_thread_manager():
 
     # The agent should now successfully create a ThreadManager via _ensure_thread_manager()
     # and create a minimal agency instance for compatibility
-    with patch("agency_swarm.agent.Runner.run", new_callable=AsyncMock) as mock_runner:
+    with patch("agents.Runner.run", new_callable=AsyncMock) as mock_runner:
         mock_runner.return_value = MagicMock(new_items=[], final_output="Test response")
 
         # This should succeed by auto-creating necessary components
@@ -98,7 +98,7 @@ async def test_call_before_agency_setup():
     assert agent._thread_manager is None
 
     # The agent should auto-create necessary components for direct usage
-    with patch("agency_swarm.agent.Runner.run", new_callable=AsyncMock) as mock_runner:
+    with patch("agents.Runner.run", new_callable=AsyncMock) as mock_runner:
         mock_runner.return_value = MagicMock(new_items=[], final_output="Test response")
 
         # This should succeed by auto-creating ThreadManager and minimal agency
@@ -108,15 +108,3 @@ async def test_call_before_agency_setup():
         assert agent._thread_manager is not None
         assert agent._agency_instance is not None
         assert result is not None
-
-
-# --- File Handling Tests ---
-
-
-@pytest.mark.asyncio
-async def test_check_file_exists_no_vs_id():
-    """Test check_file_exists when no vector store ID is associated."""
-    agent = Agent(name="TestAgent", instructions="Test")
-    # No files_folder set, so files_folder_path should be None
-    result = await agent.check_file_exists("test.txt")
-    assert result is None

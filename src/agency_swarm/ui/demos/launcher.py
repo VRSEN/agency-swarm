@@ -1,4 +1,5 @@
 class CopilotDemoLauncher:
+    @staticmethod
     def start(
         agency_instance,
         host: str = "0.0.0.0",
@@ -72,6 +73,7 @@ class CopilotDemoLauncher:
 
 
 class TerminalDemoLauncher:
+    @staticmethod
     def start(agency_instance):
         """
         Executes agency in the terminal with autocomplete for recipient agent names.

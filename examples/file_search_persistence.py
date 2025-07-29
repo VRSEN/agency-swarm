@@ -32,16 +32,16 @@ def save_thread_data_to_file(thread_data: dict[str, Any]):
         json.dump(thread_data, f, indent=2)
 
 
-def load_thread_data_from_file(thread_id: str) -> dict[str, Any] | None:
-    """Load specific thread data from a file for hosted tool preservation demo."""
+def load_thread_data_from_file() -> dict[str, Any]:
+    """Load all thread data from a file for hosted tool preservation demo."""
     file_path = PERSISTENCE_DIR / "thread_data.json"
     if not file_path.exists():
-        return None
+        return {}
 
     with open(file_path) as f:
         all_thread_data: dict[str, Any] = json.load(f)
 
-    return all_thread_data.get(thread_id)
+    return all_thread_data
 
 
 async def run_hosted_tool_preservation_demo():

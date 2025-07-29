@@ -132,19 +132,45 @@ class LayoutAlgorithms:
             if count > 1:
                 agents_with_children.add(agent_id)
 
+        # Track tool counts per agent for horizontal spacing
+        agent_tool_counts = {}
+        for tool in tools:
+            parent_agent = tool.get("data", {}).get("parentAgent")
+            if parent_agent:
+                if parent_agent not in agent_tool_counts:
+                    agent_tool_counts[parent_agent] = []
+                agent_tool_counts[parent_agent].append(tool)
+
         for tool in tools:
             parent_agent = tool.get("data", {}).get("parentAgent")
             if parent_agent and parent_agent in positions:
                 parent_pos = positions[parent_agent]
 
+                # Get the tools for this agent and find the index
+                agent_tools = agent_tool_counts.get(parent_agent, [])
+                tool_index = agent_tools.index(tool) if tool in agent_tools else 0
+                num_tools = len(agent_tools)
+
                 # Position tools based on parent agent type
                 if parent_agent in agents_with_children:
-                    # For manager agents (with children): position tool to the right
-                    tool_x = parent_pos["x"] + AGENT_WIDTH / 2 + TOOL_WIDTH / 2 + 40
+                    # For manager agents (with children): position tools to the right
+                    # Spread tools horizontally with consistent spacing
+                    tool_spacing = 120  # Consistent with old implementation
+                    if num_tools == 1:
+                        # Single tool: offset to the right
+                        tool_x = parent_pos["x"] + AGENT_WIDTH / 2 + TOOL_WIDTH / 2 + 40
+                    else:
+                        # Multiple tools: spread horizontally
+                        start_x = parent_pos["x"] + AGENT_WIDTH / 2 + TOOL_WIDTH / 2 + 40
+                        tool_x = start_x + (tool_index * tool_spacing) - ((num_tools - 1) * tool_spacing / 2)
                     tool_y = parent_pos["y"]
                 else:
-                    # For leaf agents (no children): position tool below
-                    tool_x = parent_pos["x"]
+                    # For leaf agents (no children): position tools below
+                    # Use the exact formula from the old implementation
+                    tool_spacing = 120
+                    # Old formula was: x + (j * 120) - 60
+                    # This offsets tools to spread them horizontally
+                    tool_x = parent_pos["x"] + (tool_index * tool_spacing) - 60
                     tool_y = parent_pos["y"] + AGENT_HEIGHT / 2 + TOOL_HEIGHT / 2 + 60
 
                 positions[tool["id"]] = {"x": tool_x, "y": tool_y}

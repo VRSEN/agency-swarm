@@ -25,7 +25,7 @@ async def test_get_response_stream_basic(tmp_path):
         def stream_events(self):
             return dummy_stream()
 
-    with patch("agency_swarm.agent.Runner.run_streamed", return_value=DummyStreamedResult()):
+    with patch("agents.Runner.run_streamed", return_value=DummyStreamedResult()):
         events = []
         async for event in agent.get_response_stream(message_content):
             events.append(event)
@@ -52,7 +52,7 @@ async def test_get_response_stream_final_result_processing(tmp_path):
         def stream_events(self):
             return dummy_stream()
 
-    with patch("agency_swarm.agent.Runner.run_streamed", return_value=DummyStreamedResult()):
+    with patch("agents.Runner.run_streamed", return_value=DummyStreamedResult()):
         events = []
         async for event in agent.get_response_stream("Process this"):
             events.append(event)
@@ -64,7 +64,7 @@ async def test_get_response_stream_final_result_processing(tmp_path):
 
 
 @pytest.mark.asyncio
-@patch("agency_swarm.agent.Runner.run_streamed")
+@patch("agents.Runner.run_streamed")
 async def test_get_response_stream_generates_thread_id(
     mock_runner_run_streamed_patch, minimal_agent, mock_thread_manager
 ):
@@ -93,7 +93,7 @@ async def test_get_response_stream_generates_thread_id(
 
 
 @pytest.mark.asyncio
-@patch("agency_swarm.agent.Runner.run_streamed")
+@patch("agents.Runner.run_streamed")
 async def test_get_response_stream_agent_to_agent_communication(
     mock_runner_run_streamed_patch, minimal_agent, mock_thread_manager
 ):
@@ -143,7 +143,7 @@ async def test_get_response_stream_input_validation_none_empty(minimal_agent, mo
 
 
 @pytest.mark.asyncio
-@patch("agency_swarm.agent.Runner.run_streamed")
+@patch("agents.Runner.run_streamed")
 async def test_get_response_stream_context_propagation(
     mock_runner_run_streamed_patch, minimal_agent, mock_thread_manager
 ):
@@ -177,7 +177,7 @@ async def test_get_response_stream_context_propagation(
 
 
 @pytest.mark.asyncio
-@patch("agency_swarm.agent.Runner.run_streamed")
+@patch("agents.Runner.run_streamed")
 async def test_get_response_stream_thread_management(
     mock_runner_run_streamed_patch, minimal_agent, mock_thread_manager
 ):
