@@ -1,5 +1,5 @@
-from agents import TResponseInputItem
 from pydantic import BaseModel, Field, field_validator
+from typing import Any
 
 try:
     from ag_ui.core import RunAgentInput
@@ -15,7 +15,7 @@ class RunAgentInputCustom(RunAgentInput):
     Input for running an agent.
     """
 
-    chat_history: list[TResponseInputItem] = Field(
+    chat_history: list[dict[str, Any]] = Field(
         None,
         description=(
             "Entire chat history as a flat list of messages. "
@@ -26,7 +26,7 @@ class RunAgentInputCustom(RunAgentInput):
 
 class BaseRequest(BaseModel):
     message: str
-    chat_history: list[TResponseInputItem] = Field(
+    chat_history: list[dict[str, Any]] = Field(
         None,
         description=(
             "Entire chat history as a flat list of messages. "
