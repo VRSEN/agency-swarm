@@ -10,7 +10,7 @@ from agency_swarm.agent import Agent
 
 logger = logging.getLogger(__name__)
 
-load_dotenv()
+load_dotenv(override=True)
 
 
 def run_fastapi(

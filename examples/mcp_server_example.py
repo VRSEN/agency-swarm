@@ -24,7 +24,7 @@ from dotenv import load_dotenv
 
 from agency_swarm import Agency, Agent
 
-load_dotenv()
+load_dotenv(override=True)
 
 stdio_server = MCPServerStdio(
     MCPServerStdioParams(command="python", args=["./examples/utils/stdio_mcp_server.py"]), cache_tools_list=True
