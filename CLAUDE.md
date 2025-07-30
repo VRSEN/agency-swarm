@@ -65,6 +65,35 @@ python examples/multi_agent_workflow.py
 python examples/agency_context.py
 ```
 
+### Test Optimization Commands
+
+```bash
+# Find ALL tests over 100 lines (MANDATORY CHECK)
+find tests/ -name "*.py" -exec python3 -c "
+import ast, sys
+try:
+    with open(sys.argv[1], 'r') as f: content = f.read()
+    tree = ast.parse(content)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name.startswith('test_'):
+            lines = node.end_lineno - node.lineno + 1
+            if lines > 100: print(f'{sys.argv[1]}:{node.name}:{lines}')
+except: pass
+" {} \;
+
+# Find large test files (over 200 lines)
+find tests/ -name "*.py" -exec wc -l {} \; | awk '$1 > 200 {print $2 ":" $1}' | sort -t: -k2 -nr
+
+# Count all test functions
+grep -r "def test_" tests/ | wc -l
+
+# Find misplaced root-level test files
+find tests/ -maxdepth 1 -name "test_*.py" | grep -v conftest
+
+# Run specific test optimization checks
+uv run pytest tests/integration/test_file_handling.py -v --tb=short
+```
+
 ## High-Level Architecture
 
 Agency Swarm is a multi-agent orchestration framework built on top of the OpenAI Agents SDK (v1.x beta). It enables creating collaborative AI agent systems with structured communication flows and full conversation persistence.
@@ -153,6 +182,31 @@ Agency Swarm is a multi-agent orchestration framework built on top of the OpenAI
 - **Test coverage**: 83% minimum required
 - **Integration tests**: Located in `tests/integration/` - NO MOCKS allowed
 - **NEVER write manual test scripts**: Use existing test infrastructure only
+
+## Test Quality Requirements (CRITICAL)
+
+- **Test function size limit**: 100 lines MAXIMUM - NO EXCEPTIONS
+- **Test isolation**: Use pytest's `tmp_path` fixture, NEVER shared directories
+- **No hanging tests**: All tests must complete within reasonable timeouts
+- **Proper test structure**:
+  - `tests/integration/` - Real API calls, full system tests
+  - `tests/test_*_modules/` - Unit tests grouped by module
+  - Root level tests: FORBIDDEN (move to appropriate module folders)
+
+### Test File Naming Standards
+- **GOOD**: `test_agent_file_handling.py`, `test_thread_isolation.py`
+- **BAD**: `test_handoffs_with_communication_flows.py` (too long/confusing)
+- **FORBIDDEN**: Generic names like `test_tools.py` at root level
+
+### Misplaced Files Requiring Cleanup
+```
+tests/test_context_preservation.py          → tests/integration/
+tests/test_handoffs_with_communication_flows.py → tests/integration/test_agent_handoffs.py
+tests/test_persistence_hooks.py             → tests/test_agent_modules/
+tests/test_thread_manager.py                → tests/test_agent_modules/
+tests/test_tools.py                         → tests/test_agent_modules/test_tool_system.py
+tests/test_visualization.py                 → tests/test_agency_modules/test_ui.py
+```
 
 ## 🚨 ZERO FUNCTIONAL CHANGES PROTOCOL (NUCLEAR SAFETY LEVEL)
 
