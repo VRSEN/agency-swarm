@@ -116,7 +116,7 @@ def make_stream_endpoint(request_model, agency_factory: Callable[..., Agency], v
             result = {"new_messages": filtered_messages}
             if request.file_urls is not None and file_ids_map is not None:
                 result["file_ids_map"] = file_ids_map
-            yield "event: history\ndata: " + json.dumps(result) + "\n\n"
+            yield "event: messages\ndata: " + json.dumps(result) + "\n\n"
 
             # explicit terminator
             yield "event: end\ndata: [DONE]\n\n"
