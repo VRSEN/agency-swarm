@@ -10,8 +10,8 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from agency_swarm.agency import Agency
-from agency_swarm.messages import MessageFilter
 from agency_swarm.integrations.fastapi_utils.file_handler import upload_from_urls
+from agency_swarm.messages import MessageFilter
 from agency_swarm.ui.core.converters import AguiAdapter, serialize
 
 
@@ -48,16 +48,21 @@ def make_response_endpoint(request_model, agency_factory: Callable[..., Agency],
             await asyncio.sleep(6) # Wait until files are ready for retrieval
 
         agency_instance = agency_factory(load_threads_callback=load_callback)
+
+        # Capture initial message count to identify new messages
+        initial_message_count = len(agency_instance.thread_manager.get_all_messages())
+
         response = await agency_instance.get_response(
             message=request.message,
             recipient_agent=request.recipient_agent,
             additional_instructions=request.additional_instructions,
             file_ids=combined_file_ids,
         )
-        # Get flat message list and apply filtering
+        # Get only new messages added during this request
         all_messages = agency_instance.thread_manager.get_all_messages()
-        filtered_messages = MessageFilter.filter_messages(all_messages)
-        result = {"response": response.final_output, "chat_history": filtered_messages}
+        new_messages = all_messages[initial_message_count:]  # Only messages added during this request
+        filtered_messages = MessageFilter.filter_messages(new_messages)
+        result = {"response": response.final_output, "new_messages": filtered_messages}
         if request.file_urls is not None and file_ids_map is not None:
             result["file_ids_map"] = file_ids_map
         return result
@@ -86,6 +91,9 @@ def make_stream_endpoint(request_model, agency_factory: Callable[..., Agency], v
         agency_instance = agency_factory(load_threads_callback=load_callback)
 
         async def event_generator():
+            # Capture initial message count to identify new messages
+            initial_message_count = len(agency_instance.thread_manager.get_all_messages())
+
             try:
                 async for event in agency_instance.get_response_stream(
                     message=request.message,
@@ -101,13 +109,17 @@ def make_stream_endpoint(request_model, agency_factory: Callable[..., Agency], v
             except Exception as exc:
                 yield "data: " + json.dumps({"error": str(exc)}) + "\n\n"
 
-            # Get flat message list and apply filtering
+            # Get only new messages added during this request
             all_messages = agency_instance.thread_manager.get_all_messages()
-            filtered_messages = MessageFilter.filter_messages(all_messages)
-            result = {"chat_history": filtered_messages}
+            new_messages = all_messages[initial_message_count:]  # Only messages added during this request
+            filtered_messages = MessageFilter.filter_messages(new_messages)
+            result = {"new_messages": filtered_messages}
             if request.file_urls is not None and file_ids_map is not None:
                 result["file_ids_map"] = file_ids_map
-            yield "data: " + json.dumps(result) + "\n\n"
+            yield "event: history\ndata: " + json.dumps(result) + "\n\n"
+
+            # explicit terminator
+            yield "event: end\ndata: [DONE]\n\n"
 
         return StreamingResponse(
             event_generator(),
