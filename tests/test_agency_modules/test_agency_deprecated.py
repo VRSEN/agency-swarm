@@ -27,7 +27,7 @@ def test_agency_get_completion_calls_get_response(mock_agent):
 
     mock_agent.get_response.return_value = MagicMock(final_output="Test response")
 
-    with pytest.warns(DeprecationWarning, match="Method 'get_completion' is deprecated"):
+    with pytest.warns(DeprecationWarning, match="get_completion is deprecated"):
         result = agency.get_completion("Test message")
 
     assert result == "Test response"

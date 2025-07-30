@@ -86,42 +86,48 @@ async def test_context_preservation_in_agent_communication(multi_agent_agency: A
     # Execute the communication flow
     await multi_agent_agency.get_response(message=initial_task)
 
-    # Direct verification - check actual thread manager state
+    # Direct verification - check actual messages in flat storage
     thread_manager = multi_agent_agency.thread_manager
-    actual_thread_ids = list(thread_manager._threads.keys())
-    print(f"--- Actual thread IDs created: {actual_thread_ids}")
+    all_messages = thread_manager.get_all_messages()
 
-    # Verify that we have agent-to-agent communication threads
-    agent_to_agent_threads = [tid for tid in actual_thread_ids if "->" in tid and not tid.startswith("user->")]
-    assert len(agent_to_agent_threads) > 0, (
-        f"No agent-to-agent communication threads found. Threads: {actual_thread_ids}"
+    # Extract unique conversation pairs from messages
+    conversation_pairs = set()
+    for msg in all_messages:
+        agent = msg.get("agent", "")
+        caller = msg.get("callerAgent")
+        if agent:
+            # Convert None to "user" for display
+            caller_name = "user" if caller is None else caller
+            conversation_pairs.add(f"{caller_name}->{agent}")
+
+    actual_conversations = list(conversation_pairs)
+    print(f"--- Actual conversations created: {actual_conversations}")
+
+    # Verify that we have agent-to-agent communication
+    agent_to_agent_convs = [conv for conv in actual_conversations if "->" in conv and not conv.startswith("user->")]
+    assert len(agent_to_agent_convs) > 0, (
+        f"No agent-to-agent conversations found. Conversations: {actual_conversations}"
     )
 
-    # Verify that each agent-to-agent thread follows the "sender->recipient" format
+    # Verify expected communication patterns exist
     expected_agent_patterns = ["Planner->Worker", "Worker->Reporter"]
 
     for pattern in expected_agent_patterns:
-        matching_threads = [tid for tid in actual_thread_ids if tid == pattern]
-        if len(matching_threads) > 0:
-            print(f"✓ Found expected thread pattern: {pattern}")
+        if pattern in actual_conversations:
+            print(f"✓ Found expected conversation pattern: {pattern}")
 
-            # Verify the thread ID follows structured format
-            assert "->" in pattern, f"Thread ID should be structured identifier: {pattern}"
+            # Verify the pattern follows structured format
+            assert "->" in pattern, f"Conversation should be structured: {pattern}"
 
             # Verify sender and recipient are correctly formatted
             sender, recipient = pattern.split("->")
             assert sender in ["Planner", "Worker", "Reporter"], f"Invalid sender: {sender}"
             assert recipient in ["Planner", "Worker", "Reporter"], f"Invalid recipient: {recipient}"
 
-    # Verify that user threads also exist and follow proper format
-    user_threads = [tid for tid in actual_thread_ids if tid.startswith("user->")]
-    assert len(user_threads) > 0, f"No user communication threads found. Threads: {actual_thread_ids}"
+    # Verify that user conversations also exist
+    user_convs = [conv for conv in actual_conversations if conv.startswith("user->")]
+    assert len(user_convs) > 0, f"No user conversations found. Conversations: {actual_conversations}"
 
-    # Check user thread format
-    for user_thread in user_threads:
-        assert user_thread.startswith("user->"), f"User thread should start with 'user->': {user_thread}"
-        assert "->" in user_thread, f"User thread should contain '->': {user_thread}"
-
-    print("✓ Verified all communication threads use proper thread identifiers")
-    print("✓ Thread isolation verified through direct state inspection")
-    print("--- Thread isolation test passed ---")
+    print("✓ Verified all conversations use proper identifiers")
+    print("✓ Message isolation verified through flat storage")
+    print("--- Context preservation test passed ---")

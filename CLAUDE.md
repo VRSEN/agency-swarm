@@ -2,6 +2,45 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## 🔴 CRITICAL SAFETY PROTOCOLS (NUCLEAR FACILITY LEVEL - NO EXCEPTIONS)
+
+### 🚨 MANDATORY WORKFLOW PROCESS - FOLLOW OR BE DECOMMISSIONED
+
+#### STEP 0: BUILD FULL CODEBASE STRUCTURE (ABSOLUTELY MANDATORY)
+```bash
+# MUST RUN BEFORE ANYTHING ELSE - NO EXCEPTIONS
+find src/ -name "*.py" | grep -v __pycache__ | sort          # Full file inventory
+find src/ -name "*.py" | xargs wc -l | sort -nr              # Check ALL file sizes
+```
+**🔴 CRITICAL**: This MUST be the FIRST command you run. NO READING FILES, NO ANALYSIS, NOTHING until you have the full structure.
+
+#### STEP 1: COMPLETE CHANGE REVIEW (MANDATORY)
+```bash
+git diff --cached | cat  # Review ALL staged changes - READ EVERY LINE
+git diff | cat           # Review ALL unstaged changes - READ EVERY LINE
+git status --porcelain   # Check ALL files including untracked
+```
+
+#### STEP 2: PROACTIVE ANALYSIS (MANDATORY)
+- **SEARCH for ALL similar patterns** (minimum 10 different search queries)
+- **IDENTIFY all related changes** across entire codebase
+- **FIX all instances at once** - NO piecemeal changes
+
+#### STEP 3: FULL VALIDATION (MANDATORY)
+```bash
+make ci                                          # Full CI pipeline - MUST PASS
+python examples/agency_terminal_demo.py          # Basic functionality test
+python examples/multi_agent_workflow.py          # Multi-agent test
+python -m pytest tests/integration/ -v          # Integration tests
+```
+
+### 🔴 CRITICAL VIOLATIONS = IMMEDIATE DECOMMISSIONING
+- **LYING about test results** - Report ALL failures, even minor
+- **SKIPPING any safety step** - ALL steps are MANDATORY
+- **Making functional changes during refactoring** - ZERO tolerance
+- **Creating stub files < 50 lines** - FORBIDDEN
+- **Not checking for duplication** - MANDATORY 10+ searches minimum
+
 ## Common Development Commands
 
 ### Build and Testing
@@ -26,6 +65,35 @@ python examples/multi_agent_workflow.py
 python examples/agency_context.py
 ```
 
+### Test Optimization Commands
+
+```bash
+# Find ALL tests over 100 lines (MANDATORY CHECK)
+find tests/ -name "*.py" -exec python3 -c "
+import ast, sys
+try:
+    with open(sys.argv[1], 'r') as f: content = f.read()
+    tree = ast.parse(content)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name.startswith('test_'):
+            lines = node.end_lineno - node.lineno + 1
+            if lines > 100: print(f'{sys.argv[1]}:{node.name}:{lines}')
+except: pass
+" {} \;
+
+# Find large test files (over 200 lines)
+find tests/ -name "*.py" -exec wc -l {} \; | awk '$1 > 200 {print $2 ":" $1}' | sort -t: -k2 -nr
+
+# Count all test functions
+grep -r "def test_" tests/ | wc -l
+
+# Find misplaced root-level test files
+find tests/ -maxdepth 1 -name "test_*.py" | grep -v conftest
+
+# Run specific test optimization checks
+uv run pytest tests/integration/test_file_handling.py -v --tb=short
+```
+
 ## High-Level Architecture
 
 Agency Swarm is a multi-agent orchestration framework built on top of the OpenAI Agents SDK (v1.x beta). It enables creating collaborative AI agent systems with structured communication flows and full conversation persistence.
@@ -38,7 +106,7 @@ Agency Swarm is a multi-agent orchestration framework built on top of the OpenAI
    - Provides persistence hooks for conversation history
    - Entry points: `get_response()`, `get_response_stream()` (async)
 
-2. **Agent** (`agent/agent.py` - 1444 lines, needs refactoring)
+2. **Agent** (`agent.py` - 450 lines after refactoring)
    - Extends `agents.Agent` from OpenAI SDK
    - Adds file handling, sub-agent registration, and tool management
    - Uses `send_message` tool for inter-agent communication
@@ -100,158 +168,130 @@ Agency Swarm is a multi-agent orchestration framework built on top of the OpenAI
 - **Examples**: Updated for v1.x patterns
 - **Documentation**: `/docs/` folder is OUTDATED (v0.x)
 
-## Critical Safety Protocols (MANDATORY - NO EXCEPTIONS)
+## Python Version Requirements
 
-### Before ANY Code Changes
+- **PYTHON 3.13 REQUIRED** - This codebase strictly uses Python 3.13 features
+- **ULTRA-MODERN TYPE SYNTAX** - Always use: `str | int | None` NEVER `Union[str, int, None]`
+- **NO LEGACY TYPE IMPORTS** - NEVER import `Union` from typing
+- **TYPE ANNOTATIONS MANDATORY** - ALL functions must have type hints
 
-1. **Build Project Structure First**
-   ```bash
-   find src/ -name "*.py" | grep -v __pycache__ | sort  # Full file inventory
-   find src/ -name "*.py" | xargs wc -l | sort -nr      # Check for >500 line violations
-   ```
+## Code Quality Requirements
 
-2. **Review ALL Changes**
-   ```bash
-   git diff --cached | cat  # Review ALL staged changes
-   git diff | cat           # Review ALL unstaged changes
-   git status --porcelain   # Check all files including untracked
-   ```
-
-3. **Run Full Test Suite After EVERY Change**
-   ```bash
-   make ci                                          # Full pipeline (required)
-   python examples/agency_terminal_demo.py          # Basic functionality
-   python examples/multi_agent_workflow.py          # Multi-agent communication
-   python -m pytest tests/integration/ -v          # Integration tests
-   ```
-
-### Refactoring Rules
-
-- **ZERO functional changes allowed during refactoring**
-- **Only structural reorganization to reduce file sizes**
-- **Preserve ALL behavior, even quirks and bugs**
-- **Verify against commit 54491685065bc657c358be3f2899da707e5ed94f**
-
-### Code Quality Requirements
-
-- **Python 3.13 Required**: Use modern type syntax (`str | int | None`)
-- **No legacy imports**: Never use `Union`, always use pipe syntax
-- **File size limit**: 500 lines maximum (current violations: agency.py, agent.py)
+- **File size limit**: 500 lines MAXIMUM (current violations: agency.py)
+- **Method size limit**: 100 lines MAXIMUM (prefer 10-40 lines)
 - **Test coverage**: 83% minimum required
 - **Integration tests**: Located in `tests/integration/` - NO MOCKS allowed
-- **Never write manual test scripts**: Use existing test infrastructure only
+- **NEVER write manual test scripts**: Use existing test infrastructure only
 
-### Critical Mission-Critical Codebase Rules
+## Test Quality Requirements (CRITICAL)
 
-1. **BRUTAL HONESTY REQUIRED**: Always report actual results, even minor issues
-2. **SCIENTIFIC APPROACH MANDATORY**: Base ALL decisions on real data, never assumptions
-3. **ARCHITECTURAL THINKING FIRST**: Understand ENTIRE system before structural changes
-4. **NO STUB FILES**: Never create tiny files that just delegate - minimum 50 lines
-5. **SERVICE LAYER ARCHITECTURE**: When splitting files, extract business logic properly
+- **Test function size limit**: 100 lines MAXIMUM - NO EXCEPTIONS
+- **Test isolation**: Use pytest's `tmp_path` fixture, NEVER shared directories
+- **No hanging tests**: All tests must complete within reasonable timeouts
+- **Proper test structure**:
+  - `tests/integration/` - Real API calls, full system tests
+  - `tests/test_*_modules/` - Unit tests grouped by module
+  - Root level tests: FORBIDDEN (move to appropriate module folders)
 
-### Mandatory Workflow (NO EXCEPTIONS)
+### Test File Naming Standards
+- **GOOD**: `test_agent_file_handling.py`, `test_thread_isolation.py`
+- **BAD**: `test_handoffs_with_communication_flows.py` (too long/confusing)
+- **FORBIDDEN**: Generic names like `test_tools.py` at root level
 
-1. **BEFORE ANY TASK**:
-   ```bash
-   find src/ -name "*.py" | grep -v __pycache__ | sort  # Full inventory
-   find src/ -name "*.py" | xargs wc -l | sort -nr      # Find violations
-   ```
+### Misplaced Files Requiring Cleanup
+```
+tests/test_context_preservation.py          → tests/integration/
+tests/test_handoffs_with_communication_flows.py → tests/integration/test_agent_handoffs.py
+tests/test_persistence_hooks.py             → tests/test_agent_modules/
+tests/test_thread_manager.py                → tests/test_agent_modules/
+tests/test_tools.py                         → tests/test_agent_modules/test_tool_system.py
+tests/test_visualization.py                 → tests/test_agency_modules/test_ui.py
+```
 
-2. **AFTER EVERY CHANGE**:
-   ```bash
-   git diff --cached | cat  # Review ALL staged changes
-   git diff | cat           # Review ALL unstaged changes
-   git status --porcelain   # Check ALL files
-   ```
-
-3. **PROACTIVE ANALYSIS**:
-   - Search for ALL similar patterns
-   - Fix all instances at once
-   - Never do piecemeal changes
-
-### Zero Functional Changes Protocol
+## 🚨 ZERO FUNCTIONAL CHANGES PROTOCOL (NUCLEAR SAFETY LEVEL)
 
 This is the **MOST CRITICAL RULE**. During refactoring:
 
-- **ALLOWED**: Moving code, extracting methods, splitting files
-- **FORBIDDEN**: Changing logic, behavior, APIs, error handling
-- **PRESERVE**: All bugs, quirks, and weird behavior
-- **VERIFY**: Against commit 54491685065bc657c358be3f2899da707e5ed94f
+### ALLOWED
+- Moving code between files
+- Extracting methods
+- Renaming for clarity
+- Splitting large files
 
-## Domain-Driven Refactoring Plan
+### FORBIDDEN (IMMEDIATE DECOMMISSIONING)
+- Changing ANY logic
+- Changing ANY behavior
+- Changing ANY API
+- Changing ANY error handling
+- Fixing ANY bugs (even obvious ones)
+
+### VERIFICATION (RUN UP TO 1000 TIMES)
+```bash
+# Check EVERY change for functional differences
+git diff --cached | grep -E "^[+-]" | grep -v "^[+-]import" | grep -v "^[+-]from"
+git diff | grep -E "^[+-]" | grep -v "^[+-]import" | grep -v "^[+-]from"
+
+# Verify against baseline commit
+git show 54491685065bc657c358be3f2899da707e5ed94f
+```
+
+## Domain-Driven Refactoring Strategy
 
 ### Current State
 - `agency.py`: 792 lines (VIOLATES 500 line limit)
-- `agent.py`: 1444 lines (VIOLATES 500 line limit)
-- Multiple tests failing due to attempted functional changes
+- `agent.py`: 450 lines (OK after refactoring)
 
-### Refactoring Strategy - Domain-Driven Design
+### Design Principles
 
-The goal is to split large files into focused domains while maintaining exact functionality. This is a suggested approach that should be adapted based on actual code analysis and optimal design decisions.
-
-#### Suggested Domain Boundaries
-
-**For Agent (currently 1444 lines):**
-- **Core Domain**: Agent initialization, configuration, tool management
-- **Run Domain**: Everything that happens during a run (get_response cycle)
-- **Communication Domain**: Inter-agent messaging and subagent registration
-- **File Management Domain**: File operations and vector store handling
-
-**For Agency (currently 792 lines):**
-- **Core Domain**: Agency initialization and agent orchestration
-- **Run Services**: Coordinating agent runs and response handling
-- **Registration Services**: Managing agent registration and communication flows
-- **Integration Services**: External integrations (FastAPI, demos)
-- **Visualization Services**: Structure representation and visualization
-
-**Supporting Domains to Consider:**
-- **Context Management**: Shared state and context preparation
-- **Streaming**: Event streaming and conversion
-- **Persistence**: Thread and state management
-
-#### Design Principles
-
-1. **Domain Cohesion**: Each module should represent a coherent business domain
+1. **Domain Cohesion**: Each module represents a coherent business domain
 2. **Clean Interfaces**: Clear boundaries between domains
-3. **Flexible Implementation**: Choose the best approach during actual refactoring
-4. **Maintain Public API**: External interfaces must remain unchanged
+3. **NO "Manager" or "Service" naming**: Use functional names or descriptive class names
+4. **NO artificial patterns**: Avoid "MessageProcessor", "SubagentRegistry" etc.
+5. **Prefer functional approach**: Extract functions over class-based services where appropriate
 
-### Critical Rules
+## Critical Rules Summary
 
-1. **ZERO FUNCTIONAL CHANGES**
-   - Every method must work EXACTLY as before
-   - Preserve ALL bugs and quirks
-   - No new features or fixes
+1. **ALWAYS run codebase structure command FIRST**
+2. **NEVER skip ANY safety protocol step**
+3. **ZERO functional changes during refactoring**
+4. **BRUTAL HONESTY about ALL results**
+5. **MINIMUM 10 searches for duplication**
+6. **ALL tests MUST pass before claiming completion**
+7. **Git status MUST be clean (empty) after task completion**
+8. **NEVER create files < 50 lines**
+9. **NEVER use "Manager" or "Service" in names**
+10. **ALWAYS follow domain-driven design principles**
 
-2. **Verification Protocol**
-   ```bash
-   # After EVERY file split
-   git diff --cached | cat
-   make ci
-   python examples/agency_terminal_demo.py
-   ```
+## Git Best Practices (20 Years of Experience)
 
-3. **Test Preservation**
-   - DO NOT add new tests during refactoring
-   - Existing tests must pass/fail exactly as before
-   - Same 8 tests should fail (context sharing + agency chart)
+- **ALWAYS use `git status --porcelain`** to check ALL files
+- **ALWAYS ensure working tree is clean** before continuing
+- **NEVER use `git reset --hard`** without saving changes
+- **Group commits logically** - refactoring separate from features
+- **Write descriptive commit messages** explaining WHY not WHAT
 
-4. **File Size Targets**
-   - Maximum: 500 lines (hard limit)
-   - Ideal: 300-400 lines
-   - Minimum for new files: 50 lines (avoid tiny stubs)
+## Essential References
 
-### Implementation Order
+- **`examples/`** - Modern v1.x patterns (USE THESE)
+- **`docs/migration_guide.mdx`** - Breaking changes reference
+- **`tests/integration/`** - Real behavior examples (NO MOCKS)
+- **`/docs/`** - OUTDATED v0.x patterns (DO NOT USE)
 
-1. **Phase 1**: Split agent.py (highest priority - 1444 lines)
-2. **Phase 2**: Extract agency services (792 lines)
-3. **Phase 3**: Clean up any remaining violations
-4. **Phase 4**: Run full validation suite
+## Quick Command Reference
 
-### What NOT to Do
+```bash
+# MANDATORY first command
+find src/ -name "*.py" | grep -v __pycache__ | sort
 
-- ❌ Fix any bugs (even obvious ones)
-- ❌ Add new functionality
-- ❌ Change any APIs or signatures
-- ❌ Create stub files < 50 lines
-- ❌ Mix functional changes with refactoring
+# Full validation
+make ci
+
+# Run examples
+python examples/agency_terminal_demo.py
+python examples/multi_agent_workflow.py
+
+# Integration tests
+python -m pytest tests/integration/ -v
+```
+
+Remember: **SAFETY FIRST. VERIFY EVERYTHING. TRUST NOTHING.**

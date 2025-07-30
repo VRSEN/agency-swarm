@@ -16,7 +16,7 @@ from agents import FunctionTool, RunContextWrapper
 from ..context import MasterContext
 
 if TYPE_CHECKING:
-    from ..agent import Agent
+    from ..agent_core import Agent
 
 logger = logging.getLogger(__name__)
 
@@ -122,7 +122,6 @@ class SendMessage(FunctionTool):
             logger.error(f"Tool '{self.name}' invoked without 'my_primary_instructions' parameter.")
             return f"Error: Missing required parameter 'my_primary_instructions' for tool {self.name}."
 
-        master_context: MasterContext = wrapper.context
         sender_name_for_call = self.sender_agent.name
         recipient_name_for_call = self.recipient_agent.name
 
@@ -137,7 +136,6 @@ class SendMessage(FunctionTool):
             response = await self.recipient_agent.get_response(
                 message=message_content,
                 sender_name=self.sender_agent.name,
-                context_override=master_context.user_context,
                 additional_instructions=additional_instructions,
             )
 

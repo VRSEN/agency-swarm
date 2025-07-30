@@ -11,9 +11,10 @@ from agents import (
     RunResult,
 )
 
-from .agent import Agent
-from .hooks import PersistenceHooks
-from .thread import ThreadLoadCallback, ThreadManager, ThreadSaveCallback
+from agency_swarm.agent import SEND_MESSAGE_TOOL_PREFIX
+from agency_swarm.agent_core import Agent
+from agency_swarm.hooks import PersistenceHooks
+from agency_swarm.thread import ThreadLoadCallback, ThreadManager, ThreadSaveCallback
 
 # --- Logging ---
 logger = logging.getLogger(__name__)
@@ -478,7 +479,7 @@ class Agency:
             sender_name=None,
             context_override=context_override,
             hooks_override=effective_hooks,
-            run_config=run_config,
+            run_config_override=run_config,
             message_files=message_files,
             file_ids=file_ids,
             additional_instructions=additional_instructions,
@@ -750,6 +751,9 @@ class Agency:
 
         # Create agent nodes
         for agent_name, agent in self.agents.items():
+            # Check if this agent is an entry point
+            is_entry_point = agent in self.entry_points
+
             node = {
                 "id": agent_name,
                 "data": {
@@ -759,6 +763,7 @@ class Agency:
                     else agent.instructions or "",
                     "model": agent.model,
                     "tools": [],
+                    "isEntryPoint": is_entry_point,
                 },
                 "type": "agent",
                 "position": {"x": 0, "y": 0},  # Will be set by layout
@@ -767,7 +772,13 @@ class Agency:
             # Add tools if requested
             if include_tools and agent.tools:
                 for tool in agent.tools:
-                    tool_name = getattr(tool, "__name__", str(tool))
+                    # Get tool name - FunctionTool has 'name' attribute
+                    tool_name = getattr(tool, "name", getattr(tool, "__name__", str(tool)))
+
+                    # Skip send_message tools in visualization
+                    if tool_name.startswith(SEND_MESSAGE_TOOL_PREFIX):
+                        continue
+
                     node["data"]["tools"].append(tool_name)
 
                     # Create tool node
@@ -776,6 +787,7 @@ class Agency:
                         "data": {
                             "label": tool_name,
                             "agentId": agent_name,
+                            "parentAgent": agent_name,  # Required for layout algorithm
                         },
                         "type": "tool",
                         "position": {"x": 0, "y": 0},
@@ -854,10 +866,9 @@ class Agency:
         Run a terminal demo of the agency.
         """
         # Import and run the terminal demo
-        from .ui.demos.launcher import TerminalDemo
+        from .ui.demos.launcher import TerminalDemoLauncher
 
-        demo = TerminalDemo(self)
-        demo.run()
+        TerminalDemoLauncher.start(self)
 
     def copilot_demo(
         self,
