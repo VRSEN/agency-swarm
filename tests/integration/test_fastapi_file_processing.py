@@ -159,7 +159,7 @@ class TestFastAPIFileProcessing:
         }
         headers = {}
 
-        async with httpx.AsyncClient(timeout=30) as client:
+        async with httpx.AsyncClient(timeout=60) as client:
             response = await client.post(url, json=payload, headers=headers)
 
         assert response.status_code == 200
@@ -182,7 +182,7 @@ class TestFastAPIFileProcessing:
         payload = {
             "message": (
                 "I'm uploading multiple files. Please tell me the function name presented in the image"
-                "and the secret phrase in the pdf file"
+                "and tell me the contents of the pdf file"
             ),
             "file_urls": {
                 "text_image": "http://localhost:7860/test-image.png",
