@@ -35,7 +35,7 @@ def get_extension_from_filetype(file_path):
         return f".{kind.extension}"
     return None
 
-async def async_download_file(url, name, save_dir):
+async def download_file(url, name, save_dir):
     """
     Helper function to download file from url to local path.
     Args:
@@ -72,9 +72,13 @@ async def async_download_file(url, name, save_dir):
     os.rename(temp_path, local_path)
     return str(local_path)
 
-async def async_upload_to_openai(file_path):
-    with open(file_path, "rb") as f:
-        uploaded_file = await client.files.create(file=f, purpose="assistants")
+async def upload_to_openai(file_path):
+    try:
+        with open(file_path, "rb") as f:
+            uploaded_file = await client.files.create(file=f, purpose="assistants")
+    except Exception as e:
+        logger.error(f"Error uploading file {file_path} to OpenAI: {e}")
+        raise e
     return uploaded_file.id
 
 async def upload_from_urls(file_map: dict[str, str]) -> dict[str, str]:
@@ -88,9 +92,9 @@ async def upload_from_urls(file_map: dict[str, str]) -> dict[str, str]:
     """
     file_ids = []
     with tempfile.TemporaryDirectory() as temp_dir:
-        download_tasks = [async_download_file(url, name, temp_dir) for name, url in file_map.items()]
+        download_tasks = [download_file(url, name, temp_dir) for name, url in file_map.items()]
         file_paths = await asyncio.gather(*download_tasks)
-        upload_tasks = [async_upload_to_openai(path) for path in file_paths]
+        upload_tasks = [upload_to_openai(path) for path in file_paths]
         file_ids = await asyncio.gather(*upload_tasks)
 
     return dict(zip(file_map.keys(), file_ids, strict=True))

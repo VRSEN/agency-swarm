@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any
 from agents import Agent as BaseAgent, ModelSettings
 
 from agency_swarm.tools import BaseTool, ToolFactory
-from agency_swarm.utils.agent_file_manager import AgentFileManager
+from agency_swarm.agent.file_manager import AgentFileManager, AttachmentManager
 
 if TYPE_CHECKING:
     from agency_swarm.agent_core import Agent
@@ -247,13 +247,14 @@ def separate_kwargs(kwargs: dict[str, Any]) -> tuple[dict[str, Any], dict[str, A
 
 def setup_file_manager(agent: "Agent", files_folder: str | None) -> None:
     """
-    Set up the file manager for the agent.
+    Set up the file manager and attachment manager for the agent.
 
     Args:
         agent: The agent instance
         files_folder: Optional files folder path
     """
     agent.file_manager = AgentFileManager(agent)
+    agent.attachment_manager = AttachmentManager(agent)
 
     # Parse files folder for vector store ID
     # This is handled automatically by _parse_files_folder_for_vs_id()

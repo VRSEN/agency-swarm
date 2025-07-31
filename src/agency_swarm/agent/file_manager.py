@@ -11,36 +11,189 @@ from openai.types.responses.tool_param import CodeInterpreter
 
 logger = logging.getLogger(__name__)
 
+# Shared constants
+CODE_INTERPRETER_FILE_EXTENSIONS = [
+    '.c', '.cs', '.cpp', '.csv', '.html', '.java', '.json',
+    '.php', '.py', '.rb', '.css', '.js', '.sh', '.ts',
+    '.pkl', '.tar', '.xlsx', '.xml', '.zip'
+]
 
-class AgentFileManager:
-    code_interpreter_file_extensions = [
-        ".c",
-        ".cs",
-        ".cpp",
-        ".html",
-        ".java",
-        ".php",
-        ".py",
-        ".rb",
-        ".tex",
-        ".css",
-        ".js",
-        ".sh",
-        ".ts",
-        ".csv",
-        ".pkl",
-        ".tar",
-        ".xlsx",
-        ".xml",
-        ".zip",
-    ]
+FILE_SEARCH_FILE_EXTENSIONS = [
+    '.doc', '.docx', '.go', '.md', '.pdf', '.pptx', '.tex', '.txt'
+]
+
+IMAGE_FILE_EXTENSIONS = [
+    '.jpeg', '.jpg', '.gif', '.png'
+]
+
+
+class AttachmentManager:
+    """Manages temporary file attachments for agent requests."""
 
     def __init__(self, agent):
         self.agent = agent
 
-        # temp variables used to hold attachment data to be used in cleanup
+        if not agent.file_manager:
+            raise AgentsException(f"Cannot use AttachmentManager for agent {agent.name} without file manager. "
+                                  "Please initialize the agent with a valid 'files_folder'.")
+
+        # Temp variables used to hold attachment data to be used in cleanup
         self._temp_vector_store_id = None
         self._temp_code_interpreter_file_ids = []
+
+    def init_attachments_vs(self, vs_name: str = "attachments_vs"):
+        """
+        Create or retrieve a temporary vector store for attachments.
+
+        Args:
+            vs_name: Name for the temporary vector store
+
+        Returns:
+            str: Vector store ID
+        """
+        logger.info(f"Attachments vector store for agent {self.agent.name}: {vs_name}")
+        existing_vs = self.agent.client_sync.vector_stores.list()
+        existing_vs_names = [vs.name for vs in existing_vs.data]
+        if vs_name in existing_vs_names:
+            return existing_vs.data[existing_vs_names.index(vs_name)].id
+        else:
+            created_vs = self.agent.client_sync.vector_stores.create(name=vs_name)
+            return created_vs.id
+
+    def sort_file_attachments(self, file_ids: list[str]) -> list[dict]:
+        """
+        Sort file attachments by type and prepare them for processing.
+
+        Args:
+            file_ids: List of OpenAI file IDs
+
+        Returns:
+            list: Content items for PDF files that can be directly attached to messages
+        """
+        file_search_ids = []
+        pdf_file_ids = []
+        code_interpreter_ids = []
+        image_file_ids = []
+
+        for file_id in file_ids:
+            filename = self._get_filename_by_id(file_id)
+            extension = Path(filename).suffix.lower()
+            if extension in CODE_INTERPRETER_FILE_EXTENSIONS:
+                code_interpreter_ids.append(file_id)
+            elif extension == ".pdf":
+                pdf_file_ids.append(file_id)
+            elif extension in FILE_SEARCH_FILE_EXTENSIONS:
+                file_search_ids.append(file_id)
+            elif extension in IMAGE_FILE_EXTENSIONS:
+                image_file_ids.append(file_id)
+            else:
+                raise AgentsException(f"Unsupported file extension: {extension} for file {filename}")
+
+        # Add PDF file and images to content (they can be directly attached to messages)
+        content_list = []
+        for file_id in pdf_file_ids:
+            if isinstance(file_id, str) and file_id.startswith("file-"):
+                logger.debug(f"Adding pdf file content item for file_id: {file_id}")
+                file_content_item = {
+                    "type": "input_file",
+                    "file_id": file_id,
+                }
+                content_list.append(file_content_item)
+                logger.debug(f"Added file content item for file_id: {file_id}")
+            else:
+                logger.warning(f"Invalid file_id format: {file_id} for agent {self.agent.name}")
+
+        for file_id in image_file_ids:
+            if isinstance(file_id, str) and file_id.startswith("file-"):
+                logger.debug(f"Adding image file content item for file_id: {file_id}")
+                file_content_item = {
+                    "type": "input_image",
+                    "file_id": file_id,
+                }
+                content_list.append(file_content_item)
+                logger.debug(f"Added file content item for file_id: {file_id}")
+            else:
+                logger.warning(f"Invalid file_id format: {file_id} for agent {self.agent.name}")
+
+        # Add temporary tools for other file types
+        if file_search_ids:
+            temp_vs_id = self.init_attachments_vs(vs_name=f"temp_attachments_vs_{uuid.uuid4().hex[:8]}")
+            self._temp_vector_store_id = temp_vs_id
+            logger.info(f"Adding file ids: {file_search_ids} for {self.agent.name}'s file search")
+            self.agent.file_manager.add_file_search_tool(temp_vs_id, file_search_ids)
+
+        if code_interpreter_ids:
+            logger.info(f"Adding file ids: {code_interpreter_ids} for {self.agent.name}'s code interpreter")
+            self.agent.file_manager.add_code_interpreter_tool(code_interpreter_ids)
+            self._temp_code_interpreter_file_ids = code_interpreter_ids
+
+        return content_list
+
+    def attachments_cleanup(self):
+        """
+        Clean up temporary attachments and reset agent to initial state.
+        """
+        if self._temp_vector_store_id:
+            # Remove temporary vector store from FileSearchTool
+            for tool in self.agent.tools:
+                if isinstance(tool, FileSearchTool) and self._temp_vector_store_id in tool.vector_store_ids:
+                    tool.vector_store_ids.remove(self._temp_vector_store_id)
+                    if len(tool.vector_store_ids) == 0:
+                        self.agent.tools.remove(tool)
+                        logger.debug(f"Removed temp FileSearchTool from {self.agent.name}")
+                    else:
+                        logger.debug(f"Removed temp vector store {self._temp_vector_store_id} from FileSearchTool")
+
+            # Delete the temporary vector store
+            try:
+                result = self.agent.client_sync.vector_stores.delete(
+                    vector_store_id=self._temp_vector_store_id
+                )
+                if result.deleted:
+                    logger.debug(f"Successfully deleted temp vector store: {self._temp_vector_store_id}")
+                else:
+                    logger.error(f"Failed to delete temp vector store {self._temp_vector_store_id}: {result}")
+            except Exception as e:
+                logger.error(f"Failed to delete temp vector store {self._temp_vector_store_id}: {e}")
+                # Don't raise - cleanup should be best-effort
+
+        if self._temp_code_interpreter_file_ids:
+            # Remove temporary files from CodeInterpreterTool
+            for tool in self.agent.tools:
+                if isinstance(tool, CodeInterpreterTool):
+                    code_interpreter_container = tool.tool_config.get("container", {})
+                    if isinstance(code_interpreter_container, str):
+                        logger.warning(
+                            f"Agent {self.agent.name}: Cannot modify container directly for file removal"
+                        )
+                        break
+                    file_ids_list = code_interpreter_container.get("file_ids", [])
+                    for file_id in self._temp_code_interpreter_file_ids:
+                        if file_id in file_ids_list:
+                            file_ids_list.remove(file_id)
+                            if len(file_ids_list) == 0:
+                                self.agent.tools.remove(tool)
+                                logger.debug(f"Removed temp CodeInterpreterTool from {self.agent.name}")
+                            else:
+                                logger.debug(f"Removed attachment file {file_id} from CodeInterpreterTool")
+                    code_interpreter_container["file_ids"] = file_ids_list
+                    tool.tool_config["container"] = code_interpreter_container
+
+        # Reset temp variables
+        self._temp_vector_store_id = None
+        self._temp_code_interpreter_file_ids = []
+
+    def _get_filename_by_id(self, file_id: str) -> str:
+        """Get the filename of a file by its ID"""
+        file_data = self.agent.client_sync.files.retrieve(file_id)
+        return file_data.filename
+
+
+class AgentFileManager:
+    """Manages permanent file operations for agents, including uploads and vector store management."""
+
+    def __init__(self, agent):
+        self.agent = agent
 
     def upload_file(self, file_path: str, include_in_vector_store: bool = True) -> str:
         """
@@ -255,24 +408,29 @@ class AgentFileManager:
 
         # Process existing files in vector store directory
         for file in os.listdir(self.agent.files_folder_path):
-            if Path(file).suffix.lower() in self.code_interpreter_file_extensions:
+            # Ideally images should be provided as attachments, but code interpreter tool can also handle images.
+            if Path(file).suffix.lower() in CODE_INTERPRETER_FILE_EXTENSIONS + IMAGE_FILE_EXTENSIONS:
                 file_id = self.upload_file(
                     os.path.join(self.agent.files_folder_path, file), include_in_vector_store=False
                 )
                 code_interpreter_file_ids.append(file_id)
-            else:
+            elif Path(file).suffix.lower() in FILE_SEARCH_FILE_EXTENSIONS:
                 self.upload_file(os.path.join(self.agent.files_folder_path, file))
+            else:
+                raise AgentsException(f"Unsupported file extension: {Path(file).suffix.lower()} for file {file}")
 
         # Process new files found in original directory
         for new_file in new_files_to_process:
             logger.info(f"Agent {self.agent.name}: Processing new file {new_file.name}")
 
             # Upload the new file (this will automatically rename it with file ID and move to vector store dir)
-            if new_file.suffix.lower() in self.code_interpreter_file_extensions:
+            if new_file.suffix.lower() in CODE_INTERPRETER_FILE_EXTENSIONS + IMAGE_FILE_EXTENSIONS:
                 file_id = self.upload_file(str(new_file), include_in_vector_store=False)
                 code_interpreter_file_ids.append(file_id)
-            else:
+            elif Path(new_file).suffix.lower() in FILE_SEARCH_FILE_EXTENSIONS:
                 self.upload_file(str(new_file))
+            else:
+                raise AgentsException(f"Unsupported file extension: {Path(new_file).suffix.lower()} for file {new_file}")
 
         # Add FileSearchTool if VS ID is parsed.
         if self.agent._associated_vector_store_id:
@@ -416,126 +574,3 @@ class AgentFileManager:
                 raise AgentsException(
                     f"Failed to add file {file_id} to Vector Store {vector_store_id}: {e}"
                 ) from e
-
-    def get_filename_by_id(self, file_id: str) -> str:
-        """
-        Get the filename of a file by its ID
-        """
-        file_data = self.agent.client_sync.files.retrieve(file_id)
-        return file_data.filename
-
-    def init_attachments_vs(self, vs_name: str = "attachments_vs"):
-        """
-        Fallback function that would create (or retrieve) a new vector store in case
-        no vector stores were provided by the user.
-        """
-        # First find if attachments_vs already exists
-        logger.info(f"Attachments vector store for agent {self.agent.name}: {vs_name}")
-        existing_vs = self.agent.client_sync.vector_stores.list()
-        existing_vs_names = [vs.name for vs in existing_vs.data]
-        if vs_name in existing_vs_names:
-            return existing_vs.data[existing_vs_names.index(vs_name)].id
-        else:
-            created_vs = self.agent.client_sync.vector_stores.create(name=vs_name)
-            return created_vs.id
-
-    def sort_file_attachments(self, file_ids: list[str]) -> list[dict]:
-        """
-        Helper function to correctly distribute file ids into file search, code interpreter and pdf file ids.
-        If any files can be included in the message, they will be returned in the content_list.
-        """
-        file_search_ids = []
-        pdf_file_ids = []
-        code_interpreter_ids = []
-        for file_id in file_ids:
-            filename = self.get_filename_by_id(file_id)
-            extension = Path(filename).suffix.lower()
-            if extension in self.code_interpreter_file_extensions:
-                code_interpreter_ids.append(file_id)
-            elif extension == ".pdf":
-                pdf_file_ids.append(file_id)
-            else:
-                file_search_ids.append(file_id)
-
-        # Add file items to content
-        content_list = []
-        for file_id in pdf_file_ids:
-            if isinstance(file_id, str) and file_id.startswith("file-"):
-                logger.debug(f"Adding pdf file content item for file_id: {file_id}")
-                file_content_item = {
-                    "type": "input_file",
-                    "file_id": file_id,
-                }
-                content_list.append(file_content_item)
-                logger.debug(f"Added file content item for file_id: {file_id}")
-            else:
-                logger.warning(f"Invalid file_id format: {file_id} for agent {self.agent.name}")
-
-        # ------------------------------------------------------------
-        # Temporary solution until openai supports other file types.
-        # ------------------------------------------------------------
-        # Add file search and code interpreter tools if needed (will not overwrite existing tools)
-        if file_search_ids:
-            temp_vs_id = self.init_attachments_vs(vs_name=f"temp_attachments_vs_{uuid.uuid4().hex[:8]}")
-            self._temp_vector_store_id = temp_vs_id
-            logger.info(f"Adding file ids: {file_search_ids} for {self.agent.name}'s file search")
-            self.add_file_search_tool(temp_vs_id, file_search_ids)
-        if code_interpreter_ids:
-            logger.info(
-                f"Adding file ids: {code_interpreter_ids} for {self.agent.name}'s code interpreter"
-            )
-            self.add_code_interpreter_tool(code_interpreter_ids)
-            self._temp_code_interpreter_file_ids = code_interpreter_ids
-        return content_list
-
-    def attachments_cleanup(self):
-        """
-        To keep agent stateless, remove all the attachments data after the request
-        and return tools into initial state.
-        """
-        if self._temp_vector_store_id:
-            for tool in self.agent.tools:
-                if isinstance(tool, FileSearchTool) and self._temp_vector_store_id in tool.vector_store_ids:
-                    tool.vector_store_ids.remove(self._temp_vector_store_id)
-                    if len(tool.vector_store_ids) == 0:
-                        self.agent.tools.remove(tool)
-                        logger.debug(f"Removed temp FileSearchTool from {self.agent.name}")
-                    else:
-                        logger.debug(f"Removed temp vector store {self._temp_vector_store_id} from FileSearchTool")
-
-            try:
-                result = self.agent.client_sync.vector_stores.delete(
-                    vector_store_id=self._temp_vector_store_id
-                )
-                if result.deleted:
-                    logger.debug(f"Successfully deleted temp vector store: {self._temp_vector_store_id}")
-                else:
-                    logger.error(f"Failed to delete temp vector store {self._temp_vector_store_id}: {result}")
-            except Exception as e:
-                logger.error(f"Failed to delete temp vector store {self._temp_vector_store_id}: {e}")
-                # Don't raise - cleanup should be best-effort
-
-        if self._temp_code_interpreter_file_ids:
-            for tool in self.agent.tools:
-                if isinstance(tool, CodeInterpreterTool):
-                    code_interpreter_container = tool.tool_config.get("container", {})
-                    if isinstance(code_interpreter_container, str):
-                        logger.warning(
-                            f"Agent {self.agent.name}: Cannot modify container directly for file removal, "
-                        )
-                        break
-                    file_ids_list = code_interpreter_container.get("file_ids", [])
-                    for file_id in self._temp_code_interpreter_file_ids:
-                        if file_id in file_ids_list:
-                            file_ids_list.remove(file_id)
-                            if len(file_ids_list) == 0:
-                                self.agent.tools.remove(tool)
-                                logger.debug(f"Removed temp CodeInterpreterTool from {self.agent.name}")
-                            else:
-                                logger.debug(f"Removed attachment file {file_id} from CodeInterpreterTool")
-                    code_interpreter_container["file_ids"] = file_ids_list
-                    tool.tool_config["container"] = code_interpreter_container
-
-        # Reset temp variables
-        self._temp_vector_store_id = None
-        self._temp_code_interpreter_file_ids = []

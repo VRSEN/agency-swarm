@@ -150,7 +150,7 @@ class Execution:
                         else:
                             content_list = []
 
-                        file_content_items = self.agent.file_manager.sort_file_attachments(files_to_attach)
+                        file_content_items = self.agent.attachment_manager.sort_file_attachments(files_to_attach)
                         # Content list will contain pdf files to be attached as input_file items
                         content_list.extend(file_content_items)
 
@@ -224,7 +224,7 @@ class Execution:
                 logger.error(f"Error during Runner.run for agent '{self.agent.name}': {e}", exc_info=True)
                 raise AgentsException(f"Runner execution failed for agent {self.agent.name}") from e
             finally:
-                self.agent.file_manager.attachments_cleanup()
+                self.agent.attachment_manager.attachments_cleanup()
 
             # Always save response items (both user and agent-to-agent calls)
             if self.agent._thread_manager and run_result.new_items:
@@ -388,7 +388,7 @@ class Execution:
                         else:
                             content_list = []
 
-                        file_content_items = self.agent.file_manager.sort_file_attachments(files_to_attach)
+                        file_content_items = self.agent.attachment_manager.sort_file_attachments(files_to_attach)
                         content_list.extend(file_content_items)
 
                         # Update the message content
@@ -482,7 +482,7 @@ class Execution:
         finally:
             # Always restore original instructions
             self.agent.instructions = original_instructions
-            self.agent.file_manager.attachments_cleanup()
+            self.agent.attachment_manager.attachments_cleanup()
 
     def _run_item_to_tresponse_input_item(self, item: RunItem) -> TResponseInputItem | None:
         """Converts a RunItem from a RunResult into TResponseInputItem dictionary format for history.
