@@ -410,7 +410,6 @@ Product Sales:
             f"Only found {data_access_score}/4 specific data points in response: {response_text}"
         )
 
-
-    logger.info("✅ Hosted tool output preservation test completed successfully")
+        logger.info("✅ Hosted tool output preservation test completed successfully")
 
 
