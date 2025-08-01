@@ -70,7 +70,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "ag-ui-protocol", marker = "extra == 'fastapi'", specifier = ">=0.1.4,!=0.1.7" },
+    { name = "ag-ui-protocol", marker = "extra == 'fastapi'", specifier = ">=0.1.4" },
     { name = "aiofiles", marker = "extra == 'fastapi'", specifier = ">=23.2.1" },
     { name = "datamodel-code-generator", specifier = ">=0.28.5,<0.29.0" },
     { name = "deepdiff", specifier = ">=6.7.1,<9.0.0" },
