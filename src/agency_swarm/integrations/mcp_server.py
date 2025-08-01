@@ -135,8 +135,8 @@ def run_mcp(
                         key=function_tool.name,
                         name=function_tool.name,
                         description=function_tool.description,
-                        parameters=function_tool.params_json_schema,  # Use your existing JSON schema directly
-                        enabled=True,
+                        parameters=function_tool.params_json_schema,  # Use existing JSON schema directly
+                        enabled=True
                     )
                     # Store the function_tool reference after super().__init__
                     object.__setattr__(self, "_function_tool", function_tool)

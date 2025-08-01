@@ -56,8 +56,8 @@ def run_fastapi(
             make_tool_endpoint,
         )
         from .fastapi_utils.request_models import BaseRequest, RunAgentInputCustom, add_agent_validator
-    except ImportError:
-        logger.error("FastAPI deployment dependencies are missing. Please install agency-swarm[fastapi] package")
+    except ImportError as e:
+        logger.error(f"FastAPI deployment dependencies are missing: {e}. Please install agency-swarm[fastapi] package")
         return
 
     app_token = os.getenv(app_token_env)
@@ -129,7 +129,7 @@ def run_fastapi(
 
     if tools:
         for tool in tools:
-            tool_name = tool.name
+            tool_name = tool.name if hasattr(tool, "name") else tool.__name__
             tool_handler = make_tool_endpoint(tool, verify_token)
             app.add_api_route(f"/tool/{tool_name}", tool_handler, methods=["POST"], name=tool_name)
             endpoints.append(f"/tool/{tool_name}")
