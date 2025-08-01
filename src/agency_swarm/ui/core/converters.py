@@ -6,11 +6,9 @@ import logging
 from typing import Any
 
 from pydantic import BaseModel
-from rich.console import Console
-
-from agency_swarm.agent_core import Agent
-
-from .console_renderer import LiveConsoleRenderer
+from rich.console import Console, Group
+from rich.live import Live
+from rich.markdown import Markdown
 
 try:
     from ag_ui.core import (
@@ -418,73 +416,108 @@ class ConsoleEventAdapter:
         self.response_buffer = ""
         self.message_output = None
         self.console = Console()
+        self.last_live_display = None
+
+    def _cleanup_live_display(self):
+        """Clean up any active Live display safely."""
+        if self.message_output is not None:
+            try:
+                self.message_output.__exit__(None, None, None)
+            except Exception:
+                pass  # Ignore cleanup errors
+            self.message_output = None
+            self.response_buffer = ""
 
     def _update_console(self, msg_type: str, sender: str, receiver: str, content: str):
-        renderer = LiveConsoleRenderer(msg_type, sender, receiver, "", console=self.console)
-        renderer.cprint_update(content)
+        # Print a separator only for function, function_output, and agent-to-agent messages
+        emoji = "👤" if sender.lower() == "user" else "🤖"
+        if msg_type == "function":
+            header = f"{emoji} {sender} 🛠️ Executing Function"
+        elif msg_type == "function_output":
+            header = f"{sender} ⚙️ Function Output"
+        else:
+            header = f"{emoji} {sender} 🗣️ @{receiver}"
+        self.console.print(f"[bold]{header}[/bold]\n{content}")
+        self.console.rule()
 
     def openai_to_message_output(self, event: Any, recipient_agent: str):
-        if hasattr(event, "data"):
-            event_type = event.type
-            # Handle raw_response_event
-            if event_type == "raw_response_event":
-                data = event.data
-                data_type = data.type
-                if data_type == "response.output_text.delta":
-                    if self.message_output is None:
-                        self.message_output = LiveConsoleRenderer(
-                            "text", recipient_agent, "user", "", console=self.console
-                        )
-                    self.response_buffer += data.delta
-                    self.message_output.cprint_update(self.response_buffer)
+        try:
+            if hasattr(event, "data"):
+                event_type = event.type
+                if event_type == "raw_response_event":
+                    data = event.data
+                    data_type = data.type
+                    if data_type == "response.output_text.delta":
+                        # Use Live as a context manager for the live region
+                        if self.message_output is None:
+                            self.response_buffer = ""
+                            self.message_output = Live("", console=self.console, refresh_per_second=10)
+                            self.message_output.__enter__()
+                        self.response_buffer += data.delta
+                        header_text = f"🤖 {recipient_agent} 🗣️ @user"
+                        md_content = Markdown(self.response_buffer)
+                        self.message_output.update(Group(header_text, md_content))
+                    elif data_type == "response.output_text.done":
+                        if self.message_output is not None:
+                            header_text = f"🤖 {recipient_agent} 🗣️ @user"
+                            md_content = Markdown(self.response_buffer)
+                            self.message_output.update(Group(header_text, md_content))
+                            self.message_output.__exit__(None, None, None)
+                        self.message_output = None
+                        self.response_buffer = ""
 
-                elif data_type == "response.output_text.done":
-                    self.message_output = None
-                    self.response_buffer = ""
+                    elif data_type == "response.output_item.added":
+                        if data.item.type == "mcp_call":
+                            self.mcp_calls[data.item.id] = data.item.name
 
-                elif data_type == "response.output_item.added":
-                    if data.item.type == "mcp_call":
-                        self.mcp_calls[data.item.id] = data.item.name
+                    elif data_type == "response.mcp_call_arguments.done":
+                        content = f"Calling {self.mcp_calls[data.item_id]} tool with: {data.arguments}"
+                        self._update_console("function", recipient_agent, "user", content)
+                        self.mcp_calls.pop(data.item_id)
 
-                elif data_type == "response.mcp_call_arguments.done":
-                    content = f"Calling {self.mcp_calls[data.item_id]} tool with: {data.arguments}"
-                    self._update_console("function", recipient_agent, "user", content)
-                    self.mcp_calls.pop(data.item_id)
-
-                elif data_type == "response.output_item.done":
-                    self.message_output = None
-                    item = data.item
-                    if hasattr(item, "arguments"):
-                        # Handle agent to agent communication
-                        if len(parsed_name := item.name.split("send_message_to_")) > 1:
-                            called_agent = parsed_name[1]
-                            message = json.loads(item.arguments)["message"]  # Parse once
-                            self._update_console("text", recipient_agent, called_agent, message)
-                            self.agent_to_agent_communication[item.call_id] = {
-                                "sender": recipient_agent,
-                                "receiver": called_agent,
-                                "message": message,
-                            }
-                        else:
-                            if item.type == "mcp_call":
-                                self._update_console("function_output", recipient_agent, "user", item.output)
+                    elif data_type == "response.output_item.done":
+                        self.message_output = None
+                        item = data.item
+                        if hasattr(item, "arguments"):
+                            # Handle agent to agent communication
+                            if len(parsed_name := item.name.split("send_message_to_")) > 1:
+                                called_agent = parsed_name[1]
+                                message = json.loads(item.arguments)["message"]  # Parse once
+                                self._update_console("text", recipient_agent, called_agent, message)
+                                self.agent_to_agent_communication[item.call_id] = {
+                                    "sender": recipient_agent,
+                                    "receiver": called_agent,
+                                    "message": message,
+                                }
                             else:
-                                content = f"Calling {item.name} tool with: {item.arguments}"
-                                self._update_console("function", recipient_agent, "user", content)
+                                if item.type == "mcp_call":
+                                    self._update_console("function_output", recipient_agent, "user", item.output)
+                                else:
+                                    content = f"Calling {item.name} tool with: {item.arguments}"
+                                    self._update_console("function", recipient_agent, "user", content)
 
-                elif data_type == "response.error":
-                    print(f"\n[Error] {data.error}")
 
-        # Tool outputs (except mcp calls)
-        elif hasattr(event, "item"):
-            event_type = event.type
-            if event_type == "run_item_stream_event":
-                item = event.item
-                if item.type == "tool_call_output_item":
-                    call_id = item.raw_item["call_id"]
 
-                    if call_id in self.agent_to_agent_communication:
-                        comm_data = self.agent_to_agent_communication.pop(call_id)
-                        self._update_console("text", comm_data["receiver"], comm_data["sender"], str(item.output))
-                    else:
-                        self._update_console("function_output", recipient_agent, "user", str(item.output))
+            # Tool outputs (except mcp calls)
+            elif hasattr(event, "item"):
+                event_type = event.type
+                if event_type == "run_item_stream_event":
+                    item = event.item
+                    if item.type in "tool_call_output_item":
+                        call_id = item.raw_item["call_id"]
+
+                        if call_id in self.agent_to_agent_communication:
+                            comm_data = self.agent_to_agent_communication.pop(call_id)
+                            self._update_console("text", comm_data["receiver"], comm_data["sender"], str(item.output))
+                        else:
+                            self._update_console("function_output", recipient_agent, "user", str(item.output))
+
+            # Handle error events (dict format from agent streaming)
+            elif isinstance(event, dict) and event.get("type") == "error":
+                self._cleanup_live_display()
+                content = event.get("content", "Unknown error")
+                print(f"\nEncountered error during streaming: {content}")
+        except Exception as e:
+            # Clean up any active Live display and log the error
+            self._cleanup_live_display()
+            print(f"\nError processing event: {e}")
