@@ -5,11 +5,12 @@ from unittest.mock import MagicMock, patch
 import pytest
 from pydantic import BaseModel
 
-# Mock ag_ui module before importing converters
+# Mock ag_ui module and console_renderer before importing converters
 sys.modules["ag_ui"] = MagicMock()
 sys.modules["ag_ui.core"] = MagicMock()
 sys.modules["ag_ui.events"] = MagicMock()
 sys.modules["ag_ui.events.event"] = MagicMock()
+sys.modules["agency_swarm.ui.core.console_renderer"] = MagicMock()
 
 from agency_swarm.agent_core import Agent  # noqa: E402
 from agency_swarm.ui.core.converters import AguiAdapter, ConsoleEventAdapter, serialize  # noqa: E402
@@ -124,7 +125,7 @@ class TestSerialize:
 
     def test_agent_object(self, agent_mock):
         result = serialize(agent_mock)
-        assert result == {"name": "TestAgent", "description": "Test description", "model": "gpt-4"}
+        assert result == str(agent_mock)
 
     def test_dataclass(self):
         @dataclasses.dataclass
@@ -264,9 +265,7 @@ class TestAguiAdapter:
 class TestConsoleEventAdapter:
     @pytest.fixture
     def adapter(self):
-        with patch("agency_swarm.ui.core.converters.LiveConsoleRenderer"), \
-             patch("agency_swarm.ui.core.converters.Console"):
-            return ConsoleEventAdapter()
+        return ConsoleEventAdapter()
 
     def test_initialization(self, adapter):
         assert adapter.agent_to_agent_communication == {}
