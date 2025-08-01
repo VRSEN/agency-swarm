@@ -8,8 +8,9 @@ from typing import Any
 from pydantic import BaseModel
 from rich.console import Console
 
-from .console_renderer import LiveConsoleRenderer
 from agency_swarm.agent_core import Agent
+
+from .console_renderer import LiveConsoleRenderer
 
 try:
     from ag_ui.core import (
@@ -479,7 +480,7 @@ class ConsoleEventAdapter:
             event_type = event.type
             if event_type == "run_item_stream_event":
                 item = event.item
-                if item.type in "tool_call_output_item":
+                if item.type == "tool_call_output_item":
                     call_id = item.raw_item["call_id"]
 
                     if call_id in self.agent_to_agent_communication:
