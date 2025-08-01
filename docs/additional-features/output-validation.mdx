@@ -14,11 +14,70 @@ There are 4 different validators in Agency Swarm:
   - `field_validator`: Validate individual fields independently.
   - `model_validator`: Perform complex checks involving multiple fields.
 - Agent validators:
-  - `response_validator`: Validate the response before sending it to the user or other agents.
+  - `guardrails`(for v1.0 and higher) or `response_validator` (for v0.7 and lower): Validate the response before sending it to the user or other agents.
 - Universal validators:
   - `llm_validator`: Validate outputs against specified natural language rules.
 
 ### Agent Response Validator
+
+<Tabs>
+<Tab title="v1.x (Latest)">
+
+<Warning>
+v1.x is currently in **beta preview**. Install with: `pip install -U "agency-swarm>=1.0.0-beta"`
+</Warning>
+
+In v1.x, validation is handled through **guardrails** using the agents SDK. Guardrails provide more flexible validation for both input and output.
+
+**Example:**
+
+```python
+from agents import (
+    GuardrailFunctionOutput,
+    OutputGuardrailTripwireTriggered,
+    RunContextWrapper,
+    output_guardrail,
+)
+from agency_swarm import Agency, Agent
+
+@output_guardrail
+async def response_content_guardrail(
+    context: RunContextWrapper, agent: Agent, response_text: str
+) -> GuardrailFunctionOutput:
+    tripwire_triggered = False
+    output_info = ""
+
+    if "bad word" in response_text.lower():
+        tripwire_triggered = True
+        output_info = "Please avoid using inappropriate language."
+
+    return GuardrailFunctionOutput(
+        output_info=output_info,
+        tripwire_triggered=tripwire_triggered,
+    )
+
+agent = Agent(
+    name="CustomerSupportAgent",
+    instructions="You are a helpful customer support agent.",
+    output_guardrails=[response_content_guardrail],
+)
+```
+
+**Handling guardrail exceptions:**
+
+```python
+try:
+    response = await agency.get_response("Hello!")
+except OutputGuardrailTripwireTriggered as e:
+    print(f"Validation failed: {e.guardrail_result.output_info}")
+```
+
+</Tab>
+<Tab title="v0.x (Production)">
+
+<Info>
+This is the current production version. Install with: `pip install agency-swarm`
+</Info>
 
 You can define a `response_validator` method inside your Agent class to validate responses before sending them to the user or other agents. This method should raise an error if the response is invalid, allowing the agent to handle the error and generate a corrected response.
 
@@ -64,6 +123,9 @@ class JSONAgent(Agent):
 - **Format validation** (JSON, structured output): Use `validation_attempts=2-3`
 - **Content requirements** that agents can learn: Use `validation_attempts=2`
 - **Critical/security validation**: Use `validation_attempts=0` to disable retries
+
+</Tab>
+</Tabs>
 
 ### Tool Validators
 

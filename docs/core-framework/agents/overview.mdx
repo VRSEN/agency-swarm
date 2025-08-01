@@ -31,9 +31,92 @@ Agents are the core building blocks of the Agency Swarm framework. Each agent is
   </Card>
 </CardGroup>
 
+<Tabs defaultValue="v1.x (Latest)">
+<Tab title="v1.x (Latest)">
+
+<Warning>
+v1.x is currently in **beta preview**. Install with: `pip install -U "agency-swarm>=1.0.0-beta"`
+</Warning>
+
+In the latest version, agents are built on top of the `agents` SDK with enhanced capabilities for multi-agent collaboration within an `Agency`. The agent class provides improved context management, async execution, and streamlined tool integration.
+
 ## Agent Parameters
 
-From a technical perspective, in Agency Swarm, agents are essentially wrappers for [OpenAI Assistants](https://platform.openai.com/docs/assistants/deep-dive#creating-assistants). The `Agent` class includes convenience methods to help you manage the state of your assistant, upload files, attach tools, and more:
+The new `Agent` class extends the base `agents.Agent` with Agency Swarm-specific capabilities:
+
+### Agency Swarm Specific Parameters
+
+| Name | Parameter | Description |
+|------|-----------|-------------|
+| Files Folder *(optional)* | `files_folder` | Path to a local folder for managing files associated with this agent. If the folder name follows the pattern `*_vs_<vector_store_id>`, files uploaded via `upload_file` will also be added to the specified OpenAI Vector Store, and a `FileSearchTool` will be automatically added. Default: `None` |
+| Tools Folder *(optional)* | `tools_folder` | Path to a directory containing tool definitions. Tools are automatically discovered and loaded from this directory. Supports both BaseTool subclasses and modern FunctionTool instances. Default: `None` |
+| Description *(optional)* | `description` | A description of the agent's role or purpose, used to convey agent's role to other agents. Default: `None` |
+| Send Message Tool Class *(optional)* | `send_message_tool_class` | Custom SendMessage tool class to use for inter-agent communication. If None, uses the default SendMessage class. Default: `None` |
+
+### Core Agent Parameters
+
+| Name | Parameter | Description |
+|------|-----------|-------------|
+| Name *(required)* | `name` | The name of the agent. |
+| Instructions *(optional)* | `instructions` | The instructions for the agent. Will be used as the "system prompt" when this agent is invoked. Can be a string or a function that dynamically generates instructions. Default: `None` |
+| Prompt *(optional)* | `prompt` | A prompt object (or a function that returns a Prompt). Prompts allow you to dynamically configure the instructions, tools and other config for an agent outside of your code. Only usable with OpenAI models, using the Responses API. Default: `None` |
+| Handoff Description *(optional)* | `handoff_description` | A description of the agent. This is used when the agent is used as a handoff, so that an LLM knows what it does and when to invoke it. Default: `None` |
+| Handoffs *(optional)* | `handoffs` | Handoffs are sub-agents that the agent can delegate to. You can provide a list of handoffs, and the agent can choose to delegate to them if relevant. Default: `[]` |
+| Model *(optional)* | `model` | The model implementation to use when invoking the LLM. By default, uses the default model configured in `openai_provider.DEFAULT_MODEL`. Default: `None` |
+| Model Settings *(optional)* | `model_settings` | Configures model-specific tuning parameters (e.g. temperature, top_p). Default: `ModelSettings()` |
+| Tools *(optional)* | `tools` | A list of tools that the agent can use. Default: `[]` |
+| MCP Servers *(optional)* | `mcp_servers` | A list of Model Context Protocol servers that the agent can use. Every time the agent runs, it will include tools from these servers in the list of available tools. Default: `[]` |
+| MCP Config *(optional)* | `mcp_config` | Configuration for MCP servers. Default: `MCPConfig()` |
+| Input Guardrails *(optional)* | `input_guardrails` | A list of checks that run in parallel to the agent's execution, before generating a response. Runs only if the agent is the first agent in the chain. Default: `[]` |
+| Output Guardrails *(optional)* | `output_guardrails` | A list of checks that run on the final output of the agent, after generating a response. Runs only if the agent produces a final output. Default: `[]` |
+| Output Type *(optional)* | `output_type` | The type of the output object. If not provided, the output will be `str`. In most cases, you should pass a regular Python type (e.g. a dataclass, Pydantic model, TypedDict, etc). Default: `None` |
+| Hooks *(optional)* | `hooks` | A class that receives callbacks on various lifecycle events for this agent. Default: `None` |
+| Tool Use Behavior *(optional)* | `tool_use_behavior` | Configures how tool use is handled. Options: "run_llm_again" (default), "stop_on_first_tool", a list of tool names, or a function. Default: `"run_llm_again"` |
+| Reset Tool Choice *(optional)* | `reset_tool_choice` | Whether to reset the tool choice to the default value after a tool has been called. Defaults to True. This ensures that the agent doesn't enter an infinite loop of tool usage. Default: `True` |
+
+## Agent Template
+
+It's recommended to create your agent in a separate file. Your agent class should look like this:
+
+```python
+from agency_swarm import Agent
+from agents import ModelSettings
+
+class AgentName(Agent):
+    def __init__(self):
+        super().__init__(
+            name="agent_name",
+            description="agent_description",
+            instructions="./instructions.md",
+            files_folder="./files",
+            tools_folder="./tools",
+            tools=[],
+            model_settings=ModelSettings(
+                temperature=0.3,
+            ),
+        )
+```
+
+You can add more parameters to the `__init__` method to fit the agent to your use case.
+
+To initialize the agent:
+
+```python
+from AgentName import AgentName
+
+agent = AgentName()
+```
+
+</Tab>
+<Tab title="v0.x (Production)">
+
+<Info>
+v0.x is the **current production version**. Install with: `pip install "agency-swarm<1.0.0"`
+</Info>
+
+From a technical perspective, in Agency Swarm, agents are essentially wrappers for [OpenAI Assistants](https://platform.openai.com/docs/assistants/deep-dive#creating-assistants). The `Agent` class includes convenience methods to help you manage the state of your assistant, upload files, attach tools, and more.
+
+## Agent Parameters
 
 | Name | Parameter | Description |
 |------|-----------|-------------|
@@ -68,7 +151,7 @@ From a technical perspective, in Agency Swarm, agents are essentially wrappers f
 
 ## Agent Template
 
-It's recommended to create your agent in a seprate file. Your agent class should look like this:
+It's recommended to create your agent in a separate file. Your agent class should look like this:
 
 ```python
 from agency_swarm import Agent
@@ -98,3 +181,6 @@ from AgentName import AgentName
 
 agent = AgentName()
 ```
+
+</Tab>
+</Tabs>

@@ -40,8 +40,37 @@ Yes—you can use open source models for simple, non–mission-critical tasks (u
 
 
 <Accordion title="How do I save and continue conversations?" icon="messages">
-To persist threads between application restarts, implement thread callbacks that save and load thread IDs from a local file. For example, define your callback functions:
-```python
+To persist threads between application restarts, implement thread callbacks that save and load conversation data.
+
+<CodeGroup>
+
+```python v1.x (Latest)
+import os
+import json
+from agents import ConversationThread
+
+def load_threads(chat_id: str) -> dict[str, ConversationThread]:
+    """Load all threads data for a specific chat session."""
+    if os.path.exists(f"{chat_id}_threads.json"):
+        with open(f"{chat_id}_threads.json", "r") as file:
+            return json.load(file)
+    return []
+
+def save_threads(thread_dict: dict[str, ConversationThread], chat_id: str):
+    """Save all threads data to file."""
+    with open(f"{chat_id}_threads.json", "w") as file:
+        json.dump(thread_dict, file)
+
+# Then, pass these callbacks during your agency initialization to resume conversations:
+from agency_swarm import Agency
+agency = Agency(
+    agent,
+    load_threads_callback=lambda: load_threads(chat_id),
+    save_threads_callback=lambda thread_dict: save_threads(thread_dict, chat_id),
+)
+```
+
+```python v0.x (Production)
 import os
 import json
 
@@ -54,10 +83,8 @@ def load_threads(chat_id):
 def save_threads(new_threads, chat_id):
     with open(f"{chat_id}_threads.json", "w") as file:
         json.dump(new_threads, file)
-```
 
-Then, pass these callbacks during your agency initialization to resume conversations:
-```python
+# Then, pass these callbacks during your agency initialization to resume conversations:
 from agency_swarm.agency.genesis import GenesisAgency
 
 agency = GenesisAgency(
@@ -68,6 +95,8 @@ agency = GenesisAgency(
     }
 )
 ```
+
+</CodeGroup>
 
 This setup preserves your conversation context between runs.
 </Accordion>
@@ -80,7 +109,7 @@ To support multiple users/chats, you need to load and save thread IDs in your da
 
 <Accordion title="How can I transfer data between tools and agents?" icon="upload">
 There are two ways to transfer data between tools and agents:
-1. Use shared state inside your tools. Read more: [Shared State](/additional-features/shared-state)
+1. Use agency context inside your tools. Read more: [Agency Context](/additional-features/agency-context)
 2. Create a tool (or modify an existing one) that uploads files to storage and outputs the file ID. This file ID can then be used by other tools or agents.
 </Accordion>
 
@@ -91,19 +120,54 @@ When file types like `.json`, `.docx`, or `.pptx` are uploaded, CodeInterpreter 
 
 
 <Accordion title="How can I serve an Agency as an API using FastAPI?" icon="book">
-Embed your agency within a FastAPI endpoint. For example:
-```python
+Embed your agency within a FastAPI endpoint:
+
+<CodeGroup>
+
+```python v1.x (Latest)
+from fastapi import FastAPI
+from uuid import uuid4
+
+app = FastAPI()
+
 @app.post("/chat")
 async def chat(user_request: UserRequest):
     chat_id = user_request.chat_id or str(uuid4())
+
+    agency = Agency(
+        agent,
+        load_threads_callback=lambda: load_threads(chat_id),
+        save_threads_callback=lambda thread_dict: save_threads(thread_dict, chat_id)
+    )
+
+    response = await agency.get_response(user_request.message)
+    return {"chat_id": chat_id, "response": response.final_output}
+
+# Or use the built-in FastAPI integration
+agency.run_fastapi(host="0.0.0.0", port=8000)
+```
+
+```python v0.x (Production)
+from fastapi import FastAPI
+from uuid import uuid4
+
+app = FastAPI()
+
+@app.post("/chat")
+async def chat(user_request: UserRequest):
+    chat_id = user_request.chat_id or str(uuid4())
+
     agency = Agency([...],
         threads_callbacks={
             'load': lambda: load_threads(chat_id),
             'save': lambda new_threads: save_threads(new_threads, chat_id)
         })
+
     response = agency.get_completion(user_request.message)
     return {"chat_id": chat_id, "response": response}
 ```
+
+</CodeGroup>
 </Accordion>
 
 
