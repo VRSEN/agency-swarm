@@ -411,5 +411,3 @@ Product Sales:
         )
 
         logger.info("✅ Hosted tool output preservation test completed successfully")
-
-
