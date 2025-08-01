@@ -881,4 +881,5 @@ class Agency:
         Run a copilot demo of the agency.
         """
         # Copilot demo implementation
-        logger.warning("copilot_demo is not yet implemented in this version.")
+        from .ui.demos.launcher import CopilotDemoLauncher
+        CopilotDemoLauncher.start(self, host=host, port=port, frontend_port=frontend_port, cors_origins=cors_origins)
