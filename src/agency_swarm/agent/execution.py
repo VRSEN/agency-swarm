@@ -575,7 +575,13 @@ class Execution:
                         for content_item in message.content:
                             if hasattr(content_item, "text") and content_item.text:
                                 search_results_content += f"Search Results:\n{content_item.text}\n"
-                                synthetic_outputs.append({"role": "assistant", "content": search_results_content})
+                                synthetic_outputs.append(
+                                    MessageFormatter.add_agency_metadata(
+                                        {"role": "user", "content": search_results_content},
+                                        agent=self.agent.name,
+                                        caller_agent=None,
+                                    )
+                                )
                                 logger.debug(f"Created web_search results message for call_id: {tool_call.id}")
                                 break  # Process only first text content item to avoid duplicates
 
