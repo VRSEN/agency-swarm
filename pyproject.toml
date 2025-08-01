@@ -54,7 +54,7 @@ litellm = ["litellm>=1.65.0, <2"]
 fastapi = [
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.34.0",
-    "ag-ui-protocol>=0.1.4,!=0.1.7",
+    "ag-ui-protocol>=0.1.4",
     "aiofiles>=23.2.1",
     "filetype>=1.2.0",
     "httpx>=0.28.0",
@@ -125,6 +125,7 @@ exclude_also = [
 markers = [
     "asyncio: mark test as asyncio",
     "allow_call_model_methods: mark test as allowing calls to real model implementations",
+    "fastapi: mark test as requiring FastAPI dependencies",
 ]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
