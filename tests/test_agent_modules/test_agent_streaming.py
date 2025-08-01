@@ -25,7 +25,7 @@ async def test_get_response_stream_basic(tmp_path):
         def stream_events(self):
             return dummy_stream()
 
-    with patch("agency_swarm.agent.Runner.run_streamed", return_value=DummyStreamedResult()):
+    with patch("agents.Runner.run_streamed", return_value=DummyStreamedResult()):
         events = []
         async for event in agent.get_response_stream(message_content):
             events.append(event)
@@ -52,7 +52,7 @@ async def test_get_response_stream_final_result_processing(tmp_path):
         def stream_events(self):
             return dummy_stream()
 
-    with patch("agency_swarm.agent.Runner.run_streamed", return_value=DummyStreamedResult()):
+    with patch("agents.Runner.run_streamed", return_value=DummyStreamedResult()):
         events = []
         async for event in agent.get_response_stream("Process this"):
             events.append(event)
@@ -64,7 +64,7 @@ async def test_get_response_stream_final_result_processing(tmp_path):
 
 
 @pytest.mark.asyncio
-@patch("agency_swarm.agent.Runner.run_streamed")
+@patch("agents.Runner.run_streamed")
 async def test_get_response_stream_generates_thread_id(
     mock_runner_run_streamed_patch, minimal_agent, mock_thread_manager
 ):
@@ -85,15 +85,18 @@ async def test_get_response_stream_generates_thread_id(
         events.append(event)
 
     assert len(events) == 2
-    # Verify that get_thread was called with the consistent user->agent format
-    mock_thread_manager.get_thread.assert_called()
-    call_args = mock_thread_manager.get_thread.call_args[0]
-    assert len(call_args) == 1
-    assert call_args[0] == "user->TestAgent"
+    # Verify that messages were added to the thread manager
+    mock_thread_manager.add_messages.assert_called()
+    # Messages should be saved with proper agent metadata
+    call_args = mock_thread_manager.add_messages.call_args[0]
+    messages = call_args[0]
+    assert len(messages) > 0
+    for msg in messages:
+        assert msg.get("agent") == "TestAgent"
 
 
 @pytest.mark.asyncio
-@patch("agency_swarm.agent.Runner.run_streamed")
+@patch("agents.Runner.run_streamed")
 async def test_get_response_stream_agent_to_agent_communication(
     mock_runner_run_streamed_patch, minimal_agent, mock_thread_manager
 ):
@@ -114,12 +117,14 @@ async def test_get_response_stream_agent_to_agent_communication(
         events.append(event)
 
     assert len(events) == 2
-    # Verify that get_thread was called with the sender->recipient format
-    mock_thread_manager.get_thread.assert_called_once()
-    call_args = mock_thread_manager.get_thread.call_args[0]
-    assert len(call_args) == 1
-    # Should be in format "SomeAgent->TestAgent"
-    assert call_args[0] == "SomeAgent->TestAgent"
+    # Verify that messages were added with proper sender metadata
+    mock_thread_manager.add_messages.assert_called()
+    call_args = mock_thread_manager.add_messages.call_args[0]
+    messages = call_args[0]
+    assert len(messages) > 0
+    for msg in messages:
+        assert msg.get("agent") == "TestAgent"
+        assert msg.get("callerAgent") == "SomeAgent"
 
 
 @pytest.mark.asyncio
@@ -143,7 +148,7 @@ async def test_get_response_stream_input_validation_none_empty(minimal_agent, mo
 
 
 @pytest.mark.asyncio
-@patch("agency_swarm.agent.Runner.run_streamed")
+@patch("agents.Runner.run_streamed")
 async def test_get_response_stream_context_propagation(
     mock_runner_run_streamed_patch, minimal_agent, mock_thread_manager
 ):
@@ -177,7 +182,7 @@ async def test_get_response_stream_context_propagation(
 
 
 @pytest.mark.asyncio
-@patch("agency_swarm.agent.Runner.run_streamed")
+@patch("agents.Runner.run_streamed")
 async def test_get_response_stream_thread_management(
     mock_runner_run_streamed_patch, minimal_agent, mock_thread_manager
 ):
@@ -198,11 +203,11 @@ async def test_get_response_stream_thread_management(
         events.append(event)
 
     assert len(events) == 2
-    # Verify thread was retrieved with the consistent user->agent format
-    mock_thread_manager.get_thread.assert_called_once()
-    call_args = mock_thread_manager.get_thread.call_args[0]
-    assert len(call_args) == 1
-    # Should be the consistent user->agent format
-    assert call_args[0] == "user->TestAgent"
-    # Verify items were added to thread
-    mock_thread_manager.add_items_and_save.assert_called()
+    # Verify messages were saved with proper metadata
+    mock_thread_manager.add_messages.assert_called()
+    call_args = mock_thread_manager.add_messages.call_args[0]
+    messages = call_args[0]
+    assert len(messages) > 0
+    for msg in messages:
+        assert msg.get("agent") == "TestAgent"
+        assert msg.get("callerAgent") is None  # None for user messages

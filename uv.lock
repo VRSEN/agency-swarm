@@ -4,14 +4,14 @@ requires-python = ">=3.10"
 
 [[package]]
 name = "ag-ui-protocol"
-version = "0.1.7"
+version = "0.1.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/7d/c0/f2d24d92be950dd6b12f66dbde5fb839dd01e8af34d3a0305b2309a68907/ag_ui_protocol-0.1.7.tar.gz", hash = "sha256:0e93fd9f7c74d52afbd824d6e9738bd3422e859503905ba7582481cbc3c67ab2", size = 4446, upload-time = "2025-06-26T09:37:08.895Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/90/26/1d5530e3fa84da37a8b58300f7a4352f763be43b2c393b0fad4d119f8653/ag_ui_protocol-0.1.5.tar.gz", hash = "sha256:48757afe82a4ee88eb078f31ef9672e09df624573d82045054f5a5b5dc021832", size = 4175, upload-time = "2025-05-20T11:37:06.835Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/cd/c3/c216f5ad4d78f4030a63fec23f00a71f984f10275ccfc7d3902c3c34b7cd/ag_ui_protocol-0.1.7-py3-none-any.whl", hash = "sha256:8c821662ca6e9852569022f449b9f7aeb3f16aa75390fa8c28ceae2cce642baa", size = 6165, upload-time = "2025-06-26T09:37:07.755Z" },
+    { url = "https://files.pythonhosted.org/packages/db/39/c488044d3195f82e35102c190f92b605a8af1ad63f26b9166e9be460e1c1/ag_ui_protocol-0.1.5-py3-none-any.whl", hash = "sha256:d51a0ad9635059b629b4cb57a9a2ec425b4cc8220e91d50a8f9d559571737ae9", size = 5819, upload-time = "2025-05-20T11:37:05.521Z" },
 ]
 
 [[package]]
@@ -40,7 +40,10 @@ dependencies = [
 [package.optional-dependencies]
 fastapi = [
     { name = "ag-ui-protocol" },
+    { name = "aiofiles" },
     { name = "fastapi" },
+    { name = "filetype" },
+    { name = "httpx" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 litellm = [
@@ -68,13 +71,16 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "ag-ui-protocol", marker = "extra == 'fastapi'", specifier = ">=0.1.4" },
+    { name = "aiofiles", marker = "extra == 'fastapi'", specifier = ">=23.2.1" },
     { name = "datamodel-code-generator", specifier = ">=0.28.5,<0.29.0" },
     { name = "deepdiff", specifier = ">=6.7.1,<9.0.0" },
     { name = "docstring-parser", specifier = ">=0.16,<1.0.0" },
     { name = "fastapi", marker = "extra == 'fastapi'", specifier = ">=0.115.0" },
     { name = "fastmcp", specifier = ">=2.0.0" },
+    { name = "filetype", marker = "extra == 'fastapi'", specifier = ">=1.2.0" },
     { name = "graphviz", marker = "extra == 'viz'", specifier = ">=0.17" },
     { name = "griffe", specifier = ">=1.5.6,<2" },
+    { name = "httpx", marker = "extra == 'fastapi'", specifier = ">=0.28.0" },
     { name = "jsonref", specifier = ">=1.1.0,<2.0.0" },
     { name = "litellm", marker = "extra == 'litellm'", specifier = ">=1.65.0,<2" },
     { name = "mcp", specifier = ">=1.6.0,<2.0.0" },
@@ -102,6 +108,15 @@ dev = [
     { name = "pytest-asyncio", specifier = ">=1.0.0" },
     { name = "pytest-mock", specifier = ">=3.14.1" },
     { name = "ruff", specifier = ">=0.11.12" },
+]
+
+[[package]]
+name = "aiofiles"
+version = "24.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/0b/03/a88171e277e8caa88a4c77808c20ebb04ba74cc4681bf1e9416c862de237/aiofiles-24.1.0.tar.gz", hash = "sha256:22a075c9e5a3810f0c2e48f3008c94d68c65d763b9b03857924c99e57355166c", size = 30247, upload-time = "2024-06-24T11:02:03.584Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a5/45/30bb92d442636f570cb5651bc661f52b610e2eec3f891a5dc3a4c3667db0/aiofiles-24.1.0-py3-none-any.whl", hash = "sha256:b4ec55f4195e3eb5d7abd1bf7e061763e864dd4954231fb8539a0ef8bb8260e5", size = 15896, upload-time = "2024-06-24T11:02:01.529Z" },
 ]
 
 [[package]]
@@ -730,6 +745,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/0a/10/c23352565a6544bdc5353e0b15fc1c563352101f30e24bf500207a54df9a/filelock-3.18.0.tar.gz", hash = "sha256:adbc88eabb99d2fec8c9c1b229b171f18afa655400173ddc653d5d01501fb9f2", size = 18075, upload-time = "2025-03-14T07:11:40.47Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/4d/36/2a115987e2d8c300a974597416d9de88f2444426de9571f4b59b2cca3acc/filelock-3.18.0-py3-none-any.whl", hash = "sha256:c401f4f8377c4464e6db25fff06205fd89bdd83b65eb0488ed1b160f780e21de", size = 16215, upload-time = "2025-03-14T07:11:39.145Z" },
+]
+
+[[package]]
+name = "filetype"
+version = "1.2.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/bb/29/745f7d30d47fe0f251d3ad3dc2978a23141917661998763bebb6da007eb1/filetype-1.2.0.tar.gz", hash = "sha256:66b56cd6474bf41d8c54660347d37afcc3f7d1970648de365c102ef77548aadb", size = 998020, upload-time = "2022-11-02T17:34:04.141Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/18/79/1b8fa1bb3568781e84c9200f951c735f3f157429f44be0495da55894d620/filetype-1.2.0-py2.py3-none-any.whl", hash = "sha256:7ce71b6880181241cf7ac8697a2f1eb6a8bd9b429f7ad6d27b8db9ba5f1c2d25", size = 19970, upload-time = "2022-11-02T17:34:01.425Z" },
 ]
 
 [[package]]

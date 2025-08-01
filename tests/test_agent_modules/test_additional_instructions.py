@@ -50,7 +50,7 @@ async def test_agent_get_response_modifies_instructions_temporarily(test_agent, 
         instruction_history.append(test_agent.instructions)
         return mock_run_result
 
-    with patch("agency_swarm.agent.Runner.run", side_effect=mock_runner_run):
+    with patch("agents.Runner.run", side_effect=mock_runner_run):
         await test_agent.get_response(message="Test message", additional_instructions=additional_text)
 
     # Verify instructions were modified during execution
@@ -69,7 +69,7 @@ async def test_agent_get_response_restores_instructions_on_error(test_agent):
     original_instructions = test_agent.instructions
     additional_text = "Additional test instructions"
 
-    with patch("agency_swarm.agent.Runner.run", side_effect=RuntimeError("Test error")):
+    with patch("agents.Runner.run", side_effect=RuntimeError("Test error")):
         with pytest.raises(Exception):  # AgentsException wraps the RuntimeError
             await test_agent.get_response(message="Test message", additional_instructions=additional_text)
 
@@ -93,7 +93,7 @@ async def test_agent_get_response_stream_modifies_instructions_temporarily(test_
     mock_streamed_result = MagicMock()
     mock_streamed_result.stream_events = mock_stream_events
 
-    with patch("agency_swarm.agent.Runner.run_streamed", return_value=mock_streamed_result):
+    with patch("agents.Runner.run_streamed", return_value=mock_streamed_result):
         events = []
         async for event in test_agent.get_response_stream(
             message="Test message", additional_instructions=additional_text
@@ -116,7 +116,7 @@ async def test_agent_get_response_stream_restores_instructions_on_error(test_age
     original_instructions = test_agent.instructions
     additional_text = "Additional streaming instructions"
 
-    with patch("agency_swarm.agent.Runner.run_streamed", side_effect=RuntimeError("Streaming error")):
+    with patch("agents.Runner.run_streamed", side_effect=RuntimeError("Streaming error")):
         try:
             async for _event in test_agent.get_response_stream(
                 message="Test message", additional_instructions=additional_text
@@ -171,7 +171,7 @@ async def test_agent_get_response_without_additional_instructions(test_agent, mo
     """Test that Agent.get_response works normally without additional_instructions."""
     original_instructions = test_agent.instructions
 
-    with patch("agency_swarm.agent.Runner.run", return_value=mock_run_result):
+    with patch("agents.Runner.run", return_value=mock_run_result):
         await test_agent.get_response(message="Test message")
 
     # Verify instructions were not modified
@@ -183,7 +183,7 @@ async def test_agent_get_response_empty_additional_instructions(test_agent, mock
     """Test that empty additional_instructions doesn't modify instructions."""
     original_instructions = test_agent.instructions
 
-    with patch("agency_swarm.agent.Runner.run", return_value=mock_run_result):
+    with patch("agents.Runner.run", return_value=mock_run_result):
         await test_agent.get_response(message="Test message", additional_instructions="")
 
     # Verify instructions were not modified for empty string
@@ -195,7 +195,7 @@ async def test_agent_get_response_none_additional_instructions(test_agent, mock_
     """Test that None additional_instructions doesn't modify instructions."""
     original_instructions = test_agent.instructions
 
-    with patch("agency_swarm.agent.Runner.run", return_value=mock_run_result):
+    with patch("agents.Runner.run", return_value=mock_run_result):
         await test_agent.get_response(message="Test message", additional_instructions=None)
 
     # Verify instructions were not modified for None
@@ -215,7 +215,7 @@ async def test_agent_with_none_original_instructions(mock_run_result):
         instruction_history.append(agent.instructions)
         return mock_run_result
 
-    with patch("agency_swarm.agent.Runner.run", side_effect=mock_runner_run):
+    with patch("agents.Runner.run", side_effect=mock_runner_run):
         await agent.get_response(message="Test message", additional_instructions=additional_text)
 
     # Verify instructions were set to additional_instructions during execution
