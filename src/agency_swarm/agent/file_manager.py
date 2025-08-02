@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 import re
@@ -13,18 +14,30 @@ logger = logging.getLogger(__name__)
 
 # Shared constants
 CODE_INTERPRETER_FILE_EXTENSIONS = [
-    '.c', '.cs', '.cpp', '.csv', '.html', '.java', '.json',
-    '.php', '.py', '.rb', '.css', '.js', '.sh', '.ts',
-    '.pkl', '.tar', '.xlsx', '.xml', '.zip'
+    ".c",
+    ".cs",
+    ".cpp",
+    ".csv",
+    ".html",
+    ".java",
+    ".json",
+    ".php",
+    ".py",
+    ".rb",
+    ".css",
+    ".js",
+    ".sh",
+    ".ts",
+    ".pkl",
+    ".tar",
+    ".xlsx",
+    ".xml",
+    ".zip",
 ]
 
-FILE_SEARCH_FILE_EXTENSIONS = [
-    '.doc', '.docx', '.go', '.md', '.pdf', '.pptx', '.tex', '.txt'
-]
+FILE_SEARCH_FILE_EXTENSIONS = [".doc", ".docx", ".go", ".md", ".pdf", ".pptx", ".tex", ".txt"]
 
-IMAGE_FILE_EXTENSIONS = [
-    '.jpeg', '.jpg', '.gif', '.png'
-]
+IMAGE_FILE_EXTENSIONS = [".jpeg", ".jpg", ".gif", ".png"]
 
 
 class AttachmentManager:
@@ -34,8 +47,10 @@ class AttachmentManager:
         self.agent = agent
 
         if not agent.file_manager:
-            raise AgentsException(f"Cannot use AttachmentManager for agent {agent.name} without file manager. "
-                                  "Please initialize the agent with a valid 'files_folder'.")
+            raise AgentsException(
+                f"Cannot use AttachmentManager for agent {agent.name} without file manager. "
+                "Please initialize the agent with a valid 'files_folder'."
+            )
 
         # Temp variables used to hold attachment data to be used in cleanup
         self._temp_vector_store_id = None
@@ -60,7 +75,7 @@ class AttachmentManager:
             created_vs = self.agent.client_sync.vector_stores.create(name=vs_name)
             return created_vs.id
 
-    def sort_file_attachments(self, file_ids: list[str]) -> list[dict]:
+    async def sort_file_attachments(self, file_ids: list[str]) -> list[dict]:
         """
         Sort file attachments by type and prepare them for processing.
 
@@ -121,6 +136,7 @@ class AttachmentManager:
             self._temp_vector_store_id = temp_vs_id
             logger.info(f"Adding file ids: {file_search_ids} for {self.agent.name}'s file search")
             self.agent.file_manager.add_file_search_tool(temp_vs_id, file_search_ids)
+            await self._wait_for_temp_vector_store_processing()
 
         if code_interpreter_ids:
             logger.info(f"Adding file ids: {code_interpreter_ids} for {self.agent.name}'s code interpreter")
@@ -128,6 +144,21 @@ class AttachmentManager:
             self._temp_code_interpreter_file_ids = code_interpreter_ids
 
         return content_list
+
+    async def _wait_for_temp_vector_store_processing(self, timeout: int = 30) -> None:
+        """Wait for the temporary vector store to finish processing."""
+        if not self._temp_vector_store_id:
+            return
+        try:
+            for _ in range(timeout):
+                vs = await self.agent.client.vector_stores.retrieve(self._temp_vector_store_id)
+                if vs.status == "completed":
+                    break
+                if vs.status == "failed":
+                    raise AgentsException(f"Vector store processing failed: {vs}")
+                await asyncio.sleep(1)
+        except Exception as e:  # pragma: no cover - best effort
+            logger.warning(f"Failed while waiting for vector store {self._temp_vector_store_id}: {e}")
 
     def attachments_cleanup(self):
         """
@@ -146,9 +177,7 @@ class AttachmentManager:
 
             # Delete the temporary vector store
             try:
-                result = self.agent.client_sync.vector_stores.delete(
-                    vector_store_id=self._temp_vector_store_id
-                )
+                result = self.agent.client_sync.vector_stores.delete(vector_store_id=self._temp_vector_store_id)
                 if result.deleted:
                     logger.debug(f"Successfully deleted temp vector store: {self._temp_vector_store_id}")
                 else:
@@ -163,9 +192,7 @@ class AttachmentManager:
                 if isinstance(tool, CodeInterpreterTool):
                     code_interpreter_container = tool.tool_config.get("container", {})
                     if isinstance(code_interpreter_container, str):
-                        logger.warning(
-                            f"Agent {self.agent.name}: Cannot modify container directly for file removal"
-                        )
+                        logger.warning(f"Agent {self.agent.name}: Cannot modify container directly for file removal")
                         break
                     file_ids_list = code_interpreter_container.get("file_ids", [])
                     for file_id in self._temp_code_interpreter_file_ids:
@@ -430,7 +457,8 @@ class AgentFileManager:
             elif Path(new_file).suffix.lower() in FILE_SEARCH_FILE_EXTENSIONS:
                 self.upload_file(str(new_file))
             else:
-                raise AgentsException(f"Unsupported file extension: {Path(new_file).suffix.lower()} for file {new_file}")
+                ext = Path(new_file).suffix.lower()
+                raise AgentsException(f"Unsupported file extension: {ext} for file {new_file}")
 
         # Add FileSearchTool if VS ID is parsed.
         if self.agent._associated_vector_store_id:
@@ -449,10 +477,7 @@ class AgentFileManager:
         file_search_tool_exists = any(isinstance(tool, FileSearchTool) for tool in self.agent.tools)
 
         if not file_search_tool_exists:
-            logger.info(
-                f"Agent {self.agent.name}: Adding FileSearchTool with vector store ID: "
-                f"'{vector_store_id}'"
-            )
+            logger.info(f"Agent {self.agent.name}: Adding FileSearchTool with vector store ID: '{vector_store_id}'")
             if file_ids:
                 self.add_files_to_vector_store(vector_store_id, file_ids)
 
@@ -546,31 +571,20 @@ class AgentFileManager:
         """
         Adds a file to the agent's Vector Store if one is linked to this agent via files_folder
         """
-        existing_files = self.agent.client_sync.vector_stores.files.list(
-            vector_store_id=vector_store_id
-        )
+        existing_files = self.agent.client_sync.vector_stores.files.list(vector_store_id=vector_store_id)
         existing_file_ids = [file.id for file in existing_files.data]
         for file_id in file_ids:
             if file_id in existing_file_ids:
                 logger.info(
-                    f"Agent {self.agent.name}: File {file_id} already in "
-                    f"Vector Store {vector_store_id}, skipping..."
+                    f"Agent {self.agent.name}: File {file_id} already in Vector Store {vector_store_id}, skipping..."
                 )
                 continue
 
             try:
-                self.agent.client_sync.vector_stores.files.create(
-                    vector_store_id=vector_store_id, file_id=file_id
-                )
-                logger.info(
-                    f"Agent {self.agent.name}: Added file {file_id} "
-                    f"to Vector Store {vector_store_id}."
-                )
+                self.agent.client_sync.vector_stores.files.create(vector_store_id=vector_store_id, file_id=file_id)
+                logger.info(f"Agent {self.agent.name}: Added file {file_id} to Vector Store {vector_store_id}.")
             except Exception as e:
                 logger.error(
-                    f"Agent {self.agent.name}: Failed to add file {file_id} "
-                    f"to Vector Store {vector_store_id}: {e}"
+                    f"Agent {self.agent.name}: Failed to add file {file_id} to Vector Store {vector_store_id}: {e}"
                 )
-                raise AgentsException(
-                    f"Failed to add file {file_id} to Vector Store {vector_store_id}: {e}"
-                ) from e
+                raise AgentsException(f"Failed to add file {file_id} to Vector Store {vector_store_id}: {e}") from e

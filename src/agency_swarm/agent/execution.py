@@ -67,7 +67,8 @@ class Execution:
             run_config_override: Optional run configuration settings
             message_files: DEPRECATED: Use file_ids instead. File IDs to attach to the message
             file_ids: List of OpenAI file IDs to attach to the message
-            additional_instructions: Additional instructions to be appended to the agent's instructions for this run only
+            additional_instructions: Additional instructions to be appended to
+                the agent's instructions for this run only
             **kwargs: Additional keyword arguments including max_turns
 
         Returns:
@@ -150,7 +151,7 @@ class Execution:
                         else:
                             content_list = []
 
-                        file_content_items = self.agent.attachment_manager.sort_file_attachments(files_to_attach)
+                        file_content_items = await self.agent.attachment_manager.sort_file_attachments(files_to_attach)
                         # Content list will contain pdf files to be attached as input_file items
                         content_list.extend(file_content_items)
 
@@ -251,9 +252,10 @@ class Execution:
                             item_dict, agent=self.agent.name, caller_agent=sender_name
                         )
                         items_to_save.append(formatted_item)
+                        content_preview = str(item_dict.get("content", ""))[:50]
                         logger.debug(
                             f"  [NewItem #{i}] type={type(run_item_obj).__name__}, "
-                            f"role={item_dict.get('role')}, content_preview='{str(item_dict.get('content', ''))[:50]}...'"
+                            f"role={item_dict.get('role')}, content_preview='{content_preview}...'"
                         )
 
                 items_to_save.extend(hosted_tool_outputs)
@@ -299,7 +301,8 @@ class Execution:
             run_config_override: Optional run configuration settings
             message_files: DEPRECATED: Use file_ids instead. File IDs to attach to the message
             file_ids: List of OpenAI file IDs to attach to the message
-            additional_instructions: Additional instructions to be appended to the agent's instructions for this run only
+            additional_instructions: Additional instructions to be appended to
+                the agent's instructions for this run only
             **kwargs: Additional keyword arguments including max_turns
 
         Yields:
@@ -388,7 +391,7 @@ class Execution:
                         else:
                             content_list = []
 
-                        file_content_items = self.agent.attachment_manager.sort_file_attachments(files_to_attach)
+                        file_content_items = await self.agent.attachment_manager.sort_file_attachments(files_to_attach)
                         content_list.extend(file_content_items)
 
                         # Update the message content
