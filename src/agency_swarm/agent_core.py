@@ -25,9 +25,9 @@ from agency_swarm.agent import (
     separate_kwargs,
     setup_file_manager,
 )
+from agency_swarm.agent.file_manager import AgentFileManager, AttachmentManager
 from agency_swarm.context import MasterContext
 from agency_swarm.thread import ThreadManager
-from agency_swarm.agent.file_manager import AgentFileManager, AttachmentManager
 
 logger = logging.getLogger(__name__)
 

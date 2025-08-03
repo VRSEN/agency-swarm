@@ -14,11 +14,6 @@ from agents import (
 from agents.items import MessageOutputItem, ToolCallItem
 from agents.models.openai_responses import OpenAIResponsesModel
 from openai import AsyncOpenAI
-from openai.types.responses import (
-    ResponseFunctionWebSearch,
-    ResponseOutputMessage,
-    ResponseOutputText,
-)
 from pydantic import BaseModel
 
 from agency_swarm import Agent as AgencySwarmAgent
