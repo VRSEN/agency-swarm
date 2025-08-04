@@ -446,7 +446,7 @@ class TestConsoleEventAdapter:
         event.data.type = "response.output_text.delta"
         event.data.delta = "Hello"
 
-        with patch.object(adapter, "_update_console") as mock_update:
+        with patch.object(adapter, "_update_console"):
             adapter.openai_to_message_output(event, "TestAgent")
             # This specific path may not call _update_console directly
             # but should not raise errors
@@ -506,7 +506,17 @@ class TestConsoleEventAdapter:
             # Raw response error scenarios
             ("missing_message_id", {"type": "response.output_item.added", "item_type": "message", "id": None}, None),
             # Skip problematic validation error test
-            # ("missing_tool_call_id", {"type": "response.output_item.added", "item_type": "function_call", "call_id": None, "name": "test", "arguments": "{}"}, None),
+            # (
+            #     "missing_tool_call_id",
+            #     {
+            #         "type": "response.output_item.added",
+            #         "item_type": "function_call",
+            #         "call_id": None,
+            #         "name": "test",
+            #         "arguments": "{}",
+            #     },
+            #     None,
+            # ),
             ("missing_text_delta_id", {"type": "response.output_text.delta", "item_id": None}, None),
             # Run item stream error scenarios
             ("missing_item", {"name": "message_output_created", "item": None}, None),
