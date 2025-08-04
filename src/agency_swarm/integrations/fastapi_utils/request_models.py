@@ -36,6 +36,13 @@ class BaseRequest(BaseModel):
     )
     recipient_agent: str = None
     file_ids: list[str] = None
+    file_urls: dict[str, str] = Field(
+        None,
+        description=(
+            "List of downloadable file urls to be use as file attachments. "
+            "Should be provided in a form of {'file_name_1': 'download_url_1', 'file_name_2': 'download_url_2', ...}"
+        ),
+    )
     additional_instructions: str = None
 
 

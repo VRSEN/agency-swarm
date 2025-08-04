@@ -25,9 +25,9 @@ from agency_swarm.agent import (
     separate_kwargs,
     setup_file_manager,
 )
+from agency_swarm.agent.file_manager import AgentFileManager, AttachmentManager
 from agency_swarm.context import MasterContext
 from agency_swarm.thread import ThreadManager
-from agency_swarm.utils.agent_file_manager import AgentFileManager
 
 logger = logging.getLogger(__name__)
 
@@ -116,6 +116,7 @@ class Agent(BaseAgent[MasterContext]):
     _openai_client: AsyncOpenAI | None = None
     _openai_client_sync: OpenAI | None = None
     file_manager: AgentFileManager | None = None
+    attachment_manager: AttachmentManager | None = None
     _load_threads_callback: Callable[[], dict[str, Any]] | None = None
     _save_threads_callback: Callable[[dict[str, Any]], None] | None = None
 

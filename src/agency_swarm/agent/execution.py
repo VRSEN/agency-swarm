@@ -67,7 +67,8 @@ class Execution:
             run_config_override: Optional run configuration settings
             message_files: DEPRECATED: Use file_ids instead. File IDs to attach to the message
             file_ids: List of OpenAI file IDs to attach to the message
-            additional_instructions: Additional instructions to be appended to the agent's instructions for this run only
+            additional_instructions: Additional instructions to be appended to
+                the agent's instructions for this run only
             **kwargs: Additional keyword arguments including max_turns
 
         Returns:
@@ -150,7 +151,8 @@ class Execution:
                         else:
                             content_list = []
 
-                        file_content_items = self.agent.file_manager.sort_file_attachments(files_to_attach)
+                        file_content_items = await self.agent.attachment_manager.sort_file_attachments(files_to_attach)
+                        # Content list will contain pdf files to be attached as input_file items
                         content_list.extend(file_content_items)
 
                         # Update the message content
@@ -222,6 +224,8 @@ class Execution:
             except Exception as e:
                 logger.error(f"Error during Runner.run for agent '{self.agent.name}': {e}", exc_info=True)
                 raise AgentsException(f"Runner execution failed for agent {self.agent.name}") from e
+            finally:
+                self.agent.attachment_manager.attachments_cleanup()
 
             # Always save response items (both user and agent-to-agent calls)
             if self.agent._thread_manager and run_result.new_items:
@@ -248,9 +252,10 @@ class Execution:
                             item_dict, agent=self.agent.name, caller_agent=sender_name
                         )
                         items_to_save.append(formatted_item)
+                        content_preview = str(item_dict.get("content", ""))[:50]
                         logger.debug(
                             f"  [NewItem #{i}] type={type(run_item_obj).__name__}, "
-                            f"role={item_dict.get('role')}, content_preview='{str(item_dict.get('content', ''))[:50]}...'"
+                            f"role={item_dict.get('role')}, content_preview='{content_preview}...'"
                         )
 
                 items_to_save.extend(hosted_tool_outputs)
@@ -296,7 +301,8 @@ class Execution:
             run_config_override: Optional run configuration settings
             message_files: DEPRECATED: Use file_ids instead. File IDs to attach to the message
             file_ids: List of OpenAI file IDs to attach to the message
-            additional_instructions: Additional instructions to be appended to the agent's instructions for this run only
+            additional_instructions: Additional instructions to be appended to
+                the agent's instructions for this run only
             **kwargs: Additional keyword arguments including max_turns
 
         Yields:
@@ -385,7 +391,7 @@ class Execution:
                         else:
                             content_list = []
 
-                        file_content_items = self.agent.file_manager.sort_file_attachments(files_to_attach)
+                        file_content_items = await self.agent.attachment_manager.sort_file_attachments(files_to_attach)
                         content_list.extend(file_content_items)
 
                         # Update the message content
@@ -479,6 +485,7 @@ class Execution:
         finally:
             # Always restore original instructions
             self.agent.instructions = original_instructions
+            self.agent.attachment_manager.attachments_cleanup()
 
     def _run_item_to_tresponse_input_item(self, item: RunItem) -> TResponseInputItem | None:
         """Converts a RunItem from a RunResult into TResponseInputItem dictionary format for history.
@@ -571,7 +578,13 @@ class Execution:
                         for content_item in message.content:
                             if hasattr(content_item, "text") and content_item.text:
                                 search_results_content += f"Search Results:\n{content_item.text}\n"
-                                synthetic_outputs.append({"role": "assistant", "content": search_results_content})
+                                synthetic_outputs.append(
+                                    MessageFormatter.add_agency_metadata(
+                                        {"role": "user", "content": search_results_content},
+                                        agent=self.agent.name,
+                                        caller_agent=None,
+                                    )
+                                )
                                 logger.debug(f"Created web_search results message for call_id: {tool_call.id}")
                                 break  # Process only first text content item to avoid duplicates
 

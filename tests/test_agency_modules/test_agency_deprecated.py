@@ -33,3 +33,15 @@ def test_agency_get_completion_calls_get_response(mock_agent):
     assert result == "Test response"
     # Should call get_response on the first agent in the chart
     mock_agent.get_response.assert_called_once()
+
+
+def test_agency_get_response_sync_calls_get_response(mock_agent):
+    """Test that get_response_sync calls the async get_response method."""
+    agency = Agency(mock_agent)
+
+    mock_agent.get_response.return_value = MagicMock(final_output="Sync response")
+
+    result = agency.get_response_sync("Test message")
+
+    assert result.final_output == "Sync response"
+    mock_agent.get_response.assert_called_once()
