@@ -59,9 +59,6 @@ The new `Agent` class extends the base `agents.Agent` with Agency Swarm-specific
 |------|-----------|-------------|
 | Name *(required)* | `name` | The name of the agent. |
 | Instructions *(optional)* | `instructions` | The instructions for the agent. Will be used as the "system prompt" when this agent is invoked. Can be a string or a function that dynamically generates instructions. Default: `None` |
-| Prompt *(optional)* | `prompt` | A prompt object (or a function that returns a Prompt). Prompts allow you to dynamically configure the instructions, tools and other config for an agent outside of your code. Only usable with OpenAI models, using the Responses API. Default: `None` |
-| Handoff Description *(optional)* | `handoff_description` | A description of the agent. This is used when the agent is used as a handoff, so that an LLM knows what it does and when to invoke it. Default: `None` |
-| Handoffs *(optional)* | `handoffs` | Handoffs are sub-agents that the agent can delegate to. You can provide a list of handoffs, and the agent can choose to delegate to them if relevant. Default: `[]` |
 | Model *(optional)* | `model` | The model implementation to use when invoking the LLM. By default, uses the default model configured in `openai_provider.DEFAULT_MODEL`. Default: `None` |
 | Model Settings *(optional)* | `model_settings` | Configures model-specific tuning parameters (e.g. temperature, top_p). Default: `ModelSettings()` |
 | Tools *(optional)* | `tools` | A list of tools that the agent can use. Default: `[]` |
@@ -70,42 +67,35 @@ The new `Agent` class extends the base `agents.Agent` with Agency Swarm-specific
 | Input Guardrails *(optional)* | `input_guardrails` | A list of checks that run in parallel to the agent's execution, before generating a response. Runs only if the agent is the first agent in the chain. Default: `[]` |
 | Output Guardrails *(optional)* | `output_guardrails` | A list of checks that run on the final output of the agent, after generating a response. Runs only if the agent produces a final output. Default: `[]` |
 | Output Type *(optional)* | `output_type` | The type of the output object. If not provided, the output will be `str`. In most cases, you should pass a regular Python type (e.g. a dataclass, Pydantic model, TypedDict, etc). Default: `None` |
-| Hooks *(optional)* | `hooks` | A class that receives callbacks on various lifecycle events for this agent. Default: `None` |
-| Tool Use Behavior *(optional)* | `tool_use_behavior` | Configures how tool use is handled. Options: "run_llm_again" (default), "stop_on_first_tool", a list of tool names, or a function. Default: `"run_llm_again"` |
-| Reset Tool Choice *(optional)* | `reset_tool_choice` | Whether to reset the tool choice to the default value after a tool has been called. Defaults to True. This ensures that the agent doesn't enter an infinite loop of tool usage. Default: `True` |
+
+<Note>
+To see a full list of agent parameters, refer to [OpenAI documentation]( https://openai.github.io/openai-agents-python/ref/agent/#agents.agent.Agent).
+
+Please note that agent handoff parameters are not supported. To enable handoffs, add the SendMessageHandoff tool class to the agent as [shown here](/additional-features/custom-communication-flows/hybrid-patterns)
+</Note>
 
 ## Agent Template
 
-It's recommended to create your agent in a separate file. Your agent class should look like this:
+Create a new agent by instantiating the Agent class:
 
 ```python
 from agency_swarm import Agent
 from agents import ModelSettings
 
-class AgentName(Agent):
-    def __init__(self):
-        super().__init__(
-            name="agent_name",
-            description="agent_description",
-            instructions="./instructions.md",
-            files_folder="./files",
-            tools_folder="./tools",
-            tools=[],
-            model_settings=ModelSettings(
-                temperature=0.3,
-            ),
-        )
+example_agent = Agent(
+    name="agent_name",
+    description="agent_description",
+    instructions="./agent_name/instructions.md",
+    files_folder="./agent_name/files",
+    tools_folder="./agent_name/tools",
+    tools=[],
+    model_settings=ModelSettings(
+        temperature=0.3,
+    ),
+)
 ```
 
-You can add more parameters to the `__init__` method to fit the agent to your use case.
-
-To initialize the agent:
-
-```python
-from AgentName import AgentName
-
-agent = AgentName()
-```
+You can adjust the parameters to fit the agent to your use case.
 
 </Tab>
 <Tab title="v0.x (Production)">

@@ -13,138 +13,148 @@ Multi-agent communication is the core functionality of any Multi-Agent System. U
 v1.x is currently in **beta preview**. Install with: `pip install -U "agency-swarm>=1.0.0-beta"`
 </Warning>
 
-Communication flows are handled through custom `SendMessage` tools that extend the `FunctionTool` class from the agents SDK. The system provides a flexible foundation for creating custom communication patterns tailored to your specific needs.
+## Pre-Made SendMessage Classes
 
-## Configuring SendMessage Tools
+Agency Swarm contains multiple commonly requested classes for communication flows. Currently, the following classes are available:
 
-You can customize communication by setting a custom `send_message_tool_class` on individual agents:
+| Class Name                  | Description                                                                                                                                                                                                                               | When to Use                                                                                                    | Code Link                                                                                                            |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `SendMessage` (default)     | This is the default class for sending messages to other agents. It uses synchronous communication with basic COT (Chain of Thought) prompting and allows agents to relay files and modify system instructions for each other.             | Suitable for most use cases. Balances speed and functionality.                                                 | [link](https://github.com/VRSEN/agency-swarm/blob/main/agency_swarm/tools/send_message/SendMessage.py)               |
+| `SendMessageHandoff`        | Enables unidirectional delegation of tasks or entire interaction flows to specialized agents. When a handoff occurs, the receiving agent takes over the interaction.                                                                        | Use for routing queries to specialized agents or sequential workflows where control should transfer completely. | [link](https://github.com/VRSEN/agency-swarm/blob/main/agency_swarm/tools/send_message/SendMessageHandoff.py)       |
+
+**To use any of the pre-made `SendMessage` classes**, simply put it in the `send_message_tool_class` parameter when initializing individual `Agent` instances:
 
 ```python
-from agency_swarm import Agency, Agent
-from agency_swarm.tools.send_message import SendMessage
-
-class CustomSendMessage(SendMessage):
-    # Your custom implementation
-    pass
+from agency_swarm import Agent
+from agency_swarm.tools import SendMessageHandoff
 
 agent = Agent(
     name="MyAgent",
     instructions="You are a helpful assistant.",
-    send_message_tool_class=CustomSendMessage,
+    send_message_tool_class=SendMessageHandoff,
 )
 
-agency = Agency(agent)
+agency = Agency([agent])
 ```
 
-## Default SendMessage Implementation
+That's it! Now, your agents will use your own custom `SendMessageHandoff` class for communication.
 
-The default `SendMessage` class extends `FunctionTool` from the agents SDK. Here's how it's structured:
+## Choosing the Right Communication Method: SendMessage vs. Handoffs
 
-### Key Components
+Agency Swarm supports two primary paradigms for inter-agent communication: direct messaging using `SendMessage` tool variants (native to Agency Swarm) and Handoffs via the `SendMessageHandoff` tool class.
 
-**1. Class Structure:**
+### Direct Messaging (`SendMessage` tools)
+
+- **Purpose**: Use Agency Swarm's `SendMessage` tools (e.g., `SendMessage`) when one agent needs to request information or a discrete action from another, expecting a response to continue its own work. Unlike in Handoffs, control returns to the calling agent, making this suitable for true collaboration and agent orchestration.
+- **Data Exchange**: Primarily string-based messages, with support for file attachments.
+- **Analogy**: An orchestrator agent assigning a sub-task to a worker agent and awaiting the result to proceed.
+- **When to use**:
+    - Implementing orchestrator-worker pattern.
+    - Collaborative tasks requiring back-and-forth dialogue (evaluator-optimizer pattern) or result aggregation by a calling agent.
+    - When an agent needs to retain control of the overall workflow while delegating specific parts.
+
+### Handoffs (via SendMessageHandoff)
+
+- **Purpose**: The `SendMessageHandoff` tool class enables an agent to **unidirectionally delegate** a task or an entire interaction flow to another specialized agent. When a handoff occurs, the receiving agent takes over that specific interaction; control does **not** automatically return to the initiating agent for that particular interaction thread.
+- **How it Works**: From the perspective of the underlying language model, a handoff is treated like a special tool (e.g., `transfer_to_BillingAgent`). To enable handoffs, you configure an agent with the `send_message_tool_class=SendMessageHandoff` parameter. The agent's description will be used as the handoff tool instructions.
+- **Configuration**: Set `send_message_tool_class=SendMessageHandoff` when creating the agent. The library will automatically detect this and configure handoffs using the OpenAI SDK internally.
+- **Analogy**: Transferring a customer in a call center to a specialized department (e.g., Billing). The Billing specialist handles the customer's request from that point forward for that specific issue.
+- **When to use (Handoffs)**:
+    - **Routing Use Cases**: Such as an initial customer support agent routing a query to a specialized support agent (e.g., for billing, technical issues). A new, focused interaction begins with the specialist.
+    - **Sequential interaction flows**: Where a task must pass through a series of different specialists, and each specialist completes their part and passes it on, without the original agent resuming that specific flow.
+- **Further Details**: For comprehensive information on configuring and utilizing handoffs, consult the [Hybrid Patterns Documentation](/additional-features/custom-communication-flows/hybrid-patterns).
+
+## Creating Your Own Unique Communication Flows
+
+To create your own communication flow, you will first need to extend the `FunctionTool` class from the agents SDK. In v1.x, the `SendMessage` class is built on top of `FunctionTool`, providing a flexible foundation for creating custom communication patterns tailored to your specific needs.
+
+### Default `SendMessage` Class
+
+By default, Agency Swarm uses the following `FunctionTool`-based implementation for communication:
+
 ```python
-from agents import FunctionTool, RunContextWrapper
-from agency_swarm.context import MasterContext
+from agents import FunctionTool
+import json
 
 class SendMessage(FunctionTool):
     """
     Use this tool to facilitate direct, synchronous communication between specialized agents within your agency.
     """
-```
-- Extends `FunctionTool` from the agents SDK
-- Each SendMessage instance is created dynamically for specific sender->recipient pairs
 
-**2. Dynamic Initialization:**
-```python
-def __init__(self, sender_agent, recipient_agent, tool_name):
-    params_schema = {
-        "type": "object",
-        "properties": {
-            "my_primary_instructions": {
-                "type": "string",
-                "description": "Please repeat your primary instructions step-by-step..."
+    def __init__(self, sender_agent: "Agent", recipient_agent: "Agent", tool_name: str):
+        self.sender_agent = sender_agent
+        self.recipient_agent = recipient_agent
+
+        # Define JSON schema for tool parameters
+        params_schema = {
+            "type": "object",
+            "properties": {
+                "my_primary_instructions": {
+                    "type": "string",
+                    "description": (
+                        "Please repeat your primary instructions step-by-step, including both completed "
+                        "and the following next steps that you need to perform. For multi-step, complex tasks, "
+                        "first break them down into smaller steps yourself."
+                    ),
+                },
+                "message": {
+                    "type": "string",
+                    "description": (
+                        "Specify the task required for the recipient agent to complete. Focus on clarifying "
+                        "what the task entails, rather than providing exact instructions."
+                    ),
+                },
+                "additional_instructions": {
+                    "type": "string",
+                    "description": (
+                        "Optional. Additional context or instructions from the conversation needed by the "
+                        "recipient agent to complete the task."
+                    ),
+                },
             },
-            "message": {
-                "type": "string",
-                "description": "Specify the task required for the recipient agent to complete..."
-            },
-            "additional_instructions": {
-                "type": "string",
-                "description": "Optional. Additional context or instructions..."
-            }
-        },
-        "required": ["my_primary_instructions", "message", "additional_instructions"]
-    }
-```
-- **`params_schema`**: Defines the JSON schema for tool parameters and validation
-- **Dynamic tool naming**: Each tool gets a unique name like "send_message_to_[AgentName]"
-- **Recipient-specific description**: Tool description includes the recipient agent's role
-
-**3. Tool Registration:**
-```python
-super().__init__(
-    name=tool_name,
-    description=f"{self.__doc__}\n\nRecipient role: {recipient_agent.description}",
-    params_json_schema=params_schema,
-    on_invoke_tool=self.on_invoke_tool,
-)
-```
-- Registers the tool with the agents SDK
-- Combines class docstring with recipient-specific information
-- Links to the `on_invoke_tool` method for execution
-
-**4. Communication Logic:**
-```python
-async def on_invoke_tool(self, wrapper: RunContextWrapper[MasterContext], arguments_json_string: str) -> str:
-    # Parse JSON arguments
-    kwargs = json.loads(arguments_json_string)
-    message_content = kwargs.get("message")
-    additional_instructions = kwargs.get("additional_instructions", "")
-
-    # Call recipient agent
-    response = await self.recipient_agent.get_response(
-        message=message_content,
-        sender_name=self.sender_agent.name,
-        additional_instructions=additional_instructions,
-    )
-    return response.final_output
-```
-- **Async execution**: Uses `async/await` for non-blocking communication
-- **JSON argument parsing**: Manually parses and validates tool arguments
-- **Direct agent calls**: Calls `recipient_agent.get_response()` directly
-- **Context passing**: Can access `MasterContext` for shared state
-
-## Creating Custom Communication Flows
-
-To create custom communication patterns, extend the base `SendMessage` class and modify the parameters schema or communication logic:
-
-```python
-class SendMessageWithContext(SendMessage):
-    """SendMessage with enhanced context tracking."""
-
-    def __init__(self, sender_agent, recipient_agent, tool_name):
-        super().__init__(sender_agent, recipient_agent, tool_name)
-
-        # Add custom fields to the schema
-        self.params_json_schema["properties"]["key_moments"] = {
-            "type": "string",
-            "description": "Document critical moments and decision points..."
+            "required": ["my_primary_instructions", "message", "additional_instructions"],
         }
-        self.params_json_schema["properties"]["decisions"] = {
-            "type": "string",
-            "description": "Summarize specific decisions made..."
-        }
-        self.params_json_schema["required"].extend(["key_moments", "decisions"])
+
+        super().__init__(
+            name=tool_name,
+            description=f"{self.__doc__}\n\nRecipient role: {recipient_agent.description}",
+            params_json_schema=params_schema,
+            on_invoke_tool=self.on_invoke_tool,
+        )
+
+    async def on_invoke_tool(self, wrapper, arguments_json_string: str) -> str:
+        kwargs = json.loads(arguments_json_string)
+        message_content = kwargs.get("message")
+        additional_instructions = kwargs.get("additional_instructions", "")
+
+        response = await self.recipient_agent.get_response(
+            message=message_content,
+            sender_name=self.sender_agent.name,
+            additional_instructions=additional_instructions,
+        )
+        return response.final_output
 ```
 
-This approach provides complete flexibility for customizing inter-agent communication patterns while leveraging the agents SDK's robust foundation.
+### Key Components
+
+In general, all `SendMessage` tools in v1.x have the following components:
+
+1. **FunctionTool Base**: Extends the `FunctionTool` class from the agents SDK, providing async execution and standardized tool interfaces.
+2. **Dynamic Initialization**: Tools are created dynamically for specific sender->recipient pairs with custom parameter schemas.
+3. **JSON Schema**: Parameters are defined using JSON schema for validation and type safety.
+4. **Async Communication**: Uses `async/await` for non-blocking communication between agents.
+
+When creating your own `SendMessage` tools, extend `FunctionTool` and implement the `on_invoke_tool` method with your custom communication logic.
+
+### Common Use Cases
+
+For detailed **Common Use Cases**, please refer to the [Common Use Cases](./common-use-cases) subpage.
 
 </Tab>
 <Tab title="v0.x (Production)">
 
 <Info>
-This is the current production version. Install with: `pip install agency-swarm`
+v0.x is the **current production version**. Install with: `pip install "agency-swarm<1.0.0"`
 </Info>
 
 ## Pre-Made SendMessage Classes
