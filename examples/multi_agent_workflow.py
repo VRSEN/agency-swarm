@@ -33,7 +33,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
-load_dotenv()
+load_dotenv(override=True)
 
 from agency_swarm import Agency, Agent  # noqa: E402
 

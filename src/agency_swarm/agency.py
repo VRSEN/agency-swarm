@@ -15,6 +15,7 @@ from agency_swarm.agent import SEND_MESSAGE_TOOL_PREFIX
 from agency_swarm.agent_core import Agent
 from agency_swarm.hooks import PersistenceHooks
 from agency_swarm.thread import ThreadLoadCallback, ThreadManager, ThreadSaveCallback
+from agency_swarm.tools.send_message import SendMessageHandoff
 
 # --- Logging ---
 logger = logging.getLogger(__name__)
@@ -398,7 +399,12 @@ class Agency:
                 for recipient_name in allowed_recipients:
                     recipient_agent = self.agents[recipient_name]
                     try:
-                        agent_instance.register_subagent(recipient_agent)
+                        if agent_instance.send_message_tool_class == SendMessageHandoff:
+                            handoff_instance = SendMessageHandoff().create_handoff(recipient_agent=recipient_agent)
+                            agent_instance.handoffs.append(handoff_instance)
+                            logger.debug(f"Added SendMessageHandoff for {agent_name} -> {recipient_name}")
+                        else:
+                            agent_instance.register_subagent(recipient_agent)
                     except Exception as e:
                         logger.error(
                             f"Error registering subagent '{recipient_name}' for sender '{agent_name}': {e}",
@@ -881,4 +887,6 @@ class Agency:
         Run a copilot demo of the agency.
         """
         # Copilot demo implementation
-        logger.warning("copilot_demo is not yet implemented in this version.")
+        from .ui.demos.launcher import CopilotDemoLauncher
+
+        CopilotDemoLauncher.start(self, host, port, frontend_port, cors_origins)

@@ -20,7 +20,7 @@ from openai import AsyncOpenAI
 
 from agency_swarm import Agency, Agent
 
-load_dotenv()
+load_dotenv(override=True)
 
 # Simple logging setup
 logging.basicConfig(level=logging.WARNING, format="%(asctime)s - %(levelname)s - %(message)s")

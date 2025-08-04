@@ -26,7 +26,7 @@ from dotenv import load_dotenv
 from agency_swarm import Agency, Agent
 from agency_swarm.tools.send_message import SendMessage
 
-load_dotenv()
+load_dotenv(override=True)
 
 # Setup logging
 logging.basicConfig(level=logging.WARNING)

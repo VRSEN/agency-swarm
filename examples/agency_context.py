@@ -18,7 +18,7 @@ from dotenv import load_dotenv
 
 from agency_swarm import Agency, Agent, MasterContext
 
-load_dotenv()
+load_dotenv(override=True)
 
 # Minimal logging setup
 logging.basicConfig(level=logging.WARNING)

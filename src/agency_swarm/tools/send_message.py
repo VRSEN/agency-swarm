@@ -1,5 +1,5 @@
 """
-Defines the SendMessage tool used for direct communication between agents.
+Defines the SendMessage and SendMessageHandoff tools for direct communication between agents.
 
 This module provides the `SendMessage` class, a specialized `FunctionTool` that
 allows one agent to send a message to another registered agent within the
@@ -11,7 +11,7 @@ import json
 import logging
 from typing import TYPE_CHECKING
 
-from agents import FunctionTool, RunContextWrapper
+from agents import FunctionTool, RunContextWrapper, handoff
 
 from ..context import MasterContext
 
@@ -161,3 +161,16 @@ class SendMessage(FunctionTool):
                 exc_info=True,
             )
             return f"Error: Failed to get response from agent '{recipient_name_for_call}'. Reason: {e}"
+
+
+class SendMessageHandoff:
+    """
+    A handoff configuration class for defining agent handoffs.
+    """
+
+    def create_handoff(self, recipient_agent: "Agent"):
+        """Create and return the handoff object."""
+        return handoff(
+            agent=recipient_agent,
+            tool_description_override=recipient_agent.description,
+        )

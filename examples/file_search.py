@@ -19,7 +19,7 @@ from dotenv import load_dotenv
 from agency_swarm import Agency, Agent
 from agency_swarm.utils.citation_extractor import display_citations, extract_vector_store_citations
 
-load_dotenv()
+load_dotenv(override=True)
 
 
 async def main():

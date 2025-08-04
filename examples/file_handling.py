@@ -22,7 +22,7 @@ from dotenv import load_dotenv
 
 from agency_swarm import Agency, Agent
 
-load_dotenv()
+load_dotenv(override=True)
 
 
 def image_to_base64(image_path: Path) -> str:
