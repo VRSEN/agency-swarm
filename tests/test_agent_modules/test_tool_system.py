@@ -350,6 +350,18 @@ def test_tools_folder_nonexistent_path():
     assert agent.tools == []
 
 
+@pytest.mark.asyncio
+async def test_shared_state_property(mock_run_context_wrapper):
+    class TestTool(BaseTool):
+        def run(self):
+            return "ok"
+
+    tool = TestTool()
+    tool._context = mock_run_context_wrapper
+    with pytest.deprecated_call():
+        assert tool._shared_state is mock_run_context_wrapper.context
+
+
 # TODO: Add tests for response validation aspects
 # TODO: Add tests for context/hooks propagation (more complex, might need integration tests)
 # TODO: Add parameterized tests for various message inputs (empty, long, special chars)

@@ -10,6 +10,8 @@ import warnings
 from abc import ABC, abstractmethod
 from typing import Any, ClassVar
 
+from ..context import MasterContext
+
 from docstring_parser import parse
 from openai.types.beta.threads.runs.tool_call import ToolCall
 from pydantic import BaseModel
@@ -93,14 +95,14 @@ class BaseTool(BaseModel, ABC):
         return schema
 
     @property
-    def context(self):
+    def context(self) -> MasterContext | None:
         """Get the MasterContext if available, providing clean access to shared state."""
         if self._context is not None:
             return self._context.context
         return None
 
     @property
-    def _shared_state(self):
+    def _shared_state(self) -> MasterContext | None:
         """
         Backwards compatibility property that provides direct access to the context.
 
@@ -112,7 +114,7 @@ class BaseTool(BaseModel, ABC):
             "_shared_state is deprecated and will be removed in future versions. "
             "Use 'self.context' instead.",
             DeprecationWarning,
-            stacklevel=2
+            stacklevel=2,
         )
         return self.context
 
