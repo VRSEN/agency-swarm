@@ -11,6 +11,7 @@ from agents import (
     Runner,
     function_tool,
 )
+from agents.items import MessageOutputItem, ToolCallItem
 from agents.models.openai_responses import OpenAIResponsesModel
 from openai import AsyncOpenAI
 from pydantic import BaseModel
