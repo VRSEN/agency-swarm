@@ -28,7 +28,8 @@ def from_openapi_schema(
         schema (str | dict): Full OpenAPI JSON string or dictionary.
         headers (dict[str, str] | None, optional): Extra HTTP headers to send with each call. Defaults to None.
         params (dict[str, Any] | None, optional): Extra query parameters to append to every call. Defaults to None.
-        strict (bool, optional): If True, sets 'additionalProperties' to False in every generated schema. Defaults to True.
+        strict (bool, optional): If True, sets 'additionalProperties' to False in every generated schema.
+            Defaults to True.
         timeout (int, optional): HTTP timeout in seconds. Defaults to 90.
 
     Returns:

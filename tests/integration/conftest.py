@@ -23,7 +23,9 @@ else:
 if not os.getenv("OPENAI_API_KEY"):
     import warnings
 
-    warnings.warn("OPENAI_API_KEY not found in environment. Integration tests requiring API access will fail.")
+    warnings.warn(
+        "OPENAI_API_KEY not found in environment. Integration tests requiring API access will fail.", stacklevel=2
+    )
 
 
 @pytest.fixture(autouse=True)

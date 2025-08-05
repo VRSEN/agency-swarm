@@ -113,7 +113,7 @@ async def test_file_attachment_citation_extraction():
             # 2. The agent successfully read the file (evidenced by specific data in response)
             if len(extracted_citations) == 0 and not has_revenue_data:
                 # Only fail if we have neither citations nor evidence of file access
-                assert False, (
+                raise AssertionError(
                     "Expected to find direct file citations in conversation history OR evidence of file access. "
                     f"Found {len(citation_messages)} citation messages, but no parsed citations or revenue data."
                 )

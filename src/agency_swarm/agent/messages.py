@@ -78,7 +78,8 @@ def resolve_token_settings(model_settings_dict: dict[str, Any], agent_name: str 
         # If max_tokens is specified, drop prompt and completion tokens
         if has_max_prompt_tokens or has_max_completion_tokens:
             logger.info(
-                f"max_tokens is specified, ignoring max_prompt_tokens and max_completion_tokens for agent '{agent_name}'"
+                f"max_tokens is specified, ignoring max_prompt_tokens and max_completion_tokens "
+                f"for agent '{agent_name}'"
             )
             model_settings_dict.pop("max_prompt_tokens", None)
             model_settings_dict.pop("max_completion_tokens", None)
@@ -91,7 +92,8 @@ def resolve_token_settings(model_settings_dict: dict[str, Any], agent_name: str 
             model_settings_dict.pop("max_completion_tokens", None)
             logger.warning(
                 f"Both max_prompt_tokens and max_completion_tokens specified for agent '{agent_name}'. "
-                f"Using max_completion_tokens value ({model_settings_dict['max_tokens']}) for max_tokens and ignoring max_prompt_tokens."
+                f"Using max_completion_tokens value ({model_settings_dict['max_tokens']}) "
+                f"for max_tokens and ignoring max_prompt_tokens."
             )
         elif has_max_completion_tokens:
             # Only completion tokens present

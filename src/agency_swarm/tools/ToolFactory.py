@@ -59,8 +59,8 @@ class ToolFactory:
         """
         try:
             from langchain_community.tools import format_tool_to_openai_function
-        except ImportError:
-            raise ImportError("You must install langchain to use this method.")
+        except ImportError as e:
+            raise ImportError("You must install langchain to use this method.") from e
 
         if inspect.isclass(tool):
             tool = tool()
@@ -75,7 +75,7 @@ class ToolFactory:
                 else:
                     raise TypeError(
                         f"Error parsing input for tool '{tool.__class__.__name__}' Please open an issue on github."
-                    )
+                    ) from None
 
         return ToolFactory.from_openai_schema(format_tool_to_openai_function(tool), callback)
 

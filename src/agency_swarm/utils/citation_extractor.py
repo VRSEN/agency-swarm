@@ -72,7 +72,8 @@ def extract_direct_file_annotations(
                 )
             )
             logger.debug(
-                f"Created direct file citations message for message_id: {message.id}, found {len(annotations_found)} citations"
+                f"Created direct file citations message for message_id: {message.id}, "
+                f"found {len(annotations_found)} citations"
             )
 
     return synthetic_outputs

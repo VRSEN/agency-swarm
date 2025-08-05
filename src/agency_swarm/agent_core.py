@@ -84,8 +84,8 @@ class Agent(BaseAgent[MasterContext]):
         output_type (type[Any] | None): The type of the agent's final output.
         send_message_tool_class (type | None): Custom SendMessage tool class to use for inter-agent communication.
                                                If None, uses the default SendMessage class.
-        include_search_results (bool): Whether to include search results in FileSearchTool output for citation extraction.
-                                      Defaults to False for backward compatibility.
+        include_search_results (bool): Whether to include search results in FileSearchTool output for
+                                      citation extraction. Defaults to False for backward compatibility.
         _thread_manager (ThreadManager | None): Internal reference to the agency's `ThreadManager`.
                                                 Set by the parent `Agency`.
         _agency_instance (Any | None): Internal reference to the parent `Agency` instance. Set by the parent `Agency`.
@@ -301,7 +301,8 @@ class Agent(BaseAgent[MasterContext]):
             run_config: Optional run configuration settings
             message_files: DEPRECATED: Use file_ids instead. File IDs to attach to the message
             file_ids: List of OpenAI file IDs to attach to the message
-            additional_instructions: Additional instructions to be appended to the agent's instructions for this run only
+            additional_instructions: Additional instructions to be appended to the agent's
+                                    instructions for this run only
             **kwargs: Additional keyword arguments including max_turns
 
         Returns:
@@ -340,7 +341,8 @@ class Agent(BaseAgent[MasterContext]):
             context_override: Optional context data to override default values
             hooks_override: Optional hooks to override default agent hooks
             run_config_override: Optional run configuration
-            additional_instructions: Additional instructions to be appended to the agent's instructions for this run only
+            additional_instructions: Additional instructions to be appended to the agent's
+                                    instructions for this run only
             **kwargs: Additional keyword arguments
 
         Yields:

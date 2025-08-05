@@ -96,7 +96,6 @@ class TerminalDemoLauncher:
 
         async def main_loop():
             while True:
-
                 message = input("👤 USER: ")
                 event_converter.console.rule()
 
@@ -105,23 +104,19 @@ class TerminalDemoLauncher:
 
                 recipient_agent = None
                 # Check for agent mentions that start with @ at the beginning of text or after whitespace
-                agent_mention_pattern = r'(?:^|\s)@(\w+)(?:\s|$)'
+                agent_mention_pattern = r"(?:^|\s)@(\w+)(?:\s|$)"
                 agent_match = re.search(agent_mention_pattern, message)
 
                 if agent_match:
                     mentioned_agent = agent_match.group(1)
                     try:
                         recipient_agent = [
-                            agent
-                            for agent in recipient_agents
-                            if agent.lower() == mentioned_agent.lower()
+                            agent for agent in recipient_agents if agent.lower() == mentioned_agent.lower()
                         ][0]
                         # Remove the agent mention from the message
-                        message = re.sub(agent_mention_pattern, ' ', message).strip()
+                        message = re.sub(agent_mention_pattern, " ", message).strip()
                     except Exception:
-                        logger.error(
-                            f"Recipient agent {mentioned_agent} not found.", exc_info=True
-                        )
+                        logger.error(f"Recipient agent {mentioned_agent} not found.", exc_info=True)
                         continue
 
                 # Default to first entry point if not specified
