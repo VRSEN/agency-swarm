@@ -13,11 +13,7 @@ You have these specialized sub-agents in `.claude/agents/`:
 
 ## Key Architecture Principle
 
-Each sub-agent works in a **clean context window** - they cannot see this conversation or each other's work. This isolation ensures:
-- Focused, high-quality output
-- No conversation pollution
-- Consistent results
-- Parallel execution capability
+Each sub-agent works in a **clean context window** - they cannot see this conversation or each other's work. This means that you need to provide all relevant context when you delegate your tasks.
 
 ## Agency Creation Workflows
 
