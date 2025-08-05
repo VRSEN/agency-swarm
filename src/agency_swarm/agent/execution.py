@@ -453,6 +453,14 @@ class Execution:
                 # Collect all new items for saving to thread
                 if hasattr(event, "item") and event.item:
                     collected_items.append(event.item)
+
+                # Add agent name to the event
+                if isinstance(event, dict):
+                    event["agent_name"] = self.agent.name
+                elif hasattr(event, "__dict__"):
+                    # For object-like events, add agent_name as attribute
+                    event.agent_name = self.agent.name
+
                 yield event
 
             # Save all collected items after streaming completes

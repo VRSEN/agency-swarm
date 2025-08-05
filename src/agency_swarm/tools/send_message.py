@@ -161,6 +161,13 @@ class SendMessage(FunctionTool):
                     sender_name=self.sender_agent.name,
                     additional_instructions=additional_instructions,
                 ):
+                    # Add agent name to the event before forwarding
+                    if isinstance(event, dict):
+                        event["agent_name"] = self.recipient_agent.name
+                    elif hasattr(event, "__dict__"):
+                        # For object-like events, add agent_name as attribute
+                        event.agent_name = self.recipient_agent.name
+
                     # Forward event to streaming context if available
                     if streaming_context:
                         try:
