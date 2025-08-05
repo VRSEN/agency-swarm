@@ -435,6 +435,12 @@ class ConsoleEventAdapter:
 
     def openai_to_message_output(self, event: Any, recipient_agent: str):
         try:
+            # Use agent_name from event if available, otherwise fall back to recipient_agent
+            agent_name = getattr(event, "agent_name", None) or recipient_agent
+            caller_agent = getattr(event, "caller_agent", None)
+            # Determine who the agent is speaking to (if caller_agent exists, respond to them, else to user)
+            speaking_to = caller_agent if caller_agent else "user"
+
             if hasattr(event, "data"):
                 event_type = event.type
                 if event_type == "raw_response_event":
@@ -447,12 +453,12 @@ class ConsoleEventAdapter:
                             self.message_output = Live("", console=self.console, refresh_per_second=10)
                             self.message_output.__enter__()
                         self.response_buffer += data.delta
-                        header_text = f"🤖 {recipient_agent} 🗣️ @user"
+                        header_text = f"🤖 {agent_name} 🗣️ @{speaking_to}"
                         md_content = Markdown(self.response_buffer)
                         self.message_output.update(Group(header_text, md_content))
                     elif data_type == "response.output_text.done":
                         if self.message_output is not None:
-                            header_text = f"🤖 {recipient_agent} 🗣️ @user"
+                            header_text = f"🤖 {agent_name} 🗣️ @{speaking_to}"
                             md_content = Markdown(self.response_buffer)
                             self.message_output.update(Group(header_text, md_content))
                             self.message_output.__exit__(None, None, None)
@@ -465,7 +471,7 @@ class ConsoleEventAdapter:
 
                     elif data_type == "response.mcp_call_arguments.done":
                         content = f"Calling {self.mcp_calls[data.item_id]} tool with: {data.arguments}"
-                        self._update_console("function", recipient_agent, "user", content)
+                        self._update_console("function", agent_name, "user", content)
                         self.mcp_calls.pop(data.item_id)
 
                     elif data_type == "response.output_item.done":
@@ -476,20 +482,18 @@ class ConsoleEventAdapter:
                             if len(parsed_name := item.name.split("send_message_to_")) > 1:
                                 called_agent = parsed_name[1]
                                 message = json.loads(item.arguments)["message"]  # Parse once
-                                self._update_console("text", recipient_agent, called_agent, message)
+                                self._update_console("text", agent_name, called_agent, message)
                                 self.agent_to_agent_communication[item.call_id] = {
-                                    "sender": recipient_agent,
+                                    "sender": agent_name,
                                     "receiver": called_agent,
                                     "message": message,
                                 }
                             else:
                                 if item.type == "mcp_call":
-                                    self._update_console("function_output", recipient_agent, "user", item.output)
+                                    self._update_console("function_output", agent_name, "user", item.output)
                                 else:
                                     content = f"Calling {item.name} tool with: {item.arguments}"
-                                    self._update_console("function", recipient_agent, "user", content)
-
-
+                                    self._update_console("function", agent_name, "user", content)
 
             # Tool outputs (except mcp calls)
             elif hasattr(event, "item"):
@@ -500,10 +504,11 @@ class ConsoleEventAdapter:
                         call_id = item.raw_item["call_id"]
 
                         if call_id in self.agent_to_agent_communication:
+                            # The response has already been shown via streaming, so just clean up
                             comm_data = self.agent_to_agent_communication.pop(call_id)
-                            self._update_console("text", comm_data["receiver"], comm_data["sender"], str(item.output))
+                            # Don't display it again - it's already been shown
                         else:
-                            self._update_console("function_output", recipient_agent, "user", str(item.output))
+                            self._update_console("function_output", agent_name, "user", str(item.output))
 
             # Handle error events (dict format from agent streaming)
             elif isinstance(event, dict) and event.get("type") == "error":

@@ -28,6 +28,7 @@ from openai.types.responses import ResponseFileSearchToolCall, ResponseFunctionW
 
 from agency_swarm.context import MasterContext
 from agency_swarm.messages import MessageFilter, MessageFormatter
+from agency_swarm.streaming_utils import add_agent_name_to_event
 from agency_swarm.utils.citation_extractor import extract_direct_file_annotations
 
 if TYPE_CHECKING:
@@ -432,10 +433,19 @@ class Execution:
 
             # Stream the runner results
             collected_items: list[RunItem] = []
+
+            # Prepare context with streaming indicator
+            master_context = self._prepare_master_context(context_override)
+            # Set streaming flag so SendMessage knows to use streaming
+            master_context._is_streaming = True
+            # Pass streaming context if available
+            if context_override and "_streaming_context" in context_override:
+                master_context._streaming_context = context_override["_streaming_context"]
+
             result = Runner.run_streamed(
                 starting_agent=self.agent,
                 input=history_for_runner,
-                context=self._prepare_master_context(context_override),
+                context=master_context,
                 hooks=hooks_override or self.agent.hooks,
                 run_config=run_config_override or RunConfig(),
                 max_turns=kwargs.get("max_turns", DEFAULT_MAX_TURNS),
@@ -444,6 +454,9 @@ class Execution:
                 # Collect all new items for saving to thread
                 if hasattr(event, "item") and event.item:
                     collected_items.append(event.item)
+
+                # Add agent name and caller to the event
+                event = add_agent_name_to_event(event, self.agent.name, sender_name)
                 yield event
 
             # Save all collected items after streaming completes
