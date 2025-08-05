@@ -20,7 +20,10 @@ from agency_swarm import Agency, Agent
 
 load_dotenv()
 
-# Minimal logging setup
+# ===== DEBUG CONFIGURATION =====
+# Set to True to see ALL raw events for frontend integration
+DEBUG_MODE = False
+
 logging.basicConfig(level=logging.WARNING)
 
 # --- Simple Tool --- #
@@ -76,9 +79,37 @@ async def stream_response(message: str):
     print("📡 Response: ", end="", flush=True)
 
     full_text = ""
+    event_count = 0
 
     async for event in agency.get_response_stream(message):
-        # Handle streaming events with data
+        event_count += 1
+
+        # Debug logging for frontend developers
+        if DEBUG_MODE:
+            # Extract key fields
+            agent_name = getattr(event, "agent_name", None)
+            caller_agent = getattr(event, "caller_agent", None)
+            event_type = getattr(event, "type", None)
+
+            # For data events, get the nested type
+            if hasattr(event, "data") and hasattr(event.data, "type"):
+                data_type = event.data.type
+            else:
+                data_type = None
+
+            # Format the output
+            print(f"\n[EVENT #{event_count}]")
+            print(f"  agent_name: {agent_name}")
+            print(f"  caller_agent: {caller_agent}")
+            print(f"  event.type: {event_type}")
+            if data_type:
+                print(f"  data.type: {data_type}")
+
+            # Show raw event only if verbose
+            if DEBUG_MODE == "verbose":
+                print(f"  Raw: {event}")
+
+        # Normal streaming logic (unchanged)
         if hasattr(event, "data"):
             data = event.data
 
@@ -88,7 +119,8 @@ async def stream_response(message: str):
                     # Stream the actual response text in real-time
                     delta_text = data.delta
                     if delta_text:
-                        print(delta_text, end="", flush=True)
+                        if not DEBUG_MODE:
+                            print(delta_text, end="", flush=True)
                         full_text += delta_text
                 # Skip tool call deltas (we don't want to show those to users)
                 elif data.type == "response.function_call_arguments.delta":
@@ -100,6 +132,9 @@ async def stream_response(message: str):
             if event_type == "error":
                 print(f"\n❌ Error: {event.get('content', event.get('data', 'Unknown error'))}")
                 break
+
+    if DEBUG_MODE:
+        print(f"\n📊 Total events received: {event_count}")
 
     print("\n✅ Stream complete")
     print(f"📋 Total: {len(full_text)} characters streamed")
