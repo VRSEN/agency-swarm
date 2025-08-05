@@ -80,45 +80,16 @@ Final step for all workflows:
 
 This:
 - Wires agency.py properly
-- Creates agency_manifesto.md
 - Tests all components
 - Fixes any issues
 - Ensures production readiness
 
-## How to Orchestrate Effectively
+## Key Orchestration Points
 
-### 1. Provide Minimal But Complete Context
-```
-❌ Bad: "Use prd-creator"
-✅ Good: "Use prd-creator with: Create a customer support agency that handles ticket management, live chat, and knowledge base creation for SaaS companies"
-```
-
-### 2. Batch When Possible
-You can invoke multiple sub-agents in parallel:
-```
-[Use api-researcher with: "Twitter posting API"]
-[Use api-researcher with: "LinkedIn API"]
-[Use api-researcher with: "Content generation API"]
-```
-
-### 3. Handle Sub-Agent Results
-Sub-agents return complete work. Summarize key points for the user:
-```
-You: The PRD is complete. I've designed a marketing agency with:
-- 4 specialized agents (CEO, ContentCreator, SocialManager, AnalyticsExpert)
-- 23 tools including blog generation, social posting, and analytics
-- Clear communication flows for efficient task handling
-
-Now I'll create the complete agency structure...
-```
-
-### 4. Track Progress
-Use TodoWrite to track the workflow:
-- [ ] Create PRD
-- [ ] Build agency structure
-- [ ] Research APIs
-- [ ] Implement tools
-- [ ] Test integration
+- Always provide complete context to sub-agents
+- Batch parallel operations when possible
+- Track progress with TodoWrite
+- Summarize sub-agent results for the user
 
 ## Sub-Agent Limitations
 
@@ -128,39 +99,6 @@ Remember that sub-agents:
 - Start with completely clean context
 - Only respond to your prompts, not the user's
 
-## Example: Complete Agency Creation
-
-```
-User: Create a data analysis agency
-
-You: I'll create a data analysis agency for you. Let me research the best integrations available.
-
-[Use api-researcher with: "PostgreSQL database connection - check MCP servers"]
-[Use api-researcher with: "Data visualization - Plotly, Matplotlib"]
-[Use api-researcher with: "Data processing - Pandas, NumPy"]
-
-Great! I found MCP servers for database access and Python libraries for analysis. Now I'll create comprehensive requirements:
-
-[Use prd-creator with: "Create a data analysis agency for businesses. Available: PostgreSQL MCP server, Plotly for visualization, Pandas for processing, OpenAI for insights. Target: Companies needing automated data analysis and reporting."]
-
-The PRD is complete with 4 specialized agents. Now I'll build the entire agency:
-
-[Use agency-builder with: {full PRD content}]
-
-Agency structure and all components built! Finally, let me wire and test everything:
-
-[Use qa-tester with:
-- Path: data_analysis_agency/
-- Agents: data_ceo, data_collector, data_analyst, visualization_expert
-- Flows: CEO→all, all→CEO
-- Requirements: Gradio dashboard]
-
-✅ Your data analysis agency is ready!
-- Location: data_analysis_agency/
-- 4 agents with 28 tools
-- All tests passing
-- Run: python data_analysis_agency/agency.py
-```
 
 ## Quick Reference
 

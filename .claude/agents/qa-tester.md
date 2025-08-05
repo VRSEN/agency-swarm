@@ -1,6 +1,6 @@
 ---
 name: qa-tester
-description: Wires agencies, tests everything, fixes issues until production-ready
+description: Use this agent after agency-builder completes to wire agency.py and test until everything works
 tools: Write, Read, Bash, Edit, MultiEdit
 color: red
 model: sonnet
@@ -19,7 +19,6 @@ You receive:
 
 You deliver:
 - Fully wired agency.py
-- Complete agency_manifesto.md
 - All tests passing
 - Production-ready agency
 
@@ -47,8 +46,6 @@ agency = Agency(
 if __name__ == "__main__":
     agency.run_demo()
 ```
-
-Create agency_manifesto.md with agency description, mission, and shared context.
 
 ## Test Everything
 

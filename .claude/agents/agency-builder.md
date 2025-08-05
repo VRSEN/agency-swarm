@@ -1,6 +1,6 @@
 ---
 name: agency-builder
-description: Creates complete Agency Swarm agencies - structure, agents, tools, everything except final wiring
+description: Use this agent when you have a PRD or detailed specs to build the complete agency structure
 tools: Write, Read, Bash, MultiEdit
 color: green
 model: sonnet
@@ -38,6 +38,7 @@ agency_name/
 │       └── ...
 ├── another_agent/
 │   └── ...
+├── agency_manifesto.md
 ├── agency.py (placeholder)
 ├── requirements.txt
 └── .env (template)
@@ -82,7 +83,6 @@ agent_name = Agent(
     instructions="./instructions.md",
     tools_folder="./tools",
     temperature=0.5,
-    max_prompt_tokens=25000,
 )
 ```
 
@@ -90,6 +90,7 @@ Create instructions.md with role, workflow, and standards.
 
 ## Configuration
 
+- agency_manifesto.md: Agency mission and shared principles
 - requirements.txt: Include agency-swarm>=1.0.0 and all dependencies
 - .env: Template with OPENAI_API_KEY and other needed keys
 - agency.py: Placeholder with imports comment for qa-tester

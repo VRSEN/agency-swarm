@@ -1,6 +1,6 @@
 ---
 name: api-researcher
-description: Researches MCP servers and APIs to find the best integration options for Agency Swarm tools.
+description: Use this agent when you need to research APIs or MCP servers for tool integrations
 tools: WebFetch, WebSearch, Read
 color: purple
 model: sonnet

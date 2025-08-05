@@ -1,6 +1,6 @@
 ---
 name: prd-creator
-description: Creates PRDs for Agency Swarm projects
+description: Use this agent when user has a vague idea and needs a comprehensive PRD created
 tools: Write, Read
 color: blue
 model: sonnet
