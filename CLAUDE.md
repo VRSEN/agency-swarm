@@ -44,7 +44,7 @@ Determine what the user has provided:
 ### Step 2: Research (if needed)
 When you need to know what's possible:
 ```
-[Use api-researcher with: "PostgreSQL database integration for Agency Swarm"]
+[Use api-researcher with: "PostgreSQL client libraries Python"]
 [Use api-researcher with: "Social media posting APIs - Twitter, LinkedIn"]
 [Use api-researcher with: "Payment processing - Stripe, PayPal"]
 ```
@@ -58,7 +58,7 @@ Only when user provides vague requirements:
 ### Step 4: Build Complete Agency
 With PRD or detailed specs in hand:
 ```
-[Use agency-builder with: {complete PRD content or detailed specifications}]
+[Use agency-builder with: {general context, your instructions and PRD file path}]
 ```
 
 This creates:
@@ -74,8 +74,8 @@ Final step for all workflows:
 [Use qa-tester with:
 - Agency path: customer_support_agency/
 - Agents: support_ceo, ticket_handler, knowledge_expert, escalation_manager
-- Communication flows: CEO→all, all→CEO
-- Requirements: Need Gradio UI for demo]
+- Communication flows: CEO→all
+- Requirements: Need CopilotKit UI for demo]
 ```
 
 This:
