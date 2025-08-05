@@ -11,7 +11,7 @@ from pathlib import Path
 # Add the src directory to the path so we can import agency_swarm
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from agents import RunContextWrapper, function_tool
+from agents import function_tool
 from dotenv import load_dotenv
 
 from agency_swarm import Agency, Agent
@@ -19,10 +19,10 @@ from agency_swarm import Agency, Agent
 load_dotenv()
 
 
-@function_tool()
-async def example_tool(wrapper: RunContextWrapper) -> str:
-    """Example tool for terminal demo"""
-    return "Example tool executed"
+@function_tool
+def get_weather(location: str) -> str:
+    """Get weather information for a location."""
+    return f"The weather in {location} is sunny, 22°C with light winds."
 
 
 def create_demo_agency():
@@ -32,15 +32,15 @@ def create_demo_agency():
     ceo = Agent(
         name="CEO",
         description="Chief Executive Officer - oversees all operations",
-        instructions="You are the CEO responsible for high-level decision making and coordination.",
-        tools=[example_tool],
+        instructions="You are the CEO. When asked about weather, delegate to Worker with a specific location (use London if not specified).",
+        tools=[],
     )
 
     worker = Agent(
         name="Worker",
-        description="Worker - performs tasks",
-        instructions="Follow instructions given by the CEO.",
-        tools=[example_tool],
+        description="Worker - performs weather-related tasks",
+        instructions="You handle weather tasks. Use the get_weather tool with the location provided.",
+        tools=[get_weather],
     )
 
     # Create agency with communication flows (v1.x pattern)

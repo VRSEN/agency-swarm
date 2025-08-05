@@ -15,21 +15,24 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
-def add_agent_name_to_event(event: Any, agent_name: str) -> Any:
-    """Add agent name to a streaming event.
+def add_agent_name_to_event(event: Any, agent_name: str, caller_agent: str | None = None) -> Any:
+    """Add agent name and caller to a streaming event.
 
     Args:
         event: The streaming event (dict or object)
         agent_name: Name of the agent to add to the event
+        caller_agent: Name of the calling agent (None for user)
 
     Returns:
-        The event with agent_name added
+        The event with agent_name and caller_agent added
     """
     if isinstance(event, dict):
         event["agent_name"] = agent_name
+        event["caller_agent"] = caller_agent
     elif hasattr(event, "__dict__"):
-        # For object-like events, add agent_name as attribute
+        # For object-like events, add as attributes
         event.agent_name = agent_name
+        event.caller_agent = caller_agent
     return event
 
 

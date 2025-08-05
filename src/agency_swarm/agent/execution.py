@@ -455,8 +455,8 @@ class Execution:
                 if hasattr(event, "item") and event.item:
                     collected_items.append(event.item)
 
-                # Add agent name to the event
-                event = add_agent_name_to_event(event, self.agent.name)
+                # Add agent name and caller to the event
+                event = add_agent_name_to_event(event, self.agent.name, sender_name)
                 yield event
 
             # Save all collected items after streaming completes

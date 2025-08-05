@@ -162,8 +162,8 @@ class SendMessage(FunctionTool):
                     sender_name=self.sender_agent.name,
                     additional_instructions=additional_instructions,
                 ):
-                    # Add agent name to the event before forwarding
-                    event = add_agent_name_to_event(event, self.recipient_agent.name)
+                    # Add agent name and caller to the event before forwarding
+                    event = add_agent_name_to_event(event, self.recipient_agent.name, self.sender_agent.name)
 
                     # Forward event to streaming context if available
                     if streaming_context:

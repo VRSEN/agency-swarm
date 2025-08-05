@@ -34,13 +34,38 @@ def get_weather(location: str) -> str:
 
 # --- Agent Setup --- #
 
-agent = Agent(
-    name="Assistant",
-    instructions="You are a helpful assistant. Use tools when appropriate and provide clear responses.",
-    tools=[get_weather],
-)
 
-agency = Agency(agent)
+def create_demo_agency():
+    """Create a demo agency for terminal demo"""
+
+    # Create agents using v1.x pattern (direct instantiation)
+    ceo = Agent(
+        name="CEO",
+        description="Chief Executive Officer - oversees all operations",
+        instructions="You are the CEO. When asked about weather, delegate to Worker with a specific location (use London if not specified).",
+        tools=[],
+    )
+
+    worker = Agent(
+        name="Worker",
+        description="Worker - performs tasks and writes weather reports",
+        instructions="You handle weather tasks. Use the get_weather tool which returns weather reports.",
+        tools=[get_weather],
+    )
+
+    # Create agency with communication flows (v1.x pattern)
+    agency = Agency(
+        ceo,  # Entry point agent (positional argument)
+        communication_flows=[
+            (ceo, worker),
+        ],
+        name="TerminalDemoAgency",
+    )
+
+    return agency
+
+
+agency = create_demo_agency()
 
 # --- Streaming Handler --- #
 
@@ -90,14 +115,7 @@ async def main():
     print("=" * 40)
     print("🎯 Watch text stream in real-time!")
 
-    # Test basic streaming
-    await stream_response("Hello! Tell me about yourself.")
-
-    # Test with tool call
     await stream_response("What's the weather in London?")
-
-    # Test longer response
-    await stream_response("Write a short poem about artificial intelligence.")
 
     print("\n🎉 Demo complete! Streaming works perfectly.")
 
