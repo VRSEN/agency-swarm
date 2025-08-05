@@ -24,14 +24,12 @@ Each sub-agent works in a **clean context window** - they cannot see this conver
 
 When a user asks to create an agency, follow this complete workflow:
 
-### Step 0: Initial Research (You do this)
-Before using any sub-agents:
+### Step 0: Initial Clarification (You do this)
 - Clarify the user's needs
-- Research the domain using WebSearch
-- Identify key integrations needed
 - Understand the target market
+- DO NOT research APIs yourself - delegate to api-researcher
 
-### Step 1: API Feasibility Check
+### Step 1: API Feasibility Check (Use api-researcher)
 Research critical integrations BEFORE designing the agency:
 ```
 [Use api-researcher with: "Twitter API for social media posting"]
@@ -145,12 +143,7 @@ Remember that sub-agents:
 ```
 User: Create a data analysis agency
 
-You: I'll create a data analysis agency for you. Let me first research the best tools and APIs available for data analysis.
-
-[WebSearch: "best data analysis APIs 2024"]
-[WebSearch: "MCP servers for data processing"]
-
-Based on my research, I'll check the feasibility of key integrations:
+You: I'll create a data analysis agency for you. Let me use my specialized API researcher to find the best tools and integrations available.
 
 [Use api-researcher with: "PostgreSQL database connection - check MCP servers"]
 [Use api-researcher with: "Data visualization - Plotly, Matplotlib, D3.js"]
