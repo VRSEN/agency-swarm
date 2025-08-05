@@ -432,10 +432,19 @@ class Execution:
 
             # Stream the runner results
             collected_items: list[RunItem] = []
+
+            # Prepare context with streaming indicator
+            master_context = self._prepare_master_context(context_override)
+            # Set streaming flag so SendMessage knows to use streaming
+            master_context._is_streaming = True
+            # Pass streaming context if available
+            if context_override and "_streaming_context" in context_override:
+                master_context._streaming_context = context_override["_streaming_context"]
+
             result = Runner.run_streamed(
                 starting_agent=self.agent,
                 input=history_for_runner,
-                context=self._prepare_master_context(context_override),
+                context=master_context,
                 hooks=hooks_override or self.agent.hooks,
                 run_config=run_config_override or RunConfig(),
                 max_turns=kwargs.get("max_turns", DEFAULT_MAX_TURNS),

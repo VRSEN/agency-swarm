@@ -14,6 +14,7 @@ from agents import (
 from agency_swarm.agent import SEND_MESSAGE_TOOL_PREFIX
 from agency_swarm.agent_core import Agent
 from agency_swarm.hooks import PersistenceHooks
+from agency_swarm.streaming_utils import event_stream_merger
 from agency_swarm.thread import ThreadLoadCallback, ThreadManager, ThreadSaveCallback
 
 # --- Logging ---
@@ -281,7 +282,8 @@ class Agency:
         if not temp_entry_points and all_agents_in_chart:  # all_agents_in_chart implies temp_comm_flows is not empty
             logger.warning(
                 "No explicit entry points (standalone agents) found in deprecated 'agency_chart'. "
-                "For backward compatibility, unique sender agents from communication pairs will be considered potential entry points."
+                "For backward compatibility, unique sender agents from communication pairs "
+                "will be considered potential entry points."
             )
             # Collect unique senders from communication flows as entry points
             unique_senders_as_entry_points: dict[int, Agent] = {}
@@ -438,7 +440,8 @@ class Agency:
             run_config (RunConfig | None, optional): Configuration for the agent run.
             message_files (list[str] | None, optional): Backward compatibility parameter.
             file_ids (list[str] | None, optional): Additional file IDs for the agent run.
-            additional_instructions (str | None, optional): Additional instructions to be appended to the recipient agent's instructions for this run only.
+            additional_instructions (str | None, optional): Additional instructions to be appended to the recipient
+                agent's instructions for this run only.
             **kwargs: Additional arguments passed down to the target agent's `get_response` method
                       and subsequently to `agents.Runner.run`.
 
@@ -470,7 +473,8 @@ class Agency:
         elif target_agent not in self.entry_points:
             logger.warning(
                 f"Recipient agent '{target_agent.name}' is not a designated entry point "
-                f"(Entry points: {[ep.name for ep in self.entry_points]}). Call allowed but may indicate unintended usage."
+                f"(Entry points: {[ep.name for ep in self.entry_points]}). "
+                f"Call allowed but may indicate unintended usage."
             )
 
         effective_hooks = hooks_override or self.persistence_hooks
@@ -541,7 +545,8 @@ class Agency:
             run_config_override (RunConfig | None, optional): Specific run configuration for this run.
             message_files (list[str] | None, optional): Backward compatibility parameter.
             file_ids (list[str] | None, optional): Additional file IDs for the agent run.
-            additional_instructions (str | None, optional): Additional instructions to be appended to the recipient agent's instructions for this run only.
+            additional_instructions (str | None, optional): Additional instructions to be appended to the recipient
+                agent's instructions for this run only.
             **kwargs: Additional arguments passed down to `get_response_stream` and `run_streamed`.
 
         Yields:
@@ -573,23 +578,34 @@ class Agency:
         elif target_agent not in self.entry_points:
             logger.warning(
                 f"Recipient agent '{target_agent.name}' is not a designated entry point "
-                f"(Entry points: {[ep.name for ep in self.entry_points]}). Stream call allowed but may indicate unintended usage."
+                f"(Entry points: {[ep.name for ep in self.entry_points]}). "
+                f"Stream call allowed but may indicate unintended usage."
             )
 
         effective_hooks = hooks_override or self.persistence_hooks
 
-        async for event in target_agent.get_response_stream(
-            message=message,
-            sender_name=None,
-            context_override=context_override,
-            hooks_override=effective_hooks,
-            run_config_override=run_config_override,
-            message_files=message_files,
-            file_ids=file_ids,
-            additional_instructions=additional_instructions,
-            **kwargs,
-        ):
-            yield event
+        # Create streaming context for collecting sub-agent events
+        async with event_stream_merger.create_streaming_context() as streaming_context:
+            # Add streaming context to the context override
+            enhanced_context = context_override or {}
+            enhanced_context["_streaming_context"] = streaming_context
+
+            # Get the primary stream
+            primary_stream = target_agent.get_response_stream(
+                message=message,
+                sender_name=None,
+                context_override=enhanced_context,
+                hooks_override=effective_hooks,
+                run_config_override=run_config_override,
+                message_files=message_files,
+                file_ids=file_ids,
+                additional_instructions=additional_instructions,
+                **kwargs,
+            )
+
+            # Merge primary stream with events from sub-agents
+            async for event in event_stream_merger.merge_streams(primary_stream, streaming_context):
+                yield event
 
     def _resolve_agent(self, agent_ref: str | Agent) -> Agent:
         """Helper to get an agent instance from a name or instance."""
@@ -910,4 +926,5 @@ class Agency:
         """
         # Copilot demo implementation
         from .ui.demos.launcher import CopilotDemoLauncher
+
         CopilotDemoLauncher.start(self, host=host, port=port, frontend_port=frontend_port, cors_origins=cors_origins)

@@ -104,6 +104,9 @@ class SendMessage(FunctionTool):
         Handles the invocation of this specific send message tool.
         Retrieves the message from kwargs, validates context, calls the recipient agent's
         get_response method, and returns the text result.
+
+        When the original request was made with get_response_stream, this will use
+        get_response_stream for the sub-agent call to maintain streaming consistency.
         """
         try:
             kwargs = json.loads(arguments_json_string)
@@ -132,12 +135,70 @@ class SendMessage(FunctionTool):
         )
 
         try:
-            logger.debug(f"Calling target agent '{recipient_name_for_call}'.get_response...")
-            response = await self.recipient_agent.get_response(
-                message=message_content,
-                sender_name=self.sender_agent.name,
-                additional_instructions=additional_instructions,
-            )
+            # Check if we should use streaming based on context
+            # This is a simple heuristic: check if the wrapper has a streaming indicator
+            use_streaming = False
+            if wrapper and hasattr(wrapper, "context") and wrapper.context:
+                # Check for streaming indicator in context
+                use_streaming = getattr(wrapper.context, "_is_streaming", False)
+
+            if use_streaming:
+                logger.debug(
+                    f"Calling target agent '{recipient_name_for_call}'.get_response_stream (streaming mode)..."
+                )
+
+                # Check if we have a streaming context to forward events
+                streaming_context = None
+                if wrapper and hasattr(wrapper, "context") and wrapper.context:
+                    streaming_context = getattr(wrapper.context, "_streaming_context", None)
+
+                # Use streaming and collect the final output
+                final_output_text = ""
+                tool_calls_seen = []
+
+                async for event in self.recipient_agent.get_response_stream(
+                    message=message_content,
+                    sender_name=self.sender_agent.name,
+                    additional_instructions=additional_instructions,
+                ):
+                    # Forward event to streaming context if available
+                    if streaming_context:
+                        try:
+                            await streaming_context.put_event(event)
+                        except Exception as e:
+                            logger.warning(f"Failed to forward sub-agent event: {e}")
+
+                    # Also process locally for the final output
+                    if hasattr(event, "item") and event.item:
+                        item = event.item
+
+                        # Log tool calls from sub-agent
+                        if hasattr(item, "type") and item.type == "tool_call_item":
+                            if hasattr(item, "raw_item") and hasattr(item.raw_item, "name"):
+                                tool_name = item.raw_item.name
+                                tool_calls_seen.append(tool_name)
+                                logger.info(f"[SUB-AGENT '{recipient_name_for_call}'] Tool call: {tool_name}")
+
+                        # Extract final output
+                        elif hasattr(item, "type") and item.type == "message_output_item":
+                            if hasattr(item, "raw_item") and hasattr(item.raw_item, "content"):
+                                content = item.raw_item.content
+                                if content and len(content) > 0:
+                                    text_content = getattr(content[0], "text", "")
+                                    if text_content:
+                                        final_output_text = text_content
+
+                if tool_calls_seen:
+                    logger.info(f"Sub-agent '{recipient_name_for_call}' executed tools: {tool_calls_seen}")
+
+                response = type("StreamedResponse", (), {"final_output": final_output_text})()
+            else:
+                logger.debug(f"Calling target agent '{recipient_name_for_call}'.get_response...")
+                response = await self.recipient_agent.get_response(
+                    message=message_content,
+                    sender_name=self.sender_agent.name,
+                    additional_instructions=additional_instructions,
+                )
 
             current_final_output = response.final_output
             if current_final_output is None:
