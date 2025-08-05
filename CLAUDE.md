@@ -1,16 +1,15 @@
-# Agency Swarm Claude Code Orchestration
+# Agency Builder Instructions
 
-You are working in the Agency Swarm repository. When users ask to create agencies, you orchestrate specialized sub-agents to build production-ready Agency Swarm v1.0.0 systems.
+When users ask to create agencies, you orchestrate specialized sub-agents to build production-ready Agency Swarm v1.0.0 multi-agent systems (agencies).
 
 ## Available Sub-Agents
 
 You have these specialized sub-agents in `.claude/agents/`:
 
-1. **prd-creator**: Transforms vague ideas into comprehensive requirements
-2. **agency-creator**: Creates complete folder structure with comprehensive agent instructions
-3. **tool-builder**: Implements production-ready tools with proper error handling
-4. **api-researcher**: Researches MCP servers and APIs for tool integrations
-5. **integration-tester**: Wires everything together and ensures it works
+1. **api-researcher**: Researches MCP servers and APIs for tool integrations
+2. **prd-creator**: Transforms vague ideas into comprehensive requirements (optional - skip if user provides detailed specs)
+3. **agency-builder**: Creates complete agency - structure, agents, tools, everything except final wiring
+4. **qa-tester**: Wires agency.py, tests everything, fixes issues until production-ready
 
 ## Key Architecture Principle
 
@@ -20,72 +19,75 @@ Each sub-agent works in a **clean context window** - they cannot see this conver
 - Consistent results
 - Parallel execution capability
 
-## Agency Creation Workflow
+## Agency Creation Workflows
 
-When a user asks to create an agency, follow this complete workflow:
+Choose the appropriate workflow based on what the user provides:
 
-### Step 0: Initial Clarification (You do this)
-- Clarify the user's needs
-- Understand the target market
-- DO NOT research APIs yourself - delegate to api-researcher
+### Workflow A: User has vague idea
+1. **Research feasibility** (Use api-researcher as needed)
+2. **Create PRD** (Use prd-creator)
+3. **Build everything** (Use agency-builder)
+4. **Test & wire** (Use qa-tester)
 
-### Step 1: API Feasibility Check (Use api-researcher)
-Research critical integrations BEFORE designing the agency:
+### Workflow B: User has PRD or detailed specs
+1. **Build everything** (Use agency-builder with the PRD/specs)
+2. **Test & wire** (Use qa-tester)
+
+### Workflow C: User needs specific integration research
+1. **Research APIs** (Use api-researcher)
+2. Continue with Workflow A or B
+
+## Detailed Steps
+
+### Step 1: Assess User Input
+Determine what the user has provided:
+- Vague idea → Need PRD creation (Workflow A)
+- Detailed specs/PRD → Skip to building (Workflow B)
+- Questions about integrations → Research first (Workflow C)
+
+### Step 2: Research (if needed)
+When you need to know what's possible:
 ```
-[Use api-researcher with: "Twitter API for social media posting"]
-[Use api-researcher with: "Content generation APIs"]
-[Use api-researcher with: "Analytics APIs"]
-```
-
-This ensures the PRD includes only feasible tools.
-
-### Step 2: Requirements Document
-With research complete, create the PRD:
-```
-You: Based on my research, I'll design a marketing agency with social media integration via MCP servers and content generation through OpenAI.
-
-[Use prd-creator with: "Create a marketing agency for small businesses. Available integrations: Twitter MCP server, LinkedIn API, OpenAI for content, Google Analytics API. Target: Small businesses needing automated marketing."]
-```
-
-Include your research findings to help prd-creator design feasible tools.
-
-### Step 3: Agency Creation
-After PRD approval:
-```
-[Use agency-creator with: The complete PRD content]
-```
-
-Creates:
-- Complete folder structure
-- Agent Python files with proper configuration
-- Battle-tested instructions.md for each agent
-- All base configuration files
-
-### Step 4: Tool Implementation
-Implement tools with API research results:
-```
-[Use tool-builder with:
-- Tool specifications from PRD
-- Agency path: marketing_agency/
-- API research results from Step 1
-- Any additional implementation notes]
+[Use api-researcher with: "PostgreSQL database integration for Agency Swarm"]
+[Use api-researcher with: "Social media posting APIs - Twitter, LinkedIn"]
+[Use api-researcher with: "Payment processing - Stripe, PayPal"]
 ```
 
-### Step 5: Integration & Testing
-Wire and test everything:
+### Step 3: Create PRD (if needed)
+Only when user provides vague requirements:
 ```
-[Use integration-tester with:
-- Agency path: marketing_agency/
-- Agents: ceo, content_writer, social_manager, analytics_expert
-- Communication flows from PRD
-- Special requirements: Gradio interface needed]
+[Use prd-creator with: "Create a customer support agency for SaaS companies. Available: Zendesk API, Slack integration, OpenAI. Target: SaaS companies with 100-1000 customers."]
 ```
 
-### Step 6: Iteration
-If tests fail, determine which sub-agent to use:
-- API issues → api-researcher for alternatives
-- Tool bugs → tool-builder to fix
-- Wiring issues → integration-tester to resolve
+### Step 4: Build Complete Agency
+With PRD or detailed specs in hand:
+```
+[Use agency-builder with: {complete PRD content or detailed specifications}]
+```
+
+This creates:
+- Full folder structure
+- All agent files with instructions.md
+- All tool implementations
+- Configuration files
+- Everything except final wiring
+
+### Step 5: QA and Wire
+Final step for all workflows:
+```
+[Use qa-tester with:
+- Agency path: customer_support_agency/
+- Agents: support_ceo, ticket_handler, knowledge_expert, escalation_manager
+- Communication flows: CEO→all, all→CEO
+- Requirements: Need Gradio UI for demo]
+```
+
+This:
+- Wires agency.py properly
+- Creates agency_manifesto.md
+- Tests all components
+- Fixes any issues
+- Ensures production readiness
 
 ## How to Orchestrate Effectively
 
@@ -122,14 +124,6 @@ Use TodoWrite to track the workflow:
 - [ ] Implement tools
 - [ ] Test integration
 
-## Important Patterns
-
-- **Agency Swarm v1.0.0**: No Genesis, no subclassing
-- **Agent Pattern**: Use `Agent()` instantiation directly
-- **Tools**: Inherit from `BaseTool` or use `@function_tool`
-- **Communication**: One-way flows as directional tuples
-- **MCP First**: Always check for MCP servers before traditional APIs
-
 ## Sub-Agent Limitations
 
 Remember that sub-agents:
@@ -143,37 +137,23 @@ Remember that sub-agents:
 ```
 User: Create a data analysis agency
 
-You: I'll create a data analysis agency for you. Let me use my specialized API researcher to find the best tools and integrations available.
+You: I'll create a data analysis agency for you. Let me research the best integrations available.
 
 [Use api-researcher with: "PostgreSQL database connection - check MCP servers"]
-[Use api-researcher with: "Data visualization - Plotly, Matplotlib, D3.js"]
-[Use api-researcher with: "Data processing - Pandas, NumPy integration"]
+[Use api-researcher with: "Data visualization - Plotly, Matplotlib"]
+[Use api-researcher with: "Data processing - Pandas, NumPy"]
 
-Great! I found MCP servers for database access and excellent Python libraries for analysis. Now I'll create comprehensive requirements:
+Great! I found MCP servers for database access and Python libraries for analysis. Now I'll create comprehensive requirements:
 
 [Use prd-creator with: "Create a data analysis agency for businesses. Available: PostgreSQL MCP server, Plotly for visualization, Pandas for processing, OpenAI for insights. Target: Companies needing automated data analysis and reporting."]
 
-The PRD is complete with 4 specialized agents:
-- DataCEO: Orchestrates analysis projects
-- DataCollector: Gathers data via MCP servers
-- DataAnalyst: Processes with Pandas/NumPy
-- VisualizationExpert: Creates Plotly dashboards
+The PRD is complete with 4 specialized agents. Now I'll build the entire agency:
 
-Creating the agency structure...
+[Use agency-builder with: {full PRD content}]
 
-[Use agency-creator with: {full PRD content}]
+Agency structure and all components built! Finally, let me wire and test everything:
 
-Structure ready. Now implementing all 28 tools...
-
-[Use tool-builder with:
-- Tool specs from PRD
-- Agency path: data_analysis_agency/
-- PostgreSQL MCP server config
-- Plotly/Pandas implementation guides]
-
-Finally, wiring everything together...
-
-[Use integration-tester with:
+[Use qa-tester with:
 - Path: data_analysis_agency/
 - Agents: data_ceo, data_collector, data_analyst, visualization_expert
 - Flows: CEO→all, all→CEO
@@ -182,7 +162,7 @@ Finally, wiring everything together...
 ✅ Your data analysis agency is ready!
 - Location: data_analysis_agency/
 - 4 agents with 28 tools
-- MCP server integration for databases
+- All tests passing
 - Run: python data_analysis_agency/agency.py
 ```
 
@@ -190,15 +170,7 @@ Finally, wiring everything together...
 
 | Task | Sub-Agent | Input Needed |
 |------|-----------|--------------|
-| Design agency | prd-creator | Basic concept + target market |
-| Create structure | agency-creator | Complete PRD |
-| Research integration | api-researcher | Service/API need |
-| Build tools | tool-builder | Tool specs + APIs |
-| Test & fix | integration-tester | All paths + flows |
-
-## Project Context
-
-- Repository: `/Users/nick/Areas/Development/code/agency-swarm/`
-- Sub-agents: `.claude/agents/`
-- Framework docs: `.cursor/rules/agency_swarm.mdc`
-- Version: Agency Swarm v1.0.0
+| Research APIs/MCP | api-researcher | Service/API need |
+| Design agency | prd-creator | Basic concept + target market + research |
+| Build everything | agency-builder | Complete PRD or detailed specs |
+| Test & wire | qa-tester | Agency path + agent list + flows |
