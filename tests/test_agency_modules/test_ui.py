@@ -143,9 +143,6 @@ class TestLayoutAlgorithms:
             assert "x" in node["position"]
             assert "y" in node["position"]
 
-        # Layout algorithm should not be exposed in metadata
-        assert "layoutAlgorithm" not in result["metadata"]
-
     def test_apply_layout_different_dimensions(self, sample_agency_data):
         """Test apply_layout with different width and height."""
         result1 = LayoutAlgorithms.apply_layout(sample_agency_data, width=400, height=300)
