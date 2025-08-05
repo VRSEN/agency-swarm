@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 from agents import FunctionTool, RunContextWrapper
 
 from ..context import MasterContext
+from ..streaming_utils import add_agent_name_to_event
 
 if TYPE_CHECKING:
     from ..agent_core import Agent
@@ -162,11 +163,7 @@ class SendMessage(FunctionTool):
                     additional_instructions=additional_instructions,
                 ):
                     # Add agent name to the event before forwarding
-                    if isinstance(event, dict):
-                        event["agent_name"] = self.recipient_agent.name
-                    elif hasattr(event, "__dict__"):
-                        # For object-like events, add agent_name as attribute
-                        event.agent_name = self.recipient_agent.name
+                    event = add_agent_name_to_event(event, self.recipient_agent.name)
 
                     # Forward event to streaming context if available
                     if streaming_context:

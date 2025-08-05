@@ -15,6 +15,24 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
+def add_agent_name_to_event(event: Any, agent_name: str) -> Any:
+    """Add agent name to a streaming event.
+
+    Args:
+        event: The streaming event (dict or object)
+        agent_name: Name of the agent to add to the event
+
+    Returns:
+        The event with agent_name added
+    """
+    if isinstance(event, dict):
+        event["agent_name"] = agent_name
+    elif hasattr(event, "__dict__"):
+        # For object-like events, add agent_name as attribute
+        event.agent_name = agent_name
+    return event
+
+
 @dataclass
 class StreamingContext:
     """Context for managing event streaming across nested agent calls."""

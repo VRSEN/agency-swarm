@@ -28,6 +28,7 @@ from openai.types.responses import ResponseFileSearchToolCall, ResponseFunctionW
 
 from agency_swarm.context import MasterContext
 from agency_swarm.messages import MessageFilter, MessageFormatter
+from agency_swarm.streaming_utils import add_agent_name_to_event
 from agency_swarm.utils.citation_extractor import extract_direct_file_annotations
 
 if TYPE_CHECKING:
@@ -455,12 +456,7 @@ class Execution:
                     collected_items.append(event.item)
 
                 # Add agent name to the event
-                if isinstance(event, dict):
-                    event["agent_name"] = self.agent.name
-                elif hasattr(event, "__dict__"):
-                    # For object-like events, add agent_name as attribute
-                    event.agent_name = self.agent.name
-
+                event = add_agent_name_to_event(event, self.agent.name)
                 yield event
 
             # Save all collected items after streaming completes
