@@ -198,15 +198,6 @@ Agency Swarm is a multi-agent orchestration framework built on top of the OpenAI
 - **BAD**: `test_handoffs_with_communication_flows.py` (too long/confusing)
 - **FORBIDDEN**: Generic names like `test_tools.py` at root level
 
-### Misplaced Files Requiring Cleanup
-```
-tests/test_context_preservation.py          → tests/integration/
-tests/test_handoffs_with_communication_flows.py → tests/integration/test_agent_handoffs.py
-tests/test_persistence_hooks.py             → tests/test_agent_modules/
-tests/test_thread_manager.py                → tests/test_agent_modules/
-tests/test_tools.py                         → tests/test_agent_modules/test_tool_system.py
-tests/test_visualization.py                 → tests/test_agency_modules/test_ui.py
-```
 
 ## 🚨 ZERO FUNCTIONAL CHANGES PROTOCOL (NUCLEAR SAFETY LEVEL)
 
