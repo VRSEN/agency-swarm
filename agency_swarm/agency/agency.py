@@ -5,6 +5,7 @@ import logging
 import os
 import atexit
 import queue
+import re
 import threading
 import uuid
 from enum import Enum
@@ -719,19 +720,24 @@ class Agency:
                 break
 
             recipient_agent = None
-            if "@" in text:
-                recipient_agent = text.split("@")[1].split(" ")[0]
-                text = text.replace(f"@{recipient_agent}", "").strip()
+            # Check for agent mentions that start with @ at the beginning of text or after whitespace
+            agent_mention_pattern = r'(?:^|\s)@(\w+)(?:\s|$)'
+            agent_match = re.search(agent_mention_pattern, text)
+            
+            if agent_match:
+                mentioned_agent = agent_match.group(1)
                 try:
                     recipient_agent = [
                         agent
                         for agent in self.recipient_agents
-                        if agent.lower() == recipient_agent.lower()
+                        if agent.lower() == mentioned_agent.lower()
                     ][0]
                     recipient_agent = self._get_agent_by_name(recipient_agent)
-                except Exception as e:
+                    # Remove the agent mention from the text
+                    text = re.sub(agent_mention_pattern, ' ', text).strip()
+                except Exception:
                     logger.error(
-                        f"Recipient agent {recipient_agent} not found.", exc_info=True
+                        f"Recipient agent {mentioned_agent} not found.", exc_info=True
                     )
                     continue
 
