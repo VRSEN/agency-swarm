@@ -205,6 +205,4 @@ class LayoutAlgorithms:
             updated_nodes.append(updated_node)
 
         updated_data["nodes"] = updated_nodes
-        updated_data["metadata"]["layoutAlgorithm"] = "hierarchical"
-
         return updated_data
