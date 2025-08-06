@@ -30,24 +30,25 @@ In `.claude/agents/`:
    - Core purpose and goals of the agency
    - Expected user interactions
    - Data sources/APIs they want to use
-2. Launch api-researcher with concept → saves to `agency_name/api_docs.md`
-3. Launch prd-creator with concept + API docs path → returns PRD path
-4. Download Agency Swarm docs if not present:
+2. **WAIT FOR USER FEEDBACK** before proceeding to next steps
+3. Launch api-researcher with concept → saves to `agency_name/api_docs.md`
+4. Launch prd-creator with concept + API docs path → returns PRD path
+5. Download Agency Swarm docs if not present:
    ```bash
    mkdir -p ai_docs && cd ai_docs
    git clone --depth 1 --filter=blob:none --sparse https://github.com/bonk1t/agency-swarm
    cd agency-swarm && git sparse-checkout set docs
    ```
-5. Launch structure-creator with PRD path + docs path → returns structure confirmation
-6. Launch tools-creator with PRD + API docs → returns tools status, API keys needed
-7. Ask user for API keys (OPENAI_API_KEY standard, plus any tool-specific)
-8. Launch instructions-writer with PRD + communication flows → returns instructions paths
-9. Launch qa-tester → returns test results file path + summary
-10. If failures: Pass test results file to relevant agents:
+6. Launch structure-creator with PRD path + docs path → returns structure confirmation
+7. Launch tools-creator with PRD + API docs → returns tools status, API keys needed
+8. Ask user for API keys (OPENAI_API_KEY standard, plus any tool-specific)
+9. Launch instructions-writer with PRD + communication flows → returns instructions paths
+10. Launch qa-tester → returns test results file path + summary
+11. If failures: Pass test results file to relevant agents:
     - Tool errors → tools-creator with test file
     - Instruction issues → instructions-writer with test file
     - Communication flow issues → read agency.py, fix directly or delegate
-11. Re-run qa-tester until all tests pass
+12. Re-run qa-tester until all tests pass
 
 ### When user has detailed specs:
 1. Download Agency Swarm docs if not present
