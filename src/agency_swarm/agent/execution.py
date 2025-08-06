@@ -41,18 +41,11 @@ class Execution:
     def __init__(self, agent: "Agent"):
         self.agent = agent
 
-    def _ensure_minimal_agency(self, sender_name: str | None) -> None:
-        """Ensure minimal agency instance exists for direct agent usage."""
-        if not self.agent._agency_instance or not hasattr(self.agent._agency_instance, "agents"):
-            if sender_name is None:  # Direct user interaction without agency
-                # Create a minimal agency-like object for compatibility
-                class MinimalAgency:
-                    def __init__(self, agent):
-                        self.agents = {agent.name: agent}
-                        self.user_context = {}
-
-                self.agent._agency_instance = MinimalAgency(self.agent)
-            else:
+    def _validate_agency_for_delegation(self, sender_name: str | None) -> None:
+        """Validate that agency instance exists if delegation is needed."""
+        # If this is agent-to-agent communication, we need an agency instance
+        if sender_name is not None:
+            if not self.agent._agency_instance or not hasattr(self.agent._agency_instance, "agents"):
                 raise RuntimeError(
                     f"Agent '{self.agent.name}' missing Agency instance for agent-to-agent communication."
                 )
@@ -184,8 +177,8 @@ class Execution:
         if not self.agent._thread_manager:
             raise RuntimeError(f"Agent '{self.agent.name}' missing ThreadManager.")
 
-        # For direct agent usage, ensure minimal agency instance exists
-        self._ensure_minimal_agency(sender_name)
+        # Validate agency instance exists if this is agent-to-agent communication
+        self._validate_agency_for_delegation(sender_name)
 
         # Store original instructions for restoration
         original_instructions = self.agent.instructions
@@ -364,8 +357,8 @@ class Execution:
         if not self.agent._thread_manager:
             raise RuntimeError(f"Agent '{self.agent.name}' missing ThreadManager.")
 
-        # For direct agent usage, ensure minimal agency instance exists
-        self._ensure_minimal_agency(sender_name)
+        # Validate agency instance exists if this is agent-to-agent communication
+        self._validate_agency_for_delegation(sender_name)
 
         # Store original instructions for restoration
         original_instructions = self.agent.instructions
@@ -579,10 +572,17 @@ class Execution:
 
     def _prepare_master_context(self, context_override: dict[str, Any] | None) -> MasterContext:
         """Constructs the MasterContext for the current run."""
-        if not self.agent._agency_instance or not hasattr(self.agent._agency_instance, "agents"):
-            raise RuntimeError("Cannot prepare context: Agency instance or agents map missing.")
         if not self.agent._thread_manager:
             raise RuntimeError("Cannot prepare context: ThreadManager missing.")
+
+        # For standalone agent usage (no agency), create minimal context
+        if not self.agent._agency_instance or not hasattr(self.agent._agency_instance, "agents"):
+            return MasterContext(
+                thread_manager=self.agent._thread_manager,
+                agents={self.agent.name: self.agent},  # Only include self
+                user_context=context_override or {},
+                current_agent_name=self.agent.name,
+            )
 
         # Use reference for persistence, or create merged copy if override provided
         base_user_context = getattr(self.agent._agency_instance, "user_context", {})
