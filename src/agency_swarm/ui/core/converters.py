@@ -39,20 +39,34 @@ logger = logging.getLogger(__name__)
 
 
 # Universal function to serialize any object to a JSON-compatible format
-def serialize(obj):
+def serialize(obj, _visited=None):
+    if _visited is None:
+        _visited = set()
+
+    # Check for circular references
+    obj_id = id(obj)
+    if obj_id in _visited:
+        return str(obj)  # Return string representation for circular refs
+
     if dataclasses.is_dataclass(obj):
+        _visited.add(obj_id)
         # Use __dict__ to preserve dynamically added attributes like agent and callerAgent
-        return {k: serialize(v) for k, v in obj.__dict__.items() if not k.startswith("_")}
+        result = {k: serialize(v, _visited) for k, v in obj.__dict__.items() if not k.startswith("_")}
+        _visited.discard(obj_id)
+        return result
     elif isinstance(obj, BaseModel):
-        return {k: serialize(v) for k, v in obj.model_dump().items()}
+        return {k: serialize(v, _visited) for k, v in obj.model_dump().items()}
     elif isinstance(obj, list | tuple):
-        return [serialize(item) for item in obj]
+        return [serialize(item, _visited) for item in obj]
     elif isinstance(obj, dict):
-        return {k: serialize(v) for k, v in obj.items()}
-    elif hasattr(obj, "__dict__") and type(obj).__module__ == "types":
-        # Only handle SimpleNamespace and similar types from the types module
-        # This preserves streaming event attributes like agent and callerAgent
-        return {k: serialize(v) for k, v in obj.__dict__.items() if not k.startswith("_")}
+        return {k: serialize(v, _visited) for k, v in obj.items()}
+    elif hasattr(obj, "__dict__") and not isinstance(obj, type):
+        # Handle any object with __dict__ (includes SimpleNamespace and regular objects)
+        # This ensures circular reference tracking for all objects with attributes
+        _visited.add(obj_id)
+        result = {k: serialize(v, _visited) for k, v in obj.__dict__.items() if not k.startswith("_")}
+        _visited.discard(obj_id)
+        return result
     else:
         return str(obj)
 
