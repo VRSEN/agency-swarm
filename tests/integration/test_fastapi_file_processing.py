@@ -236,3 +236,38 @@ class TestFastAPIFileProcessing:
         # The agent should mention it couldn't access the file
         response_text = response_data["error"].lower()
         assert "error downloading file from provided urls" in response_text
+
+    @pytest.mark.asyncio
+    async def test_streaming_invalid_file_url(self, file_server_process, fastapi_server):
+        """Test that streaming endpoint properly handles invalid file URLs without hanging."""
+        url = "http://localhost:8080/test_agency/get_response_stream"
+        payload = {
+            "message": "Please process this file.",
+            "file_urls": {"nonexistent.txt": "http://localhost:7860/nonexistent-file.txt"},
+        }
+        headers = {}
+
+        collected_data = []
+        error_found = False
+
+        async with httpx.AsyncClient(timeout=30) as client:
+            async with client.stream("POST", url, json=payload, headers=headers) as response:
+                assert response.status_code == 200
+                async for line in response.aiter_lines():
+                    if line.strip():
+                        collected_data.append(line)
+                        # Check if this is an error event
+                        if line.startswith("data: "):
+                            try:
+                                import json
+
+                                data = json.loads(line[6:])  # Remove "data: " prefix
+                                if "error" in data:
+                                    error_found = True
+                                    assert "error downloading file from provided urls" in data["error"].lower()
+                            except json.JSONDecodeError:
+                                pass  # Some lines might not be JSON
+
+        # Verify we received streaming data and found the error
+        assert len(collected_data) > 0, "Should have received streaming data"
+        assert error_found, "Should have received an error event for invalid file URL"
