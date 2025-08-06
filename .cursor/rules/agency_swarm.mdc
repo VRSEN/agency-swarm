@@ -267,7 +267,7 @@ filesystem_server = MCPServerStdio(
     name="Filesystem_Server",
     params={
         "command": "npx",
-        "args": ["-y", "@modelcontextprotocol/server-filesystem", "."], 
+        "args": ["-y", "@modelcontextprotocol/server-filesystem", "."],
     },
     cache_tools_list=True
 )
@@ -362,7 +362,7 @@ Agencies are collections of agents that work together to achieve a common goal. 
    )
 
    if __name__ == "__main__":
-       agency.run_demo()
+       agency.terminal_demo()
    ```
 
    **A Note on Communication Flows**:
