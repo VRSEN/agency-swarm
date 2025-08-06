@@ -41,7 +41,8 @@ logger = logging.getLogger(__name__)
 # Universal function to serialize any object to a JSON-compatible format
 def serialize(obj):
     if dataclasses.is_dataclass(obj):
-        return {k: serialize(v) for k, v in dataclasses.asdict(obj).items()}
+        # Use __dict__ to preserve dynamically added attributes like agent and callerAgent
+        return {k: serialize(v) for k, v in obj.__dict__.items() if not k.startswith("_")}
     elif isinstance(obj, BaseModel):
         return {k: serialize(v) for k, v in obj.model_dump().items()}
     elif isinstance(obj, list | tuple):

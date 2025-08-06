@@ -91,6 +91,7 @@ async def stream_response(message: str):
             caller_agent = getattr(event, "callerAgent", None)
             event_type = getattr(event, "type", None)
             call_id = getattr(event, "call_id", None)
+            item_id = getattr(event, "item_id", None)
 
             # For data events, get the nested type
             if hasattr(event, "data") and hasattr(event.data, "type"):
@@ -104,6 +105,8 @@ async def stream_response(message: str):
             print(f"  callerAgent: {caller_agent}")
             if call_id:
                 print(f"  call_id: {call_id}")
+            if item_id:
+                print(f"  item_id: {item_id}")
             print(f"  event.type: {event_type}")
             if data_type:
                 print(f"  data.type: {data_type}")

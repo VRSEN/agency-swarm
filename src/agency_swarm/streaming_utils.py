@@ -37,24 +37,42 @@ def add_agent_name_to_event(event: Any, agent_name: str, caller_agent: str | Non
 
     # Extract and propagate call_id if present in the event structure
     call_id = None
+    item_id = None
 
     # Check for call_id in various locations within the event
     if hasattr(event, "data"):
         data = event.data
-        # Check in data.item.call_id
-        if hasattr(data, "item") and hasattr(data.item, "call_id"):
-            call_id = data.item.call_id
 
-    # Check in event.item structure
+        # Check for item_id on delta events (for function arguments, text, etc.)
+        if hasattr(data, "item_id"):
+            item_id = data.item_id
+
+        # Check in data.item for various ID fields
+        if hasattr(data, "item"):
+            item = data.item
+            # Check for call_id directly
+            if hasattr(item, "call_id"):
+                call_id = item.call_id
+            # Also check for id field (some items have both id and call_id)
+            elif hasattr(item, "id"):
+                # For function calls, the id field can serve as call_id
+                call_id = item.id
+
+    # Check in event.item structure (for run_item_stream_event)
     if not call_id and hasattr(event, "item") and event.item:
         item = event.item
         # Check for call_id directly
         if hasattr(item, "call_id"):
             call_id = item.call_id
-        # For tool_call_item events, check raw_item.id
+        # For tool_call_item events, check raw_item
         elif hasattr(item, "type") and item.type == "tool_call_item":
-            if hasattr(item, "raw_item") and hasattr(item.raw_item, "id"):
-                call_id = item.raw_item.id
+            if hasattr(item, "raw_item"):
+                raw = item.raw_item
+                # Check both call_id and id fields
+                if hasattr(raw, "call_id"):
+                    call_id = raw.call_id
+                elif hasattr(raw, "id"):
+                    call_id = raw.id
 
     # Add call_id to root level if found
     if call_id:
@@ -62,6 +80,13 @@ def add_agent_name_to_event(event: Any, agent_name: str, caller_agent: str | Non
             event["call_id"] = call_id
         elif hasattr(event, "__dict__"):
             event.call_id = call_id
+
+    # Add item_id to root level if found (useful for correlating delta events)
+    if item_id:
+        if isinstance(event, dict):
+            event["item_id"] = item_id
+        elif hasattr(event, "__dict__"):
+            event.item_id = item_id
 
     return event
 
