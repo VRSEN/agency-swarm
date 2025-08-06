@@ -455,6 +455,8 @@ class TestConsoleEventAdapter:
         """Test openai_to_message_output detects send_message pattern."""
         event = MagicMock()
         event.type = "raw_response_event"
+        event.agent = "Agent1"  # Add agent attribute
+        event.callerAgent = None  # Add callerAgent attribute
         event.data = MagicMock()
         event.data.type = "response.output_item.done"
         event.data.item = MagicMock()

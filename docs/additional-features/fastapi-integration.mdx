@@ -132,3 +132,42 @@ history.extend(new_messages)
   - `/your_agency_name/get_response_stream` (POST, streaming responses)
 - **Tool Endpoints:**
   - `/tool/ToolClassName` (POST)
+
+## Streaming Event Structure
+
+When using the streaming endpoint (`/your_agency_name/get_response_stream`), the API returns Server-Sent Events (SSE) with the following structure:
+
+### Event Fields
+
+All streaming events include these standard fields:
+
+- **`agent`**: The name of the agent that generated this event
+- **`callerAgent`**: The name of the agent that called this agent (null for user-initiated requests)
+
+### Function/Tool/MCP Call Events
+
+For events related to function calls, tool calls, or MCP calls, the following additional field is included where applicable:
+
+- **`call_id`**: The unique identifier for this call, useful for correlating all events related to the same function/tool/MCP invocation
+  - Present in: `response.output_item.added`, `response.output_item.done`, `tool_call_item`, `function_call` events
+  - Note: For `response.function_call_arguments.delta` and similar delta events, the `call_id` will be added when the item_id to call_id mapping is available
+
+### Example Event Structure
+
+```json
+{
+  "type": "tool_call_item",
+  "agent": "Developer",
+  "callerAgent": "CEO",
+  "call_id": "call_abc123...",
+  "item": {
+    "type": "tool_call_item",
+    "raw_item": {
+      "name": "write_code",
+      "arguments": "{\"language\": \"python\"}"
+    }
+  }
+}
+```
+
+This consistent structure makes it easy to track which agent is performing actions and maintain proper context in multi-agent conversations, especially when agents call sub-agents simultaneously.

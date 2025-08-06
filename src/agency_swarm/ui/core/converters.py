@@ -48,6 +48,10 @@ def serialize(obj):
         return [serialize(item) for item in obj]
     elif isinstance(obj, dict):
         return {k: serialize(v) for k, v in obj.items()}
+    elif hasattr(obj, "__dict__") and type(obj).__module__ == "types":
+        # Only handle SimpleNamespace and similar types from the types module
+        # This preserves streaming event attributes like agent and callerAgent
+        return {k: serialize(v) for k, v in obj.__dict__.items() if not k.startswith("_")}
     else:
         return str(obj)
 
@@ -435,9 +439,9 @@ class ConsoleEventAdapter:
 
     def openai_to_message_output(self, event: Any, recipient_agent: str):
         try:
-            # Use agent_name from event if available, otherwise fall back to recipient_agent
-            agent_name = getattr(event, "agent_name", None) or recipient_agent
-            caller_agent = getattr(event, "caller_agent", None)
+            # Use agent from event if available, otherwise fall back to recipient_agent
+            agent_name = getattr(event, "agent", None) or recipient_agent
+            caller_agent = getattr(event, "callerAgent", None)
             # Determine who the agent is speaking to (if caller_agent exists, respond to them, else to user)
             speaking_to = caller_agent if caller_agent else "user"
 

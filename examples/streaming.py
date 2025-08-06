@@ -87,9 +87,10 @@ async def stream_response(message: str):
         # Debug logging for frontend developers
         if DEBUG_MODE:
             # Extract key fields
-            agent_name = getattr(event, "agent_name", None)
-            caller_agent = getattr(event, "caller_agent", None)
+            agent_name = getattr(event, "agent", None)
+            caller_agent = getattr(event, "callerAgent", None)
             event_type = getattr(event, "type", None)
+            call_id = getattr(event, "call_id", None)
 
             # For data events, get the nested type
             if hasattr(event, "data") and hasattr(event.data, "type"):
@@ -99,8 +100,10 @@ async def stream_response(message: str):
 
             # Format the output
             print(f"\n[EVENT #{event_count}]")
-            print(f"  agent_name: {agent_name}")
-            print(f"  caller_agent: {caller_agent}")
+            print(f"  agent: {agent_name}")
+            print(f"  callerAgent: {caller_agent}")
+            if call_id:
+                print(f"  call_id: {call_id}")
             print(f"  event.type: {event_type}")
             if data_type:
                 print(f"  data.type: {data_type}")

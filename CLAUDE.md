@@ -43,14 +43,20 @@ python -m pytest tests/integration/ -v          # Integration tests
 
 ## Common Development Commands
 
-### Build and Testing
+### Build and Testing (MANDATORY - RUN THESE COMMANDS)
 ```bash
-make ci          # Full CI pipeline: lint + mypy + tests + coverage (83% minimum)
+# CRITICAL: ALWAYS RUN THESE WITH PROPER TIMEOUT
+make sync        # Install dependencies - MUST RUN FIRST
+make ci          # Full CI pipeline: lint + mypy + tests + coverage (86% minimum)
 make tests       # Run all tests
 make format      # Format code with ruff
 make lint        # Run linting checks
 make mypy        # Run type checking
-make coverage    # Run tests with coverage reporting
+make coverage    # Run tests with coverage reporting (86% minimum required)
+
+# IMPORTANT: When running tests with Bash tool, ALWAYS use timeout=600000 (10 minutes)
+# Example: Bash(command="make ci", timeout=600000)
+# Example: Bash(command="make coverage", timeout=600000)
 ```
 
 ### Running Examples
