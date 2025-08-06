@@ -8,9 +8,6 @@ message content and tool call results.
 import logging
 
 from agents.items import MessageOutputItem
-from agents.run import TResponseInputItem
-
-from agency_swarm.messages.message_formatter import MessageFormatter
 
 logger = logging.getLogger(__name__)
 
