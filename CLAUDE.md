@@ -2,6 +2,11 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## 🔴 CRITICAL: KEEP THIS FILE TIGHT AND CONDENSED
+- **NO information duplication** - Each rule stated ONCE
+- **MAXIMUM clarity with MINIMUM words**
+- **User feedback = check if already covered before adding**
+
 ## 🔴 CRITICAL SAFETY PROTOCOLS (NUCLEAR FACILITY LEVEL - NO EXCEPTIONS)
 
 ### 🚨 MANDATORY WORKFLOW PROCESS - FOLLOW OR BE DECOMMISSIONED
@@ -54,9 +59,7 @@ make lint        # Run linting checks
 make mypy        # Run type checking
 make coverage    # Run tests with coverage reporting (86% minimum required)
 
-# IMPORTANT: When running tests with Bash tool, ALWAYS use timeout=600000 (10 minutes)
-# Example: Bash(command="make ci", timeout=600000)
-# Example: Bash(command="make coverage", timeout=600000)
+# ONLY use timeout=600000 (10 minutes) for: make tests, make coverage, make ci
 ```
 
 ### Running Examples

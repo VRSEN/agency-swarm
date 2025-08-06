@@ -57,7 +57,14 @@ class TestSerialize:
 
     def test_agent_object(self, agent_mock):
         result = serialize(agent_mock)
-        assert result == str(agent_mock)
+        # Agent objects with __dict__ now get serialized to dictionaries
+        # MagicMock includes method_calls attribute
+        assert result == {
+            "method_calls": [],
+            "name": "TestAgent",
+            "description": "Test description",
+            "model": "gpt-4",
+        }
 
     def test_dataclass(self):
         @dataclasses.dataclass
@@ -86,8 +93,8 @@ class TestSerialize:
 
         obj = TestClass()
         result = serialize(obj)
-        # For generic objects, serialize just calls str()
-        assert result == str(obj)
+        # Objects with __dict__ now get serialized to dictionaries
+        assert result == {"name": "test", "value": "42"}
 
 
 class TestAguiAdapter:
