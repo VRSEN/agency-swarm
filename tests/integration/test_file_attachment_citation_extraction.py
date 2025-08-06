@@ -93,14 +93,13 @@ async def test_file_attachment_citation_extraction():
             # Get conversation history to examine
             history = agent._thread_manager.get_conversation_history("DocumentAnalyst", None)  # None = user
 
-            # Look for direct file citation messages in history
-            citation_messages = [
-                item
-                for item in history
-                if item.get("role") == "assistant" and "[DIRECT_FILE_CITATIONS]" in str(item.get("content", ""))
+            # Look for citations in assistant messages (new format: in metadata)
+            messages_with_citations = [
+                item for item in history if item.get("role") == "assistant" and "citations" in item
             ]
 
             # Extract citations programmatically using centralized utility
+            # This now supports both old format (synthetic messages) and new format (metadata)
             extracted_citations = extract_direct_file_citations_from_history(history)
 
             # More lenient verification - check if either citations were extracted OR
@@ -115,7 +114,8 @@ async def test_file_attachment_citation_extraction():
                 # Only fail if we have neither citations nor evidence of file access
                 raise AssertionError(
                     "Expected to find direct file citations in conversation history OR evidence of file access. "
-                    f"Found {len(citation_messages)} citation messages, but no parsed citations or revenue data."
+                    f"Found {len(messages_with_citations)} messages with citations metadata, "
+                    f"but no parsed citations or revenue data."
                 )
 
             # Verify citation structure

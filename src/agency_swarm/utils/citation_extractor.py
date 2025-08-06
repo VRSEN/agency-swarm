@@ -16,8 +16,8 @@ logger = logging.getLogger(__name__)
 
 
 def extract_direct_file_annotations(
-    assistant_messages: list[MessageOutputItem], agent_name: str
-) -> list[TResponseInputItem]:
+    assistant_messages: list[MessageOutputItem], agent_name: str = None
+) -> dict[str, list[dict]]:
     """
     Extract file citations from direct file uploads (annotations in message content).
 
@@ -27,11 +27,12 @@ def extract_direct_file_annotations(
 
     Args:
         assistant_messages: List of MessageOutputItem objects to examine for annotations
+        agent_name: Agent name (kept for compatibility, not used in new implementation)
 
     Returns:
-        List of synthetic assistant messages containing extracted annotation data
+        Dictionary mapping message IDs to their citation data
     """
-    synthetic_outputs = []
+    citations_by_message = {}
 
     for msg_item in assistant_messages:
         message = msg_item.raw_item
@@ -50,33 +51,16 @@ def extract_direct_file_annotations(
                             "filename": getattr(annotation, "filename", "unknown"),
                             "index": getattr(annotation, "index", 0),
                             "type": annotation.type,
+                            "method": "direct_file",
                         }
                         annotations_found.append(citation_info)
 
-        # Create synthetic message for annotations if any were found
+        # Store citations mapped to message ID
         if annotations_found:
-            annotation_content = (
-                f"[DIRECT_FILE_CITATIONS] Message ID: {message.id}\nAnnotation Type: direct_file_citations\n"
-            )
+            citations_by_message[message.id] = annotations_found
+            logger.debug(f"Extracted {len(annotations_found)} direct file citations for message_id: {message.id}")
 
-            for i, citation in enumerate(annotations_found, 1):
-                annotation_content += f"Citation {i}:\n"
-                annotation_content += f"  File ID: {citation['file_id']}\n"
-                annotation_content += f"  Filename: {citation['filename']}\n"
-                annotation_content += f"  Text Index: {citation['index']}\n"
-                annotation_content += f"  Type: {citation['type']}\n\n"
-
-            synthetic_outputs.append(
-                MessageFormatter.add_agency_metadata(
-                    {"role": "user", "content": annotation_content}, agent=agent_name, caller_agent=None
-                )
-            )
-            logger.debug(
-                f"Created direct file citations message for message_id: {message.id}, "
-                f"found {len(annotations_found)} citations"
-            )
-
-    return synthetic_outputs
+    return citations_by_message
 
 
 def extract_vector_store_citations(run_result):
@@ -101,11 +85,21 @@ def extract_vector_store_citations(run_result):
 
 
 def extract_direct_file_citations_from_history(thread_items):
-    """Extract direct file citations from thread conversation history"""
+    """Extract direct file citations from thread conversation history.
+
+    This function now supports both legacy format (synthetic user messages)
+    and new format (citations in message metadata).
+    """
     citations = []
 
     for item in thread_items:
-        if item.get("role") == "assistant" and "[DIRECT_FILE_CITATIONS]" in str(item.get("content", "")):
+        # New format: Check for citations in message metadata
+        if item.get("role") == "assistant" and "citations" in item:
+            item_citations = item.get("citations", [])
+            citations.extend(item_citations)
+
+        # Legacy format: Check for synthetic user messages with [DIRECT_FILE_CITATIONS]
+        elif item.get("role") == "user" and "[DIRECT_FILE_CITATIONS]" in str(item.get("content", "")):
             content = item.get("content", "")
             lines = content.split("\n")
             current_citation = {}

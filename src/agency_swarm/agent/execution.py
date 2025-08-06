@@ -238,16 +238,27 @@ class Execution:
 
                 # Extract direct file annotations from assistant messages
                 assistant_messages = [item for item in run_result.new_items if isinstance(item, MessageOutputItem)]
-                annotation_outputs = (
+                citations_by_message = (
                     extract_direct_file_annotations(assistant_messages, agent_name=self.agent.name)
                     if assistant_messages
-                    else []
+                    else {}
                 )
 
                 for i, run_item_obj in enumerate(run_result.new_items):
                     # _run_item_to_tresponse_input_item converts RunItem to TResponseInputItem (dict)
                     item_dict = self._run_item_to_tresponse_input_item(run_item_obj)
                     if item_dict:
+                        # If this is an assistant message with citations, add them to the message
+                        if (
+                            isinstance(run_item_obj, MessageOutputItem)
+                            and hasattr(run_item_obj.raw_item, "id")
+                            and run_item_obj.raw_item.id in citations_by_message
+                        ):
+                            item_dict["citations"] = citations_by_message[run_item_obj.raw_item.id]
+                            logger.debug(
+                                f"Added {len(item_dict['citations'])} citations to message {run_item_obj.raw_item.id}"
+                            )
+
                         # Add agency metadata to the response items
                         formatted_item = MessageFormatter.add_agency_metadata(
                             item_dict, agent=self.agent.name, caller_agent=sender_name
@@ -260,7 +271,6 @@ class Execution:
                         )
 
                 items_to_save.extend(hosted_tool_outputs)
-                items_to_save.extend(annotation_outputs)
 
                 # Filter out unwanted message types before saving
                 filtered_items = MessageFilter.filter_messages(items_to_save)
@@ -468,15 +478,26 @@ class Execution:
 
                 # Extract direct file annotations from assistant messages
                 assistant_messages = [item for item in collected_items if isinstance(item, MessageOutputItem)]
-                annotation_outputs = (
+                citations_by_message = (
                     extract_direct_file_annotations(assistant_messages, agent_name=self.agent.name)
                     if assistant_messages
-                    else []
+                    else {}
                 )
 
                 for run_item_obj in collected_items:
                     item_dict = self._run_item_to_tresponse_input_item(run_item_obj)
                     if item_dict:
+                        # If this is an assistant message with citations, add them to the message
+                        if (
+                            isinstance(run_item_obj, MessageOutputItem)
+                            and hasattr(run_item_obj.raw_item, "id")
+                            and run_item_obj.raw_item.id in citations_by_message
+                        ):
+                            item_dict["citations"] = citations_by_message[run_item_obj.raw_item.id]
+                            logger.debug(
+                                f"Added {len(item_dict['citations'])} citations to streamed message {run_item_obj.raw_item.id}"
+                            )
+
                         # Add agency metadata to the response items
                         formatted_item = MessageFormatter.add_agency_metadata(
                             item_dict, agent=self.agent.name, caller_agent=sender_name
@@ -484,7 +505,6 @@ class Execution:
                         items_to_save.append(formatted_item)
 
                 items_to_save.extend(hosted_tool_outputs)
-                items_to_save.extend(annotation_outputs)
 
                 # Filter out unwanted message types before saving
                 filtered_items = MessageFilter.filter_messages(items_to_save)
