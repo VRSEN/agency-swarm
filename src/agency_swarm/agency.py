@@ -1,6 +1,8 @@
 # --- agency.py ---
 import asyncio
+import inspect
 import logging
+import os
 import warnings
 from collections.abc import AsyncGenerator
 from typing import Any
@@ -218,7 +220,16 @@ class Agency:
 
         # --- Assign Core Attributes ---
         self.name = name
-        self.shared_instructions = shared_instructions
+        if os.path.isfile(
+            os.path.join(self._get_class_folder_path(), shared_instructions)
+        ):
+            self._read_instructions(
+                os.path.join(self._get_class_folder_path(), shared_instructions)
+            )
+        elif os.path.isfile(shared_instructions):
+            self._read_instructions(shared_instructions)
+        else:
+            self.shared_instructions = shared_instructions
         self.user_context = user_context or {}
         self.send_message_tool_class = send_message_tool_class
 
@@ -293,6 +304,20 @@ class Agency:
             temp_entry_points = list(unique_senders_as_entry_points.values())
 
         return temp_entry_points, temp_comm_flows
+
+    def _get_class_folder_path(self):
+        """
+        Retrieves the absolute path of the directory containing the class file.
+        """
+        return os.path.abspath(os.path.dirname(inspect.getfile(self.__class__)))
+
+    def _read_instructions(self, path: str):
+        """
+        Reads shared instructions from a specified file and stores them in the agency.
+        """
+        path = path
+        with open(path, "r") as f:
+            self.shared_instructions = f.read()
 
     def _register_all_agents_and_set_entry_points(
         self, defined_entry_points: list[Agent], defined_communication_flows: list[tuple[Agent, Agent]]

@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 import logging
 import os
 import re
@@ -157,6 +158,8 @@ class AttachmentManager:
                 if vs.status == "failed":
                     raise AgentsException(f"Vector store processing failed: {vs}")
                 await asyncio.sleep(1)
+            if _ == timeout - 1:
+                raise AgentsException(f"Vector store processing timed out: {self._temp_vector_store_id}")
         except Exception as e:  # pragma: no cover - best effort
             logger.warning(f"Failed while waiting for vector store {self._temp_vector_store_id}: {e}")
 
@@ -588,3 +591,33 @@ class AgentFileManager:
                     f"Agent {self.agent.name}: Failed to add file {file_id} to Vector Store {vector_store_id}: {e}"
                 )
                 raise AgentsException(f"Failed to add file {file_id} to Vector Store {vector_store_id}: {e}") from e
+
+    def read_instructions(self):
+        if not self.agent.instructions:
+            return
+        class_instructions_path = os.path.normpath(
+            os.path.join(self.get_class_folder_path(), self.agent.instructions)
+        )
+        if os.path.isfile(class_instructions_path):
+            with open(class_instructions_path, "r") as f:
+                self.agent.instructions = f.read()
+        elif os.path.isfile(self.agent.instructions):
+            with open(self.agent.instructions, "r") as f:
+                self.agent.instructions = f.read()
+        elif (
+            "./instructions.md" in self.agent.instructions
+            or "./instructions.txt" in self.agent.instructions
+        ):
+            raise Exception("Instructions file not found.")
+
+    def get_class_folder_path(self):
+        try:
+            # First, try to use the __file__ attribute of the module
+            return os.path.abspath(os.path.dirname(self.agent.__module__.__file__))
+        except (TypeError, OSError, AttributeError):
+            # If that fails, fall back to inspect
+            try:
+                class_file = inspect.getfile(self.__class__)
+            except (TypeError, OSError, AttributeError):
+                return "./"
+            return os.path.abspath(os.path.realpath(os.path.dirname(class_file)))
