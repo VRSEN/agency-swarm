@@ -282,3 +282,68 @@ def test_agent_ensure_thread_manager_without_callbacks():
     assert agent._thread_manager is not None
     assert agent._thread_manager._load_threads_callback is None
     assert agent._thread_manager._save_threads_callback is None
+
+
+# --- Instruction File Loading Tests ---
+
+
+def test_agent_instruction_file_loading(tmp_path):
+    """Test that agent can load instructions from a file."""
+    import os
+
+    # Create instruction file
+    instruction_file = tmp_path / "agent_instructions.md"
+    instruction_content = "You are a helpful assistant. Always be polite."
+    instruction_file.write_text(instruction_content)
+
+    # Create agent with instruction file path
+    agent = Agent(name="TestAgent", instructions=str(instruction_file), model="gpt-4o-mini")
+
+    # Verify instructions were loaded
+    assert agent.instructions == instruction_content
+
+
+def test_agent_instruction_file_relative_path(tmp_path):
+    """Test agent loading instructions from relative path."""
+    import os
+
+    # Create a subdirectory structure
+    agent_dir = tmp_path / "agents" / "test_agent"
+    agent_dir.mkdir(parents=True)
+
+    instruction_file = agent_dir / "instructions.md"
+    instruction_content = "I am a specialized agent for testing."
+    instruction_file.write_text(instruction_content)
+
+    # Change to the agent directory
+    original_cwd = os.getcwd()
+    try:
+        os.chdir(agent_dir)
+
+        # Create agent with relative path
+        agent = Agent(name="TestAgent", instructions="./instructions.md", model="gpt-4o-mini")
+
+        assert agent.instructions == instruction_content
+    finally:
+        os.chdir(original_cwd)
+
+
+def test_agent_instruction_string_not_file():
+    """Test that agent accepts instruction strings that aren't files."""
+    instruction_text = "Direct instruction text, not a file path"
+
+    agent = Agent(name="TestAgent", instructions=instruction_text, model="gpt-4o-mini")
+
+    # Should keep the text as-is since it's not a file
+    assert agent.instructions == instruction_text
+
+
+def test_agent_missing_instruction_file():
+    """Test proper error when instruction file doesn't exist."""
+    import pytest
+
+    with pytest.raises(FileNotFoundError) as exc_info:
+        Agent(name="TestAgent", instructions="./nonexistent_instructions.md", model="gpt-4o-mini")
+
+    assert "Instructions file not found" in str(exc_info.value)
+    assert "nonexistent_instructions.md" in str(exc_info.value)

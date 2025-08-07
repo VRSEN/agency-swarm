@@ -220,15 +220,21 @@ class Agency:
 
         # --- Assign Core Attributes ---
         self.name = name
-        self.shared_instructions = shared_instructions or ""
-        if os.path.isfile(
-            os.path.join(self._get_class_folder_path(), self.shared_instructions)
-        ):
-            self._read_instructions(
-                os.path.join(self._get_class_folder_path(), self.shared_instructions)
-            )
-        elif os.path.isfile(self.shared_instructions):
-            self._read_instructions(self.shared_instructions)
+
+        # Handle shared instructions - can be a string or a file path
+        if shared_instructions:
+            # Check if it's a file path relative to the class location
+            class_relative_path = os.path.join(self._get_class_folder_path(), shared_instructions)
+            if os.path.isfile(class_relative_path):
+                self._read_instructions(class_relative_path)
+            elif os.path.isfile(shared_instructions):
+                # It's an absolute path or relative to CWD
+                self._read_instructions(shared_instructions)
+            else:
+                # It's actual instruction text, not a file path
+                self.shared_instructions = shared_instructions
+        else:
+            self.shared_instructions = ""
 
         self.user_context = user_context or {}
         self.send_message_tool_class = send_message_tool_class
@@ -315,8 +321,7 @@ class Agency:
         """
         Reads shared instructions from a specified file and stores them in the agency.
         """
-        path = path
-        with open(path, "r") as f:
+        with open(path) as f:
             self.shared_instructions = f.read()
 
     def _register_all_agents_and_set_entry_points(
