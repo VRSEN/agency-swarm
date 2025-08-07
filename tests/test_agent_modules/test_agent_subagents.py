@@ -7,8 +7,9 @@ def test_register_subagent(minimal_agent):
     """Test registering a subagent."""
     recipient = Agent(name="Recipient", instructions="Receive messages")
     minimal_agent.register_subagent(recipient)
-    assert "Recipient" in minimal_agent._subagents
-    assert minimal_agent._subagents["Recipient"] == recipient
+    # Subagents are stored with lowercase keys for case-insensitive lookup
+    assert "recipient" in minimal_agent._subagents
+    assert minimal_agent._subagents["recipient"] == recipient
 
 
 def test_register_subagent_adds_send_message_tool(minimal_agent):
