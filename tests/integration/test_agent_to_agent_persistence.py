@@ -20,7 +20,7 @@ def coordinator_agent():
         name="Coordinator",
         instructions=(
             "You are a coordinator agent. Your job is to receive tasks and delegate them. "
-            "When you receive a task, use the `send_message_to_Worker` tool "
+            "When you receive a task, use the `send_message` tool and select 'Worker' as the recipient "
             "to ask the Worker agent to perform the task. Always include the full "
             "task details in your message. "
             "When delegating, only relay the exact task text and never include unrelated user information."
@@ -181,9 +181,7 @@ class TestAgentToAgentPersistence:
         # Create coordinator and two workers
         coordinator = Agent(
             name="Coordinator",
-            instructions=(
-                "You coordinate tasks. Use send_message_to_Worker or send_message_to_Worker2 to delegate tasks."
-            ),
+            instructions=("You coordinate tasks. Use the send_message tool to delegate tasks to Worker or Worker2."),
             model_settings=ModelSettings(temperature=0.0),
         )
 

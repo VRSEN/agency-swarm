@@ -467,8 +467,8 @@ class TestConsoleEventAdapter:
         event.data = MagicMock()
         event.data.type = "response.output_item.done"
         event.data.item = MagicMock()
-        event.data.item.name = "send_message_to_Agent2"
-        event.data.item.arguments = '{"message": "Hello Agent2"}'
+        event.data.item.name = "send_message"
+        event.data.item.arguments = '{"recipient_agent": "Agent2", "message": "Hello Agent2"}'
         event.data.item.call_id = "call_123"
 
         with patch.object(adapter, "_update_console"):

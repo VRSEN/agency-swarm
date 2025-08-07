@@ -497,7 +497,15 @@ class Execution:
             for item in run_items
         )
 
+        # Log debugging info for file search
+        for item in run_items:
+            if isinstance(item, ToolCallItem):
+                logger.debug(f"ToolCallItem type: {type(item.raw_item).__name__}")
+                if hasattr(item.raw_item, "name"):
+                    logger.debug(f"  Tool name: {item.raw_item.name}")
+
         if not has_hosted_tools:
+            logger.debug("No hosted tool calls found in run_items")
             return []  # Early exit - no hosted tools used
 
         return self._extract_hosted_tool_results(run_items)

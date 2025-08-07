@@ -25,6 +25,7 @@ git diff --cached | cat  # Review ALL staged changes - READ EVERY LINE
 git diff | cat           # Review ALL unstaged changes - READ EVERY LINE
 git status --porcelain   # Check ALL files including untracked
 ```
+**IMPORTANT:** NEVER use head, tail, or any truncation with git diff. ALWAYS use `git diff | cat` or `git diff --cached | cat` to see FULL output. Using truncation (head -500, etc.) is a DEATH PENALTY VIOLATION.
 
 #### STEP 2: PROACTIVE ANALYSIS (MANDATORY)
 - **SEARCH for ALL similar patterns** (minimum 10 different search queries)

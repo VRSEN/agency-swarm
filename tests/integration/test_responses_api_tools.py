@@ -331,8 +331,9 @@ Product Sales:
         mock_agency = MockAgency()
         agent._set_agency_instance(mock_agency)
 
-        # Wait a moment for file processing
-        await asyncio.sleep(2)
+        # Wait longer for file processing and vector store indexing
+        # FileSearch requires time to process and index uploaded files
+        await asyncio.sleep(10)
 
         # TURN 1: Agent searches but gives summary only
         logger.info("=== TURN 1: Agent searches with FileSearch ===")
