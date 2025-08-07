@@ -64,7 +64,8 @@ def test_agency_initialization_persistence_hooks(mock_agent):
 
 
 def test_agency_duplicate_agent_names_forbidden():
-    """Test that Agency raises ValueError when trying to register two agents with the same name but different instances."""
+    """Test that Agency raises ValueError when trying to register two agents with
+    the same name but different instances."""
     # Create two different mock agents with the same name
     agent1 = MagicMock(spec=Agent)
     agent1.name = "DuplicateName"

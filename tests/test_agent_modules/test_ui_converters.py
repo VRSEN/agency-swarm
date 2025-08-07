@@ -515,7 +515,8 @@ class TestConsoleEventAdapter:
             # Raw response error scenarios
             ("missing_message_id", {"type": "response.output_item.added", "item_type": "message", "id": None}, None),
             # Skip problematic validation error test
-            # ("missing_tool_call_id", {"type": "response.output_item.added", "item_type": "function_call", "call_id": None, "name": "test", "arguments": "{}"}, None),
+            # ("missing_tool_call_id", {"type": "response.output_item.added",
+            #  "item_type": "function_call", "call_id": None, "name": "test", "arguments": "{}"}, None),
             ("missing_text_delta_id", {"type": "response.output_text.delta", "item_id": None}, None),
             # Run item stream error scenarios
             ("missing_item", {"name": "message_output_created", "item": None}, None),

@@ -69,7 +69,11 @@ async def test_send_message_communication(send_message_tool, mock_recipient_agen
     wrapper.context = master_context
 
     # Prepare the message arguments
-    args_json = '{"my_primary_instructions": "Coordinate the task", "message": "Please process this user request", "additional_instructions": "Use the full conversation context"}'
+    args_json = (
+        '{"my_primary_instructions": "Coordinate the task", '
+        '"message": "Please process this user request", '
+        '"additional_instructions": "Use the full conversation context"}'
+    )
 
     # Execute the SendMessage tool
     result = await send_message_tool.on_invoke_tool(wrapper, args_json)

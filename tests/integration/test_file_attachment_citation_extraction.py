@@ -58,7 +58,11 @@ async def test_file_attachment_citation_extraction():
             # Create agent for direct file attachment processing
             agent = Agent(
                 name="DocumentAnalyst",
-                instructions="You are a document analyst. When analyzing attached files, always cite specific information from the document. Be precise and reference exact text when providing answers.",
+                instructions=(
+                    "You are a document analyst. When analyzing attached files, always cite specific "
+                    "information from the document. Be precise and reference exact text when "
+                    "providing answers."
+                ),
                 model="gpt-4.1",
                 model_settings=ModelSettings(temperature=0.0),  # DETERMINISTIC BEHAVIOR
             )

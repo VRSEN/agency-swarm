@@ -42,6 +42,7 @@ AGENT_PARAMS = {
     "api_params",
     "description",
     "response_validator",
+    "include_search_results",
     # Old/Deprecated (to check in kwargs)
     "id",
     "tool_resources",
