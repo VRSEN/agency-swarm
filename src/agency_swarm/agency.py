@@ -220,16 +220,16 @@ class Agency:
 
         # --- Assign Core Attributes ---
         self.name = name
+        self.shared_instructions = shared_instructions or ""
         if os.path.isfile(
-            os.path.join(self._get_class_folder_path(), shared_instructions)
+            os.path.join(self._get_class_folder_path(), self.shared_instructions)
         ):
             self._read_instructions(
-                os.path.join(self._get_class_folder_path(), shared_instructions)
+                os.path.join(self._get_class_folder_path(), self.shared_instructions)
             )
-        elif os.path.isfile(shared_instructions):
-            self._read_instructions(shared_instructions)
-        else:
-            self.shared_instructions = shared_instructions
+        elif os.path.isfile(self.shared_instructions):
+            self._read_instructions(self.shared_instructions)
+
         self.user_context = user_context or {}
         self.send_message_tool_class = send_message_tool_class
 
