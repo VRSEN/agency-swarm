@@ -251,7 +251,7 @@ def separate_kwargs(kwargs: dict[str, Any]) -> tuple[dict[str, Any], dict[str, A
     return base_agent_params, current_agent_params
 
 
-def setup_file_manager(agent: "Agent", files_folder: str | None) -> None:
+def setup_file_manager(agent: "Agent") -> None:
     """
     Set up the file manager and attachment manager for the agent.
 
@@ -261,9 +261,3 @@ def setup_file_manager(agent: "Agent", files_folder: str | None) -> None:
     """
     agent.file_manager = AgentFileManager(agent)
     agent.attachment_manager = AttachmentManager(agent)
-
-    # Parse files folder for vector store ID
-    # This is handled automatically by _parse_files_folder_for_vs_id()
-
-    # Parse files folder for vector store ID
-    agent.file_manager._parse_files_folder_for_vs_id()

@@ -191,7 +191,9 @@ class Agent(BaseAgent[MasterContext]):
             self.files_folder_path = None
 
         # Set up file manager and tools
-        setup_file_manager(self, self.files_folder)
+        setup_file_manager(self)
+        self.file_manager.read_instructions()
+        self.file_manager._parse_files_folder_for_vs_id()
         parse_schemas(self)
         load_tools_from_folder(self)
 
