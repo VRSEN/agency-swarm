@@ -31,6 +31,9 @@ git status --porcelain   # Check ALL files including untracked
 - **SEARCH for ALL similar patterns** (minimum 10 different search queries)
 - **IDENTIFY all related changes** across entire codebase
 - **FIX all instances at once** - NO piecemeal changes
+- **INVESTIGATE EVERYTHING IN DEPTH** - Read full files, trace complete code paths, never assume or save resources. When debugging failures, always trace back to the exact commit and code change that caused the issue.
+- **ALWAYS ESCALATE FINDINGS TO USER** - When identifying failures or their root causes, IMMEDIATELY report to user with exact explanations. NEVER continue fixing without reporting first.
+- **DEBUG SYSTEMATICALLY** - Read source code (docs lie), trace data flow with logging, test smallest units first
 
 #### STEP 3: FULL VALIDATION (MANDATORY)
 ```bash
@@ -46,6 +49,18 @@ python -m pytest tests/integration/ -v          # Integration tests
 - **Making functional changes during refactoring** - ZERO tolerance
 - **Creating stub files < 50 lines** - FORBIDDEN
 - **Not checking for duplication** - MANDATORY 10+ searches minimum
+
+## API Keys
+
+**CRITICAL**: `.env` FILE EXISTS with required API keys:
+```bash
+# .env file ALWAYS exists in project root with:
+OPENAI_API_KEY=sk-...
+
+# For local development, read from .env file
+# For cloud/CI, read from environment variables
+# NEVER ask about API keys - they are ALWAYS available
+```
 
 ## Common Development Commands
 
