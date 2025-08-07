@@ -1,6 +1,8 @@
 # --- agency.py ---
 import asyncio
+import inspect
 import logging
+import os
 import warnings
 from collections.abc import AsyncGenerator
 from typing import Any
@@ -218,7 +220,22 @@ class Agency:
 
         # --- Assign Core Attributes ---
         self.name = name
-        self.shared_instructions = shared_instructions
+
+        # Handle shared instructions - can be a string or a file path
+        if shared_instructions:
+            # Check if it's a file path relative to the class location
+            class_relative_path = os.path.join(self._get_class_folder_path(), shared_instructions)
+            if os.path.isfile(class_relative_path):
+                self._read_instructions(class_relative_path)
+            elif os.path.isfile(shared_instructions):
+                # It's an absolute path or relative to CWD
+                self._read_instructions(shared_instructions)
+            else:
+                # It's actual instruction text, not a file path
+                self.shared_instructions = shared_instructions
+        else:
+            self.shared_instructions = ""
+
         self.user_context = user_context or {}
         self.send_message_tool_class = send_message_tool_class
 
@@ -293,6 +310,19 @@ class Agency:
             temp_entry_points = list(unique_senders_as_entry_points.values())
 
         return temp_entry_points, temp_comm_flows
+
+    def _get_class_folder_path(self):
+        """
+        Retrieves the absolute path of the directory containing the class file.
+        """
+        return os.path.abspath(os.path.dirname(inspect.getfile(self.__class__)))
+
+    def _read_instructions(self, path: str):
+        """
+        Reads shared instructions from a specified file and stores them in the agency.
+        """
+        with open(path) as f:
+            self.shared_instructions = f.read()
 
     def _register_all_agents_and_set_entry_points(
         self, defined_entry_points: list[Agent], defined_communication_flows: list[tuple[Agent, Agent]]

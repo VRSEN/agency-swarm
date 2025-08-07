@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 import logging
 import os
 import re
@@ -153,10 +154,17 @@ class AttachmentManager:
             for _ in range(timeout):
                 vs = await self.agent.client.vector_stores.retrieve(self._temp_vector_store_id)
                 if vs.status == "completed":
-                    break
+                    return
                 if vs.status == "failed":
                     raise AgentsException(f"Vector store processing failed: {vs}")
                 await asyncio.sleep(1)
+            # If we've gone through all iterations without completing, it's a timeout
+            raise AgentsException(
+                f"Vector store processing timed out after {timeout} seconds: {self._temp_vector_store_id}"
+            )
+        except AgentsException:
+            # Re-raise our own exceptions
+            raise
         except Exception as e:  # pragma: no cover - best effort
             logger.warning(f"Failed while waiting for vector store {self._temp_vector_store_id}: {e}")
 
@@ -588,3 +596,39 @@ class AgentFileManager:
                     f"Agent {self.agent.name}: Failed to add file {file_id} to Vector Store {vector_store_id}: {e}"
                 )
                 raise AgentsException(f"Failed to add file {file_id} to Vector Store {vector_store_id}: {e}") from e
+
+    def read_instructions(self):
+        if not self.agent.instructions:
+            return
+
+        # If it looks like a file path, try to load it
+        if isinstance(self.agent.instructions, str) and (
+            self.agent.instructions.endswith((".md", ".txt"))
+            or self.agent.instructions.startswith(("./", "../"))
+            or "/" in self.agent.instructions
+        ):
+            # Try class-relative path first
+            class_instructions_path = os.path.normpath(
+                os.path.join(self.get_class_folder_path(), self.agent.instructions)
+            )
+            if os.path.isfile(class_instructions_path):
+                with open(class_instructions_path) as f:
+                    self.agent.instructions = f.read()
+            elif os.path.isfile(self.agent.instructions):
+                # Try as absolute or CWD-relative path
+                with open(self.agent.instructions) as f:
+                    self.agent.instructions = f.read()
+            else:
+                raise FileNotFoundError(
+                    f"Instructions file not found: '{self.agent.instructions}'. "
+                    f"Searched in: '{class_instructions_path}' and '{self.agent.instructions}'"
+                )
+
+    def get_class_folder_path(self):
+        try:
+            # Use inspect to get the file of the agent's class
+            class_file = inspect.getfile(self.agent.__class__)
+            return os.path.abspath(os.path.realpath(os.path.dirname(class_file)))
+        except (TypeError, OSError, AttributeError):
+            # If that fails, return current directory
+            return "./"
