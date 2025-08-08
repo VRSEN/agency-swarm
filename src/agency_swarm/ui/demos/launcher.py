@@ -83,7 +83,7 @@ class TerminalDemoLauncher:
         import re
         import uuid
 
-        from ..core.converters import ConsoleEventAdapter
+        from ..core.console_event_adapter import ConsoleEventAdapter
 
         logger = logging.getLogger(__name__)
 
