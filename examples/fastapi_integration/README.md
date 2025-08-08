@@ -92,13 +92,6 @@ response = requests.post(url, json=payload, headers=headers)
 
 ## Troubleshooting
 
-### Missing agent/callerAgent fields
-
-If these fields are missing in Postman/curl but visible in the debug script:
-1. Check if events are double-wrapped in `data` field
-2. Verify the `serialize()` function in `ui/core/converters.py`
-3. Ensure `streaming_utils.add_agent_name_to_event()` is being called
-
 ### Events not streaming
 
 1. Check that the client accepts `text/event-stream` content type

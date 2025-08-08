@@ -7,7 +7,8 @@ from ag_ui.core import AssistantMessage, FunctionCall, ToolCall, ToolMessage, Us
 from pydantic import BaseModel
 
 from agency_swarm.agent_core import Agent
-from agency_swarm.ui.core.converters import AguiAdapter, ConsoleEventAdapter, serialize
+from agency_swarm.ui.core.agui_adapter import AguiAdapter, serialize
+from agency_swarm.ui.core.console_event_adapter import ConsoleEventAdapter
 
 
 # Helper functions to create real ag_ui objects
@@ -397,7 +398,7 @@ class TestConsoleEventAdapter:
         adapter.console = MagicMock()
 
         # Create real methods by binding them from ConsoleEventAdapter
-        with patch("agency_swarm.ui.core.converters.Console"):
+        with patch("agency_swarm.ui.core.console_event_adapter.ConsoleEventAdapter"):
             real_adapter = ConsoleEventAdapter()
             adapter._cleanup_live_display = real_adapter._cleanup_live_display.__func__.__get__(adapter)
             adapter._update_console = real_adapter._update_console.__func__.__get__(adapter)

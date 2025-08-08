@@ -12,7 +12,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from agency_swarm.agency import Agency
 from agency_swarm.integrations.fastapi_utils.file_handler import upload_from_urls
 from agency_swarm.messages import MessageFilter
-from agency_swarm.ui.core.converters import AguiAdapter, serialize
+from agency_swarm.ui.core.agui_adapter import AguiAdapter, serialize
 
 
 def get_verify_token(app_token):
