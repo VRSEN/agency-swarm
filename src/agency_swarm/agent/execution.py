@@ -28,6 +28,7 @@ from openai.types.responses import ResponseFileSearchToolCall, ResponseFunctionW
 
 from agency_swarm.context import MasterContext
 from agency_swarm.messages import MessageFilter, MessageFormatter
+from agency_swarm.streaming_utils import add_agent_name_to_event
 from agency_swarm.utils.citation_extractor import extract_direct_file_annotations
 
 if TYPE_CHECKING:
@@ -39,6 +40,101 @@ class Execution:
 
     def __init__(self, agent: "Agent"):
         self.agent = agent
+
+    def _validate_agency_for_delegation(self, sender_name: str | None) -> None:
+        """Validate that agency instance exists if delegation is needed."""
+        # If this is agent-to-agent communication, we need an agency instance
+        if sender_name is not None:
+            if not self.agent._agency_instance or not hasattr(self.agent._agency_instance, "agents"):
+                raise RuntimeError(
+                    f"Agent '{self.agent.name}' missing Agency instance for agent-to-agent communication."
+                )
+
+    async def _prepare_and_attach_files(
+        self,
+        processed_current_message_items: list[TResponseInputItem],
+        file_ids: list[str] | None,
+        message_files: list[str] | None,
+        kwargs: dict[str, Any],
+    ) -> None:
+        """Handle file attachments for messages."""
+        files_to_attach = file_ids or message_files or kwargs.get("file_ids") or kwargs.get("message_files")
+        if files_to_attach and isinstance(files_to_attach, list):
+            # Warn about deprecated message_files usage
+            if message_files or kwargs.get("message_files"):
+                warnings.warn(
+                    "'message_files' parameter is deprecated. Use 'file_ids' instead.",
+                    DeprecationWarning,
+                    stacklevel=3,
+                )
+
+            # Add file items to the last user message content
+            if processed_current_message_items:
+                last_message = processed_current_message_items[-1]
+                if isinstance(last_message, dict) and last_message.get("role") == "user":
+                    # Ensure content is a list for multi-content messages
+                    current_content = last_message.get("content", "")
+                    if isinstance(current_content, str):
+                        # Convert string content to list format
+                        content_list = [{"type": "input_text", "text": current_content}] if current_content else []
+                    elif isinstance(current_content, list):
+                        content_list = list(current_content)
+                    else:
+                        content_list = []
+
+                    file_content_items = await self.agent.attachment_manager.sort_file_attachments(files_to_attach)
+                    content_list.extend(file_content_items)
+
+                    # Update the message content
+                    if content_list != []:
+                        last_message["content"] = content_list
+                else:
+                    logger.warning(
+                        f"Cannot attach files: Last message is not a user message for agent {self.agent.name}"
+                    )
+            else:
+                logger.warning(f"Cannot attach files: No messages to attach to for agent {self.agent.name}")
+
+    def _prepare_history_for_runner(
+        self, processed_current_message_items: list[TResponseInputItem], sender_name: str | None
+    ) -> list[TResponseInputItem]:
+        """Prepare conversation history for the runner."""
+        # Add agency metadata to incoming messages
+        messages_to_save: list[TResponseInputItem] = []
+        for msg in processed_current_message_items:
+            formatted_msg = MessageFormatter.add_agency_metadata(msg, agent=self.agent.name, caller_agent=sender_name)
+            messages_to_save.append(formatted_msg)
+
+        # Save messages to flat storage
+        self.agent._thread_manager.add_messages(messages_to_save)
+        logger.debug(f"Added {len(messages_to_save)} messages to storage.")
+
+        # Get relevant conversation history for this agent pair
+        full_history = self.agent._thread_manager.get_conversation_history(self.agent.name, sender_name)
+
+        # Prepare history for runner (sanitize and ensure content safety)
+        history_for_runner = MessageFormatter.sanitize_tool_calls_in_history(full_history)
+        history_for_runner = MessageFormatter.ensure_tool_calls_content_safety(history_for_runner)
+        # Strip agency metadata before sending to OpenAI
+        history_for_runner = MessageFormatter.strip_agency_metadata(history_for_runner)
+        return history_for_runner
+
+    def _add_citations_to_message(
+        self,
+        run_item_obj: RunItem,
+        item_dict: TResponseInputItem,
+        citations_by_message: dict[str, list[dict]],
+        is_streaming: bool = False,
+    ) -> None:
+        """Add citations to an assistant message if applicable."""
+        if (
+            isinstance(run_item_obj, MessageOutputItem)
+            and hasattr(run_item_obj.raw_item, "id")
+            and run_item_obj.raw_item.id in citations_by_message
+        ):
+            item_dict["citations"] = citations_by_message[run_item_obj.raw_item.id]
+            msg_type = "streamed message" if is_streaming else "message"
+            logger.debug(f"Added {len(item_dict['citations'])} citations to {msg_type} {run_item_obj.raw_item.id}")
 
     async def get_response(
         self,
@@ -81,20 +177,8 @@ class Execution:
         if not self.agent._thread_manager:
             raise RuntimeError(f"Agent '{self.agent.name}' missing ThreadManager.")
 
-        # For direct agent usage, we need to ensure _agency_instance exists with minimal agents map
-        if not self.agent._agency_instance or not hasattr(self.agent._agency_instance, "agents"):
-            if sender_name is None:  # Direct user interaction without agency
-                # Create a minimal agency-like object for compatibility
-                class MinimalAgency:
-                    def __init__(self, agent):
-                        self.agents = {agent.name: agent}
-                        self.user_context = {}
-
-                self.agent._agency_instance = MinimalAgency(self.agent)
-            else:
-                raise RuntimeError(
-                    f"Agent '{self.agent.name}' missing Agency instance for agent-to-agent communication."
-                )
+        # Validate agency instance exists if this is agent-to-agent communication
+        self._validate_agency_for_delegation(sender_name)
 
         # Store original instructions for restoration
         original_instructions = self.agent.instructions
@@ -126,65 +210,11 @@ class Execution:
                 logger.error(f"Error processing current input message for get_response: {e}", exc_info=True)
                 raise AgentsException(f"Failed to process input message for agent {self.agent.name}") from e
 
-            # Handle file attachments - support both old message_files and new file_ids
-            files_to_attach = file_ids or message_files or kwargs.get("file_ids") or kwargs.get("message_files")
-            if files_to_attach and isinstance(files_to_attach, list):
-                # Warn about deprecated message_files usage
-                if message_files or kwargs.get("message_files"):
-                    warnings.warn(
-                        "'message_files' parameter is deprecated. Use 'file_ids' instead.",
-                        DeprecationWarning,
-                        stacklevel=2,
-                    )
+            # Handle file attachments
+            await self._prepare_and_attach_files(processed_current_message_items, file_ids, message_files, kwargs)
 
-                # Add file items to the last user message content
-                if processed_current_message_items:
-                    last_message = processed_current_message_items[-1]
-                    if isinstance(last_message, dict) and last_message.get("role") == "user":
-                        # Ensure content is a list for multi-content messages
-                        current_content = last_message.get("content", "")
-                        if isinstance(current_content, str):
-                            # Convert string content to list format
-                            content_list = [{"type": "input_text", "text": current_content}] if current_content else []
-                        elif isinstance(current_content, list):
-                            content_list = list(current_content)
-                        else:
-                            content_list = []
-
-                        file_content_items = await self.agent.attachment_manager.sort_file_attachments(files_to_attach)
-                        # Content list will contain pdf files to be attached as input_file items
-                        content_list.extend(file_content_items)
-
-                        # Update the message content
-                        if content_list != []:
-                            last_message["content"] = content_list
-                    else:
-                        logger.warning(
-                            f"Cannot attach files: Last message is not a user message for agent {self.agent.name}"
-                        )
-                else:
-                    logger.warning(f"Cannot attach files: No messages to attach to for agent {self.agent.name}")
-
-            # Add agency metadata to incoming messages
-            messages_to_save: list[TResponseInputItem] = []
-            for msg in processed_current_message_items:
-                formatted_msg = MessageFormatter.add_agency_metadata(
-                    msg, agent=self.agent.name, caller_agent=sender_name
-                )
-                messages_to_save.append(formatted_msg)
-
-            # Save messages to flat storage
-            self.agent._thread_manager.add_messages(messages_to_save)
-            logger.debug(f"Added {len(messages_to_save)} messages to storage.")
-
-            # Get relevant conversation history for this agent pair
-            full_history = self.agent._thread_manager.get_conversation_history(self.agent.name, sender_name)
-
-            # Prepare history for runner (sanitize and ensure content safety)
-            history_for_runner = MessageFormatter.sanitize_tool_calls_in_history(full_history)
-            history_for_runner = MessageFormatter.ensure_tool_calls_content_safety(history_for_runner)
-            # Strip agency metadata before sending to OpenAI
-            history_for_runner = MessageFormatter.strip_agency_metadata(history_for_runner)
+            # Prepare history for runner
+            history_for_runner = self._prepare_history_for_runner(processed_current_message_items, sender_name)
             logger.debug(f"Running agent '{self.agent.name}' with history length {len(history_for_runner)}:")
             for i, m in enumerate(history_for_runner):
                 content_preview = str(m.get("content", ""))[:70] if m.get("content") else ""
@@ -237,16 +267,19 @@ class Execution:
 
                 # Extract direct file annotations from assistant messages
                 assistant_messages = [item for item in run_result.new_items if isinstance(item, MessageOutputItem)]
-                annotation_outputs = (
+                citations_by_message = (
                     extract_direct_file_annotations(assistant_messages, agent_name=self.agent.name)
                     if assistant_messages
-                    else []
+                    else {}
                 )
 
                 for i, run_item_obj in enumerate(run_result.new_items):
                     # _run_item_to_tresponse_input_item converts RunItem to TResponseInputItem (dict)
                     item_dict = self._run_item_to_tresponse_input_item(run_item_obj)
                     if item_dict:
+                        # Add citations if applicable
+                        self._add_citations_to_message(run_item_obj, item_dict, citations_by_message)
+
                         # Add agency metadata to the response items
                         formatted_item = MessageFormatter.add_agency_metadata(
                             item_dict, agent=self.agent.name, caller_agent=sender_name
@@ -259,7 +292,6 @@ class Execution:
                         )
 
                 items_to_save.extend(hosted_tool_outputs)
-                items_to_save.extend(annotation_outputs)
 
                 # Filter out unwanted message types before saving
                 filtered_items = MessageFilter.filter_messages(items_to_save)
@@ -325,20 +357,8 @@ class Execution:
         if not self.agent._thread_manager:
             raise RuntimeError(f"Agent '{self.agent.name}' missing ThreadManager.")
 
-        # For direct agent usage, we need to ensure _agency_instance exists with minimal agents map
-        if not self.agent._agency_instance or not hasattr(self.agent._agency_instance, "agents"):
-            if sender_name is None:  # Direct user interaction without agency
-                # Create a minimal agency-like object for compatibility
-                class MinimalAgency:
-                    def __init__(self, agent):
-                        self.agents = {agent.name: agent}
-                        self.user_context = {}
-
-                self.agent._agency_instance = MinimalAgency(self.agent)
-            else:
-                raise RuntimeError(
-                    f"Agent '{self.agent.name}' missing Agency instance for agent-to-agent communication."
-                )
+        # Validate agency instance exists if this is agent-to-agent communication
+        self._validate_agency_for_delegation(sender_name)
 
         # Store original instructions for restoration
         original_instructions = self.agent.instructions
@@ -366,65 +386,11 @@ class Execution:
                 logger.error(f"Error processing current input message for get_response_stream: {e}", exc_info=True)
                 raise AgentsException(f"Failed to process input message for agent {self.agent.name}") from e
 
-            # Handle file attachments - support both old message_files and new file_ids
-            files_to_attach = file_ids or message_files or kwargs.get("file_ids") or kwargs.get("message_files")
-            if files_to_attach and isinstance(files_to_attach, list):
-                # Warn about deprecated message_files usage
-                if message_files or kwargs.get("message_files"):
-                    warnings.warn(
-                        "'message_files' parameter is deprecated. Use 'file_ids' instead.",
-                        DeprecationWarning,
-                        stacklevel=2,
-                    )
+            # Handle file attachments
+            await self._prepare_and_attach_files(processed_current_message_items, file_ids, message_files, kwargs)
 
-                # Add file items to the last user message content
-                if processed_current_message_items:
-                    last_message = processed_current_message_items[-1]
-                    if isinstance(last_message, dict) and last_message.get("role") == "user":
-                        # Ensure content is a list for multi-content messages
-                        current_content = last_message.get("content", "")
-                        if isinstance(current_content, str):
-                            # Convert string content to list format
-                            content_list = [{"type": "input_text", "text": current_content}] if current_content else []
-                        elif isinstance(current_content, list):
-                            content_list = list(current_content)
-                        else:
-                            content_list = []
-
-                        file_content_items = await self.agent.attachment_manager.sort_file_attachments(files_to_attach)
-                        content_list.extend(file_content_items)
-
-                        # Update the message content
-                        if content_list != []:
-                            last_message["content"] = content_list
-                    else:
-                        logger.warning(
-                            f"Cannot attach files: Last message is not a user message for agent {self.agent.name}"
-                        )
-                else:
-                    logger.warning(f"Cannot attach files: No messages to attach to for agent {self.agent.name}")
-
-            # --- Input history logic (match get_response) ---
-            # Add agency metadata to incoming messages
-            messages_to_save: list[TResponseInputItem] = []
-            for msg in processed_current_message_items:
-                formatted_msg = MessageFormatter.add_agency_metadata(
-                    msg, agent=self.agent.name, caller_agent=sender_name
-                )
-                messages_to_save.append(formatted_msg)
-
-            # Save messages to flat storage
-            self.agent._thread_manager.add_messages(messages_to_save)
-            logger.debug(f"Added {len(messages_to_save)} messages to storage.")
-
-            # Get relevant conversation history for this agent pair
-            full_history = self.agent._thread_manager.get_conversation_history(self.agent.name, sender_name)
-
-            # Prepare history for runner (sanitize and ensure content safety)
-            history_for_runner = MessageFormatter.sanitize_tool_calls_in_history(full_history)
-            history_for_runner = MessageFormatter.ensure_tool_calls_content_safety(history_for_runner)
-            # Strip agency metadata before sending to OpenAI
-            history_for_runner = MessageFormatter.strip_agency_metadata(history_for_runner)
+            # Prepare history for runner
+            history_for_runner = self._prepare_history_for_runner(processed_current_message_items, sender_name)
 
             logger.debug(
                 f"Starting streaming run for agent '{self.agent.name}' with {len(history_for_runner)} history items."
@@ -432,10 +398,19 @@ class Execution:
 
             # Stream the runner results
             collected_items: list[RunItem] = []
+
+            # Prepare context with streaming indicator
+            master_context = self._prepare_master_context(context_override)
+            # Set streaming flag so SendMessage knows to use streaming
+            master_context._is_streaming = True
+            # Pass streaming context if available
+            if context_override and "_streaming_context" in context_override:
+                master_context._streaming_context = context_override["_streaming_context"]
+
             result = Runner.run_streamed(
                 starting_agent=self.agent,
                 input=history_for_runner,
-                context=self._prepare_master_context(context_override),
+                context=master_context,
                 hooks=hooks_override or self.agent.hooks,
                 run_config=run_config_override or RunConfig(),
                 max_turns=kwargs.get("max_turns", DEFAULT_MAX_TURNS),
@@ -444,6 +419,9 @@ class Execution:
                 # Collect all new items for saving to thread
                 if hasattr(event, "item") and event.item:
                     collected_items.append(event.item)
+
+                # Add agent name and caller to the event
+                event = add_agent_name_to_event(event, self.agent.name, sender_name)
                 yield event
 
             # Save all collected items after streaming completes
@@ -455,15 +433,18 @@ class Execution:
 
                 # Extract direct file annotations from assistant messages
                 assistant_messages = [item for item in collected_items if isinstance(item, MessageOutputItem)]
-                annotation_outputs = (
+                citations_by_message = (
                     extract_direct_file_annotations(assistant_messages, agent_name=self.agent.name)
                     if assistant_messages
-                    else []
+                    else {}
                 )
 
                 for run_item_obj in collected_items:
                     item_dict = self._run_item_to_tresponse_input_item(run_item_obj)
                     if item_dict:
+                        # Add citations if applicable
+                        self._add_citations_to_message(run_item_obj, item_dict, citations_by_message, is_streaming=True)
+
                         # Add agency metadata to the response items
                         formatted_item = MessageFormatter.add_agency_metadata(
                             item_dict, agent=self.agent.name, caller_agent=sender_name
@@ -471,7 +452,6 @@ class Execution:
                         items_to_save.append(formatted_item)
 
                 items_to_save.extend(hosted_tool_outputs)
-                items_to_save.extend(annotation_outputs)
 
                 # Filter out unwanted message types before saving
                 filtered_items = MessageFilter.filter_messages(items_to_save)
@@ -517,7 +497,15 @@ class Execution:
             for item in run_items
         )
 
+        # Log debugging info for file search
+        for item in run_items:
+            if isinstance(item, ToolCallItem):
+                logger.debug(f"ToolCallItem type: {type(item.raw_item).__name__}")
+                if hasattr(item.raw_item, "name"):
+                    logger.debug(f"  Tool name: {item.raw_item.name}")
+
         if not has_hosted_tools:
+            logger.debug("No hosted tool calls found in run_items")
             return []  # Early exit - no hosted tools used
 
         return self._extract_hosted_tool_results(run_items)
@@ -592,10 +580,17 @@ class Execution:
 
     def _prepare_master_context(self, context_override: dict[str, Any] | None) -> MasterContext:
         """Constructs the MasterContext for the current run."""
-        if not self.agent._agency_instance or not hasattr(self.agent._agency_instance, "agents"):
-            raise RuntimeError("Cannot prepare context: Agency instance or agents map missing.")
         if not self.agent._thread_manager:
             raise RuntimeError("Cannot prepare context: ThreadManager missing.")
+
+        # For standalone agent usage (no agency), create minimal context
+        if not self.agent._agency_instance or not hasattr(self.agent._agency_instance, "agents"):
+            return MasterContext(
+                thread_manager=self.agent._thread_manager,
+                agents={self.agent.name: self.agent},  # Only include self
+                user_context=context_override or {},
+                current_agent_name=self.agent.name,
+            )
 
         # Use reference for persistence, or create merged copy if override provided
         base_user_context = getattr(self.agent._agency_instance, "user_context", {})

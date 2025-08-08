@@ -52,9 +52,8 @@ def master_context():
 @pytest.fixture
 def send_message_tool(mock_sender_agent, mock_recipient_agent):
     return SendMessage(
-        tool_name=f"send_message_to_{mock_recipient_agent.name}",
         sender_agent=mock_sender_agent,
-        recipient_agent=mock_recipient_agent,
+        recipients={mock_recipient_agent.name.lower(): mock_recipient_agent},
     )
 
 
@@ -69,7 +68,12 @@ async def test_send_message_communication(send_message_tool, mock_recipient_agen
     wrapper.context = master_context
 
     # Prepare the message arguments
-    args_json = '{"my_primary_instructions": "Coordinate the task", "message": "Please process this user request", "additional_instructions": "Use the full conversation context"}'
+    args_json = (
+        '{"recipient_agent": "WorkerAgent", '
+        '"my_primary_instructions": "Coordinate the task", '
+        '"message": "Please process this user request", '
+        '"additional_instructions": "Use the full conversation context"}'
+    )
 
     # Execute the SendMessage tool
     result = await send_message_tool.on_invoke_tool(wrapper, args_json)
@@ -94,7 +98,8 @@ async def test_thread_id_generation(send_message_tool, mock_recipient_agent, mas
     wrapper.context = master_context
 
     args_json = (
-        '{"my_primary_instructions": "Test instructions", "message": "Test message", "additional_instructions": ""}'
+        '{"recipient_agent": "WorkerAgent", '
+        '"my_primary_instructions": "Test instructions", "message": "Test message", "additional_instructions": ""}'
     )
 
     await send_message_tool.on_invoke_tool(wrapper, args_json)

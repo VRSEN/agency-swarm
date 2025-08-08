@@ -42,6 +42,7 @@ AGENT_PARAMS = {
     "api_params",
     "description",
     "response_validator",
+    "include_search_results",
     # Old/Deprecated (to check in kwargs)
     "id",
     "tool_resources",
@@ -54,7 +55,6 @@ AGENT_PARAMS = {
 }
 
 # --- Constants for dynamic tool creation ---
-SEND_MESSAGE_TOOL_PREFIX = "send_message_to_"
 MESSAGE_PARAM = "message"
 
 T = TypeVar("T", bound="Agent")
@@ -84,8 +84,8 @@ class Agent(BaseAgent[MasterContext]):
         output_type (type[Any] | None): The type of the agent's final output.
         send_message_tool_class (type | None): Custom SendMessage tool class to use for inter-agent communication.
                                                If None, uses the default SendMessage class.
-        include_search_results (bool): Whether to include search results in FileSearchTool output for citation extraction.
-                                      Defaults to False for backward compatibility.
+        include_search_results (bool): Whether to include search results in FileSearchTool output for
+                                      citation extraction. Defaults to False for backward compatibility.
         _thread_manager (ThreadManager | None): Internal reference to the agency's `ThreadManager`.
                                                 Set by the parent `Agency`.
         _agency_instance (Any | None): Internal reference to the parent `Agency` instance. Set by the parent `Agency`.
@@ -191,7 +191,9 @@ class Agent(BaseAgent[MasterContext]):
             self.files_folder_path = None
 
         # Set up file manager and tools
-        setup_file_manager(self, self.files_folder)
+        setup_file_manager(self)
+        self.file_manager.read_instructions()
+        self.file_manager._parse_files_folder_for_vs_id()
         parse_schemas(self)
         load_tools_from_folder(self)
 
@@ -254,10 +256,10 @@ class Agent(BaseAgent[MasterContext]):
         """
         Registers another agent as a subagent that this agent can communicate with.
 
-        This method stores a reference to the recipient agent and dynamically creates
-        and adds a specific `FunctionTool` named `send_message_to_<RecipientName>`
-        to this agent's tools. This allows the agent to call the recipient agent
-        during a run using the standard tool invocation mechanism.
+        This method stores a reference to the recipient agent and either creates
+        or updates a unified `send_message` tool that can send messages to any
+        registered recipient. This allows the agent to call any registered recipient
+        agent during a run using the standard tool invocation mechanism.
 
         Args:
             recipient_agent (Agent): The `Agent` instance to register as a recipient.
@@ -301,7 +303,8 @@ class Agent(BaseAgent[MasterContext]):
             run_config: Optional run configuration settings
             message_files: DEPRECATED: Use file_ids instead. File IDs to attach to the message
             file_ids: List of OpenAI file IDs to attach to the message
-            additional_instructions: Additional instructions to be appended to the agent's instructions for this run only
+            additional_instructions: Additional instructions to be appended to the agent's
+                                    instructions for this run only
             **kwargs: Additional keyword arguments including max_turns
 
         Returns:
@@ -340,7 +343,8 @@ class Agent(BaseAgent[MasterContext]):
             context_override: Optional context data to override default values
             hooks_override: Optional hooks to override default agent hooks
             run_config_override: Optional run configuration
-            additional_instructions: Additional instructions to be appended to the agent's instructions for this run only
+            additional_instructions: Additional instructions to be appended to the agent's
+                                    instructions for this run only
             **kwargs: Additional keyword arguments
 
         Yields:

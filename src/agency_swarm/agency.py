@@ -1,6 +1,8 @@
 # --- agency.py ---
 import asyncio
+import inspect
 import logging
+import os
 import warnings
 from collections.abc import AsyncGenerator
 from typing import Any
@@ -11,9 +13,9 @@ from agents import (
     RunResult,
 )
 
-from agency_swarm.agent import SEND_MESSAGE_TOOL_PREFIX
 from agency_swarm.agent_core import Agent
 from agency_swarm.hooks import PersistenceHooks
+from agency_swarm.streaming_utils import event_stream_merger
 from agency_swarm.thread import ThreadLoadCallback, ThreadManager, ThreadSaveCallback
 from agency_swarm.tools.send_message import SendMessageHandoff
 
@@ -218,7 +220,22 @@ class Agency:
 
         # --- Assign Core Attributes ---
         self.name = name
-        self.shared_instructions = shared_instructions
+
+        # Handle shared instructions - can be a string or a file path
+        if shared_instructions:
+            # Check if it's a file path relative to the class location
+            class_relative_path = os.path.join(self._get_class_folder_path(), shared_instructions)
+            if os.path.isfile(class_relative_path):
+                self._read_instructions(class_relative_path)
+            elif os.path.isfile(shared_instructions):
+                # It's an absolute path or relative to CWD
+                self._read_instructions(shared_instructions)
+            else:
+                # It's actual instruction text, not a file path
+                self.shared_instructions = shared_instructions
+        else:
+            self.shared_instructions = ""
+
         self.user_context = user_context or {}
         self.send_message_tool_class = send_message_tool_class
 
@@ -282,7 +299,8 @@ class Agency:
         if not temp_entry_points and all_agents_in_chart:  # all_agents_in_chart implies temp_comm_flows is not empty
             logger.warning(
                 "No explicit entry points (standalone agents) found in deprecated 'agency_chart'. "
-                "For backward compatibility, unique sender agents from communication pairs will be considered potential entry points."
+                "For backward compatibility, unique sender agents from communication pairs "
+                "will be considered potential entry points."
             )
             # Collect unique senders from communication flows as entry points
             unique_senders_as_entry_points: dict[int, Agent] = {}
@@ -292,6 +310,19 @@ class Agency:
             temp_entry_points = list(unique_senders_as_entry_points.values())
 
         return temp_entry_points, temp_comm_flows
+
+    def _get_class_folder_path(self):
+        """
+        Retrieves the absolute path of the directory containing the class file.
+        """
+        return os.path.abspath(os.path.dirname(inspect.getfile(self.__class__)))
+
+    def _read_instructions(self, path: str):
+        """
+        Reads shared instructions from a specified file and stores them in the agency.
+        """
+        with open(path) as f:
+            self.shared_instructions = f.read()
 
     def _register_all_agents_and_set_entry_points(
         self, defined_entry_points: list[Agent], defined_communication_flows: list[tuple[Agent, Agent]]
@@ -444,7 +475,8 @@ class Agency:
             run_config (RunConfig | None, optional): Configuration for the agent run.
             message_files (list[str] | None, optional): Backward compatibility parameter.
             file_ids (list[str] | None, optional): Additional file IDs for the agent run.
-            additional_instructions (str | None, optional): Additional instructions to be appended to the recipient agent's instructions for this run only.
+            additional_instructions (str | None, optional): Additional instructions to be appended to the recipient
+                agent's instructions for this run only.
             **kwargs: Additional arguments passed down to the target agent's `get_response` method
                       and subsequently to `agents.Runner.run`.
 
@@ -476,7 +508,8 @@ class Agency:
         elif target_agent not in self.entry_points:
             logger.warning(
                 f"Recipient agent '{target_agent.name}' is not a designated entry point "
-                f"(Entry points: {[ep.name for ep in self.entry_points]}). Call allowed but may indicate unintended usage."
+                f"(Entry points: {[ep.name for ep in self.entry_points]}). "
+                f"Call allowed but may indicate unintended usage."
             )
 
         effective_hooks = hooks_override or self.persistence_hooks
@@ -547,7 +580,8 @@ class Agency:
             run_config_override (RunConfig | None, optional): Specific run configuration for this run.
             message_files (list[str] | None, optional): Backward compatibility parameter.
             file_ids (list[str] | None, optional): Additional file IDs for the agent run.
-            additional_instructions (str | None, optional): Additional instructions to be appended to the recipient agent's instructions for this run only.
+            additional_instructions (str | None, optional): Additional instructions to be appended to the recipient
+                agent's instructions for this run only.
             **kwargs: Additional arguments passed down to `get_response_stream` and `run_streamed`.
 
         Yields:
@@ -579,23 +613,34 @@ class Agency:
         elif target_agent not in self.entry_points:
             logger.warning(
                 f"Recipient agent '{target_agent.name}' is not a designated entry point "
-                f"(Entry points: {[ep.name for ep in self.entry_points]}). Stream call allowed but may indicate unintended usage."
+                f"(Entry points: {[ep.name for ep in self.entry_points]}). "
+                f"Stream call allowed but may indicate unintended usage."
             )
 
         effective_hooks = hooks_override or self.persistence_hooks
 
-        async for event in target_agent.get_response_stream(
-            message=message,
-            sender_name=None,
-            context_override=context_override,
-            hooks_override=effective_hooks,
-            run_config_override=run_config_override,
-            message_files=message_files,
-            file_ids=file_ids,
-            additional_instructions=additional_instructions,
-            **kwargs,
-        ):
-            yield event
+        # Create streaming context for collecting sub-agent events
+        async with event_stream_merger.create_streaming_context() as streaming_context:
+            # Add streaming context to the context override
+            enhanced_context = context_override or {}
+            enhanced_context["_streaming_context"] = streaming_context
+
+            # Get the primary stream
+            primary_stream = target_agent.get_response_stream(
+                message=message,
+                sender_name=None,
+                context_override=enhanced_context,
+                hooks_override=effective_hooks,
+                run_config_override=run_config_override,
+                message_files=message_files,
+                file_ids=file_ids,
+                additional_instructions=additional_instructions,
+                **kwargs,
+            )
+
+            # Merge primary stream with events from sub-agents
+            async for event in event_stream_merger.merge_streams(primary_stream, streaming_context):
+                yield event
 
     def _resolve_agent(self, agent_ref: str | Agent) -> Agent:
         """Helper to get an agent instance from a name or instance."""
@@ -810,7 +855,7 @@ class Agency:
                     tool_name = getattr(tool, "name", getattr(tool, "__name__", str(tool)))
 
                     # Skip send_message tools in visualization
-                    if tool_name.startswith(SEND_MESSAGE_TOOL_PREFIX):
+                    if tool_name == "send_message":
                         continue
 
                     node["data"]["tools"].append(tool_name)
@@ -916,4 +961,5 @@ class Agency:
         """
         # Copilot demo implementation
         from .ui.demos.launcher import CopilotDemoLauncher
+
         CopilotDemoLauncher.start(self, host=host, port=port, frontend_port=frontend_port, cors_origins=cors_origins)

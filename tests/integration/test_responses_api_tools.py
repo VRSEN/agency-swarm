@@ -11,7 +11,6 @@ from agents import (
     Runner,
     function_tool,
 )
-from agents.items import MessageOutputItem, ToolCallItem
 from agents.models.openai_responses import OpenAIResponsesModel
 from openai import AsyncOpenAI
 from pydantic import BaseModel
@@ -310,7 +309,10 @@ Product Sales:
         # Create Agency Swarm agent with FileSearch via files_folder
         agent = AgencySwarmAgent(
             name="DataSearchAgent",
-            instructions="You are a data search assistant. Use file search to find information but be concise in your initial responses.",
+            instructions=(
+                "You are a data search assistant. Use file search to find information but be "
+                "concise in your initial responses."
+            ),
             model="gpt-4.1",
             model_settings=ModelSettings(temperature=0.0),
             files_folder=str(temp_dir),
@@ -329,14 +331,18 @@ Product Sales:
         mock_agency = MockAgency()
         agent._set_agency_instance(mock_agency)
 
-        # Wait a moment for file processing
-        await asyncio.sleep(2)
+        # Wait longer for file processing and vector store indexing
+        # FileSearch requires time to process and index uploaded files
+        await asyncio.sleep(10)
 
         # TURN 1: Agent searches but gives summary only
         logger.info("=== TURN 1: Agent searches with FileSearch ===")
 
         result1 = await agent.get_response(
-            message="Search the company data for financial information and employee data. Just confirm you found it, don't give me the specific numbers yet."
+            message=(
+                "Search the company data for financial information and employee data. "
+                "Just confirm you found it, don't give me the specific numbers yet."
+            )
         )
 
         assert result1 is not None
@@ -369,7 +375,8 @@ Product Sales:
         result2 = await agent.get_response(
             message=(
                 "Now provide me the exact file search results that you found in the previous tool call. "
-                "Do not use the tool again. I'm looking for Q3 and Q4 revenue, operating costs, and total employee count."
+                "Do not use the tool again. I'm looking for Q3 and Q4 revenue, operating costs, "
+                "and total employee count."
             )
         )
 

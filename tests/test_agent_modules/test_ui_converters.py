@@ -7,7 +7,8 @@ from ag_ui.core import AssistantMessage, FunctionCall, ToolCall, ToolMessage, Us
 from pydantic import BaseModel
 
 from agency_swarm.agent_core import Agent
-from agency_swarm.ui.core.converters import AguiAdapter, ConsoleEventAdapter, serialize
+from agency_swarm.ui.core.agui_adapter import AguiAdapter, serialize
+from agency_swarm.ui.core.console_event_adapter import ConsoleEventAdapter
 
 
 # Helper functions to create real ag_ui objects
@@ -57,7 +58,14 @@ class TestSerialize:
 
     def test_agent_object(self, agent_mock):
         result = serialize(agent_mock)
-        assert result == str(agent_mock)
+        # Agent objects with __dict__ now get serialized to dictionaries
+        # MagicMock includes method_calls attribute
+        assert result == {
+            "method_calls": [],
+            "name": "TestAgent",
+            "description": "Test description",
+            "model": "gpt-4",
+        }
 
     def test_dataclass(self):
         @dataclasses.dataclass
@@ -86,8 +94,8 @@ class TestSerialize:
 
         obj = TestClass()
         result = serialize(obj)
-        # For generic objects, serialize just calls str()
-        assert result == str(obj)
+        # Objects with __dict__ now get serialized to dictionaries
+        assert result == {"name": "test", "value": "42"}
 
 
 class TestAguiAdapter:
@@ -390,7 +398,7 @@ class TestConsoleEventAdapter:
         adapter.console = MagicMock()
 
         # Create real methods by binding them from ConsoleEventAdapter
-        with patch("agency_swarm.ui.core.converters.Console"):
+        with patch("agency_swarm.ui.core.console_event_adapter.ConsoleEventAdapter"):
             real_adapter = ConsoleEventAdapter()
             adapter._cleanup_live_display = real_adapter._cleanup_live_display.__func__.__get__(adapter)
             adapter._update_console = real_adapter._update_console.__func__.__get__(adapter)
@@ -455,11 +463,13 @@ class TestConsoleEventAdapter:
         """Test openai_to_message_output detects send_message pattern."""
         event = MagicMock()
         event.type = "raw_response_event"
+        event.agent = "Agent1"  # Add agent attribute
+        event.callerAgent = None  # Add callerAgent attribute
         event.data = MagicMock()
         event.data.type = "response.output_item.done"
         event.data.item = MagicMock()
-        event.data.item.name = "send_message_to_Agent2"
-        event.data.item.arguments = '{"message": "Hello Agent2"}'
+        event.data.item.name = "send_message"
+        event.data.item.arguments = '{"recipient_agent": "Agent2", "message": "Hello Agent2"}'
         event.data.item.call_id = "call_123"
 
         with patch.object(adapter, "_update_console"):
@@ -506,17 +516,8 @@ class TestConsoleEventAdapter:
             # Raw response error scenarios
             ("missing_message_id", {"type": "response.output_item.added", "item_type": "message", "id": None}, None),
             # Skip problematic validation error test
-            # (
-            #     "missing_tool_call_id",
-            #     {
-            #         "type": "response.output_item.added",
-            #         "item_type": "function_call",
-            #         "call_id": None,
-            #         "name": "test",
-            #         "arguments": "{}",
-            #     },
-            #     None,
-            # ),
+            # ("missing_tool_call_id", {"type": "response.output_item.added",
+            #  "item_type": "function_call", "call_id": None, "name": "test", "arguments": "{}"}, None),
             ("missing_text_delta_id", {"type": "response.output_text.delta", "item_id": None}, None),
             # Run item stream error scenarios
             ("missing_item", {"name": "message_output_created", "item": None}, None),

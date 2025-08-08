@@ -78,9 +78,8 @@ def mock_wrapper(mock_context, mock_sender_agent):
 def specific_send_message_tool(mock_sender_agent, mock_recipient_agent):
     # Create an instance of SendMessage for testing its on_invoke_tool method directly
     return SendMessage(
-        tool_name=f"send_message_to_{mock_recipient_agent.name}",
         sender_agent=mock_sender_agent,
-        recipient_agent=mock_recipient_agent,
+        recipients={mock_recipient_agent.name.lower(): mock_recipient_agent},
     )
 
 
@@ -107,6 +106,7 @@ def legacy_tool():
 async def test_send_message_success(specific_send_message_tool, mock_wrapper, mock_recipient_agent, mock_context):
     message_content = "Test message"
     args_dict = {
+        "recipient_agent": mock_recipient_agent.name,  # Add the recipient_agent field
         "my_primary_instructions": "Primary instructions for test.",
         "message": message_content,
         "additional_instructions": "Additional instructions for test.",
@@ -145,6 +145,7 @@ async def test_send_message_invalid_json(specific_send_message_tool, mock_wrappe
 async def test_send_message_missing_required_param(specific_send_message_tool, mock_wrapper):
     # Test missing 'message'
     args_dict_missing_message = {
+        "recipient_agent": "RecipientAgent",
         "my_primary_instructions": "Primary instructions.",
         # "message" is missing
     }
@@ -166,6 +167,7 @@ async def test_send_message_missing_required_param(specific_send_message_tool, m
 
     # Test missing 'my_primary_instructions'
     args_dict_missing_instr = {
+        "recipient_agent": "RecipientAgent",
         "message": "A message",
         # my_primary_instructions is missing
     }
@@ -190,6 +192,7 @@ async def test_send_message_target_agent_error(specific_send_message_tool, mock_
     mock_recipient_agent.get_response.side_effect = RuntimeError(error_text)
     message_content = "Test message"
     args_dict = {
+        "recipient_agent": mock_recipient_agent.name,
         "my_primary_instructions": "Primary instructions.",
         "message": message_content,
     }

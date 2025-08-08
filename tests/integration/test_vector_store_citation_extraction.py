@@ -48,7 +48,10 @@ Equipment Status: Mass Spectrometer operational
         # Create agent with FileSearch capability and citations enabled
         search_agent = Agent(
             name="VectorSearchAgent",
-            instructions="You are a research assistant that searches documents for specific information using your FileSearch tool.",
+            instructions=(
+                "You are a research assistant that searches documents for specific information "
+                "using your FileSearch tool."
+            ),
             files_folder=str(temp_path),
             include_search_results=True,
         )

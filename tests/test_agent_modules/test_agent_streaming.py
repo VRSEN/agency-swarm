@@ -30,9 +30,9 @@ async def test_get_response_stream_basic(tmp_path):
         async for event in agent.get_response_stream(message_content):
             events.append(event)
         assert events == [
-            {"event": "text", "data": "Hello "},
-            {"event": "text", "data": "World"},
-            {"event": "done"},
+            {"event": "text", "data": "Hello ", "agent": "TestAgent", "callerAgent": None},
+            {"event": "text", "data": "World", "agent": "TestAgent", "callerAgent": None},
+            {"event": "done", "agent": "TestAgent", "callerAgent": None},
         ]
 
 
@@ -57,9 +57,9 @@ async def test_get_response_stream_final_result_processing(tmp_path):
         async for event in agent.get_response_stream("Process this"):
             events.append(event)
         assert events == [
-            {"event": "text", "data": "Thinking..."},
-            {"event": "final_result", "data": final_content},
-            {"event": "done"},
+            {"event": "text", "data": "Thinking...", "agent": "TestAgent", "callerAgent": None},
+            {"event": "final_result", "data": final_content, "agent": "TestAgent", "callerAgent": None},
+            {"event": "done", "agent": "TestAgent", "callerAgent": None},
         ]
 
 

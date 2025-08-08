@@ -140,7 +140,9 @@ def test_migrate_old_format():
         },
     }
 
-    mock_load = lambda: old_format
+    def mock_load():
+        return old_format
+
     manager = ThreadManager(load_threads_callback=mock_load)
 
     # Check that messages were migrated correctly

@@ -6,9 +6,6 @@ import logging
 from typing import Any
 
 from pydantic import BaseModel
-from rich.console import Console, Group
-from rich.live import Live
-from rich.markdown import Markdown
 
 try:
     from ag_ui.core import (
@@ -32,22 +29,41 @@ try:
     )
 except ImportError as exc:
     raise ImportError(
-        "FastAPI deployment dependencies are missing. Please install agency-swarm[fastapi] package"
+        "ag_ui.core is required for the AG-UI adapter. Install with `pip install ag-ui-protocol`."
     ) from exc
 
 logger = logging.getLogger(__name__)
 
 
 # Universal function to serialize any object to a JSON-compatible format
-def serialize(obj):
+def serialize(obj, _visited=None):
+    if _visited is None:
+        _visited = set()
+
+    # Check for circular references
+    obj_id = id(obj)
+    if obj_id in _visited:
+        return str(obj)  # Return string representation for circular refs
+
     if dataclasses.is_dataclass(obj):
-        return {k: serialize(v) for k, v in dataclasses.asdict(obj).items()}
+        _visited.add(obj_id)
+        # Use __dict__ to preserve dynamically added attributes like agent and callerAgent
+        result = {k: serialize(v, _visited) for k, v in obj.__dict__.items() if not k.startswith("_")}
+        _visited.discard(obj_id)
+        return result
     elif isinstance(obj, BaseModel):
-        return {k: serialize(v) for k, v in obj.model_dump().items()}
+        return {k: serialize(v, _visited) for k, v in obj.model_dump().items()}
     elif isinstance(obj, list | tuple):
-        return [serialize(item) for item in obj]
+        return [serialize(item, _visited) for item in obj]
     elif isinstance(obj, dict):
-        return {k: serialize(v) for k, v in obj.items()}
+        return {k: serialize(v, _visited) for k, v in obj.items()}
+    elif hasattr(obj, "__dict__") and not isinstance(obj, type):
+        # Handle any object with __dict__ (includes SimpleNamespace and regular objects)
+        # This ensures circular reference tracking for all objects with attributes
+        _visited.add(obj_id)
+        result = {k: serialize(v, _visited) for k, v in obj.__dict__.items() if not k.startswith("_")}
+        _visited.discard(obj_id)
+        return result
     else:
         return str(obj)
 
@@ -394,123 +410,3 @@ class AguiAdapter:
 
         logger.warning("run_item_stream_event ignored: no mapping for name %s", name)
         return None
-
-
-class ConsoleEventAdapter:
-    """
-    Converts OpenAI Agents SDK events int console message outputs.
-    """
-
-    def __init__(self):
-        # Dictionary to hold agent-to-agent communication data
-        self.agent_to_agent_communication: dict[str, dict[str, Any]] = {}
-        # Dictionary to hold MCP call names
-        self.mcp_calls: dict[str, str] = {}
-        self.response_buffer = ""
-        self.message_output = None
-        self.console = Console()
-        self.last_live_display = None
-
-    def _cleanup_live_display(self):
-        """Clean up any active Live display safely."""
-        if self.message_output is not None:
-            try:
-                self.message_output.__exit__(None, None, None)
-            except Exception:
-                pass  # Ignore cleanup errors
-            self.message_output = None
-            self.response_buffer = ""
-
-    def _update_console(self, msg_type: str, sender: str, receiver: str, content: str):
-        # Print a separator only for function, function_output, and agent-to-agent messages
-        emoji = "👤" if sender.lower() == "user" else "🤖"
-        if msg_type == "function":
-            header = f"{emoji} {sender} 🛠️ Executing Function"
-        elif msg_type == "function_output":
-            header = f"{sender} ⚙️ Function Output"
-        else:
-            header = f"{emoji} {sender} 🗣️ @{receiver}"
-        self.console.print(f"[bold]{header}[/bold]\n{content}")
-        self.console.rule()
-
-    def openai_to_message_output(self, event: Any, recipient_agent: str):
-        try:
-            if hasattr(event, "data"):
-                event_type = event.type
-                if event_type == "raw_response_event":
-                    data = event.data
-                    data_type = data.type
-                    if data_type == "response.output_text.delta":
-                        # Use Live as a context manager for the live region
-                        if self.message_output is None:
-                            self.response_buffer = ""
-                            self.message_output = Live("", console=self.console, refresh_per_second=10)
-                            self.message_output.__enter__()
-                        self.response_buffer += data.delta
-                        header_text = f"🤖 {recipient_agent} 🗣️ @user"
-                        md_content = Markdown(self.response_buffer)
-                        self.message_output.update(Group(header_text, md_content))
-                    elif data_type == "response.output_text.done":
-                        if self.message_output is not None:
-                            header_text = f"🤖 {recipient_agent} 🗣️ @user"
-                            md_content = Markdown(self.response_buffer)
-                            self.message_output.update(Group(header_text, md_content))
-                            self.message_output.__exit__(None, None, None)
-                        self.message_output = None
-                        self.response_buffer = ""
-
-                    elif data_type == "response.output_item.added":
-                        if data.item.type == "mcp_call":
-                            self.mcp_calls[data.item.id] = data.item.name
-
-                    elif data_type == "response.mcp_call_arguments.done":
-                        content = f"Calling {self.mcp_calls[data.item_id]} tool with: {data.arguments}"
-                        self._update_console("function", recipient_agent, "user", content)
-                        self.mcp_calls.pop(data.item_id)
-
-                    elif data_type == "response.output_item.done":
-                        self.message_output = None
-                        item = data.item
-                        if hasattr(item, "arguments"):
-                            # Handle agent to agent communication
-                            if len(parsed_name := item.name.split("send_message_to_")) > 1:
-                                called_agent = parsed_name[1]
-                                message = json.loads(item.arguments)["message"]  # Parse once
-                                self._update_console("text", recipient_agent, called_agent, message)
-                                self.agent_to_agent_communication[item.call_id] = {
-                                    "sender": recipient_agent,
-                                    "receiver": called_agent,
-                                    "message": message,
-                                }
-                            else:
-                                if item.type == "mcp_call":
-                                    self._update_console("function_output", recipient_agent, "user", item.output)
-                                else:
-                                    content = f"Calling {item.name} tool with: {item.arguments}"
-                                    self._update_console("function", recipient_agent, "user", content)
-
-
-
-            # Tool outputs (except mcp calls)
-            elif hasattr(event, "item"):
-                event_type = event.type
-                if event_type == "run_item_stream_event":
-                    item = event.item
-                    if item.type in "tool_call_output_item":
-                        call_id = item.raw_item["call_id"]
-
-                        if call_id in self.agent_to_agent_communication:
-                            comm_data = self.agent_to_agent_communication.pop(call_id)
-                            self._update_console("text", comm_data["receiver"], comm_data["sender"], str(item.output))
-                        else:
-                            self._update_console("function_output", recipient_agent, "user", str(item.output))
-
-            # Handle error events (dict format from agent streaming)
-            elif isinstance(event, dict) and event.get("type") == "error":
-                self._cleanup_live_display()
-                content = event.get("content", "Unknown error")
-                print(f"\nEncountered error during streaming: {content}")
-        except Exception as e:
-            # Clean up any active Live display and log the error
-            self._cleanup_live_display()
-            print(f"\nError processing event: {e}")

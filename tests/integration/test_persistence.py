@@ -314,7 +314,8 @@ async def test_persistence_load_all_messages(temp_persistence_dir, file_persiste
         assert "timestamp" in msg, "Message missing 'timestamp'"
 
     print(
-        f"✓ Successfully loaded {len(all_loaded_messages)} messages with agents: {set(msg.get('agent') for msg in all_loaded_messages)}"
+        f"✓ Successfully loaded {len(all_loaded_messages)} messages with agents: "
+        f"{ {msg.get('agent') for msg in all_loaded_messages} }"
     )
 
 

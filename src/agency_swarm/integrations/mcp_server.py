@@ -119,15 +119,15 @@ def run_mcp(
         tool_registry[tool_name] = tool
         logger.info(f"Registered tool: {tool_name}")
 
-    for tool_name, tool in tool_registry.items():
+    for _tool_name, tool_obj in tool_registry.items():
         # Handle different tool types
-        if inspect.isclass(tool) and issubclass(tool, BaseTool):
-            logger.info(f"Converting BaseTool: {tool}")
-            tool = ToolFactory.adapt_base_tool(tool)
+        if inspect.isclass(tool_obj) and issubclass(tool_obj, BaseTool):
+            logger.info(f"Converting BaseTool: {tool_obj}")
+            tool_obj = ToolFactory.adapt_base_tool(tool_obj)
 
         # on_invoke_tool does not contain input type hints
         # Create a custom tool to maintain input schema
-        if isinstance(tool, FunctionTool):
+        if isinstance(tool_obj, FunctionTool):
             # Create a custom tool class that extends Tool
             class CustomTool(Tool):
                 def __init__(self, function_tool):
@@ -136,7 +136,7 @@ def run_mcp(
                         name=function_tool.name,
                         description=function_tool.description,
                         parameters=function_tool.params_json_schema,  # Use existing JSON schema directly
-                        enabled=True
+                        enabled=True,
                     )
                     # Store the function_tool reference after super().__init__
                     object.__setattr__(self, "_function_tool", function_tool)
@@ -149,11 +149,11 @@ def run_mcp(
                     return ToolResult(content=result)
 
             # Create and add the custom tool
-            custom_tool = CustomTool(tool)
+            custom_tool = CustomTool(tool_obj)
             mcp.add_tool(custom_tool)
         else:
             # For non-FunctionTool instances, fall back to the decorator approach
-            raise ValueError(f"Unexpected tool type: {type(tool)} for tool: {tool.name}")
+            raise ValueError(f"Unexpected tool type: {type(tool_obj)} for tool: {tool_obj.name}")
 
     if return_app:
         return mcp

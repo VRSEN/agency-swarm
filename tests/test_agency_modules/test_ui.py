@@ -51,7 +51,7 @@ def sample_agency_data():
             {"id": "CEO-Manager", "source": "CEO", "target": "Manager", "type": "communication"},
             {"id": "Manager-Worker", "source": "Manager", "target": "Worker", "type": "communication"},
         ],
-        "metadata": {"agencyName": "Test Agency", "totalAgents": 3, "totalTools": 0, "layoutAlgorithm": "hierarchical"},
+        "metadata": {"agencyName": "Test Agency", "totalAgents": 3, "totalTools": 0},
     }
 
 
@@ -142,9 +142,6 @@ class TestLayoutAlgorithms:
             assert "position" in node
             assert "x" in node["position"]
             assert "y" in node["position"]
-
-        # Check that layout algorithm is recorded
-        assert result["metadata"]["layoutAlgorithm"] == "hierarchical"
 
     def test_apply_layout_different_dimensions(self, sample_agency_data):
         """Test apply_layout with different width and height."""

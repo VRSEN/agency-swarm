@@ -69,8 +69,10 @@ async def test_agent_get_response_restores_instructions_on_error(test_agent):
     original_instructions = test_agent.instructions
     additional_text = "Additional test instructions"
 
+    from agents import AgentsException
+
     with patch("agents.Runner.run", side_effect=RuntimeError("Test error")):
-        with pytest.raises(Exception):  # AgentsException wraps the RuntimeError
+        with pytest.raises(AgentsException):  # Now using specific exception type
             await test_agent.get_response(message="Test message", additional_instructions=additional_text)
 
     # Verify original instructions are restored despite the error
@@ -122,7 +124,7 @@ async def test_agent_get_response_stream_restores_instructions_on_error(test_age
                 message="Test message", additional_instructions=additional_text
             ):
                 pass
-        except:
+        except Exception:
             pass  # Expected to fail
 
     # Verify original instructions are restored despite the error

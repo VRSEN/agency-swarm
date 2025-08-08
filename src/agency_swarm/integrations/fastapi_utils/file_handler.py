@@ -24,16 +24,19 @@ def get_extension_from_name(name):
     ext = os.path.splitext(name)[1]
     return ext if ext else None
 
+
 def get_extension_from_url(url):
     path = urlparse(url).path
     ext = os.path.splitext(path)[1]
     return ext if ext else None
+
 
 def get_extension_from_filetype(file_path):
     kind = filetype.guess(str(file_path))
     if kind:
         return f".{kind.extension}"
     return None
+
 
 async def download_file(url, name, save_dir):
     """
@@ -55,7 +58,7 @@ async def download_file(url, name, save_dir):
         ),
     }
     temp_path = Path(save_dir) / f"{base_name}.tmp"
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=30.0) as client:
         async with client.stream("GET", url, headers=headers) as r:
             r.raise_for_status()
             async with aiofiles.open(temp_path, "wb") as f:
@@ -72,6 +75,7 @@ async def download_file(url, name, save_dir):
     os.rename(temp_path, local_path)
     return str(local_path)
 
+
 async def upload_to_openai(file_path):
     try:
         with open(file_path, "rb") as f:
@@ -80,6 +84,7 @@ async def upload_to_openai(file_path):
         logger.error(f"Error uploading file {file_path} to OpenAI: {e}")
         raise e
     return uploaded_file.id
+
 
 async def upload_from_urls(file_map: dict[str, str]) -> dict[str, str]:
     """

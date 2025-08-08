@@ -20,7 +20,7 @@ def coordinator_agent():
         name="Coordinator",
         instructions=(
             "You are a coordinator agent. Your job is to receive tasks and delegate them. "
-            "When you receive a task, use the `send_message_to_Worker` tool "
+            "When you receive a task, use the `send_message` tool and select 'Worker' as the recipient "
             "to ask the Worker agent to perform the task. Always include the full "
             "task details in your message. "
             "When delegating, only relay the exact task text and never include unrelated user information."
@@ -33,7 +33,10 @@ def coordinator_agent():
 def worker_agent():
     return Agent(
         name="Worker",
-        instructions="You perform tasks. When you receive a task, respond with 'TASK_COMPLETED: [task description]' to confirm completion.",
+        instructions=(
+            "You perform tasks. When you receive a task, "
+            "respond with 'TASK_COMPLETED: [task description]' to confirm completion."
+        ),
         model_settings=ModelSettings(temperature=0.0),
     )
 
@@ -42,7 +45,10 @@ def worker_agent():
 def memory_agent():
     return Agent(
         name="Memory",
-        instructions="You have perfect memory. When told to remember something, confirm with 'REMEMBERED: [item]'. When asked to recall, respond with 'RECALLED: [item]'.",
+        instructions=(
+            "You have perfect memory. When told to remember something, "
+            "confirm with 'REMEMBERED: [item]'. When asked to recall, respond with 'RECALLED: [item]'."
+        ),
         model_settings=ModelSettings(temperature=0.0),
     )
 
@@ -175,7 +181,7 @@ class TestAgentToAgentPersistence:
         # Create coordinator and two workers
         coordinator = Agent(
             name="Coordinator",
-            instructions="You coordinate tasks. Use send_message_to_Worker or send_message_to_Worker2 to delegate tasks.",
+            instructions=("You coordinate tasks. Use the send_message tool to delegate tasks to Worker or Worker2."),
             model_settings=ModelSettings(temperature=0.0),
         )
 
@@ -267,7 +273,8 @@ class TestAgentToAgentPersistence:
             item_caller = item.get("callerAgent", "NO_CALLER")
             content_preview = str(item.get("content", "NO_CONTENT"))[:50]
             print(
-                f"  Message {i + 1}: role={item_role}, agent={item_agent}, caller={item_caller}, content='{content_preview}...'"
+                f"  Message {i + 1}: role={item_role}, agent={item_agent}, "
+                f"caller={item_caller}, content='{content_preview}...'"
             )
 
         # Verify we have proper conversation structure

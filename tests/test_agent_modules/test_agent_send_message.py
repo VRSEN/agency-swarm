@@ -4,7 +4,6 @@ import pytest
 from agents import RunContextWrapper
 
 from agency_swarm import Agent
-from agency_swarm.agent import SEND_MESSAGE_TOOL_PREFIX
 from agency_swarm.context import MasterContext
 
 # --- Send Message Tool Tests ---
@@ -25,7 +24,7 @@ async def test_invoke_send_message_tool_success(minimal_agent):
     # Find the send_message tool
     send_message_tool = None
     for tool in minimal_agent.tools:
-        if hasattr(tool, "name") and tool.name == f"{SEND_MESSAGE_TOOL_PREFIX}Recipient":
+        if hasattr(tool, "name") and tool.name == "send_message":
             send_message_tool = tool
             break
 
@@ -38,7 +37,10 @@ async def test_invoke_send_message_tool_success(minimal_agent):
     mock_context.context = mock_master_context
 
     # Test the tool invocation with the required parameters
-    input_json = '{"my_primary_instructions": "Test instructions", "message": "Hello recipient"}'
+    input_json = (
+        '{"recipient_agent": "Recipient", "my_primary_instructions": "Test instructions", '
+        '"message": "Hello recipient", "additional_instructions": ""}'
+    )
     result = await send_message_tool.on_invoke_tool(mock_context, input_json)
 
     assert "Response from recipient" in result
@@ -55,7 +57,7 @@ async def test_invoke_send_message_tool_arg_parse_error(minimal_agent):
     # Find the send_message tool
     send_message_tool = None
     for tool in minimal_agent.tools:
-        if hasattr(tool, "name") and tool.name == f"{SEND_MESSAGE_TOOL_PREFIX}Recipient":
+        if hasattr(tool, "name") and tool.name == "send_message":
             send_message_tool = tool
             break
 
@@ -84,7 +86,7 @@ async def test_invoke_send_message_tool_missing_arg(minimal_agent):
     # Find the send_message tool
     send_message_tool = None
     for tool in minimal_agent.tools:
-        if hasattr(tool, "name") and tool.name == f"{SEND_MESSAGE_TOOL_PREFIX}Recipient":
+        if hasattr(tool, "name") and tool.name == "send_message":
             send_message_tool = tool
             break
 
@@ -116,7 +118,7 @@ async def test_invoke_send_message_tool_recipient_error(minimal_agent):
     # Find the send_message tool
     send_message_tool = None
     for tool in minimal_agent.tools:
-        if hasattr(tool, "name") and tool.name == f"{SEND_MESSAGE_TOOL_PREFIX}Recipient":
+        if hasattr(tool, "name") and tool.name == "send_message":
             send_message_tool = tool
             break
 
@@ -129,7 +131,10 @@ async def test_invoke_send_message_tool_recipient_error(minimal_agent):
     mock_context.context = mock_master_context
 
     # Test the tool invocation
-    input_json = '{"my_primary_instructions": "Test instructions", "message": "Hello recipient"}'
+    input_json = (
+        '{"recipient_agent": "Recipient", "my_primary_instructions": "Test instructions", '
+        '"message": "Hello recipient", "additional_instructions": ""}'
+    )
     result = await send_message_tool.on_invoke_tool(mock_context, input_json)
 
     assert "Error: Failed to get response from agent" in result

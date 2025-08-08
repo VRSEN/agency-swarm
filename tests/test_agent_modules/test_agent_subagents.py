@@ -1,5 +1,4 @@
 from agency_swarm import Agent
-from agency_swarm.agent import SEND_MESSAGE_TOOL_PREFIX
 
 # --- Subagent Registration Tests ---
 
@@ -8,8 +7,9 @@ def test_register_subagent(minimal_agent):
     """Test registering a subagent."""
     recipient = Agent(name="Recipient", instructions="Receive messages")
     minimal_agent.register_subagent(recipient)
-    assert "Recipient" in minimal_agent._subagents
-    assert minimal_agent._subagents["Recipient"] == recipient
+    # Subagents are stored with lowercase keys for case-insensitive lookup
+    assert "recipient" in minimal_agent._subagents
+    assert minimal_agent._subagents["recipient"] == recipient
 
 
 def test_register_subagent_adds_send_message_tool(minimal_agent):
@@ -20,7 +20,7 @@ def test_register_subagent_adds_send_message_tool(minimal_agent):
     assert len(minimal_agent.tools) == initial_tool_count + 1
     # Check that the tool name follows the expected pattern
     tool_names = [getattr(tool, "name", None) for tool in minimal_agent.tools]
-    expected_tool_name = f"{SEND_MESSAGE_TOOL_PREFIX}Recipient"
+    expected_tool_name = "send_message"
     assert expected_tool_name in tool_names
 
 

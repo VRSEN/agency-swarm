@@ -52,7 +52,8 @@ def handle_deprecated_parameters(kwargs: dict[str, Any]) -> dict[str, Any]:
         if param in kwargs:
             param_value = kwargs.pop(param)
             warnings.warn(
-                f"'{param}' is deprecated as a direct Agent parameter. Configure model settings via 'model_settings' parameter using a ModelSettings object from the agents SDK.",
+                f"'{param}' is deprecated as a direct Agent parameter. Configure model settings "
+                "via 'model_settings' parameter using a ModelSettings object from the agents SDK.",
                 DeprecationWarning,
                 stacklevel=3,
             )
@@ -70,7 +71,8 @@ def handle_deprecated_parameters(kwargs: dict[str, Any]) -> dict[str, Any]:
 
     if "id" in kwargs:
         warnings.warn(
-            "'id' parameter (OpenAI Assistant ID) is deprecated and no longer used for loading. Agent state is managed via PersistenceHooks.",
+            "'id' parameter (OpenAI Assistant ID) is deprecated and no longer used for loading. "
+            "Agent state is managed via PersistenceHooks.",
             DeprecationWarning,
             stacklevel=3,
         )
@@ -86,7 +88,8 @@ def handle_deprecated_parameters(kwargs: dict[str, Any]) -> dict[str, Any]:
 
     if "tool_resources" in kwargs:
         warnings.warn(
-            "'tool_resources' is deprecated. File resources should be managed via 'files_folder' and the 'upload_file' method for Vector Stores.",
+            "'tool_resources' is deprecated. File resources should be managed via 'files_folder' "
+            "and the 'upload_file' method for Vector Stores.",
             DeprecationWarning,
             stacklevel=3,
         )
@@ -94,7 +97,8 @@ def handle_deprecated_parameters(kwargs: dict[str, Any]) -> dict[str, Any]:
 
     if "file_ids" in kwargs:
         warnings.warn(
-            "'file_ids' is deprecated. Use 'files_folder' to associate with Vector Stores or manage files via Agent methods.",
+            "'file_ids' is deprecated. Use 'files_folder' to associate with Vector Stores "
+            "or manage files via Agent methods.",
             DeprecationWarning,
             stacklevel=3,
         )
@@ -103,7 +107,8 @@ def handle_deprecated_parameters(kwargs: dict[str, Any]) -> dict[str, Any]:
     if "examples" in kwargs:
         examples = kwargs.pop("examples")
         warnings.warn(
-            "'examples' parameter is deprecated. Consider incorporating examples directly into the agent's 'instructions'.",
+            "'examples' parameter is deprecated. Consider incorporating examples directly "
+            "into the agent's 'instructions'.",
             DeprecationWarning,
             stacklevel=3,
         )
@@ -121,7 +126,8 @@ def handle_deprecated_parameters(kwargs: dict[str, Any]) -> dict[str, Any]:
 
     if "file_search" in kwargs:
         warnings.warn(
-            "'file_search' parameter is deprecated. FileSearchTool is added automatically if 'files_folder' indicates a Vector Store.",
+            "'file_search' parameter is deprecated. FileSearchTool is added automatically "
+            "if 'files_folder' indicates a Vector Store.",
             DeprecationWarning,
             stacklevel=3,
         )
@@ -246,7 +252,7 @@ def separate_kwargs(kwargs: dict[str, Any]) -> tuple[dict[str, Any], dict[str, A
     return base_agent_params, current_agent_params
 
 
-def setup_file_manager(agent: "Agent", files_folder: str | None) -> None:
+def setup_file_manager(agent: "Agent") -> None:
     """
     Set up the file manager and attachment manager for the agent.
 
@@ -256,9 +262,3 @@ def setup_file_manager(agent: "Agent", files_folder: str | None) -> None:
     """
     agent.file_manager = AgentFileManager(agent)
     agent.attachment_manager = AttachmentManager(agent)
-
-    # Parse files folder for vector store ID
-    # This is handled automatically by _parse_files_folder_for_vs_id()
-
-    # Parse files folder for vector store ID
-    agent.file_manager._parse_files_folder_for_vs_id()

@@ -71,7 +71,7 @@ async def test_context_sharing_between_agents():
     assert "shared_value" in response2.final_output
 
     # Agent2 can also store data that's visible to the agency
-    response3 = await agency.get_response("Ask Agent2 to store 'agent2_key' with value 'agent2_value'")
+    await agency.get_response("Ask Agent2 to store 'agent2_key' with value 'agent2_value'")
 
     # Verify Agent2's data is in agency context
     assert agency.user_context.get("agent2_key") == "agent2_value"

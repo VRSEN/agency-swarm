@@ -25,8 +25,8 @@ class TestFastAPIFileProcessing:
     @pytest.fixture(scope="class")
     def agency_factory(self):
         """Create an agency factory for testing."""
-        def create_agency(load_threads_callback=None, save_threads_callback=None):
 
+        def create_agency(load_threads_callback=None, save_threads_callback=None):
             agent = Agent(
                 name="FileProcessorAgent",
                 instructions="""
@@ -46,6 +46,7 @@ class TestFastAPIFileProcessing:
                 load_threads_callback=load_threads_callback,
                 save_threads_callback=save_threads_callback,
             )
+
         return create_agency
 
     @pytest.fixture(scope="class")
@@ -88,15 +89,10 @@ class TestFastAPIFileProcessing:
 
         from agency_swarm.integrations.fastapi import run_fastapi
 
-
         # Ensure no authentication is required by using a non-existent env var
         # This will make app_token None and disable authentication
         app = run_fastapi(
-            agencies={"test_agency": agency_factory},
-            port=8080,
-            app_token_env="",
-            return_app=True,
-            enable_agui=False
+            agencies={"test_agency": agency_factory}, port=8080, app_token_env="", return_app=True, enable_agui=False
         )
 
         # Start server in a thread
@@ -130,9 +126,7 @@ class TestFastAPIFileProcessing:
         url = "http://localhost:8080/test_agency/get_response"
         payload = {
             "message": "Please read the content of the uploaded file and tell me what secret phrase you find.",
-            "file_urls": {
-                "test_file.txt": "http://localhost:7860/test-txt.txt"
-            }
+            "file_urls": {"test_file.txt": "http://localhost:7860/test-txt.txt"},
         }
         headers = {}
 
@@ -153,9 +147,7 @@ class TestFastAPIFileProcessing:
         url = "http://localhost:8080/test_agency/get_response"
         payload = {
             "message": "Search for the secret phrase inside the document.",
-            "file_urls": {
-                "webpage.html": "http://localhost:7860/test-html.html"
-            }
+            "file_urls": {"webpage.html": "http://localhost:7860/test-html.html"},
         }
         headers = {}
 
@@ -167,10 +159,7 @@ class TestFastAPIFileProcessing:
 
         response_text = response_data["response"].lower()
         # Should find both secret phrases in HTML
-        assert (
-            "first html secret phrase" in response_text or
-            "second html secret phrase" in response_text
-        )
+        assert "first html secret phrase" in response_text or "second html secret phrase" in response_text
 
         file_ids = response_data["file_ids_map"]
         assert "webpage.html" in file_ids.keys()
@@ -186,8 +175,8 @@ class TestFastAPIFileProcessing:
             ),
             "file_urls": {
                 "text_image": "http://localhost:7860/test-image.png",
-                "pdf_file": "http://localhost:7860/test-pdf.pdf"
-            }
+                "pdf_file": "http://localhost:7860/test-pdf.pdf",
+            },
         }
         headers = {}
 
@@ -208,9 +197,7 @@ class TestFastAPIFileProcessing:
         url = "http://localhost:8080/test_agency/get_response_stream"
         payload = {
             "message": "Please read the text file and describe its content in detail.",
-            "file_urls": {
-                "stream_test.txt": "http://localhost:7860/test-txt.txt"
-            }
+            "file_urls": {"stream_test.txt": "http://localhost:7860/test-txt.txt"},
         }
         headers = {}
 
@@ -235,9 +222,7 @@ class TestFastAPIFileProcessing:
         url = "http://localhost:8080/test_agency/get_response"
         payload = {
             "message": "Please process this file.",
-            "file_urls": {
-                "nonexistent.txt": "http://localhost:7860/nonexistent-file.txt"
-            }
+            "file_urls": {"nonexistent.txt": "http://localhost:7860/nonexistent-file.txt"},
         }
         headers = {}
 
@@ -250,6 +235,39 @@ class TestFastAPIFileProcessing:
 
         # The agent should mention it couldn't access the file
         response_text = response_data["error"].lower()
-        assert (
-            "error downloading file from provided urls" in response_text
-        )
+        assert "error downloading file from provided urls" in response_text
+
+    @pytest.mark.asyncio
+    async def test_streaming_invalid_file_url(self, file_server_process, fastapi_server):
+        """Test that streaming endpoint properly handles invalid file URLs without hanging."""
+        url = "http://localhost:8080/test_agency/get_response_stream"
+        payload = {
+            "message": "Please process this file.",
+            "file_urls": {"nonexistent.txt": "http://localhost:7860/nonexistent-file.txt"},
+        }
+        headers = {}
+
+        collected_data = []
+        error_found = False
+
+        async with httpx.AsyncClient(timeout=30) as client:
+            async with client.stream("POST", url, json=payload, headers=headers) as response:
+                assert response.status_code == 200
+                async for line in response.aiter_lines():
+                    if line.strip():
+                        collected_data.append(line)
+                        # Check if this is an error event
+                        if line.startswith("data: "):
+                            try:
+                                import json
+
+                                data = json.loads(line[6:])  # Remove "data: " prefix
+                                if "error" in data:
+                                    error_found = True
+                                    assert "error downloading file from provided urls" in data["error"].lower()
+                            except json.JSONDecodeError:
+                                pass  # Some lines might not be JSON
+
+        # Verify we received streaming data and found the error
+        assert len(collected_data) > 0, "Should have received streaming data"
+        assert error_found, "Should have received an error event for invalid file URL"

@@ -12,7 +12,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from agency_swarm.agency import Agency
 from agency_swarm.integrations.fastapi_utils.file_handler import upload_from_urls
 from agency_swarm.messages import MessageFilter
-from agency_swarm.ui.core.converters import AguiAdapter, serialize
+from agency_swarm.ui.core.agui_adapter import AguiAdapter, serialize
 
 
 def get_verify_token(app_token):
@@ -46,7 +46,7 @@ def make_response_endpoint(request_model, agency_factory: Callable[..., Agency],
             try:
                 file_ids_map = await upload_from_urls(request.file_urls)
                 combined_file_ids = (combined_file_ids or []) + list(file_ids_map.values())
-                await asyncio.sleep(6) # Wait until files are ready for retrieval
+                await asyncio.sleep(6)  # Wait until files are ready for retrieval
             except Exception as e:
                 return {"error": f"Error downloading file from provided urls: {e}"}
 
@@ -86,10 +86,32 @@ def make_stream_endpoint(request_model, agency_factory: Callable[..., Agency], v
                 return []
 
         combined_file_ids = request.file_ids
+        file_ids_map = None
         if request.file_urls is not None:
-            file_ids_map = await upload_from_urls(request.file_urls)
-            combined_file_ids = (combined_file_ids or []) + list(file_ids_map.values())
-            await asyncio.sleep(6) # Wait until files are ready for retrieval
+            try:
+                file_ids_map = await upload_from_urls(request.file_urls)
+                combined_file_ids = (combined_file_ids or []) + list(file_ids_map.values())
+                await asyncio.sleep(6)  # Wait until files are ready for retrieval
+            except Exception as e:
+                error_msg = str(e)
+
+                async def error_generator():
+                    yield (
+                        "data: "
+                        + json.dumps({"error": f"Error downloading file from provided urls: {error_msg}"})
+                        + "\n\n"
+                    )
+                    yield "event: end\ndata: [DONE]\n\n"
+
+                return StreamingResponse(
+                    error_generator(),
+                    media_type="text/event-stream",
+                    headers={
+                        "Cache-Control": "no-cache",
+                        "Connection": "keep-alive",
+                        "X-Accel-Buffering": "no",
+                    },
+                )
 
         agency_instance = agency_factory(load_threads_callback=load_callback)
 
