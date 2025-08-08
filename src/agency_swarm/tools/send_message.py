@@ -223,6 +223,7 @@ class SendMessage(FunctionTool):
                 async for event in self.recipient_agent.get_response_stream(
                     message=message_content,
                     sender_name=self.sender_agent.name,
+                    context_override=wrapper.context.user_context,
                     additional_instructions=additional_instructions,
                 ):
                     # Add agent name and caller to the event before forwarding

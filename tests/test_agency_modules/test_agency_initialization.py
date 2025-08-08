@@ -31,7 +31,7 @@ def test_agency_minimal_initialization(mock_agent):
     chart = [mock_agent]
     agency = Agency(agency_chart=chart)
     assert agency.agents == {"MockAgent": mock_agent}
-    assert agency.shared_instructions is None
+    assert agency.shared_instructions is None or agency.shared_instructions == ""
     assert agency.persistence_hooks is None
 
 

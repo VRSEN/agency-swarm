@@ -1,3 +1,4 @@
+import json
 import uuid
 
 import pytest
@@ -146,3 +147,67 @@ async def test_context_preservation_in_agent_communication(multi_agent_agency: A
     print("✓ Verified all conversations use proper identifiers")
     print("✓ Message isolation verified through flat storage")
     print("--- Context preservation test passed ---")
+
+
+@pytest.mark.asyncio
+async def test_non_blocking_parallel_agent_interactions(
+    planner_agent_instance, worker_agent_instance, reporter_agent_instance
+):
+    """Verify main agent (Planner) greets two agents in parallel using existing fixtures.
+
+    We assert that two send_message function_call items (to Worker and Reporter) appear before any
+    function_call_output items in the newly added messages for this request.
+    """
+
+    # Create agency where Planner can talk to both Worker and Reporter directly
+    agency = Agency(
+        planner_agent_instance,
+        communication_flows=[
+            (planner_agent_instance, worker_agent_instance),
+            (planner_agent_instance, reporter_agent_instance),
+        ],
+        shared_instructions="",
+    )
+
+    before_count = len(agency.thread_manager.get_all_messages())
+
+    result: RunResult = await agency.get_response(message="Say hello to both agents in parallel")
+
+    assert result is not None and isinstance(result.final_output, str)
+
+    all_messages = agency.thread_manager.get_all_messages()
+    new_messages = all_messages[before_count:]
+
+    call_indices = []
+    output_indices = []
+    send_message_like_call_indices = []
+    for idx, msg in enumerate(new_messages):
+        msg_type = msg.get("type")
+        if msg_type == "function_call":
+            call_indices.append(idx)
+            try:
+                args = json.loads(msg.get("arguments", "{}"))
+            except Exception:
+                args = {}
+            arg_keys = set(args.keys()) if isinstance(args, dict) else set()
+            if {"message", "my_primary_instructions", "additional_instructions"}.issubset(arg_keys):
+                send_message_like_call_indices.append(idx)
+        elif msg_type == "function_call_output":
+            output_indices.append(idx)
+
+    # Ensure we see at least two inter-agent calls (name-agnostic)
+    assert len(send_message_like_call_indices) >= 2, (
+        f"Expected at least two inter-agent function_call items; found indices {send_message_like_call_indices}."
+    )
+
+    # Both calls should occur before any outputs
+    assert len(call_indices) >= 2
+    assert len(output_indices) >= 1  # at least one output should follow
+    first_output_idx = min(output_indices)
+
+    # Check ordering: any two send_message-like calls must be before the first output
+    send_message_like_call_indices.sort()
+    assert send_message_like_call_indices[1] < first_output_idx, (
+        f"Expected two inter-agent function_call items before any outputs; "
+        f"got calls at {send_message_like_call_indices} and first output at {first_output_idx}."
+    )
