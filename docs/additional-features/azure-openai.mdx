@@ -30,14 +30,13 @@ To use Azure OpenAI, you need to configure the client to connect to your Azure O
 
 ```python
 import os
-from openai import AsyncOpenAI
+from openai import AsyncAzureOpenAI
 
 # Create a custom AsyncOpenAI client for Azure
-azure_agent = AsyncOpenAI(
+azure_agent = AsyncAzureOpenAI(
     api_key=os.getenv("AZURE_OPENAI_KEY"),
-    # Set the API version and base URL for your Azure deployment
-    default_query={"api-version": "preview"},
-    base_url=os.getenv("AZURE_ENDPOINT") + "/openai/v1/",
+    azure_endpoint=os.getenv("AZURE_ENDPOINT"),
+    api_version=os.getenv("AZURE_API_VERSION"),
 )
 ```
 
