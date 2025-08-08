@@ -121,7 +121,7 @@ Product Sales:
             # Look for hosted tool search results messages
             if item.get("role") == "user" and "[SEARCH_RESULTS]" in str(item.get("content", "")):
                 hosted_tool_outputs_found += 1
-                logger.info(f"  *** FOUND SEARCH RESULTS MESSAGE ***")
+                logger.info("  *** FOUND SEARCH RESULTS MESSAGE ***")
                 logger.info(f"  Content: {item.get('content', '')}")
 
         logger.info(f"Found {hosted_tool_outputs_found} hosted tool preservation items")
