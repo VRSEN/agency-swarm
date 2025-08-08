@@ -94,7 +94,6 @@ class TestHandoffsWithCommunicationFlows:
 
         # Get tool names for each agent
         agent_a_tools = [tool.name if hasattr(tool, "name") else str(tool) for tool in agent_a.tools]
-        agent_b_tools = [tool.name if hasattr(tool, "name") else str(tool) for tool in agent_b.tools]
         agent_c_tools = [tool.name if hasattr(tool, "name") else str(tool) for tool in agent_c.tools]
 
         # AgentA should have a unified send_message tool
@@ -122,7 +121,6 @@ class TestHandoffsWithCommunicationFlows:
     def test_sendmessage_tool_recipients(self, mixed_communication_agency):
         """Test that SendMessage tool has the correct recipients."""
         agent_a = mixed_communication_agency.agents["AgentA"]
-        agent_b = mixed_communication_agency.agents["AgentB"]
 
         # Find the unified send_message tool
         sendmessage_tools = [tool for tool in agent_a.tools if hasattr(tool, "name") and tool.name == "send_message"]

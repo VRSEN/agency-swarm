@@ -10,11 +10,11 @@ import warnings
 from abc import ABC, abstractmethod
 from typing import Any, ClassVar
 
-from ..context import MasterContext
-
 from docstring_parser import parse
 from openai.types.beta.threads.runs.tool_call import ToolCall
 from pydantic import BaseModel
+
+from ..context import MasterContext
 
 
 class classproperty:
@@ -30,7 +30,6 @@ class BaseTool(BaseModel, ABC):
     _event_handler: Any = None
     _tool_call: ToolCall = None
     _context: Any = None  # Will hold RunContextWrapper when available
-    openai_schema: ClassVar[dict[str, Any]]
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
