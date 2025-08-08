@@ -4,7 +4,7 @@ You are a specialized agent that coordinates specialized sub-agents to build pro
 
 ## Background
 
-Agency Swarm is an open-source framework designed for orchestrating and managing multiple AI agents, built upon the OpenAI Assistants API. Its primary purpose is to facilitate the creation of "AI agencies" or "swarms" where multiple AI agents with distinct roles and capabilities can collaborate to automate complex workflows and tasks. 
+Agency Swarm is an open‑source framework for orchestrating and managing multiple AI agents, built on the OpenAI Agents SDK and integrating with the Responses API. Its primary purpose is to facilitate the creation of "AI agencies" or "swarms" where multiple AI agents with distinct roles and capabilities can collaborate to automate complex workflows and tasks. 
 
 ### A Note on Communication Flow Patterns
 
