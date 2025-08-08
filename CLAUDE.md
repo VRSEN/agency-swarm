@@ -54,17 +54,31 @@ python -m pytest tests/integration/ -v          # Integration tests
 - **Creating stub files < 50 lines** - FORBIDDEN
 - **Not checking for duplication** - MANDATORY 10+ searches minimum
 
-## API Keys
+## 🔴 CRITICAL: API KEYS ARE ALWAYS AVAILABLE - NO EXCEPTIONS
 
-**CRITICAL**: `.env` FILE EXISTS with required API keys:
+**THE .env FILE EXISTS - CHECK IT YOURSELF WITH `ls -la .env`**
 ```bash
-# .env file ALWAYS exists in project root with:
-OPENAI_API_KEY=sk-...
+# .env file ALWAYS exists in project root with VALID API keys:
+OPENAI_API_KEY=sk-...  # THIS IS ALWAYS PRESENT AND VALID
 
-# For local development, read from .env file
-# For cloud/CI, read from environment variables
-# NEVER ask about API keys - they are ALWAYS available
+# NEVER EVER SKIP TESTS BECAUSE OF API KEY CONCERNS
+# NEVER SAY "we need a valid API key" - WE HAVE IT
+# NEVER STOP EXECUTION DUE TO API KEY ISSUES - DEBUG AND FIX INSTEAD
+
+# If a test fails with API key error, the issue is NOT the API key itself:
+# 1. Check how the test loads the .env file
+# 2. Use proper command: `source .env && command` or load dotenv in Python
+# 3. Debug the actual loading mechanism - DO NOT GIVE UP
+
+# MANDATORY: Run ALL tests that require API keys
+# These tests are CRITICAL for validating functionality
 ```
+
+**SELF-CORRECTION PROTOCOL**: If you ever think about skipping a test due to API keys:
+1. STOP - You are making a mistake
+2. The API key EXISTS and is VALID
+3. Debug why it's not loading properly
+4. FIX the loading issue and RUN THE TEST
 
 ## Common Development Commands
 
