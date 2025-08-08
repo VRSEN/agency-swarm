@@ -40,7 +40,7 @@ agency = Agency(
 
 if __name__ == "__main__":
     # Test with programmatic interface
-    response = agency.get_completion("test query")
+    response = agency.get_response("test query")
     print(response)
 ```
 
@@ -75,7 +75,7 @@ test_queries = [
 for i, query in enumerate(test_queries, 1):
     print(f"\n=== Test {i} ===")
     print(f"Query: {query}")
-    response = agency.get_completion(query)
+    response = agency.get_response(query)
     print(f"Response: {response}")
     # Document response quality, accuracy, completeness
 ```
