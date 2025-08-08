@@ -5,6 +5,7 @@ This module handles the core execution logic for agent responses,
 including both sync and streaming variants.
 """
 
+import json
 import warnings
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING, Any
@@ -135,6 +136,32 @@ class Execution:
             item_dict["citations"] = citations_by_message[run_item_obj.raw_item.id]
             msg_type = "streamed message" if is_streaming else "message"
             logger.debug(f"Added {len(item_dict['citations'])} citations to {msg_type} {run_item_obj.raw_item.id}")
+
+    def _extract_handoff_target_name(self, run_item_obj: RunItem) -> str | None:
+        """Extract target agent name from a handoff output item.
+
+        Prefers parsing raw_item.output JSON {"assistant": "AgentName"}. Falls back to
+        run_item_obj.target_agent.name if available.
+        """
+        try:
+            raw = getattr(run_item_obj, "raw_item", None)
+            if isinstance(raw, dict):
+                output_val = raw.get("output")
+                if isinstance(output_val, str):
+                    try:
+                        parsed = json.loads(output_val)
+                        assistant_name = parsed.get("assistant")
+                        if isinstance(assistant_name, str) and assistant_name.strip():
+                            return assistant_name.strip()
+                    except Exception:
+                        pass
+            # Fallback if SDK provides target_agent attribute
+            target_agent = getattr(run_item_obj, "target_agent", None)
+            if target_agent is not None and hasattr(target_agent, "name") and target_agent.name:
+                return target_agent.name
+        except Exception:
+            return None
+        return None
 
     async def get_response(
         self,
@@ -273,6 +300,7 @@ class Execution:
                     else {}
                 )
 
+                current_agent_name = self.agent.name
                 for i, run_item_obj in enumerate(run_result.new_items):
                     # _run_item_to_tresponse_input_item converts RunItem to TResponseInputItem (dict)
                     item_dict = self._run_item_to_tresponse_input_item(run_item_obj)
@@ -282,7 +310,7 @@ class Execution:
 
                         # Add agency metadata to the response items
                         formatted_item = MessageFormatter.add_agency_metadata(
-                            item_dict, agent=self.agent.name, caller_agent=sender_name
+                            item_dict, agent=current_agent_name, caller_agent=sender_name
                         )
                         items_to_save.append(formatted_item)
                         content_preview = str(item_dict.get("content", ""))[:50]
@@ -290,6 +318,12 @@ class Execution:
                             f"  [NewItem #{i}] type={type(run_item_obj).__name__}, "
                             f"role={item_dict.get('role')}, content_preview='{content_preview}...'"
                         )
+
+                        # If this item indicates a handoff, update current agent for subsequent items
+                        if getattr(run_item_obj, "type", None) == "handoff_output_item":
+                            target = self._extract_handoff_target_name(run_item_obj)
+                            if target:
+                                current_agent_name = target
 
                 items_to_save.extend(hosted_tool_outputs)
 
@@ -415,13 +449,35 @@ class Execution:
                 run_config=run_config_override or RunConfig(),
                 max_turns=kwargs.get("max_turns", DEFAULT_MAX_TURNS),
             )
+            current_stream_agent_name = self.agent.name
             async for event in result.stream_events():
                 # Collect all new items for saving to thread
                 if hasattr(event, "item") and event.item:
                     collected_items.append(event.item)
 
+                # Update active agent on handoff events or explicit agent update events
+                try:
+                    if (
+                        getattr(event, "type", None) == "run_item_stream_event"
+                        and getattr(event, "name", None) == "handoff_occured"
+                    ):
+                        item = getattr(event, "item", None)
+                        target = self._extract_handoff_target_name(item) if item is not None else None
+                        if target:
+                            current_stream_agent_name = target
+                    elif getattr(event, "type", None) == "agent_updated_stream_event":
+                        new_agent = getattr(event, "new_agent", None)
+                        if (
+                            new_agent is not None
+                            and hasattr(new_agent, "name")
+                            and new_agent.name
+                        ):
+                            current_stream_agent_name = new_agent.name
+                except Exception:
+                    pass
+
                 # Add agent name and caller to the event
-                event = add_agent_name_to_event(event, self.agent.name, sender_name)
+                event = add_agent_name_to_event(event, current_stream_agent_name, sender_name)
                 yield event
 
             # Save all collected items after streaming completes
@@ -439,6 +495,7 @@ class Execution:
                     else {}
                 )
 
+                current_agent_name = self.agent.name
                 for run_item_obj in collected_items:
                     item_dict = self._run_item_to_tresponse_input_item(run_item_obj)
                     if item_dict:
@@ -447,9 +504,15 @@ class Execution:
 
                         # Add agency metadata to the response items
                         formatted_item = MessageFormatter.add_agency_metadata(
-                            item_dict, agent=self.agent.name, caller_agent=sender_name
+                            item_dict, agent=current_agent_name, caller_agent=sender_name
                         )
                         items_to_save.append(formatted_item)
+
+                        # If this item indicates a handoff, update current agent for subsequent items
+                        if getattr(run_item_obj, "type", None) == "handoff_output_item":
+                            target = self._extract_handoff_target_name(run_item_obj)
+                            if target:
+                                current_agent_name = target
 
                 items_to_save.extend(hosted_tool_outputs)
 
@@ -459,7 +522,9 @@ class Execution:
                 # Save filtered items to flat storage
                 self.agent._thread_manager.add_messages(filtered_items)
                 logger.debug(
-                    f"Saved {len(filtered_items)} streamed items to storage (filtered from {len(items_to_save)})."
+                    "Saved %d streamed items to storage (filtered from %d).",
+                    len(filtered_items),
+                    len(items_to_save),
                 )
 
         finally:
