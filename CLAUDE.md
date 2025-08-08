@@ -7,6 +7,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **MAXIMUM clarity with MINIMUM words**
 - **User feedback = check if already covered before adding**
 
+### Writing Style (User Preference)
+- Default for user-facing answers: expressive, comprehensive, beautiful Markdown.
+- If there is ever a conflict, user’s expressive preference wins for prose; safety protocols still apply.
+
 ## 🔴 CRITICAL SAFETY PROTOCOLS (NUCLEAR FACILITY LEVEL - NO EXCEPTIONS)
 
 ### 🚨 MANDATORY WORKFLOW PROCESS - FOLLOW OR BE DECOMMISSIONED
