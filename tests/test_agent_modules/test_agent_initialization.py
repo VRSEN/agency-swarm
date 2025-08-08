@@ -289,8 +289,6 @@ def test_agent_ensure_thread_manager_without_callbacks():
 
 def test_agent_instruction_file_loading(tmp_path):
     """Test that agent can load instructions from a file."""
-    import os
-
     # Create instruction file
     instruction_file = tmp_path / "agent_instructions.md"
     instruction_content = "You are a helpful assistant. Always be polite."

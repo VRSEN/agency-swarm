@@ -108,10 +108,10 @@ async def test_call_before_agency_setup():
     with patch("agents.Runner.run", new_callable=AsyncMock) as mock_runner:
         mock_runner.return_value = MagicMock(new_items=[], final_output="Test response")
 
-        # This should succeed by auto-creating ThreadManager and minimal agency
+        # This should succeed by auto-creating ThreadManager
         result = await agent.get_response("Test message")
 
-        # Verify components were created
+        # Verify ThreadManager was created (agency_instance stays None in standalone mode)
         assert agent._thread_manager is not None
-        assert agent._agency_instance is not None
+        assert agent._agency_instance is None  # Remains None in standalone mode
         assert result is not None

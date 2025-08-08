@@ -13,7 +13,6 @@ from agents import (
     RunResult,
 )
 
-from agency_swarm.agent import SEND_MESSAGE_TOOL_PREFIX
 from agency_swarm.agent_core import Agent
 from agency_swarm.hooks import PersistenceHooks
 from agency_swarm.streaming_utils import event_stream_merger
@@ -850,7 +849,7 @@ class Agency:
                     tool_name = getattr(tool, "name", getattr(tool, "__name__", str(tool)))
 
                     # Skip send_message tools in visualization
-                    if tool_name.startswith(SEND_MESSAGE_TOOL_PREFIX):
+                    if tool_name == "send_message":
                         continue
 
                     node["data"]["tools"].append(tool_name)

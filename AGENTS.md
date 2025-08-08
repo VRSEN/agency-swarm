@@ -1,1 +1,1 @@
-Please read CLAUDE.md instead.
+CLAUDE.md

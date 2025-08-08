@@ -36,21 +36,30 @@ class SendMessage(FunctionTool):
     """
 
     sender_agent: "Agent"
-    recipient_agent: "Agent"
+    # Dict mapping lowercase recipient names to Agent instances
+    recipients: dict[str, "Agent"]
 
     def __init__(
         self,
         sender_agent: "Agent",
-        recipient_agent: "Agent",
-        tool_name: str,
+        recipients: dict[str, "Agent"] | None = None,
     ):
         self.sender_agent = sender_agent
-        self.recipient_agent = recipient_agent
+        self.recipients = recipients or {}
+
+        # Build the recipient agent enum values for the schema
+        recipient_names = list(self.recipients.values())
+        recipient_enum = [agent.name for agent in recipient_names] if recipient_names else []
 
         # Rich parameter schema incorporating all field descriptions
         params_schema = {
             "type": "object",
             "properties": {
+                "recipient_agent": {
+                    "type": "string",
+                    "enum": recipient_enum,
+                    "description": "The name of the agent to send the message to.",
+                },
                 "my_primary_instructions": {
                     "type": "string",
                     "description": (
@@ -79,26 +88,64 @@ class SendMessage(FunctionTool):
                     ),
                 },
             },
-            "required": ["my_primary_instructions", "message", "additional_instructions"],
+            "required": ["recipient_agent", "my_primary_instructions", "message", "additional_instructions"],
             "additionalProperties": False,
         }
 
-        # Combine own rich docstring with the recipient-specific description part
-        recipient_role_description = (
-            getattr(self.recipient_agent, "description", "No description provided") or "No description provided"
-        )
-        final_description = f"{self.__doc__}\n\nThis agent's role is: {recipient_role_description}"
+        # Build description with all recipient roles
+        description_parts = [self.__doc__]
+        if recipient_names:
+            description_parts.append("\n\nAvailable recipient agents:")
+            for agent in recipient_names:
+                agent_desc = getattr(agent, "description", "No description provided") or "No description provided"
+                description_parts.append(f"\n- {agent.name}: {agent_desc}")
+        final_description = "".join(description_parts)
 
         super().__init__(
-            name=tool_name,
+            name="send_message",
             description=final_description,
             params_json_schema=params_schema,
             on_invoke_tool=self.on_invoke_tool,
         )
         logger.debug(
-            f"Initialized SendMessage tool: '{self.name}' "
-            f"for sender '{sender_agent.name}' -> recipient '{recipient_agent.name}'"
+            f"Initialized SendMessage tool for sender '{sender_agent.name}' with {len(self.recipients)} recipient(s)"
         )
+
+    def add_recipient(self, recipient_agent: "Agent") -> None:
+        """
+        Adds a new recipient agent to the tool and updates the schema.
+
+        Args:
+            recipient_agent: The agent to add as a recipient
+        """
+        # Store with lowercase key for case-insensitive lookup
+        recipient_key = recipient_agent.name.lower()
+        self.recipients[recipient_key] = recipient_agent
+
+        # Update the schema with new recipient enum
+        self._update_schema()
+
+        logger.debug(
+            f"Added recipient '{recipient_agent.name}' to SendMessage tool. Total recipients: {len(self.recipients)}"
+        )
+
+    def _update_schema(self) -> None:
+        """Updates the tool schema with current recipients."""
+        # Build the recipient agent enum values for the schema
+        recipient_names = list(self.recipients.values())
+        recipient_enum = [agent.name for agent in recipient_names] if recipient_names else []
+
+        # Update the params schema
+        self.params_json_schema["properties"]["recipient_agent"]["enum"] = recipient_enum
+
+        # Update description with all recipient roles
+        description_parts = [self.__doc__]
+        if recipient_names:
+            description_parts.append("\n\nAvailable recipient agents:")
+            for agent in recipient_names:
+                agent_desc = getattr(agent, "description", "No description provided") or "No description provided"
+                description_parts.append(f"\n- {agent.name}: {agent_desc}")
+        self.description = "".join(description_parts)
 
     async def on_invoke_tool(self, wrapper: RunContextWrapper[MasterContext], arguments_json_string: str) -> str:
         """
@@ -115,10 +162,14 @@ class SendMessage(FunctionTool):
             logger.error(f"Tool '{self.name}' invoked with invalid JSON arguments: {arguments_json_string}. Error: {e}")
             return f"Error: Invalid arguments format for tool {self.name}. Expected a valid JSON string."
 
+        recipient_agent_name = kwargs.get("recipient_agent")
         message_content = kwargs.get("message")
         my_primary_instructions = kwargs.get("my_primary_instructions")
         additional_instructions = kwargs.get("additional_instructions", "")
 
+        if not recipient_agent_name:
+            logger.error(f"Tool '{self.name}' invoked without 'recipient_agent' parameter.")
+            return f"Error: Missing required parameter 'recipient_agent' for tool {self.name}."
         if not message_content:
             logger.error(f"Tool '{self.name}' invoked without 'message' parameter.")
             return f"Error: Missing required parameter 'message' for tool {self.name}."
@@ -126,6 +177,18 @@ class SendMessage(FunctionTool):
             logger.error(f"Tool '{self.name}' invoked without 'my_primary_instructions' parameter.")
             return f"Error: Missing required parameter 'my_primary_instructions' for tool {self.name}."
 
+        # Case-insensitive lookup for recipient agent
+        recipient_key = recipient_agent_name.lower()
+        if recipient_key not in self.recipients:
+            logger.error(f"Tool '{self.name}' invoked with unknown recipient: '{recipient_agent_name}'")
+            available = list(self.recipients.values())
+            available_names = [a.name for a in available] if available else []
+            return (
+                f"Error: Unknown recipient agent '{recipient_agent_name}'. "
+                f"Available agents: {', '.join(available_names)}"
+            )
+
+        self.recipient_agent = self.recipients[recipient_key]
         sender_name_for_call = self.sender_agent.name
         recipient_name_for_call = self.recipient_agent.name
 

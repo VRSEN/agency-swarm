@@ -55,7 +55,6 @@ AGENT_PARAMS = {
 }
 
 # --- Constants for dynamic tool creation ---
-SEND_MESSAGE_TOOL_PREFIX = "send_message_to_"
 MESSAGE_PARAM = "message"
 
 T = TypeVar("T", bound="Agent")
@@ -257,10 +256,10 @@ class Agent(BaseAgent[MasterContext]):
         """
         Registers another agent as a subagent that this agent can communicate with.
 
-        This method stores a reference to the recipient agent and dynamically creates
-        and adds a specific `FunctionTool` named `send_message_to_<RecipientName>`
-        to this agent's tools. This allows the agent to call the recipient agent
-        during a run using the standard tool invocation mechanism.
+        This method stores a reference to the recipient agent and either creates
+        or updates a unified `send_message` tool that can send messages to any
+        registered recipient. This allows the agent to call any registered recipient
+        agent during a run using the standard tool invocation mechanism.
 
         Args:
             recipient_agent (Agent): The `Agent` instance to register as a recipient.

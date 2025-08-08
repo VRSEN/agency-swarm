@@ -7,6 +7,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **MAXIMUM clarity with MINIMUM words**
 - **User feedback = check if already covered before adding**
 
+### Writing Style (User Preference)
+- Default for user-facing answers: expressive, comprehensive, beautiful Markdown.
+- If there is ever a conflict, user’s expressive preference wins for prose; safety protocols still apply.
+
 ## 🔴 CRITICAL SAFETY PROTOCOLS (NUCLEAR FACILITY LEVEL - NO EXCEPTIONS)
 
 ### 🚨 MANDATORY WORKFLOW PROCESS - FOLLOW OR BE DECOMMISSIONED
@@ -25,11 +29,15 @@ git diff --cached | cat  # Review ALL staged changes - READ EVERY LINE
 git diff | cat           # Review ALL unstaged changes - READ EVERY LINE
 git status --porcelain   # Check ALL files including untracked
 ```
+**IMPORTANT:** NEVER use head, tail, or any truncation with git diff. ALWAYS use `git diff | cat` or `git diff --cached | cat` to see FULL output. Using truncation (head -500, etc.) is a DEATH PENALTY VIOLATION.
 
 #### STEP 2: PROACTIVE ANALYSIS (MANDATORY)
 - **SEARCH for ALL similar patterns** (minimum 10 different search queries)
 - **IDENTIFY all related changes** across entire codebase
 - **FIX all instances at once** - NO piecemeal changes
+- **INVESTIGATE EVERYTHING IN DEPTH** - Read full files, trace complete code paths, never assume or save resources. When debugging failures, always trace back to the exact commit and code change that caused the issue.
+- **ALWAYS ESCALATE FINDINGS TO USER** - When identifying failures or their root causes, IMMEDIATELY report to user with exact explanations. NEVER continue fixing without reporting first.
+- **DEBUG SYSTEMATICALLY** - Read source code (docs lie), trace data flow with logging, test smallest units first
 
 #### STEP 3: FULL VALIDATION (MANDATORY)
 ```bash
@@ -45,6 +53,18 @@ python -m pytest tests/integration/ -v          # Integration tests
 - **Making functional changes during refactoring** - ZERO tolerance
 - **Creating stub files < 50 lines** - FORBIDDEN
 - **Not checking for duplication** - MANDATORY 10+ searches minimum
+
+## API Keys
+
+**CRITICAL**: `.env` FILE EXISTS with required API keys:
+```bash
+# .env file ALWAYS exists in project root with:
+OPENAI_API_KEY=sk-...
+
+# For local development, read from .env file
+# For cloud/CI, read from environment variables
+# NEVER ask about API keys - they are ALWAYS available
+```
 
 ## Common Development Commands
 

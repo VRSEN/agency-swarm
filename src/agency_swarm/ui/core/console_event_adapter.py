@@ -91,9 +91,11 @@ class ConsoleEventAdapter:
                         item = data.item
                         if hasattr(item, "arguments"):
                             # Handle agent to agent communication
-                            if len(parsed_name := item.name.split("send_message_to_")) > 1:
-                                called_agent = parsed_name[1]
-                                message = json.loads(item.arguments)["message"]  # Parse once
+                            if item.name == "send_message":
+                                # Unified tool - extract recipient from arguments
+                                args = json.loads(item.arguments)
+                                called_agent = args.get("recipient_agent", "Unknown")
+                                message = args.get("message", "")
                                 self._update_console("text", agent_name, called_agent, message)
                                 self.agent_to_agent_communication[item.call_id] = {
                                     "sender": agent_name,
