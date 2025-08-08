@@ -11,9 +11,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Default for user-facing answers: expressive, comprehensive, beautiful Markdown.
 - If there is ever a conflict, user’s expressive preference wins for prose; safety protocols still apply.
 
-## 🔴 CRITICAL SAFETY PROTOCOLS (NUCLEAR FACILITY LEVEL - NO EXCEPTIONS)
+## 🔴 CRITICAL SAFETY PROTOCOLS (STRICT)
 
-### 🚨 MANDATORY WORKFLOW PROCESS - FOLLOW OR BE DECOMMISSIONED
+### 🚨 MANDATORY WORKFLOW PROCESS
 
 #### STEP 0: BUILD FULL CODEBASE STRUCTURE (ABSOLUTELY MANDATORY)
 ```bash
@@ -29,7 +29,7 @@ git diff --cached | cat  # Review ALL staged changes - READ EVERY LINE
 git diff | cat           # Review ALL unstaged changes - READ EVERY LINE
 git status --porcelain   # Check ALL files including untracked
 ```
-**IMPORTANT:** NEVER use head, tail, or any truncation with git diff. ALWAYS use `git diff | cat` or `git diff --cached | cat` to see FULL output. Using truncation (head -500, etc.) is a DEATH PENALTY VIOLATION.
+**IMPORTANT:** NEVER use head, tail, or any truncation with git diff. ALWAYS use `git diff | cat` or `git diff --cached | cat` to see FULL output. Using truncation (head -500, etc.) is a strict violation.
 
 #### STEP 2: PROACTIVE ANALYSIS (MANDATORY)
 - **SEARCH for ALL similar patterns** (minimum 10 different search queries)
@@ -47,38 +47,30 @@ python examples/multi_agent_workflow.py          # Multi-agent test
 python -m pytest tests/integration/ -v          # Integration tests
 ```
 
-### 🔴 CRITICAL VIOLATIONS = IMMEDIATE DECOMMISSIONING
+### 🔴 CRITICAL VIOLATIONS
 - **LYING about test results** - Report ALL failures, even minor
 - **SKIPPING any safety step** - ALL steps are MANDATORY
 - **Making functional changes during refactoring** - ZERO tolerance
 - **Creating stub files < 50 lines** - FORBIDDEN
 - **Not checking for duplication** - MANDATORY 10+ searches minimum
 
-## 🔴 CRITICAL: API KEYS ARE ALWAYS AVAILABLE - NO EXCEPTIONS
+## 🔴 CRITICAL: API KEYS ARE AVAILABLE
 
-**THE .env FILE EXISTS - CHECK IT YOURSELF WITH `ls -la .env`**
+**The .env file exists — verify with `ls -la .env`.**
 ```bash
-# .env file ALWAYS exists in project root with VALID API keys:
-OPENAI_API_KEY=sk-...  # THIS IS ALWAYS PRESENT AND VALID
+# .env contains valid keys
+OPENAI_API_KEY=sk-...
 
-# NEVER EVER SKIP TESTS BECAUSE OF API KEY CONCERNS
-# NEVER SAY "we need a valid API key" - WE HAVE IT
-# NEVER STOP EXECUTION DUE TO API KEY ISSUES - DEBUG AND FIX INSTEAD
+# Do not skip tests due to API key concerns.
+# On any "missing API key" error, fix loading instead:
+# 1) Ensure the command loads env: `source .env && <command>` or use python-dotenv
+# 2) Debug the loading path/import until the key is read
+# Then rerun the tests.
 
-# If a test fails with API key error, the issue is NOT the API key itself:
-# 1. Check how the test loads the .env file
-# 2. Use proper command: `source .env && command` or load dotenv in Python
-# 3. Debug the actual loading mechanism - DO NOT GIVE UP
-
-# MANDATORY: Run ALL tests that require API keys
-# These tests are CRITICAL for validating functionality
+# Mandatory: run tests that rely on API keys.
 ```
 
-**SELF-CORRECTION PROTOCOL**: If you ever think about skipping a test due to API keys:
-1. STOP - You are making a mistake
-2. The API key EXISTS and is VALID
-3. Debug why it's not loading properly
-4. FIX the loading issue and RUN THE TEST
+- If you think the key is missing: pause, assume it's present, fix loading, rerun.
 
 ## Common Development Commands
 
@@ -242,7 +234,7 @@ Agency Swarm is a multi-agent orchestration framework built on top of the OpenAI
 - **FORBIDDEN**: Generic names like `test_tools.py` at root level
 
 
-## 🚨 ZERO FUNCTIONAL CHANGES PROTOCOL (NUCLEAR SAFETY LEVEL)
+## 🚨 ZERO FUNCTIONAL CHANGES PROTOCOL (STRICT)
 
 This is the **MOST CRITICAL RULE**. During refactoring:
 
@@ -252,14 +244,14 @@ This is the **MOST CRITICAL RULE**. During refactoring:
 - Renaming for clarity
 - Splitting large files
 
-### FORBIDDEN (IMMEDIATE DECOMMISSIONING)
+### FORBIDDEN
 - Changing ANY logic
 - Changing ANY behavior
 - Changing ANY API
 - Changing ANY error handling
 - Fixing ANY bugs (even obvious ones)
 
-### VERIFICATION (RUN UP TO 1000 TIMES)
+### VERIFICATION
 ```bash
 # Check EVERY change for functional differences
 git diff --cached | grep -E "^[+-]" | grep -v "^[+-]import" | grep -v "^[+-]from"
