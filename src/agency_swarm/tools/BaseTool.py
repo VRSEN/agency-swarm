@@ -10,11 +10,11 @@ import warnings
 from abc import ABC, abstractmethod
 from typing import Any, ClassVar
 
-from ..context import MasterContext
-
 from docstring_parser import parse
 from openai.types.beta.threads.runs.tool_call import ToolCall
 from pydantic import BaseModel
+
+from ..context import MasterContext
 
 
 class classproperty:
