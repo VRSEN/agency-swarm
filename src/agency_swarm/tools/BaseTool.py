@@ -30,6 +30,7 @@ class BaseTool(BaseModel, ABC):
     _event_handler: Any = None
     _tool_call: ToolCall = None
     _context: Any = None  # Will hold RunContextWrapper when available
+    openai_schema: ClassVar[dict[str, Any]]
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
