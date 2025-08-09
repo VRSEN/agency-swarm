@@ -42,10 +42,15 @@ def mock_recipient_agent():
 
 
 @pytest.fixture
-def master_context():
+def master_context(mock_sender_agent, mock_recipient_agent):
     """A master context for agent communication."""
+    from agency_swarm.thread import ThreadManager
+
     context = MagicMock(spec=MasterContext)
     context.user_context = {"user_id": "user_456", "session": "session_789"}
+    context.agents = {"OrchestratorAgent": mock_sender_agent, "WorkerAgent": mock_recipient_agent}
+    context.thread_manager = ThreadManager()
+    context.shared_instructions = None
     return context
 
 
@@ -82,10 +87,13 @@ async def test_send_message_communication(send_message_tool, mock_recipient_agen
     assert result == "Work completed"
 
     # Verify that the recipient agent receives the correct parameters
+    from unittest.mock import ANY
+
     mock_recipient_agent.get_response.assert_called_once_with(
         message="Please process this user request",
         sender_name="OrchestratorAgent",
         additional_instructions="Use the full conversation context",
+        agency_context=ANY,
     )
 
 

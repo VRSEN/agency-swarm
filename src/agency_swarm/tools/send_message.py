@@ -17,7 +17,7 @@ from ..context import MasterContext
 from ..streaming_utils import add_agent_name_to_event
 
 if TYPE_CHECKING:
-    from ..agent_core import Agent
+    from ..agent_core import AgencyContext, Agent
 
 logger = logging.getLogger(__name__)
 
@@ -147,6 +147,45 @@ class SendMessage(FunctionTool):
                 description_parts.append(f"\n- {agent.name}: {agent_desc}")
         self.description = "".join(description_parts)
 
+    def _combine_instructions(self, shared_instructions: str | None, additional_instructions: str | None) -> str | None:
+        """Combine shared instructions with additional instructions."""
+        if not shared_instructions and not additional_instructions:
+            return None
+
+        parts = []
+        if shared_instructions:
+            parts.append(shared_instructions)
+        if additional_instructions:
+            parts.append(additional_instructions)
+
+        return "\n\n---\n\n".join(parts) if parts else None
+
+    def _create_recipient_agency_context(self, wrapper: RunContextWrapper[MasterContext]) -> "AgencyContext":
+        """Create agency context for the recipient agent."""
+        # Avoid circular import
+        from ..agent_core import AgencyContext
+
+        # Create a minimal agency context for multi-agent communication
+        class MinimalAgency:
+            def __init__(self, agents_dict, user_context):
+                self.agents = agents_dict
+                self.user_context = user_context
+
+        # Since we're using send_message tool, we're always in an agency context
+        agency_instance = MinimalAgency(wrapper.context.agents, wrapper.context.user_context)
+
+        # Get shared instructions from the current context
+        shared_instructions_from_context = wrapper.context.shared_instructions
+
+        return AgencyContext(
+            agency_instance=agency_instance,
+            thread_manager=wrapper.context.thread_manager,
+            subagents=self.recipients,
+            load_threads_callback=None,
+            save_threads_callback=None,
+            shared_instructions=shared_instructions_from_context,
+        )
+
     async def on_invoke_tool(self, wrapper: RunContextWrapper[MasterContext], arguments_json_string: str) -> str:
         """
         Handles the invocation of this specific send message tool.
@@ -220,11 +259,19 @@ class SendMessage(FunctionTool):
                 final_output_text = ""
                 tool_calls_seen = []
 
+                # Create agency context for the recipient agent
+                recipient_agency_context = self._create_recipient_agency_context(wrapper)
+
+                # Combine shared instructions with any additional instructions for agent-to-agent communication
+                combined_instructions = self._combine_instructions(
+                    recipient_agency_context.shared_instructions, additional_instructions
+                )
+
                 async for event in self.recipient_agent.get_response_stream(
                     message=message_content,
                     sender_name=self.sender_agent.name,
-                    context_override=wrapper.context.user_context,
-                    additional_instructions=additional_instructions,
+                    additional_instructions=combined_instructions,
+                    agency_context=recipient_agency_context,
                 ):
                     # Add agent name and caller to the event before forwarding
                     event = add_agent_name_to_event(event, self.recipient_agent.name, self.sender_agent.name)
@@ -262,10 +309,20 @@ class SendMessage(FunctionTool):
                 response = type("StreamedResponse", (), {"final_output": final_output_text})()
             else:
                 logger.debug(f"Calling target agent '{recipient_name_for_call}'.get_response...")
+
+                # Create agency context for the recipient agent
+                recipient_agency_context = self._create_recipient_agency_context(wrapper)
+
+                # Combine shared instructions with any additional instructions for agent-to-agent communication
+                combined_instructions = self._combine_instructions(
+                    recipient_agency_context.shared_instructions, additional_instructions
+                )
+
                 response = await self.recipient_agent.get_response(
                     message=message_content,
                     sender_name=self.sender_agent.name,
-                    additional_instructions=additional_instructions,
+                    additional_instructions=combined_instructions,
+                    agency_context=recipient_agency_context,
                 )
 
             current_final_output = response.final_output

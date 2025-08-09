@@ -33,7 +33,10 @@ async def test_invoke_send_message_tool_success(minimal_agent):
     # Mock the context
     mock_context = MagicMock(spec=RunContextWrapper)
     mock_master_context = MagicMock(spec=MasterContext)
-    mock_master_context.user_context = {}  # Add user_context attribute
+    mock_master_context.user_context = {}
+    mock_master_context.agents = {"TestAgent": minimal_agent, "Recipient": recipient}
+    mock_master_context.thread_manager = MagicMock()
+    mock_master_context.shared_instructions = None
     mock_context.context = mock_master_context
 
     # Test the tool invocation with the required parameters
@@ -66,7 +69,10 @@ async def test_invoke_send_message_tool_arg_parse_error(minimal_agent):
     # Mock the context
     mock_context = MagicMock(spec=RunContextWrapper)
     mock_master_context = MagicMock(spec=MasterContext)
-    mock_master_context.user_context = {}  # Add user_context attribute
+    mock_master_context.user_context = {}
+    mock_master_context.agents = {"TestAgent": minimal_agent, "Recipient": recipient}
+    mock_master_context.thread_manager = MagicMock()
+    mock_master_context.shared_instructions = None
     mock_context.context = mock_master_context
 
     # Test with invalid JSON
@@ -95,7 +101,10 @@ async def test_invoke_send_message_tool_missing_arg(minimal_agent):
     # Mock the context
     mock_context = MagicMock(spec=RunContextWrapper)
     mock_master_context = MagicMock(spec=MasterContext)
-    mock_master_context.user_context = {}  # Add user_context attribute
+    mock_master_context.user_context = {}
+    mock_master_context.agents = {"TestAgent": minimal_agent, "Recipient": recipient}
+    mock_master_context.thread_manager = MagicMock()
+    mock_master_context.shared_instructions = None
     mock_context.context = mock_master_context
 
     # Test with missing message argument
@@ -127,7 +136,10 @@ async def test_invoke_send_message_tool_recipient_error(minimal_agent):
     # Mock the context
     mock_context = MagicMock(spec=RunContextWrapper)
     mock_master_context = MagicMock(spec=MasterContext)
-    mock_master_context.user_context = {}  # Add user_context attribute
+    mock_master_context.user_context = {}
+    mock_master_context.agents = {"TestAgent": minimal_agent, "Recipient": recipient}
+    mock_master_context.thread_manager = MagicMock()
+    mock_master_context.shared_instructions = None
     mock_context.context = mock_master_context
 
     # Test the tool invocation

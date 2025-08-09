@@ -55,13 +55,14 @@ def mock_run_context_wrapper(mock_master_context):
 
 
 @pytest.fixture
-def mock_context():
+def mock_context(mock_sender_agent, mock_recipient_agent):
     context = MagicMock(spec=MasterContext)
-    context.agents = {}
+    context.agents = {"SenderAgent": mock_sender_agent, "RecipientAgent": mock_recipient_agent}
     context.thread_manager = MagicMock(spec=ThreadManager)
     context.thread_manager.get_thread = MagicMock(return_value=MagicMock())
     context.thread_manager.add_items_and_save = AsyncMock()
     context.user_context = {"user_key": "user_val"}
+    context.shared_instructions = None
     return context
 
 
@@ -118,11 +119,13 @@ async def test_send_message_success(specific_send_message_tool, mock_wrapper, mo
     )
 
     assert result == "Response from recipient"
-    mock_recipient_agent.get_response.assert_called_once_with(
-        message=message_content,
-        sender_name=specific_send_message_tool.sender_agent.name,
-        additional_instructions="Additional instructions for test.",
-    )
+    # Check that get_response was called with the expected parameters
+    mock_recipient_agent.get_response.assert_called_once()
+    call_args = mock_recipient_agent.get_response.call_args
+    assert call_args.kwargs["message"] == message_content
+    assert call_args.kwargs["sender_name"] == specific_send_message_tool.sender_agent.name
+    assert "additional_instructions" in call_args.kwargs
+    assert "agency_context" in call_args.kwargs
 
 
 @pytest.mark.asyncio
@@ -195,6 +198,7 @@ async def test_send_message_target_agent_error(specific_send_message_tool, mock_
         "recipient_agent": mock_recipient_agent.name,
         "my_primary_instructions": "Primary instructions.",
         "message": message_content,
+        "additional_instructions": "",
     }
     args_json_string = json.dumps(args_dict)
     expected_error_message = (

@@ -38,6 +38,7 @@ def basic_agency(ceo_agent_instance, developer_agent_instance):
     """Agency with CEO and Developer for basic isolation testing."""
     return Agency(
         ceo_agent_instance,
+        developer_agent_instance,
         communication_flows=[(ceo_agent_instance, developer_agent_instance)],
         shared_instructions="Basic thread isolation test agency.",
     )
@@ -107,8 +108,7 @@ async def test_agent_to_agent_thread_isolation(basic_agency: Agency):
     await basic_agency.get_response(message=f"Developer info: {user_dev_info}", recipient_agent="Developer")
 
     # Flow 3: CEO->Developer (agent-to-agent) - just trigger thread creation
-    developer_agent = basic_agency.agents["Developer"]
-    await developer_agent.get_response(message="Developer, please work on this task", sender_name="CEO")
+    await basic_agency.get_response(message="Say hi to developer")
 
     # Direct verification of thread separation
     thread_manager = basic_agency.thread_manager
@@ -158,8 +158,7 @@ async def test_thread_identifier_format(basic_agency: Agency):
     await basic_agency.get_response(message="Test message to Developer", recipient_agent="Developer")
 
     # CEO to Developer
-    developer_agent = basic_agency.agents["Developer"]
-    await developer_agent.get_response(message="Test message from CEO", sender_name="CEO")
+    await basic_agency.get_response(message="Say hi to developer")
 
     # Direct verification - check actual conversation flows
     thread_manager = basic_agency.thread_manager

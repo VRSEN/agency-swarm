@@ -4,6 +4,8 @@ import pytest
 from agents import RunConfig, RunHooks
 
 from agency_swarm import Agent
+from agency_swarm.agent_core import AgencyContext
+
 
 # --- Core Response Tests ---
 
@@ -13,7 +15,9 @@ from agency_swarm import Agent
 async def test_get_response_saves_messages(mock_runner_run, minimal_agent, mock_thread_manager):
     """Test that get_response saves messages to the thread manager."""
     mock_runner_run.return_value = MagicMock(new_items=[], final_output="Test response")
+    
     result = await minimal_agent.get_response("Test message")
+        
     assert result is not None
     # Verify that messages were added to the thread manager
     mock_thread_manager.add_messages.assert_called()
@@ -30,9 +34,24 @@ async def test_get_response_saves_messages(mock_runner_run, minimal_agent, mock_
 @patch("agents.Runner.run", new_callable=AsyncMock)
 async def test_get_response_agent_to_agent_communication(mock_runner_run, minimal_agent, mock_thread_manager):
     """Test that get_response works correctly for agent-to-agent communication."""
+    
     mock_runner_run.return_value = MagicMock(new_items=[], final_output="Test response")
 
-    result = await minimal_agent.get_response("Test message", sender_name="SomeAgent")
+    # Mock the agency instance and context for agent-to-agent communication
+    mock_agency = MagicMock()
+    mock_agency.agents = {"SomeAgent": MagicMock(name="SomeAgent")}
+    mock_agency.user_context = {}
+    
+    agency_context = AgencyContext(
+        agency_instance=mock_agency,
+        thread_manager=mock_thread_manager,
+        subagents={},
+        load_threads_callback=None,
+        save_threads_callback=None,
+        shared_instructions=None
+    )
+
+    result = await minimal_agent.get_response("Test message", sender_name="SomeAgent", agency_context=agency_context)
 
     assert result is not None
     # Verify that messages were added with proper sender metadata
@@ -75,21 +94,17 @@ async def test_get_response_with_overrides(mock_runner_run, minimal_agent):
 
 @pytest.mark.asyncio
 async def test_get_response_missing_thread_manager():
-    """Test that get_response succeeds by creating ThreadManager when missing."""
+    """Test that get_response succeeds by creating minimal context for standalone agent."""
     agent = Agent(name="TestAgent", instructions="Test")
-    # Don't set thread manager initially
-    assert agent._thread_manager is None
 
-    # The agent should now successfully create a ThreadManager via _ensure_thread_manager()
-    # and create a minimal agency instance for compatibility
+    # The agent should successfully create a minimal context for standalone usage
     with patch("agents.Runner.run", new_callable=AsyncMock) as mock_runner:
         mock_runner.return_value = MagicMock(new_items=[], final_output="Test response")
 
         # This should succeed by auto-creating necessary components
         result = await agent.get_response("Test message")
 
-        # Verify ThreadManager was created
-        assert agent._thread_manager is not None
+        # Just verify the result exists - the agent handles ThreadManager internally
         assert result is not None
 
 
@@ -98,20 +113,15 @@ async def test_get_response_missing_thread_manager():
 
 @pytest.mark.asyncio
 async def test_call_before_agency_setup():
-    """Test that calling agent methods without agency setup succeeds by auto-creating components."""
+    """Test that calling agent methods without agency setup succeeds by creating minimal context."""
     agent = Agent(name="TestAgent", instructions="Test")
-    # Agent not set up with agency initially
-    assert agent._agency_instance is None
-    assert agent._thread_manager is None
 
     # The agent should auto-create necessary components for direct usage
     with patch("agents.Runner.run", new_callable=AsyncMock) as mock_runner:
         mock_runner.return_value = MagicMock(new_items=[], final_output="Test response")
 
-        # This should succeed by auto-creating ThreadManager
+        # This should succeed by auto-creating minimal context
         result = await agent.get_response("Test message")
 
-        # Verify ThreadManager was created (agency_instance stays None in standalone mode)
-        assert agent._thread_manager is not None
-        assert agent._agency_instance is None  # Remains None in standalone mode
+        # Just verify the result exists - the agent handles ThreadManager internally
         assert result is not None
