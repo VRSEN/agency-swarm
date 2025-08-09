@@ -23,7 +23,7 @@ from agency_swarm import Agency, Agent
 # Configure basic logging
 logging.basicConfig(level=logging.WARNING)
 
-load_dotenv()
+load_dotenv(override=True)
 
 # --- Define Guardrails --- #
 

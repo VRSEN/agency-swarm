@@ -22,7 +22,7 @@ from langfuse import observe  # noqa: E402
 
 from agency_swarm import Agency, Agent  # noqa: E402
 
-load_dotenv()
+load_dotenv(override=True)
 logging.basicConfig(level=logging.INFO)
 
 

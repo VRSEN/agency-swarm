@@ -15,7 +15,7 @@ Agency Swarm enhances the underlying SDK by introducing:
 - An `Agency` that uses an `agency_chart` to define complex communication flows and interaction patterns between agents.
 - Flexible conversation persistence: Manage conversation history by providing `load_threads_callback` and `save_threads_callback` functions to the `Agency`, enabling threads to be loaded from and saved to external storage (e.g., a database). This allows conversations to continue across sessions, which is essential for production environments.
 - A specialized `send_message` tool automatically configured for agents, enabling them to communicate based on the defined `agency_chart`.
-- `agency_swarm.Agent` which extends the base SDK `Agent` with built-in file handling and sub-agent registration capabilities.
+- `agency_swarm.agent` which extends the base SDK `Agent` with built-in file handling and sub-agent registration capabilities.
 
 This framework continues the original vision of Arsenii Shatokhin (aka VRSEN) to simplify the creation of sophisticated AI agencies by thinking about automation in terms of real-world organizational structures.
 

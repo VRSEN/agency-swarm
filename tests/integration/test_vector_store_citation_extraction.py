@@ -14,7 +14,6 @@ import tempfile
 from pathlib import Path
 
 import pytest
-from agents import FileSearchTool
 
 from agency_swarm import Agency, Agent
 from agency_swarm.utils.citation_extractor import extract_vector_store_citations
@@ -49,7 +48,10 @@ Equipment Status: Mass Spectrometer operational
         # Create agent with FileSearch capability and citations enabled
         search_agent = Agent(
             name="VectorSearchAgent",
-            instructions="You are a research assistant that searches documents for specific information using your FileSearch tool.",
+            instructions=(
+                "You are a research assistant that searches documents for specific information "
+                "using your FileSearch tool."
+            ),
             files_folder=str(temp_path),
             include_search_results=True,
         )

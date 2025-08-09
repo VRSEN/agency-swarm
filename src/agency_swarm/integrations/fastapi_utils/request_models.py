@@ -1,6 +1,5 @@
 from typing import Any
 
-from agents import TResponseInputItem
 from pydantic import BaseModel, Field, field_validator
 
 try:
@@ -11,37 +10,39 @@ except ModuleNotFoundError as exc:
     ) from exc
 
 
-class ConversationThread(BaseModel):
-    items: list[TResponseInputItem]
-    metadata: dict[str, Any] = Field(default_factory=dict)
-
-
 # Extended version of the ag-ui RunAgentInput with added chat_history field
 class RunAgentInputCustom(RunAgentInput):
     """
     Input for running an agent.
     """
 
-    chat_history: dict[str, ConversationThread] = Field(
+    chat_history: list[dict[str, Any]] = Field(
         None,
         description=(
-            "Entire chat history containing previous messages across all threads. "
-            "Should be provided in a form of {'thread_1': ConversationThread, 'thread_2': ConversationThread, ...}"
+            "Entire chat history as a flat list of messages. "
+            "Each message should contain 'agent', 'callerAgent', 'timestamp' and other OpenAI fields."
         ),
     )
 
 
 class BaseRequest(BaseModel):
     message: str
-    chat_history: dict[str, ConversationThread] = Field(
+    chat_history: list[dict[str, Any]] = Field(
         None,
         description=(
-            "Entire chat history containing previous messages across all threads. "
-            "Should be provided in a form of {'thread_1': ConversationThread, 'thread_2': ConversationThread, ...}"
+            "Entire chat history as a flat list of messages. "
+            "Each message should contain 'agent', 'callerAgent', 'timestamp' and other OpenAI fields."
         ),
     )
     recipient_agent: str = None
     file_ids: list[str] = None
+    file_urls: dict[str, str] = Field(
+        None,
+        description=(
+            "List of downloadable file urls to be use as file attachments. "
+            "Should be provided in a form of {'file_name_1': 'download_url_1', 'file_name_2': 'download_url_2', ...}"
+        ),
+    )
     additional_instructions: str = None
 
 
@@ -68,6 +69,6 @@ if __name__ == "__main__":
             tools=[],
             context=[],
             forwarded_props=None,
-            chat_history="test",
+            chat_history=[],
         )
     )
