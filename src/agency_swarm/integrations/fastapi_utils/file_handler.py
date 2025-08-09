@@ -86,6 +86,23 @@ async def upload_to_openai(file_path):
     return uploaded_file.id
 
 
+async def _wait_for_file_processed(file_id: str, timeout: int = 60) -> None:
+    """Poll OpenAI until the uploaded file is processed."""
+    for _ in range(timeout):
+        try:
+            file_info = await client.files.retrieve(file_id)
+        except Exception as e:  # pragma: no cover - network issues
+            logger.warning(f"Error retrieving status for file {file_id}: {e}")
+            await asyncio.sleep(1)
+            continue
+        if getattr(file_info, "status", None) == "processed":
+            return
+        if getattr(file_info, "status", None) == "error":
+            raise RuntimeError(f"File processing failed: {file_id}")
+        await asyncio.sleep(1)
+    raise TimeoutError(f"File processing timed out for {file_id}")
+
+
 async def upload_from_urls(file_map: dict[str, str]) -> dict[str, str]:
     """
     Helper function to upload files from urls to OpenAI.
@@ -101,5 +118,8 @@ async def upload_from_urls(file_map: dict[str, str]) -> dict[str, str]:
         file_paths = await asyncio.gather(*download_tasks)
         upload_tasks = [upload_to_openai(path) for path in file_paths]
         file_ids = await asyncio.gather(*upload_tasks)
+
+    # Wait for all uploaded files to be processed before returning
+    await asyncio.gather(*[_wait_for_file_processed(fid) for fid in file_ids])
 
     return dict(zip(file_map.keys(), file_ids, strict=True))
