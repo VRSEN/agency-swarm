@@ -113,6 +113,9 @@ class Agency:
         """
         logger.info("Initializing Agency...")
 
+        # --- Capture Instantiation Path ---
+        self._instantiation_path = self._capture_instantiation_path()
+
         # --- Handle Deprecated Args & New/Old Chart Logic ---
         deprecated_args_used = {}
         # --- Handle Deprecated Thread Callbacks ---
@@ -311,11 +314,35 @@ class Agency:
 
         return temp_entry_points, temp_comm_flows
 
+    def _capture_instantiation_path(self):
+        """Capture the path where this agency is being instantiated."""
+        import inspect
+
+        # Walk up the call stack to find the first frame outside of agency_swarm
+        frame = inspect.currentframe()
+        try:
+            while frame is not None:
+                frame_info = inspect.getframeinfo(frame)
+                # Skip frames from agency_swarm library
+                if frame_info.filename and 'agency_swarm' not in frame_info.filename:
+                    return os.path.abspath(os.path.dirname(frame_info.filename))
+                frame = frame.f_back
+        finally:
+            del frame  # Prevent reference cycles
+
+        # Fall back to current working directory if we can't determine the path
+        return os.getcwd()
+
     def _get_class_folder_path(self):
         """
-        Retrieves the absolute path of the directory containing the class file.
+        Retrieves the absolute path of the directory where this agency was instantiated.
         """
-        return os.path.abspath(os.path.dirname(inspect.getfile(self.__class__)))
+        # Try to get the instantiation path that was captured during __init__
+        if hasattr(self, '_instantiation_path') and self._instantiation_path:
+            return self._instantiation_path
+
+        # Fall back to current working directory if no instantiation path is available
+        return os.getcwd()
 
     def _read_instructions(self, path: str):
         """
