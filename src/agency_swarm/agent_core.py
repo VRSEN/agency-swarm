@@ -1,5 +1,7 @@
+import inspect
 import logging
 import os
+import sys
 from collections.abc import AsyncGenerator, Callable
 from pathlib import Path
 from typing import Any, TypeVar
@@ -178,9 +180,6 @@ class Agent(BaseAgent[MasterContext]):
         self._openai_client = None
         self._openai_client_sync = None
         self._subagents = {}
-
-        # Capture the instantiation path by looking at the call stack
-        self._instantiation_path = self._capture_instantiation_path()
 
         # Initialize execution handler
         self._execution = Execution(self)
@@ -436,30 +435,14 @@ class Agent(BaseAgent[MasterContext]):
                 load_threads_callback=self._load_threads_callback, save_threads_callback=self._save_threads_callback
             )
 
-    def _capture_instantiation_path(self) -> str:
-        """Capture the path where this agent is being instantiated."""
-        import inspect
-
-        # Walk up the call stack to find the first frame outside of agency_swarm
-        frame = inspect.currentframe()
-        try:
-            while frame is not None:
-                frame_info = inspect.getframeinfo(frame)
-                # Skip frames from agency_swarm library
-                if frame_info.filename and 'agency_swarm' not in frame_info.filename:
-                    return os.path.abspath(os.path.dirname(frame_info.filename))
-                frame = frame.f_back
-        finally:
-            del frame  # Prevent reference cycles
-
-        # Fall back to current working directory if we can't determine the path
-        return os.getcwd()
-
     def get_class_folder_path(self) -> str:
-        """Return the absolute path to the folder where this agent was instantiated."""
-        # Try to get the instantiation path that was captured during __init__
-        if hasattr(self, '_instantiation_path') and self._instantiation_path:
-            return self._instantiation_path
+        """Return the absolute path to the folder containing this class."""
+        module = sys.modules.get(self.__class__.__module__)
+        if module and getattr(module, "__file__", None):
+            return os.path.abspath(os.path.dirname(module.__file__))
 
-        # Fall back to current working directory if no instantiation path is available
-        return os.getcwd()
+        try:
+            class_file = inspect.getfile(self.__class__)
+        except (TypeError, OSError, AttributeError):
+            return "./"
+        return os.path.abspath(os.path.realpath(os.path.dirname(class_file)))

@@ -8,7 +8,6 @@ including both sync and streaming variants.
 import json
 import warnings
 from collections.abc import AsyncGenerator
-from contextlib import AsyncExitStack
 from typing import TYPE_CHECKING, Any
 
 from agents import (
@@ -256,19 +255,14 @@ class Execution:
                 logger.debug(
                     f"Calling Runner.run for agent '{self.agent.name}' with {len(history_for_runner)} history items."
                 )
-                # Ensure MCP servers connect/cleanup within the same task using a context stack
-                async with AsyncExitStack() as mcp_stack:
-                    for server in self.agent.mcp_servers:
-                        await mcp_stack.enter_async_context(server)
-
-                    run_result: RunResult = await Runner.run(
-                        starting_agent=self.agent,
-                        input=history_for_runner,
-                        context=self._prepare_master_context(context_override),
-                        hooks=hooks_override or self.agent.hooks,
-                        run_config=run_config_override or RunConfig(),
-                        max_turns=kwargs.get("max_turns", DEFAULT_MAX_TURNS),
-                    )
+                run_result: RunResult = await Runner.run(
+                    starting_agent=self.agent,
+                    input=history_for_runner,
+                    context=self._prepare_master_context(context_override),
+                    hooks=hooks_override or self.agent.hooks,
+                    run_config=run_config_override or RunConfig(),
+                    max_turns=kwargs.get("max_turns", DEFAULT_MAX_TURNS),
+                )
                 completion_info = (
                     f"Output Type: {type(run_result.final_output).__name__}"
                     if run_result.final_output is not None
@@ -447,91 +441,44 @@ class Execution:
             if context_override and "_streaming_context" in context_override:
                 master_context._streaming_context = context_override["_streaming_context"]
 
-            # Use a background worker feeding a queue so MCP cleanup runs in the same task it was entered
-            import asyncio
+            result = Runner.run_streamed(
+                starting_agent=self.agent,
+                input=history_for_runner,
+                context=master_context,
+                hooks=hooks_override or self.agent.hooks,
+                run_config=run_config_override or RunConfig(),
+                max_turns=kwargs.get("max_turns", DEFAULT_MAX_TURNS),
+            )
+            current_stream_agent_name = self.agent.name
+            async for event in result.stream_events():
+                # Collect all new items for saving to thread
+                if hasattr(event, "item") and event.item:
+                    collected_items.append(event.item)
 
-            queue: asyncio.Queue[Any] = asyncio.Queue(maxsize=1000)
-
-            async def stream_worker():
+                # Update active agent on handoff events or explicit agent update events
                 try:
-                    async with AsyncExitStack() as mcp_stack:
-                        for server in self.agent.mcp_servers:
-                            await mcp_stack.enter_async_context(server)
-
-                        result = Runner.run_streamed(
-                            starting_agent=self.agent,
-                            input=history_for_runner,
-                            context=master_context,
-                            hooks=hooks_override or self.agent.hooks,
-                            run_config=run_config_override or RunConfig(),
-                            max_turns=kwargs.get("max_turns", DEFAULT_MAX_TURNS),
-                        )
-
-                        current_stream_agent_name_inner = self.agent.name
-                        async for event in result.stream_events():
-                            # Collect all new items for saving to thread
-                            if hasattr(event, "item") and event.item:
-                                collected_items.append(event.item)
-
-                            # Update active agent on handoff events or explicit agent update events
-                            try:
-                                if (
-                                    getattr(event, "type", None) == "run_item_stream_event"
-                                    and getattr(event, "name", None) in ("handoff_occured", "handoff_occurred")
-                                ):
-                                    item = getattr(event, "item", None)
-                                    target = self._extract_handoff_target_name(item) if item is not None else None
-                                    if target:
-                                        current_stream_agent_name_inner = target
-                                elif getattr(event, "type", None) == "agent_updated_stream_event":
-                                    new_agent = getattr(event, "new_agent", None)
-                                    if (
-                                        new_agent is not None
-                                        and hasattr(new_agent, "name")
-                                        and new_agent.name
-                                    ):
-                                        current_stream_agent_name_inner = new_agent.name
-                            except Exception:
-                                pass
-
-                            # Add agent name and caller to the event
-                            event = add_agent_name_to_event(event, current_stream_agent_name_inner, sender_name)
-                            await queue.put(event)
-                except asyncio.CancelledError:
-                    # Graceful shutdown on cancellation
-                    pass
-                except Exception as e:
-                    logger.exception("Error in stream_worker for agent '%s'", self.agent.name)
-                    try:
-                        await queue.put({"type": "error", "content": str(e)})
-                    except Exception:
-                        logger.exception(f"Error in stream_worker for agent {self.agent.name}: {e}")
-                finally:
-                    try:
-                        queue.put_nowait(None)
-                    except Exception as e:
-                        logger.exception(f"Error in stream_worker for agent {self.agent.name}: {e}")
-
-            worker_task = asyncio.create_task(stream_worker(), name=f"{self.agent.name}-stream-worker")
-
-            try:
-                while True:
-                    event = await queue.get()
-                    if event is None:
-                        break
-                    yield event
-            finally:
-                # Ensure sentinel is present to unblock consumer loop even if worker was cancelled
-                try:
-                    queue.put_nowait(None)
+                    if (
+                        getattr(event, "type", None) == "run_item_stream_event"
+                        and getattr(event, "name", None) == "handoff_occured"
+                    ):
+                        item = getattr(event, "item", None)
+                        target = self._extract_handoff_target_name(item) if item is not None else None
+                        if target:
+                            current_stream_agent_name = target
+                    elif getattr(event, "type", None) == "agent_updated_stream_event":
+                        new_agent = getattr(event, "new_agent", None)
+                        if (
+                            new_agent is not None
+                            and hasattr(new_agent, "name")
+                            and new_agent.name
+                        ):
+                            current_stream_agent_name = new_agent.name
                 except Exception:
                     pass
-                if not worker_task.done():
-                    worker_task.cancel()
-                try:
-                    await worker_task
-                except Exception as e:
-                    logger.error(f"Error during worker task cleanup: {e}", exc_info=True)
+
+                # Add agent name and caller to the event
+                event = add_agent_name_to_event(event, current_stream_agent_name, sender_name)
+                yield event
 
             # Save all collected items after streaming completes
             if self.agent._thread_manager and collected_items:

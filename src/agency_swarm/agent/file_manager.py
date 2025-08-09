@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 import logging
 import os
 import re
@@ -624,9 +625,10 @@ class AgentFileManager:
                 )
 
     def get_class_folder_path(self):
-        # Try to get the instantiation path from the agent
-        if hasattr(self.agent, '_instantiation_path') and self.agent._instantiation_path:
-            return self.agent._instantiation_path
-
-        # Fall back to current working directory if no instantiation path is available
-        return os.getcwd()
+        try:
+            # Use inspect to get the file of the agent's class
+            class_file = inspect.getfile(self.agent.__class__)
+            return os.path.abspath(os.path.realpath(os.path.dirname(class_file)))
+        except (TypeError, OSError, AttributeError):
+            # If that fails, return current directory
+            return "./"
