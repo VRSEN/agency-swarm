@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 
 from agency_swarm import Agency, Agent
 
-load_dotenv()
+load_dotenv(override=True)
 
 
 @function_tool

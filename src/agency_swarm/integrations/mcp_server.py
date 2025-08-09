@@ -19,7 +19,7 @@ from agency_swarm import BaseTool
 from agency_swarm.tools import ToolFactory
 
 logger = logging.getLogger(__name__)
-load_dotenv()
+load_dotenv(override=True)
 
 
 def _load_tools_from_directory(tools_dir: str) -> list[type[BaseTool] | type[FunctionTool]]:

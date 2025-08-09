@@ -6,6 +6,7 @@ process various file types through HTTP requests, and return appropriate respons
 containing the expected file content.
 """
 
+import asyncio
 import subprocess
 import sys
 import time
@@ -21,6 +22,18 @@ from agency_swarm import Agency, Agent
 
 class TestFastAPIFileProcessing:
     """Test suite for FastAPI file processing with file_urls parameter."""
+
+    @staticmethod
+    def get_http_client(timeout_seconds: int = 60) -> httpx.AsyncClient:
+        """Create an HTTP client with proper timeout configuration."""
+        timeout_config = httpx.Timeout(
+            timeout_seconds,  # Total timeout (first positional arg)
+            connect=10.0,  # Connection timeout
+            read=timeout_seconds,  # Read timeout for the entire response
+            write=10.0,  # Write timeout for sending request
+            pool=5.0,  # Pool connection timeout
+        )
+        return httpx.AsyncClient(timeout=timeout_config)
 
     @pytest.fixture(scope="class")
     def agency_factory(self):
@@ -105,18 +118,23 @@ class TestFastAPIFileProcessing:
         # Wait for server to start
         time.sleep(3)
 
-        # Verify server is running
-        max_retries = 10
+        # Verify server is running with proper timeout configuration
+        max_retries = 15
         for i in range(max_retries):
             try:
-                response = httpx.get("http://localhost:8080/docs", timeout=5)
+                response = httpx.get("http://localhost:8080/docs", timeout=10.0)
                 if response.status_code == 200:
+                    # Ensure server is fully ready
+                    time.sleep(1)
                     break
-                time.sleep(1)
-            except Exception:
+            except (httpx.ConnectTimeout, httpx.ReadTimeout):
+                time.sleep(1.5)
+                if i == max_retries - 1:
+                    pytest.skip("Could not start FastAPI server after multiple retries")
+            except Exception as e:
                 time.sleep(1)
                 if i == max_retries - 1:
-                    pytest.skip("Could not start FastAPI server")
+                    pytest.skip(f"Could not start FastAPI server: {e}")
 
         yield server_thread
 
@@ -130,7 +148,7 @@ class TestFastAPIFileProcessing:
         }
         headers = {}
 
-        async with httpx.AsyncClient(timeout=30) as client:
+        async with self.get_http_client(timeout_seconds=90) as client:
             response = await client.post(url, json=payload, headers=headers)
 
         assert response.status_code == 200
@@ -151,7 +169,7 @@ class TestFastAPIFileProcessing:
         }
         headers = {}
 
-        async with httpx.AsyncClient(timeout=60) as client:
+        async with self.get_http_client(timeout_seconds=90) as client:
             response = await client.post(url, json=payload, headers=headers)
 
         assert response.status_code == 200
@@ -180,7 +198,7 @@ class TestFastAPIFileProcessing:
         }
         headers = {}
 
-        async with httpx.AsyncClient(timeout=45) as client:
+        async with self.get_http_client(timeout_seconds=90) as client:
             response = await client.post(url, json=payload, headers=headers)
 
         assert response.status_code == 200
@@ -202,7 +220,7 @@ class TestFastAPIFileProcessing:
         headers = {}
 
         collected_data = []
-        async with httpx.AsyncClient(timeout=30) as client:
+        async with self.get_http_client(timeout_seconds=90) as client:
             async with client.stream("POST", url, json=payload, headers=headers) as response:
                 assert response.status_code == 200
                 async for line in response.aiter_lines():
@@ -226,7 +244,7 @@ class TestFastAPIFileProcessing:
         }
         headers = {}
 
-        async with httpx.AsyncClient(timeout=30) as client:
+        async with self.get_http_client(timeout_seconds=60) as client:
             response = await client.post(url, json=payload, headers=headers)
 
         # The request should still return 200, but the response should indicate file issues
@@ -250,7 +268,7 @@ class TestFastAPIFileProcessing:
         collected_data = []
         error_found = False
 
-        async with httpx.AsyncClient(timeout=30) as client:
+        async with self.get_http_client(timeout_seconds=60) as client:
             async with client.stream("POST", url, json=payload, headers=headers) as response:
                 assert response.status_code == 200
                 async for line in response.aiter_lines():

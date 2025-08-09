@@ -222,8 +222,9 @@ def separate_kwargs(kwargs: dict[str, Any]) -> tuple[dict[str, Any], dict[str, A
         base_param_names = {
             "name",
             "instructions",
-            "handoff_description",
-            "handoffs",
+            # Handoffs should be defined by providing SendMessageHandoff
+            # "handoff_description",
+            # "handoffs",
             "model",
             "model_settings",
             "tools",

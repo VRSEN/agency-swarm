@@ -17,6 +17,7 @@ from agency_swarm.agent_core import Agent
 from agency_swarm.hooks import PersistenceHooks
 from agency_swarm.streaming_utils import event_stream_merger
 from agency_swarm.thread import ThreadLoadCallback, ThreadManager, ThreadSaveCallback
+from agency_swarm.tools.send_message import SendMessageHandoff
 
 # --- Logging ---
 logger = logging.getLogger(__name__)
@@ -429,7 +430,12 @@ class Agency:
                 for recipient_name in allowed_recipients:
                     recipient_agent = self.agents[recipient_name]
                     try:
-                        agent_instance.register_subagent(recipient_agent)
+                        if agent_instance.send_message_tool_class == SendMessageHandoff:
+                            handoff_instance = SendMessageHandoff().create_handoff(recipient_agent=recipient_agent)
+                            agent_instance.handoffs.append(handoff_instance)
+                            logger.debug(f"Added SendMessageHandoff for {agent_name} -> {recipient_name}")
+                        else:
+                            agent_instance.register_subagent(recipient_agent)
                     except Exception as e:
                         logger.error(
                             f"Error registering subagent '{recipient_name}' for sender '{agent_name}': {e}",

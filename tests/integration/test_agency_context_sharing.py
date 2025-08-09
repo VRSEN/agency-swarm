@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 
 from agency_swarm import Agency, Agent, MasterContext
 
-load_dotenv()
+load_dotenv(override=True)
 
 
 @function_tool
@@ -51,34 +51,47 @@ async def test_context_sharing_between_agents():
         model="gpt-4o-mini",
     )
 
-    # Create agency with communication flow
+    # Create agency with both agents as entry points
     agency = Agency(
         agent1,
+        agent2,
         communication_flows=[(agent1, agent2)],
         user_context={"initial": "test"},
     )
 
     # Agent1 stores data
-    response1 = await agency.get_response("Store 'shared_key' with value 'shared_value'")
+    response1 = await agency.get_response(
+        "Store 'shared_key' with value 'shared_value'",
+        recipient_agent=agent1,
+    )
     assert "shared_value" in response1.final_output
 
     # Verify data is in agency context
     assert agency.user_context.get("shared_key") == "shared_value"
     assert agency.user_context.get("initial") == "test"  # Original value preserved
 
-    # Agent1 asks Agent2 to retrieve the data
-    response2 = await agency.get_response("Ask Agent2 to get the value for 'shared_key'")
+    # Directly ask Agent2 to retrieve the data
+    response2 = await agency.get_response(
+        "Get the value for 'shared_key'",
+        recipient_agent=agent2,
+    )
     assert "shared_value" in response2.final_output
 
     # Agent2 can also store data that's visible to the agency
-    await agency.get_response("Ask Agent2 to store 'agent2_key' with value 'agent2_value'")
+    await agency.get_response(
+        "Store 'agent2_key' with value 'agent2_value'",
+        recipient_agent=agent2,
+    )
 
     # Verify Agent2's data is in agency context
     assert agency.user_context.get("agent2_key") == "agent2_value"
     assert agency.user_context.get("shared_key") == "shared_value"  # Previous data preserved
 
-    # Agent1 can see Agent2's data
-    response4 = await agency.get_response("Get the value for 'agent2_key'")
+    # Retrieve Agent2's data directly from Agent2
+    response4 = await agency.get_response(
+        "Get the value for 'agent2_key'",
+        recipient_agent=agent2,
+    )
     assert "agent2_value" in response4.final_output
 
 

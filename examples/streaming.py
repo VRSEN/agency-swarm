@@ -18,7 +18,7 @@ from dotenv import load_dotenv
 
 from agency_swarm import Agency, Agent
 
-load_dotenv()
+load_dotenv(override=True)
 
 # ===== DEBUG CONFIGURATION =====
 # Set to True to see ALL raw events for frontend integration
