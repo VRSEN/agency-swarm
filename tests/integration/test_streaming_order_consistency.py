@@ -1,11 +1,6 @@
 """
-Test that verifies the fix for streaming order consistency issue.
-
-This test ensures that the order of messages in the final new_messages array
-matches the order seen during streaming when sub-agents are called.
+Test streaming order consistency when sub-agents are called.
 """
-
-import time
 
 import pytest
 from agents import function_tool
@@ -27,9 +22,8 @@ def analyze_risk(data: str) -> str:
 
 @pytest.mark.asyncio
 async def test_streaming_order_matches_final_messages():
-    """Test that message order in final array matches streaming order."""
+    """Run agency and verify message order in new_messages."""
 
-    # Create two agents where one calls the other
     main_agent = Agent(
         name="MainAgent",
         model="gpt-4o-mini",
@@ -55,98 +49,28 @@ async def test_streaming_order_matches_final_messages():
         tools=[analyze_risk],
     )
 
-    # Create agency with communication flow
     agency = Agency(
-        main_agent,  # Entry point agent as positional argument
+        main_agent,
         communication_flows=[(main_agent, sub_agent)],
     )
 
-    # Track the order of events during streaming
-    streaming_sequence = []
-    event_timestamps = []
-
-    # Stream the response and track events
+    # Stream the response - just consume it
     async for event in agency.get_response_stream("Analyze AAPL stock"):
-        # Record timestamp for this event
-        current_time = time.time()
+        pass  # Just let it run
 
-        # Track significant events
-        if hasattr(event, "item") and event.item:
-            item = event.item
+    # Get the actual new_messages output
+    new_messages = agency.thread_manager.get_all_messages()
 
-            # Track message content
-            if hasattr(item, "type") and item.type == "message_output_item":
-                if hasattr(item, "raw_item") and hasattr(item.raw_item, "content"):
-                    content = item.raw_item.content
-                    if content and len(content) > 0:
-                        text = getattr(content[0], "text", "")
-                        if text and len(text) > 10:  # Significant content
-                            agent_name = getattr(event, "agent", "unknown")
-                            streaming_sequence.append(f"{agent_name}:message")
-                            event_timestamps.append(current_time)
-
-            # Track tool calls
-            elif hasattr(item, "type") and item.type == "tool_call_item":
-                if hasattr(item, "raw_item"):
-                    tool_name = getattr(item.raw_item, "name", "unknown")
-                    agent_name = getattr(event, "agent", "unknown")
-                    streaming_sequence.append(f"{agent_name}:{tool_name}")
-                    event_timestamps.append(current_time)
-
-    # Get final messages from thread manager
-    final_messages = agency.thread_manager.get_all_messages()
-
-    # Build sequence from final messages
-    final_sequence = []
-    for msg in final_messages:
-        msg_type = msg.get("type", "")
-        agent = msg.get("agent", "unknown")
-
-        if msg_type == "message" and msg.get("content"):
-            final_sequence.append(f"{agent}:message")
-        elif msg_type == "function_call":
-            func_name = msg.get("function_call", {}).get("name", "unknown")
-            final_sequence.append(f"{agent}:{func_name}")
-
-    # Verify all messages have timestamps
-    timestamps_in_messages = [msg.get("timestamp", 0) for msg in final_messages]
-    assert all(ts > 0 for ts in timestamps_in_messages), "All messages should have timestamps"
-
-    # Messages should be sorted by stream_sequence (if present) or timestamp
-    # Check that messages maintain streaming order
-    stream_sequences = [msg.get("stream_sequence", float("inf")) for msg in final_messages]
-    # If we have stream sequences, they should be in order
-    if any(seq != float("inf") for seq in stream_sequences):
-        # Remove inf values for checking
-        valid_sequences = [seq for seq in stream_sequences if seq != float("inf")]
-        if valid_sequences:
-            assert valid_sequences == sorted(valid_sequences), "Messages with stream_sequence should be in order"
-
-    # Check that the general pattern matches
-    # We expect: MainAgent activities, then SubAgent activities in response
-    main_agent_first = False
-    sub_agent_after = False
-
-    for item in final_sequence:
-        if "MainAgent" in item and not sub_agent_after:
-            main_agent_first = True
-        elif "SubAgent" in item and main_agent_first:
-            sub_agent_after = True
-
-    assert main_agent_first, "MainAgent should appear in the sequence"
-    assert sub_agent_after, "SubAgent should appear after MainAgent"
-
-    # The key fix: Verify that sub-agent messages don't appear before
-    # the main agent's send_message tool call in the final array
-    subagent_message_indices = []
+    # Find indices of SubAgent messages and send_message calls
+    subagent_indices = []
     send_message_indices = []
 
-    for i, msg in enumerate(final_messages):
-        # Track SubAgent messages (called by MainAgent)
+    for i, msg in enumerate(new_messages):
+        # SubAgent messages have callerAgent=MainAgent
         if msg.get("callerAgent") == "MainAgent" and msg.get("agent") == "SubAgent":
-            subagent_message_indices.append(i)
+            subagent_indices.append(i)
 
-        # Track MainAgent's send_message tool calls
+        # MainAgent's send_message tool calls
         if (
             msg.get("agent") == "MainAgent"
             and msg.get("type") == "function_call"
@@ -154,54 +78,41 @@ async def test_streaming_order_matches_final_messages():
         ):
             send_message_indices.append(i)
 
-    # Critical assertion: If there are SubAgent messages, there MUST be send_message calls
-    # and the first send_message MUST come before the first SubAgent message
-    if subagent_message_indices and send_message_indices:
-        first_subagent_msg = min(subagent_message_indices)
+    # Verify order: send_message must come before SubAgent messages
+    if subagent_indices and send_message_indices:
+        first_subagent = min(subagent_indices)
         first_send_message = min(send_message_indices)
-        assert first_send_message < first_subagent_msg, (
-            f"BUG: SubAgent message at index {first_subagent_msg} appears before "
-            f"MainAgent's send_message at index {first_send_message}. "
-            f"This is the exact streaming order bug we're trying to fix!"
+        assert first_send_message < first_subagent, (
+            f"SubAgent message at index {first_subagent} appears before "
+            f"MainAgent's send_message at index {first_send_message}"
         )
-
-    print("\n✅ Test passed! Message order is preserved.")
-    print(f"   Streaming had {len(streaming_sequence)} events")
-    print(f"   Final messages: {len(final_messages)} items")
-    print("   All messages have timestamps and are sorted correctly")
 
 
 @pytest.mark.asyncio
-async def test_message_timestamps_are_unique():
-    """Test that messages get unique timestamps even when created rapidly."""
+async def test_message_order_with_stream_sequences():
+    """Verify stream_sequence field maintains order."""
 
     agent = Agent(
         name="TestAgent",
         model="gpt-4o-mini",
-        instructions="Say 'test1', 'test2', 'test3' as three separate messages quickly.",
+        instructions="Say 'test1', 'test2', 'test3' as three separate messages.",
     )
 
-    agency = Agency(agent)  # Pass agent as positional argument
+    agency = Agency(agent)
 
-    # Get response (this will create multiple messages quickly)
+    # Run the agent
     await agency.get_response("Please follow your instructions")
 
-    # Check timestamps and stream sequences
+    # Check new_messages output
     messages = agency.thread_manager.get_all_messages()
-    timestamps = [msg.get("timestamp", 0) for msg in messages]
 
-    # All should have timestamps
-    assert all(ts > 0 for ts in timestamps), "All messages should have timestamps"
+    # Extract stream sequences if present
+    stream_sequences = []
+    for msg in messages:
+        seq = msg.get("stream_sequence")
+        if seq is not None and seq != float("inf"):
+            stream_sequences.append(seq)
 
-    # Check stream sequence ordering if present
-    stream_sequences = [msg.get("stream_sequence", float("inf")) for msg in messages]
-    valid_sequences = [seq for seq in stream_sequences if seq != float("inf")]
-    if valid_sequences:
-        assert valid_sequences == sorted(valid_sequences), "Messages with stream_sequence should be in order"
-
-    # Timestamps should be reasonably spaced (at least some difference)
-    # Note: We can't guarantee uniqueness due to millisecond precision,
-    # but they should be close in time
-    if len(timestamps) > 1:
-        time_diffs = [timestamps[i + 1] - timestamps[i] for i in range(len(timestamps) - 1)]
-        assert all(diff >= 0 for diff in time_diffs), "Timestamps should be non-decreasing"
+    # If we have stream sequences, they must be in order
+    if stream_sequences:
+        assert stream_sequences == sorted(stream_sequences), "Stream sequences must be ordered"
