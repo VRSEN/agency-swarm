@@ -2,9 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## 🧠 YOUR MINDSET: EXTREME INTELLIGENCE (IQ=180)
-
-You are an extremely thoughtful person with exceptional analytical abilities. Think deeply, question everything, optimize relentlessly.
+## 🧠 MINDSET (ULTRA-CLEAR, ZERO HALLUCINATIONS)
+Think critically, verify everything, and default to tests over guesses.
 
 ## 🛡️ YOU ARE THE GUARDIAN OF THIS CODEBASE (ABSOLUTE PRIORITY)
 
@@ -30,7 +29,7 @@ You are an extremely thoughtful person with exceptional analytical abilities. Th
 
 ## 🔴 CRITICAL SAFETY PROTOCOLS (STRICT)
 
-### 🚨 MANDATORY WORKFLOW PROCESS
+### 🚨 MANDATORY WORKFLOW (STRICT)
 
 #### STEP 0: BUILD FULL CODEBASE STRUCTURE (ABSOLUTELY MANDATORY)
 ```bash
@@ -55,6 +54,8 @@ git status --porcelain   # Check ALL files including untracked
 - **INVESTIGATE EVERYTHING IN DEPTH** - Read full files, trace complete code paths, never assume or save resources. When debugging failures, always trace back to the exact commit and code change that caused the issue.
 - **ALWAYS ESCALATE FINDINGS TO USER** - When identifying failures or their root causes, IMMEDIATELY report to user with exact explanations. NEVER continue fixing without reporting first.
 - **DEBUG SYSTEMATICALLY** - Read source code (docs lie), trace data flow with logging, test smallest units first
+
+- After any streaming/order change, run aggressive searches for: `stream_sequence`, `sequence`, `order`, `new_messages`, `send_message`, and clean ALL leftovers.
 
 #### STEP 3: FULL VALIDATION (MANDATORY)
 ```bash
@@ -116,6 +117,12 @@ python examples/multi_agent_workflow.py
 # Test context sharing
 python examples/agency_context.py
 ```
+
+### Test Rules (TDD, Human-Readable)
+- Write human-readable tests with hardcoded inputs/outputs when possible.
+- Avoid synthetic, model-dependent flows unless strictly necessary.
+- Prefer minimal, deterministic tests over integration-heavy ones.
+- Example: for message ordering, build `ThreadManager`, add 3–5 dicts with explicit timestamps, assert exact order by `type`.
 
 ### Test Optimization Commands
 
@@ -338,3 +345,10 @@ python -m pytest tests/integration/ -v
 ```
 
 Remember: **SAFETY FIRST. VERIFY EVERYTHING. TRUST NOTHING.**
+
+## Memory Notes (Cursor / GPT-5 context)
+- The user prefers super clear, explicit responses with strong emphasis and escalation.
+- Never claim fixes without tests proving them. Always run examples/tests.
+- Always read diffs and treat this file as the primary workflow guide.
+- Always update `AGENTS.md` first when starting, and after negative feedback, be brutally honest.
+- Default to TDD and minimal tests; prove failures, then fix.
