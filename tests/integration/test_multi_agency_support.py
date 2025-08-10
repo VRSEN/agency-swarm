@@ -100,7 +100,7 @@ class TestMultiAgencySupport:
         """Test that thread managers are isolated between agencies."""
         # Get responses from both agencies
         await agency1.get_response("Set test_value to 'agency1_value' using the SharedStateTool")
-        agency2.get_response("Set test_value to 'agency2_value' using the SharedStateTool")
+        await agency2.get_response("Set test_value to 'agency2_value' using the SharedStateTool")
 
         # Get agency contexts for the shared agent
         context1 = agency1._get_agent_context("SharedAgent")
