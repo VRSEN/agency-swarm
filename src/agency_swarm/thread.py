@@ -72,9 +72,9 @@ class MessageStore:
                     filtered.append(msg)
             messages = filtered
 
-        # Sort by stream_sequence if available, otherwise by timestamp
-        # This ensures messages appear in the same order as during streaming
-        messages.sort(key=lambda m: (m.get("stream_sequence", float("inf")), m.get("timestamp", 0)))
+        # Sort by timestamp as primary key, stream_sequence as secondary
+        # This ensures chronological order while preserving streaming order for same-timestamp messages
+        messages.sort(key=lambda m: (m.get("timestamp", 0), m.get("stream_sequence", 0)))
 
         logger.debug(
             f"Filtered {len(messages)} messages for agent='{agent}', callerAgent='{caller_agent}' "
@@ -189,16 +189,15 @@ class ThreadManager:
         return self._store.get_conversation_between(agent, caller_agent)
 
     def get_all_messages(self) -> list[TResponseInputItem]:
-        """Get all messages in the store, sorted by timestamp.
+        """Get all messages in the store, properly ordered.
 
         Returns:
-            list[TResponseInputItem]: All messages sorted chronologically
+            list[TResponseInputItem]: All messages in chronological order
         """
         messages = self._store.messages.copy()
-        # Sort by stream_sequence if available, otherwise by timestamp
-        # This ensures messages appear in the same order as during streaming
-        # Critical: new_messages array is expected to be saved to DB by frontend - order must match streaming
-        messages.sort(key=lambda m: (m.get("stream_sequence", float("inf")), m.get("timestamp", 0)))
+        # Sort by timestamp as primary key, stream_sequence as secondary
+        # This ensures chronological order while preserving streaming order for same-timestamp messages
+        messages.sort(key=lambda m: (m.get("timestamp", 0), m.get("stream_sequence", 0)))
         return messages
 
     def _save_messages(self) -> None:
@@ -268,9 +267,9 @@ class ThreadManager:
 
                 messages.append(item)
 
-        # Sort by stream_sequence if available, otherwise by timestamp
-        # This ensures messages appear in the same order as during streaming
-        messages.sort(key=lambda m: (m.get("stream_sequence", float("inf")), m.get("timestamp", 0)))
+        # Sort by timestamp as primary key, stream_sequence as secondary
+        # This ensures chronological order while preserving streaming order for same-timestamp messages
+        messages.sort(key=lambda m: (m.get("timestamp", 0), m.get("stream_sequence", 0)))
 
         logger.info(f"Migrated {len(messages)} messages from {len(old_threads)} threads")
         return messages
