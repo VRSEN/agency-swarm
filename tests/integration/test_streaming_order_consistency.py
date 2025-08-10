@@ -55,7 +55,7 @@ async def test_streaming_order_matches_final_messages():
     )
 
     # Stream the response - just consume it
-    async for event in agency.get_response_stream("Analyze AAPL stock"):
+    async for _event in agency.get_response_stream("Analyze AAPL stock"):
         pass  # Just let it run
 
     # Get the actual new_messages output
