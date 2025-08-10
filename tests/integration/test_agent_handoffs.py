@@ -275,7 +275,7 @@ class TestComplexHandoffScenarios:
         agent_b = Agent(
             name="AgentB",
             instructions="Secondary orchestrator with handoffs",
-            send_message_tool_class=SendMessageHandoff
+            send_message_tool_class=SendMessageHandoff,
         )
         agent_c = Agent(name="AgentC", instructions="Specialist")
 

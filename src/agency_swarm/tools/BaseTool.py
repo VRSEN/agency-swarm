@@ -111,8 +111,7 @@ class BaseTool(BaseModel, ABC):
         - value = self._shared_state.get("key", "default")  # Get a value
         """
         warnings.warn(
-            "_shared_state is deprecated and will be removed in future versions. "
-            "Use 'self.context' instead.",
+            "_shared_state is deprecated and will be removed in future versions. Use 'self.context' instead.",
             DeprecationWarning,
             stacklevel=2,
         )

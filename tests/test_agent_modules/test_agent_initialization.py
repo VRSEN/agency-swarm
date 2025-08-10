@@ -126,6 +126,7 @@ def test_agent_initialization_with_all_parameters():
     # TEST-ONLY SETUP: Create test directory to enable FileSearchTool auto-addition
     import tempfile
     from pathlib import Path
+    from unittest.mock import PropertyMock, patch
 
     # Create a temporary test directory
     with tempfile.TemporaryDirectory(prefix="test_files_") as temp_dir_str:
@@ -135,18 +136,27 @@ def test_agent_initialization_with_all_parameters():
 
         import warnings
 
+        # Mock the OpenAI client to avoid API key requirement
+        mock_vector_store = MagicMock()
+        mock_vector_store.id = "test_vs_id"
+
+        mock_client = MagicMock()
+        mock_client.vector_stores.create.return_value = mock_vector_store
+
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            agent = Agent(
-                name="CompleteAgent",
-                instructions="Complete agent with all params",
-                model="gpt-4.1",
-                tools=[tool1],
-                response_validator=validator,
-                output_type=TaskOutput,
-                files_folder=str(temp_dir),  # Use temporary directory
-                description="A complete test agent",
-            )
+            with patch.object(Agent, "client_sync", new_callable=PropertyMock) as mock_client_sync:
+                mock_client_sync.return_value = mock_client
+                agent = Agent(
+                    name="CompleteAgent",
+                    instructions="Complete agent with all params",
+                    model="gpt-4.1",
+                    tools=[tool1],
+                    response_validator=validator,
+                    output_type=TaskOutput,
+                    files_folder=str(temp_dir),  # Use temporary directory
+                    description="A complete test agent",
+                )
             # Should trigger deprecation warning for response_validator
             assert any("response_validator" in str(warning.message) for warning in w)
 

@@ -431,7 +431,8 @@ class Execution:
             )
 
             # Stream the runner results
-            collected_items: list[RunItem] = []
+            collected_items: list[tuple[int, RunItem]] = []  # Store with sequence number
+            stream_sequence = 0  # Track streaming order
 
             # Prepare context with streaming indicator
             master_context = self._prepare_master_context(context_override)
@@ -451,9 +452,10 @@ class Execution:
             )
             current_stream_agent_name = self.agent.name
             async for event in result.stream_events():
-                # Collect all new items for saving to thread
+                # Collect all new items for saving to thread with sequence number
                 if hasattr(event, "item") and event.item:
-                    collected_items.append(event.item)
+                    collected_items.append((stream_sequence, event.item))
+                    stream_sequence += 1
 
                 # Update active agent on handoff events or explicit agent update events
                 try:
@@ -467,11 +469,7 @@ class Execution:
                             current_stream_agent_name = target
                     elif getattr(event, "type", None) == "agent_updated_stream_event":
                         new_agent = getattr(event, "new_agent", None)
-                        if (
-                            new_agent is not None
-                            and hasattr(new_agent, "name")
-                            and new_agent.name
-                        ):
+                        if new_agent is not None and hasattr(new_agent, "name") and new_agent.name:
                             current_stream_agent_name = new_agent.name
                 except Exception:
                     pass
@@ -482,13 +480,19 @@ class Execution:
 
             # Save all collected items after streaming completes
             if self.agent._thread_manager and collected_items:
-                items_to_save: list[TResponseInputItem] = []
+                # Sort by sequence number to preserve streaming order
+                collected_items.sort(key=lambda x: x[0])
+
+                # Extract just the items (without sequence numbers) for processing
+                sorted_items = [item for seq, item in collected_items]
+
+                items_to_save: list[tuple[int, TResponseInputItem]] = []  # Store with sequence
 
                 # Only extract hosted tool results if hosted tools were actually used
-                hosted_tool_outputs = self._extract_hosted_tool_results_if_needed(collected_items)
+                hosted_tool_outputs = self._extract_hosted_tool_results_if_needed(sorted_items)
 
                 # Extract direct file annotations from assistant messages
-                assistant_messages = [item for item in collected_items if isinstance(item, MessageOutputItem)]
+                assistant_messages = [item for item in sorted_items if isinstance(item, MessageOutputItem)]
                 citations_by_message = (
                     extract_direct_file_annotations(assistant_messages, agent_name=self.agent.name)
                     if assistant_messages
@@ -496,17 +500,19 @@ class Execution:
                 )
 
                 current_agent_name = self.agent.name
-                for run_item_obj in collected_items:
+                for seq, run_item_obj in collected_items:
                     item_dict = self._run_item_to_tresponse_input_item(run_item_obj)
                     if item_dict:
                         # Add citations if applicable
                         self._add_citations_to_message(run_item_obj, item_dict, citations_by_message, is_streaming=True)
 
-                        # Add agency metadata to the response items
+                        # Add agency metadata to the response items with stream_sequence
                         formatted_item = MessageFormatter.add_agency_metadata(
                             item_dict, agent=current_agent_name, caller_agent=sender_name
                         )
-                        items_to_save.append(formatted_item)
+                        # Add stream sequence for ordering
+                        formatted_item["stream_sequence"] = seq
+                        items_to_save.append((seq, formatted_item))
 
                         # If this item indicates a handoff, update current agent for subsequent items
                         if getattr(run_item_obj, "type", None) == "handoff_output_item":
@@ -514,10 +520,19 @@ class Execution:
                             if target:
                                 current_agent_name = target
 
-                items_to_save.extend(hosted_tool_outputs)
+                # Add hosted tool outputs at the end with high sequence numbers
+                for i, output in enumerate(hosted_tool_outputs):
+                    output["stream_sequence"] = stream_sequence + i
+                    items_to_save.append((stream_sequence + i, output))
+
+                # Sort by sequence before saving
+                items_to_save.sort(key=lambda x: x[0])
+
+                # Extract just the items for filtering and saving
+                sorted_items_to_save = [item for seq, item in items_to_save]
 
                 # Filter out unwanted message types before saving
-                filtered_items = MessageFilter.filter_messages(items_to_save)
+                filtered_items = MessageFilter.filter_messages(sorted_items_to_save)
 
                 # Save filtered items to flat storage
                 self.agent._thread_manager.add_messages(filtered_items)

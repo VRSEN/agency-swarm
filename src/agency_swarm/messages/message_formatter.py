@@ -25,7 +25,8 @@ class MessageFormatter:
         message = message.copy()
         message["agent"] = agent
         message["callerAgent"] = caller_agent
-        message["timestamp"] = int(time.time() * 1000)  # milliseconds
+        # time.time() always returns UTC seconds since epoch (timezone-independent)
+        message["timestamp"] = int(time.time() * 1000)  # milliseconds since epoch UTC, sortable
         # Add type field if not present (for easier parsing/navigation)
         if "type" not in message:
             message["type"] = "message"
