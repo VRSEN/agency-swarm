@@ -138,25 +138,32 @@ async def test_streaming_order_matches_final_messages():
 
     # The key fix: Verify that sub-agent messages don't appear before
     # the main agent's send_message tool call in the final array
-    for i, msg in enumerate(final_messages):
-        if msg.get("callerAgent") == "MainAgent":  # This is a SubAgent message
-            # There should be a send_message tool call from MainAgent before this
-            found_send_message = False
-            for j in range(i):
-                prev_msg = final_messages[j]
-                if (
-                    prev_msg.get("agent") == "MainAgent"
-                    and prev_msg.get("type") == "function_call"
-                    and "send_message" in str(prev_msg.get("function_call", {}).get("name", ""))
-                ):
-                    found_send_message = True
-                    break
+    subagent_message_indices = []
+    send_message_indices = []
 
-            # For the first SubAgent message, we should have seen send_message
-            if not found_send_message and i > 0:
-                # This might be expected if MainAgent hasn't called send_message yet
-                # But if we're seeing SubAgent responses, MainAgent must have called it
-                pass  # Allow some flexibility in the test
+    for i, msg in enumerate(final_messages):
+        # Track SubAgent messages (called by MainAgent)
+        if msg.get("callerAgent") == "MainAgent" and msg.get("agent") == "SubAgent":
+            subagent_message_indices.append(i)
+
+        # Track MainAgent's send_message tool calls
+        if (
+            msg.get("agent") == "MainAgent"
+            and msg.get("type") == "function_call"
+            and "send_message" in str(msg.get("function_call", {}).get("name", ""))
+        ):
+            send_message_indices.append(i)
+
+    # Critical assertion: If there are SubAgent messages, there MUST be send_message calls
+    # and the first send_message MUST come before the first SubAgent message
+    if subagent_message_indices and send_message_indices:
+        first_subagent_msg = min(subagent_message_indices)
+        first_send_message = min(send_message_indices)
+        assert first_send_message < first_subagent_msg, (
+            f"BUG: SubAgent message at index {first_subagent_msg} appears before "
+            f"MainAgent's send_message at index {first_send_message}. "
+            f"This is the exact streaming order bug we're trying to fix!"
+        )
 
     print("\n✅ Test passed! Message order is preserved.")
     print(f"   Streaming had {len(streaming_sequence)} events")
