@@ -88,8 +88,8 @@ async def test_streaming_order_matches_final_messages():
 
 
 @pytest.mark.asyncio
-async def test_message_order_with_stream_sequences():
-    """Verify stream_sequence field maintains order."""
+async def test_message_order_chronological():
+    """Verify messages are in chronological order (timestamp-based)."""
 
     agent = Agent(
         name="TestAgent",
@@ -105,13 +105,6 @@ async def test_message_order_with_stream_sequences():
     # Check new_messages output
     messages = agency.thread_manager.get_all_messages()
 
-    # Extract stream sequences if present
-    stream_sequences = []
-    for msg in messages:
-        seq = msg.get("stream_sequence")
-        if seq is not None and seq != float("inf"):
-            stream_sequences.append(seq)
-
-    # If we have stream sequences, they must be in order
-    if stream_sequences:
-        assert stream_sequences == sorted(stream_sequences), "Stream sequences must be ordered"
+    # Verify timestamps are non-decreasing
+    timestamps = [m.get("timestamp", 0) for m in messages]
+    assert timestamps == sorted(timestamps), "Timestamps must be non-decreasing"

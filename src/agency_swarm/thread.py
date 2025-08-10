@@ -72,9 +72,8 @@ class MessageStore:
                     filtered.append(msg)
             messages = filtered
 
-        # Sort by timestamp as primary key, stream_sequence as secondary
-        # This ensures chronological order while preserving streaming order for same-timestamp messages
-        messages.sort(key=lambda m: (m.get("timestamp", 0), m.get("stream_sequence", 0)))
+        # Sort by timestamp to maintain chronological order
+        messages.sort(key=lambda m: m.get("timestamp", 0))
 
         logger.debug(
             f"Filtered {len(messages)} messages for agent='{agent}', callerAgent='{caller_agent}' "
@@ -195,9 +194,7 @@ class ThreadManager:
             list[TResponseInputItem]: All messages in chronological order
         """
         messages = self._store.messages.copy()
-        # Sort by timestamp as primary key, stream_sequence as secondary
-        # This ensures chronological order while preserving streaming order for same-timestamp messages
-        messages.sort(key=lambda m: (m.get("timestamp", 0), m.get("stream_sequence", 0)))
+        messages.sort(key=lambda m: m.get("timestamp", 0))
         return messages
 
     def _save_messages(self) -> None:
@@ -267,9 +264,8 @@ class ThreadManager:
 
                 messages.append(item)
 
-        # Sort by timestamp as primary key, stream_sequence as secondary
-        # This ensures chronological order while preserving streaming order for same-timestamp messages
-        messages.sort(key=lambda m: (m.get("timestamp", 0), m.get("stream_sequence", 0)))
+        # Sort by timestamp to maintain chronological order
+        messages.sort(key=lambda m: m.get("timestamp", 0))
 
         logger.info(f"Migrated {len(messages)} messages from {len(old_threads)} threads")
         return messages
