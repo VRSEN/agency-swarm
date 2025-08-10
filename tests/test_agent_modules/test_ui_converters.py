@@ -422,10 +422,10 @@ class TestConsoleEventAdapter:
         event.data.type = "response.output_text.delta"
         event.data.delta = "Hello"
 
-        with patch.object(adapter, "_update_console"):
+        with patch.object(adapter, "_update_console") as mock_update:
             adapter.openai_to_message_output(event, "TestAgent")
-            # This specific path may not call _update_console directly
-            # but should not raise errors
+            # This specific path should not trigger console updates
+            mock_update.assert_not_called()
 
     def test_openai_to_message_output_send_message_detection(self, adapter):
         """Test openai_to_message_output detects send_message pattern."""

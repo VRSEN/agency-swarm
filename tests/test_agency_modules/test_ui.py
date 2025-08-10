@@ -367,13 +367,6 @@ class TestAgencyVisualizationIntegration:
             assert "x" in node["position"]
             assert "y" in node["position"]
 
-    def test_visualization_module_import(self):
-        """Test that visualization modules can be imported."""
-        from agency_swarm.ui import HTMLVisualizationGenerator, LayoutAlgorithms
-
-        assert HTMLVisualizationGenerator is not None
-        assert LayoutAlgorithms is not None
-
     def test_layout_algorithms_manager_vs_leaf_positioning(self):
         """Test that manager agents and leaf agents position tools differently."""
         # Create a more complex structure with manager and leaf agents
