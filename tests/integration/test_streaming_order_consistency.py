@@ -42,9 +42,8 @@ async def test_streaming_order_matches_final_messages():
         model="gpt-4o-mini",
         instructions=(
             "You are the risk analysis agent. When receiving data:\n"
-            "1. Say 'Analyzing risk'\n"
-            "2. Use the analyze_risk tool\n"
-            "3. Return the risk assessment"
+            "1. Use the analyze_risk tool\n"
+            "2. Return the risk assessment"
         ),
         tools=[analyze_risk],
     )
