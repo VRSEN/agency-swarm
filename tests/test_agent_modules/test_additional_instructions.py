@@ -175,24 +175,24 @@ async def test_agent_get_response_without_additional_instructions(sample_agent, 
 
     with patch("agents.Runner.run", new_callable=AsyncMock) as mock_run:
         mock_run.return_value = mock_run_result
-        await test_agent.get_response(message="Test message")
+        await sample_agent.get_response(message="Test message")
 
     # Verify instructions were not modified
-    assert test_agent.instructions == original_instructions
+    assert sample_agent.instructions == original_instructions
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("additional_text", ["", None])
-async def test_agent_get_response_no_effect_additional_instructions(test_agent, mock_run_result, additional_text):
+async def test_agent_get_response_no_effect_additional_instructions(sample_agent, mock_run_result, additional_text):
     """Test that empty or None additional_instructions don't modify instructions."""
-    original_instructions = test_agent.instructions
+    original_instructions = sample_agent.instructions
 
     with patch("agents.Runner.run", new_callable=AsyncMock) as mock_run:
         mock_run.return_value = mock_run_result
-        await test_agent.get_response(message="Test message", additional_instructions=additional_text)
+        await sample_agent.get_response(message="Test message", additional_instructions=additional_text)
 
     # Verify instructions were not modified for empty string or None
-    assert test_agent.instructions == original_instructions
+    assert sample_agent.instructions == original_instructions
 
 
 @pytest.mark.asyncio
