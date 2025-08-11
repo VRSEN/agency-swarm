@@ -5,7 +5,6 @@ This module handles the core execution logic for agent responses,
 including both sync and streaming variants.
 """
 
-import asyncio
 import json
 import warnings
 from collections.abc import AsyncGenerator
@@ -448,89 +447,58 @@ class Execution:
             if context_override and "_streaming_context" in context_override:
                 master_context._streaming_context = context_override["_streaming_context"]
 
-            # Use a background worker feeding a queue so MCP cleanup runs in the same task it was entered
-            queue: asyncio.Queue[Any] = asyncio.Queue(maxsize=1000)
-
-            async def stream_worker():
-                try:
-                    async with AsyncExitStack() as mcp_stack:
-                        for server in self.agent.mcp_servers:
-                            await mcp_stack.enter_async_context(server)
-
-                        result = Runner.run_streamed(
-                            starting_agent=self.agent,
-                            input=history_for_runner,
-                            context=master_context,
-                            hooks=hooks_override or self.agent.hooks,
-                            run_config=run_config_override or RunConfig(),
-                            max_turns=kwargs.get("max_turns", DEFAULT_MAX_TURNS),
-                        )
-
-                        current_stream_agent_name_inner = self.agent.name
-                        async for event in result.stream_events():
-                            # Collect all new items for saving to thread
-                            if hasattr(event, "item") and event.item:
-                                collected_items.append(event.item)
-
-                            # Update active agent on handoff events or explicit agent update events
-                            try:
-                                if (
-                                    getattr(event, "type", None) == "run_item_stream_event"
-                                    and getattr(event, "name", None) == "handoff_occured"
-                                ):
-                                    item = getattr(event, "item", None)
-                                    target = self._extract_handoff_target_name(item) if item is not None else None
-                                    if target:
-                                        current_stream_agent_name_inner = target
-                                elif getattr(event, "type", None) == "agent_updated_stream_event":
-                                    new_agent = getattr(event, "new_agent", None)
-                                    if (
-                                        new_agent is not None
-                                        and hasattr(new_agent, "name")
-                                        and new_agent.name
-                                    ):
-                                        current_stream_agent_name_inner = new_agent.name
-                            except Exception:
-                                pass
-
-                            # Add agent name and caller to the event
-                            event = add_agent_name_to_event(event, current_stream_agent_name_inner, sender_name)
-                            await queue.put(event)
-                except asyncio.CancelledError:
-                    # Graceful shutdown on cancellation
-                    pass
-                except Exception as e:
-                    logger.exception("Error in stream_worker for agent '%s'", self.agent.name)
-                    try:
-                        await queue.put({"type": "error", "content": str(e)})
-                    except Exception:
-                        logger.exception(f"Error in stream_worker for agent {self.agent.name}: {e}")
-                finally:
-                    try:
-                        queue.put_nowait(None)
-                    except Exception as e:
-                        logger.exception(f"Error in stream_worker for agent {self.agent.name}: {e}")
-
-            worker_task = asyncio.create_task(stream_worker(), name=f"{self.agent.name}-stream-worker")
-
+            # Open MCP servers in this task and stream events directly
+            result = None
             try:
-                while True:
-                    event = await queue.get()
-                    if event is None:
-                        break
-                    yield event
+                async with AsyncExitStack() as mcp_stack:
+                    for server in self.agent.mcp_servers:
+                        await mcp_stack.enter_async_context(server)
+
+                    result = Runner.run_streamed(
+                        starting_agent=self.agent,
+                        input=history_for_runner,
+                        context=master_context,
+                        hooks=hooks_override or self.agent.hooks,
+                        run_config=run_config_override or RunConfig(),
+                        max_turns=kwargs.get("max_turns", DEFAULT_MAX_TURNS),
+                    )
+
+                    current_stream_agent_name = self.agent.name
+                    async for event in result.stream_events():
+                        # Collect all new items for saving to thread
+                        if hasattr(event, "item") and event.item:
+                            collected_items.append(event.item)
+
+                        # Update active agent on handoff events or explicit agent update events
+                        try:
+                            if (
+                                getattr(event, "type", None) == "run_item_stream_event"
+                                and getattr(event, "name", None) == "handoff_occured"
+                            ):
+                                item = getattr(event, "item", None)
+                                target = self._extract_handoff_target_name(item) if item is not None else None
+                                if target:
+                                    current_stream_agent_name = target
+                            elif getattr(event, "type", None) == "agent_updated_stream_event":
+                                new_agent = getattr(event, "new_agent", None)
+                                if new_agent is not None and hasattr(new_agent, "name") and new_agent.name:
+                                    current_stream_agent_name = new_agent.name
+                        except Exception:
+                            pass
+
+                        # Add agent name and caller to the event
+                        event = add_agent_name_to_event(event, current_stream_agent_name, sender_name)
+                        yield event
+            except Exception as e:
+                logger.exception("Error during streamed run for agent '%s'", self.agent.name)
+                yield {"type": "error", "content": str(e)}
             finally:
-                # Ensure sentinel is present to unblock consumer loop even if worker was cancelled
+                # Ensure the SDK's background task is cancelled before closing MCP servers
                 try:
-                    queue.put_nowait(None)
+                    if result is not None:
+                        result.cancel()
                 except Exception:
                     pass
-                if not worker_task.done():
-                    worker_task.cancel()
-                try:
-                    await worker_task
-                except Exception as e:
-                    logger.error(f"Error during worker task cleanup: {e}", exc_info=True)
 
             # Save all collected items after streaming completes
             if self.agent._thread_manager and collected_items:

@@ -6,7 +6,6 @@ process various file types through HTTP requests, and return appropriate respons
 containing the expected file content.
 """
 
-import asyncio
 import subprocess
 import sys
 import time
