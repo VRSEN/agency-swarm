@@ -8,6 +8,7 @@ including both sync and streaming variants.
 import json
 import warnings
 from collections.abc import AsyncGenerator
+from contextlib import AsyncExitStack
 from typing import TYPE_CHECKING, Any
 
 from agents import (
@@ -441,78 +442,100 @@ class Execution:
             if context_override and "_streaming_context" in context_override:
                 master_context._streaming_context = context_override["_streaming_context"]
 
-            result = Runner.run_streamed(
-                starting_agent=self.agent,
-                input=history_for_runner,
-                context=master_context,
-                hooks=hooks_override or self.agent.hooks,
-                run_config=run_config_override or RunConfig(),
-                max_turns=kwargs.get("max_turns", DEFAULT_MAX_TURNS),
-            )
-            current_stream_agent_name = self.agent.name
-            # Suppress SDK-emitted send_message tool call pair (we inject a sentinel earlier)
-            suppress_next_send_message_output: bool = False
-            async for event in result.stream_events():
-                # Collect all new items for potential post-processing
-                if hasattr(event, "item") and event.item:
-                    # Check for SDK-emitted send_message tool call and suppress it (and its immediate output)
-                    itm = getattr(event, "item", None)
-                    if itm is not None:
-                        itm_type = getattr(itm, "type", None)
-                        raw = getattr(itm, "raw_item", None)
-                        tool_name = getattr(raw, "name", None) if raw is not None else None
+            # Open MCP servers in this task and stream events directly
+            result = None
+            try:
+                async with AsyncExitStack() as mcp_stack:
+                    for server in self.agent.mcp_servers:
+                        await mcp_stack.enter_async_context(server)
 
-                        if itm_type == "tool_call_item" and tool_name == "send_message":
-                            suppress_next_send_message_output = True
-                            continue
+                    result = Runner.run_streamed(
+                        starting_agent=self.agent,
+                        input=history_for_runner,
+                        context=master_context,
+                        hooks=hooks_override or self.agent.hooks,
+                        run_config=run_config_override or RunConfig(),
+                        max_turns=kwargs.get("max_turns", DEFAULT_MAX_TURNS),
+                    )
 
-                        if itm_type == "tool_call_output_item" and suppress_next_send_message_output:
-                            suppress_next_send_message_output = False
-                            continue
+                    current_stream_agent_name = self.agent.name
+                    # Suppress SDK-emitted send_message tool call pair (we inject a sentinel earlier)
+                    suppress_next_send_message_output: bool = False
+                    async for event in result.stream_events():
+                        # Collect all new items for potential post-processing
+                        if hasattr(event, "item") and event.item:
+                            # Check for SDK-emitted send_message tool call and suppress it (and its immediate output)
+                            itm = getattr(event, "item", None)
+                            if itm is not None:
+                                itm_type = getattr(itm, "type", None)
+                                raw = getattr(itm, "raw_item", None)
+                                tool_name = getattr(raw, "name", None) if raw is not None else None
 
-                    collected_items.append(event.item)
+                                if itm_type == "tool_call_item" and tool_name == "send_message":
+                                    suppress_next_send_message_output = True
+                                    continue
 
-                # Update active agent on handoff events or explicit agent update events
-                if (
-                    getattr(event, "type", None) == "run_item_stream_event"
-                    and getattr(event, "name", None) == "handoff_occured"
-                ):
-                    item = getattr(event, "item", None)
-                    target = self._extract_handoff_target_name(item) if item is not None else None
-                    if target:
-                        current_stream_agent_name = target
-                elif getattr(event, "type", None) == "agent_updated_stream_event":
-                    new_agent = getattr(event, "new_agent", None)
-                    if new_agent is not None and hasattr(new_agent, "name") and new_agent.name:
-                        current_stream_agent_name = new_agent.name
-                # Add agent name and caller to the event
-                event = add_agent_name_to_event(event, current_stream_agent_name, sender_name)
+                                if itm_type == "tool_call_output_item" and suppress_next_send_message_output:
+                                    suppress_next_send_message_output = False
+                                    continue
 
-                # Incrementally persist the item to maintain exact stream order in storage
-                if hasattr(event, "item") and event.item and self.agent._thread_manager:
-                    run_item_obj = event.item
-                    # Convert to input item (dict) using SDK helper
-                    item_dict = self._run_item_to_tresponse_input_item(run_item_obj)
-                    if item_dict:
-                        # Extract citations for this single message if applicable
-                        if isinstance(run_item_obj, MessageOutputItem):
-                            single_citation_map = extract_direct_file_annotations(
-                                [run_item_obj], agent_name=self.agent.name
-                            )
-                            self._add_citations_to_message(
-                                run_item_obj, item_dict, single_citation_map, is_streaming=True
-                            )
+                            collected_items.append(event.item)
 
-                        # Add agency metadata with the current active agent
-                        formatted_item = MessageFormatter.add_agency_metadata(
-                            item_dict, agent=current_stream_agent_name, caller_agent=sender_name
-                        )
+                        # Update active agent on handoff events or explicit agent update events
+                        try:
+                            if (
+                                getattr(event, "type", None) == "run_item_stream_event"
+                                and getattr(event, "name", None) == "handoff_occured"
+                            ):
+                                item = getattr(event, "item", None)
+                                target = self._extract_handoff_target_name(item) if item is not None else None
+                                if target:
+                                    current_stream_agent_name = target
+                            elif getattr(event, "type", None) == "agent_updated_stream_event":
+                                new_agent = getattr(event, "new_agent", None)
+                                if new_agent is not None and hasattr(new_agent, "name") and new_agent.name:
+                                    current_stream_agent_name = new_agent.name
+                        except Exception:
+                            pass
 
-                        # Filter and save immediately
-                        if not MessageFilter.should_filter(formatted_item):
-                            self.agent._thread_manager.add_messages([formatted_item])
+                        # Add agent name and caller to the event
+                        event = add_agent_name_to_event(event, current_stream_agent_name, sender_name)
 
-                yield event
+                        # Incrementally persist the item to maintain exact stream order in storage
+                        if hasattr(event, "item") and event.item and self.agent._thread_manager:
+                            run_item_obj = event.item
+                            # Convert to input item (dict) using SDK helper
+                            item_dict = self._run_item_to_tresponse_input_item(run_item_obj)
+                            if item_dict:
+                                # Extract citations for this single message if applicable
+                                if isinstance(run_item_obj, MessageOutputItem):
+                                    single_citation_map = extract_direct_file_annotations(
+                                        [run_item_obj], agent_name=self.agent.name
+                                    )
+                                    self._add_citations_to_message(
+                                        run_item_obj, item_dict, single_citation_map, is_streaming=True
+                                    )
+
+                                # Add agency metadata with the current active agent
+                                formatted_item = MessageFormatter.add_agency_metadata(
+                                    item_dict, agent=current_stream_agent_name, caller_agent=sender_name
+                                )
+
+                                # Filter and save immediately
+                                if not MessageFilter.should_filter(formatted_item):
+                                    self.agent._thread_manager.add_messages([formatted_item])
+
+                        yield event
+            except Exception as e:
+                logger.exception("Error during streamed run for agent '%s'", self.agent.name)
+                yield {"type": "error", "content": str(e)}
+            finally:
+                # Ensure the SDK's background task is cancelled before closing MCP servers
+                try:
+                    if result is not None:
+                        result.cancel()
+                except Exception:
+                    pass
 
             # Save all collected items after streaming completes
             if self.agent._thread_manager and collected_items:
