@@ -17,15 +17,15 @@ from agency_swarm import Agency, Agent
 
 
 @pytest.fixture
-def test_agent():
+def sample_agent():
     """Create a test agent with known instructions."""
     return Agent(name="TestAgent", instructions="Original agent instructions")
 
 
 @pytest.fixture
-def test_agency(test_agent):
+def sample_agency(sample_agent):
     """Create a test agency with the test agent."""
-    return Agency(test_agent)
+    return Agency(sample_agent)
 
 
 @pytest.fixture
@@ -38,20 +38,20 @@ def mock_run_result():
 
 
 @pytest.mark.asyncio
-async def test_agent_get_response_modifies_instructions_temporarily(test_agent, mock_run_result):
+async def test_agent_get_response_modifies_instructions_temporarily(sample_agent, mock_run_result):
     """Test that Agent.get_response temporarily modifies instructions with additional_instructions."""
-    original_instructions = test_agent.instructions
+    original_instructions = sample_agent.instructions
     additional_text = "Additional test instructions"
 
     # Track instruction changes during execution
     instruction_history = []
 
     async def mock_runner_run(*args, **kwargs):
-        instruction_history.append(test_agent.instructions)
+        instruction_history.append(sample_agent.instructions)
         return mock_run_result
 
     with patch("agents.Runner.run", side_effect=mock_runner_run):
-        await test_agent.get_response(message="Test message", additional_instructions=additional_text)
+        await sample_agent.get_response(message="Test message", additional_instructions=additional_text)
 
     # Verify instructions were modified during execution
     assert len(instruction_history) == 1
@@ -60,36 +60,36 @@ async def test_agent_get_response_modifies_instructions_temporarily(test_agent, 
     assert original_instructions in modified_instructions
 
     # Verify original instructions are restored
-    assert test_agent.instructions == original_instructions
+    assert sample_agent.instructions == original_instructions
 
 
 @pytest.mark.asyncio
-async def test_agent_get_response_restores_instructions_on_error(test_agent):
+async def test_agent_get_response_restores_instructions_on_error(sample_agent):
     """Test that original instructions are restored even if Runner.run fails."""
-    original_instructions = test_agent.instructions
+    original_instructions = sample_agent.instructions
     additional_text = "Additional test instructions"
 
     from agents import AgentsException
 
     with patch("agents.Runner.run", side_effect=RuntimeError("Test error")):
         with pytest.raises(AgentsException):  # Now using specific exception type
-            await test_agent.get_response(message="Test message", additional_instructions=additional_text)
+            await sample_agent.get_response(message="Test message", additional_instructions=additional_text)
 
     # Verify original instructions are restored despite the error
-    assert test_agent.instructions == original_instructions
+    assert sample_agent.instructions == original_instructions
 
 
 @pytest.mark.asyncio
-async def test_agent_get_response_stream_modifies_instructions_temporarily(test_agent):
+async def test_agent_get_response_stream_modifies_instructions_temporarily(sample_agent):
     """Test that Agent.get_response_stream temporarily modifies instructions with additional_instructions."""
-    original_instructions = test_agent.instructions
+    original_instructions = sample_agent.instructions
     additional_text = "Additional streaming instructions"
 
     # Track instruction changes during execution
     instruction_history = []
 
     async def mock_stream_events():
-        instruction_history.append(test_agent.instructions)
+        instruction_history.append(sample_agent.instructions)
         yield {"event": "text", "data": "test"}
 
     mock_streamed_result = MagicMock()
@@ -97,7 +97,7 @@ async def test_agent_get_response_stream_modifies_instructions_temporarily(test_
 
     with patch("agents.Runner.run_streamed", return_value=mock_streamed_result):
         events = []
-        async for event in test_agent.get_response_stream(
+        async for event in sample_agent.get_response_stream(
             message="Test message", additional_instructions=additional_text
         ):
             events.append(event)
@@ -109,18 +109,18 @@ async def test_agent_get_response_stream_modifies_instructions_temporarily(test_
     assert original_instructions in modified_instructions
 
     # Verify original instructions are restored
-    assert test_agent.instructions == original_instructions
+    assert sample_agent.instructions == original_instructions
 
 
 @pytest.mark.asyncio
-async def test_agent_get_response_stream_restores_instructions_on_error(test_agent):
+async def test_agent_get_response_stream_restores_instructions_on_error(sample_agent):
     """Test that original instructions are restored even if streaming fails."""
-    original_instructions = test_agent.instructions
+    original_instructions = sample_agent.instructions
     additional_text = "Additional streaming instructions"
 
     with patch("agents.Runner.run_streamed", side_effect=RuntimeError("Streaming error")):
         try:
-            async for _event in test_agent.get_response_stream(
+            async for _event in sample_agent.get_response_stream(
                 message="Test message", additional_instructions=additional_text
             ):
                 pass
@@ -128,18 +128,18 @@ async def test_agent_get_response_stream_restores_instructions_on_error(test_age
             pass  # Expected to fail
 
     # Verify original instructions are restored despite the error
-    assert test_agent.instructions == original_instructions
+    assert sample_agent.instructions == original_instructions
 
 
 @pytest.mark.asyncio
-async def test_agency_get_response_passes_additional_instructions(test_agency, test_agent):
+async def test_agency_get_response_passes_additional_instructions(sample_agency, sample_agent):
     """Test that Agency.get_response passes additional_instructions to the target agent."""
     additional_text = "Agency additional instructions"
 
-    with patch.object(test_agent, "get_response", new_callable=AsyncMock) as mock_get_response:
+    with patch.object(sample_agent, "get_response", new_callable=AsyncMock) as mock_get_response:
         mock_get_response.return_value = MagicMock(final_output="Agency response")
 
-        await test_agency.get_response(message="Test message", additional_instructions=additional_text)
+        await sample_agency.get_response(message="Test message", additional_instructions=additional_text)
 
         # Verify additional_instructions was passed to agent
         mock_get_response.assert_called_once()
@@ -148,16 +148,16 @@ async def test_agency_get_response_passes_additional_instructions(test_agency, t
 
 
 @pytest.mark.asyncio
-async def test_agency_get_response_stream_passes_additional_instructions(test_agency, test_agent):
+async def test_agency_get_response_stream_passes_additional_instructions(sample_agency, sample_agent):
     """Test that Agency.get_response_stream passes additional_instructions to the target agent."""
     additional_text = "Agency streaming instructions"
 
     async def mock_stream():
         yield {"event": "text", "data": "test"}
 
-    with patch.object(test_agent, "get_response_stream", return_value=mock_stream()) as mock_stream_method:
+    with patch.object(sample_agent, "get_response_stream", return_value=mock_stream()) as mock_stream_method:
         events = []
-        async for event in test_agency.get_response_stream(
+        async for event in sample_agency.get_response_stream(
             message="Test message", additional_instructions=additional_text
         ):
             events.append(event)
@@ -169,9 +169,9 @@ async def test_agency_get_response_stream_passes_additional_instructions(test_ag
 
 
 @pytest.mark.asyncio
-async def test_agent_get_response_without_additional_instructions(test_agent, mock_run_result):
+async def test_agent_get_response_without_additional_instructions(sample_agent, mock_run_result):
     """Test that Agent.get_response works normally without additional_instructions."""
-    original_instructions = test_agent.instructions
+    original_instructions = sample_agent.instructions
 
     with patch("agents.Runner.run", new_callable=AsyncMock) as mock_run:
         mock_run.return_value = mock_run_result
@@ -219,16 +219,16 @@ async def test_agent_with_none_original_instructions(mock_run_result):
     assert agent.instructions is None
 
 
-def test_deprecated_get_completion_passes_additional_instructions(test_agency, test_agent):
+def test_deprecated_get_completion_passes_additional_instructions(sample_agency, sample_agent):
     """Test that the deprecated get_completion method passes additional_instructions."""
     additional_text = "Deprecated method instructions"
 
-    with patch.object(test_agency, "_async_get_completion", new_callable=AsyncMock) as mock_async_get_completion:
+    with patch.object(sample_agency, "_async_get_completion", new_callable=AsyncMock) as mock_async_get_completion:
         mock_async_get_completion.return_value = "Completion response"
 
         # Suppress the deprecation warning for this test
         with pytest.warns(DeprecationWarning):
-            result = test_agency.get_completion(message="Test message", additional_instructions=additional_text)
+            result = sample_agency.get_completion(message="Test message", additional_instructions=additional_text)
 
         # Verify the result
         assert result == "Completion response"
