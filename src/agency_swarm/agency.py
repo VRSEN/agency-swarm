@@ -311,11 +311,37 @@ class Agency:
 
         return temp_entry_points, temp_comm_flows
 
+    def _get_caller_directory(self) -> str:
+        """Get the directory where this agency is being instantiated (caller's directory)."""
+        try:
+            # Get the agency_swarm package path for comparison (we're already in it)
+            agency_swarm_path = os.path.dirname(os.path.abspath(__file__))
+
+            # Walk up the call stack to find the first frame outside of agency_swarm package
+            frame = inspect.currentframe()
+            while frame is not None:
+                frame_module = inspect.getmodule(frame)
+                if frame_module and hasattr(frame_module, '__file__') and frame_module.__file__:
+                    module_path = os.path.dirname(os.path.abspath(frame_module.__file__))
+                    # Check if module is outside the agency_swarm package directory
+                    if not module_path.startswith(agency_swarm_path):
+                        return os.path.dirname(os.path.abspath(frame.f_code.co_filename))
+                frame = frame.f_back
+        except Exception:
+            pass
+        finally:
+            # Prevent reference cycles
+            del frame
+
+        # Fall back to current working directory
+        return os.getcwd()
+
     def _get_class_folder_path(self):
         """
-        Retrieves the absolute path of the directory containing the class file.
+        Retrieves the absolute path of the directory where this agency was instantiated.
         """
-        return os.path.abspath(os.path.dirname(inspect.getfile(self.__class__)))
+        # For relative path resolution, use caller directory instead of class location
+        return self._get_caller_directory()
 
     def _read_instructions(self, path: str):
         """

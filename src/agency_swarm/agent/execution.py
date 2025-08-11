@@ -256,14 +256,19 @@ class Execution:
                 logger.debug(
                     f"Calling Runner.run for agent '{self.agent.name}' with {len(history_for_runner)} history items."
                 )
-                run_result: RunResult = await Runner.run(
-                    starting_agent=self.agent,
-                    input=history_for_runner,
-                    context=self._prepare_master_context(context_override),
-                    hooks=hooks_override or self.agent.hooks,
-                    run_config=run_config_override or RunConfig(),
-                    max_turns=kwargs.get("max_turns", DEFAULT_MAX_TURNS),
-                )
+                # Ensure MCP servers connect/cleanup within the same task using a context stack
+                async with AsyncExitStack() as mcp_stack:
+                    for server in self.agent.mcp_servers:
+                        await mcp_stack.enter_async_context(server)
+
+                    run_result: RunResult = await Runner.run(
+                        starting_agent=self.agent,
+                        input=history_for_runner,
+                        context=self._prepare_master_context(context_override),
+                        hooks=hooks_override or self.agent.hooks,
+                        run_config=run_config_override or RunConfig(),
+                        max_turns=kwargs.get("max_turns", DEFAULT_MAX_TURNS),
+                    )
                 completion_info = (
                     f"Output Type: {type(run_result.final_output).__name__}"
                     if run_result.final_output is not None
