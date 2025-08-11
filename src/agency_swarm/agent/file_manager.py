@@ -625,10 +625,6 @@ class AgentFileManager:
                 )
 
     def get_class_folder_path(self):
-        try:
-            # Use inspect to get the file of the agent's class
-            class_file = inspect.getfile(self.agent.__class__)
-            return os.path.abspath(os.path.realpath(os.path.dirname(class_file)))
-        except (TypeError, OSError, AttributeError):
-            # If that fails, return current directory
-            return "./"
+        """Get the directory where the agent was instantiated for relative path resolution."""
+        # Delegate to the agent's path resolution method for consistency
+        return self.agent.get_class_folder_path()
