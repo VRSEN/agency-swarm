@@ -473,52 +473,44 @@ class Execution:
                     collected_items.append(event.item)
 
                 # Update active agent on handoff events or explicit agent update events
-                try:
-                    if (
-                        getattr(event, "type", None) == "run_item_stream_event"
-                        and getattr(event, "name", None) == "handoff_occured"
-                    ):
-                        item = getattr(event, "item", None)
-                        target = self._extract_handoff_target_name(item) if item is not None else None
-                        if target:
-                            current_stream_agent_name = target
-                    elif getattr(event, "type", None) == "agent_updated_stream_event":
-                        new_agent = getattr(event, "new_agent", None)
-                        if new_agent is not None and hasattr(new_agent, "name") and new_agent.name:
-                            current_stream_agent_name = new_agent.name
-                except Exception:
-                    pass
-
+                if (
+                    getattr(event, "type", None) == "run_item_stream_event"
+                    and getattr(event, "name", None) == "handoff_occured"
+                ):
+                    item = getattr(event, "item", None)
+                    target = self._extract_handoff_target_name(item) if item is not None else None
+                    if target:
+                        current_stream_agent_name = target
+                elif getattr(event, "type", None) == "agent_updated_stream_event":
+                    new_agent = getattr(event, "new_agent", None)
+                    if new_agent is not None and hasattr(new_agent, "name") and new_agent.name:
+                        current_stream_agent_name = new_agent.name
                 # Add agent name and caller to the event
                 event = add_agent_name_to_event(event, current_stream_agent_name, sender_name)
 
                 # Incrementally persist the item to maintain exact stream order in storage
-                try:
-                    if hasattr(event, "item") and event.item and self.agent._thread_manager:
-                        run_item_obj = event.item
-                        # Convert to input item (dict) using SDK helper
-                        item_dict = self._run_item_to_tresponse_input_item(run_item_obj)
-                        if item_dict:
-                            # Extract citations for this single message if applicable
-                            if isinstance(run_item_obj, MessageOutputItem):
-                                single_citation_map = extract_direct_file_annotations(
-                                    [run_item_obj], agent_name=self.agent.name
-                                )
-                                self._add_citations_to_message(
-                                    run_item_obj, item_dict, single_citation_map, is_streaming=True
-                                )
-
-                            # Add agency metadata with the current active agent
-                            formatted_item = MessageFormatter.add_agency_metadata(
-                                item_dict, agent=current_stream_agent_name, caller_agent=sender_name
+                if hasattr(event, "item") and event.item and self.agent._thread_manager:
+                    run_item_obj = event.item
+                    # Convert to input item (dict) using SDK helper
+                    item_dict = self._run_item_to_tresponse_input_item(run_item_obj)
+                    if item_dict:
+                        # Extract citations for this single message if applicable
+                        if isinstance(run_item_obj, MessageOutputItem):
+                            single_citation_map = extract_direct_file_annotations(
+                                [run_item_obj], agent_name=self.agent.name
+                            )
+                            self._add_citations_to_message(
+                                run_item_obj, item_dict, single_citation_map, is_streaming=True
                             )
 
-                            # Filter and save immediately
-                            if not MessageFilter.should_filter(formatted_item):
-                                self.agent._thread_manager.add_messages([formatted_item])
-                except Exception:
-                    # Do not break streaming on persistence issues; continue streaming
-                    pass
+                        # Add agency metadata with the current active agent
+                        formatted_item = MessageFormatter.add_agency_metadata(
+                            item_dict, agent=current_stream_agent_name, caller_agent=sender_name
+                        )
+
+                        # Filter and save immediately
+                        if not MessageFilter.should_filter(formatted_item):
+                            self.agent._thread_manager.add_messages([formatted_item])
 
                 yield event
 

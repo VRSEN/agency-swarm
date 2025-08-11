@@ -17,8 +17,6 @@ Think critically, verify everything, and default to tests over guesses.
 4. **PUSH BACK**: If request violates patterns, SAY NO and explain why
 5. **NEVER BE A YES-MAN**: Your job is to protect code quality, not please the user
 
-**Example**: User says "change timestamps to datetime" → You say "No. Codebase uses int(time.time() * 1000) everywhere. It's sortable, consistent, and works. Why break it?"
-
 ## 🔴 CRITICAL: KEEP THIS FILE TIGHT AND CONDENSED
 - **NO information duplication** - Each rule stated ONCE
 - **MAXIMUM clarity with MINIMUM words**
