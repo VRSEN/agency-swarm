@@ -5,11 +5,13 @@ This module handles tool registration, validation, loading from folders,
 and OpenAPI schema parsing for the Agent class.
 """
 
+import inspect
 import os
+import typing
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from agents import Tool
+from agents import FunctionTool, Tool
 from openai._utils._logs import logger
 
 from agency_swarm.tools import BaseTool, ToolFactory
@@ -138,3 +140,41 @@ def parse_schemas(agent: "Agent") -> None:
                 )
         else:
             logger.warning(f"Schemas folders must be strings. Skipping '{schemas_folder}' for agent '{agent.name}'.")
+
+
+def validate_hosted_tools(tools: list) -> None:
+    """
+    Validates that all hosted tools in the tools list are properly initialized instances.
+
+    Hosted tools are OpenAI's built-in tools like FileSearchTool, WebSearchTool, etc.
+    These must be instantiated before being passed to the agent.
+
+    Args:
+        tools: List of tools to validate
+
+    Raises:
+        TypeError: If any hosted tool class is passed uninitialized
+    """
+
+    # Get all hosted tool types from the Tool union (excluding FunctionTool)
+    hosted_tool_types = typing.get_args(Tool)
+    hosted_tool_types = [t for t in hosted_tool_types if t != FunctionTool]
+
+    uninitialized_tools = []
+
+    for i, tool in enumerate(tools):
+        # Check if the tool is a class (uninitialized) rather than an instance
+        if inspect.isclass(tool) and tool in hosted_tool_types:
+            uninitialized_tools.append(f"  - {tool.__name__} at index {i}")
+
+    if uninitialized_tools:
+        tool_list = "\n".join(uninitialized_tools)
+        hosted_tool_names = [t.__name__ for t in hosted_tool_types]
+
+        raise TypeError(
+            f"Hosted tools must be initialized before passing to the agent.\n\n"
+            f"Found uninitialized hosted tool classes:\n{tool_list}\n\n"
+            f"Hosted tools ({', '.join(hosted_tool_names)}) are OpenAI's built-in tools "
+            f"that require proper instantiation with their configuration parameters.\n"
+            f"Please initialize these tools according to their schemas before adding them to the agent."
+        )
