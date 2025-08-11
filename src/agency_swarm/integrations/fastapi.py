@@ -22,6 +22,8 @@ def run_fastapi(
     return_app: bool = False,
     cors_origins: list[str] | None = None,
     enable_agui: bool = False,
+    enable_logging: bool = False,
+    logs_dir: str = "activity-logs",
 ):
     """Launch a FastAPI server exposing endpoints for multiple agencies and tools.
 
@@ -36,6 +38,13 @@ def run_fastapi(
         Optional tools to expose under ``/tool`` routes.
     host, port, app_token_env, return_app, cors_origins :
         Standard FastAPI configuration options.
+    enable_logging : bool
+        Enable enhanced logging with request tracking and file logging.
+        When enabled, adds middleware to track requests and allows conditional
+        file logging based on 'x-agency-log-id' header.
+    logs_dir : str
+        Directory to store log files when enhanced logging is enabled.
+        Defaults to 'activity-logs'.
     """
     if (agencies is None or len(agencies) == 0) and (tools is None or len(tools) == 0):
         logger.warning("No endpoints to deploy. Please provide at least one agency or tool.")
@@ -50,12 +59,17 @@ def run_fastapi(
             exception_handler,
             get_verify_token,
             make_agui_chat_endpoint,
+            make_logs_endpoint,
             make_metadata_endpoint,
             make_response_endpoint,
             make_stream_endpoint,
             make_tool_endpoint,
         )
-        from .fastapi_utils.request_models import BaseRequest, RunAgentInputCustom, add_agent_validator
+        from .fastapi_utils.logging_middleware import (
+            RequestTracker,
+            setup_enhanced_logging,
+        )
+        from .fastapi_utils.request_models import BaseRequest, LogRequest, RunAgentInputCustom, add_agent_validator
     except ImportError as e:
         logger.error(f"FastAPI deployment dependencies are missing: {e}. Please install agency-swarm[fastapi] package")
         return
@@ -66,6 +80,11 @@ def run_fastapi(
     verify_token = get_verify_token(app_token)
 
     app = FastAPI()
+
+    # Setup enhanced logging if enabled
+    if enable_logging:
+        setup_enhanced_logging(logs_dir)
+        app.add_middleware(RequestTracker)
 
     if cors_origins is None:
         cors_origins = ["*"]
@@ -135,6 +154,15 @@ def run_fastapi(
             endpoints.append(f"/tool/{tool_name}")
 
     app.add_exception_handler(Exception, exception_handler)
+
+    # Add get_logs endpoint if enhanced logging is enabled
+    if enable_logging:
+        app.add_api_route(
+            "/get_logs",
+            make_logs_endpoint(LogRequest, logs_dir, verify_token),
+            methods=["POST"]
+        )
+        endpoints.append("/get_logs")
 
     logger.info("Created endpoints:\n" + "\n".join(endpoints))
 

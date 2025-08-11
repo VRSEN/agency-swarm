@@ -11,6 +11,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from agency_swarm.agency import Agency
 from agency_swarm.integrations.fastapi_utils.file_handler import upload_from_urls
+from agency_swarm.integrations.fastapi_utils.logging_middleware import get_logs_endpoint_impl
 from agency_swarm.messages import MessageFilter
 from agency_swarm.ui.core.agui_adapter import AguiAdapter, serialize
 
@@ -274,6 +275,14 @@ def make_agui_chat_endpoint(request_model, agency_factory: Callable[..., Agency]
 def make_metadata_endpoint(agency_metadata: dict, verify_token):
     async def handler(token: str = Depends(verify_token)):
         return {"metadata": agency_metadata}
+
+    return handler
+
+def make_logs_endpoint(request_model, logs_dir: str, verify_token):
+    """Create a logs endpoint handler following the same pattern as other endpoints."""
+
+    async def handler(request: request_model, token: str = Depends(verify_token)):
+        return await get_logs_endpoint_impl(request.log_id, logs_dir)
 
     return handler
 
