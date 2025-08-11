@@ -266,6 +266,7 @@ class Agent(BaseAgent[MasterContext]):
         context_override: dict[str, Any] | None = None,
         hooks_override: RunHooks | None = None,
         run_config_override: RunConfig | None = None,
+        message_files: list[str] | None = None,  # Backward compatibility
         file_ids: list[str] | None = None,
         additional_instructions: str | None = None,
         agency_context: AgencyContext | None = None,  # Context from agency, or None for standalone
@@ -284,6 +285,7 @@ class Agent(BaseAgent[MasterContext]):
             context_override: Optional context data to override default MasterContext values
             hooks_override: Optional hooks to override default agent hooks
             run_config_override: Optional run configuration settings
+            message_files: DEPRECATED: Use file_ids instead. File IDs to attach to the message
             file_ids: List of OpenAI file IDs to attach to the message
             additional_instructions: Additional instructions to be appended to the agent's
                                     instructions for this run only
@@ -303,6 +305,7 @@ class Agent(BaseAgent[MasterContext]):
             context_override=context_override,
             hooks_override=hooks_override,
             run_config_override=run_config_override,
+            message_files=message_files,
             file_ids=file_ids,
             additional_instructions=additional_instructions,
             agency_context=agency_context,
@@ -316,6 +319,7 @@ class Agent(BaseAgent[MasterContext]):
         context_override: dict[str, Any] | None = None,
         hooks_override: RunHooks | None = None,
         run_config_override: RunConfig | None = None,
+        message_files: list[str] | None = None,
         file_ids: list[str] | None = None,
         additional_instructions: str | None = None,
         agency_context: AgencyContext | None = None,  # Context from agency, or None for standalone
@@ -331,6 +335,8 @@ class Agent(BaseAgent[MasterContext]):
             run_config_override: Optional run configuration
             additional_instructions: Additional instructions to be appended to the agent's
                                     instructions for this run only
+            message_files: DEPRECATED: Use file_ids instead. File IDs to attach to the message
+            file_ids: List of OpenAI file IDs to attach to the message
             agency_context: AgencyContext for this execution (provided by Agency, or None for standalone use)
             **kwargs: Additional keyword arguments
 
@@ -347,6 +353,7 @@ class Agent(BaseAgent[MasterContext]):
             context_override=context_override,
             hooks_override=hooks_override,
             run_config_override=run_config_override,
+            message_files=message_files,
             file_ids=file_ids,
             additional_instructions=additional_instructions,
             agency_context=agency_context,
