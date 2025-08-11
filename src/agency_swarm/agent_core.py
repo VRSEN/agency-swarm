@@ -6,13 +6,7 @@ from collections.abc import AsyncGenerator, Callable
 from pathlib import Path
 from typing import Any, TypeVar
 
-from agents import (
-    Agent as BaseAgent,
-    RunConfig,
-    RunHooks,
-    RunResult,
-    Tool,
-)
+from agents import Agent as BaseAgent, RunConfig, RunHooks, RunResult, Tool
 from openai import AsyncOpenAI, OpenAI
 
 from agency_swarm.agent import (
@@ -24,6 +18,7 @@ from agency_swarm.agent import (
     register_subagent,
     separate_kwargs,
     setup_file_manager,
+    validate_hosted_tools,
 )
 from agency_swarm.agent.file_manager import AgentFileManager, AttachmentManager
 from agency_swarm.context import MasterContext
@@ -155,6 +150,11 @@ class Agent(BaseAgent[MasterContext]):
             base_agent_params["tools"] = []
         elif not isinstance(base_agent_params["tools"], list):
             raise TypeError("'tools' parameter must be a list.")
+
+        if "tools" in kwargs:
+            tools_list = kwargs["tools"]
+            # Validate that hosted tools are properly initialized
+            validate_hosted_tools(tools_list)
 
         # Remove description from base_agent_params if it was added for Swarm Agent
         base_agent_params.pop("description", None)
