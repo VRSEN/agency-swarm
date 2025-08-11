@@ -58,10 +58,10 @@ git status --porcelain   # Check ALL files including untracked
 
 #### STEP 3: FULL VALIDATION (MANDATORY)
 ```bash
-make ci                                          # Full CI pipeline - MUST PASS
-python examples/agency_terminal_demo.py          # Basic functionality test
-python examples/multi_agent_workflow.py          # Multi-agent test
-python -m pytest tests/integration/ -v          # Integration tests
+make ci                                          # Full CI pipeline - MUST PASS (uses project env)
+uv run python examples/agency_terminal_demo.py   # Basic functionality test (STRICT: use uv run)
+uv run python examples/multi_agent_workflow.py   # Multi-agent test (STRICT: use uv run)
+uv run pytest tests/integration/ -v              # Integration tests (STRICT: use uv run)
 ```
 
 ### 🔴 CRITICAL VIOLATIONS
@@ -96,7 +96,7 @@ OPENAI_API_KEY=sk-...
 # CRITICAL: ALWAYS RUN THESE WITH PROPER TIMEOUT
 make sync        # Install dependencies - MUST RUN FIRST
 make ci          # Full CI pipeline: lint + mypy + tests + coverage (86% minimum)
-make tests       # Run all tests
+make tests       # Run all tests (STRICT: uses project env)
 make format      # Format code with ruff
 make lint        # Run linting checks
 make mypy        # Run type checking
@@ -105,16 +105,22 @@ make coverage    # Run tests with coverage reporting (86% minimum required)
 # ONLY use timeout=600000 (10 minutes) for: make tests, make coverage, make ci
 ```
 
+### Environment and Executables (STRICT)
+- NEVER use global executables (e.g., /opt/anaconda3/bin/python, system python, system pytest, pip).
+- ALWAYS use the project environment via `uv run` or Make targets.
+- NEVER invoke absolute interpreter paths. If you need Python, use `uv run python ...`.
+- For pytest, use `uv run pytest ...`. For ad-hoc scripts, use `uv run python script.py`.
+
 ### Running Examples
 ```bash
 # Test basic functionality
-python examples/agency_terminal_demo.py
+uv run python examples/agency_terminal_demo.py
 
 # Test multi-agent communication
-python examples/multi_agent_workflow.py
+uv run python examples/multi_agent_workflow.py
 
 # Test context sharing
-python examples/agency_context.py
+uv run python examples/agency_context.py
 ```
 
 ### Test Rules (TDD, Minimal, Deterministic)
@@ -334,11 +340,11 @@ find src/ -name "*.py" | grep -v __pycache__ | sort
 make ci
 
 # Run examples
-python examples/agency_terminal_demo.py
-python examples/multi_agent_workflow.py
+uv run python examples/agency_terminal_demo.py
+uv run python examples/multi_agent_workflow.py
 
 # Integration tests
-python -m pytest tests/integration/ -v
+uv run pytest tests/integration/ -v
 ```
 
 Remember: **SAFETY FIRST. VERIFY EVERYTHING. TRUST NOTHING.**
