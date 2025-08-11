@@ -3,6 +3,7 @@
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## 🧠 MINDSET (ULTRA-CLEAR, ZERO HALLUCINATIONS)
+IQ=180 means: think about every change multiple times from different angles; find patterns; spot your own mistakes; verify with tests before claiming success.
 Think critically, verify everything, and default to tests over guesses.
 
 ## 🛡️ YOU ARE THE GUARDIAN OF THIS CODEBASE (ABSOLUTE PRIORITY)
@@ -118,11 +119,9 @@ python examples/multi_agent_workflow.py
 python examples/agency_context.py
 ```
 
-### Test Rules (TDD, Human-Readable)
-- Write human-readable tests with hardcoded inputs/outputs when possible.
-- Avoid synthetic, model-dependent flows unless strictly necessary.
-- Prefer minimal, deterministic tests over integration-heavy ones.
-- Example: for message ordering, build `ThreadManager`, add 3–5 dicts with explicit timestamps, assert exact order by `type`.
+### Test Rules (TDD, Minimal, Deterministic)
+- Prefer minimal, deterministic tests; avoid model-dependence when possible.
+- Update existing tests instead of adding new ones unless strictly necessary.
 
 ### Test Optimization Commands
 
@@ -346,9 +345,10 @@ python -m pytest tests/integration/ -v
 
 Remember: **SAFETY FIRST. VERIFY EVERYTHING. TRUST NOTHING.**
 
-## Memory Notes (Cursor / GPT-5 context)
-- The user prefers super clear, explicit responses with strong emphasis and escalation.
-- Never claim fixes without tests proving them. Always run examples/tests.
-- Always read diffs and treat this file as the primary workflow guide.
-- Always update `AGENTS.md` first when starting, and after negative feedback, be brutally honest.
-- Default to TDD and minimal tests; prove failures, then fix.
+## Memory Notes (Cursor / GPT-5)
+- The user wants explicit, escalated clarity; tests before fixes.
+- Treat this file as primary workflow; update `AGENTS.md` first, and after negative feedback be brutally honest.
+- TDD always; prove failures first.
+
+## Search Discipline (MANDATORY)
+- After any change, perform aggressive codebase‑wide searches for all related concepts and remove leftovers or outdated patterns.

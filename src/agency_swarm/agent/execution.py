@@ -450,9 +450,26 @@ class Execution:
                 max_turns=kwargs.get("max_turns", DEFAULT_MAX_TURNS),
             )
             current_stream_agent_name = self.agent.name
+            # Suppress SDK-emitted send_message tool call pair (we inject a sentinel earlier)
+            suppress_next_send_message_output: bool = False
             async for event in result.stream_events():
                 # Collect all new items for potential post-processing
                 if hasattr(event, "item") and event.item:
+                    # Check for SDK-emitted send_message tool call and suppress it (and its immediate output)
+                    itm = getattr(event, "item", None)
+                    if itm is not None:
+                        itm_type = getattr(itm, "type", None)
+                        raw = getattr(itm, "raw_item", None)
+                        tool_name = getattr(raw, "name", None) if raw is not None else None
+
+                        if itm_type == "tool_call_item" and tool_name == "send_message":
+                            suppress_next_send_message_output = True
+                            continue
+
+                        if itm_type == "tool_call_output_item" and suppress_next_send_message_output:
+                            suppress_next_send_message_output = False
+                            continue
+
                     collected_items.append(event.item)
 
                 # Update active agent on handoff events or explicit agent update events

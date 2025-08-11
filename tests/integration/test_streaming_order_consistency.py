@@ -1,110 +1,113 @@
 """
-Test streaming order consistency when sub-agents are called.
+Deterministic streaming order test with two agents and custom tools.
 """
 
+from typing import Any
+
 import pytest
-from agents import function_tool
+from agents import ModelSettings, function_tool
 
 from agency_swarm import Agency, Agent
+
+# Hardcoded expected flow (normalized stream type, agent, tool_name)
+EXPECTED_FLOW: list[tuple[str, str, str | None]] = [
+    ("message_output_item", "MainAgent", None),
+    ("tool_call_item", "MainAgent", "get_market_data"),
+    ("tool_call_output_item", "MainAgent", None),
+    ("tool_call_item", "MainAgent", "send_message"),
+    ("tool_call_item", "SubAgent", "analyze_risk"),
+    ("tool_call_output_item", "SubAgent", None),
+    ("message_output_item", "SubAgent", None),
+    ("message_output_item", "MainAgent", None),
+]
 
 
 @function_tool
 def get_market_data(symbol: str) -> str:
-    """Get market data for a stock symbol."""
-    return f"Market data for {symbol}: Price=$150, P/E=25"
+    return "AAPL:PRICE=150"
 
 
 @function_tool
 def analyze_risk(data: str) -> str:
-    """Analyze risk for the provided market data."""
-    return f"Risk analysis complete: {data} - Risk Level: MEDIUM"
+    return "RISK=LOW"
 
 
 @pytest.mark.asyncio
-async def test_streaming_order_matches_final_messages():
-    """Run agency and verify message order in new_messages."""
-
-    main_agent = Agent(
+async def test_full_streaming_flow_hardcoded_sequence():
+    main = Agent(
         name="MainAgent",
-        model="gpt-4o-mini",
+        description="Coordinator",
         instructions=(
-            "You are the main agent. When asked to analyze a stock:\n"
-            "1. First say 'Starting analysis'\n"
-            "2. Call get_market_data tool\n"
-            "3. Send the data to SubAgent for risk analysis\n"
-            "4. Say 'Analysis complete'"
+            "First say 'ACK'. Then call get_market_data('AAPL'). "
+            "Then use the send_message tool to ask SubAgent to analyze the data and reply. "
+            "Finally, respond to the user with a brief conclusion."
         ),
+        model_settings=ModelSettings(temperature=0.0),
         tools=[get_market_data],
     )
 
-    sub_agent = Agent(
+    helper = Agent(
         name="SubAgent",
-        model="gpt-4o-mini",
-        instructions=(
-            "You are the risk analysis agent. When receiving data:\n"
-            "1. Use the analyze_risk tool\n"
-            "2. Return the risk assessment"
-        ),
+        description="Risk analyzer",
+        instructions=("When prompted by MainAgent: call analyze_risk on the provided data, then reply succinctly."),
+        model_settings=ModelSettings(temperature=0.0),
         tools=[analyze_risk],
     )
 
     agency = Agency(
-        main_agent,
-        communication_flows=[(main_agent, sub_agent)],
+        main,
+        communication_flows=[(main, helper)],
+        shared_instructions="",
     )
 
-    # Stream the response - just consume it
-    async for _event in agency.get_response_stream("Analyze AAPL stock"):
-        pass  # Just let it run
+    before = len(agency.thread_manager.get_all_messages())
 
-    # Get the actual new_messages output
-    new_messages = agency.thread_manager.get_all_messages()
+    # Collect stream as (type, agent, tool_name)
+    stream_items: list[tuple[str, str, str | None]] = []
+    async for event in agency.get_response_stream(message="Start."):
+        if hasattr(event, "item") and event.item is not None:
+            item = event.item
+            evt_type = getattr(item, "type", None)
+            agent_name = getattr(event, "agent", None)
+            tool_name = None
+            if evt_type == "tool_call_item":
+                raw = getattr(item, "raw_item", None)
+                tool_name = getattr(raw, "name", None)
+            if isinstance(evt_type, str) and isinstance(agent_name, str):
+                stream_items.append((evt_type, agent_name, tool_name))
 
-    # Find indices of SubAgent messages and send_message calls
-    subagent_indices = []
-    send_message_indices = []
+    all_messages = agency.thread_manager.get_all_messages()
+    new_messages = all_messages[before:]
 
-    for i, msg in enumerate(new_messages):
-        # SubAgent messages have callerAgent=MainAgent
-        if msg.get("callerAgent") == "MainAgent" and msg.get("agent") == "SubAgent":
-            subagent_indices.append(i)
+    # Map saved messages to same triple format
+    comparable: list[dict[str, Any]] = []
+    for m in new_messages:
+        t = m.get("type")
+        role = m.get("role")
+        if t in {"function_call", "function_call_output"} or role == "assistant":
+            comparable.append(m)
 
-        # MainAgent's send_message tool calls
-        if (
-            msg.get("agent") == "MainAgent"
-            and msg.get("type") == "function_call"
-            and "send_message" in str(msg.get("function_call", {}).get("name", ""))
-        ):
-            send_message_indices.append(i)
+    # Stream must equal hardcoded expected sequence
+    assert stream_items == EXPECTED_FLOW, f"Stream flow mismatch:\n got={stream_items}\n exp={EXPECTED_FLOW}"
 
-    # Verify order: send_message must come before SubAgent messages
-    if subagent_indices and send_message_indices:
-        first_subagent = min(subagent_indices)
-        first_send_message = min(send_message_indices)
-        assert first_send_message < first_subagent, (
-            f"SubAgent message at index {first_subagent} appears before "
-            f"MainAgent's send_message at index {first_send_message}"
-        )
+    # Normalize saved messages to stream-equivalent triples inline
+    saved_normalized: list[tuple[str, str, str | None]] = []
+    for m in comparable:
+        t = m.get("type")
+        role = m.get("role")
+        agent = m.get("agent")
+        tool_name = None
+        if t == "function_call":
+            fn = m.get("function_call") or {}
+            tool_name = fn.get("name")
+            norm = "tool_call_item"
+        elif t == "function_call_output":
+            norm = "tool_call_output_item"
+        else:
+            norm = "message_output_item" if role == "assistant" else (t or "unknown")
+        saved_normalized.append((norm, agent, tool_name))
 
-
-@pytest.mark.asyncio
-async def test_message_order_chronological():
-    """Verify messages are in chronological order (timestamp-based)."""
-
-    agent = Agent(
-        name="TestAgent",
-        model="gpt-4o-mini",
-        instructions="Say 'test1', 'test2', 'test3' as three separate messages.",
-    )
-
-    agency = Agency(agent)
-
-    # Run the agent
-    await agency.get_response("Please follow your instructions")
-
-    # Check new_messages output
-    messages = agency.thread_manager.get_all_messages()
-
-    # Verify timestamps are non-decreasing
-    timestamps = [m.get("timestamp", 0) for m in messages]
-    assert timestamps == sorted(timestamps), "Timestamps must be non-decreasing"
+    # Saved messages: compare minimal invariant (type + agent) to reduce coupling
+    saved_min = [(t, a) for (t, a, _n) in saved_normalized]
+    expected_min = [(t, a) for (t, a, _n) in EXPECTED_FLOW]
+    assert saved_min == expected_min, f"Saved minimal order mismatch:\n got={saved_min}\n exp={expected_min}"

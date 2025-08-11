@@ -9,6 +9,8 @@ recipient details.
 
 import json
 import logging
+import time
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 from agents import FunctionTool, RunContextWrapper, handoff
@@ -216,6 +218,17 @@ class SendMessage(FunctionTool):
                 if wrapper and hasattr(wrapper, "context") and wrapper.context:
                     streaming_context = getattr(wrapper.context, "_streaming_context", None)
 
+                # Emit a single ordered marker and persist a minimal record before forwarding child events
+                if streaming_context:
+                    try:
+                        await self._emit_send_message_start(
+                            streaming_context=streaming_context,
+                            sender_agent_name=self.sender_agent.name,
+                            thread_manager=getattr(wrapper.context, "thread_manager", None),
+                        )
+                    except Exception as e:
+                        logger.warning(f"Failed to emit/persist send_message start: {e}")
+
                 # Use streaming and collect the final output
                 final_output_text = ""
                 tool_calls_seen = []
@@ -290,6 +303,30 @@ class SendMessage(FunctionTool):
                 exc_info=True,
             )
             return f"Error: Failed to get response from agent '{recipient_name_for_call}'. Reason: {e}"
+
+    async def _emit_send_message_start(
+        self,
+        *,
+        streaming_context,
+        sender_agent_name: str,
+        thread_manager,
+    ) -> None:
+        """Emit a sentinel for send_message and persist a minimal record to align saved order with stream."""
+        sentinel = SimpleNamespace(
+            item=SimpleNamespace(type="tool_call_item", raw_item=SimpleNamespace(name="send_message"))
+        )
+        sentinel = add_agent_name_to_event(sentinel, sender_agent_name, None)
+        await streaming_context.put_event(sentinel)
+
+        if thread_manager is not None and hasattr(thread_manager, "add_messages"):
+            minimal_record = {
+                "type": "function_call",
+                "agent": sender_agent_name,
+                "callerAgent": None,
+                "function_call": {"name": "send_message"},
+                "timestamp": int(time.time() * 1000),
+            }
+            thread_manager.add_messages([minimal_record])
 
 
 class SendMessageHandoff:
