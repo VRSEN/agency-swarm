@@ -4,16 +4,13 @@ import pytest
 from agents.lifecycle import RunHooks
 
 from agency_swarm import Agent
-from agency_swarm.thread import ThreadManager
 
 # --- Streaming Tests ---
 
 
 @pytest.mark.asyncio
-async def test_get_response_stream_basic(tmp_path):
+async def test_get_response_stream_basic():
     agent = Agent(name="TestAgent", instructions="Test instructions")
-    agent._thread_manager = ThreadManager()
-    agent._agency_instance = type("Agency", (), {"agents": {"TestAgent": agent}, "user_context": {}})()
     message_content = "Stream this"
 
     async def dummy_stream():
@@ -37,10 +34,8 @@ async def test_get_response_stream_basic(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_get_response_stream_final_result_processing(tmp_path):
+async def test_get_response_stream_final_result_processing():
     agent = Agent(name="TestAgent", instructions="Test instructions")
-    agent._thread_manager = ThreadManager()
-    agent._agency_instance = type("Agency", (), {"agents": {"TestAgent": agent}, "user_context": {}})()
     final_content = {"final_key": "final_value"}
 
     async def dummy_stream():
