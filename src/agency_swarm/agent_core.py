@@ -92,6 +92,7 @@ class Agent(BaseAgent[MasterContext]):
                                                If None, uses the default SendMessage class.
         include_search_results (bool): Whether to include search results in FileSearchTool output for
                                       citation extraction. Defaults to False for backward compatibility.
+        instructions (str | None): Path to a file containing instructions for the agent or a string of instructions.
         _associated_vector_store_id (str | None): The ID of the OpenAI Vector Store associated via `files_folder`.
         files_folder_path (Path | None): The resolved absolute path for `files_folder`.
         _openai_client (AsyncOpenAI | None): Internal reference to the initialized AsyncOpenAI client instance.
@@ -133,15 +134,31 @@ class Agent(BaseAgent[MasterContext]):
         Initializes file handling based on `files_folder` and the internal subagent dictionary.
 
         Args:
-            **kwargs: Keyword arguments including standard `agents.Agent` parameters
-                      (like `name`, `instructions`, `model`, `tools`, `hooks`, etc.)
-                      and Agency Swarm specific parameters (`files_folder`, `description`,
-                      `output_type`, `load_threads_callback`, `save_threads_callback`).
-                      Deprecated parameters are handled with warnings.
-
-        Raises:
-            ValueError: If the required 'name' parameter is not provided.
-            TypeError: If the 'tools' parameter is provided but is not a list.
+            name (str): The name of the agent. Required parameter.
+            instructions (str | Path | None): Path to a file containing instructions for the agent
+                                            or a string of instructions. Optional.
+            description (str | None): A description of the agent's role or purpose, used when
+                                    generating dynamic `send_message` tools for other agents.
+            model (str | None): The model to use for the agent (e.g., "gpt-4o"). Optional.
+            model_settings (ModelSettings | None): Model configuration settings. Optional.
+            tools (list[Tool] | None): List of Tool instances for the agent. Defaults to empty list.
+            hooks (RunHooks | None): Hooks for customizing agent execution. Optional.
+            output_guardrails (list[OutputGuardrail] | None): Output validation rules. Optional.
+            mcp_servers (list[MCPServer] | None): Model Context Protocol servers. Optional.
+            files_folder (str | Path | None): Path to a folder containing files to be attached to the agent.
+            tools_folder (str | Path | None): Path to a directory containing tool definitions.
+            schemas_folder (str | Path | list[str | Path] | None): Path(s) to directories containing
+                                                                 OpenAPI schema files for automatic tool generation.
+            api_headers (dict[str, str] | None): Headers for OpenAPI schema-generated tools. Must follow the format:
+                                           {"schema_filename.json": {"header_name": "header_value"}}.
+                                           Defaults to empty dict.
+            api_params (dict[str, Any] | None): Parameters for OpenAPI schema-generated tools. Must follow the format:
+                                              {"schema_filename.json": {"param_name": "param_value"}}.
+                                              Defaults to empty dict.
+            output_type (type[Any] | None): The type of the agent's final output.
+            send_message_tool_class (type | None): Custom SendMessage tool class to use for inter-agent communication.
+            include_search_results (bool): Whether to include search results in FileSearchTool
+                                         output for citation extraction. Defaults to False.
         """
         # Handle deprecated parameters
         handle_deprecated_parameters(kwargs)

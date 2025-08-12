@@ -600,28 +600,20 @@ class AgentFileManager:
         if not self.agent.instructions:
             return
 
-        # If it looks like a file path, try to load it
-        if isinstance(self.agent.instructions, str) and (
-            self.agent.instructions.endswith((".md", ".txt"))
-            or self.agent.instructions.startswith(("./", "../"))
-            or "/" in self.agent.instructions
-        ):
-            # Try class-relative path first
-            class_instructions_path = os.path.normpath(
-                os.path.join(self.get_class_folder_path(), self.agent.instructions)
-            )
-            if os.path.isfile(class_instructions_path):
-                with open(class_instructions_path) as f:
-                    self.agent.instructions = f.read()
-            elif os.path.isfile(self.agent.instructions):
-                # Try as absolute or CWD-relative path
-                with open(self.agent.instructions) as f:
-                    self.agent.instructions = f.read()
-            else:
-                raise FileNotFoundError(
-                    f"Instructions file not found: '{self.agent.instructions}'. "
-                    f"Searched in: '{class_instructions_path}' and '{self.agent.instructions}'"
-                )
+        # Try class-relative path first
+        class_instructions_path = os.path.normpath(
+            os.path.join(self.get_class_folder_path(), self.agent.instructions)
+        )
+        if os.path.isfile(class_instructions_path):
+            with open(class_instructions_path) as f:
+                self.agent.instructions = f.read()
+        elif os.path.isfile(self.agent.instructions):
+            # Try as absolute or CWD-relative path
+            with open(self.agent.instructions) as f:
+                self.agent.instructions = f.read()
+        else:
+            # Keep original instructions if it's not a file path
+            return
 
     def get_class_folder_path(self):
         """Get the directory where the agent was instantiated for relative path resolution."""
