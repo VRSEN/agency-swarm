@@ -168,7 +168,7 @@ async def get_logs_endpoint_impl(log_id: str, logs_dir: str = "activity-logs"):
             )
 
         log_entries = []
-        with open(log_file, "r", encoding="utf-8") as f:
+        with open(log_file, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line:

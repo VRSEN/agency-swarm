@@ -1,7 +1,6 @@
 import inspect
 import logging
 import os
-import sys
 from collections.abc import AsyncGenerator, Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -93,17 +92,17 @@ class Agent(BaseAgent[MasterContext]):
                                                If None, uses the default SendMessage class.
         include_search_results (bool): Whether to include search results in FileSearchTool output for
                                       citation extraction. Defaults to False for backward compatibility.
-        _thread_manager (ThreadManager | None): Internal reference to the agency's `ThreadManager`.
-                                                Set by the parent `Agency`.
-        _agency_instance (Any | None): Internal reference to the parent `Agency` instance. Set by the parent `Agency`.
         _associated_vector_store_id (str | None): The ID of the OpenAI Vector Store associated via `files_folder`.
         files_folder_path (Path | None): The resolved absolute path for `files_folder`.
-        _subagents (dict[str, "Agent"]): Dictionary mapping names of registered subagents to their instances.
         _openai_client (AsyncOpenAI | None): Internal reference to the initialized AsyncOpenAI client instance.
         _openai_client_sync (OpenAI | None): Internal reference to the initialized sync OpenAI client instance.
         file_manager (AgentFileManager | None): File management utility for handling file uploads and vector stores.
-        _load_threads_callback (Callable[[], dict[str, Any]] | None): Callback to load all thread data.
-        _save_threads_callback (Callable[[dict[str, Any]], None] | None): Callback to save all threads data.
+        attachment_manager (AttachmentManager | None): Helper for managing message attachments.
+
+    Note:
+        Agents are stateless. Agency-specific resources like thread managers,
+        subagent mappings and shared instructions are provided at runtime via
+        :class:`AgencyContext` from the owning :class:`Agency`.
     """
 
     # --- Agency Swarm Specific Parameters ---
