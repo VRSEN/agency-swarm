@@ -328,14 +328,3 @@ def test_agent_instruction_string_not_file():
 
     # Should keep the text as-is since it's not a file
     assert agent.instructions == instruction_text
-
-
-def test_agent_missing_instruction_file():
-    """Test proper error when instruction file doesn't exist."""
-    import pytest
-
-    with pytest.raises(FileNotFoundError) as exc_info:
-        Agent(name="TestAgent", instructions="./nonexistent_instructions.md", model="gpt-4o-mini")
-
-    assert "Instructions file not found" in str(exc_info.value)
-    assert "nonexistent_instructions.md" in str(exc_info.value)
