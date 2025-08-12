@@ -255,13 +255,3 @@ Remember: **Verify with tests. Trust evidence.**
 
 ## Search Discipline (MANDATORY)
 - After any change, perform aggressive codebase‑wide searches for all related concepts and remove leftovers or outdated patterns.
-
-## Review Checklist
-Before submitting changes, confirm:
-
-- Requirements here are followed
-- No unrelated edits or dead code
-- Docs and docstrings updated
-- Existing behavior preserved
-- Tests are meaningful, non-duplicative and cover the change (~90%)
-- All tests and provided examples run cleanly
