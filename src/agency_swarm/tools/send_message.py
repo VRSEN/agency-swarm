@@ -225,6 +225,7 @@ class SendMessage(FunctionTool):
                             streaming_context=streaming_context,
                             sender_agent_name=self.sender_agent.name,
                             thread_manager=getattr(wrapper.context, "thread_manager", None),
+                            arguments_json=arguments_json_string,
                         )
                     except Exception as e:
                         logger.warning(f"Failed to emit/persist send_message start: {e}")
@@ -310,11 +311,22 @@ class SendMessage(FunctionTool):
         streaming_context,
         sender_agent_name: str,
         thread_manager,
+        arguments_json: str | None = None,
     ) -> None:
         """Emit a sentinel for send_message and persist a minimal record to align saved order with stream."""
-        sentinel = SimpleNamespace(
-            item=SimpleNamespace(type="tool_call_item", raw_item=SimpleNamespace(name="send_message"))
+        import uuid
+
+        # Create a raw_item that matches the SDK ResponseFunctionToolCall structure
+        raw_item = SimpleNamespace(
+            name="send_message",
+            arguments=arguments_json or "",
+            call_id=f"call_{uuid.uuid4().hex[:20]}",  # Generate unique call_id
+            type="function_call",
+            id=f"fc_{uuid.uuid4().hex}",  # Generate unique id
+            status="in_progress",  # Start as in_progress like the SDK does
         )
+
+        sentinel = SimpleNamespace(item=SimpleNamespace(type="tool_call_item", raw_item=raw_item))
         sentinel = add_agent_name_to_event(sentinel, sender_agent_name, None)
         await streaming_context.put_event(sentinel)
 
@@ -323,7 +335,13 @@ class SendMessage(FunctionTool):
                 "type": "function_call",
                 "agent": sender_agent_name,
                 "callerAgent": None,
-                "function_call": {"name": "send_message"},
+                "function_call": {
+                    "name": "send_message",
+                    "arguments": arguments_json or "",
+                },
+                "call_id": raw_item.call_id,
+                "id": raw_item.id,
+                "status": raw_item.status,
                 "timestamp": int(time.time() * 1000),
             }
             thread_manager.add_messages([minimal_record])
