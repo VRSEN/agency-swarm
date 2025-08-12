@@ -101,6 +101,7 @@ async def test_get_response_stream_agent_to_agent_communication(
     mock_runner_run_streamed_patch, minimal_agent, mock_thread_manager
 ):
     """Test that get_response_stream works correctly for agent-to-agent communication."""
+    from agency_swarm.agent_core import AgencyContext
 
     async def mock_stream_wrapper():
         yield {"event": "text", "data": "Hello"}
@@ -112,8 +113,24 @@ async def test_get_response_stream_agent_to_agent_communication(
 
     mock_runner_run_streamed_patch.return_value = MockStreamedResult()
 
+    # Create agency context for agent-to-agent communication
+    mock_agency = MagicMock()
+    mock_agency.agents = {"SomeAgent": MagicMock(name="SomeAgent")}
+    mock_agency.user_context = {}
+
+    agency_context = AgencyContext(
+        agency_instance=mock_agency,
+        thread_manager=mock_thread_manager,
+        subagents={},
+        load_threads_callback=None,
+        save_threads_callback=None,
+        shared_instructions=None,
+    )
+
     events = []
-    async for event in minimal_agent.get_response_stream("Test message", sender_name="SomeAgent"):
+    async for event in minimal_agent.get_response_stream(
+        "Test message", sender_name="SomeAgent", agency_context=agency_context
+    ):
         events.append(event)
 
     assert len(events) == 2

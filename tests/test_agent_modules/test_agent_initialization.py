@@ -25,11 +25,8 @@ def test_agent_initialization_minimal():
     assert agent.name == "Agent1"
     assert agent.instructions == "Be helpful"
     assert agent.tools == []
-    assert agent._subagents == {}
     assert agent.files_folder is None
-    assert not hasattr(agent, "response_validator")  # removed completely
-    assert agent._thread_manager is None
-    assert agent._agency_instance is None
+    assert not hasattr(agent, "response_validator")
     assert agent.output_type is None
 
 
@@ -193,105 +190,6 @@ def test_agent_repr():
     repr_str = repr(agent3)
     assert "name='TaskAgent'" in repr_str
     assert "desc='Handles tasks'" in repr_str
-
-
-def test_agent_initialization_with_persistence_callbacks():
-    """Test Agent initialization with persistence callbacks."""
-
-    def mock_load_callback(thread_id: str):
-        return {"items": [], "metadata": {}}
-
-    def mock_save_callback(threads_data: dict):
-        pass
-
-    agent = Agent(
-        name="PersistentAgent",
-        instructions="Agent with persistence",
-        load_threads_callback=mock_load_callback,
-        save_threads_callback=mock_save_callback,
-    )
-
-    assert agent.name == "PersistentAgent"
-    assert agent._load_threads_callback == mock_load_callback
-    assert agent._save_threads_callback == mock_save_callback
-    # ThreadManager should not be created until _ensure_thread_manager is called
-    assert agent._thread_manager is None
-
-
-def test_agent_set_persistence_callbacks():
-    """Test _set_persistence_callbacks method."""
-
-    def mock_load_callback(thread_id: str):
-        return {"items": [], "metadata": {}}
-
-    def mock_save_callback(threads_data: dict):
-        pass
-
-    agent = Agent(name="TestAgent", instructions="Test")
-
-    # Initially no callbacks
-    assert agent._load_threads_callback is None
-    assert agent._save_threads_callback is None
-    assert agent._thread_manager is None
-
-    # Set callbacks
-    agent._set_persistence_callbacks(
-        load_threads_callback=mock_load_callback,
-        save_threads_callback=mock_save_callback,
-    )
-
-    assert agent._load_threads_callback == mock_load_callback
-    assert agent._save_threads_callback == mock_save_callback
-    # ThreadManager should be created with callbacks
-    assert agent._thread_manager is not None
-    assert agent._thread_manager._load_threads_callback == mock_load_callback
-    assert agent._thread_manager._save_threads_callback == mock_save_callback
-
-
-def test_agent_ensure_thread_manager():
-    """Test _ensure_thread_manager method."""
-
-    def mock_load_callback(thread_id: str):
-        return {"items": [], "metadata": {}}
-
-    def mock_save_callback(threads_data: dict):
-        pass
-
-    agent = Agent(
-        name="TestAgent",
-        instructions="Test",
-        load_threads_callback=mock_load_callback,
-        save_threads_callback=mock_save_callback,
-    )
-
-    # Initially no ThreadManager
-    assert agent._thread_manager is None
-
-    # Call _ensure_thread_manager
-    agent._ensure_thread_manager()
-
-    # ThreadManager should be created with callbacks
-    assert agent._thread_manager is not None
-    assert agent._thread_manager._load_threads_callback == mock_load_callback
-    assert agent._thread_manager._save_threads_callback == mock_save_callback
-
-
-def test_agent_ensure_thread_manager_without_callbacks():
-    """Test _ensure_thread_manager method without callbacks."""
-    agent = Agent(name="TestAgent", instructions="Test")
-
-    # Initially no ThreadManager or callbacks
-    assert agent._thread_manager is None
-    assert agent._load_threads_callback is None
-    assert agent._save_threads_callback is None
-
-    # Call _ensure_thread_manager
-    agent._ensure_thread_manager()
-
-    # ThreadManager should be created without callbacks
-    assert agent._thread_manager is not None
-    assert agent._thread_manager._load_threads_callback is None
-    assert agent._thread_manager._save_threads_callback is None
 
 
 # --- Instruction File Loading Tests ---

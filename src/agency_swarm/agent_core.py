@@ -3,6 +3,7 @@ import logging
 import os
 import sys
 from collections.abc import AsyncGenerator, Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TypeVar
 
@@ -15,7 +16,6 @@ from agency_swarm.agent import (
     handle_deprecated_parameters,
     load_tools_from_folder,
     parse_schemas,
-    register_subagent,
     separate_kwargs,
     setup_file_manager,
     validate_hosted_tools,
@@ -53,6 +53,18 @@ AGENT_PARAMS = {
 MESSAGE_PARAM = "message"
 
 T = TypeVar("T", bound="Agent")
+
+
+@dataclass
+class AgencyContext:
+    """Agency-specific context for an agent to enable multi-agency support."""
+
+    agency_instance: Any
+    thread_manager: "ThreadManager"
+    subagents: dict[str, "Agent"]
+    load_threads_callback: Callable[[], dict[str, Any]] | None = None
+    save_threads_callback: Callable[[dict[str, Any]], None] | None = None
+    shared_instructions: str | None = None
 
 
 class Agent(BaseAgent[MasterContext]):
@@ -104,17 +116,12 @@ class Agent(BaseAgent[MasterContext]):
     include_search_results: bool = False
 
     # --- Internal State ---
-    _thread_manager: ThreadManager | None = None
-    _agency_instance: Any | None = None  # Holds reference to parent Agency
     _associated_vector_store_id: str | None = None
     files_folder_path: Path | None = None
-    _subagents: dict[str, "Agent"]
     _openai_client: AsyncOpenAI | None = None
     _openai_client_sync: OpenAI | None = None
     file_manager: AgentFileManager | None = None
     attachment_manager: AttachmentManager | None = None
-    _load_threads_callback: Callable[[], dict[str, Any]] | None = None
-    _save_threads_callback: Callable[[dict[str, Any]], None] | None = None
 
     # --- SDK Agent Compatibility ---
     # Re-declare attributes from BaseAgent for clarity and potential overrides
@@ -189,14 +196,9 @@ class Agent(BaseAgent[MasterContext]):
         self.send_message_tool_class = current_agent_params.get("send_message_tool_class")
         self.include_search_results = current_agent_params.get("include_search_results", False)
 
-        # Persistence callbacks
-        self._load_threads_callback = current_agent_params.get("load_threads_callback")
-        self._save_threads_callback = current_agent_params.get("save_threads_callback")
-
         # Internal state
         self._openai_client = None
         self._openai_client_sync = None
-        self._subagents = {}
 
         # Initialize execution handler
         self._execution = Execution(self)
@@ -268,31 +270,13 @@ class Agent(BaseAgent[MasterContext]):
         """Parse OpenAPI schemas from the schemas folder and create tools."""
         parse_schemas(self)
 
-    # --- Subagent Management ---
-    def register_subagent(self, recipient_agent: "Agent") -> None:
-        """
-        Registers another agent as a subagent that this agent can communicate with.
-
-        This method stores a reference to the recipient agent and either creates
-        or updates a unified `send_message` tool that can send messages to any
-        registered recipient. This allows the agent to call any registered recipient
-        agent during a run using the standard tool invocation mechanism.
-
-        Args:
-            recipient_agent (Agent): The `Agent` instance to register as a recipient.
-
-        Raises:
-            TypeError: If `recipient_agent` is not a valid `Agent` instance or lacks a name.
-            ValueError: If attempting to register the agent itself as a subagent.
-        """
-        register_subagent(self, recipient_agent)
-
     # --- File Handling ---
     def upload_file(self, file_path: str, include_in_vector_store: bool = True) -> str:
         """Upload a file using the agent's file manager."""
         return self.file_manager.upload_file(file_path, include_in_vector_store)
 
-    # --- Core Execution Methods ---
+        # --- Core Execution Methods ---
+
     async def get_response(
         self,
         message: str | list[dict[str, Any]],
@@ -301,8 +285,9 @@ class Agent(BaseAgent[MasterContext]):
         hooks_override: RunHooks | None = None,
         run_config_override: RunConfig | None = None,
         message_files: list[str] | None = None,  # Backward compatibility
-        file_ids: list[str] | None = None,  # New parameter
+        file_ids: list[str] | None = None,
         additional_instructions: str | None = None,
+        agency_context: AgencyContext | None = None,  # Context from agency, or None for standalone
         **kwargs: Any,
     ) -> RunResult:
         """
@@ -317,16 +302,20 @@ class Agent(BaseAgent[MasterContext]):
             sender_name: Name of the sending agent (None for user interactions)
             context_override: Optional context data to override default MasterContext values
             hooks_override: Optional hooks to override default agent hooks
-            run_config: Optional run configuration settings
+            run_config_override: Optional run configuration settings
             message_files: DEPRECATED: Use file_ids instead. File IDs to attach to the message
             file_ids: List of OpenAI file IDs to attach to the message
             additional_instructions: Additional instructions to be appended to the agent's
                                     instructions for this run only
+            agency_context: AgencyContext for this execution (provided by Agency, or None for standalone use)
             **kwargs: Additional keyword arguments including max_turns
 
         Returns:
             RunResult: The complete execution result
         """
+        # If no agency context provided, create a minimal one for standalone usage
+        if agency_context is None:
+            agency_context = self._create_minimal_context()
 
         return await self._execution.get_response(
             message=message,
@@ -337,6 +326,7 @@ class Agent(BaseAgent[MasterContext]):
             message_files=message_files,
             file_ids=file_ids,
             additional_instructions=additional_instructions,
+            agency_context=agency_context,
             **kwargs,
         )
 
@@ -350,6 +340,7 @@ class Agent(BaseAgent[MasterContext]):
         message_files: list[str] | None = None,
         file_ids: list[str] | None = None,
         additional_instructions: str | None = None,
+        agency_context: AgencyContext | None = None,  # Context from agency, or None for standalone
         **kwargs,
     ) -> AsyncGenerator[Any]:
         """Runs the agent's turn in streaming mode.
@@ -362,11 +353,17 @@ class Agent(BaseAgent[MasterContext]):
             run_config_override: Optional run configuration
             additional_instructions: Additional instructions to be appended to the agent's
                                     instructions for this run only
+            message_files: DEPRECATED: Use file_ids instead. File IDs to attach to the message
+            file_ids: List of OpenAI file IDs to attach to the message
+            agency_context: AgencyContext for this execution (provided by Agency, or None for standalone use)
             **kwargs: Additional keyword arguments
 
         Yields:
             Stream events from the agent's execution
         """
+        # If no agency context provided, create a minimal one for standalone usage
+        if agency_context is None:
+            agency_context = self._create_minimal_context()
 
         async for event in self._execution.get_response_stream(
             message=message,
@@ -377,6 +374,7 @@ class Agent(BaseAgent[MasterContext]):
             message_files=message_files,
             file_ids=file_ids,
             additional_instructions=additional_instructions,
+            agency_context=agency_context,
             **kwargs,
         ):
             yield event
@@ -384,73 +382,33 @@ class Agent(BaseAgent[MasterContext]):
     # --- Helper Methods ---
     # _validate_response removed - use output_guardrails instead
 
-    # --- Agency Configuration Methods --- (Called by Agency)
-    def _set_thread_manager(self, manager: ThreadManager):
-        """Allows the Agency to inject the ThreadManager instance."""
-        self._thread_manager = manager
+    def _create_minimal_context(self) -> AgencyContext:
+        """Create a minimal context for standalone agent usage (no agency)."""
+        from .thread import ThreadManager
 
-    def _set_agency_instance(self, agency: Any):
-        """Allows the Agency to inject a reference to itself and its agent map.
+        return AgencyContext(
+            agency_instance=None,
+            thread_manager=ThreadManager(),
+            subagents={},
+            load_threads_callback=None,
+            save_threads_callback=None,
+            shared_instructions=None,
+        )
 
-        Prevents agent instance sharing between agencies to avoid callback and ThreadManager conflicts.
+    def register_subagent(self, recipient_agent: "Agent") -> None:
         """
-        if not hasattr(agency, "agents"):
-            raise TypeError("Provided agency instance must have an 'agents' dictionary.")
+        Registers another agent as a subagent that this agent can communicate with.
 
-        # Check if agent is already owned by a different agency
-        if hasattr(self, "_agency_instance") and self._agency_instance is not None:
-            if self._agency_instance is not agency:
-                agency_name = getattr(agency, "name", "unnamed")
-                existing_agency_name = getattr(self._agency_instance, "name", "unnamed")
-                raise ValueError(
-                    f"Agent '{self.name}' is already registered in agency '{existing_agency_name}'. "
-                    f"Each agent instance can only belong to one agency to prevent callback conflicts. "
-                    f"To use the same agent logic in multiple agencies, create separate agent instances:\n"
-                    f"  agent1 = Agent(name='{self.name}', instructions='...', ...)\n"
-                    f"  agent2 = Agent(name='{self.name}', instructions='...', ...)\n"
-                    f"Then use agent1 in one agency and agent2 in another."
-                )
-            # Agent is already registered in this agency, allow re-configuration
-            agency_name = getattr(agency, "name", "unnamed")
-            logger.debug(
-                f"Agent '{self.name}' already registered in agency '{agency_name}', skipping duplicate registration."
-            )
-            return
-
-        self._agency_instance = agency
-
-    def _set_persistence_callbacks(
-        self,
-        load_threads_callback: Callable[[], dict[str, Any]] | None = None,
-        save_threads_callback: Callable[[dict[str, Any]], None] | None = None,
-    ):
-        """Set persistence callbacks for the agent's thread manager.
-
-        This method allows setting callbacks after agent initialization and will
-        create a new ThreadManager with the provided callbacks if none exists.
+        This method delegates to the standalone register_subagent function for tool creation.
 
         Args:
-            load_threads_callback: Callback to load all thread data
-            save_threads_callback: Callback to save all threads data
+            recipient_agent (Agent): The `Agent` instance to register as a recipient.
         """
-        self._load_threads_callback = load_threads_callback
-        self._save_threads_callback = save_threads_callback
+        # Import to avoid circular dependency
+        from .agent.subagents import register_subagent as register_subagent_func
 
-        # Create ThreadManager with callbacks if it doesn't exist
-        if self._thread_manager is None:
-            self._thread_manager = ThreadManager(
-                load_threads_callback=load_threads_callback, save_threads_callback=save_threads_callback
-            )
-
-    def _ensure_thread_manager(self):
-        """Ensures the agent has a ThreadManager, creating one if necessary.
-
-        This is called when the agent is used directly without an Agency.
-        """
-        if self._thread_manager is None:
-            self._thread_manager = ThreadManager(
-                load_threads_callback=self._load_threads_callback, save_threads_callback=self._save_threads_callback
-            )
+        # Use the existing register_subagent function for tool creation
+        register_subagent_func(self, recipient_agent)
 
     def _get_caller_directory(self) -> str:
         """Get the directory where this agent is being instantiated (caller's directory)."""
@@ -462,7 +420,7 @@ class Agent(BaseAgent[MasterContext]):
             frame = inspect.currentframe()
             while frame is not None:
                 frame_module = inspect.getmodule(frame)
-                if frame_module and hasattr(frame_module, '__file__') and frame_module.__file__:
+                if frame_module and hasattr(frame_module, "__file__") and frame_module.__file__:
                     module_path = os.path.dirname(os.path.abspath(frame_module.__file__))
                     # Check if module is outside the agency_swarm package directory
                     if not module_path.startswith(agency_swarm_path):

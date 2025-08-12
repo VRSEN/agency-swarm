@@ -29,6 +29,7 @@ class MasterContext:
     agents: dict[str, "Agent"]
     user_context: dict[str, Any] = field(default_factory=dict)
     current_agent_name: str | None = None  # Name of the agent currently executing
+    shared_instructions: str | None = None  # Shared instructions from the agency
 
     def __post_init__(self):
         """Basic validation after initialization."""

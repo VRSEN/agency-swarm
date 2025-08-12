@@ -34,7 +34,7 @@ from agency_swarm.streaming_utils import add_agent_name_to_event
 from agency_swarm.utils.citation_extractor import extract_direct_file_annotations
 
 if TYPE_CHECKING:
-    from agency_swarm.agent_core import Agent
+    from agency_swarm.agent_core import AgencyContext, Agent
 
 
 class Execution:
@@ -43,13 +43,28 @@ class Execution:
     def __init__(self, agent: "Agent"):
         self.agent = agent
 
-    def _validate_agency_for_delegation(self, sender_name: str | None) -> None:
-        """Validate that agency instance exists if delegation is needed."""
-        # If this is agent-to-agent communication, we need an agency instance
+    def _validate_agency_for_delegation(
+        self, sender_name: str | None, agency_context: "AgencyContext | None" = None
+    ) -> None:
+        """Validate that agency context exists if delegation is needed."""
+        # If this is agent-to-agent communication, we need an agency context with a valid agency
         if sender_name is not None:
-            if not self.agent._agency_instance or not hasattr(self.agent._agency_instance, "agents"):
+            if not agency_context:
                 raise RuntimeError(
-                    f"Agent '{self.agent.name}' missing Agency instance for agent-to-agent communication."
+                    f"Agent '{self.agent.name}' missing AgencyContext for agent-to-agent communication. "
+                    f"Agent-to-agent communication requires an Agency to manage the context."
+                )
+
+            agency_instance = agency_context.agency_instance
+            if not agency_instance:
+                raise RuntimeError(
+                    f"Agent '{self.agent.name}' received agent-to-agent message from '{sender_name}' but is running "
+                    f"in standalone mode. Agent-to-agent communication requires agents to be managed by an Agency."
+                )
+
+            if not hasattr(agency_instance, "agents"):
+                raise RuntimeError(
+                    f"Agent '{self.agent.name}' has invalid Agency instance for agent-to-agent communication."
                 )
 
     async def _prepare_and_attach_files(
@@ -98,9 +113,18 @@ class Execution:
                 logger.warning(f"Cannot attach files: No messages to attach to for agent {self.agent.name}")
 
     def _prepare_history_for_runner(
-        self, processed_current_message_items: list[TResponseInputItem], sender_name: str | None
+        self,
+        processed_current_message_items: list[TResponseInputItem],
+        sender_name: str | None,
+        agency_context: "AgencyContext | None" = None,
     ) -> list[TResponseInputItem]:
         """Prepare conversation history for the runner."""
+        # Get thread manager from context (required)
+        if not agency_context or not agency_context.thread_manager:
+            raise RuntimeError(f"Agent '{self.agent.name}' missing ThreadManager in agency context.")
+
+        thread_manager = agency_context.thread_manager
+
         # Add agency metadata to incoming messages
         messages_to_save: list[TResponseInputItem] = []
         for msg in processed_current_message_items:
@@ -108,11 +132,11 @@ class Execution:
             messages_to_save.append(formatted_msg)
 
         # Save messages to flat storage
-        self.agent._thread_manager.add_messages(messages_to_save)
+        thread_manager.add_messages(messages_to_save)
         logger.debug(f"Added {len(messages_to_save)} messages to storage.")
 
         # Get relevant conversation history for this agent pair
-        full_history = self.agent._thread_manager.get_conversation_history(self.agent.name, sender_name)
+        full_history = thread_manager.get_conversation_history(self.agent.name, sender_name)
 
         # Prepare history for runner (sanitize and ensure content safety)
         history_for_runner = MessageFormatter.sanitize_tool_calls_in_history(full_history)
@@ -174,6 +198,7 @@ class Execution:
         message_files: list[str] | None = None,  # Backward compatibility
         file_ids: list[str] | None = None,  # New parameter
         additional_instructions: str | None = None,  # New parameter for v1.x
+        agency_context: "AgencyContext | None" = None,  # New stateless context parameter
         **kwargs: Any,
     ) -> RunResult:
         """
@@ -199,14 +224,8 @@ class Execution:
             RunResult: The complete execution result
         """
         logger.info(f"Agent '{self.agent.name}' starting run.")
-        # Ensure ThreadManager exists (for direct agent usage without Agency)
-        self.agent._ensure_thread_manager()
-
-        if not self.agent._thread_manager:
-            raise RuntimeError(f"Agent '{self.agent.name}' missing ThreadManager.")
-
         # Validate agency instance exists if this is agent-to-agent communication
-        self._validate_agency_for_delegation(sender_name)
+        self._validate_agency_for_delegation(sender_name, agency_context)
 
         # Store original instructions for restoration
         original_instructions = self.agent.instructions
@@ -242,7 +261,9 @@ class Execution:
             await self._prepare_and_attach_files(processed_current_message_items, file_ids, message_files, kwargs)
 
             # Prepare history for runner
-            history_for_runner = self._prepare_history_for_runner(processed_current_message_items, sender_name)
+            history_for_runner = self._prepare_history_for_runner(
+                processed_current_message_items, sender_name, agency_context
+            )
             logger.debug(f"Running agent '{self.agent.name}' with history length {len(history_for_runner)}:")
             for i, m in enumerate(history_for_runner):
                 content_preview = str(m.get("content", ""))[:70] if m.get("content") else ""
@@ -256,6 +277,9 @@ class Execution:
                 logger.debug(
                     f"Calling Runner.run for agent '{self.agent.name}' with {len(history_for_runner)} history items."
                 )
+                # Prepare context and store reference for potential sync-back
+                master_context_for_run = self._prepare_master_context(context_override, agency_context)
+
                 # Ensure MCP servers connect/cleanup within the same task using a context stack
                 async with AsyncExitStack() as mcp_stack:
                     for server in self.agent.mcp_servers:
@@ -264,7 +288,7 @@ class Execution:
                     run_result: RunResult = await Runner.run(
                         starting_agent=self.agent,
                         input=history_for_runner,
-                        context=self._prepare_master_context(context_override),
+                        context=master_context_for_run,
                         hooks=hooks_override or self.agent.hooks,
                         run_config=run_config_override or RunConfig(),
                         max_turns=kwargs.get("max_turns", DEFAULT_MAX_TURNS),
@@ -291,7 +315,7 @@ class Execution:
                 self.agent.attachment_manager.attachments_cleanup()
 
             # Always save response items (both user and agent-to-agent calls)
-            if self.agent._thread_manager and run_result.new_items:
+            if agency_context and agency_context.thread_manager and run_result.new_items:
                 items_to_save: list[TResponseInputItem] = []
                 logger.debug(f"Preparing to save {len(run_result.new_items)} new items from RunResult")
 
@@ -337,8 +361,16 @@ class Execution:
                 filtered_items = MessageFilter.filter_messages(items_to_save)
 
                 # Save filtered items to flat storage
-                self.agent._thread_manager.add_messages(filtered_items)
+                agency_context.thread_manager.add_messages(filtered_items)
                 logger.debug(f"Saved {len(filtered_items)} items to storage (filtered from {len(items_to_save)}).")
+
+            # Sync back context changes if we used a merged context due to override
+            if context_override and agency_context and agency_context.agency_instance:
+                base_user_context = getattr(agency_context.agency_instance, "user_context", {})
+                # Sync back any new keys that weren't part of the original override
+                for key, value in master_context_for_run.user_context.items():
+                    if key not in context_override:  # Don't sync back override keys
+                        base_user_context[key] = value
 
             return run_result
 
@@ -356,6 +388,7 @@ class Execution:
         message_files: list[str] | None = None,  # Backward compatibility
         file_ids: list[str] | None = None,  # New parameter
         additional_instructions: str | None = None,  # New parameter for v1.x
+        agency_context: "AgencyContext | None" = None,  # New stateless context parameter
         **kwargs: Any,
     ) -> AsyncGenerator[RunItemStreamEvent]:
         """
@@ -391,14 +424,11 @@ class Execution:
             return
 
         logger.info(f"Agent '{self.agent.name}' starting streaming run.")
-        # Ensure ThreadManager exists (for direct agent usage without Agency)
-        self.agent._ensure_thread_manager()
 
-        if not self.agent._thread_manager:
-            raise RuntimeError(f"Agent '{self.agent.name}' missing ThreadManager.")
+        # agency_context is required and contains thread_manager (validated by caller)
 
         # Validate agency instance exists if this is agent-to-agent communication
-        self._validate_agency_for_delegation(sender_name)
+        self._validate_agency_for_delegation(sender_name, agency_context)
 
         # Store original instructions for restoration
         original_instructions = self.agent.instructions
@@ -430,7 +460,9 @@ class Execution:
             await self._prepare_and_attach_files(processed_current_message_items, file_ids, message_files, kwargs)
 
             # Prepare history for runner
-            history_for_runner = self._prepare_history_for_runner(processed_current_message_items, sender_name)
+            history_for_runner = self._prepare_history_for_runner(
+                processed_current_message_items, sender_name, agency_context
+            )
 
             logger.debug(
                 f"Starting streaming run for agent '{self.agent.name}' with {len(history_for_runner)} history items."
@@ -440,12 +472,12 @@ class Execution:
             collected_items: list[RunItem] = []
 
             # Prepare context with streaming indicator
-            master_context = self._prepare_master_context(context_override)
+            master_context_for_run = self._prepare_master_context(context_override, agency_context)
             # Set streaming flag so SendMessage knows to use streaming
-            master_context._is_streaming = True
+            master_context_for_run._is_streaming = True
             # Pass streaming context if available
             if context_override and "_streaming_context" in context_override:
-                master_context._streaming_context = context_override["_streaming_context"]
+                master_context_for_run._streaming_context = context_override["_streaming_context"]
 
             # Open MCP servers in this task and stream events directly
             result = None
@@ -457,7 +489,7 @@ class Execution:
                     result = Runner.run_streamed(
                         starting_agent=self.agent,
                         input=history_for_runner,
-                        context=master_context,
+                        context=master_context_for_run,
                         hooks=hooks_override or self.agent.hooks,
                         run_config=run_config_override or RunConfig(),
                         max_turns=kwargs.get("max_turns", DEFAULT_MAX_TURNS),
@@ -507,7 +539,7 @@ class Execution:
                         event = add_agent_name_to_event(event, current_stream_agent_name, sender_name)
 
                         # Incrementally persist the item to maintain exact stream order in storage
-                        if hasattr(event, "item") and event.item and self.agent._thread_manager:
+                        if hasattr(event, "item") and event.item and agency_context and agency_context.thread_manager:
                             run_item_obj = event.item
                             # Convert to input item (dict) using SDK helper
                             item_dict = self._run_item_to_tresponse_input_item(run_item_obj)
@@ -528,7 +560,7 @@ class Execution:
 
                                 # Filter and save immediately
                                 if not MessageFilter.should_filter(formatted_item):
-                                    self.agent._thread_manager.add_messages([formatted_item])
+                                    agency_context.thread_manager.add_messages([formatted_item])
 
                         yield event
             except Exception as e:
@@ -543,18 +575,26 @@ class Execution:
                     pass
 
             # Save all collected items after streaming completes
-            if self.agent._thread_manager and collected_items:
+            if agency_context and agency_context.thread_manager and collected_items:
                 # Only extract hosted tool results if hosted tools were actually used
                 hosted_tool_outputs = self._extract_hosted_tool_results_if_needed(collected_items)
                 if hosted_tool_outputs:
                     # Filter and save any synthetic hosted tool outputs after stream completion
                     filtered_items = MessageFilter.filter_messages(hosted_tool_outputs)
                     if filtered_items:
-                        self.agent._thread_manager.add_messages(filtered_items)
+                        agency_context.thread_manager.add_messages(filtered_items)
                         logger.debug(
                             "Saved %d hosted tool outputs after stream.",
                             len(filtered_items),
                         )
+
+            # Sync back context changes if we used a merged context due to override
+            if context_override and agency_context and agency_context.agency_instance:
+                base_user_context = getattr(agency_context.agency_instance, "user_context", {})
+                # Sync back any new keys that weren't part of the original override
+                for key, value in master_context_for_run.user_context.items():
+                    if key not in context_override:  # Don't sync back override keys
+                        base_user_context[key] = value
 
         finally:
             # Always restore original instructions
@@ -672,27 +712,34 @@ class Execution:
 
         return synthetic_outputs
 
-    def _prepare_master_context(self, context_override: dict[str, Any] | None) -> MasterContext:
+    def _prepare_master_context(
+        self, context_override: dict[str, Any] | None, agency_context: "AgencyContext | None" = None
+    ) -> MasterContext:
         """Constructs the MasterContext for the current run."""
-        if not self.agent._thread_manager:
-            raise RuntimeError("Cannot prepare context: ThreadManager missing.")
+        if not agency_context or not agency_context.thread_manager:
+            raise RuntimeError("Cannot prepare context: AgencyContext with ThreadManager required.")
+
+        thread_manager = agency_context.thread_manager
+        agency_instance = agency_context.agency_instance
 
         # For standalone agent usage (no agency), create minimal context
-        if not self.agent._agency_instance or not hasattr(self.agent._agency_instance, "agents"):
+        if not agency_instance or not hasattr(agency_instance, "agents"):
             return MasterContext(
-                thread_manager=self.agent._thread_manager,
+                thread_manager=thread_manager,
                 agents={self.agent.name: self.agent},  # Only include self
                 user_context=context_override or {},
                 current_agent_name=self.agent.name,
+                shared_instructions=agency_context.shared_instructions,
             )
 
         # Use reference for persistence, or create merged copy if override provided
-        base_user_context = getattr(self.agent._agency_instance, "user_context", {})
+        base_user_context = getattr(agency_instance, "user_context", {})
         user_context = {**base_user_context, **context_override} if context_override else base_user_context
 
         return MasterContext(
-            thread_manager=self.agent._thread_manager,
-            agents=self.agent._agency_instance.agents,
+            thread_manager=thread_manager,
+            agents=agency_instance.agents,
             user_context=user_context,
             current_agent_name=self.agent.name,
+            shared_instructions=agency_context.shared_instructions,
         )
