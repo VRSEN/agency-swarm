@@ -16,9 +16,7 @@ async def test_agent_structured_response_output_type():
     class GreetingSchema(BaseModel):
         greeting: str = Field(..., description="Greeting text")
         recipient: str = Field(..., description="Who is greeted")
-        num_messages: int = Field(
-            ..., description="Number of messages in your conversation history"
-        )
+        num_messages: int = Field(..., description="Number of messages in your conversation history")
 
     agent = Agent(
         name="SchemaAgent",
@@ -54,9 +52,7 @@ async def test_max_tokens_limits_output_length():
     """
     agent = Agent(
         name="TokenLimitAgent",
-        instructions=(
-            "Respond to the user's request. Keep your answer within the model's limits."
-        ),
+        instructions=("Respond to the user's request. Keep your answer within the model's limits."),
         model_settings=ModelSettings(temperature=0.0, max_tokens=16),
     )
 
@@ -73,8 +69,4 @@ async def test_max_tokens_limits_output_length():
     assert len(text) > 0
     # Heuristic: with max_tokens=16, response should be very short compared to 500 words
     word_count = len(text.split())
-    assert (
-        word_count < 80
-    ), f"Expected a truncated response due to low max_tokens; got ~{word_count} words"
-
-
+    assert word_count < 80, f"Expected a truncated response due to low max_tokens; got ~{word_count} words"

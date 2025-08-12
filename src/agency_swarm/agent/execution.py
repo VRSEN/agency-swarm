@@ -464,9 +464,26 @@ class Execution:
                     )
 
                     current_stream_agent_name = self.agent.name
+                    # Suppress SDK-emitted send_message tool call pair (we inject a sentinel earlier)
+                    suppress_next_send_message_output: bool = False
                     async for event in result.stream_events():
-                        # Collect all new items for saving to thread
+                        # Collect all new items for potential post-processing
                         if hasattr(event, "item") and event.item:
+                            # Check for SDK-emitted send_message tool call and suppress it (and its immediate output)
+                            itm = getattr(event, "item", None)
+                            if itm is not None:
+                                itm_type = getattr(itm, "type", None)
+                                raw = getattr(itm, "raw_item", None)
+                                tool_name = getattr(raw, "name", None) if raw is not None else None
+
+                                if itm_type == "tool_call_item" and tool_name == "send_message":
+                                    suppress_next_send_message_output = True
+                                    continue
+
+                                if itm_type == "tool_call_output_item" and suppress_next_send_message_output:
+                                    suppress_next_send_message_output = False
+                                    continue
+
                             collected_items.append(event.item)
 
                         # Update active agent on handoff events or explicit agent update events
@@ -488,6 +505,31 @@ class Execution:
 
                         # Add agent name and caller to the event
                         event = add_agent_name_to_event(event, current_stream_agent_name, sender_name)
+
+                        # Incrementally persist the item to maintain exact stream order in storage
+                        if hasattr(event, "item") and event.item and self.agent._thread_manager:
+                            run_item_obj = event.item
+                            # Convert to input item (dict) using SDK helper
+                            item_dict = self._run_item_to_tresponse_input_item(run_item_obj)
+                            if item_dict:
+                                # Extract citations for this single message if applicable
+                                if isinstance(run_item_obj, MessageOutputItem):
+                                    single_citation_map = extract_direct_file_annotations(
+                                        [run_item_obj], agent_name=self.agent.name
+                                    )
+                                    self._add_citations_to_message(
+                                        run_item_obj, item_dict, single_citation_map, is_streaming=True
+                                    )
+
+                                # Add agency metadata with the current active agent
+                                formatted_item = MessageFormatter.add_agency_metadata(
+                                    item_dict, agent=current_stream_agent_name, caller_agent=sender_name
+                                )
+
+                                # Filter and save immediately
+                                if not MessageFilter.should_filter(formatted_item):
+                                    self.agent._thread_manager.add_messages([formatted_item])
+
                         yield event
             except Exception as e:
                 logger.exception("Error during streamed run for agent '%s'", self.agent.name)
@@ -502,50 +544,17 @@ class Execution:
 
             # Save all collected items after streaming completes
             if self.agent._thread_manager and collected_items:
-                items_to_save: list[TResponseInputItem] = []
-
                 # Only extract hosted tool results if hosted tools were actually used
                 hosted_tool_outputs = self._extract_hosted_tool_results_if_needed(collected_items)
-
-                # Extract direct file annotations from assistant messages
-                assistant_messages = [item for item in collected_items if isinstance(item, MessageOutputItem)]
-                citations_by_message = (
-                    extract_direct_file_annotations(assistant_messages, agent_name=self.agent.name)
-                    if assistant_messages
-                    else {}
-                )
-
-                current_agent_name = self.agent.name
-                for run_item_obj in collected_items:
-                    item_dict = self._run_item_to_tresponse_input_item(run_item_obj)
-                    if item_dict:
-                        # Add citations if applicable
-                        self._add_citations_to_message(run_item_obj, item_dict, citations_by_message, is_streaming=True)
-
-                        # Add agency metadata to the response items
-                        formatted_item = MessageFormatter.add_agency_metadata(
-                            item_dict, agent=current_agent_name, caller_agent=sender_name
+                if hosted_tool_outputs:
+                    # Filter and save any synthetic hosted tool outputs after stream completion
+                    filtered_items = MessageFilter.filter_messages(hosted_tool_outputs)
+                    if filtered_items:
+                        self.agent._thread_manager.add_messages(filtered_items)
+                        logger.debug(
+                            "Saved %d hosted tool outputs after stream.",
+                            len(filtered_items),
                         )
-                        items_to_save.append(formatted_item)
-
-                        # If this item indicates a handoff, update current agent for subsequent items
-                        if getattr(run_item_obj, "type", None) == "handoff_output_item":
-                            target = self._extract_handoff_target_name(run_item_obj)
-                            if target:
-                                current_agent_name = target
-
-                items_to_save.extend(hosted_tool_outputs)
-
-                # Filter out unwanted message types before saving
-                filtered_items = MessageFilter.filter_messages(items_to_save)
-
-                # Save filtered items to flat storage
-                self.agent._thread_manager.add_messages(filtered_items)
-                logger.debug(
-                    "Saved %d streamed items to storage (filtered from %d).",
-                    len(filtered_items),
-                    len(items_to_save),
-                )
 
         finally:
             # Always restore original instructions
