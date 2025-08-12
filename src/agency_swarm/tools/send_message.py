@@ -14,6 +14,7 @@ from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 from agents import FunctionTool, RunContextWrapper, handoff
+from openai.types.responses import ResponseFunctionToolCall
 
 from ..context import MasterContext
 from ..streaming_utils import add_agent_name_to_event
@@ -316,8 +317,8 @@ class SendMessage(FunctionTool):
         """Emit a sentinel for send_message and persist a minimal record to align saved order with stream."""
         import uuid
 
-        # Create a raw_item that matches the SDK ResponseFunctionToolCall structure
-        raw_item = SimpleNamespace(
+        # Create a proper ResponseFunctionToolCall object that matches the SDK structure
+        raw_item = ResponseFunctionToolCall(
             name="send_message",
             arguments=arguments_json or "",
             call_id=f"call_{uuid.uuid4().hex[:20]}",  # Generate unique call_id
