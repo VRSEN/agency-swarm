@@ -53,6 +53,8 @@ git status --porcelain   # Check ALL files including untracked
 - **ALWAYS ESCALATE FINDINGS TO USER** - When identifying failures or their root causes, IMMEDIATELY report to user with exact explanations. NEVER continue fixing without reporting first.
 - **DEBUG SYSTEMATICALLY** - Read source code (docs lie), trace data flow with logging, test smallest units first
 
+- **ITERATE IN SMALL, FOCUSED CHANGES** - Prefer many small, self-contained edits over large sweeping changes; validate each increment with tests before proceeding.
+
 - After any streaming/order change, perform aggressive codebase-wide searches for related concepts and remove any leftovers or outdated patterns.
 
 #### STEP 3: FULL VALIDATION
@@ -255,3 +257,17 @@ Remember: **Verify with tests. Trust evidence.**
 
 ## Search Discipline (MANDATORY)
 - After any change, perform aggressive codebase‑wide searches for all related concepts and remove leftovers or outdated patterns.
+
+## End-of-Task Review Checklist
+
+Use this checklist at the end of a task (pre-commit review):
+
+- **Aligns with CLAUDE.md (all the content above)**: Changes satisfy all requirements and patterns defined here.
+- **Minimal, focused diffs**: No unrelated edits; no dead code left behind.
+- **Docs updated**: Relevant documentation and docstrings adjusted when behavior, APIs, or usage descriptions change.
+- **No regressions**: Do not break existing functionality.
+- **Sensible tests**: Tests make sense; avoid brittle patterns (e.g., do not `chdir` before a test that verifies relative path support—read all tests carefully).
+- **No duplicate tests**: Update or remove existing tests rather than duplicating coverage.
+- **90%+ of changes are covered by tests**: Integration or unit; or tested manually by the user (requires explicit approval).
+- **All tests pass**: Full suite green (`make ci`, targeted runs as needed).
+- **Examples run cleanly**: Run all examples without errors and inspect their output for correctness.
