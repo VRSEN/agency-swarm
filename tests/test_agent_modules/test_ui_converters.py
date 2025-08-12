@@ -99,16 +99,6 @@ class TestSerialize:
 
 
 class TestAguiAdapter:
-    def test_raw_response_event(self):
-        event = MagicMock()
-        event.type = "raw_response_event"
-        event.data = MagicMock()
-        event.data.type = "response.content.delta"
-
-        result = AguiAdapter.openai_to_agui_events(event, run_id="test")
-        # Test that it handles the event without error
-        assert result is not None or result is None  # Either is fine
-
     def test_exception_handling(self):
         event = MagicMock()
         event.type = "raw_response_event"
@@ -176,28 +166,6 @@ class TestAguiAdapter:
         call_id, tool_name, _ = AguiAdapter._tool_meta(item)
         assert call_id == expected_call_id
         assert tool_name == expected_name
-
-    def test_handle_raw_response_basic(self):
-        """Test the _handle_raw_response method with basic content."""
-        data = MagicMock()
-        data.type = "response.content.delta"
-        data.delta = [MagicMock()]
-        data.delta[0].type = "text"
-        data.delta[0].text = "test content"
-
-        # This should not raise an error
-        result = AguiAdapter._handle_raw_response(data, {})
-        assert result is not None or result is None  # Either is fine
-
-    def test_handle_run_item_stream_basic(self):
-        """Test the _handle_run_item_stream method with basic event."""
-        event = MagicMock()
-        event.item = MagicMock()
-        event.item.type = "message_item"
-
-        # This should not raise an error
-        result = AguiAdapter._handle_run_item_stream(event)
-        assert result is not None or result is None  # Either is fine
 
     @pytest.mark.parametrize(
         "event_type,item_config,expected_type,should_track",
@@ -454,10 +422,10 @@ class TestConsoleEventAdapter:
         event.data.type = "response.output_text.delta"
         event.data.delta = "Hello"
 
-        with patch.object(adapter, "_update_console"):
+        with patch.object(adapter, "_update_console") as mock_update:
             adapter.openai_to_message_output(event, "TestAgent")
-            # This specific path may not call _update_console directly
-            # but should not raise errors
+            # This specific path should not trigger console updates
+            mock_update.assert_not_called()
 
     def test_openai_to_message_output_send_message_detection(self, adapter):
         """Test openai_to_message_output detects send_message pattern."""

@@ -50,35 +50,39 @@ class MessageStore:
             self.add_message(message)
 
     def get_messages(self, agent: str | None = None, caller_agent: str | None = None) -> list[TResponseInputItem]:
-        """Get filtered messages for specific agent pairs.
+        """Get filtered messages for specific agent pairs, sorted by timestamp.
 
         Args:
             agent: Filter by recipient agent name
             caller_agent: Filter by sender agent name
 
         Returns:
-            list[TResponseInputItem]: Filtered list of messages
+            list[TResponseInputItem]: Filtered list of messages sorted chronologically
         """
         if agent is None and caller_agent is None:
-            return self.messages.copy()
+            messages = self.messages.copy()
+        else:
+            filtered = []
+            for msg in self.messages:
+                # Match messages based on agent/callerAgent criteria
+                agent_match = agent is None or msg.get("agent") == agent
+                caller_match = caller_agent is None or msg.get("callerAgent") == caller_agent
 
-        filtered = []
-        for msg in self.messages:
-            # Match messages based on agent/callerAgent criteria
-            agent_match = agent is None or msg.get("agent") == agent
-            caller_match = caller_agent is None or msg.get("callerAgent") == caller_agent
+                if agent_match and caller_match:
+                    filtered.append(msg)
+            messages = filtered
 
-            if agent_match and caller_match:
-                filtered.append(msg)
+        # Sort by timestamp to maintain chronological order
+        messages.sort(key=lambda m: m.get("timestamp", 0))
 
         logger.debug(
-            f"Filtered {len(filtered)} messages for agent='{agent}', callerAgent='{caller_agent}' "
+            f"Filtered {len(messages)} messages for agent='{agent}', callerAgent='{caller_agent}' "
             f"from total {len(self.messages)}"
         )
-        return filtered
+        return messages
 
     def get_conversation_between(self, agent1: str, agent2: str | None) -> list[TResponseInputItem]:
-        """Get all messages exchanged between two specific agents.
+        """Get all messages exchanged between two specific agents, sorted by timestamp.
 
         This includes messages in both directions.
 
@@ -87,7 +91,7 @@ class MessageStore:
             agent2: Second agent name (None represents user)
 
         Returns:
-            list[TResponseInputItem]: Messages between the two agents
+            list[TResponseInputItem]: Messages between the two agents sorted chronologically
         """
         conversation = []
         for msg in self.messages:
@@ -96,6 +100,9 @@ class MessageStore:
                 msg.get("agent") == agent2 and msg.get("callerAgent") == agent1
             ):
                 conversation.append(msg)
+
+        # Sort by timestamp to maintain chronological order
+        conversation.sort(key=lambda m: m.get("timestamp", 0))
 
         return conversation
 
@@ -181,12 +188,14 @@ class ThreadManager:
         return self._store.get_conversation_between(agent, caller_agent)
 
     def get_all_messages(self) -> list[TResponseInputItem]:
-        """Get all messages in the store.
+        """Get all messages in the store, properly ordered.
 
         Returns:
-            list[TResponseInputItem]: All messages
+            list[TResponseInputItem]: All messages in chronological order
         """
-        return self._store.messages.copy()
+        messages = self._store.messages.copy()
+        messages.sort(key=lambda m: m.get("timestamp", 0))
+        return messages
 
     def _save_messages(self) -> None:
         """Save all messages using the callback if configured."""
@@ -250,8 +259,8 @@ class ThreadManager:
 
                 # Add timestamp if missing
                 if "timestamp" not in item:
-                    # Use current time as fallback
-                    item["timestamp"] = int(time.time() * 1000)
+                    # time.time() returns UTC seconds since epoch (timezone-independent)
+                    item["timestamp"] = int(time.time() * 1000)  # milliseconds UTC
 
                 messages.append(item)
 

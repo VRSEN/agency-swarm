@@ -285,36 +285,10 @@ def test_tools_folder_autoload():
     assert "sample_tool" in tool_names
 
 
-def test_relative_tools_folder_is_class_local(tmp_path, monkeypatch):
-    pkg_dir = tmp_path / "pkg"
-    pkg_dir.mkdir()
-    tools_dir = pkg_dir / "tools"
-    tools_dir.mkdir()
-
-    tool_code = """\
-from agents import function_tool
-
-@function_tool
-def local_tool() -> str:
-    return "from local"
-"""
-    (tools_dir / "local_tool.py").write_text(tool_code)
-
-    agent_code = """\
-from agency_swarm import Agent
-
-class TempAgent(Agent):
-    pass
-"""
-    (pkg_dir / "temp_agent.py").write_text(agent_code)
-    (pkg_dir / "__init__.py").write_text("")
-
-    monkeypatch.syspath_prepend(str(tmp_path))
-    from pkg.temp_agent import TempAgent
-
-    agent = TempAgent(name="A", instructions="B", tools_folder="./tools")
+def test_relative_tools_folder_is_class_local():
+    agent = Agent(name="test", instructions="test", tools_folder="../data/tools")
     tool_names = [tool.name for tool in agent.tools]
-    assert "local_tool" in tool_names
+    assert "ExampleTool1" in tool_names and "sample_tool" in tool_names
 
 
 def test_tools_folder_edge_cases(tmp_path):

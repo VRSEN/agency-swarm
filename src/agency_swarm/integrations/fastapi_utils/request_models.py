@@ -46,6 +46,11 @@ class BaseRequest(BaseModel):
     additional_instructions: str = None
 
 
+class LogRequest(BaseModel):
+    """Request model for retrieving logs."""
+    log_id: str = Field(..., description="The log ID to retrieve")
+
+
 def add_agent_validator(model, agent_instances):
     class ModifiedRequest(model):
         @field_validator("recipient_agent")

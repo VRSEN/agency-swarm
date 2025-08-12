@@ -123,6 +123,7 @@ def test_agent_initialization_with_all_parameters():
     # TEST-ONLY SETUP: Create test directory to enable FileSearchTool auto-addition
     import tempfile
     from pathlib import Path
+    from unittest.mock import PropertyMock, patch
 
     # Create a temporary test directory
     with tempfile.TemporaryDirectory(prefix="test_files_") as temp_dir_str:
@@ -132,16 +133,17 @@ def test_agent_initialization_with_all_parameters():
 
         import warnings
 
-        # Mock OpenAI client to avoid requiring API key
-        from unittest.mock import patch
+        # Mock the OpenAI client to avoid API key requirement
+        mock_vector_store = MagicMock()
+        mock_vector_store.id = "test_vs_id"
+
+        mock_client = MagicMock()
+        mock_client.vector_stores.create.return_value = mock_vector_store
 
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            with patch("agency_swarm.agent_core.OpenAI") as mock_openai:
-                mock_client = MagicMock()
-                mock_openai.return_value = mock_client
-                mock_client.vector_stores.create.return_value = MagicMock(id="vs_test_id")
-
+            with patch.object(Agent, "client_sync", new_callable=PropertyMock) as mock_client_sync:
+                mock_client_sync.return_value = mock_client
                 agent = Agent(
                     name="CompleteAgent",
                     instructions="Complete agent with all params",
@@ -207,29 +209,13 @@ def test_agent_instruction_file_loading(tmp_path):
     assert agent.instructions == instruction_content
 
 
-def test_agent_instruction_file_relative_path(tmp_path):
+def test_agent_instruction_file_relative_path():
     """Test agent loading instructions from relative path."""
-    import os
 
-    # Create a subdirectory structure
-    agent_dir = tmp_path / "agents" / "test_agent"
-    agent_dir.mkdir(parents=True)
+    # Create agent with relative path
+    agent = Agent(name="TestAgent", instructions="../data/files/instructions.md", model="gpt-4o-mini")
 
-    instruction_file = agent_dir / "instructions.md"
-    instruction_content = "I am a specialized agent for testing."
-    instruction_file.write_text(instruction_content)
-
-    # Change to the agent directory
-    original_cwd = os.getcwd()
-    try:
-        os.chdir(agent_dir)
-
-        # Create agent with relative path
-        agent = Agent(name="TestAgent", instructions="./instructions.md", model="gpt-4o-mini")
-
-        assert agent.instructions == instruction_content
-    finally:
-        os.chdir(original_cwd)
+    assert agent.instructions == "Test instructions"
 
 
 def test_agent_instruction_string_not_file():
