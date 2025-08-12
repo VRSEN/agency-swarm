@@ -6,7 +6,6 @@ from agents import RunConfig, RunHooks
 from agency_swarm import Agent
 from agency_swarm.agent_core import AgencyContext
 
-
 # --- Core Response Tests ---
 
 
@@ -15,9 +14,9 @@ from agency_swarm.agent_core import AgencyContext
 async def test_get_response_saves_messages(mock_runner_run, minimal_agent, mock_thread_manager):
     """Test that get_response saves messages to the thread manager."""
     mock_runner_run.return_value = MagicMock(new_items=[], final_output="Test response")
-    
+
     result = await minimal_agent.get_response("Test message")
-        
+
     assert result is not None
     # Verify that messages were added to the thread manager
     mock_thread_manager.add_messages.assert_called()
@@ -34,21 +33,21 @@ async def test_get_response_saves_messages(mock_runner_run, minimal_agent, mock_
 @patch("agents.Runner.run", new_callable=AsyncMock)
 async def test_get_response_agent_to_agent_communication(mock_runner_run, minimal_agent, mock_thread_manager):
     """Test that get_response works correctly for agent-to-agent communication."""
-    
+
     mock_runner_run.return_value = MagicMock(new_items=[], final_output="Test response")
 
     # Mock the agency instance and context for agent-to-agent communication
     mock_agency = MagicMock()
     mock_agency.agents = {"SomeAgent": MagicMock(name="SomeAgent")}
     mock_agency.user_context = {}
-    
+
     agency_context = AgencyContext(
         agency_instance=mock_agency,
         thread_manager=mock_thread_manager,
         subagents={},
         load_threads_callback=None,
         save_threads_callback=None,
-        shared_instructions=None
+        shared_instructions=None,
     )
 
     result = await minimal_agent.get_response("Test message", sender_name="SomeAgent", agency_context=agency_context)

@@ -13,7 +13,7 @@ from agents import (
     RunResult,
 )
 
-from agency_swarm.agent_core import Agent, AgencyContext
+from agency_swarm.agent_core import AgencyContext, Agent
 from agency_swarm.hooks import PersistenceHooks
 from agency_swarm.streaming_utils import event_stream_merger
 from agency_swarm.thread import ThreadLoadCallback, ThreadManager, ThreadSaveCallback
@@ -64,7 +64,7 @@ class Agency:
     shared_instructions: str | None
     user_context: dict[str, Any]  # Shared user context for MasterContext
     send_message_tool_class: type | None  # Custom SendMessage tool class for all agents
-    
+
     # Context Factory Pattern - Agency owns agent contexts
     _agent_contexts: dict[str, AgencyContext]  # agent_name -> context mapping
 
@@ -255,7 +255,7 @@ class Agency:
         self.agents = {}
         self.entry_points = []  # Will be populated by _register_all_agents_and_set_entry_points
         self._register_all_agents_and_set_entry_points(_derived_entry_points, _derived_communication_flows)
-        
+
         # Initialize agent contexts using Context Factory Pattern (after agents are registered)
         self._agent_contexts = {}
         self._initialize_agent_contexts(final_load_threads_callback, final_save_threads_callback)
@@ -271,7 +271,7 @@ class Agency:
         # --- Configure Agents & Communication ---
         # _configure_agents uses _derived_communication_flows determined above
         self._configure_agents(_derived_communication_flows)
-        
+
         # Update agent contexts with communication flows
         self._update_agent_contexts_with_communication_flows(_derived_communication_flows)
 
@@ -401,13 +401,8 @@ class Agency:
             if receiver_name not in communication_map[sender_name]:
                 communication_map[sender_name].append(receiver_name)
 
-        # Extract persistence callbacks from the thread manager to delegate to agents
-        thread_manager_load_callback = getattr(self.thread_manager, "_load_threads_callback", None)
-        thread_manager_save_callback = getattr(self.thread_manager, "_save_threads_callback", None)
-
         # Configure each agent
         for agent_name, agent_instance in self.agents.items():
-
             # Propagate send_message_tool_class if agent doesn't have one set
             if self.send_message_tool_class and not agent_instance.send_message_tool_class:
                 agent_instance.send_message_tool_class = self.send_message_tool_class
@@ -503,13 +498,13 @@ class Agency:
             )
 
         effective_hooks = hooks_override or self.persistence_hooks
-        
+
         # Get agency context for the target agent (stateless context passing)
         agency_context = self._get_agent_context(target_agent.name)
-        
+
         # Combine shared instructions with any additional instructions
         combined_additional_instructions = self._combine_instructions(additional_instructions)
-        
+
         return await target_agent.get_response(
             message=message,
             sender_name=None,
@@ -625,10 +620,10 @@ class Agency:
 
             # Get agency context for the target agent (stateless context passing)
             agency_context = self._get_agent_context(target_agent.name)
-            
+
             # Combine shared instructions with any additional instructions
             combined_additional_instructions = self._combine_instructions(additional_instructions)
-            
+
             # Get the primary stream
             primary_stream = target_agent.get_response_stream(
                 message=message,
@@ -948,19 +943,21 @@ class Agency:
     # --- Context Factory Pattern Methods ---
     def _initialize_agent_contexts(self, load_threads_callback=None, save_threads_callback=None) -> None:
         """Initialize agent contexts using the Context Factory Pattern."""
-        for agent_name, agent in self.agents.items():
-            # Create context for each agent sharing the same ThreadManager
+        for agent_name, _agent in self.agents.items():
+            # Create context for each agent using the agency's ThreadManager
+            # Each agency has its own ThreadManager, so contexts from different agencies
+            # will have different ThreadManager instances
             context = AgencyContext(
                 agency_instance=self,
-                thread_manager=self.thread_manager,  # Share the agency's ThreadManager
+                thread_manager=self.thread_manager,  # Use this agency's ThreadManager
                 subagents={},  # Will be populated in _update_agent_contexts_with_communication_flows
                 load_threads_callback=load_threads_callback,
                 save_threads_callback=save_threads_callback,
-                shared_instructions=self.shared_instructions
+                shared_instructions=self.shared_instructions,
             )
             self._agent_contexts[agent_name] = context
-            logger.debug(f"Created agency context for agent: {agent_name} (sharing ThreadManager)")
-    
+            logger.debug(f"Created agency context for agent: {agent_name} with agency's ThreadManager")
+
     def _update_agent_contexts_with_communication_flows(self, communication_flows: list[tuple[Agent, Agent]]) -> None:
         """Update agent contexts with subagent registrations based on communication flows."""
         # Build communication map: sender -> [receivers]
@@ -968,11 +965,11 @@ class Agency:
         for sender, receiver in communication_flows:
             sender_name = sender.name
             receiver_name = receiver.name
-            
+
             if sender_name not in communication_map:
                 communication_map[sender_name] = []
             communication_map[sender_name].append(receiver_name)
-        
+
         # Update each agent's context with its allowed recipients
         for agent_name, context in self._agent_contexts.items():
             allowed_recipients = communication_map.get(agent_name, [])
@@ -981,24 +978,24 @@ class Agency:
                     recipient_agent = self.agents[recipient_name]
                     context.subagents[recipient_name] = recipient_agent
                     logger.debug(f"Added {recipient_name} as subagent for {agent_name} in agency context")
-    
+
     def _get_agent_context(self, agent_name: str) -> AgencyContext:
         """Get the agency context for a specific agent."""
         if agent_name not in self._agent_contexts:
             raise ValueError(f"No context found for agent: {agent_name}")
         return self._agent_contexts[agent_name]
-    
+
     def _combine_instructions(self, additional_instructions: str | None = None) -> str | None:
         """Combine shared instructions with additional instructions."""
         if not self.shared_instructions and not additional_instructions:
             return None
-        
+
         parts = []
         if self.shared_instructions:
             parts.append(self.shared_instructions)
         if additional_instructions:
             parts.append(additional_instructions)
-        
+
         return "\n\n---\n\n".join(parts) if parts else None
 
     def terminal_demo(self) -> None:

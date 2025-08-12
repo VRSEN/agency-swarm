@@ -54,9 +54,7 @@ async def test_agent_processes_message_files_attachment(real_openai_client: Asyn
     message_to_agent = "What content do you see in the attached PDF file? Please summarize what you find."
 
     print(f"TEST: Calling get_response for agent '{attachment_tester_agent.name}' with file_ids: [{attached_file_id}]")
-    response_result = await agency.get_response(
-        message_to_agent, file_ids=[attached_file_id]
-    )
+    response_result = await agency.get_response(message_to_agent, file_ids=[attached_file_id])
 
     assert response_result is not None
     assert response_result.final_output is not None

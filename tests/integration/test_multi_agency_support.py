@@ -23,13 +23,13 @@ class SharedStateTool(BaseTool):
 
     def run(self):
         """Execute the tool action."""
-        print(f"Shared state: {self._shared_state}")
+        print(f"Shared state: {self.context}")
         if self.action == "set":
-            self._shared_state.set("test_value", self.value)
+            self.context.set("test_value", self.value)
             print(f"Set test_value to: {self.value}")
             return f"Set test_value to: {self.value}"
         elif self.action == "get":
-            stored_value = self._shared_state.get("test_value", "NOT_SET")
+            stored_value = self.context.get("test_value", "NOT_SET")
             print(f"Current test_value: {stored_value}")
             return f"Current test_value: {stored_value}"
 

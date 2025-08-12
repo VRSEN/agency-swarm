@@ -2,8 +2,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from agency_swarm import Agency, Agent
-from agency_swarm.agent_core import AgencyContext
+from agency_swarm import Agency, AgencyContext, Agent
 from agency_swarm.thread import ThreadManager
 
 

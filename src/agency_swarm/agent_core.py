@@ -63,6 +63,7 @@ T = TypeVar("T", bound="Agent")
 @dataclass
 class AgencyContext:
     """Agency-specific context for an agent to enable multi-agency support."""
+
     agency_instance: Any
     thread_manager: "ThreadManager"
     subagents: dict[str, "Agent"]
@@ -252,13 +253,13 @@ class Agent(BaseAgent[MasterContext]):
         """Parse OpenAPI schemas from the schemas folder and create tools."""
         parse_schemas(self)
 
-
     # --- File Handling ---
     def upload_file(self, file_path: str, include_in_vector_store: bool = True) -> str:
         """Upload a file using the agent's file manager."""
         return self.file_manager.upload_file(file_path, include_in_vector_store)
 
         # --- Core Execution Methods ---
+
     async def get_response(
         self,
         message: str | list[dict[str, Any]],
@@ -374,7 +375,7 @@ class Agent(BaseAgent[MasterContext]):
             subagents={},
             load_threads_callback=None,
             save_threads_callback=None,
-            shared_instructions=None
+            shared_instructions=None,
         )
 
     def register_subagent(self, recipient_agent: "Agent") -> None:
