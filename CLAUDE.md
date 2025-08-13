@@ -178,7 +178,7 @@ uv run python examples/agency_context.py
 - `examples/` – v1.x modern usage
 - `docs/migration_guide.mdx` – Breaking changes
 - `tests/integration/` – Real-world behaviors
-- `/docs/` – Outdated/v0.x (do not reference)
+- `/docs/` – Fresh docs covering both v0.x and v1.x
 
 ## Quick Commands
 ```bash
