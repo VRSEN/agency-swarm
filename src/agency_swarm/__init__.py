@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 load_dotenv(override=True)
 
 from .agency import Agency  # noqa: E402
-from .agent_core import Agent  # noqa: E402
+from .agent_core import AgencyContext, Agent  # noqa: E402
 from .context import MasterContext  # noqa: E402
 from .hooks import PersistenceHooks  # noqa: E402
 from .thread import ThreadManager  # noqa: E402
