@@ -18,7 +18,7 @@ class LayoutAlgorithms:
         Create a hierarchical layout.
         Entry points at top, subsequent layers below.
         """
-        positions = {}
+        positions: dict[str, dict[str, float]] = {}
 
         # Node sizing constants
         AGENT_WIDTH = 120
@@ -34,7 +34,7 @@ class LayoutAlgorithms:
         tools = [node for node in nodes if node["type"] == "tool"]
 
         # Build adjacency graph for flow analysis
-        graph = {}
+        graph: dict[str, list[str]] = {}
         for node in nodes:
             graph[node["id"]] = []
 
@@ -43,8 +43,8 @@ class LayoutAlgorithms:
                 graph[edge["source"]].append(edge["target"])
 
         # Assign layers using BFS from entry points
-        layers = {}
-        visited = set()
+        layers: dict[str, int] = {}
+        visited: set[str] = set()
 
         # Start with entry points at layer 0
         for ep in entry_points:
@@ -54,7 +54,7 @@ class LayoutAlgorithms:
         # BFS to assign layers
         current_layer = 0
         while True:
-            next_layer_nodes = []
+            next_layer_nodes: list[str] = []
 
             for node_id, layer in layers.items():
                 if layer == current_layer:
@@ -72,14 +72,14 @@ class LayoutAlgorithms:
 
         # Calculate required space for each layer to prevent intersections
         max_layer = max(layers.values()) if layers else 0
-        layer_node_counts = {}
+        layer_node_counts: dict[int, int] = {}
 
         for node in agents:
             layer = layers.get(node["id"], max_layer + 1)
             layer_node_counts[layer] = layer_node_counts.get(layer, 0) + 1
 
         # Position agents layer by layer to ensure consistent spacing
-        processed_layers = set()
+        processed_layers: set[int] = set()
         for node in agents:
             layer = layers.get(node["id"], max_layer + 1)
 
@@ -96,12 +96,12 @@ class LayoutAlgorithms:
 
             # Calculate spacing for this layer
             if total_width_needed <= width:
-                layer_spacing = MIN_SPACING_X
+                layer_spacing: float = float(MIN_SPACING_X)
                 start_x = (width - total_width_needed) / 2 + (AGENT_WIDTH / 2)
             else:
                 # If too wide, compress spacing but maintain minimum
                 available_spacing = (width - (total_nodes * AGENT_WIDTH)) / max(total_nodes - 1, 1)
-                layer_spacing = max(MIN_SPACING_X, available_spacing)
+                layer_spacing = float(max(MIN_SPACING_X, available_spacing))
                 start_x = AGENT_WIDTH / 2
 
             # Position all nodes in this layer
@@ -114,10 +114,10 @@ class LayoutAlgorithms:
         orphan_count = 0
 
         # First, identify which agents are managers (have multiple outgoing connections or are intermediate layers)
-        agents_with_children = set()
+        agents_with_children: set[str] = set()
 
         # Count outgoing communication flows for each agent
-        outgoing_counts = {}
+        outgoing_counts: dict[str, int] = {}
         for edge in edges:
             if edge["type"] == "communication":
                 source_agent = edge["source"]
@@ -133,7 +133,7 @@ class LayoutAlgorithms:
                 agents_with_children.add(agent_id)
 
         # Track tool counts per agent for horizontal spacing
-        agent_tool_counts = {}
+        agent_tool_counts: dict[str, list[dict[str, Any]]] = {}
         for tool in tools:
             parent_agent = tool.get("data", {}).get("parentAgent")
             if parent_agent:
