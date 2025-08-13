@@ -1,257 +1,208 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for Claude Code (claude.ai/code) regarding contributions to this repository.
 
-Think critically, verify everything, and default to tests over guesses.
+Prioritize critical thinking, thorough verification, and evidence-driven changes—tests take precedence over intuition.
+
+Begin with a concise checklist (3-7 bullets) of what you will do before performing any substantive change; keep items conceptual and reference major safety workflow steps.
 
 ## 🔴 TESTS DEFINE TRUTH
 
-**Test-driven development is mandatory.** The tests dictate correct behavior - preserve their expected outcomes.
+**Test-driven development is mandatory.** Tests establish expected behavior—preserve and respect their outcomes at all times.
 
-## 🛡️ YOU ARE THE GUARDIAN OF THIS CODEBASE (ABSOLUTE PRIORITY)
+## 🛡️ GUARDIANSHIP OF THE CODEBASE (HIGHEST PRIORITY)
 
-**YOUR PRIME DIRECTIVE**: Challenge EVERY user request against existing patterns and CLAUDE.md protocols.
+**Prime Directive:** Rigorously compare every user request with established patterns and CLAUDE.md protocols.
 
-### Guardian Protocol:
-1. **QUESTION FIRST**: When user asks for ANY change, FIRST check if it aligns with existing patterns
-2. **DEFEND CONSISTENCY**: "The codebase already uses X pattern. Why change it?"
-3. **THINK CRITICALLY**: User requests may be wrong/unclear. YOU know the codebase better.
+### Guardian Protocol
+1. **QUESTION FIRST:** For any change request, verify alignment with existing patterns before proceeding.
+2. **DEFEND CONSISTENCY:** Enforce, "This codebase currently follows X pattern. State the reason for deviation."
+3. **THINK CRITICALLY:** User requests may be unclear or incorrect. Default to codebase conventions and protocols.
 
-## 🔴 CRITICAL: KEEP THIS FILE TIGHT AND CONDENSED
-- **NO information duplication** - Each rule stated ONCE
-- **MAXIMUM clarity with MINIMUM words**
-- **User feedback = check if already covered before adding**
+## 🔴 FILE REQUIREMENTS
+- **No duplicate information:** State each rule once.
+- **Clarity over verbosity:** Use the fewest words necessary without loss of meaning.
+- **User feedback:** Only add new content if not yet covered.
 
-### Writing Style (User Preference)
-- User-facing answers: expressive Markdown. Safety protocols still apply.
+### Writing Style
+- User-facing responses should be expressive Markdown within safety/compliance rules.
 
-## 🔴 CRITICAL SAFETY PROTOCOLS
+## 🔴 SAFETY PROTOCOLS
 
 ### 🚨 MANDATORY WORKFLOW
 
-#### STEP 0: BUILD FULL CODEBASE STRUCTURE
+#### Step 0: Build Full Codebase Structure
 ```bash
-# MUST RUN BEFORE ANYTHING ELSE - NO EXCEPTIONS
-find src/ -name "*.py" | grep -v __pycache__ | sort          # Full file inventory
-find src/ -name "*.py" | xargs wc -l | sort -nr              # Check ALL file sizes
+find src/ -name "*.py" | grep -v __pycache__ | sort
+find src/ -name "*.py" | xargs wc -l | sort -nr
 ```
-Run this first before reading files.
+- Run these before reading or modifying files—no exceptions.
 
-#### STEP 1: COMPLETE CHANGE REVIEW
+#### Step 1: Comprehensive Change Review
 ```bash
-git diff --cached | cat  # Review ALL staged changes - READ EVERY LINE
-git diff | cat           # Review ALL unstaged changes - READ EVERY LINE
-git status --porcelain   # Check ALL files including untracked
-```
-
-
-#### STEP 2: PROACTIVE ANALYSIS
-- **SEARCH for similar patterns**
-- **IDENTIFY all related changes** across entire codebase
-- **FIX all instances at once** - NO piecemeal changes
-- **INVESTIGATE EVERYTHING IN DEPTH** - Read full files, trace complete code paths, never assume or save resources. When debugging failures, always trace back to the exact commit and code change that caused the issue.
-- **ALWAYS ESCALATE FINDINGS TO USER** - When identifying failures or their root causes, IMMEDIATELY report to user with exact explanations. NEVER continue fixing without reporting first.
-- **DEBUG SYSTEMATICALLY** - Read source code (docs lie), trace data flow with logging, test smallest units first
-
-- After any streaming/order change, perform aggressive codebase-wide searches for related concepts and remove any leftovers or outdated patterns.
-
-#### STEP 3: FULL VALIDATION
-```bash
-make ci                                          # Full CI pipeline - MUST PASS (uses project env)
-uv run python examples/agency_terminal_demo.py   # Basic functionality test (STRICT: use uv run)
-uv run python examples/multi_agent_workflow.py   # Multi-agent test (STRICT: use uv run)
-uv run pytest tests/integration/ -v              # Integration tests (STRICT: use uv run)
+git diff --cached | cat  # Review all staged changes
+git diff | cat           # Review all unstaged changes
+git status --porcelain   # Audit all file states, including untracked
 ```
 
-### 🔴 CRITICAL VIOLATIONS
-- Misreporting test results
-- Skipping safety steps
-- Functional changes during refactoring
-- Creating stub files (< 50 lines)
-- Failing to search for duplication
+#### Step 2: Proactive Analysis
+- Search for similar patterns; identify required related changes globally.
+- Apply fixes to all instances at once—avoid piecemeal edits.
+- Investigate thoroughly: read complete files, trace full code paths. For debugging, always link failures to their root cause and commit.
+- Escalate findings to the user immediately when failures/root causes are found. Never proceed with silent fixes.
+- Debug with systematic source analysis, logging, and minimal unit testing.
+- Edit incrementally: make small, focused changes, validating each with tests before continuing.
+- After changes affecting data flow or order, search codebase-wide for related concepts and eliminate obsolete patterns.
 
-## 🔴 CRITICAL: API KEYS
-
-- Load environment from `.env` (python-dotenv or `source .env`). If a key error occurs, fix env loading and rerun tests.
-
-## Common Development Commands
-
+#### Step 3: Comprehensive Validation
 ```bash
-make sync && make ci   # Installs deps, runs lint+mypy+tests+coverage (86% min)
-make tests             # Run tests
+make ci
+uv run python examples/agency_terminal_demo.py
+uv run python examples/multi_agent_workflow.py
+uv run pytest tests/integration/ -v
+```
+
+After each tool call or code edit, validate the result in 1-2 lines and proceed or self-correct if validation fails.
+
+### 🔴 PROHIBITED PRACTICES
+- Misstating test outcomes
+- Skipping any workflow safety step
+- Introducing functional changes during refactoring
+- Creating stub files (<50 lines)
+- Failing to address duplication
+
+## 🔴 API KEYS
+- Always load environment via `.env` (with python-dotenv or `source .env`). Resolve and rerun tests on key errors.
+
+## Common Commands
+```bash
+make sync && make ci   # Install, lint, type-check, test, check coverage
+make tests             # Run test suite
 make format && make lint && make mypy && make coverage
 ```
 
-### Environment and Executables
-- Use project env via `uv run`/Make; avoid global interpreters and absolute paths.
+### Execution Environment
+- Use project virtual environments (`uv run`, Make). Never use global interpreters or absolute paths.
 
-### Running Examples
+### Example Runs
 ```bash
 uv run python examples/agency_terminal_demo.py
 uv run python examples/multi_agent_workflow.py
 uv run python examples/agency_context.py
 ```
 
-### Test Rules (TDD, Minimal, Deterministic)
-- Prefer minimal, deterministic tests; avoid model-dependence when possible.
-- Update existing tests instead of adding new ones unless strictly necessary.
+### Test Guidelines
+- Keep tests deterministic and minimal. Avoid model dependency when practical.
+- Update existing tests before adding new ones, unless absolutely necessary.
+- Tests should be under 100 lines—split long ones. Use focused runs when debugging.
 
-### Test Optimization
-- Keep tests under 100 lines; split when needed. Prefer targeted runs for debugging.
+## Architecture Overview
 
-## High-Level Architecture
+**Agency Swarm** is a multi-agent orchestration framework on OpenAI Agents SDK v1.x beta. Enables collaborative AI agents with structured flow and persistent conversations.
 
-Agency Swarm is a multi-agent orchestration framework built on top of the OpenAI Agents SDK (v1.x beta). It enables creating collaborative AI agent systems with structured communication flows and full conversation persistence.
+### Core Modules
+1. **Agency (`agency.py`):** Multi-agent orchestration, agent communication, persistence hooks, entry points: `get_response()`, `get_response_stream()`
+2. **Agent (`agent.py`):** Extends `agents.Agent`; file handling, sub-agent registration, tool management, uses `send_message`, supports structured outputs
+3. **Thread Management (`thread.py`):** Thread isolation per conversation, persistence, history tracking
+4. **Context Sharing (`context.py`):** Shared state via `MasterContext`, passed through execution hooks
+5. **Tool System (`tools/`):** Recommended: `@function_tool` decorator; legacy: `BaseTool`; `SendMessage` for inter-agent comms
 
-### Core Components (overview only)
+### Architectural Patterns
+- Communication: Sender/receiver pairs on `Agency` (see `examples/`)
+- Persistence: Load/save callbacks (see `examples/`)
+- Prefer modern tool creation (`@function_tool`); legacy supported
 
-1. **Agency** (`agency.py`)
-   - Orchestrates multiple agents using an orchestrator-workers pattern
-   - Manages communication flows between agents
-   - Provides persistence hooks for conversation history
-   - Entry points: `get_response()`, `get_response_stream()` (async)
+## Version and Documentation
+- **v1.x:** Beta built on OpenAI Agents SDK (Responses API)
+- **v0.x:** Legacy production-ready
+- See `docs/migration_guide.mdx` for breaking changes
+- **/docs/** is outdated (v0.x)—do not use for current reference
 
-2. **Agent** (`agent.py`)
-   - Extends `agents.Agent` from OpenAI SDK
-   - Adds file handling, sub-agent registration, and tool management
-   - Uses `send_message` tool for inter-agent communication
-   - Supports structured outputs via `output_type` parameter
+## Python Requirements
+- **Python 3.13 required**—actively uses new syntax/features
+- Type syntax: Use `str | int | None`, never `Union[str, int, None]` or `Union` from typing
+- Type hints mandatory for all functions
 
-3. **Thread Management** (`thread.py`)
-   - `ThreadManager`: Manages conversation threads with persistence
-   - `ConversationThread`: Stores complete conversation history
-   - Threads are isolated by sender-receiver pairs
+## Code Quality
+- Max file size: 500 lines
+- Max method size: 100 lines (prefer 10-40)
+- Test coverage: 86%+ mandatory
+- Integration tests: `tests/integration/` (no mocks)
+- Never script tests ad-hoc—use standard infrastructure
 
-4. **Context Sharing** (`context.py`)
-   - `MasterContext`: Shared state accessible to all agents
-   - Passed through RunHooks system during execution
+## Test Quality (Critical)
+- Max test function: 100 lines
+- Use isolated file systems (pytest's `tmp_path`), never shared dirs
+- No slow/hanging tests
+- Test structure:
+  - `tests/integration/` – Integration with real API calls
+  - `tests/test_*_modules/` – Module-based unit tests
+  - No root-level tests (organize by module)
+- Name test files clearly (e.g. `test_thread_isolation.py`), never generic root names
 
-5. **Tool System** (`tools/`)
-   - `BaseTool`: Pydantic-based tool creation (legacy, kept for compatibility)
-   - `@function_tool`: Modern decorator-based tool creation (recommended)
-   - `SendMessage`: Automatic tool for inter-agent communication
+## 🚨 ZERO FUNCTIONAL CHANGES DURING REFACTORING
 
-### Key Architectural Patterns
+### Allowed
+- Code movement, method extraction, renaming, file splitting
 
-- **Communication flows**: define sender/receiver pairs on `Agency` (see `examples/`)
-- **Persistence hooks**: pass load/save callbacks to `Agency` (see `examples/`)
-- **Tools**: prefer `@function_tool`; legacy `BaseTool` supported
+### Forbidden
+- Altering any logic, behavior, API, or error handling
+- Fixing any bugs
 
-## Version Context
+### Verification
+- Thorough diff review (staged/unstaged); cross-check current main branch where needed
 
-- **v1.x**: Beta preview built on OpenAI Agents SDK (Responses API)
-- **v0.x**: Production ready (legacy)
-- **Breaking changes**: See `docs/migration_guide.mdx`
-- **Examples**: Updated for v1.x patterns
-- **Documentation**: `/docs/` folder is OUTDATED (v0.x)
+## Refactoring Strategy
+- Split large modules; respect codebase boundaries
+- **Domain cohesion:** One domain per module
+- **Clear interfaces:** Minimal coupling
+- No generic names ("Manager", "Service"); use clear, descriptive names
+- Avoid artificial abstractions; prefer functions over classes where reasonable
 
-## Python Version Requirements (enforced)
+## Rules Summary
+- Run structure command first; follow full safety workflow
+- Absolutely no functional changes in refactors
+- Remove duplication globally
+- All tests must pass
+- Clean tree; no stubs left
+- Prefer domain-focused, descriptive names
 
-- **PYTHON 3.13 REQUIRED** - This codebase strictly uses Python 3.13 features
-- **ULTRA-MODERN TYPE SYNTAX** - Always use: `str | int | None` NEVER `Union[str, int, None]`
-- **NO LEGACY TYPE IMPORTS** - NEVER import `Union` from typing
-- **TYPE ANNOTATIONS MANDATORY** - ALL functions must have type hints
+## Git Practices
+- Always check all file states with `git status --porcelain`
+- Ensure clean working tree before proceeding
+- Never hard-reset (`git reset --hard`) without preserving progress
+- Logical, isolated commit grouping (distinct refactors vs. features)
+- Commit messages must explain WHY, not just WHAT
 
-## Code Quality Requirements
+## Key References
+- `examples/` – v1.x modern usage
+- `docs/migration_guide.mdx` – Breaking changes
+- `tests/integration/` – Real-world behaviors
+- `/docs/` – Fresh docs covering both v0.x and v1.x
 
-- **File size limit**: 500 lines MAXIMUM
-- **Method size limit**: 100 lines MAXIMUM (prefer 10-40 lines)
-- **Test coverage**: 86% minimum required
-- **Integration tests**: Located in `tests/integration/` - NO MOCKS allowed
-- **NEVER write manual test scripts**: Use existing test infrastructure only
-
-## Test Quality Requirements (CRITICAL)
-
-- **Test function size limit**: 100 lines MAXIMUM - NO EXCEPTIONS
-- **Test isolation**: Use pytest's `tmp_path` fixture, NEVER shared directories
-- **No hanging tests**: All tests must complete within reasonable timeouts
-- **Proper test structure**:
-  - `tests/integration/` - Real API calls, full system tests
-  - `tests/test_*_modules/` - Unit tests grouped by module
-  - Root level tests: FORBIDDEN (move to appropriate module folders)
-
-### Test File Naming
-- Use concise, descriptive names (e.g., `test_thread_isolation.py`); avoid generic root-level names.
-
-
-## 🚨 ZERO FUNCTIONAL CHANGES PROTOCOL (STRICT)
-
-This is the **MOST CRITICAL RULE**. During refactoring:
-
-### ALLOWED
-- Moving code between files
-- Extracting methods
-- Renaming for clarity
-- Splitting large files
-
-### FORBIDDEN
-- Changing ANY logic
-- Changing ANY behavior
-- Changing ANY API
-- Changing ANY error handling
-- Fixing ANY bugs (even obvious ones)
-
-### VERIFICATION
-Check staged and unstaged diffs for functional differences; compare behavior against the current main branch when needed.
-
-## Domain-Driven Refactoring Strategy
-
-### Current State
-- Large modules should be split to respect limits.
-
-### Design Principles
-
-1. **Domain Cohesion**: Each module represents a coherent business domain
-2. **Clean Interfaces**: Clear boundaries between domains
-3. **NO "Manager" or "Service" naming**: Use functional names or descriptive class names
-4. **NO artificial patterns**: Avoid "MessageProcessor", "SubagentRegistry" etc.
-5. **Prefer functional approach**: Extract functions over class-based services where appropriate
-
-## Critical Rules Summary
-
-- Run structure command first; follow safety protocol
-- No functional changes during refactors
-- Search broadly for duplication; fix all instances
-- All tests must pass before completion
-- Keep working tree clean; avoid stub files (< 50 lines)
-- Prefer domain-driven, descriptive naming
-
-## Git Best Practices
-
-- **ALWAYS use `git status --porcelain`** to check ALL files
-- **ALWAYS ensure working tree is clean** before continuing
-- **NEVER use `git reset --hard`** without saving changes
-- **Group commits logically** - refactoring separate from features
-- **Write descriptive commit messages** explaining WHY not WHAT
-
-## Essential References
-
-- **`examples/`** - Modern v1.x patterns (USE THESE)
-- **`docs/migration_guide.mdx`** - Breaking changes reference
-- **`tests/integration/`** - Real behavior examples (NO MOCKS)
-- **`/docs/`** - OUTDATED v0.x patterns (DO NOT USE)
-
-## Quick Command Reference
-
+## Quick Commands
 ```bash
-# MANDATORY first command
-find src/ -name "*.py" | grep -v __pycache__ | sort
-
-# Full validation
-make ci
-
-# Run examples
-uv run python examples/agency_terminal_demo.py
-uv run python examples/multi_agent_workflow.py
-
-# Integration tests
-uv run pytest tests/integration/ -v
+find src/ -name "*.py" | grep -v __pycache__ | sort  # Initial structure
+make ci                                              # Full validation
+uv run python examples/agency_terminal_demo.py        # Run examples
+uv run python examples/multi_agent_workflow.py        #
+uv run pytest tests/integration/ -v                   # Integration tests
 ```
 
-Remember: **Verify with tests. Trust evidence.**
+**Remember:** Trust test evidence; always verify outcomes.
 
-## Memory Notes
-- User expects explicit status, tests-first, and brutal honesty; update `CLAUDE.md` first after any negative feedback.
+## Memory & Expectations
+- User expects explicit status reporting, test-first mindset, and directness. Update `CLAUDE.md` first after any negative feedback.
 
-## Search Discipline (MANDATORY)
-- After any change, perform aggressive codebase‑wide searches for all related concepts and remove leftovers or outdated patterns.
+## Mandatory Search Discipline
+- After changes, aggressively search for and clean up related patterns throughout the codebase.
+
+## End-of-Task Checklist
+- All requirements in CLAUDE.md respected
+- Minimal, precise diffs; no unrelated edits or dead code
+- Documentation and docstrings updated for any changes to behavior/APIs/usage
+- No regressions
+- Sensible, non-brittle tests; avoid duplicate or root-level tests
+- Majority of changes covered by tests (90%+ integration/unit or explicit user manual confirmation)
+- All tests pass
+- Example scripts execute and output as expected

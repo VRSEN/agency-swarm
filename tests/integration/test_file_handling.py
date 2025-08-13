@@ -47,16 +47,14 @@ async def test_agent_processes_message_files_attachment(real_openai_client: Asyn
     )
     attachment_tester_agent._openai_client = real_openai_client
 
-    # 3. Setup a minimal real Agency and ThreadManager for agent.get_response()
-    Agency(attachment_tester_agent, user_context=None)
-    thread_manager = attachment_tester_agent._thread_manager
-    assert thread_manager is not None, "ThreadManager not set by Agency"
+    # 3. Setup a real Agency for proper testing
+    agency = Agency(attachment_tester_agent, user_context=None)
 
     # 4. Call get_response with file_ids - OpenAI will automatically process the file
     message_to_agent = "What content do you see in the attached PDF file? Please summarize what you find."
 
     print(f"TEST: Calling get_response for agent '{attachment_tester_agent.name}' with file_ids: [{attached_file_id}]")
-    response_result = await attachment_tester_agent.get_response(message_to_agent, file_ids=[attached_file_id])
+    response_result = await agency.get_response(message_to_agent, file_ids=[attached_file_id])
 
     assert response_result is not None
     assert response_result.final_output is not None

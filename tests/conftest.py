@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from agency_swarm import Agent
+from agency_swarm import Agency, AgencyContext, Agent
 from agency_swarm.thread import ThreadManager
 
 
@@ -59,10 +59,26 @@ def mock_agency_instance(mock_thread_manager):
 @pytest.fixture
 def minimal_agent(mock_thread_manager, mock_agency_instance):
     """Provides a minimal Agent instance for basic tests."""
+
     agent = Agent(name="TestAgent", instructions="Test instructions")
-    agent._set_agency_instance(mock_agency_instance)
-    agent._set_thread_manager(mock_thread_manager)
-    mock_agency_instance.agents[agent.name] = agent
+
+    # Create an agency and replace its thread manager with our mock
+    agency = Agency(agent)
+    agency.thread_manager = mock_thread_manager
+
+    # Mock the agent's context creation to always return a context with our mock thread manager
+    def mock_create_minimal_context():
+        return AgencyContext(
+            agency_instance=None,
+            thread_manager=mock_thread_manager,
+            subagents={},
+            load_threads_callback=None,
+            save_threads_callback=None,
+            shared_instructions=None,
+        )
+
+    agent._create_minimal_context = mock_create_minimal_context
+
     return agent
 
 
