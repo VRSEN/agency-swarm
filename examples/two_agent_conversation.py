@@ -5,13 +5,10 @@ import os
 import sys
 
 from agents import ModelSettings, function_tool
-from dotenv import load_dotenv
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
 from agency_swarm import Agency, Agent
-
-load_dotenv(override=True)
 
 
 @function_tool

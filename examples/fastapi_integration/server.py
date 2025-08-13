@@ -17,12 +17,9 @@ import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "src")))
 
 from agents import function_tool
-from dotenv import load_dotenv
 
 from agency_swarm import Agency, Agent
 from agency_swarm.integrations.fastapi import run_fastapi
-
-load_dotenv()
 
 # --- Simple Tools --- #
 

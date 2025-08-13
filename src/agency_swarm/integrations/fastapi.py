@@ -3,14 +3,11 @@ import os
 from collections.abc import Callable, Mapping
 
 from agents.tool import FunctionTool
-from dotenv import load_dotenv
 
 from agency_swarm.agency import Agency
 from agency_swarm.agent_core import Agent
 
 logger = logging.getLogger(__name__)
-
-load_dotenv(override=True)
 
 
 def run_fastapi(
@@ -157,11 +154,7 @@ def run_fastapi(
 
     # Add get_logs endpoint if enhanced logging is enabled
     if enable_logging:
-        app.add_api_route(
-            "/get_logs",
-            make_logs_endpoint(LogRequest, logs_dir, verify_token),
-            methods=["POST"]
-        )
+        app.add_api_route("/get_logs", make_logs_endpoint(LogRequest, logs_dir, verify_token), methods=["POST"])
         endpoints.append("/get_logs")
 
     logger.info("Created endpoints:\n" + "\n".join(endpoints))

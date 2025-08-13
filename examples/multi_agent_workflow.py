@@ -25,15 +25,12 @@ import sys
 from typing import Any
 
 from agents import RunContextWrapper, function_tool
-from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 
 # Configure basic logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
-
-load_dotenv(override=True)
 
 from agency_swarm import Agency, Agent  # noqa: E402
 

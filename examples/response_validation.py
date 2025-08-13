@@ -3,8 +3,6 @@ import logging
 import os
 import sys
 
-from dotenv import load_dotenv
-
 # Path setup for standalone examples
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
@@ -22,8 +20,6 @@ from agency_swarm import Agency, Agent
 
 # Configure basic logging
 logging.basicConfig(level=logging.WARNING)
-
-load_dotenv(override=True)
 
 # --- Define Guardrails --- #
 

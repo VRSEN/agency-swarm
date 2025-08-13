@@ -1,7 +1,6 @@
 import inspect
 import logging
 import os
-import sys
 from collections.abc import AsyncGenerator, Callable
 from pathlib import Path
 from typing import Any, TypeVar
@@ -462,7 +461,7 @@ class Agent(BaseAgent[MasterContext]):
             frame = inspect.currentframe()
             while frame is not None:
                 frame_module = inspect.getmodule(frame)
-                if frame_module and hasattr(frame_module, '__file__') and frame_module.__file__:
+                if frame_module and hasattr(frame_module, "__file__") and frame_module.__file__:
                     module_path = os.path.dirname(os.path.abspath(frame_module.__file__))
                     # Check if module is outside the agency_swarm package directory
                     if not module_path.startswith(agency_swarm_path):

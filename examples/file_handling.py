@@ -18,11 +18,8 @@ from pathlib import Path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
 from agents import ModelSettings
-from dotenv import load_dotenv
 
 from agency_swarm import Agency, Agent
-
-load_dotenv(override=True)
 
 
 def image_to_base64(image_path: Path) -> str:

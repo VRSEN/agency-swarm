@@ -12,11 +12,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from agents import function_tool
-from dotenv import load_dotenv
 
 from agency_swarm import Agency, Agent
-
-load_dotenv(override=True)
 
 
 @function_tool

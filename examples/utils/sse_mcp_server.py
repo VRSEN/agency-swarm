@@ -1,13 +1,10 @@
 import os
 
 from agents import function_tool
-from dotenv import load_dotenv
 from pydantic import Field
 
 from agency_swarm import BaseTool
 from agency_swarm.integrations.mcp_server import run_mcp
-
-load_dotenv(override=True)
 
 
 # v0.X BaseTool-style tool example (equally supported)

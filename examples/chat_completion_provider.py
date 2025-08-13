@@ -15,12 +15,9 @@ import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
 from agents import OpenAIChatCompletionsModel, function_tool
-from dotenv import load_dotenv
 from openai import AsyncOpenAI
 
 from agency_swarm import Agency, Agent
-
-load_dotenv(override=True)
 
 # Simple logging setup
 logging.basicConfig(level=logging.WARNING, format="%(asctime)s - %(levelname)s - %(message)s")

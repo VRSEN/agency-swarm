@@ -10,9 +10,6 @@ from pathlib import Path
 from typing import Any
 
 from agents import ModelSettings
-from dotenv import load_dotenv
-
-load_dotenv(override=True)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
