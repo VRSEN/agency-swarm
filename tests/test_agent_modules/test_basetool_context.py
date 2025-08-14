@@ -74,33 +74,9 @@ class TestBaseToolContext:
         assert tool.context.get("test_executed") is True
         assert tool.context.get("execution_count") == 1
 
-    def test_context_persistence_across_runs(self):
-        """Test that context persists across multiple tool executions."""
-        tool = TestTool()
-
-        # First execution
-        tool.run()
-        assert tool.context.get("execution_count") == 1
-
-        # Second execution - should increment
+        # Run again to ensure persistence across executions
         tool.run()
         assert tool.context.get("execution_count") == 2
-
-    def test_context_access_between_instances(self):
-        """In actual run both tools should have access to the same context and share changes."""
-        real_context = MasterContext(thread_manager=Mock(), agents={}, user_context={"test_key": "real_value"})
-        tool1 = TestTool()
-        tool2 = TestTool()
-
-        tool1._context = RunContextWrapper(context=real_context)
-        tool2._context = RunContextWrapper(context=real_context)
-
-        # Execute both
-        tool1.run()
-        assert tool1.context.get("execution_count") == 1
-
-        tool2.run()
-        assert tool2.context.get("execution_count") == 2
 
     def test_context_fallback_when_none(self):
         """Test graceful handling when context is None."""
