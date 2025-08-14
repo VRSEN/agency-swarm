@@ -11,8 +11,6 @@ import sys
 from statistics import mean, stdev
 from typing import Any
 
-from dotenv import load_dotenv
-
 # Path setup for standalone examples
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
@@ -22,7 +20,6 @@ from langfuse import observe  # noqa: E402
 
 from agency_swarm import Agency, Agent  # noqa: E402
 
-load_dotenv(override=True)
 logging.basicConfig(level=logging.INFO)
 
 

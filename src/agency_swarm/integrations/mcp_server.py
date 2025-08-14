@@ -6,7 +6,6 @@ import sys
 from typing import Any
 
 from agents.tool import FunctionTool
-from dotenv import load_dotenv
 from fastmcp import FastMCP
 from fastmcp.exceptions import McpError
 from fastmcp.server.dependencies import get_http_headers
@@ -19,7 +18,6 @@ from agency_swarm import BaseTool
 from agency_swarm.tools import ToolFactory
 
 logger = logging.getLogger(__name__)
-load_dotenv(override=True)
 
 
 def _load_tools_from_directory(tools_dir: str) -> list[type[BaseTool] | type[FunctionTool]]:

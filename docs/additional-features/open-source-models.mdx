@@ -74,9 +74,6 @@ pip install astra-assistants-api gradio
 from openai import OpenAI
 from astra_assistants import patch
 from agency_swarm import set_openai_client
-from dotenv import load_dotenv
-
-load_dotenv(override=True)
 
 client = patch(OpenAI())
 

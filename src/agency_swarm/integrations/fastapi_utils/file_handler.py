@@ -8,11 +8,7 @@ from urllib.parse import urlparse
 import aiofiles
 import filetype
 import httpx
-from dotenv import load_dotenv
 from openai import AsyncOpenAI
-
-load_dotenv()
-
 
 client = AsyncOpenAI()
 

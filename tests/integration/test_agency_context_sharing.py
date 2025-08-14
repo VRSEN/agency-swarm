@@ -9,11 +9,8 @@ import asyncio
 
 import pytest
 from agents import RunContextWrapper, function_tool
-from dotenv import load_dotenv
 
 from agency_swarm import Agency, Agent, MasterContext
-
-load_dotenv(override=True)
 
 
 @function_tool
