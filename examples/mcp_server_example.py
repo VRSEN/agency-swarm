@@ -78,10 +78,10 @@ agency_public = Agency(mcp_agent_public)
 
 
 async def local_mcp_server_example():
-    await stdio_server.connect()
+    # Let the Agent's execution lifecycle manage MCP server connect/cleanup.
+    # Do not call connect()/cleanup() manually here.
     response = await agency_local.get_response("Get unique id and then current time in Europe/Amsterdam")
     print(response.final_output)
-    await stdio_server.cleanup()
 
 
 async def public_mcp_server_example():
