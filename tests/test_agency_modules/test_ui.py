@@ -400,3 +400,65 @@ class TestAgencyVisualizationIntegration:
         # These assertions test the smart positioning logic
         assert manager_tool_pos["x"] > manager_pos["x"]  # Tool to the right of manager
         assert worker_tool_pos["y"] > worker_pos["y"]  # Tool below worker
+
+
+class TestMetadataDetails:
+    def test_get_agency_structure_rich_metadata(self):
+        """Ensure metadata includes tool details and agency info."""
+        from agents import function_tool
+
+        @function_tool
+        def sample_tool(text: str) -> str:
+            """Echo text."""
+            return text
+
+        agent = Agent(name="ToolAgent", instructions="Use the tool", tools=[sample_tool])
+        agency = Agency(agent, name="ToolAgency", shared_instructions="shared.md")
+
+        structure = agency.get_agency_structure()
+
+        agent_node = next(n for n in structure["nodes"] if n["id"] == "ToolAgent")
+        data = agent_node["data"]
+        assert data["toolCount"] == 1
+        assert data["tools"][0]["name"] == "sample_tool"
+        assert data["instructions"].startswith("shared.md")
+
+        meta = structure["metadata"]
+        assert meta["agencyName"] == "ToolAgency"
+        assert meta["layoutAlgorithm"] == "hierarchical"
+
+    def test_hosted_mcp_tools_unique_ids(self):
+        """HostedMCPTool instances should produce unique tool nodes and labeled with server labels."""
+        from agents import HostedMCPTool
+
+        agent = Agent(
+            name="SearchCoordinator",
+            instructions="Handle searches",
+            tools=[
+                HostedMCPTool(
+                    tool_config={
+                        "type": "mcp",
+                        "server_label": "tavily-server",
+                        "server_url": "https://example.com/tavily",
+                        "require_approval": "never",
+                    }
+                ),
+                HostedMCPTool(
+                    tool_config={
+                        "type": "mcp",
+                        "server_label": "youtube-server",
+                        "server_url": "https://example.com/youtube",
+                        "require_approval": "never",
+                    }
+                ),
+            ],
+        )
+
+        agency = Agency(agent)
+        structure = agency.get_agency_structure()
+
+        tool_nodes = [n for n in structure["nodes"] if n["type"] == "tool"]
+        ids = [n["id"] for n in tool_nodes]
+        assert len(ids) == len(set(ids))
+        labels = [n["data"]["label"] for n in tool_nodes]
+        assert "tavily-server" in labels and "youtube-server" in labels
