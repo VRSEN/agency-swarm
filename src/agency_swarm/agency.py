@@ -90,22 +90,19 @@ class Agency:
         shared instructions, and establishes communication pathways between agents.
 
         Args:
-            *entry_point_agents (Agent): Positional arguments representing Agent instances that
-                                         serve as entry points for external interaction.
-            communication_flows (list[tuple[Agent, Agent]] | None, optional):
-                                         Keyword argument defining allowed agent-to-agent
-                                         (sender, receiver) message paths. Defaults to None.
-            agency_chart (AgencyChart | None, optional): Deprecated keyword argument for defining
-                                                            the agency structure. If provided, it takes
-                                                            precedence over entry_point_agents and
-                                                            communication_flows, issuing a warning.
-                                                            Defaults to None.
-            shared_instructions (str | None, optional): Instructions prepended to all agents' system prompts.
-            send_message_tool_class (type | None, optional): Custom SendMessage tool class to use for all agents
-                                                            that don't have their own send_message_tool_class set.
-                                                            Enables enhanced inter-agent communication patterns.
-            load_threads_callback (ThreadLoadCallback | None, optional): A callable to load conversation threads.
-            save_threads_callback (ThreadSaveCallback | None, optional): A callable to save conversation threads.
+            *entry_point_agents (Agent): Positional Agent instances serving as entry points for external interaction.
+            communication_flows (list[tuple[Agent, Agent]] | None, optional): Allowed agent-to-agent (sender, receiver)
+                message paths. Defaults to None.
+            agency_chart (AgencyChart | None, optional): Deprecated structure definition; if provided, it takes
+                precedence over `entry_point_agents` and `communication_flows` (a warning is issued). Defaults to None.
+            name (str | None, optional): Display name for the agency.
+            shared_instructions (str | None, optional): Either direct instruction text or a file path. If a path is
+                provided, the file is read (supports caller-relative, absolute, or CWD-relative paths) and its
+                contents are used as shared instructions prepended to all agents' system prompts.
+            send_message_tool_class (type | None, optional): Custom SendMessage tool for agents lacking their own,
+                enabling custom inter-agent communication patterns.
+            load_threads_callback (ThreadLoadCallback | None, optional): Callable to load conversation threads.
+            save_threads_callback (ThreadSaveCallback | None, optional): Callable to save conversation threads.
             user_context (dict[str, Any] | None, optional): Initial shared context accessible to all agents.
             **kwargs: Catches other deprecated parameters, issuing warnings if used.
 

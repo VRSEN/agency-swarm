@@ -134,31 +134,33 @@ class Agent(BaseAgent[MasterContext]):
         Initializes file handling based on `files_folder` and the internal subagent dictionary.
 
         Args:
-            name (str): The name of the agent. Required parameter.
-            instructions (str | Path | None): Path to a file containing instructions for the agent
-                                            or a string of instructions. Optional.
-            description (str | None): A description of the agent's role or purpose, used when
-                                    generating dynamic `send_message` tools for other agents.
-            model (str | None): The model to use for the agent (e.g., "gpt-4o"). Optional.
-            model_settings (ModelSettings | None): Model configuration settings. Optional.
-            tools (list[Tool] | None): List of Tool instances for the agent. Defaults to empty list.
-            hooks (RunHooks | None): Hooks for customizing agent execution. Optional.
-            output_guardrails (list[OutputGuardrail] | None): Output validation rules. Optional.
-            mcp_servers (list[MCPServer] | None): Model Context Protocol servers. Optional.
-            files_folder (str | Path | None): Path to a folder containing files to be attached to the agent.
+            name (str): The name of the agent. Required.
+            instructions (str | Path | None): Either direct instruction text or a file path. If a path is provided,
+                it is resolved relative to the caller's directory first, then treated as absolute/CWD-relative if
+                found, and the file contents are loaded as the agent's instructions. Otherwise, the string value is
+                used directly.
+            description (str | None): Description of the agent's role; used when generating dynamic `send_message`
+                tools for other agents.
+            model (str | None): The model identifier (e.g., "gpt-4o").
+            model_settings (ModelSettings | None): Model configuration settings.
+            tools (list[Tool] | None): Tool instances for the agent. Defaults to empty list.
+            hooks (RunHooks | None): Hooks for customizing agent execution.
+            output_guardrails (list[OutputGuardrail] | None): Output validation rules.
+            mcp_servers (list[MCPServer] | None): Model Context Protocol servers.
+            files_folder (str | Path | None): Path to a folder of files associated with this agent. If the folder name
+                matches `*_vs_<vector_store_id>`, uploaded files are added to the specified OpenAI Vector Store and a
+                FileSearch tool is added automatically.
             tools_folder (str | Path | None): Path to a directory containing tool definitions.
-            schemas_folder (str | Path | list[str | Path] | None): Path(s) to directories containing
-                                                                 OpenAPI schema files for automatic tool generation.
-            api_headers (dict[str, str] | None): Headers for OpenAPI schema-generated tools. Must follow the format:
-                                           {"schema_filename.json": {"header_name": "header_value"}}.
-                                           Defaults to empty dict.
-            api_params (dict[str, Any] | None): Parameters for OpenAPI schema-generated tools. Must follow the format:
-                                              {"schema_filename.json": {"param_name": "param_value"}}.
-                                              Defaults to empty dict.
-            output_type (type[Any] | None): The type of the agent's final output.
-            send_message_tool_class (type | None): Custom SendMessage tool class to use for inter-agent communication.
-            include_search_results (bool): Whether to include search results in FileSearchTool
-                                         output for citation extraction. Defaults to False.
+            schemas_folder (str | Path | list[str | Path] | None): Path(s) to directories containing OpenAPI schema
+                files for automatic tool generation.
+            api_headers (dict[str, str] | None): Per-schema headers for OpenAPI schema-generated tools. Format:
+                {"schema_filename.json": {"header_name": "header_value"}}. Defaults to {}.
+            api_params (dict[str, Any] | None): Per-schema parameters for OpenAPI schema-generated tools. Format:
+                {"schema_filename.json": {"param_name": "param_value"}}. Defaults to {}.
+            output_type (type[Any] | None): Type of the agent's final output.
+            send_message_tool_class (type | None): Custom SendMessage tool class for inter-agent communication.
+            include_search_results (bool): Include search results in FileSearchTool output for citation extraction.
+                Defaults to False.
         """
         # Handle deprecated parameters
         handle_deprecated_parameters(kwargs)
