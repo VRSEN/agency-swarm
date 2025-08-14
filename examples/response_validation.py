@@ -77,6 +77,36 @@ agent = Agent(
 agency = Agency(agent)
 
 
+# --- Helper for Guardrail Retries --- #
+async def get_response_with_retry(
+    user_message: str, max_attempts: int = 3
+):
+    """Retry `agency.get_response` when an output guardrail triggers.
+
+    If an :class:`OutputGuardrailTripwireTriggered` error is raised, the
+    guardrail message is passed back to the agent as a system message so the
+    agent can attempt a corrected response.  After ``max_attempts`` failures the
+    last error is re-raised.
+    """
+
+    last_error: OutputGuardrailTripwireTriggered | None = None
+    for attempt in range(max_attempts):
+        try:
+            return await agency.get_response(message=user_message)
+        except OutputGuardrailTripwireTriggered as e:
+            last_error = e
+            error_message = e.guardrail_result.output.output_info
+            print(f"Output Guardrail Tripwire Triggered: {error_message}")
+            user_message = (
+                "System message: Response validation failed with an error: "
+                f"{error_message}\nAdjust your response and try again."
+            )
+            print(f"Retrying... ({attempt + 1}/{max_attempts})")
+
+    if last_error is not None:
+        raise last_error
+
+
 # --- Run Interaction --- #
 async def run_conversation():
     """
@@ -106,19 +136,8 @@ async def run_conversation():
 
     # --- Turn 3: Send a retry request --- #
     print("\n--- Running output retry test ---\n\n")
-    retry_attempts = 3
-    user_message_3 = "Hello, Agent!"
-    for attempt in range(retry_attempts):
-        try:
-            response3 = await agency.get_response(message=user_message_3)
-            break
-        except OutputGuardrailTripwireTriggered as e:
-            error_message = e.guardrail_result.output.output_info
-            print(f"Output Guardrail Tripwire Triggered: {error_message}")
-            user_message_3 = f"System message: Response validation failed with an error: {error_message}\nAdjust your response and try again."
-            print(f"Retrying... ({attempt + 1}/{retry_attempts})")
-
-    print(f"Final response after {attempt + 1} attempts: {response3.final_output}")
+    response3 = await get_response_with_retry("Hello, Agent!", max_attempts=3)
+    print(f"Final response: {response3.final_output}")
 
 
 # --- Main Execution --- #
