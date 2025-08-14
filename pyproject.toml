@@ -7,7 +7,7 @@ name = "agency-swarm"
 version = "1.0.0-beta.6"
 description = "Agency Swarm framework"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 license = "MIT"
 authors = [{ name = "Vrsen AI Solutions", email = "me@vrsen.ai" }]
 dependencies = [
@@ -32,8 +32,6 @@ classifiers = [
     "Typing :: Typed",
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Intended Audience :: Developers",
@@ -95,8 +93,6 @@ convention = "google"
 
 [tool.ruff.lint.per-file-ignores]
 "examples/**/*.py" = ["E501"]
-"tests/test_agency.py" = ["F403"]
-"tests/test_agent.py" = ["F403"]
 
 [tool.mypy]
 # Relax strictness to get CI green without functional changes.

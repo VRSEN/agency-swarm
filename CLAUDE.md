@@ -33,12 +33,12 @@ Begin with a concise checklist (3-7 bullets) of what you will do before performi
 
 ### 🚨 MANDATORY WORKFLOW
 
-#### Step 0: Build Full Codebase Structure
+#### Step 0: Build Full Codebase Structure (Context Priming)
 ```bash
 find src/ -name "*.py" | grep -v __pycache__ | sort
 find src/ -name "*.py" | xargs wc -l | sort -nr
 ```
-- Run these before reading or modifying files—no exceptions.
+- Run these before reading or modifying files—no exceptions. You can invoke `make prime` to perform Step 0 and Step 1 together.
 
 #### Step 1: Comprehensive Change Review
 ```bash
@@ -62,12 +62,12 @@ Run Step 1 twice: once before starting work (to understand current state) and on
 #### Step 3: Comprehensive Validation
 ```bash
 make ci
-uv run python examples/agency_terminal_demo.py
+uv run python examples/interactive/terminal_demo.py
 uv run python examples/multi_agent_workflow.py
 uv run pytest tests/integration/ -v
 ```
 
-After each tool call or code edit, validate the result in 1-2 lines and proceed or self-correct if validation fails.
+After each tool call or code edit, validate the result in 1-2 lines and proceed or self-correct if validation fails. If you have not run Step 0 and Step 1 in the current session, run `make prime` first.
 
 ### 🔴 PROHIBITED PRACTICES
 - Misstating test outcomes
@@ -91,7 +91,7 @@ make format && make lint && make mypy && make coverage
 
 ### Example Runs
 ```bash
-uv run python examples/agency_terminal_demo.py
+uv run python examples/interactive/terminal_demo.py
 uv run python examples/multi_agent_workflow.py
 uv run python examples/agency_context.py
 ```
@@ -107,7 +107,7 @@ uv run python examples/agency_context.py
 
 ### Core Modules
 1. **Agency (`agency.py`):** Multi-agent orchestration, agent communication, persistence hooks, entry points: `get_response()`, `get_response_stream()`
-2. **Agent (`agent.py`):** Extends `agents.Agent`; file handling, sub-agent registration, tool management, uses `send_message`, supports structured outputs
+2. **Agent:** Extends `agents.Agent`; file handling, sub-agent registration, tool management, uses `send_message`, supports structured outputs
 3. **Thread Management (`thread.py`):** Thread isolation per conversation, persistence, history tracking
 4. **Context Sharing (`context.py`):** Shared state via `MasterContext`, passed through execution hooks
 5. **Tool System (`tools/`):** Recommended: `@function_tool` decorator; legacy: `BaseTool`; `SendMessage` for inter-agent comms
@@ -124,16 +124,23 @@ uv run python examples/agency_context.py
 - **/docs/** is outdated (v0.x)—do not use for current reference
 
 ## Python Requirements
-- **Python 3.13 required**—actively uses new syntax/features
+- **Python >= 3.12 (development on 3.13)** — project developed and primarily tested on 3.13; CI ensures 3.12 compatibility.
 - Type syntax: Use `str | int | None`, never `Union[str, int, None]` or `Union` from typing
 - Type hints mandatory for all functions
 
 ## Code Quality
 - Max file size: 500 lines
 - Max method size: 100 lines (prefer 10-40)
-- Test coverage: 86%+ mandatory
+- Test coverage: 85%+ mandatory
 - Integration tests: `tests/integration/` (no mocks)
 - Never script tests ad-hoc—use standard infrastructure
+
+### Oversized files (do not extend)
+The following files currently exceed limits and are considered problematic. Do not add lines to these files. Any subsequent changes must include refactoring that reduces their length.
+- `src/agency_swarm/agency.py` (~1049 lines)
+- `src/agency_swarm/agent/execution.py` (~745 lines)
+- `src/agency_swarm/agent/file_manager.py` (~621 lines)
+- `src/agency_swarm/tools/ToolFactory.py` (~545 lines)
 
 ## Test Quality (Critical)
 - Max test function: 100 lines
@@ -161,8 +168,7 @@ uv run python examples/agency_context.py
 - Split large modules; respect codebase boundaries
 - **Domain cohesion:** One domain per module
 - **Clear interfaces:** Minimal coupling
-- No generic names ("Manager", "Service"); use clear, descriptive names
-- Avoid artificial abstractions; prefer functions over classes where reasonable
+- Prefer clear, descriptive names; avoid artificial abstractions.
 
 ## Rules Summary
 - Run structure command first; follow full safety workflow
@@ -183,15 +189,15 @@ uv run python examples/agency_context.py
 - `examples/` – v1.x modern usage
 - `docs/migration_guide.mdx` – Breaking changes
 - `tests/integration/` – Real-world behaviors
-- `/docs/` – Fresh docs covering both v0.x and v1.x
+- `/docs/` – Framework documentation
 
 ## Quick Commands
 ```bash
 find src/ -name "*.py" | grep -v __pycache__ | sort  # Initial structure
 make ci                                              # Full validation
-uv run python examples/agency_terminal_demo.py        # Run examples
-uv run python examples/multi_agent_workflow.py        #
-uv run pytest tests/integration/ -v                   # Integration tests
+uv run python examples/interactive/terminal_demo.py  # Run examples
+uv run python examples/multi_agent_workflow.py       #
+uv run pytest tests/integration/ -v                  # Integration tests
 ```
 
 **Remember:** Trust test evidence; always verify outcomes.

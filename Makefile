@@ -2,6 +2,28 @@
 sync:
 	uv sync --all-extras
 
+.PHONY: prime
+prime:
+	@echo "[prime] Context priming: building structure and reviewing diffs"
+	@echo "Full file list:"
+	@find src/ -name "*.py" | sort
+	@echo "--------------------------------"
+	@echo "Top 5 largest files:"
+	@find src/ -name "*.py" | xargs wc -l | sort -nr | head -n 5
+	@echo "--------------------------------"
+	@echo "Full test list:"
+	@find tests/ -name "*.py" | sort
+	@echo "--------------------------------"
+	@echo "Git status:"
+	@git status --porcelain
+	@echo "--------------------------------"
+	@echo "Git diff (staged):"  # Only show staged changes
+	@git diff --cached -- . ':(exclude)uv.lock' | cat
+	@echo "--------------------------------"
+	@echo "Git diff (unstaged):"
+	@git diff -- . ':(exclude)uv.lock' | cat
+	@echo "--------------------------------"
+
 .PHONY: format
 format:
 	uv run ruff format
@@ -35,7 +57,7 @@ tests-verbose:
 coverage:
 	uv run coverage run -m pytest
 	uv run coverage xml -o coverage.xml
-	uv run coverage report -m --fail-under=84
+	uv run coverage report -m --fail-under=85
 
 .PHONY: coverage-html
 coverage-html:
