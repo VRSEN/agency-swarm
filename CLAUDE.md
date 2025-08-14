@@ -23,6 +23,8 @@ Begin with a concise checklist (3-7 bullets) of what you will do before performi
 - **No duplicate information:** State each rule once.
 - **Clarity over verbosity:** Use the fewest words necessary without loss of meaning.
 - **User feedback:** Only add new content if not yet covered.
+ - **No superfluous examples in CLAUDE.md:** Do not add examples that do not improve or clarify a rule. Omit examples when rules are self‑explanatory.
+ - **Edit existing sections:** When updating CLAUDE.md, prefer modifying existing sections over adding new ones. Add new sections only when strictly necessary to remove ambiguity.
 
 ### Writing Style
 - User-facing responses should be expressive Markdown within safety/compliance rules.
@@ -45,6 +47,8 @@ git diff | cat           # Review all unstaged changes
 git status --porcelain   # Audit all file states, including untracked
 ```
 
+Run Step 1 twice: once before starting work (to understand current state) and once during review before finishing (to double‑check your work).
+
 #### Step 2: Proactive Analysis
 - Search for similar patterns; identify required related changes globally.
 - Apply fixes to all instances at once—avoid piecemeal edits.
@@ -53,6 +57,7 @@ git status --porcelain   # Audit all file states, including untracked
 - Debug with systematic source analysis, logging, and minimal unit testing.
 - Edit incrementally: make small, focused changes, validating each with tests before continuing.
 - After changes affecting data flow or order, search codebase-wide for related concepts and eliminate obsolete patterns.
+- You must get explicit approval from the user before adding any workaround. Keep any diffs minimal (avoid excessive changes).
 
 #### Step 3: Comprehensive Validation
 ```bash
@@ -192,7 +197,7 @@ uv run pytest tests/integration/ -v                   # Integration tests
 **Remember:** Trust test evidence; always verify outcomes.
 
 ## Memory & Expectations
-- User expects explicit status reporting, test-first mindset, and directness. Update `CLAUDE.md` first after any negative feedback.
+- User expects explicit status reporting, test-first mindset, and directness. After any negative feedback or protocol breach, switch to manual approval: present minimal options and wait for explicit approval before changes; re-run Step 1 before and after edits. Update `CLAUDE.md` first after negative feedback.
 
 ## Mandatory Search Discipline
 - After changes, aggressively search for and clean up related patterns throughout the codebase.
