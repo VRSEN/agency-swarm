@@ -6,33 +6,6 @@ from pydantic import Field
 from agency_swarm import Agency, Agent, BaseTool
 
 
-class StoreDataTool(BaseTool):
-    """Store data in agency context using BaseTool."""
-
-    key: str = Field(..., description="Key to store data under")
-    value: str = Field(..., description="Value to store")
-
-    def run(self):
-        if self.context is not None:
-            self.context.set(self.key, self.value)
-            return f"Stored {self.key}={self.value}"
-        else:
-            return "Error: No context available"
-
-
-class RetrieveDataTool(BaseTool):
-    """Retrieve data from agency context using BaseTool."""
-
-    key: str = Field(..., description="Key to retrieve data for")
-
-    def run(self):
-        if self.context is not None:
-            value = self.context.get(self.key, "not_found")
-            return f"Retrieved {self.key}={value}"
-        else:
-            return "Error: No context available"
-
-
 @pytest.mark.asyncio
 async def test_basetool_context_integration():
     """Test that BaseTools can access agency context."""

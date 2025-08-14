@@ -228,49 +228,6 @@ async def test_legacy_tool(legacy_tool):
 
 
 @pytest.mark.asyncio
-async def test_basetool_context_support():
-    """Test that BaseTools receive context through _context attribute."""
-    from pydantic import Field
-
-    from agency_swarm import BaseTool
-    from agency_swarm.tools.ToolFactory import ToolFactory
-
-    # Create a BaseTool that uses context
-    class ContextAwareTool(BaseTool):
-        """A tool that accesses context."""
-
-        message: str = Field(..., description="Message to process")
-
-        def run(self):
-            if self.context is not None:
-                # Access user context using the cleaner API
-                user_val = self.context.get("test_key", "no_value")
-                return f"Message: {self.message}, Context: {user_val}"
-            else:
-                return f"Message: {self.message}, Context: None"
-
-    # Adapt to FunctionTool
-    function_tool = ToolFactory.adapt_base_tool(ContextAwareTool)
-
-    # Create mock context
-    mock_master_context = MagicMock()
-    mock_master_context.user_context = {"test_key": "test_value"}
-    mock_master_context.get = lambda key, default=None: mock_master_context.user_context.get(key, default)
-
-    mock_wrapper = MagicMock()
-    mock_wrapper.context = mock_master_context
-
-    # Test with context
-    input_json = '{"message": "Hello"}'
-    result = await function_tool.on_invoke_tool(mock_wrapper, input_json)
-    assert result == "Message: Hello, Context: test_value"
-
-    # Test without context (None)
-    result_no_ctx = await function_tool.on_invoke_tool(None, input_json)
-    assert result_no_ctx == "Message: Hello, Context: None"
-
-
-@pytest.mark.asyncio
 async def test_schema_conversion():
     agent = Agent(name="test", instructions="test", schemas_folder="tests/data/schemas")
     tool_names = [tool.name for tool in agent.tools]

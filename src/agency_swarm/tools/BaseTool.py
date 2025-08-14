@@ -10,6 +10,7 @@ import warnings
 from abc import ABC, abstractmethod
 from typing import Any, ClassVar
 
+from agents import RunContextWrapper
 from docstring_parser import parse
 from openai.types.beta.threads.runs.tool_call import ToolCall
 from pydantic import BaseModel
@@ -43,6 +44,11 @@ class BaseTool(BaseModel, ABC):
         for key, value in config_defaults.items():
             if not hasattr(self.ToolConfig, key):
                 setattr(self.ToolConfig, key, value)
+
+        if self._context is None:
+            self._context = RunContextWrapper(
+                context=MasterContext(thread_manager=None, agents={}, user_context={}, current_agent_name=None)
+            )
 
     class ToolConfig:
         strict: bool = False
