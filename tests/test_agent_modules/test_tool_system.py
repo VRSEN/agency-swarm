@@ -276,15 +276,10 @@ def valid_tool() -> str:
     assert len(tool_names) == 1
 
 
-def test_tools_folder_none():
-    """Test agent works with no tools_folder."""
-    agent = Agent(name="test", instructions="test", tools_folder=None)
-    assert agent.tools == []
-
-
-def test_tools_folder_nonexistent_path():
-    """Test agent handles nonexistent tools_folder gracefully."""
-    agent = Agent(name="test", instructions="test", tools_folder="/nonexistent/path")
+@pytest.mark.parametrize("folder_value", [None, "/nonexistent/path"])
+def test_tools_folder_invalid(folder_value: str | None):
+    """Agent handles missing or invalid tools_folder gracefully."""
+    agent = Agent(name="test", instructions="test", tools_folder=folder_value)
     assert agent.tools == []
 
 
