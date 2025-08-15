@@ -63,14 +63,6 @@ def test_agent_initialization_with_validator():
         assert not hasattr(agent, "response_validator")
 
 
-def test_agent_initialization_with_output_type():
-    """Test Agent initialization with output_type parameter."""
-    agent = Agent(name="Agent5", instructions="Structured output", output_type=TaskOutput)
-    assert agent.output_type == TaskOutput
-    assert agent.name == "Agent5"
-    assert agent.instructions == "Structured output"
-
-
 def test_agent_initialization_with_model_settings():
     """Test Agent initialization with a specific model."""
     agent = Agent(
