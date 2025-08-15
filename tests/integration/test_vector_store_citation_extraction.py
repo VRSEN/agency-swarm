@@ -9,7 +9,6 @@ not direct file attachment citations which are tested separately.
 """
 
 import asyncio
-import os
 import tempfile
 from pathlib import Path
 
@@ -97,10 +96,3 @@ Equipment Status: Mass Spectrometer operational
         print(f"   File ID: {citation['file_id']}")
         print(f"   Tool Call: {citation['tool_call_id']}")
         print(f"   Content preview: {citation['text'][:50]}...")
-
-
-if __name__ == "__main__":
-    # Allow running this test directly
-    if os.name == "nt":
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    asyncio.run(test_vector_store_citation_extraction())

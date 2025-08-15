@@ -5,7 +5,6 @@ This test verifies that agents can share data through the agency context,
 ensuring that changes made by one agent are visible to other agents.
 """
 
-import asyncio
 
 import pytest
 from agents import RunContextWrapper, function_tool
@@ -90,7 +89,3 @@ async def test_context_sharing_between_agents():
         recipient_agent=agent2,
     )
     assert "agent2_value" in response4.final_output
-
-
-if __name__ == "__main__":
-    asyncio.run(test_context_sharing_between_agents())

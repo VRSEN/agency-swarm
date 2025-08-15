@@ -259,7 +259,3 @@ class TestStatelessContextPassing:
         # Invalid agent name should raise error
         with pytest.raises(ValueError, match="No context found for agent"):
             agency1._get_agent_context("NonexistentAgent")
-
-
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
