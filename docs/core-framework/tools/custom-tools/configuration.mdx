@@ -26,10 +26,7 @@ class MyCustomTool(BaseTool):
     # ...
 
     class ToolConfig:
-        one_call_at_a_time = True
         strict = False
-        async_mode = "threading"
-        output_as_result = True
 
     def run(self):
         # ...

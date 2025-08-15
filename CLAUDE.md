@@ -184,6 +184,8 @@ The following files currently exceed limits and are considered problematic. Do n
 - Never hard-reset (`git reset --hard`) without preserving progress
 - Logical, isolated commit grouping (distinct refactors vs. features)
 - Commit messages must explain WHY, not just WHAT
+- Before composing a commit message, run `git diff --cached | cat` and base the message on that diff only.
+- Keep subject concise (<72 chars), imperative, and scoped (e.g., `examples: response_validation`).
 
 ## Key References
 - `examples/` – v1.x modern usage
