@@ -3,6 +3,8 @@ import json
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+pytest.importorskip("ag_ui")
 from ag_ui.core import AssistantMessage, FunctionCall, ToolCall, ToolMessage, UserMessage
 from pydantic import BaseModel
 
