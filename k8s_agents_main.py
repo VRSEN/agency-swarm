@@ -7,6 +7,10 @@ from agents.k8s_group_agents.subtask_planner import (
     subtask_planner, subtask_scheduler, subtask_inspector
 )
 
+from agents.k8s_group_agents.comprehensive_group import(
+    comprehensive_planner, comprehensive_step_scheduler
+)
+
 from agents.k8s_group_agents.pod_manage_group import (
     pod_manage_planner, pod_manage_step_scheduler
 )
@@ -33,6 +37,9 @@ from agents.k8s_group_agents.storage_group import (
 
 from agents.k8s_group_agents import step_inspector
 
+from agents.k8s_group_agents.comprehensive_group.file_io_agent import file_io_agent
+from agents.k8s_group_agents.comprehensive_group.text_output_agent import text_output_agent
+
 from agents.k8s_group_agents.pod_manage_group.pod_manage_agent import pod_manage_agent
 from agents.k8s_group_agents.pod_manage_group.resource_grouping_agent import resource_grouping_agent
 
@@ -57,12 +64,12 @@ from agents.k8s_group_agents.storage_group.disk_agent import disk_agent
 from agents.k8s_group_agents.monitor_group.monitor_configuration_agent import monitor_configuration_agent
 from agents.k8s_group_agents.monitor_group.monitor_observe_agent import monitor_observe_agent
 from agents.k8s_group_agents.monitor_group.flexible_strategy_manage_agent import flexible_strategy_manage_agent
-from agents.k8s_group_agents.monitor_group.text_output_agent import text_output_agent
+
 
 from agents.k8s_group_agents.software_manage_group.software_config_modify_agent import software_config_modify_agent
 from agents.k8s_group_agents.software_manage_group.software_install_agent import software_install_agent
 from agents.k8s_group_agents.software_manage_group.software_monitor_agent import software_monitor_agent
-
+from agents.k8s_group_agents.software_manage_group.stress_test_agent import stress_test_agent
 
 from agents.k8s_group_agents.vm_group.kubeadm_agent import kubeadm_agent
 from agents.k8s_group_agents.vm_group.status_agent import status_agent
@@ -122,6 +129,8 @@ def main():
 
         step_inspector_instance = step_inspector.create_agent()
 
+        comprehensive_planner_instance = comprehensive_planner.create_agent()
+        comprehensive_step_scheduler_instance = comprehensive_step_scheduler.create_agent()
         pod_manage_planner_instance = pod_manage_planner.create_agent()
         pod_manage_step_scheduler_instance = pod_manage_step_scheduler.create_agent()
         pod_orchestration_scheduling_planner_instance = pod_orchestration_scheduling_planner.create_agent()
@@ -139,6 +148,9 @@ def main():
         vm_planner_instance = vm_planner.create_agent()
         vm_step_scheduler_instance = vm_step_scheduler.create_agent()
 
+        text_output_agent_instance =  text_output_agent.create_agent()
+        file_io_agent_instance = file_io_agent.create_agent()
+
         pod_manage_agent_instance = pod_manage_agent.create_agent()
         resource_grouping_agent_instance = resource_grouping_agent.create_agent()
 
@@ -154,11 +166,11 @@ def main():
         monitor_configuration_agent_instance = monitor_configuration_agent.create_agent()
         monitor_observe_agent_instance = monitor_observe_agent.create_agent()
         flexible_strategy_manage_agent_instance = flexible_strategy_manage_agent.create_agent()
-        text_output_agent_instance =  text_output_agent.create_agent()
 
         software_config_modify_agent_instance = software_config_modify_agent.create_agent()
         software_install_agent_instance = software_install_agent.create_agent()
         software_monitor_agent_instance = software_monitor_agent.create_agent()
+        stress_test_agent_instance = stress_test_agent.create_agent()
 
         pv_agent_instance = pv_agent.create_agent()
         pvc_agent_instance = pvc_agent.create_agent()
@@ -189,14 +201,20 @@ def main():
             check_log_agent_instance,
             #
             # # 每个能力群的planner和step scheduler
+            
             pod_manage_planner_instance, pod_manage_step_scheduler_instance,
             pod_orchestration_scheduling_planner_instance, pod_orchestration_scheduling_step_scheduler_instance,
             config_manage_planner_instance, config_manage_step_scheduler_instance,
             storage_planner_instance, storage_step_scheduler_instance,
-            monitor_planner_instance, monitor_step_scheduler_instance,flexible_strategy_manage_agent_instance, text_output_agent_instance,
+            monitor_planner_instance, monitor_step_scheduler_instance,
             software_manage_planner_instance, software_manage_step_scheduler_instance,
             vm_planner_instance, vm_step_scheduler_instance,
+            comprehensive_planner_instance,comprehensive_step_scheduler_instance,
             #
+            # # 综合能力 agent
+            file_io_agent_instance,
+            text_output_agent_instance,
+
             # # pod管理能力 agent
             pod_manage_agent_instance,
             resource_grouping_agent_instance,
@@ -224,11 +242,13 @@ def main():
             # # 监控能力 agent
             monitor_configuration_agent_instance,
             monitor_observe_agent_instance,
+            flexible_strategy_manage_agent_instance,
             #
             # # 软件管理能力 agent
             software_config_modify_agent_instance,
             software_install_agent_instance,
             software_monitor_agent_instance,
+            stress_test_agent_instance,
             #
             ## 虚拟机交互能力agent
             kubeadm_agent_instance,
@@ -265,20 +285,24 @@ def main():
             "监控能力群": [monitor_planner_instance,monitor_step_scheduler_instance],
             "软件管理能力群": [software_manage_planner_instance, software_manage_step_scheduler_instance],
             "虚拟机交互能力群":[vm_planner_instance, vm_step_scheduler_instance],
+            "综合能力群":[comprehensive_planner_instance,comprehensive_step_scheduler_instance]
         }
 
         cap_agents = {
             "pod管理能力群": [pod_manage_agent_instance, resource_grouping_agent_instance,],
             "pod编排调度能力群": [stateful_workload_manage_agent_instance, stateless_workload_manage_agent_instance, task_manage_agent_instance, daemonSet_manage_agent_instance, affinity_antiAffinity_scheduling_agent_instance],
             "配置管理能力群": [env_config_manage_agent_instance, privacy_manage_agent_instance],
-            "监控能力群": [monitor_configuration_agent_instance, monitor_observe_agent_instance,flexible_strategy_manage_agent_instance, text_output_agent_instance],
+            "监控能力群": [monitor_configuration_agent_instance, monitor_observe_agent_instance,flexible_strategy_manage_agent_instance],
             "软件管理能力群": [software_config_modify_agent_instance, software_install_agent_instance, software_monitor_agent_instance],
             "存储能力群": [pv_agent_instance, pvc_agent_instance, storageclass_agent_instance, csi_agent_instance, emptydir_agent_instance, hostpath_agent_instance, disk_agent_instance,],
             "虚拟机交互能力群":[package_agent_instance, status_agent_instance,kubeadm_agent_instance],
+            "综合能力群":[file_io_agent_instance,text_output_agent_instance]
         }
 
         text = """
-        我们在华为云CCE集群上已经部署了一个3节点的k8s集群,现在有一台新的虚拟机,需要直接在ubuntu操作系统的虚拟机内安装安装docker和kubernetes相关组件，并且在虚拟机上确认相关组件运行状态
+        对mysql进行高吞吐量测试
+使用 JMeter 执行挂载于pod-name上的/jmeter/test-plan.jmx文件，并根据结果生成报告
+
         """
         # text = input("请输入新的请求描述（或输入exit退出）：")
 

@@ -2,13 +2,13 @@ from agency_swarm import Agent
 from agents.k8s_group_agents.planner_instruction import planner_instruction
 from agents.tools.read_json_file.ReadJsonFile import ReadJsonFile
 
-_name = "monitor_planner"
+_name = "comprehensive_planner"
 
 _description = """
-负责监控能力群的步骤规划
+负责综合能力群的步骤规划
 """
 
-_group_name = "监控能力群"
+_group_name = "综合能力群"
 
 _input_format = """
 {
@@ -19,9 +19,8 @@ _input_format = """
 """
 
 _agents = """
-1. **monitor_configuration_agent**: 负责修改k8s集群的插件或配置文件。
-2. **monitor_observe_agent**: 负责对k8s集群的健康、监控、日志（LTS）、告警（AOM）进行观测。
-3. **flexible_strategy_manage_agent**：负责管理 HPA/VPA 策略，基于 Prometheus 指标进行自动扩缩容决策。
+1. **text_output_agent**：负责根据用户输入生成相应文本。
+2. **file_io_agent**：负责读写k8s环境中的文件
 """
 
 _output_format = """
@@ -37,7 +36,10 @@ _output_format = """
 }
 """
 
-_instruction = planner_instruction(_group_name, _input_format, _agents, _output_format)
+__instruction = f""" 
+# 注意，类似于“收集和分析测试结果”的任务请分为读取结果和分析结果等多个步骤进行。"""
+
+_instruction = planner_instruction(_group_name, _input_format, _agents, _output_format)+ __instruction
 
 
 _tools = [ReadJsonFile]

@@ -22,6 +22,7 @@ _agents = """
 1. **software_config_modify_agent**: 负责对k8s集群中的软件配置进行修改。
 2. **software_install_agent**: 负责进行k8s集群中软件的安装。
 3. **software_monitor_agent**: 负责对k8s集群中的软件进行监控。
+4. **stress_test_agent**: 负责对k8s集群中的软件进行压力测试。
 """
 
 _output_format = """
