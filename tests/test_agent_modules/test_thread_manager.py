@@ -1,5 +1,7 @@
 import pickle
 
+import pytest
+
 from agency_swarm.thread import ThreadManager
 
 
@@ -11,34 +13,49 @@ def test_thread_manager_initialization():
     assert manager._save_threads_callback is None
 
 
-def test_add_message():
-    """Tests adding a single message to the thread manager."""
+@pytest.mark.parametrize(
+    "method,messages",
+    [
+        (
+            "add_message",
+            [
+                {
+                    "role": "user",
+                    "content": "Hello",
+                    "agent": "Agent1",
+                    "callerAgent": None,
+                    "timestamp": 1234567890000,
+                }
+            ],
+        ),
+        (
+            "add_messages",
+            [
+                {
+                    "role": "user",
+                    "content": "Hello",
+                    "agent": "Agent1",
+                    "callerAgent": None,
+                    "timestamp": 1234567890000,
+                },
+                {
+                    "role": "assistant",
+                    "content": "Hi there",
+                    "agent": "Agent1",
+                    "callerAgent": None,
+                    "timestamp": 1234567891000,
+                },
+            ],
+        ),
+    ],
+)
+def test_add_messages(method: str, messages: list[dict]):
+    """Tests adding messages through both single and batch methods."""
     manager = ThreadManager()
-    message = {"role": "user", "content": "Hello", "agent": "Agent1", "callerAgent": None, "timestamp": 1234567890000}
+    target = messages[0] if method == "add_message" else messages
+    getattr(manager, method)(target)
 
-    manager.add_message(message)
-
-    assert len(manager._store.messages) == 1
-    assert manager._store.messages[0] == message
-
-
-def test_add_messages():
-    """Tests adding multiple messages to the thread manager."""
-    manager = ThreadManager()
-    messages = [
-        {"role": "user", "content": "Hello", "agent": "Agent1", "callerAgent": None, "timestamp": 1234567890000},
-        {
-            "role": "assistant",
-            "content": "Hi there",
-            "agent": "Agent1",
-            "callerAgent": None,
-            "timestamp": 1234567891000,
-        },
-    ]
-
-    manager.add_messages(messages)
-
-    assert len(manager._store.messages) == 2
+    assert len(manager._store.messages) == len(messages)
     assert manager._store.messages == messages
 
 

@@ -5,7 +5,6 @@ This test verifies that modifications to user_context are preserved
 between different agent invocations within the same agency.
 """
 
-import asyncio
 
 import pytest
 from pydantic import Field
@@ -104,7 +103,3 @@ async def test_context_override_does_not_affect_agency():
     # Verify agency context was NOT modified
     assert "override_key" not in agency.user_context
     assert agency.user_context == {"agency_key": "agency_value"}
-
-
-if __name__ == "__main__":
-    asyncio.run(test_context_persistence_between_calls())
