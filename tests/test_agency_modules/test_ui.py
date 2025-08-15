@@ -143,18 +143,6 @@ class TestLayoutAlgorithms:
             assert "x" in node["position"]
             assert "y" in node["position"]
 
-    def test_apply_layout_different_dimensions(self, sample_agency_data):
-        """Test apply_layout with different width and height."""
-        result1 = LayoutAlgorithms.apply_layout(sample_agency_data, width=400, height=300)
-        result2 = LayoutAlgorithms.apply_layout(sample_agency_data, width=1200, height=900)
-
-        # Positions should be different for different canvas sizes
-        node1_pos1 = next(n["position"] for n in result1["nodes"] if n["id"] == "CEO")
-        node1_pos2 = next(n["position"] for n in result2["nodes"] if n["id"] == "CEO")
-
-        # At least one coordinate should be different (positions adapt to canvas size)
-        assert node1_pos1 != node1_pos2 or True  # Layout may be the same but that's OK
-
 
 class TestHTMLVisualizationGenerator:
     """Test the HTML visualization generator."""
