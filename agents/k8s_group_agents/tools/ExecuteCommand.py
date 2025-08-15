@@ -36,13 +36,13 @@ class ExecuteCommand(BaseTool):
             check_result = self.send_message_to_agent(recipient_agent_name="check_log_agent", message=json.dumps({"command": self.command, "output": output}, indent=4, ensure_ascii=False))
 
             if "该任务执行失败" in check_result:
-                return {"result": "FAIL", "context": check_result}
-            return {"result": "SUCCESS", "context": check_result}
+                return {"tool": "ExecuteCommand", "command": self.command, "result": "FAIL", "reason": check_result}
+            return {"tool": "ExecuteCommand", "command": self.command, "result": "SUCCESS", "reason": check_result}
         else:
             print(f"ExecuteCommand: command = {self.command}")
             output = input("input result: ")
             check_result = self.send_message_to_agent(recipient_agent_name="check_log_agent", message=json.dumps({"command": self.command, "output": output}, indent=4, ensure_ascii=False))
 
             if "该任务执行失败" in check_result:
-                return {"result": "FAIL", "context": check_result}
-            return {"result": "SUCCESS", "context": check_result}
+                return {"tool": "ExecuteCommand", "command": self.command, "result": "FAIL", "reason": check_result}
+            return {"tool": "ExecuteCommand", "command": self.command, "result": "SUCCESS", "reason": check_result}

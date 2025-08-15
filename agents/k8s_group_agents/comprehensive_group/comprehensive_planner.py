@@ -2,27 +2,25 @@ from agency_swarm import Agent
 from agents.k8s_group_agents.planner_instruction import planner_instruction
 from agents.tools.read_json_file.ReadJsonFile import ReadJsonFile
 
-_name = "software_manage_planner"
+_name = "comprehensive_planner"
 
 _description = """
-负责软件管理能力群的步骤规划
+负责综合能力群的步骤规划
 """
 
-_group_name = "软件管理能力群"
+_group_name = "综合能力群"
 
 _input_format = """
 {
-    "title": <本次子任务的名称>,
-    "description": <本次子任务的描述>,
+    "title": <任务名称>,
+    "description": <任务描述>,
     "total_subtask_graph": <所有子任务的规划图>
 }
 """
 
 _agents = """
-1. **software_config_modify_agent**: 负责对k8s集群中的软件配置进行修改。
-2. **software_install_agent**: 负责进行k8s集群中软件的安装。
-3. **software_monitor_agent**: 负责对k8s集群中的软件进行监控。
-4. **stress_test_agent**: 负责对k8s集群中的软件进行压力测试。
+1. **text_output_agent**：负责根据用户输入生成相应文本。
+2. **file_io_agent**：负责读写k8s环境中的文件
 """
 
 _output_format = """
@@ -38,7 +36,10 @@ _output_format = """
 }
 """
 
-_instruction = planner_instruction(_group_name, _input_format, _agents, _output_format)
+__instruction = f""" 
+# 注意，类似于“收集和分析测试结果”的任务请分为读取结果和分析结果等多个步骤进行。"""
+
+_instruction = planner_instruction(_group_name, _input_format, _agents, _output_format)+ __instruction
 
 
 _tools = [ReadJsonFile]
