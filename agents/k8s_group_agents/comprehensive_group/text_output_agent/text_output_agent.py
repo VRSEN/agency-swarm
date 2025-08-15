@@ -2,6 +2,7 @@ from agency_swarm import Agent
 from agents.k8s_group_agents.k8s_agent_instruction import k8s_agent_instruction
 from agents.tools.read_json_file.ReadJsonFile import ReadJsonFile
 from agents.k8s_group_agents.tools.WriteFile import WriteFile
+from agents.k8s_group_agents.tools.ExecuteCommand import ExecuteCommand
 from datetime import datetime
 
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -21,12 +22,14 @@ _instuction = f"""
 
 ### step 1. 读取日志信息
 
-你收到用户发输入请求后，需要先调用工具`ReadJsonFile`从context_tree.json中读取完整的上下文信息。
+你收到用户发输入请求后，需要先调用工具`ReadJsonFile`从context_tree.json中读取完整的上下文信息，并判断此次任务文本是否是写入k8s环境的任务
+
 获取以上信息后继续执行下列流程。
 
 ### step 2. 生成文本信息
 
-仔细分析初始的用户输入请求和所获取到的上下文信息，生成一份尽可能满足用户需求的文字信息，并将结果用`WriteFile`工具写入{file_name_}文件中，并获取执行结果
+仔细分析初始的用户输入请求和所获取到的上下文信息，生成一份尽可能满足用户需求的信息，
+请将结果用`WriteFile`工具写入{file_name_}文件中，并获取执行结果
 
 你必须**执行工具`WriteFile`**，而不能直接返回结果。
 
@@ -52,7 +55,7 @@ import os
 current_path = os.path.abspath(os.path.dirname(__file__))
 #_instruction = k8s_agent_instruction(_name, _description)
 
-_tools = [ReadJsonFile, WriteFile]
+_tools = [ReadJsonFile, WriteFile,ExecuteCommand]
 
 _file_folder = ""
 

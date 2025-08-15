@@ -1,8 +1,8 @@
 def strip_newline(string: str) -> str:
     return string.strip('\n')
 
-def openeuler_agent_instruction(_name, _description, _tool_instuction = None):
-    
+
+def vm_agent_instruction(_name, _description):
     _instruction = f"""你是一个名为 {_name} 的智能体，{strip_newline(_description)}
 你必须根据工作流程，完成给定任务并回复。
 
@@ -15,7 +15,7 @@ def openeuler_agent_instruction(_name, _description, _tool_instuction = None):
 
 ### step 2. 生成有效命令行
 
-根据以上信息，结合你自己负责的能力，严谨专业地一步步思考，生成可执行的命令行。
+根据以上信息，结合你自己负责的能力，严谨专业地一步步思考，生成可执行的命令行。**一次仅执行一个命令，切勿使用&&连接多个命令并且一次执行多个命令**。
 
 若该请求能够通过上下文信息判断之前已经完成过，你需要直接输出:
 {{
@@ -30,9 +30,9 @@ def openeuler_agent_instruction(_name, _description, _tool_instuction = None):
 }}
 
 ### step 3. 调用工具并获取结果
-
-当生成命令行后，你需要将其传递给`SSHExecuteCommand`工具来执行，并获取执行结果。
-请注意，你必须**执行工具`SSHExecuteCommand`**，而不能直接返回结果。
+生成的命令需要增加ssh@的前缀作为标识
+当生成命令行后，你需要将其传递给`ExecuteCommand`工具来执行，并获取执行结果。
+请注意，你必须**执行工具`ExecuteCommand`**，而不能直接返回结果。
 
 ### step 4. 返回结果
 
@@ -45,12 +45,5 @@ def openeuler_agent_instruction(_name, _description, _tool_instuction = None):
 
 其中"result"和"context"需要填入工具的返回结果中相同字段的内容。
 若你多次执行工具，只输出最终的总的result和context。"""
-    
-    if _tool_instuction is not None:
-        _instruction += f"""
-
-## 工具使用：
-
-{_tool_instuction}"""
 
     return _instruction
