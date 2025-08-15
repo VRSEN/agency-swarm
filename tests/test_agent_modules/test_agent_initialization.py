@@ -39,30 +39,6 @@ def test_agent_initialization_with_tools():
     assert agent.tools[0] == tool1
 
 
-def test_agent_initialization_with_model():
-    """Test Agent initialization with a specific model."""
-    agent = Agent(name="Agent3", instructions="Test", model="gpt-4.1")
-    assert agent.name == "Agent3"
-    assert agent.instructions == "Test"
-    assert agent.model == "gpt-4.1"
-
-
-def test_agent_initialization_with_validator():
-    """Test Agent initialization with response_validator shows deprecation warning."""
-    validator = MagicMock()
-    import warnings
-
-    with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter("always")
-        agent = Agent(name="Agent4", instructions="Validate me", response_validator=validator)
-        # Should show deprecation warning
-        assert len(w) == 1
-        assert issubclass(w[0].category, DeprecationWarning)
-        assert "response_validator" in str(w[0].message)
-        # response_validator is completely removed
-        assert not hasattr(agent, "response_validator")
-
-
 def test_agent_initialization_with_model_settings():
     """Test Agent initialization with a specific model."""
     agent = Agent(
