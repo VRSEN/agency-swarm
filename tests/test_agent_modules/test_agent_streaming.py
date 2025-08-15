@@ -60,38 +60,6 @@ async def test_get_response_stream_final_result_processing():
 
 @pytest.mark.asyncio
 @patch("agents.Runner.run_streamed")
-async def test_get_response_stream_generates_thread_id(
-    mock_runner_run_streamed_patch, minimal_agent, mock_thread_manager
-):
-    """Test that get_response_stream generates a consistent thread ID for user interactions."""
-
-    async def mock_stream_wrapper():
-        yield {"event": "text", "data": "Hello"}
-        yield {"event": "done"}
-
-    class MockStreamedResult:
-        def stream_events(self):
-            return mock_stream_wrapper()
-
-    mock_runner_run_streamed_patch.return_value = MockStreamedResult()
-
-    events = []
-    async for event in minimal_agent.get_response_stream("Test message"):
-        events.append(event)
-
-    assert len(events) == 2
-    # Verify that messages were added to the thread manager
-    mock_thread_manager.add_messages.assert_called()
-    # Messages should be saved with proper agent metadata
-    call_args = mock_thread_manager.add_messages.call_args[0]
-    messages = call_args[0]
-    assert len(messages) > 0
-    for msg in messages:
-        assert msg.get("agent") == "TestAgent"
-
-
-@pytest.mark.asyncio
-@patch("agents.Runner.run_streamed")
 async def test_get_response_stream_agent_to_agent_communication(
     mock_runner_run_streamed_patch, minimal_agent, mock_thread_manager
 ):
@@ -214,7 +182,11 @@ async def test_get_response_stream_thread_management(
     async for event in minimal_agent.get_response_stream("Test message"):
         events.append(event)
 
-    assert len(events) == 2
+    assert events == [
+        {"event": "text", "data": "Hello", "agent": "TestAgent", "callerAgent": None},
+        {"event": "done", "agent": "TestAgent", "callerAgent": None},
+    ]
+
     # Verify messages were saved with proper metadata
     mock_thread_manager.add_messages.assert_called()
     call_args = mock_thread_manager.add_messages.call_args[0]
