@@ -12,8 +12,8 @@ _group_name = "pod管理能力群"
 
 _input_format = """
 {
-    "title": <任务名称>,
-    "description": <任务描述>,
+    "title": <本次子任务的名称>,
+    "description": <本次子任务的描述>,
     "total_subtask_graph": <所有子任务的规划图>
 }
 """

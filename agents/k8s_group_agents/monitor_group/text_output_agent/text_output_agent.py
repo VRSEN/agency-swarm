@@ -21,7 +21,7 @@ _instuction = f"""
 
 ### step 1. 读取日志信息
 
-你收到用户发输入请求后，需要先调用工具`ReadJsonFile`从context.json中读取完整的上下文信息。
+你收到用户发输入请求后，需要先调用工具`ReadJsonFile`从context_tree.json中读取完整的上下文信息。
 获取以上信息后继续执行下列流程。
 
 ### step 2. 生成文本信息
@@ -36,12 +36,13 @@ _instuction = f"""
 获取文件写入结果后，你应该用以下json格式输出:
 
 {{
+    "tool": "...",
     "result": "...",
-    "context": "..."
+    "reason": "..."
 }}
 
-其中"result"和"context"需要填入工具的返回结果中相同字段的内容。
-若你多次执行工具，只输出最终的总的result和context。
+其中"result"和"reason"需要填入工具的返回结果中相同字段的内容。
+若你多次执行工具，只输出最终的总的result和reason。
 
 """
 

@@ -253,24 +253,46 @@ def main():
             "存储能力群": [pv_agent_instance, pvc_agent_instance, storageclass_agent_instance, csi_agent_instance, emptydir_agent_instance, hostpath_agent_instance, disk_agent_instance,],
         }
 
-        text ="""我们在华为云CCE集群上部署了一个 4 节点的 MySQL Galera Cluster (1主3从)，使用 StatefulSet 部署。近期我们发现集群偶尔出现脑裂问题，需要制定一个预案，以便在出现问题时 DBA 能在智能体的协助下快速恢复服务。
+        text ="""我需要为华为云 CCE 集群上的MySQL集群制定扩容预案，以应对即将到来的双十一大促活动。请输出一个 MySQL 数据库扩容的预案方案。
+- 华为云 CCE 集群k8s上的MySQL配置如下:
+    - 集群架构：
+        - 数据库版本：MySQL 8.0.28
+        - 集群架构：1 个主节点mysql-master，2 个从节点mysql-slave-1、mysql-slave-2，主从复制架构。
+        - 主节点配置：8 核 CPU，16GB 内存，500GB SSD 硬盘。
+		        - CPU requests/limits: 8 核(50%)
+						- Memory requests/limits: 16GB
+        - 从节点配置：4 核 CPU，8GB 内存，250GB SSD 硬盘。
+		        - CPU requests/limits: 4 核(50%)
+						- Memory requests/limits: 8GB
+        - 数据库参数配置：
+            - innodb_buffer_pool_size: 8GB
+            - max_connections: 500
+            - innodb_flush_log_at_trx_commit: 1
+    - 监控系统：已部署 Prometheus ，通过 CCE 监控 CPU 使用率、内存使用率、TPS、查询延迟等指标。
+    - CCE 集群节点: 当前集群共有 3 个工作节点，资源已接近饱和。
+    - 数据库目前数据总量约为 500GB，表数量约为 200 个。
+- 预算限制： 例如 1 万元/月以内。
+- 业务需求：
+	- 预计双十一大促期间峰值 TPS 将达到 20000/s，是平日的 4 倍。
+	- 要求峰值 TPS 下平均查询延迟不超过 5ms。
+	- 应用程序读写比例约为 8:2。
+- 安全需求：例如需要保证数据加密和访问控制。
 """
 
         files_path = os.path.join("agents", "files")
-        context_path = os.path.join(files_path, "context.json")
+        comtext_tree = os.path.join(files_path, "context_tree.json")
         # 确保文件目录存在
         if not os.path.exists(files_path):  
             os.mkdir(files_path)    
-        # 清空context.json
-        with open(context_path, "w", encoding='utf-8') as f:
+        # 清空context_tree.json
+        with open(comtext_tree, "w", encoding='utf-8') as f:
             pass
 
         request_id = 0
-
         while True:
             request_id += 1
-            agency.task_planning(original_request=text, plan_agents=plan_agents, cap_group_agents=cap_group_agents, cap_agents=cap_agents, request_id=request_id)
-            text= input("请输入新的请求描述（或输入exit退出）：")
+            agency.task_planning(original_request=text, plan_agents=plan_agents, cap_group_agents=cap_group_agents, cap_agents=cap_agents, request_id= "request_" + str(request_id))
+            text= input("\n请输入新的请求描述（或输入exit退出）：")
             log_file.write(text + '\n')
             log_file.flush()
             if text.lower() == 'exit':
