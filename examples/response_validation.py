@@ -1,124 +1,115 @@
 import asyncio
 import logging
 import os
+import re
 import sys
-
-# Path setup for standalone examples
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
 from agents import (
     GuardrailFunctionOutput,
     InputGuardrailTripwireTriggered,
-    ModelSettings,
     OutputGuardrailTripwireTriggered,
     RunContextWrapper,
     input_guardrail,
     output_guardrail,
 )
 
+# Path setup for standalone examples
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
+
+# Minimal guardrails demo: input requires "Task:"; output forbids email addresses
+
 from agency_swarm import Agency, Agent
 
-# Configure basic logging
-logging.basicConfig(level=logging.WARNING)
+# Silence library logs and stack traces for a clean demo output
+logging.basicConfig(level=logging.ERROR)
 
-# --- Define Guardrails --- #
-
-
-# Checks agent's response
-@output_guardrail
-async def agent_output_guardrail(
-    context: RunContextWrapper, agent: Agent, response_text: str
-) -> GuardrailFunctionOutput:
-    tripwire_triggered = False
-    output_info = ""
-    if not response_text.startswith("Hello, User!"):
-        tripwire_triggered = True
-        output_info = f"Response must start with 'Hello, User!' Original response: {response_text}"
-
-    return GuardrailFunctionOutput(
-        output_info=output_info,
-        tripwire_triggered=tripwire_triggered,
-    )
+# --- Guardrails --- #
 
 
-# Checks user's input
-@input_guardrail
-async def agent_input_guardrail(
+# Require user requests to be explicitly scoped as a Task
+@input_guardrail(name="RequireTaskPrefix")
+async def require_task_prefix(
     context: RunContextWrapper, agent: Agent, input_text: list[dict]
 ) -> GuardrailFunctionOutput:
-    tripwire_triggered = False
-    output_info = ""
-    # By default agent receives entire conversation history as input_text
-    user_message = input_text[-1]["content"]  # Only check last (new) message
-    if not user_message.startswith("Hello, Agent!") and not user_message.startswith("System message:"):
-        tripwire_triggered = True
-        output_info = "User input must start with 'Hello, Agent!'"
+    """Trip if the latest user message does not begin with "Task:".
 
-    return GuardrailFunctionOutput(
-        output_info=output_info,
-        tripwire_triggered=tripwire_triggered,
-    )
+    Demonstrates an input validation pattern. If tripped, agent execution halts immediately
+    and the exception can be caught by the caller to implement a takeover/fallback.
+    """
+    user_message = input_text[-1]["content"].strip()
+    if not user_message.startswith("Task:"):
+        return GuardrailFunctionOutput(
+            output_info="Prefix your request with 'Task:' describing what you need.",
+            tripwire_triggered=True,
+        )
+    return GuardrailFunctionOutput(output_info="", tripwire_triggered=False)
+
+
+# Forbid email addresses in output
+EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+
+
+@output_guardrail(name="ForbidEmailOutput")
+async def forbid_email_output(context: RunContextWrapper, agent: Agent, response_text: str) -> GuardrailFunctionOutput:
+    """Trip if output contains an email address."""
+    text = response_text.strip()
+    if EMAIL_RE.search(text):
+        return GuardrailFunctionOutput(
+            output_info="You are not allowed to include your email address in your response. "
+            "Redirect the user to the contact page: https://www.example.com/contact",
+            tripwire_triggered=True,
+        )
+    return GuardrailFunctionOutput(output_info="", tripwire_triggered=False)
 
 
 # --- Define Agency --- #
 
 agent = Agent(
     name="Agent",
-    instructions="You are a helpful assistant.",
-    description="Helpful assistant",
-    model="gpt-4.1",
-    model_settings=ModelSettings(
-        temperature=0,
+    instructions=(
+        "You are a customer support assistant for ExampleCo. Keep responses concise. "
+        "Your support email is alice@example.com."
     ),
-    output_guardrails=[agent_output_guardrail],
-    input_guardrails=[agent_input_guardrail],
+    description="Customer support assistant",
+    model="gpt-5",
+    output_guardrails=[forbid_email_output],
+    input_guardrails=[require_task_prefix],
 )
 
 agency = Agency(agent)
 
 
-# --- Run Interaction --- #
+# --- Helper: minimal send+log wrapper --- #
+async def ask(message: str):
+    print(f"-> User: {message}")
+    response = await agency.get_response(message=message)
+    print(f"<- Agent: {response.final_output}")
+    return response
+
+
+# No retry helper to keep things simple. If a guardrail trips, we show the message and
+# then send a corrected follow-up like a normal chat user would.
+
+
+# --- Demo --- #
 async def run_conversation():
-    """
-    Demonstrates the usage of guardrails to validate agent's response and user's input.
-
-    Key concepts demonstrated:
-    1. Guardrails tripwire triggers
-    2. Exception handling
-    3. Output validation retry logic
-    """
-
-    # --- Turn 1: Trigger an input guardrail --- #
-    print("\n--- Running input trigger test ---\n\n")
-    user_message_1 = "Hi, what's your name?"
+    print("\n--- Guardrails demo ---\n")
+    # Input guardrail: send invalid message (no Task:) to trigger
     try:
-        await agency.get_response(message=user_message_1)
+        await ask("How can I contact support?")
     except InputGuardrailTripwireTriggered as e:
-        print(f"Input Guardrail Tripwire Triggered: {e.guardrail_result.output.output_info}")
+        info = e.guardrail_result.output.output_info
+        print(f"[Input Tripwire] {info}")
 
-    # --- Turn 2: Trigger an output guardrail --- #
-    print("\n--- Running output trigger test ---\n\n")
-    user_message_2 = "Hello, Agent!"
+    # Output guardrail: realistic role-play; then retry once by passing tripwire back
     try:
-        await agency.get_response(message=user_message_2)
+        await ask("Task: How can I contact support?")
     except OutputGuardrailTripwireTriggered as e:
-        print(f"Output Guardrail Tripwire Triggered: {e.guardrail_result.output.output_info}")
-
-    # --- Turn 3: Send a retry request --- #
-    print("\n--- Running output retry test ---\n\n")
-    retry_attempts = 3
-    user_message_3 = "Hello, Agent!"
-    for attempt in range(retry_attempts):
-        try:
-            response3 = await agency.get_response(message=user_message_3)
-            break
-        except OutputGuardrailTripwireTriggered as e:
-            error_message = e.guardrail_result.output.output_info
-            print(f"Output Guardrail Tripwire Triggered: {error_message}")
-            user_message_3 = f"System message: Response validation failed with an error: {error_message}\nAdjust your response and try again."
-            print(f"Retrying... ({attempt + 1}/{retry_attempts})")
-
-    print(f"Final response after {attempt + 1} attempts: {response3.final_output}")
+        print(f"[Output Tripwire] {e.guardrail_result.output.output_info}")
+        retry = (
+            f"Task: Please answer without including any email address. Context: {e.guardrail_result.output.output_info}"
+        )
+        await ask(retry)
 
 
 # --- Main Execution --- #
