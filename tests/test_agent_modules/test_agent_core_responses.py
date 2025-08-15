@@ -93,34 +93,12 @@ async def test_get_response_with_overrides(mock_runner_run, minimal_agent):
 
 @pytest.mark.asyncio
 async def test_get_response_missing_thread_manager():
-    """Test that get_response succeeds by creating minimal context for standalone agent."""
+    """Test that a standalone agent auto-creates minimal context."""
     agent = Agent(name="TestAgent", instructions="Test")
 
-    # The agent should successfully create a minimal context for standalone usage
     with patch("agents.Runner.run", new_callable=AsyncMock) as mock_runner:
         mock_runner.return_value = MagicMock(new_items=[], final_output="Test response")
 
-        # This should succeed by auto-creating necessary components
         result = await agent.get_response("Test message")
 
-        # Just verify the result exists - the agent handles ThreadManager internally
-        assert result is not None
-
-
-# --- Error Handling Tests ---
-
-
-@pytest.mark.asyncio
-async def test_call_before_agency_setup():
-    """Test that calling agent methods without agency setup succeeds by creating minimal context."""
-    agent = Agent(name="TestAgent", instructions="Test")
-
-    # The agent should auto-create necessary components for direct usage
-    with patch("agents.Runner.run", new_callable=AsyncMock) as mock_runner:
-        mock_runner.return_value = MagicMock(new_items=[], final_output="Test response")
-
-        # This should succeed by auto-creating minimal context
-        result = await agent.get_response("Test message")
-
-        # Just verify the result exists - the agent handles ThreadManager internally
         assert result is not None
