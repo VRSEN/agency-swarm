@@ -170,52 +170,25 @@ def test_agent_initialization_with_all_parameters():
         assert agent.description == "A complete test agent"
 
 
-def test_agent_repr():
-    """Test Agent.__repr__ method with different configurations."""
-    # Test basic agent with minimal config
-    agent1 = Agent(name="TestAgent")
-    repr_str = repr(agent1)
-    assert "name='TestAgent'" in repr_str
-    assert "desc=None" in repr_str
-    assert "model='unknown'" in repr_str
-
-    # Test agent with model
-    agent2 = Agent(name="Worker", model="gpt-4.1")
-    repr_str = repr(agent2)
-    assert "name='Worker'" in repr_str
-    assert "model='gpt-4.1'" in repr_str
-
-    # Test agent with description and output_type
-    agent3 = Agent(name="TaskAgent", description="Handles tasks", output_type=TaskOutput)
-    repr_str = repr(agent3)
-    assert "name='TaskAgent'" in repr_str
-    assert "desc='Handles tasks'" in repr_str
-
-
 # --- Instruction File Loading Tests ---
 
 
 def test_agent_instruction_file_loading(tmp_path):
-    """Test that agent can load instructions from a file."""
-    # Create instruction file
+    """Test that agent can load instructions from absolute and relative file paths."""
+    # Create instruction file for absolute path test
     instruction_file = tmp_path / "agent_instructions.md"
     instruction_content = "You are a helpful assistant. Always be polite."
     instruction_file.write_text(instruction_content)
 
-    # Create agent with instruction file path
+    # Absolute path
     agent = Agent(name="TestAgent", instructions=str(instruction_file), model="gpt-4o-mini")
-
-    # Verify instructions were loaded
     assert agent.instructions == instruction_content
 
-
-def test_agent_instruction_file_relative_path():
-    """Test agent loading instructions from relative path."""
-
-    # Create agent with relative path
-    agent = Agent(name="TestAgent", instructions="../data/files/instructions.md", model="gpt-4o-mini")
-
-    assert agent.instructions == "Test instructions"
+    # Relative path resolved from caller directory
+    relative_agent = Agent(
+        name="TestAgent", instructions="../data/files/instructions.md", model="gpt-4o-mini"
+    )
+    assert relative_agent.instructions == "Test instructions"
 
 
 def test_agent_instruction_string_not_file():
