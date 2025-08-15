@@ -219,21 +219,3 @@ async def test_agent_with_none_original_instructions(mock_run_result):
     assert agent.instructions is None
 
 
-def test_deprecated_get_completion_passes_additional_instructions(sample_agency, sample_agent):
-    """Test that the deprecated get_completion method passes additional_instructions."""
-    additional_text = "Deprecated method instructions"
-
-    with patch.object(sample_agency, "_async_get_completion", new_callable=AsyncMock) as mock_async_get_completion:
-        mock_async_get_completion.return_value = "Completion response"
-
-        # Suppress the deprecation warning for this test
-        with pytest.warns(DeprecationWarning):
-            result = sample_agency.get_completion(message="Test message", additional_instructions=additional_text)
-
-        # Verify the result
-        assert result == "Completion response"
-
-        # Verify additional_instructions was passed to _async_get_completion
-        mock_async_get_completion.assert_called_once()
-        call_kwargs = mock_async_get_completion.call_args[1]
-        assert call_kwargs["additional_instructions"] == additional_text
