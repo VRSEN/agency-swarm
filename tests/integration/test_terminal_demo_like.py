@@ -23,7 +23,8 @@ async def test_terminal_demo_like_flow():
         name="CEO",
         description="Chief Executive Officer - oversees all operations",
         instructions=(
-            "You are the CEO. When asked about weather, delegate to Worker with a specific location (use London if not specified)."
+            "You are the CEO. When asked about weather, delegate to Worker "
+            "with a specific location (use London if not specified)."
         ),
         tools=[],
         model_settings=ModelSettings(temperature=0.0),

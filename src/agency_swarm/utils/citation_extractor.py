@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 def extract_direct_file_annotations(
-    assistant_messages: list[MessageOutputItem], agent_name: str = None
+    assistant_messages: list[MessageOutputItem], agent_name: str | None = None
 ) -> dict[str, list[dict]]:
     """
     Extract file citations from direct file uploads (annotations in message content).

@@ -476,7 +476,7 @@ class AgentFileManager:
         if code_interpreter_file_ids:
             self.add_code_interpreter_tool(code_interpreter_file_ids)
 
-    def add_file_search_tool(self, vector_store_id: str, file_ids: list[str] = None):
+    def add_file_search_tool(self, vector_store_id: str, file_ids: list[str] | None = None):
         """
         Adds a new vector store to the existing FileSearchTool or creates a new one if it doesn't exist.
         If optional file_ids provided, they will be added to the provided vector store.
