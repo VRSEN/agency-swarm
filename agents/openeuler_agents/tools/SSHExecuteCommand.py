@@ -4,10 +4,10 @@ import json
 
 from agents.openeuler_agents.tools.ssh_executor import SSHCommandExecutor
 
-HOST = "127.0.0.1"
-PORT = 8022
-USERNAME = "tommenx"
-PASSWORD = "test"
+HOST = "192.168.40.140"
+PORT = 22
+USERNAME = "root"
+PASSWORD = "1723"
 
 SSH_CONNECTION_ERROR = -1
 
@@ -18,19 +18,25 @@ class SSHExecuteCommand(BaseTool):
     command: str = Field(..., description="需要执行的命令")
 
     def run(self):
-        
+        print(f"SSHExecuteCommand: executing {self.command}")
         success_connect = executor.connect()
         if not success_connect:
-            return json.dumps({
-            'full_stdout':'',
-            'full_stderr':'',
-            'final_status':SSH_CONNECTION_ERROR,
-        })
-        res = executor.execute_command_common(command=self.command)
-        return json.dumps(res)
+            res = {
+                'full_stdout': '',
+                'full_stderr': '',
+                'final_status': SSH_CONNECTION_ERROR,
+            }
+        else:
+            res = executor.execute_command_common(command=self.command)
 
-if __name__=="__main__":
-    tool = SSHExecuteCommand(command="for i in $(seq 1 3); do echo 'Line $i (yield)'; sleep 1; done")
-    print(tool.run())
+        print("SSH:", json.dumps({"command": self.command, "result": res}, indent=4, ensure_ascii=False))
+        
+        check_result = self.send_message_to_agent(recipient_agent_name="check_log_agent", message=json.dumps({"command": self.command, "result": res}, indent=4, ensure_ascii=False))
 
- 
+        if "该任务执行失败" in check_result:
+            return {"result": "FAIL", "context": check_result}
+        return {"result": "SUCCESS", "context": check_result}
+
+# if __name__=="__main__":
+#     tool = SSHExecuteCommand(command="for i in $(seq 1 3); do echo 'Line $i (yield)'; sleep 1; done")
+#     print(tool.run())

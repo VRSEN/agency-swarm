@@ -167,7 +167,7 @@ def main():
             "操作系统能力群": [permissions_agent_instance, network_agent_instance,],
         }
 
-        text ="""在OpenEuler系统上使用yum安装redis6软件包。"""
+        text ="""请更新 secscanner 的本地漏洞数据库，然后扫描系统中软件包的 CVE 漏洞。"""
 
         files_path = os.path.join("agents", "files")
         context_path = os.path.join(files_path, "context.json")

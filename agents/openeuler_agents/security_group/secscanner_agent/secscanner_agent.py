@@ -7,9 +7,9 @@ from agents.openeuler_agents.tools.SSHExecuteCommand import SSHExecuteCommand
 
 _name = "secscanner_agent"
 _description = """
-负责使用secScanner工具扫描OpenEuler系统上多种类型的漏洞，例如rootkit、CVE等。
+负责使用secscanner工具扫描OpenEuler系统上多种类型的漏洞，例如rootkit、CVE等。
 """
-_tool_instruction = """你可以使用secScanner扫描系统漏洞，使用方法如下：
+_tool_instruction = """你可以使用secscanner扫描系统漏洞，使用方法如下：
 
 `secscanner db update`: 下载漏洞数据库更新。
 `secscanner check cve`: 对照漏洞数据库，检查系统中存在的CVE漏洞。
