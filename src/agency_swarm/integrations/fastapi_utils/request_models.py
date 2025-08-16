@@ -16,8 +16,8 @@ class RunAgentInputCustom(RunAgentInput):
     Input for running an agent.
     """
 
-    chat_history: list[dict[str, Any]] = Field(
-        None,
+    chat_history: list[dict[str, Any]] | None = Field(
+        default=None,
         description=(
             "Entire chat history as a flat list of messages. "
             "Each message should contain 'agent', 'callerAgent', 'timestamp' and other OpenAI fields."
@@ -27,23 +27,23 @@ class RunAgentInputCustom(RunAgentInput):
 
 class BaseRequest(BaseModel):
     message: str
-    chat_history: list[dict[str, Any]] = Field(
-        None,
+    chat_history: list[dict[str, Any]] | None = Field(
+        default=None,
         description=(
             "Entire chat history as a flat list of messages. "
             "Each message should contain 'agent', 'callerAgent', 'timestamp' and other OpenAI fields."
         ),
     )
-    recipient_agent: str = None
-    file_ids: list[str] = None
-    file_urls: dict[str, str] = Field(
-        None,
+    recipient_agent: str | None = None
+    file_ids: list[str] | None = None
+    file_urls: dict[str, str] | None = Field(
+        default=None,
         description=(
             "List of downloadable file urls to be use as file attachments. "
             "Should be provided in a form of {'file_name_1': 'download_url_1', 'file_name_2': 'download_url_2', ...}"
         ),
     )
-    additional_instructions: str = None
+    additional_instructions: str | None = None
 
 
 class LogRequest(BaseModel):
