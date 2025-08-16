@@ -934,6 +934,7 @@ class Agency:
             "agencyName": getattr(self, "name", None) or "Unnamed Agency",
             "totalAgents": len(self.agents),
             "totalTools": sum(len(a.tools) if a.tools else 0 for a in self.agents.values()),
+            "agents": list(self.agents.keys()),
             "entryPoints": [ep.name for ep in self.entry_points],
             "sharedInstructions": self.shared_instructions or "",
             "layoutAlgorithm": "hierarchical",

@@ -310,6 +310,11 @@ class TestAgencyVisualizationIntegration:
         communication_edges = [e for e in edges if e["type"] == "communication"]
         assert len(communication_edges) >= 2  # CEO->Manager, Manager->Worker
 
+        # Check metadata contains full agents list and entry points
+        meta = structure["metadata"]
+        assert set(meta["agents"]) == {"CEO", "Manager", "Worker"}
+        assert set(meta["entryPoints"]) == {"CEO"}
+
     def test_get_agency_structure_with_tools(self, sample_agency):
         """Test agency structure generation with tools included."""
         # Test that the method works with include_tools=True
@@ -414,6 +419,8 @@ class TestMetadataDetails:
         meta = structure["metadata"]
         assert meta["agencyName"] == "ToolAgency"
         assert meta["layoutAlgorithm"] == "hierarchical"
+        # Full agents list must include the single ToolAgent
+        assert meta["agents"] == ["ToolAgent"]
 
     def test_hosted_mcp_tools_unique_ids(self):
         """HostedMCPTool instances should produce unique tool nodes and labeled with server labels."""
