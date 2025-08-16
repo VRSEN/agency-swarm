@@ -33,23 +33,14 @@ Begin with a concise checklist (3-7 bullets) of what you will do before performi
 
 ### 🚨 MANDATORY WORKFLOW
 
-#### Step 0: Build Full Codebase Structure (Context Priming)
+#### Step 0: Build Full Codebase Structure and Comprehensive Change Review
 ```bash
-find src/ -name "*.py" | grep -v __pycache__ | sort
-find src/ -name "*.py" | xargs wc -l | sort -nr
+make prime
 ```
-- Run these before reading or modifying files—no exceptions. You can invoke `make prime` to perform Step 0 and Step 1 together.
+- Run this before reading or modifying files—no exceptions.
+- Run Step 0 twice: once before starting work (to understand current state) and once during review before finishing (to double‑check your work).
 
-#### Step 1: Comprehensive Change Review
-```bash
-git diff --cached | cat  # Review all staged changes
-git diff | cat           # Review all unstaged changes
-git status --porcelain   # Audit all file states, including untracked
-```
-
-Run Step 1 twice: once before starting work (to understand current state) and once during review before finishing (to double‑check your work).
-
-#### Step 2: Proactive Analysis
+#### Step 1: Proactive Analysis
 - Search for similar patterns; identify required related changes globally.
 - Apply fixes to all instances at once—avoid piecemeal edits.
 - Investigate thoroughly: read complete files, trace full code paths. For debugging, always link failures to their root cause and commit.
@@ -59,7 +50,7 @@ Run Step 1 twice: once before starting work (to understand current state) and on
 - After changes affecting data flow or order, search codebase-wide for related concepts and eliminate obsolete patterns.
 - You must get explicit approval from the user before adding any workaround. Keep any diffs minimal (avoid excessive changes).
 
-#### Step 3: Comprehensive Validation
+#### Step 2: Comprehensive Validation
 ```bash
 make ci
 uv run python examples/interactive/terminal_demo.py

@@ -30,7 +30,12 @@ from openai._utils._logs import logger
 from openai.types.responses import ResponseFileSearchToolCall, ResponseFunctionWebSearch
 
 from agency_swarm.context import MasterContext
-from agency_swarm.messages import MessageFilter, MessageFormatter
+from agency_swarm.messages import (
+    MessageFilter,
+    MessageFormatter,
+    ensure_tool_calls_content_safety,
+    sanitize_tool_calls_in_history,
+)
 from agency_swarm.streaming_utils import add_agent_name_to_event
 from agency_swarm.utils.citation_extractor import extract_direct_file_annotations
 
@@ -118,6 +123,7 @@ class Execution:
         processed_current_message_items: list[TResponseInputItem],
         sender_name: str | None,
         agency_context: "AgencyContext | None" = None,
+        agent_run_id: str | None = None,
     ) -> list[TResponseInputItem]:
         """Prepare conversation history for the runner."""
         # Get thread manager from context (required)
@@ -129,7 +135,9 @@ class Execution:
         # Add agency metadata to incoming messages
         messages_to_save: list[TResponseInputItem] = []
         for msg in processed_current_message_items:
-            formatted_msg = MessageFormatter.add_agency_metadata(msg, agent=self.agent.name, caller_agent=sender_name)
+            formatted_msg = MessageFormatter.add_agency_metadata(
+                msg, agent=self.agent.name, caller_agent=sender_name, agent_run_id=agent_run_id
+            )
             messages_to_save.append(formatted_msg)
 
         # Save messages to flat storage
@@ -140,8 +148,8 @@ class Execution:
         full_history = thread_manager.get_conversation_history(self.agent.name, sender_name)
 
         # Prepare history for runner (sanitize and ensure content safety)
-        history_for_runner = MessageFormatter.sanitize_tool_calls_in_history(full_history)
-        history_for_runner = MessageFormatter.ensure_tool_calls_content_safety(history_for_runner)
+        history_for_runner = sanitize_tool_calls_in_history(full_history)
+        history_for_runner = ensure_tool_calls_content_safety(history_for_runner)
         # Ensure send_message function_call has a paired output for model input (in-memory only)
         history_for_runner = MessageFormatter.ensure_send_message_pairing(history_for_runner)
         # Strip agency metadata before sending to OpenAI
@@ -263,9 +271,12 @@ class Execution:
             # Handle file attachments
             await self._prepare_and_attach_files(processed_current_message_items, file_ids, message_files, kwargs)
 
-            # Prepare history for runner
+            # Generate a unique run id for this agent execution (non-streaming)
+            current_agent_run_id = f"agent_run_{uuid.uuid4().hex}"
+
+            # Prepare history for runner, persisting initiating messages with agent_run_id
             history_for_runner = self._prepare_history_for_runner(
-                processed_current_message_items, sender_name, agency_context
+                processed_current_message_items, sender_name, agency_context, agent_run_id=current_agent_run_id
             )
             logger.debug(f"Running agent '{self.agent.name}' with history length {len(history_for_runner)}:")
             for i, m in enumerate(history_for_runner):
@@ -334,8 +345,6 @@ class Execution:
                 )
 
                 current_agent_name = self.agent.name
-                # Generate a unique run id for this agent execution (non-streaming)
-                current_agent_run_id = f"agent_run_{uuid.uuid4().hex}"
                 for i, run_item_obj in enumerate(run_result.new_items):
                     # _run_item_to_tresponse_input_item converts RunItem to TResponseInputItem (dict)
                     item_dict = self._run_item_to_tresponse_input_item(run_item_obj)
@@ -467,9 +476,12 @@ class Execution:
             # Handle file attachments
             await self._prepare_and_attach_files(processed_current_message_items, file_ids, message_files, kwargs)
 
-            # Prepare history for runner
+            # Assign a run id for the current active agent in the stream (may change on handoff/new-agent)
+            current_agent_run_id = f"agent_run_{uuid.uuid4().hex}"
+
+            # Prepare history for runner, persisting initiating messages with agent_run_id
             history_for_runner = self._prepare_history_for_runner(
-                processed_current_message_items, sender_name, agency_context
+                processed_current_message_items, sender_name, agency_context, agent_run_id=current_agent_run_id
             )
 
             logger.debug(
@@ -517,8 +529,6 @@ class Execution:
                     )
 
                     current_stream_agent_name = self.agent.name
-                    # Assign a unique run id for the current active agent in the stream
-                    current_agent_run_id = f"agent_run_{uuid.uuid4().hex}"
                     # Suppress SDK-emitted send_message tool call pair (we inject a sentinel earlier)
                     suppress_next_send_message_output: bool = False
                     async for event in result.stream_events():
