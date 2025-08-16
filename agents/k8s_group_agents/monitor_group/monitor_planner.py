@@ -12,8 +12,8 @@ _group_name = "监控能力群"
 
 _input_format = """
 {
-    "title": <任务名称>,
-    "description": <任务描述>,
+    "title": <本次子任务的名称>,
+    "description": <本次子任务的描述>,
     "total_subtask_graph": <所有子任务的规划图>
 }
 """
@@ -22,7 +22,6 @@ _agents = """
 1. **monitor_configuration_agent**: 负责修改k8s集群的插件或配置文件。
 2. **monitor_observe_agent**: 负责对k8s集群的健康、监控、日志（LTS）、告警（AOM）进行观测。
 3. **flexible_strategy_manage_agent**：负责管理 HPA/VPA 策略，基于 Prometheus 指标进行自动扩缩容决策。
-4. **text_output_agent**：负责根据用户输入生成相应文本。
 """
 
 _output_format = """
