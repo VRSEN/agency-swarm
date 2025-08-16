@@ -6,12 +6,16 @@ model validators, and Pydantic's powerful validation capabilities. Both BaseTool
 are fully supported approaches for tool creation.
 """
 
+import warnings
 from abc import ABC, abstractmethod
 from typing import Any, ClassVar
 
+from agents import RunContextWrapper
 from docstring_parser import parse
 from openai.types.beta.threads.runs.tool_call import ToolCall
 from pydantic import BaseModel
+
+from ..context import MasterContext
 
 
 class classproperty:
@@ -25,7 +29,8 @@ class classproperty:
 class BaseTool(BaseModel, ABC):
     _caller_agent: Any = None
     _event_handler: Any = None
-    _tool_call: ToolCall = None
+    _tool_call: ToolCall | None = None
+    _context: Any = None  # Will hold RunContextWrapper when available
     openai_schema: ClassVar[dict[str, Any]]
 
     def __init__(self, **kwargs):
@@ -39,6 +44,11 @@ class BaseTool(BaseModel, ABC):
         for key, value in config_defaults.items():
             if not hasattr(self.ToolConfig, key):
                 setattr(self.ToolConfig, key, value)
+
+        if self._context is None:
+            self._context = RunContextWrapper(
+                context=MasterContext(thread_manager=None, agents={}, user_context={}, current_agent_name=None)
+            )
 
     class ToolConfig:
         strict: bool = False
@@ -89,6 +99,29 @@ class BaseTool(BaseModel, ABC):
                     def_["additionalProperties"] = False
 
         return schema
+
+    @property
+    def context(self) -> MasterContext | None:
+        """Get the MasterContext if available, providing clean access to shared state."""
+        if self._context is not None:
+            return self._context.context
+        return None
+
+    @property
+    def _shared_state(self) -> MasterContext | None:
+        """
+        Backwards compatibility property that provides direct access to the context.
+
+        Usage:
+        - self._shared_state.set("key", "value")  # Set a value
+        - value = self._shared_state.get("key", "default")  # Get a value
+        """
+        warnings.warn(
+            "_shared_state is deprecated and will be removed in future versions. Use 'self.context' instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.context
 
     @abstractmethod
     def run(self):

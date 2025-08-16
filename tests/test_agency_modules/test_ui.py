@@ -51,7 +51,7 @@ def sample_agency_data():
             {"id": "CEO-Manager", "source": "CEO", "target": "Manager", "type": "communication"},
             {"id": "Manager-Worker", "source": "Manager", "target": "Worker", "type": "communication"},
         ],
-        "metadata": {"agencyName": "Test Agency", "totalAgents": 3, "totalTools": 0, "layoutAlgorithm": "hierarchical"},
+        "metadata": {"agencyName": "Test Agency", "totalAgents": 3, "totalTools": 0},
     }
 
 
@@ -130,7 +130,7 @@ class TestLayoutAlgorithms:
 
     def test_apply_layout(self, sample_agency_data):
         """Test the apply_layout method."""
-        result = LayoutAlgorithms.apply_layout(sample_agency_data, algorithm="hierarchical")
+        result = LayoutAlgorithms.apply_layout(sample_agency_data)
 
         # Check that structure is preserved
         assert "nodes" in result
@@ -142,21 +142,6 @@ class TestLayoutAlgorithms:
             assert "position" in node
             assert "x" in node["position"]
             assert "y" in node["position"]
-
-        # Check that layout algorithm is recorded
-        assert result["metadata"]["layoutAlgorithm"] == "hierarchical"
-
-    def test_apply_layout_different_dimensions(self, sample_agency_data):
-        """Test apply_layout with different width and height."""
-        result1 = LayoutAlgorithms.apply_layout(sample_agency_data, width=400, height=300)
-        result2 = LayoutAlgorithms.apply_layout(sample_agency_data, width=1200, height=900)
-
-        # Positions should be different for different canvas sizes
-        node1_pos1 = next(n["position"] for n in result1["nodes"] if n["id"] == "CEO")
-        node1_pos2 = next(n["position"] for n in result2["nodes"] if n["id"] == "CEO")
-
-        # At least one coordinate should be different (positions adapt to canvas size)
-        assert node1_pos1 != node1_pos2 or True  # Layout may be the same but that's OK
 
 
 class TestHTMLVisualizationGenerator:
@@ -262,7 +247,6 @@ class TestHTMLVisualizationGenerator:
         result = HTMLVisualizationGenerator.create_visualization_from_agency(
             agency=sample_agency,
             output_file="test.html",
-            layout_algorithm="hierarchical",
             include_tools=True,
             open_browser=False,
         )
@@ -281,9 +265,7 @@ class TestAgencyVisualizationIntegration:
 
         try:
             with patch("webbrowser.open"):
-                result_path = sample_agency.visualize(
-                    output_file=output_file, layout_algorithm="hierarchical", include_tools=True, open_browser=False
-                )
+                result_path = sample_agency.visualize(output_file=output_file, include_tools=True, open_browser=False)
 
             assert result_path == str(Path(output_file).resolve())
             assert Path(output_file).exists()
@@ -328,6 +310,11 @@ class TestAgencyVisualizationIntegration:
         communication_edges = [e for e in edges if e["type"] == "communication"]
         assert len(communication_edges) >= 2  # CEO->Manager, Manager->Worker
 
+        # Check metadata contains full agents list and entry points
+        meta = structure["metadata"]
+        assert set(meta["agents"]) == {"CEO", "Manager", "Worker"}
+        assert set(meta["entryPoints"]) == {"CEO"}
+
     def test_get_agency_structure_with_tools(self, sample_agency):
         """Test agency structure generation with tools included."""
         # Test that the method works with include_tools=True
@@ -362,24 +349,16 @@ class TestAgencyVisualizationIntegration:
         tool_edges = [e for e in structure["edges"] if e["type"] == "tool"]
         assert len(tool_edges) == 0
 
-    def test_get_agency_structure_layout_algorithms(self, sample_agency):
-        """Test different layout algorithms in get_agency_structure."""
+    def test_get_agency_structure_hierarchical_layout(self, sample_agency):
+        """Test hierarchical layout in get_agency_structure."""
         # Test hierarchical layout
-        structure_hier = sample_agency.get_agency_structure(layout_algorithm="hierarchical")
-        assert structure_hier["metadata"]["layoutAlgorithm"] == "hierarchical"
+        structure = sample_agency.get_agency_structure()
 
         # Check that nodes have positions
-        for node in structure_hier["nodes"]:
+        for node in structure["nodes"]:
             assert "position" in node
             assert "x" in node["position"]
             assert "y" in node["position"]
-
-    def test_visualization_module_import(self):
-        """Test that visualization modules can be imported."""
-        from agency_swarm.ui import HTMLVisualizationGenerator, LayoutAlgorithms
-
-        assert HTMLVisualizationGenerator is not None
-        assert LayoutAlgorithms is not None
 
     def test_layout_algorithms_manager_vs_leaf_positioning(self):
         """Test that manager agents and leaf agents position tools differently."""
@@ -414,3 +393,67 @@ class TestAgencyVisualizationIntegration:
         # These assertions test the smart positioning logic
         assert manager_tool_pos["x"] > manager_pos["x"]  # Tool to the right of manager
         assert worker_tool_pos["y"] > worker_pos["y"]  # Tool below worker
+
+
+class TestMetadataDetails:
+    def test_get_agency_structure_rich_metadata(self):
+        """Ensure metadata includes tool details and agency info."""
+        from agents import function_tool
+
+        @function_tool
+        def sample_tool(text: str) -> str:
+            """Echo text."""
+            return text
+
+        agent = Agent(name="ToolAgent", instructions="Use the tool", tools=[sample_tool])
+        agency = Agency(agent, name="ToolAgency", shared_instructions="shared.md")
+
+        structure = agency.get_agency_structure()
+
+        agent_node = next(n for n in structure["nodes"] if n["id"] == "ToolAgent")
+        data = agent_node["data"]
+        assert data["toolCount"] == 1
+        assert data["tools"][0]["name"] == "sample_tool"
+        assert data["instructions"].startswith("shared.md")
+
+        meta = structure["metadata"]
+        assert meta["agencyName"] == "ToolAgency"
+        assert meta["layoutAlgorithm"] == "hierarchical"
+        # Full agents list must include the single ToolAgent
+        assert meta["agents"] == ["ToolAgent"]
+
+    def test_hosted_mcp_tools_unique_ids(self):
+        """HostedMCPTool instances should produce unique tool nodes and labeled with server labels."""
+        from agents import HostedMCPTool
+
+        agent = Agent(
+            name="SearchCoordinator",
+            instructions="Handle searches",
+            tools=[
+                HostedMCPTool(
+                    tool_config={
+                        "type": "mcp",
+                        "server_label": "tavily-server",
+                        "server_url": "https://example.com/tavily",
+                        "require_approval": "never",
+                    }
+                ),
+                HostedMCPTool(
+                    tool_config={
+                        "type": "mcp",
+                        "server_label": "youtube-server",
+                        "server_url": "https://example.com/youtube",
+                        "require_approval": "never",
+                    }
+                ),
+            ],
+        )
+
+        agency = Agency(agent)
+        structure = agency.get_agency_structure()
+
+        tool_nodes = [n for n in structure["nodes"] if n["type"] == "tool"]
+        ids = [n["id"] for n in tool_nodes]
+        assert len(ids) == len(set(ids))
+        labels = [n["data"]["label"] for n in tool_nodes]
+        assert "tavily-server" in labels and "youtube-server" in labels

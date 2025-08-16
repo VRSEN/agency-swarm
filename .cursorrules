@@ -267,7 +267,7 @@ filesystem_server = MCPServerStdio(
     name="Filesystem_Server",
     params={
         "command": "npx",
-        "args": ["-y", "@modelcontextprotocol/server-filesystem", "."], 
+        "args": ["-y", "@modelcontextprotocol/server-filesystem", "."],
     },
     cache_tools_list=True
 )

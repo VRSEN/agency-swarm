@@ -18,7 +18,7 @@ class LayoutAlgorithms:
         Create a hierarchical layout.
         Entry points at top, subsequent layers below.
         """
-        positions = {}
+        positions: dict[str, dict[str, float]] = {}
 
         # Node sizing constants
         AGENT_WIDTH = 120
@@ -34,7 +34,7 @@ class LayoutAlgorithms:
         tools = [node for node in nodes if node["type"] == "tool"]
 
         # Build adjacency graph for flow analysis
-        graph = {}
+        graph: dict[str, list[str]] = {}
         for node in nodes:
             graph[node["id"]] = []
 
@@ -43,8 +43,8 @@ class LayoutAlgorithms:
                 graph[edge["source"]].append(edge["target"])
 
         # Assign layers using BFS from entry points
-        layers = {}
-        visited = set()
+        layers: dict[str, int] = {}
+        visited: set[str] = set()
 
         # Start with entry points at layer 0
         for ep in entry_points:
@@ -54,7 +54,7 @@ class LayoutAlgorithms:
         # BFS to assign layers
         current_layer = 0
         while True:
-            next_layer_nodes = []
+            next_layer_nodes: list[str] = []
 
             for node_id, layer in layers.items():
                 if layer == current_layer:
@@ -72,14 +72,14 @@ class LayoutAlgorithms:
 
         # Calculate required space for each layer to prevent intersections
         max_layer = max(layers.values()) if layers else 0
-        layer_node_counts = {}
+        layer_node_counts: dict[int, int] = {}
 
         for node in agents:
             layer = layers.get(node["id"], max_layer + 1)
             layer_node_counts[layer] = layer_node_counts.get(layer, 0) + 1
 
         # Position agents layer by layer to ensure consistent spacing
-        processed_layers = set()
+        processed_layers: set[int] = set()
         for node in agents:
             layer = layers.get(node["id"], max_layer + 1)
 
@@ -96,12 +96,12 @@ class LayoutAlgorithms:
 
             # Calculate spacing for this layer
             if total_width_needed <= width:
-                layer_spacing = MIN_SPACING_X
+                layer_spacing: float = float(MIN_SPACING_X)
                 start_x = (width - total_width_needed) / 2 + (AGENT_WIDTH / 2)
             else:
                 # If too wide, compress spacing but maintain minimum
                 available_spacing = (width - (total_nodes * AGENT_WIDTH)) / max(total_nodes - 1, 1)
-                layer_spacing = max(MIN_SPACING_X, available_spacing)
+                layer_spacing = float(max(MIN_SPACING_X, available_spacing))
                 start_x = AGENT_WIDTH / 2
 
             # Position all nodes in this layer
@@ -114,10 +114,10 @@ class LayoutAlgorithms:
         orphan_count = 0
 
         # First, identify which agents are managers (have multiple outgoing connections or are intermediate layers)
-        agents_with_children = set()
+        agents_with_children: set[str] = set()
 
         # Count outgoing communication flows for each agent
-        outgoing_counts = {}
+        outgoing_counts: dict[str, int] = {}
         for edge in edges:
             if edge["type"] == "communication":
                 source_agent = edge["source"]
@@ -132,19 +132,45 @@ class LayoutAlgorithms:
             if count > 1:
                 agents_with_children.add(agent_id)
 
+        # Track tool counts per agent for horizontal spacing
+        agent_tool_counts: dict[str, list[dict[str, Any]]] = {}
+        for tool in tools:
+            parent_agent = tool.get("data", {}).get("parentAgent")
+            if parent_agent:
+                if parent_agent not in agent_tool_counts:
+                    agent_tool_counts[parent_agent] = []
+                agent_tool_counts[parent_agent].append(tool)
+
         for tool in tools:
             parent_agent = tool.get("data", {}).get("parentAgent")
             if parent_agent and parent_agent in positions:
                 parent_pos = positions[parent_agent]
 
+                # Get the tools for this agent and find the index
+                agent_tools = agent_tool_counts.get(parent_agent, [])
+                tool_index = agent_tools.index(tool) if tool in agent_tools else 0
+                num_tools = len(agent_tools)
+
                 # Position tools based on parent agent type
                 if parent_agent in agents_with_children:
-                    # For manager agents (with children): position tool to the right
-                    tool_x = parent_pos["x"] + AGENT_WIDTH / 2 + TOOL_WIDTH / 2 + 40
+                    # For manager agents (with children): position tools to the right
+                    # Spread tools horizontally with consistent spacing
+                    tool_spacing = 120  # Consistent with old implementation
+                    if num_tools == 1:
+                        # Single tool: offset to the right
+                        tool_x = parent_pos["x"] + AGENT_WIDTH / 2 + TOOL_WIDTH / 2 + 40
+                    else:
+                        # Multiple tools: spread horizontally
+                        start_x = parent_pos["x"] + AGENT_WIDTH / 2 + TOOL_WIDTH / 2 + 40
+                        tool_x = start_x + (tool_index * tool_spacing) - ((num_tools - 1) * tool_spacing / 2)
                     tool_y = parent_pos["y"]
                 else:
-                    # For leaf agents (no children): position tool below
-                    tool_x = parent_pos["x"]
+                    # For leaf agents (no children): position tools below
+                    # Use the exact formula from the old implementation
+                    tool_spacing = 120
+                    # Old formula was: x + (j * 120) - 60
+                    # This offsets tools to spread them horizontally
+                    tool_x = parent_pos["x"] + (tool_index * tool_spacing) - 60
                     tool_y = parent_pos["y"] + AGENT_HEIGHT / 2 + TOOL_HEIGHT / 2 + 60
 
                 positions[tool["id"]] = {"x": tool_x, "y": tool_y}
@@ -158,16 +184,14 @@ class LayoutAlgorithms:
         return positions
 
     @staticmethod
-    def apply_layout(
-        agency_data: dict[str, Any], algorithm: str = "hierarchical", width: int = 800, height: int = 600
-    ) -> dict[str, Any]:
+    def apply_layout(agency_data: dict[str, Any], width: int = 800, height: int = 600) -> dict[str, Any]:
         """
         Apply hierarchical layout algorithm to agency data and return updated structure.
         """
         nodes = agency_data.get("nodes", [])
         edges = agency_data.get("edges", [])
 
-        # Only hierarchical layout is supported now
+        # Apply hierarchical layout
         positions = LayoutAlgorithms.hierarchical_layout(nodes, edges, width, height)
 
         # Update node positions in the data structure
@@ -181,6 +205,4 @@ class LayoutAlgorithms:
             updated_nodes.append(updated_node)
 
         updated_data["nodes"] = updated_nodes
-        updated_data["metadata"]["layoutAlgorithm"] = "hierarchical"
-
         return updated_data

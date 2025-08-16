@@ -17,7 +17,7 @@ Agency Swarm supports two powerful paradigms for inter-agent communication that 
 ### Handoffs (Sequential Pattern)
 - **Control Flow**: Control **transfers** to the handoff target
 - **Use Case**: Complete task delegation and specialization
-- **Implementation**: Via agent `handoffs` attribute + OpenAI SDK
+- **Implementation**: Via `SendMessageHandoff` tool class + OpenAI SDK
 - **Example**: `Worker -> Specialist` (control stays with Specialist)
 
 ## The Hybrid Resolution
@@ -40,12 +40,13 @@ When both patterns are used together, Agency Swarm implements a **sophisticated 
    - The recipient formulates a comprehensive response including handoff results
    - The orchestrator receives full visibility into the handoff process
 
-## Practical Example
+## Setting Up Handoffs
 
-Here's a real-world scenario demonstrating the hybrid pattern:
+In this library, handoffs are configured via the `SendMessageHandoff` tool.
 
 ```python
 from agency_swarm import Agency, Agent
+from agency_swarm.tools import SendMessageHandoff
 
 # Create specialized agents
 orchestrator = Agent(
@@ -57,17 +58,17 @@ orchestrator = Agent(
 worker = Agent(
     name="Developer",
     instructions="Handle development tasks, consult specialists when needed",
+    send_message_tool_class=SendMessageHandoff,
     # ... other config
 )
 
 specialist = Agent(
     name="SecurityExpert",
     instructions="Provide security expertise and recommendations",
+    # Agent description will be added to the handoff tool instructions
+    description="Provides security expertise and recommendations",
     # ... other config
 )
-
-# Configure handoffs: Developer can hand off to SecurityExpert
-worker.handoffs = [specialist]
 
 # Create agency with communication flows
 agency = Agency(
@@ -75,6 +76,7 @@ agency = Agency(
     communication_flows=[
         (orchestrator, worker),      # Creates send_message_to_Developer tool
         (orchestrator, specialist),  # Creates send_message_to_SecurityExpert tool
+        (worker, specialist),        # Creates a handoff from worker to specialist (since worker has a special send message class)
     ]
 )
 ```
@@ -93,73 +95,32 @@ agency = Agency(
 
 6. **ProjectManager** receives a comprehensive response with security considerations included
 
-## Configuration Verification
-
-You can verify your hybrid setup is working correctly:
-
-```python
-# Check tool configuration
-orchestrator_tools = [tool.name for tool in orchestrator.tools if hasattr(tool, 'name')]
-print(f"Orchestrator tools: {orchestrator_tools}")
-# Expected: ['send_message_to_Developer', 'send_message_to_SecurityExpert']
-
-# Check handoff configuration
-print(f"Developer handoffs: {[h.name for h in worker.handoffs]}")
-# Expected: ['SecurityExpert']
-
-# Specialist should have no communication tools
-specialist_tools = [tool.name for tool in specialist.tools if hasattr(tool, 'name')]
-print(f"Specialist tools: {specialist_tools}")
-# Expected: [] (no SendMessage tools)
-```
-
 ## Advanced Patterns
 
 ### Multi-Level Handoffs with Orchestration
 
 ```python
-# Complex hierarchy: Manager -> Developer -> SecurityExpert -> ComplianceOfficer
-developer.handoffs = [security_expert]
-security_expert.handoffs = [compliance_officer]
+# Complex hierarchy: Manager -> Developer (has SendMessageHandoff) -> 
+# -> SecurityExpert (has SendMessageHandoff) -> ComplianceOfficer
 
 # Manager can still orchestrate while allowing deep specialization chains
 agency = Agency(
     manager,
     communication_flows=[
         (manager, developer),
-        (manager, security_expert),
-        (manager, compliance_officer),
+        (developer, security_expert),
+        (security_expert, compliance_officer),
     ]
 )
-```
-
-### Selective Handoff Triggers
-
-```python
-class ConditionalHandoffAgent(Agent):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.handoffs = [specialist_agent]
-
-    async def get_response(self, message, **kwargs):
-        # Custom logic to determine when to use handoffs
-        if "security" in message.lower() or "compliance" in message.lower():
-            # Let handoff mechanism handle this
-            return await super().get_response(message, **kwargs)
-        else:
-            # Handle directly without handoff
-            return await super().get_response(message, **kwargs)
 ```
 
 ## Thread Management
 
 The hybrid pattern includes sophisticated conversation thread management:
 
-- **Top-level calls** (`sender_name=None`): History saved to shared thread
-- **Agent-to-agent calls** (`sender_name` provided): History NOT saved to shared thread
-- **Handoff coordination**: Context flows through handoff chain without polluting main thread
-
-This prevents tool responses from cluttering the main conversation while preserving context flow.
+- **Top-level calls** (`sender_name=None`): History saved to main user thread
+- **Agent-to-agent calls** (`sender_name` provided): History saved with agent-pair metadata for isolated retrieval
+- **Handoff coordination**: Context flows through handoff chain without polluting main user thread
 
 ## When to Use Hybrid Patterns
 
@@ -184,6 +145,8 @@ This prevents tool responses from cluttering the main conversation while preserv
 - Expert consultation during task processing
 - Seamless specialist integration
 
+**⚠️ Important**: In this library, handoffs must be configured using `SendMessageHandoff` tools only. The `agent.handoffs` parameter is not supported.
+
 **Combine both when you need**:
 - Sophisticated multi-agent coordination
 - Hierarchical delegation with oversight
@@ -195,16 +158,12 @@ This prevents tool responses from cluttering the main conversation while preserv
 Agency Swarm includes comprehensive tests for hybrid patterns. You can run them to verify your setup:
 
 ```bash
-# Test hybrid pattern behavior
-python -m pytest tests/test_control_transfer_behavior.py -v
-
 # Test handoffs with communication flows
-python -m pytest tests/test_handoffs_with_communication_flows.py -v
+python -m pytest tests/integration/test_agent_handoffs.py -v
 ```
 
 Key test files:
-- [`tests/test_control_transfer_behavior.py`](https://github.com/VRSEN/agency-swarm/blob/main/tests/test_control_transfer_behavior.py) - Comprehensive hybrid pattern testing
-- [`tests/test_handoffs_with_communication_flows.py`](https://github.com/VRSEN/agency-swarm/blob/main/tests/test_handoffs_with_communication_flows.py) - Configuration verification tests
+- [`tests/integration/test_agent_handoffs.py`](https://github.com/VRSEN/agency-swarm/blob/main/tests/integration/test_agent_handoffs.py) - Comprehensive handoff and communication flow testing
 
 ## Implementation Details
 
@@ -222,8 +181,8 @@ class SendMessage(FunctionTool):
 ```
 
 ### Sequential Handoff Integration
-- Handoffs configured via `agent.handoffs = [target_agent]`
-- Handled by OpenAI SDK during agent execution
+- Handoffs configured by adding `SendMessageHandoff` as agent's custom send message tool class
+- Handled by OpenAI SDK during agent execution  
 - Can occur within `get_response()` call triggered by SendMessage
 - Results incorporated into agent's response
 

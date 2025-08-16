@@ -55,13 +55,14 @@ def mock_run_context_wrapper(mock_master_context):
 
 
 @pytest.fixture
-def mock_context():
+def mock_context(mock_sender_agent, mock_recipient_agent):
     context = MagicMock(spec=MasterContext)
-    context.agents = {}
+    context.agents = {"SenderAgent": mock_sender_agent, "RecipientAgent": mock_recipient_agent}
     context.thread_manager = MagicMock(spec=ThreadManager)
     context.thread_manager.get_thread = MagicMock(return_value=MagicMock())
     context.thread_manager.add_items_and_save = AsyncMock()
     context.user_context = {"user_key": "user_val"}
+    context.shared_instructions = None
     return context
 
 
@@ -78,9 +79,8 @@ def mock_wrapper(mock_context, mock_sender_agent):
 def specific_send_message_tool(mock_sender_agent, mock_recipient_agent):
     # Create an instance of SendMessage for testing its on_invoke_tool method directly
     return SendMessage(
-        tool_name=f"send_message_to_{mock_recipient_agent.name}",
         sender_agent=mock_sender_agent,
-        recipient_agent=mock_recipient_agent,
+        recipients={mock_recipient_agent.name.lower(): mock_recipient_agent},
     )
 
 
@@ -107,6 +107,7 @@ def legacy_tool():
 async def test_send_message_success(specific_send_message_tool, mock_wrapper, mock_recipient_agent, mock_context):
     message_content = "Test message"
     args_dict = {
+        "recipient_agent": mock_recipient_agent.name,  # Add the recipient_agent field
         "my_primary_instructions": "Primary instructions for test.",
         "message": message_content,
         "additional_instructions": "Additional instructions for test.",
@@ -118,12 +119,13 @@ async def test_send_message_success(specific_send_message_tool, mock_wrapper, mo
     )
 
     assert result == "Response from recipient"
-    mock_recipient_agent.get_response.assert_called_once_with(
-        message=message_content,
-        sender_name=specific_send_message_tool.sender_agent.name,
-        context_override=mock_context.user_context,
-        additional_instructions="Additional instructions for test.",
-    )
+    # Check that get_response was called with the expected parameters
+    mock_recipient_agent.get_response.assert_called_once()
+    call_args = mock_recipient_agent.get_response.call_args
+    assert call_args.kwargs["message"] == message_content
+    assert call_args.kwargs["sender_name"] == specific_send_message_tool.sender_agent.name
+    assert "additional_instructions" in call_args.kwargs
+    assert "agency_context" in call_args.kwargs
 
 
 @pytest.mark.asyncio
@@ -146,6 +148,7 @@ async def test_send_message_invalid_json(specific_send_message_tool, mock_wrappe
 async def test_send_message_missing_required_param(specific_send_message_tool, mock_wrapper):
     # Test missing 'message'
     args_dict_missing_message = {
+        "recipient_agent": "RecipientAgent",
         "my_primary_instructions": "Primary instructions.",
         # "message" is missing
     }
@@ -167,6 +170,7 @@ async def test_send_message_missing_required_param(specific_send_message_tool, m
 
     # Test missing 'my_primary_instructions'
     args_dict_missing_instr = {
+        "recipient_agent": "RecipientAgent",
         "message": "A message",
         # my_primary_instructions is missing
     }
@@ -191,8 +195,10 @@ async def test_send_message_target_agent_error(specific_send_message_tool, mock_
     mock_recipient_agent.get_response.side_effect = RuntimeError(error_text)
     message_content = "Test message"
     args_dict = {
+        "recipient_agent": mock_recipient_agent.name,
         "my_primary_instructions": "Primary instructions.",
         "message": message_content,
+        "additional_instructions": "",
     }
     args_json_string = json.dumps(args_dict)
     expected_error_message = (
@@ -211,12 +217,11 @@ async def test_send_message_target_agent_error(specific_send_message_tool, mock_
 @pytest.mark.asyncio
 async def test_legacy_tool(legacy_tool):
     """
-    Test that a legacy BaseTool can be used via the on_invoke_tool method of the adapted FunctionTool.
+    Test that BaseTool can be used via the on_invoke_tool method of the adapted FunctionTool.
     """
-    from agency_swarm.agent import Agent
+    from agency_swarm.tools.ToolFactory import ToolFactory
 
-    agent = Agent(name="test", instructions="test")
-    function_tool = agent._adapt_legacy_tool(legacy_tool)
+    function_tool = ToolFactory.adapt_base_tool(legacy_tool)
     input_json = '{"input": "hello"}'
     result = await function_tool.on_invoke_tool(None, input_json)
     assert result == "hello"
@@ -237,36 +242,10 @@ def test_tools_folder_autoload():
     assert "sample_tool" in tool_names
 
 
-def test_relative_tools_folder_is_class_local(tmp_path, monkeypatch):
-    pkg_dir = tmp_path / "pkg"
-    pkg_dir.mkdir()
-    tools_dir = pkg_dir / "tools"
-    tools_dir.mkdir()
-
-    tool_code = """\
-from agents import function_tool
-
-@function_tool
-def local_tool() -> str:
-    return "from local"
-"""
-    (tools_dir / "local_tool.py").write_text(tool_code)
-
-    agent_code = """\
-from agency_swarm import Agent
-
-class TempAgent(Agent):
-    pass
-"""
-    (pkg_dir / "temp_agent.py").write_text(agent_code)
-    (pkg_dir / "__init__.py").write_text("")
-
-    monkeypatch.syspath_prepend(str(tmp_path))
-    from pkg.temp_agent import TempAgent
-
-    agent = TempAgent(name="A", instructions="B", tools_folder="./tools")
+def test_relative_tools_folder_is_class_local():
+    agent = Agent(name="test", instructions="test", tools_folder="../data/tools")
     tool_names = [tool.name for tool in agent.tools]
-    assert "local_tool" in tool_names
+    assert "ExampleTool1" in tool_names and "sample_tool" in tool_names
 
 
 def test_tools_folder_edge_cases(tmp_path):
@@ -297,16 +276,23 @@ def valid_tool() -> str:
     assert len(tool_names) == 1
 
 
-def test_tools_folder_none():
-    """Test agent works with no tools_folder."""
-    agent = Agent(name="test", instructions="test", tools_folder=None)
+@pytest.mark.parametrize("folder", [None, "/nonexistent/path"])
+def test_tools_folder_missing(folder: str | None):
+    """Agent should handle missing or invalid tools_folder gracefully."""
+    agent = Agent(name="test", instructions="test", tools_folder=folder)
     assert agent.tools == []
 
 
-def test_tools_folder_nonexistent_path():
-    """Test agent handles nonexistent tools_folder gracefully."""
-    agent = Agent(name="test", instructions="test", tools_folder="/nonexistent/path")
-    assert agent.tools == []
+@pytest.mark.asyncio
+async def test_shared_state_property(mock_run_context_wrapper):
+    class TestTool(BaseTool):
+        def run(self):
+            return "ok"
+
+    tool = TestTool()
+    tool._context = mock_run_context_wrapper
+    with pytest.deprecated_call():
+        assert tool._shared_state is mock_run_context_wrapper.context
 
 
 # TODO: Add tests for response validation aspects

@@ -1,7 +1,8 @@
 # --- agency.py ---
 import asyncio
-import concurrent.futures
+import inspect
 import logging
+import os
 import warnings
 from collections.abc import AsyncGenerator
 from typing import Any
@@ -12,9 +13,11 @@ from agents import (
     RunResult,
 )
 
-from .agent import Agent
-from .hooks import PersistenceHooks
-from .thread import ThreadLoadCallback, ThreadManager, ThreadSaveCallback
+from agency_swarm.agent_core import AgencyContext, Agent
+from agency_swarm.hooks import PersistenceHooks
+from agency_swarm.streaming_utils import event_stream_merger
+from agency_swarm.thread import ThreadLoadCallback, ThreadManager, ThreadSaveCallback
+from agency_swarm.tools.send_message import SendMessageHandoff
 
 # --- Logging ---
 logger = logging.getLogger(__name__)
@@ -56,15 +59,18 @@ class Agency:
     agents: dict[str, Agent]
     chart: AgencyChart
     entry_points: list[Agent]
-    thread_manager: ThreadManager
+    thread_manager: ThreadManager  # Legacy for backward compatibility
     persistence_hooks: PersistenceHooks | None
     shared_instructions: str | None
     user_context: dict[str, Any]  # Shared user context for MasterContext
     send_message_tool_class: type | None  # Custom SendMessage tool class for all agents
 
+    # Context Factory Pattern - Agency owns agent contexts
+    _agent_contexts: dict[str, AgencyContext]  # agent_name -> context mapping
+
     def __init__(
         self,
-        *entry_points_args: Agent,
+        *entry_point_agents: Agent,
         communication_flows: list[tuple[Agent, Agent]] | None = None,
         agency_chart: AgencyChart | None = None,
         name: str | None = None,
@@ -84,22 +90,19 @@ class Agency:
         shared instructions, and establishes communication pathways between agents.
 
         Args:
-            *entry_points_args (Agent): Positional arguments representing Agent instances that
-                                         serve as entry points for external interaction.
-            communication_flows (list[tuple[Agent, Agent]] | None, optional):
-                                         Keyword argument defining allowed agent-to-agent
-                                         (sender, receiver) message paths. Defaults to None.
-            agency_chart (AgencyChart | None, optional): Deprecated keyword argument for defining
-                                                            the agency structure. If provided, it takes
-                                                            precedence over entry_points_args and
-                                                            communication_flows, issuing a warning.
-                                                            Defaults to None.
-            shared_instructions (str | None, optional): Instructions prepended to all agents' system prompts.
-            send_message_tool_class (type | None, optional): Custom SendMessage tool class to use for all agents
-                                                            that don't have their own send_message_tool_class set.
-                                                            Enables enhanced inter-agent communication patterns.
-            load_threads_callback (ThreadLoadCallback | None, optional): A callable to load conversation threads.
-            save_threads_callback (ThreadSaveCallback | None, optional): A callable to save conversation threads.
+            *entry_point_agents (Agent): Positional Agent instances serving as entry points for external interaction.
+            communication_flows (list[tuple[Agent, Agent]] | None, optional): Allowed agent-to-agent (sender, receiver)
+                message paths. Defaults to None.
+            agency_chart (AgencyChart | None, optional): Deprecated structure definition; if provided, it takes
+                precedence over `entry_point_agents` and `communication_flows` (a warning is issued). Defaults to None.
+            name (str | None, optional): Display name for the agency.
+            shared_instructions (str | None, optional): Either direct instruction text or a file path. If a path is
+                provided, the file is read (supports caller-relative, absolute, or CWD-relative paths) and its
+                contents are used as shared instructions prepended to all agents' system prompts.
+            send_message_tool_class (type | None, optional): Custom SendMessage tool for agents lacking their own,
+                enabling custom inter-agent communication patterns.
+            load_threads_callback (ThreadLoadCallback | None, optional): Callable to load conversation threads.
+            save_threads_callback (ThreadSaveCallback | None, optional): Callable to save conversation threads.
             user_context (dict[str, Any] | None, optional): Initial shared context accessible to all agents.
             **kwargs: Catches other deprecated parameters, issuing warnings if used.
 
@@ -181,17 +184,17 @@ class Agency:
                 stacklevel=2,
             )
             deprecated_args_used["agency_chart"] = agency_chart  # Log that it was used
-            if entry_points_args or communication_flows is not None:
+            if entry_point_agents or communication_flows is not None:
                 logger.warning(
-                    "'agency_chart' was provided along with new 'entry_points_args' or 'communication_flows'. "
+                    "'agency_chart' was provided along with new 'entry_point_agents' or 'communication_flows'. "
                     "'agency_chart' will be used for backward compatibility, and the new parameters will be ignored."
                 )
             # Parse the deprecated chart regardless if it was provided
             _derived_entry_points, _derived_communication_flows = self._parse_deprecated_agency_chart(agency_chart)
 
-        elif entry_points_args or communication_flows is not None:
+        elif entry_point_agents or communication_flows is not None:
             # Using new method
-            _derived_entry_points = list(entry_points_args)
+            _derived_entry_points = list(entry_point_agents)
             _derived_communication_flows = communication_flows or []
             # Validate inputs for new method
             if not all(isinstance(ep, Agent) for ep in _derived_entry_points):
@@ -217,7 +220,22 @@ class Agency:
 
         # --- Assign Core Attributes ---
         self.name = name
-        self.shared_instructions = shared_instructions
+
+        # Handle shared instructions - can be a string or a file path
+        if shared_instructions:
+            # Check if it's a file path relative to the class location
+            class_relative_path = os.path.join(self._get_class_folder_path(), shared_instructions)
+            if os.path.isfile(class_relative_path):
+                self._read_instructions(class_relative_path)
+            elif os.path.isfile(shared_instructions):
+                # It's an absolute path or relative to CWD
+                self._read_instructions(shared_instructions)
+            else:
+                # It's actual instruction text, not a file path
+                self.shared_instructions = shared_instructions
+        else:
+            self.shared_instructions = ""
+
         self.user_context = user_context or {}
         self.send_message_tool_class = send_message_tool_class
 
@@ -235,6 +253,10 @@ class Agency:
         self.entry_points = []  # Will be populated by _register_all_agents_and_set_entry_points
         self._register_all_agents_and_set_entry_points(_derived_entry_points, _derived_communication_flows)
 
+        # Initialize agent contexts using Context Factory Pattern (after agents are registered)
+        self._agent_contexts = {}
+        self._initialize_agent_contexts(final_load_threads_callback, final_save_threads_callback)
+
         if not self.agents:
             raise ValueError("Agency must contain at least one agent.")
         logger.info(f"Registered agents: {list(self.agents.keys())}")
@@ -244,8 +266,11 @@ class Agency:
         self._derived_communication_flows = _derived_communication_flows
 
         # --- Configure Agents & Communication ---
-        # _configure_agents will now use _derived_communication_flows determined above
+        # _configure_agents uses _derived_communication_flows determined above
         self._configure_agents(_derived_communication_flows)
+
+        # Update agent contexts with communication flows
+        self._update_agent_contexts_with_communication_flows(_derived_communication_flows)
 
         logger.info("Agency initialization complete.")
 
@@ -281,7 +306,8 @@ class Agency:
         if not temp_entry_points and all_agents_in_chart:  # all_agents_in_chart implies temp_comm_flows is not empty
             logger.warning(
                 "No explicit entry points (standalone agents) found in deprecated 'agency_chart'. "
-                "For backward compatibility, unique sender agents from communication pairs will be considered potential entry points."
+                "For backward compatibility, unique sender agents from communication pairs "
+                "will be considered potential entry points."
             )
             # Collect unique senders from communication flows as entry points
             unique_senders_as_entry_points: dict[int, Agent] = {}
@@ -291,6 +317,45 @@ class Agency:
             temp_entry_points = list(unique_senders_as_entry_points.values())
 
         return temp_entry_points, temp_comm_flows
+
+    def _get_caller_directory(self) -> str:
+        """Get the directory where this agency is being instantiated (caller's directory)."""
+        try:
+            # Get the agency_swarm package path for comparison (we're already in it)
+            agency_swarm_path = os.path.dirname(os.path.abspath(__file__))
+
+            # Walk up the call stack to find the first frame outside of agency_swarm package
+            frame = inspect.currentframe()
+            while frame is not None:
+                frame_module = inspect.getmodule(frame)
+                if frame_module and hasattr(frame_module, "__file__") and frame_module.__file__:
+                    module_path = os.path.dirname(os.path.abspath(frame_module.__file__))
+                    # Check if module is outside the agency_swarm package directory
+                    if not module_path.startswith(agency_swarm_path):
+                        return os.path.dirname(os.path.abspath(frame.f_code.co_filename))
+                frame = frame.f_back
+        except Exception:
+            pass
+        finally:
+            # Prevent reference cycles
+            del frame
+
+        # Fall back to current working directory
+        return os.getcwd()
+
+    def _get_class_folder_path(self):
+        """
+        Retrieves the absolute path of the directory where this agency was instantiated.
+        """
+        # For relative path resolution, use caller directory instead of class location
+        return self._get_caller_directory()
+
+    def _read_instructions(self, path: str):
+        """
+        Reads shared instructions from a specified file and stores them in the agency.
+        """
+        with open(path) as f:
+            self.shared_instructions = f.read()
 
     def _register_all_agents_and_set_entry_points(
         self, defined_entry_points: list[Agent], defined_communication_flows: list[tuple[Agent, Agent]]
@@ -359,33 +424,8 @@ class Agency:
             if receiver_name not in communication_map[sender_name]:
                 communication_map[sender_name].append(receiver_name)
 
-        # Extract persistence callbacks from the thread manager to delegate to agents
-        thread_manager_load_callback = getattr(self.thread_manager, "_load_threads_callback", None)
-        thread_manager_save_callback = getattr(self.thread_manager, "_save_threads_callback", None)
-
         # Configure each agent
         for agent_name, agent_instance in self.agents.items():
-            agent_instance._set_agency_instance(self)
-            agent_instance._set_thread_manager(self.thread_manager)
-
-            # Delegate persistence callbacks to each agent
-            if thread_manager_load_callback is not None or thread_manager_save_callback is not None:
-                agent_instance._set_persistence_callbacks(
-                    load_threads_callback=thread_manager_load_callback,
-                    save_threads_callback=thread_manager_save_callback,
-                )
-                logger.debug(f"Delegated persistence callbacks to agent: {agent_name}")
-
-            # Apply shared instructions (prepend)
-            if self.shared_instructions:
-                # Make instructions mutable if None
-                if agent_instance.instructions is None:
-                    agent_instance.instructions = ""
-                # Basic check to avoid re-prepending if somehow configured twice
-                if not agent_instance.instructions.startswith(self.shared_instructions):
-                    agent_instance.instructions = self.shared_instructions + "\n\n---\n\n" + agent_instance.instructions
-                logger.debug(f"Applied shared instructions to agent: {agent_name}")
-
             # Propagate send_message_tool_class if agent doesn't have one set
             if self.send_message_tool_class and not agent_instance.send_message_tool_class:
                 agent_instance.send_message_tool_class = self.send_message_tool_class
@@ -398,7 +438,12 @@ class Agency:
                 for recipient_name in allowed_recipients:
                     recipient_agent = self.agents[recipient_name]
                     try:
-                        agent_instance.register_subagent(recipient_agent)
+                        if agent_instance.send_message_tool_class == SendMessageHandoff:
+                            handoff_instance = SendMessageHandoff().create_handoff(recipient_agent=recipient_agent)
+                            agent_instance.handoffs.append(handoff_instance)
+                            logger.debug(f"Added SendMessageHandoff for {agent_name} -> {recipient_name}")
+                        else:
+                            agent_instance.register_subagent(recipient_agent)
                     except Exception as e:
                         logger.error(
                             f"Error registering subagent '{recipient_name}' for sender '{agent_name}': {e}",
@@ -438,7 +483,8 @@ class Agency:
             run_config (RunConfig | None, optional): Configuration for the agent run.
             message_files (list[str] | None, optional): Backward compatibility parameter.
             file_ids (list[str] | None, optional): Additional file IDs for the agent run.
-            additional_instructions (str | None, optional): Additional instructions to be appended to the recipient agent's instructions for this run only.
+            additional_instructions (str | None, optional): Additional instructions to be appended to the recipient
+                agent's instructions for this run only.
             **kwargs: Additional arguments passed down to the target agent's `get_response` method
                       and subsequently to `agents.Runner.run`.
 
@@ -457,7 +503,7 @@ class Agency:
         if target_recipient is None:
             if self.entry_points:
                 target_recipient = self.entry_points[0]
-                logger.info(f"No recipient_agent specified, using first entry point: {target_recipient.name}")
+                logger.debug(f"No recipient_agent specified, using first entry point: {target_recipient.name}")
             else:
                 raise ValueError(
                     "No recipient_agent specified and no entry points available. "
@@ -470,20 +516,57 @@ class Agency:
         elif target_agent not in self.entry_points:
             logger.warning(
                 f"Recipient agent '{target_agent.name}' is not a designated entry point "
-                f"(Entry points: {[ep.name for ep in self.entry_points]}). Call allowed but may indicate unintended usage."
+                f"(Entry points: {[ep.name for ep in self.entry_points]}). "
+                f"Call allowed but may indicate unintended usage."
             )
 
         effective_hooks = hooks_override or self.persistence_hooks
+
+        # Get agency context for the target agent (stateless context passing)
+        agency_context = self._get_agent_context(target_agent.name)
+
+        # Combine shared instructions with any additional instructions
+        combined_additional_instructions = self._combine_instructions(additional_instructions)
+
         return await target_agent.get_response(
             message=message,
             sender_name=None,
             context_override=context_override,
             hooks_override=effective_hooks,
-            run_config=run_config,
+            run_config_override=run_config,
             message_files=message_files,
             file_ids=file_ids,
-            additional_instructions=additional_instructions,
+            additional_instructions=combined_additional_instructions,
+            agency_context=agency_context,  # Pass stateless context
             **kwargs,
+        )
+
+    def get_response_sync(
+        self,
+        message: str | list[dict[str, Any]],
+        recipient_agent: str | Agent | None = None,
+        context_override: dict[str, Any] | None = None,
+        hooks_override: RunHooks | None = None,
+        run_config: RunConfig | None = None,
+        message_files: list[str] | None = None,
+        file_ids: list[str] | None = None,
+        additional_instructions: str | None = None,
+        **kwargs: Any,
+    ) -> RunResult:
+        """Synchronous wrapper around :meth:`get_response`."""
+
+        return asyncio.run(
+            self.get_response(
+                message=message,
+                recipient_agent=recipient_agent,
+                context_override=context_override,
+                hooks_override=hooks_override,
+                run_config=run_config,
+                message_files=message_files,
+                file_ids=file_ids,
+                additional_instructions=additional_instructions,
+                **kwargs,
+            )
         )
 
     async def get_response_stream(
@@ -513,7 +596,8 @@ class Agency:
             run_config_override (RunConfig | None, optional): Specific run configuration for this run.
             message_files (list[str] | None, optional): Backward compatibility parameter.
             file_ids (list[str] | None, optional): Additional file IDs for the agent run.
-            additional_instructions (str | None, optional): Additional instructions to be appended to the recipient agent's instructions for this run only.
+            additional_instructions (str | None, optional): Additional instructions to be appended to the recipient
+                agent's instructions for this run only.
             **kwargs: Additional arguments passed down to `get_response_stream` and `run_streamed`.
 
         Yields:
@@ -530,7 +614,7 @@ class Agency:
         if target_recipient is None:
             if self.entry_points:
                 target_recipient = self.entry_points[0]
-                logger.info(
+                logger.debug(
                     f"No recipient_agent specified for stream, using first entry point: {target_recipient.name}"
                 )
             else:
@@ -545,23 +629,41 @@ class Agency:
         elif target_agent not in self.entry_points:
             logger.warning(
                 f"Recipient agent '{target_agent.name}' is not a designated entry point "
-                f"(Entry points: {[ep.name for ep in self.entry_points]}). Stream call allowed but may indicate unintended usage."
+                f"(Entry points: {[ep.name for ep in self.entry_points]}). "
+                f"Stream call allowed but may indicate unintended usage."
             )
 
         effective_hooks = hooks_override or self.persistence_hooks
 
-        async for event in target_agent.get_response_stream(
-            message=message,
-            sender_name=None,
-            context_override=context_override,
-            hooks_override=effective_hooks,
-            run_config_override=run_config_override,
-            message_files=message_files,
-            file_ids=file_ids,
-            additional_instructions=additional_instructions,
-            **kwargs,
-        ):
-            yield event
+        # Create streaming context for collecting sub-agent events
+        async with event_stream_merger.create_streaming_context() as streaming_context:
+            # Add streaming context to the context override
+            enhanced_context = context_override or {}
+            enhanced_context["_streaming_context"] = streaming_context
+
+            # Get agency context for the target agent (stateless context passing)
+            agency_context = self._get_agent_context(target_agent.name)
+
+            # Combine shared instructions with any additional instructions
+            combined_additional_instructions = self._combine_instructions(additional_instructions)
+
+            # Get the primary stream
+            primary_stream = target_agent.get_response_stream(
+                message=message,
+                sender_name=None,
+                context_override=enhanced_context,
+                hooks_override=effective_hooks,
+                run_config_override=run_config_override,
+                message_files=message_files,
+                file_ids=file_ids,
+                additional_instructions=combined_additional_instructions,
+                agency_context=agency_context,  # Pass stateless context
+                **kwargs,
+            )
+
+            # Merge primary stream with events from sub-agents
+            async for event in event_stream_merger.merge_streams(primary_stream, streaming_context):
+                yield event
 
     def _resolve_agent(self, agent_ref: str | Agent) -> Agent:
         """Helper to get an agent instance from a name or instance."""
@@ -666,7 +768,7 @@ class Agency:
         if target_recipient is None:
             if self.entry_points:
                 target_recipient = self.entry_points[0]
-                logger.info(f"No recipient_agent specified, using first entry point: {target_recipient.name}")
+                logger.debug(f"No recipient_agent specified, using first entry point: {target_recipient.name}")
             else:
                 raise ValueError(
                     "No recipient_agent specified and no entry points available. "
@@ -698,450 +800,243 @@ class Agency:
     ) -> str:
         """
         [DEPRECATED] Use get_response instead. Returns final text output.
-
-        Retrieves the completion for a given message from the main thread.
-
-        Parameters:
-            message (str): The message for which completion is to be retrieved.
-            message_files (list, optional): A list of file ids to be sent as attachments with the message.
-                                            When using this parameter, files will be assigned both to
-                                            file_search and code_interpreter tools if available. It is
-                                            recommended to assign files to the most suitable tool manually,
-                                            using the attachments parameter. Defaults to None.
-            yield_messages (bool, optional): Flag to determine if intermediate messages should be yielded.
-                                             Defaults to False.
-            recipient_agent (Agent, optional): The agent to which the message should be sent. Defaults to the
-                                               first agent in the agency chart.
-            additional_instructions (str, optional): Additional instructions to be sent with the message.
-                                                     Defaults to None.
-            attachments (List[dict], optional): A list of attachments to be sent with the message, following
-                                                openai format. Defaults to None.
-            tool_choice (dict, optional): The tool choice for the recipient agent to use. Defaults to None.
-            verbose (bool, optional): Whether to print the intermediary messages in console. Defaults to False.
-            response_format (dict, optional): The response format to use for the completion.
-
-        Returns:
-            Generator or final response: Depending on the 'yield_messages' flag, this method returns either
-                                         a generator yielding intermediate messages (when
-                                         yield_messages=True) or the final response from the main thread.
         """
         warnings.warn(
-            "Method 'get_completion' is deprecated. Use 'get_response' instead.",
+            "get_completion is deprecated. Use get_response instead.",
             DeprecationWarning,
             stacklevel=2,
         )
 
-        # Handle event loop edge cases for synchronous wrapper
-        try:
-            # Check if we're already in an event loop
-            asyncio.get_running_loop()
-            # If we reach here, there's already a running loop
-            # We need to create a new thread to run the async function
-
-            def run_in_thread():
-                # Create new event loop in the thread
-                new_loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(new_loop)
-                try:
-                    return new_loop.run_until_complete(
-                        self._async_get_completion(
-                            message=message,
-                            message_files=message_files,
-                            yield_messages=yield_messages,
-                            recipient_agent=recipient_agent,
-                            additional_instructions=additional_instructions,
-                            attachments=attachments,
-                            tool_choice=tool_choice,
-                            verbose=verbose,
-                            response_format=response_format,
-                            **kwargs,
-                        )
-                    )
-                finally:
-                    new_loop.close()
-
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                future = executor.submit(run_in_thread)
-                return future.result()
-
-        except RuntimeError:
-            # No event loop running, we can use asyncio.run directly
-            return asyncio.run(
-                self._async_get_completion(
-                    message=message,
-                    message_files=message_files,
-                    yield_messages=yield_messages,
-                    recipient_agent=recipient_agent,
-                    additional_instructions=additional_instructions,
-                    attachments=attachments,
-                    tool_choice=tool_choice,
-                    verbose=verbose,
-                    response_format=response_format,
-                    **kwargs,
-                )
+        # Use asyncio.run to call the async method from sync context
+        return asyncio.run(
+            self._async_get_completion(
+                message=message,
+                message_files=message_files,
+                yield_messages=yield_messages,
+                recipient_agent=recipient_agent,
+                additional_instructions=additional_instructions,
+                attachments=attachments,
+                tool_choice=tool_choice,
+                verbose=verbose,
+                response_format=response_format,
+                **kwargs,
             )
+        )
 
     def get_completion_stream(self, *args: Any, **kwargs: Any):
         """
         [DEPRECATED] Use get_response_stream instead. Yields all events from the modern streaming API.
         """
         warnings.warn(
-            "Method 'get_completion_stream' is deprecated. Use 'get_response_stream' instead.",
+            "get_completion_stream is deprecated. Use get_response_stream instead.",
             DeprecationWarning,
             stacklevel=2,
         )
-
         raise NotImplementedError(
-            "get_completion_stream() is not supported in v1.x due to architectural differences. "
-            "Use get_response_stream() for actual streaming functionality. "
-            "This method will be removed in v1.1."
+            "get_completion_stream is not yet implemented in v1.x. Use get_response_stream instead."
         )
 
-    def get_agency_structure(
-        self, include_tools: bool = True, layout_algorithm: str = "hierarchical"
-    ) -> dict[str, Any]:
-        """
-        Returns a ReactFlow-compatible JSON structure representing the agency's organization.
+    def get_agency_structure(self, include_tools: bool = True) -> dict[str, Any]:
+        """Return a ReactFlow-compatible JSON structure describing the agency."""
+        from .ui.core.layout_algorithms import LayoutAlgorithms
 
-        Args:
-            include_tools (bool): Whether to include agent tools as separate nodes
-            layout_algorithm (str): Layout algorithm hint ("hierarchical", "force-directed")
-
-        Returns:
-            dict: ReactFlow-compatible structure with nodes and edges
-
-        Example:
-            {
-                "nodes": [
-                    {
-                        "id": "agent1",
-                        "type": "agent",
-                        "position": {"x": 100, "y": 100},
-                        "data": {
-                            "label": "Agent Name",
-                            "description": "Agent description",
-                            "isEntryPoint": True,
-                            "toolCount": 3,
-                            "instructions": "Brief instructions..."
-                        }
-                    }
-                ],
-                "edges": [
-                    {
-                        "id": "agent1->agent2",
-                        "source": "agent1",
-                        "target": "agent2",
-                        "type": "communication"
-                    }
-                ]
-            }
-        """
-        nodes = []
-        edges = []
-        node_positions = self._calculate_node_positions(layout_algorithm)
+        nodes: list[dict[str, Any]] = []
+        edges: list[dict[str, Any]] = []
 
         # Create agent nodes
-        for i, (agent_name, agent) in enumerate(self.agents.items()):
-            # Get tools info
-            tools_info = self._extract_agent_tools_info(agent) if include_tools else []
+        for agent_name, agent in self.agents.items():
+            is_entry_point = agent in self.entry_points
 
-            # Create agent node
-            agent_node = {
-                "id": agent_name,
-                "type": "agent",
-                "position": node_positions.get(agent_name, {"x": i * 200, "y": 100}),
-                "data": {
-                    "label": agent.name,
-                    "description": getattr(agent, "description", None) or "No description",
-                    "isEntryPoint": agent in self.entry_points,
-                    "toolCount": len(tools_info),
-                    "tools": tools_info,
-                    "instructions": self._truncate_text(getattr(agent, "instructions", "") or "", 100),
-                    "model": self._get_agent_model_info(agent),
-                    "hasSubagents": len(getattr(agent, "_subagents", {})) > 0,
-                },
+            # Combine shared and agent-specific instructions
+            if self.shared_instructions and getattr(agent, "instructions", None):
+                instructions = f"{self.shared_instructions}\n\n---\n\n{agent.instructions}"
+            else:
+                instructions = self.shared_instructions or getattr(agent, "instructions", "") or ""
+
+            agent_data = {
+                "label": agent_name,
+                "description": getattr(agent, "description", "") or "",
+                "isEntryPoint": is_entry_point,
+                "toolCount": 0,
+                "tools": [],
+                "instructions": instructions,
+                "model": agent.model,
+                "hasSubagents": bool(getattr(agent, "_subagents", {})),
             }
-            nodes.append(agent_node)
 
-            # Create tool nodes if requested
-            if include_tools:
-                tool_y_offset = 150
-                for j, tool_info in enumerate(tools_info):
+            node = {
+                "id": agent_name,
+                "data": agent_data,
+                "type": "agent",
+                "position": {"x": 0, "y": 0},
+            }
+
+            # Add tools if requested
+            if include_tools and agent.tools:
+                for idx, tool in enumerate(agent.tools):
+                    tool_name = getattr(tool, "name", getattr(tool, "__name__", str(tool)))
+
+                    # Skip send_message tools in visualization
+                    if tool_name == "send_message":
+                        continue
+
+                    tool_type = getattr(tool, "type", tool.__class__.__name__)
+                    tool_desc = getattr(tool, "description", getattr(tool, "__doc__", "")) or ""
+
+                    # Handle Hosted MCP tools with server labels for uniqueness/clarity
+                    if tool_name == "hosted_mcp":
+                        tool_config = getattr(tool, "tool_config", {})
+                        server_label = tool_config.get("server_label") if isinstance(tool_config, dict) else None
+                        display_name = server_label or tool_name
+                    else:
+                        display_name = tool_name
+
+                    agent_data["tools"].append({"name": display_name, "type": tool_type, "description": tool_desc})
+                    agent_data["toolCount"] += 1
+
                     tool_node = {
-                        "id": f"{agent_name}_tool_{j}",
-                        "type": "tool",
-                        "position": {
-                            "x": node_positions.get(agent_name, {"x": i * 200})["x"] + (j * 120) - 60,
-                            "y": node_positions.get(agent_name, {"y": 100})["y"] + tool_y_offset,
-                        },
+                        "id": f"{agent_name}_tool_{idx}",
                         "data": {
-                            "label": tool_info["name"],
-                            "description": tool_info["description"],
-                            "type": tool_info["type"],
+                            "label": display_name,
+                            "description": tool_desc,
+                            "type": tool_type,
                             "parentAgent": agent_name,
                         },
+                        "type": "tool",
+                        "position": {"x": 0, "y": 0},
                     }
                     nodes.append(tool_node)
 
-                    # Edge from agent to tool
-                    edges.append(
-                        {
-                            "id": f"{agent_name}->{agent_name}_tool_{j}",
-                            "source": agent_name,
-                            "target": f"{agent_name}_tool_{j}",
-                            "type": "owns",
-                        }
-                    )
+                    tool_edge = {
+                        "id": f"{agent_name}->{agent_name}_tool_{idx}",
+                        "source": agent_name,
+                        "target": f"{agent_name}_tool_{idx}",
+                        "type": "owns",
+                    }
+                    edges.append(tool_edge)
 
-        # Create communication edges from defined flows (primary method)
-        communication_edges_added = set()  # Track to avoid duplicates
+            nodes.append(node)
 
-        if hasattr(self, "_derived_communication_flows") and self._derived_communication_flows:
-            for sender, receiver in self._derived_communication_flows:
-                edge_key = f"{sender.name}->{receiver.name}"
-                if edge_key not in communication_edges_added:
-                    edges.append(
-                        {
-                            "id": edge_key,
-                            "source": sender.name,
-                            "target": receiver.name,
-                            "type": "communication",
-                            "data": {"label": "can send messages to", "bidirectional": False},
-                        }
-                    )
-                    communication_edges_added.add(edge_key)
-        else:
-            # Fallback: extract from current agency setup if no explicit flows
-            for agent_name, agent in self.agents.items():
-                subagents = getattr(agent, "_subagents", {})
-                for subagent_name in subagents:
-                    if subagent_name in self.agents:
-                        edge_key = f"{agent_name}->{subagent_name}"
-                        if edge_key not in communication_edges_added:
-                            edges.append(
-                                {
-                                    "id": edge_key,
-                                    "source": agent_name,
-                                    "target": subagent_name,
-                                    "type": "communication",
-                                    "data": {"label": "can send messages to", "bidirectional": False},
-                                }
-                            )
-                            communication_edges_added.add(edge_key)
+        # Create communication edges from flows
+        for sender, receiver in self._derived_communication_flows:
+            edges.append(
+                {
+                    "id": f"{sender.name}->{receiver.name}",
+                    "source": sender.name,
+                    "target": receiver.name,
+                    "type": "communication",
+                    "data": {"label": "can send messages to", "bidirectional": False},
+                }
+            )
 
-        return {
-            "nodes": nodes,
-            "edges": edges,
-            "metadata": {
-                "agencyName": getattr(self, "name", None) or "Unnamed Agency",
-                "totalAgents": len(self.agents),
-                "totalTools": sum(len(self._extract_agent_tools_info(agent)) for agent in self.agents.values()),
-                "entryPoints": [ep.name for ep in self.entry_points],
-                "sharedInstructions": self.shared_instructions,
-                "layoutAlgorithm": layout_algorithm,
-            },
+        # Create metadata
+        metadata = {
+            "agencyName": getattr(self, "name", None) or "Unnamed Agency",
+            "totalAgents": len(self.agents),
+            "totalTools": sum(len(a.tools) if a.tools else 0 for a in self.agents.values()),
+            "agents": list(self.agents.keys()),
+            "entryPoints": [ep.name for ep in self.entry_points],
+            "sharedInstructions": self.shared_instructions or "",
+            "layoutAlgorithm": "hierarchical",
         }
+
+        agency_data = {"nodes": nodes, "edges": edges, "metadata": metadata}
+
+        layout = LayoutAlgorithms()
+        return layout.apply_layout(agency_data)
 
     def visualize(
         self,
         output_file: str = "agency_visualization.html",
-        layout_algorithm: str = "force_directed",
         include_tools: bool = True,
         open_browser: bool = True,
     ) -> str:
         """
-        Create an HTML visualization using the visualization system.
-
-        This method uses templates and layout algorithms.
+        Create a visual representation of the agency structure.
 
         Args:
             output_file: Path to save the HTML file
-            layout_algorithm: Layout algorithm ("hierarchical", "force_directed")
-            include_tools: Whether to include agent tools in visualization
-            open_browser: Whether to automatically open in browser
+            include_tools: Whether to include agent tools as separate nodes
+            open_browser: Whether to open the file in a browser
 
         Returns:
-            Path to the generated HTML file
+            Path to the generated file
         """
-        try:
-            from .ui import HTMLVisualizationGenerator
+        # Delegate to visualization module using actual existing API
+        from .ui.generators.html_generator import HTMLVisualizationGenerator
 
-            return HTMLVisualizationGenerator.create_visualization_from_agency(
-                agency=self,
-                output_file=output_file,
-                layout_algorithm=layout_algorithm,
-                include_tools=include_tools,
-                open_browser=open_browser,
+        return HTMLVisualizationGenerator.create_visualization_from_agency(
+            agency=self,
+            output_file=output_file,
+            include_tools=include_tools,
+            open_browser=open_browser,
+        )
+
+    # --- Context Factory Pattern Methods ---
+    def _initialize_agent_contexts(self, load_threads_callback=None, save_threads_callback=None) -> None:
+        """Initialize agent contexts using the Context Factory Pattern."""
+        for agent_name, _agent in self.agents.items():
+            # Create context for each agent using the agency's ThreadManager
+            # Each agency has its own ThreadManager, so contexts from different agencies
+            # will have different ThreadManager instances
+            context = AgencyContext(
+                agency_instance=self,
+                thread_manager=self.thread_manager,  # Use this agency's ThreadManager
+                subagents={},  # Will be populated in _update_agent_contexts_with_communication_flows
+                load_threads_callback=load_threads_callback,
+                save_threads_callback=save_threads_callback,
+                shared_instructions=self.shared_instructions,
             )
-        except ImportError as e:
-            raise ImportError(
-                "Visualization module not available. "
-                "This suggests an installation issue with the visualization components."
-            ) from e
+            self._agent_contexts[agent_name] = context
+            logger.debug(f"Created agency context for agent: {agent_name} with agency's ThreadManager")
 
-    def _extract_agent_tools_info(self, agent: Agent) -> list[dict[str, Any]]:
-        """Extract structured information about an agent's tools, excluding communication tools."""
-        tools_info = []
+    def _update_agent_contexts_with_communication_flows(self, communication_flows: list[tuple[Agent, Agent]]) -> None:
+        """Update agent contexts with subagent registrations based on communication flows."""
+        # Build communication map: sender -> [receivers]
+        communication_map: dict[str, list[str]] = {}
+        for sender, receiver in communication_flows:
+            sender_name = sender.name
+            receiver_name = receiver.name
 
-        if not hasattr(agent, "tools") or not agent.tools:
-            return tools_info
+            if sender_name not in communication_map:
+                communication_map[sender_name] = []
+            communication_map[sender_name].append(receiver_name)
 
-        for tool in agent.tools:
-            tool_name = getattr(tool, "name", type(tool).__name__)
-            tool_type = type(tool).__name__
+        # Update each agent's context with its allowed recipients
+        for agent_name, context in self._agent_contexts.items():
+            allowed_recipients = communication_map.get(agent_name, [])
+            for recipient_name in allowed_recipients:
+                if recipient_name in self.agents:
+                    recipient_agent = self.agents[recipient_name]
+                    context.subagents[recipient_name] = recipient_agent
+                    logger.debug(f"Added {recipient_name} as subagent for {agent_name} in agency context")
 
-            # Skip communication tools (send_message_to_* tools)
-            if (
-                tool_name.startswith("send_message_to_")
-                or tool_type == "SendMessage"
-                or "send_message" in tool_name.lower()
-            ):
-                continue
+    def _get_agent_context(self, agent_name: str) -> AgencyContext:
+        """Get the agency context for a specific agent."""
+        if agent_name not in self._agent_contexts:
+            raise ValueError(f"No context found for agent: {agent_name}")
+        return self._agent_contexts[agent_name]
 
-            tool_info = {
-                "name": tool_name,
-                "type": tool_type,
-                "description": self._truncate_text(
-                    getattr(tool, "description", "") or getattr(tool, "__doc__", "") or "No description available", 80
-                ),
-            }
-            tools_info.append(tool_info)
+    def _combine_instructions(self, additional_instructions: str | None = None) -> str | None:
+        """Combine shared instructions with additional instructions."""
+        if not self.shared_instructions and not additional_instructions:
+            return None
 
-        return tools_info
+        parts = []
+        if self.shared_instructions:
+            parts.append(self.shared_instructions)
+        if additional_instructions:
+            parts.append(additional_instructions)
 
-    def _get_agent_model_info(self, agent: Agent) -> str:
-        """Extract model information from an agent."""
-        if hasattr(agent, "model_settings") and agent.model_settings:
-            if hasattr(agent.model_settings, "model"):
-                return agent.model_settings.model
+        return "\n\n---\n\n".join(parts) if parts else None
 
-        if hasattr(agent, "model") and agent.model:
-            return agent.model
-
-        return "unknown"
-
-    def _truncate_text(self, text: str, max_length: int) -> str:
-        """Truncate text to specified length with ellipsis."""
-        if not text:
-            return ""
-        return text[:max_length] + "..." if len(text) > max_length else text
-
-    def _calculate_node_positions(self, layout_algorithm: str) -> dict[str, dict[str, int]]:
-        """Calculate node positions based on layout algorithm."""
-        # TODO: This helper is over 100 lines long. Break into smaller
-        # functions (e.g., _force_directed_layout) to improve readability.
-        positions = {}
-
-        if layout_algorithm == "hierarchical":
-            # Entry points at top, others below
-            entry_points = [ep.name for ep in self.entry_points]
-            regular_agents = [name for name in self.agents.keys() if name not in entry_points]
-
-            # Position entry points
-            for i, agent_name in enumerate(entry_points):
-                positions[agent_name] = {"x": i * 300 + 100, "y": 50}
-
-            # Position regular agents below
-            for i, agent_name in enumerate(regular_agents):
-                positions[agent_name] = {"x": i * 300 + 100, "y": 250}
-
-        else:  # force-directed layout
-            # Implement proper force-directed layout with collision detection
-            import math
-            import random
-
-            # Initialize positions randomly
-            width, height = 800, 600
-            node_radius = 80  # Minimum distance between nodes to prevent intersections
-
-            agent_names = list(self.agents.keys())
-
-            # Use random seed for reproducible layouts
-            random.seed(42)
-
-            # Initial random placement
-            for agent_name in agent_names:
-                positions[agent_name] = {
-                    "x": random.randint(node_radius, width - node_radius),
-                    "y": random.randint(node_radius, height - node_radius),
-                }
-
-            # Force-directed algorithm iterations
-            iterations = 150  # More iterations for better convergence
-            for iteration in range(iterations):
-                forces = {agent: {"x": 0, "y": 0} for agent in agent_names}
-
-                # Repulsive forces between all nodes (prevents intersections)
-                for i, agent1 in enumerate(agent_names):
-                    for j, agent2 in enumerate(agent_names):
-                        if i != j:
-                            pos1 = positions[agent1]
-                            pos2 = positions[agent2]
-
-                            dx = pos1["x"] - pos2["x"]
-                            dy = pos1["y"] - pos2["y"]
-                            distance = math.sqrt(dx * dx + dy * dy)
-
-                            # Stronger repulsion forces to ensure minimum spacing
-                            if distance < node_radius * 2.5:  # Extended danger zone
-                                repulsion_force = 5000 / max(distance, 5)  # Very strong repulsion
-                            elif distance < node_radius * 3:  # Medium danger zone
-                                repulsion_force = 2500 / max(distance, 10)
-                            else:
-                                repulsion_force = 1000 / max(distance, 20)
-
-                            if distance > 0:
-                                forces[agent1]["x"] += (dx / distance) * repulsion_force
-                                forces[agent1]["y"] += (dy / distance) * repulsion_force
-
-                # Attractive forces for communication flows (if they exist)
-                if hasattr(self, "_derived_communication_flows") and self._derived_communication_flows:
-                    for sender, receiver in self._derived_communication_flows:
-                        pos1 = positions[sender.name]
-                        pos2 = positions[receiver.name]
-
-                        dx = pos2["x"] - pos1["x"]
-                        dy = pos2["y"] - pos1["y"]
-                        distance = math.sqrt(dx * dx + dy * dy)
-
-                        # Attractive force (but not too strong to maintain spacing)
-                        attractive_force = distance * 0.1
-                        if distance > 0:
-                            forces[sender.name]["x"] += (dx / distance) * attractive_force
-                            forces[sender.name]["y"] += (dy / distance) * attractive_force
-                            forces[receiver.name]["x"] -= (dx / distance) * attractive_force
-                            forces[receiver.name]["y"] -= (dy / distance) * attractive_force
-
-                # Apply forces with cooling and damping
-                cooling = max(0.1, 1.0 - (iteration / iterations))  # Maintain minimum movement
-                damping = 0.8  # Slightly less damping for better movement
-
-                for agent_name in agent_names:
-                    force = forces[agent_name]
-
-                    # Apply force with cooling and damping
-                    force_magnitude = math.sqrt(force["x"] ** 2 + force["y"] ** 2)
-                    if force_magnitude > 0:
-                        # Scale down very large forces to prevent overshooting
-                        max_force = 50
-                        if force_magnitude > max_force:
-                            force["x"] = (force["x"] / force_magnitude) * max_force
-                            force["y"] = (force["y"] / force_magnitude) * max_force
-
-                    positions[agent_name]["x"] += int(force["x"] * cooling * damping)
-                    positions[agent_name]["y"] += int(force["y"] * cooling * damping)
-
-                    # Keep within bounds with padding
-                    positions[agent_name]["x"] = max(node_radius, min(width - node_radius, positions[agent_name]["x"]))
-                    positions[agent_name]["y"] = max(node_radius, min(height - node_radius, positions[agent_name]["y"]))
-
-        return positions
-
-    def terminal_demo(self):
+    def terminal_demo(self) -> None:
         """
         Run a terminal demo of the agency.
         """
+        # Import and run the terminal demo
         from .ui.demos.launcher import TerminalDemoLauncher
+
         TerminalDemoLauncher.start(self)
 
     def copilot_demo(
@@ -1149,10 +1044,12 @@ class Agency:
         host: str = "0.0.0.0",
         port: int = 8000,
         frontend_port: int = 3000,
-        cors_origins: list[str] | None = None
-    ):
+        cors_origins: list[str] | None = None,
+    ) -> None:
         """
         Run a copilot demo of the agency.
         """
+        # Copilot demo implementation
         from .ui.demos.launcher import CopilotDemoLauncher
+
         CopilotDemoLauncher.start(self, host=host, port=port, frontend_port=frontend_port, cors_origins=cors_origins)

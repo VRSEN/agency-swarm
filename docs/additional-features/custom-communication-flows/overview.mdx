@@ -30,14 +30,14 @@ agency = Agency(
 That's it! Now, your agents will use your own custom `SendMessageQuick` class for communication.
 
 <Note>
-**`SendMessageSwarm` is Deprecated**: `SendMessageSwarm` will be removed in a future version. For sequential flows or transferring control between agents in one direction, use the OpenAI Agents SDK's Handoffs mechanism.
+**`SendMessageSwarm` is Deprecated**: `SendMessageSwarm` will be removed in a future version. For sequential flows or transferring control between agents in one direction, use the `SendMessageHandoff` tool class.
 
-Detailed guidance on implementing Handoffs, including custom data inputs, is available in the [OpenAI Agents SDK Handoffs Documentation](https://openai.github.io/openai-agents-python/handoffs/).
+Detailed guidance on implementing handoffs is available in the [Hybrid Patterns Documentation](/additional-features/custom-communication-flows/hybrid-patterns).
 </Note>
 
 ## Choosing the Right Communication Method: SendMessage vs. Handoffs
 
-Agency Swarm supports two primary paradigms for inter-agent communication: direct messaging using `SendMessage` tool variants (native to Agency Swarm) and Handoffs from the OpenAI Agents SDK.
+Agency Swarm supports two primary paradigms for inter-agent communication: direct messaging using `SendMessage` tool variants (native to Agency Swarm) and Handoffs via the `SendMessageHandoff` tool class.
 
 ### Direct Messaging (`SendMessage` tools)
 
@@ -49,16 +49,16 @@ Agency Swarm supports two primary paradigms for inter-agent communication: direc
     - Collaborative tasks requiring back-and-forth dialogue (evaluator-optimizer pattern) or result aggregation by a calling agent.
     - When an agent needs to retain control of the overall workflow while delegating specific parts.
 
-### SDK Handoffs (via OpenAI Agents SDK)
+### Handoffs (via SendMessageHandoff)
 
-- **Purpose**: The OpenAI Agents SDK provides a Handoffs mechanism for an agent to **unidirectionally delegate** a task or an entire interaction flow to another specialized agent. When a handoff occurs, the receiving agent takes over that specific interaction; control does **not** automatically return to the initiating agent for that particular interaction thread.
-- **How it Works**: From the perspective of the underlying language model, a handoff is treated like a special tool (e.g., `transfer_to_BillingAgent`). To enable handoffs, you configure an agent with a list of potential target agents. This is done using the `handoffs` parameter in the `Agent` constructor, which can accept other `Agent` instances directly or customized `Handoff` objects created with the SDK's `handoff()` function. This function also allows you to define structured data inputs for the handoff.
-- **Data Exchange**: The SDK's `handoff()` function allows specifying an `input_type` (e.g., a Pydantic model) for passing structured data during the handoff. Refer to the SDK documentation for details.
+- **Purpose**: The `SendMessageHandoff` tool class enables an agent to **unidirectionally delegate** a task or an entire interaction flow to another specialized agent. When a handoff occurs, the receiving agent takes over that specific interaction; control does **not** automatically return to the initiating agent for that particular interaction thread.
+- **How it Works**: From the perspective of the underlying language model, a handoff is treated like a special tool (e.g., `transfer_to_BillingAgent`). To enable handoffs, you configure an agent with the `send_message_tool_class=SendMessageHandoff` parameter. The agent's description will be used as the handoff tool instructions.
+- **Configuration**: Place a `SendMessageHandoff` tool in your agent's tools folder or set `send_message_tool_class=SendMessageHandoff` when creating the agent. The library will automatically detect this and configure handoffs using the OpenAI SDK internally.
 - **Analogy**: Transferring a customer in a call center to a specialized department (e.g., Billing). The Billing specialist handles the customer's request from that point forward for that specific issue.
-- **When to use (SDK Handoffs)**:
+- **When to use (Handoffs)**:
     - **Routing Use Cases**: Such as an initial customer support agent routing a query to a specialized support agent (e.g., for billing, technical issues). A new, focused interaction begins with the specialist.
     - **Sequential interaction flows**: Where a task must pass through a series of different specialists, and each specialist completes their part and passes it on, without the original agent resuming that specific flow.
-- **Further Details**: For comprehensive information on creating, configuring (including structured data input with Pydantic models), and utilizing handoffs, consult the [OpenAI Agents SDK Handoffs Documentation](https://openai.github.io/openai-agents-python/handoffs/).
+- **Further Details**: For comprehensive information on configuring and utilizing handoffs, consult the [Hybrid Patterns Documentation](/additional-features/custom-communication-flows/hybrid-patterns).
 
 ## Creating Your Own Unique Communication Flows
 

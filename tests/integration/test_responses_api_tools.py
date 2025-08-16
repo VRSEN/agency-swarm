@@ -15,8 +15,7 @@ from agents.models.openai_responses import OpenAIResponsesModel
 from openai import AsyncOpenAI
 from pydantic import BaseModel
 
-from agency_swarm import Agent as AgencySwarmAgent
-from agency_swarm.thread import ThreadManager
+from agency_swarm import Agency, Agent as AgencySwarmAgent
 
 # Configure logging to see SDK and HTTP client details
 logging.basicConfig(level=logging.DEBUG)
@@ -175,32 +174,20 @@ async def test_tool_output_conversion_bug_two_turn_conversation():
     # Add the calculator tool to the agent
     agent.add_tool(calculator_tool)
 
-    # Set up thread manager and agency instance (required by Agency Swarm)
-    thread_manager = ThreadManager()
-    agent._set_thread_manager(thread_manager)
-
-    # Create a mock agency instance
-    class MockAgency:
-        def __init__(self):
-            self.agents = {"Calculator Agent": agent}
-            self.user_context = {}
-
-    mock_agency = MockAgency()
-    agent._set_agency_instance(mock_agency)
+    # Create an agency with the agent
+    agency = Agency(agent)
 
     # TURN 1: Ask agent to perform a calculation
     logger.info("=== TURN 1: Performing calculation ===")
 
-    result1 = await agent.get_response(message="Please calculate 15 + 27 using the calculator tool.")
+    result1 = await agency.get_response(message="Please calculate 15 + 27 using the calculator tool.")
 
     # Verify the first turn completed successfully
     assert result1 is not None
     logger.info(f"Turn 1 result: {result1.final_output}")
 
-    # Get the thread to inspect conversation history using proper thread identifier
-    thread_identifier = "user->Calculator Agent"
-    thread = thread_manager.get_thread(thread_identifier)
-    history_after_turn1 = thread.get_history()
+    # Get the conversation history from the agency's thread manager
+    history_after_turn1 = agency.thread_manager._store.messages
 
     logger.info(f"=== CONVERSATION HISTORY AFTER TURN 1 ({len(history_after_turn1)} items) ===")
     for i, item in enumerate(history_after_turn1):
@@ -209,7 +196,7 @@ async def test_tool_output_conversion_bug_two_turn_conversation():
     # TURN 2: Ask agent to reference the previous calculation
     logger.info("=== TURN 2: Referencing previous calculation ===")
 
-    result2 = await agent.get_response(
+    result2 = await agency.get_response(
         message="What was the result of the calculation you just performed? Please tell me the exact result."
     )
 
@@ -217,8 +204,8 @@ async def test_tool_output_conversion_bug_two_turn_conversation():
     assert result2 is not None
     logger.info(f"Turn 2 result: {result2.final_output}")
 
-    # Get the final conversation history
-    history_after_turn2 = thread.get_history()
+    # Get the final conversation history from the agency's thread manager
+    history_after_turn2 = agency.thread_manager._store.messages
 
     logger.info(f"=== FINAL CONVERSATION HISTORY ({len(history_after_turn2)} items) ===")
     for i, item in enumerate(history_after_turn2):
@@ -311,42 +298,38 @@ Product Sales:
         # Create Agency Swarm agent with FileSearch via files_folder
         agent = AgencySwarmAgent(
             name="DataSearchAgent",
-            instructions="You are a data search assistant. Use file search to find information but be concise in your initial responses.",
+            instructions=(
+                "You are a data search assistant. Use file search to find information but be "
+                "concise in your initial responses."
+            ),
             model="gpt-4.1",
             model_settings=ModelSettings(temperature=0.0),
             files_folder=str(temp_dir),
             include_search_results=True,
         )
 
-        # Set up thread manager and agency instance
-        thread_manager = ThreadManager()
-        agent._set_thread_manager(thread_manager)
+        # Create an agency with the agent
+        agency = Agency(agent)
 
-        class MockAgency:
-            def __init__(self):
-                self.agents = {"DataSearchAgent": agent}
-                self.user_context = {}
-
-        mock_agency = MockAgency()
-        agent._set_agency_instance(mock_agency)
-
-        # Wait a moment for file processing
-        await asyncio.sleep(2)
+        # Wait longer for file processing and vector store indexing
+        # FileSearch requires time to process and index uploaded files
+        await asyncio.sleep(10)
 
         # TURN 1: Agent searches but gives summary only
         logger.info("=== TURN 1: Agent searches with FileSearch ===")
 
-        result1 = await agent.get_response(
-            message="Search the company data for financial information. Just confirm you found it, don't give me the specific numbers yet."
+        result1 = await agency.get_response(
+            message=(
+                "Search the company data for financial information and employee data. "
+                "Just confirm you found it, don't give me the specific numbers yet."
+            )
         )
 
         assert result1 is not None
         logger.info(f"Turn 1 result: {result1.final_output}")
 
-        # Get the thread to inspect conversation history
-        thread_identifier = "user->DataSearchAgent"
-        thread = thread_manager.get_thread(thread_identifier)
-        history_after_turn1 = thread.get_history()
+        # Get the conversation history from the agency's thread manager
+        history_after_turn1 = agency.thread_manager._store.messages
 
         logger.info(f"=== CONVERSATION HISTORY AFTER TURN 1 ({len(history_after_turn1)} items) ===")
         hosted_tool_outputs_found = 0
@@ -357,18 +340,24 @@ Product Sales:
             logger.info(f"Item {i + 1}: {item_type}")
 
             # Look for hosted tool search results messages
-            if item.get("role") == "assistant" and "[SEARCH_RESULTS]" in str(item.get("content", "")):
+            if item.get("role") == "user" and "[SEARCH_RESULTS]" in str(item.get("content", "")):
                 hosted_tool_outputs_found += 1
                 preservation_items.append(item)
-                logger.info(f"  Found search results message: {str(item.get('content', ''))[:100]}...")
+                logger.info(f"  Found search results message: {str(item.get('content', ''))}...")
 
         logger.info(f"Found {hosted_tool_outputs_found} hosted tool preservation items")
 
         # TURN 2: Ask for exact tool output
         logger.info("=== TURN 2: Requesting exact tool output ===")
 
-        result2 = await agent.get_response(
-            message="Now show me the EXACT financial data you found. I need the precise numbers from your search results."
+        logger.info(f"History at turn 2: {agency.thread_manager._store.messages}")
+
+        result2 = await agency.get_response(
+            message=(
+                "Now provide me the exact file search results that you found in the previous tool call. "
+                "Do not use the tool again. I'm looking for Q3 and Q4 revenue, operating costs, "
+                "and total employee count."
+            )
         )
 
         assert result2 is not None
