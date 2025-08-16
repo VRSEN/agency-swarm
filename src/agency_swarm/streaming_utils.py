@@ -15,7 +15,12 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
-def add_agent_name_to_event(event: Any, agent_name: str, caller_agent: str | None = None) -> Any:
+def add_agent_name_to_event(
+    event: Any,
+    agent_name: str,
+    caller_agent: str | None = None,
+    agent_run_id: str | None = None,
+) -> Any:
     """Add agent name and caller to a streaming event.
 
     Args:
@@ -30,10 +35,16 @@ def add_agent_name_to_event(event: Any, agent_name: str, caller_agent: str | Non
     if isinstance(event, dict):
         event["agent"] = agent_name
         event["callerAgent"] = caller_agent
+        # Only attach agent_run_id for structured SDK events (they have a 'type' key)
+        if agent_run_id and "type" in event:
+            event["agent_run_id"] = agent_run_id
     elif hasattr(event, "__dict__"):
         # For object-like events, add as attributes
         event.agent = agent_name
         event.callerAgent = caller_agent
+        # Only attach agent_run_id for objects that expose a 'type' attribute (SDK events)
+        if agent_run_id and hasattr(event, "type"):
+            event.agent_run_id = agent_run_id
 
     # Extract and propagate call_id if present in the event structure
     call_id = None

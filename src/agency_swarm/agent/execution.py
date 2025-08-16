@@ -6,6 +6,7 @@ including both sync and streaming variants.
 """
 
 import json
+import uuid
 import warnings
 from collections.abc import AsyncGenerator
 from contextlib import AsyncExitStack
@@ -141,7 +142,7 @@ class Execution:
         # Prepare history for runner (sanitize and ensure content safety)
         history_for_runner = MessageFormatter.sanitize_tool_calls_in_history(full_history)
         history_for_runner = MessageFormatter.ensure_tool_calls_content_safety(history_for_runner)
-        # Ensure send_message function_call has a paired output for model input
+        # Ensure send_message function_call has a paired output for model input (in-memory only)
         history_for_runner = MessageFormatter.ensure_send_message_pairing(history_for_runner)
         # Strip agency metadata before sending to OpenAI
         history_for_runner = MessageFormatter.strip_agency_metadata(history_for_runner)
@@ -333,6 +334,8 @@ class Execution:
                 )
 
                 current_agent_name = self.agent.name
+                # Generate a unique run id for this agent execution (non-streaming)
+                current_agent_run_id = f"agent_run_{uuid.uuid4().hex}"
                 for i, run_item_obj in enumerate(run_result.new_items):
                     # _run_item_to_tresponse_input_item converts RunItem to TResponseInputItem (dict)
                     item_dict = self._run_item_to_tresponse_input_item(run_item_obj)
@@ -342,7 +345,10 @@ class Execution:
 
                         # Add agency metadata to the response items
                         formatted_item = MessageFormatter.add_agency_metadata(
-                            item_dict, agent=current_agent_name, caller_agent=sender_name
+                            item_dict,
+                            agent=current_agent_name,
+                            caller_agent=sender_name,
+                            agent_run_id=current_agent_run_id,
                         )
                         items_to_save.append(formatted_item)
                         content_preview = str(item_dict.get("content", ""))[:50]
@@ -511,6 +517,8 @@ class Execution:
                     )
 
                     current_stream_agent_name = self.agent.name
+                    # Assign a unique run id for the current active agent in the stream
+                    current_agent_run_id = f"agent_run_{uuid.uuid4().hex}"
                     # Suppress SDK-emitted send_message tool call pair (we inject a sentinel earlier)
                     suppress_next_send_message_output: bool = False
                     async for event in result.stream_events():
@@ -543,15 +551,29 @@ class Execution:
                                 target = self._extract_handoff_target_name(item) if item is not None else None
                                 if target:
                                     current_stream_agent_name = target
+                                    # New agent context after handoff; assign a new run id
+                                    current_agent_run_id = f"agent_run_{uuid.uuid4().hex}"
                             elif getattr(event, "type", None) == "agent_updated_stream_event":
                                 new_agent = getattr(event, "new_agent", None)
                                 if new_agent is not None and hasattr(new_agent, "name") and new_agent.name:
                                     current_stream_agent_name = new_agent.name
+                                    # For each new agent event, generate a stable id for this instance
+                                    # Prefer the event id if present to keep determinism across layers
+                                    event_id = getattr(event, "id", None)
+                                    if isinstance(event_id, str) and event_id:
+                                        current_agent_run_id = event_id
+                                    else:
+                                        current_agent_run_id = f"agent_run_{uuid.uuid4().hex}"
                         except Exception:
                             pass
 
                         # Add agent name and caller to the event
-                        event = add_agent_name_to_event(event, current_stream_agent_name, sender_name)
+                        event = add_agent_name_to_event(
+                            event,
+                            current_stream_agent_name,
+                            sender_name,
+                            agent_run_id=current_agent_run_id,
+                        )
 
                         # Incrementally persist the item to maintain exact stream order in storage
                         if hasattr(event, "item") and event.item and agency_context and agency_context.thread_manager:
@@ -570,7 +592,10 @@ class Execution:
 
                                 # Add agency metadata with the current active agent
                                 formatted_item = MessageFormatter.add_agency_metadata(
-                                    item_dict, agent=current_stream_agent_name, caller_agent=sender_name
+                                    item_dict,
+                                    agent=current_stream_agent_name,
+                                    caller_agent=sender_name,
+                                    agent_run_id=current_agent_run_id,
                                 )
 
                                 # Filter and save immediately

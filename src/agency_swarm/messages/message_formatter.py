@@ -11,7 +11,12 @@ class MessageFormatter:
     """Handles message formatting and structure preparation."""
 
     @staticmethod
-    def add_agency_metadata(message: dict[str, Any], agent: str, caller_agent: str | None = None) -> dict[str, Any]:
+    def add_agency_metadata(
+        message: dict[str, Any],
+        agent: str,
+        caller_agent: str | None = None,
+        agent_run_id: str | None = None,
+    ) -> dict[str, Any]:
         """Add agency-specific metadata to a message.
 
         Args:
@@ -25,6 +30,8 @@ class MessageFormatter:
         message = message.copy()
         message["agent"] = agent
         message["callerAgent"] = caller_agent
+        if agent_run_id is not None:
+            message["agent_run_id"] = agent_run_id
         # time.time() always returns UTC seconds since epoch (timezone-independent)
         message["timestamp"] = int(time.time() * 1000)  # milliseconds since epoch UTC, sortable
         # Add type field if not present (for easier parsing/navigation)
@@ -117,7 +124,11 @@ class MessageFormatter:
         cleaned = []
         for msg in messages:
             # Create a copy without agency fields (including citations which OpenAI doesn't accept)
-            clean_msg = {k: v for k, v in msg.items() if k not in ["agent", "callerAgent", "timestamp", "citations"]}
+            clean_msg = {
+                k: v
+                for k, v in msg.items()
+                if k not in ["agent", "callerAgent", "timestamp", "citations", "agent_run_id"]
+            }
             cleaned.append(clean_msg)
         return cleaned
 
