@@ -274,9 +274,10 @@ def make_agui_chat_endpoint(request_model, agency_factory: Callable[..., Agency]
 
 def make_metadata_endpoint(agency_metadata: dict, verify_token):
     async def handler(token: str = Depends(verify_token)):
-        return {"metadata": agency_metadata}
+        return agency_metadata
 
     return handler
+
 
 def make_logs_endpoint(request_model, logs_dir: str, verify_token):
     """Create a logs endpoint handler following the same pattern as other endpoints."""
