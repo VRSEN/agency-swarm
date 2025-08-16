@@ -1554,7 +1554,7 @@ class Agency:
                     description = task['description']
                 )
             completed_task_ids = []
-            # self.update_context("task_plan_result", task_graph_json)
+            # self.update_context("task_plan", task_graph_json)
 
             # 任务调度循环
             while True:
@@ -1585,7 +1585,7 @@ class Agency:
                         "total_task_graph": task_graph_json,
                     }
 
-                    # self.update_context("subtask_plan_input", {"task_id": next_task_id, "title": next_task.get("title"), "description": next_task.get("description")})
+                    # self.update_context("planning_task", {"task_id": next_task_id, "title": next_task.get("title"), "description": next_task.get("description")})
                     self.update_context_tree(
                         request_id = request_id,
                         task_id = next_task_id,
@@ -1617,7 +1617,7 @@ class Agency:
                             )
                         completed_subtask_ids = []
                         
-                        # self.update_context("subtask_plan_result", subtask_graph_json)
+                        # self.update_context("subtask_plan", subtask_graph_json)
 
                         # 子任务调度循环
                         while True: 
@@ -1644,7 +1644,7 @@ class Agency:
                                     "total_subtask_graph": subtask_graph_json,
                                 }
 
-                                # self.update_context("step_plan_input", {"subtask_id": next_subtask_id, "title": next_subtask.get("title"), "description": next_subtask.get("description")})
+                                # self.update_context("planning_subtask", {"subtask_id": next_subtask_id, "title": next_subtask.get("title"), "description": next_subtask.get("description")})
                                 self.update_context_tree(
                                     request_id = request_id,
                                     task_id = next_task_id,
@@ -1679,8 +1679,8 @@ class Agency:
                                             description = step['description']
                                         )
                                     completed_step_ids = []
-                                    
-                                    # self.update_context("step_plan_result", steps_graph_json)
+
+                                    # self.update_context("step_plan", steps_graph_json)
 
                                     # 步骤调度循环
                                     while True: 
@@ -1700,7 +1700,7 @@ class Agency:
                                             step_error_message = ""
 
                                             next_step = id2step[next_step_id]
-                                            # self.update_context("agent_input", {"step_id": next_step_id, "title": next_step.get("title"), "description": next_step.get("description")})
+                                            # self.update_context("agent_executing_step", {"step_id": next_step_id, "title": next_step.get("title"), "description": next_step.get("description")})
                                             self.update_context_tree(
                                                 request_id = request_id,
                                                 task_id = next_task_id,
@@ -1722,8 +1722,8 @@ class Agency:
                                                     # 7. 能力agent执行单个step
                                                     tool, command, result, reason = self.capability_agents_processor(step=next_step, cap_group=next_subtask_cap_group, cap_agent_threads=cap_agent_threads)
                                                     assert result == 'SUCCESS' or result == 'FAIL', f"Unknown result: {result}"
-                                                    
-                                                    # self.update_context("agent_completion_result", {
+
+                                                    # self.update_context("agent_execution_result", {
                                                     #         "step_id": next_step_id,
                                                     #         "step_title": next_step['title'],
                                                     #         "result": result,
