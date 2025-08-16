@@ -98,8 +98,11 @@ async def test_full_streaming_flow_hardcoded_sequence():
         agent = m.get("agent")
         tool_name = None
         if t == "function_call":
-            fn = m.get("function_call") or {}
-            tool_name = fn.get("name")
+            # Accept flat shape (preferred) and legacy nested
+            tool_name = m.get("name")
+            if not tool_name:
+                fn = m.get("function_call") or {}
+                tool_name = fn.get("name")
             norm = "tool_call_item"
         elif t == "function_call_output":
             norm = "tool_call_output_item"

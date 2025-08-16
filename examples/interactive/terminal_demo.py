@@ -36,7 +36,7 @@ def create_demo_agency():
     worker = Agent(
         name="Worker",
         description="Worker - performs weather-related tasks",
-        instructions="You handle weather tasks. Use the get_weather tool with the location provided.",
+        instructions="You are a worker. You handle weather tasks. Use the get_weather tool with the location provided.",
         tools=[get_weather],
     )
 

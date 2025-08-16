@@ -69,12 +69,26 @@ uv run pytest tests/integration/ -v
 
 After each tool call or code edit, validate the result in 1-2 lines and proceed or self-correct if validation fails. If you have not run Step 0 and Step 1 in the current session, run `make prime` first.
 
+##### Additional Required Validations (Streaming & Tool Contract)
+
+- Always run at least one streaming example after edits that affect events, storage, or tools:
+  - `uv run python examples/streaming.py`
+  - Validate: no `400` errors like "Missing required parameter" or "No tool output found for function call".
+- Verify Responses API tool-call contract in flat history:
+  - Every `function_call` item MUST have a matching `function_call_output` (same `call_id`) in a later position of the same turn or after sub-call completion.
+  - Persist minimal records only; avoid nested shapes that the API does not accept.
+  - Never synthesize events with ad-hoc helper types; use Agents SDK classes (e.g., `RunItemStreamEvent`, `ToolCallItem`).
+- Ensure deterministic streaming order continues to pass:
+  - `uv run pytest tests/integration/test_streaming_order_consistency.py -q`
+  - Saved minimal order must match stream minimal order.
+
 ### 🔴 PROHIBITED PRACTICES
 - Misstating test outcomes
 - Skipping any workflow safety step
 - Introducing functional changes during refactoring
 - Creating stub files (<50 lines)
 - Failing to address duplication
+ - Emitting synthetic streaming events with ad-hoc helper types instead of Agents SDK classes
 
 ## 🔴 API KEYS
 - Always load environment via `.env` (with python-dotenv or `source .env`). Resolve and rerun tests on key errors.
@@ -219,3 +233,6 @@ uv run pytest tests/integration/ -v                  # Integration tests
 - Majority of changes covered by tests (90%+ integration/unit or explicit user manual confirmation)
 - All tests pass
 - Example scripts execute and output as expected
+ - Streaming contract verified:
+   - No 400s in streaming examples/terminal demo
+   - `function_call` ↔ `function_call_output` pairing present in flat history

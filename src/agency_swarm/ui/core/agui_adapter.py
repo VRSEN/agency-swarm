@@ -58,7 +58,7 @@ def serialize(obj, _visited=None):
     elif isinstance(obj, dict):
         return {k: serialize(v, _visited) for k, v in obj.items()}
     elif hasattr(obj, "__dict__") and not isinstance(obj, type):
-        # Handle any object with __dict__ (includes SimpleNamespace and regular objects)
+        # Handle any object with __dict__ (regular dynamic objects)
         # This ensures circular reference tracking for all objects with attributes
         _visited.add(obj_id)
         result = {k: serialize(v, _visited) for k, v in obj.__dict__.items() if not k.startswith("_")}

@@ -141,6 +141,8 @@ class Execution:
         # Prepare history for runner (sanitize and ensure content safety)
         history_for_runner = MessageFormatter.sanitize_tool_calls_in_history(full_history)
         history_for_runner = MessageFormatter.ensure_tool_calls_content_safety(history_for_runner)
+        # Ensure send_message function_call has a paired output for model input
+        history_for_runner = MessageFormatter.ensure_send_message_pairing(history_for_runner)
         # Strip agency metadata before sending to OpenAI
         history_for_runner = MessageFormatter.strip_agency_metadata(history_for_runner)
         return history_for_runner
@@ -467,6 +469,19 @@ class Execution:
             logger.debug(
                 f"Starting streaming run for agent '{self.agent.name}' with {len(history_for_runner)} history items."
             )
+            # Instrumentation: verify function_call pairing presence in prepared history
+            try:
+                fc = [m for m in history_for_runner if m.get("type") == "function_call"]
+                fco = [m for m in history_for_runner if m.get("type") == "function_call_output"]
+                logger.debug(
+                    f"Prepared history contains {len(fc)} function_call and {len(fco)} function_call_output items."
+                )
+                for m in fc:
+                    logger.debug(f"  FC name={m.get('name')} call_id={m.get('call_id')} status={m.get('status')}")
+                for m in fco:
+                    logger.debug(f"  FCO call_id={m.get('call_id')} output_preview={str(m.get('output', ''))[:40]}...")
+            except Exception:
+                pass
 
             # Stream the runner results
             collected_items: list[RunItem] = []
