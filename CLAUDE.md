@@ -192,6 +192,20 @@ The following files currently exceed limits and are considered problematic. Do n
 - Before composing a commit message, run `git diff --cached | cat` and base the message on that diff only.
 - Keep subject concise (<72 chars), imperative, and scoped (e.g., `examples: response_validation`).
 
+### Repository Enforcement (must-follow)
+- Do not stage everything. Never use `git add -A` or blanket staging. Stage only the specific files relevant to the change.
+- Pre-commit hooks are blocking. If a hook modifies files:
+  - Re-stage the exact changed files only
+  - Re-run the commit with the SAME commit message (do not alter the message when retrying)
+- Prove fixes with TDD evidence:
+  - Add a failing test first; run and capture the failure
+  - Implement the minimal fix; re-run and capture the pass
+  - When necessary to demonstrate proof, temporarily comment out the fix to re-show the failure, then restore
+- Eliminate duplication immediately. Prefer consolidating tests/code instead of leaving placeholders. Do not describe anything as “legacy”; remove the old path.
+- Test naming and scope:
+  - Use focused files (e.g., `tests/test_agent_modules/test_agent_run_id.py`) instead of scattering related assertions
+  - Avoid duplicate coverage across files; consolidate instead
+
 ## Key References
 - `examples/` – v1.x modern usage
 - `docs/migration_guide.mdx` – Breaking changes
