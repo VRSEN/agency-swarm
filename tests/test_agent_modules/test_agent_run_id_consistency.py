@@ -4,6 +4,7 @@ import pytest
 
 from agency_swarm import Agent
 from agency_swarm.agent_core import AgencyContext
+from agency_swarm.tools.send_message import SendMessage
 
 
 @pytest.mark.asyncio
@@ -94,3 +95,72 @@ async def test_runner_input_strips_agent_run_id(mock_runner_run, minimal_agent, 
 
     assert "input" in captured_input
     assert all("agent_run_id" not in m for m in captured_input["input"])
+
+
+class _DummyStreamingContext:
+    def __init__(self):
+        self._events = []
+
+    async def put_event(self, event):
+        self._events.append(event)
+
+
+@pytest.mark.asyncio
+async def test_send_message_function_call_persists_agent_run_id(mock_thread_manager):
+    """Streaming sentinel for send_message should persist agent_run_id on minimal record."""
+
+    sender = Agent(name="PortfolioManager", instructions="i")
+    recipient = Agent(name="RiskAnalyst", instructions="i")
+    tool = SendMessage(sender_agent=sender, recipients={recipient.name.lower(): recipient})
+
+    # Minimal wrapper-like object with context attributes accessed by tool
+    class _Ctx:
+        def __init__(self):
+            self._is_streaming = True
+            self._streaming_context = _DummyStreamingContext()
+            self._current_agent_run_id = "agent_run_TESTCASE"
+            self.thread_manager = mock_thread_manager
+            self.agents = {sender.name: sender, recipient.name: recipient}
+            self.user_context = {}
+            self.shared_instructions = None
+
+    class _Wrapper:
+        def __init__(self):
+            self.context = _Ctx()
+
+    wrapper = _Wrapper()
+
+    # Stub recipient stream to end immediately
+    async def _empty_stream(*args, **kwargs):
+        if False:
+            yield  # pragma: no cover
+        return
+
+    recipient.get_response_stream = _empty_stream  # type: ignore[attr-defined]
+
+    # Invoke tool in streaming mode
+    arguments_json_string = '{"recipient_agent":"RiskAnalyst","my_primary_instructions":"Conduct risk assessment on the given market data for Apple (AAPL). Provide insights into volatility, valuation risks, and sector-specific concerns.","message":"Please analyze the risk profile for Apple Inc. (AAPL) using the following market data: Current Price: $231.59, Market Cap: $3.437T, P/E Ratio: 35.089394, Forward P/E: 27.868832, Analyst Rating: buy. Focus on volatility, valuation risks, and sector-specific concerns.","additional_instructions":"The company operates in the Technology sector, specifically in the Consumer Electronics industry."}'
+
+    await tool.on_invoke_tool(wrapper, arguments_json_string)
+
+    # Validate streamed event includes agent_run_id
+    sc = wrapper.context._streaming_context
+    assert sc._events, "Expected a tool_called event emitted"
+    ev = sc._events[0]
+    assert getattr(ev, "agent_run_id", None) == "agent_run_TESTCASE"
+
+    # Inspect saved minimal function_call record for agent_run_id
+    mock_thread_manager.add_messages.assert_called()
+    saved_batches = [call.args[0] for call in mock_thread_manager.add_messages.call_args_list]
+    flat = [m for batch in saved_batches for m in batch]
+    fc = next(
+        (
+            m
+            for m in flat
+            if isinstance(m, dict) and m.get("type") == "function_call" and m.get("name") == "send_message"
+        ),
+        None,
+    )
+    assert fc is not None, "Expected send_message function_call record saved"
+    # This is the specific requirement
+    assert fc.get("agent_run_id") == "agent_run_TESTCASE"

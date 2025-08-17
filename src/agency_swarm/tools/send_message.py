@@ -265,6 +265,7 @@ class SendMessage(FunctionTool):
                             sender_agent_name=self.sender_agent.name,
                             thread_manager=getattr(wrapper.context, "thread_manager", None),
                             arguments_json=arguments_json_string,
+                            agent_run_id=getattr(wrapper.context, "_current_agent_run_id", None),
                         )
                     except Exception as e:
                         logger.warning(f"Failed to emit/persist send_message start: {e}")
@@ -369,6 +370,7 @@ class SendMessage(FunctionTool):
         sender_agent_name: str,
         thread_manager,
         arguments_json: str | None = None,
+        agent_run_id: str | None = None,
     ) -> str | None:
         """Emit a sentinel for send_message and persist a minimal record to align saved order with stream."""
         import uuid
@@ -387,7 +389,7 @@ class SendMessage(FunctionTool):
             name="tool_called",
             item=ToolCallItem(agent=self.sender_agent, raw_item=raw_item),
         )
-        event = add_agent_name_to_event(event, sender_agent_name, None)
+        event = add_agent_name_to_event(event, sender_agent_name, None, agent_run_id=agent_run_id)
         await streaming_context.put_event(event)
 
         if thread_manager is not None and hasattr(thread_manager, "add_messages"):
@@ -404,6 +406,8 @@ class SendMessage(FunctionTool):
                 "status": raw_item.status,
                 "timestamp": int(time.time() * 1000),
             }
+            if agent_run_id:
+                minimal_record["agent_run_id"] = agent_run_id
             thread_manager.add_messages([minimal_record])
 
         # Return call_id so caller can persist matching output later
