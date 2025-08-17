@@ -93,12 +93,18 @@ class AttachmentManager:
         for file_id in file_ids:
             filename = self._get_filename_by_id(file_id)
             extension = Path(filename).suffix.lower()
-            if extension in CODE_INTERPRETER_FILE_EXTENSIONS:
+            # Use code interpreter for all file types except .go, pdf, and images
+            code_interpreter_extensions = [
+                ext for ext in CODE_INTERPRETER_FILE_EXTENSIONS + FILE_SEARCH_FILE_EXTENSIONS if ext != ".go"
+            ]
+            if extension in code_interpreter_extensions:
                 code_interpreter_ids.append(file_id)
             elif extension == ".pdf":
                 pdf_file_ids.append(file_id)
-            elif extension in FILE_SEARCH_FILE_EXTENSIONS:
-                file_search_ids.append(file_id)
+            # For now, all file search files will be attached to code interpreter
+            # to avoid creating temporary vector stores
+            # elif extension in FILE_SEARCH_FILE_EXTENSIONS:
+            #     file_search_ids.append(file_id)
             elif extension in IMAGE_FILE_EXTENSIONS:
                 image_file_ids.append(file_id)
             else:
@@ -601,9 +607,7 @@ class AgentFileManager:
             return
 
         # Try class-relative path first
-        class_instructions_path = os.path.normpath(
-            os.path.join(self.get_class_folder_path(), self.agent.instructions)
-        )
+        class_instructions_path = os.path.normpath(os.path.join(self.get_class_folder_path(), self.agent.instructions))
         if os.path.isfile(class_instructions_path):
             with open(class_instructions_path) as f:
                 self.agent.instructions = f.read()
