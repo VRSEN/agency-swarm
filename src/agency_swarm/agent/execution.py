@@ -6,6 +6,7 @@ including both sync and streaming variants.
 """
 
 import asyncio
+import contextlib
 import json
 import uuid
 import warnings
@@ -514,7 +515,8 @@ class Execution:
                 master_context_for_run._streaming_context = context_override["_streaming_context"]
 
             # Stream using a worker that owns MCP connect/cleanup; forward events via a queue
-            event_queue: asyncio.Queue[Any] = asyncio.Queue()
+            # Bounded queue to provide backpressure and prevent unbounded memory growth
+            event_queue: asyncio.Queue[Any] = asyncio.Queue(maxsize=10)
 
             async def _streaming_worker() -> None:
                 local_result = None
@@ -551,7 +553,15 @@ class Execution:
                 # Suppress SDK-emitted send_message tool call pair (we inject a sentinel earlier)
                 suppress_next_send_message_output: bool = False
                 while True:
-                    event = await event_queue.get()
+                    # If worker finished and there are no pending events, exit cleanly
+                    if worker_task.done() and event_queue.empty():
+                        break
+
+                    # Await next event with a short timeout to avoid hanging if sentinel wasn't enqueued
+                    try:
+                        event = await asyncio.wait_for(event_queue.get(), timeout=0.25)
+                    except asyncio.TimeoutError:  # noqa: UP041
+                        continue
                     if event is None:
                         break
                     # Pass through worker-surfaced errors
@@ -647,6 +657,8 @@ class Execution:
                 try:
                     if not worker_task.done():
                         worker_task.cancel()
+                        with contextlib.suppress(asyncio.CancelledError):
+                            await worker_task
                 except Exception:
                     pass
 
