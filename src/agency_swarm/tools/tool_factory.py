@@ -23,7 +23,7 @@ from datamodel_code_generator.model import get_data_model_types
 from datamodel_code_generator.parser.jsonschema import JsonSchemaParser
 from pydantic import BaseModel, ValidationError
 
-from .BaseTool import BaseTool
+from .base_tool import BaseTool
 
 logger = logging.getLogger(__name__)
 

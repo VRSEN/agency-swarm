@@ -219,7 +219,7 @@ async def test_legacy_tool(legacy_tool):
     """
     Test that BaseTool can be used via the on_invoke_tool method of the adapted FunctionTool.
     """
-    from agency_swarm.tools.ToolFactory import ToolFactory
+    from agency_swarm.tools import ToolFactory
 
     function_tool = ToolFactory.adapt_base_tool(legacy_tool)
     input_json = '{"input": "hello"}'
