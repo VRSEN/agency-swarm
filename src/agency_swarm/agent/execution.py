@@ -5,6 +5,7 @@ This module handles the core execution logic for agent responses,
 including both sync and streaming variants.
 """
 
+import asyncio
 import json
 import uuid
 import warnings
@@ -512,115 +513,140 @@ class Execution:
             if context_override and "_streaming_context" in context_override:
                 master_context_for_run._streaming_context = context_override["_streaming_context"]
 
-            # Open MCP servers in this task and stream events directly
-            result = None
-            try:
-                async with AsyncExitStack() as mcp_stack:
-                    for server in self.agent.mcp_servers:
-                        await mcp_stack.enter_async_context(server)
+            # Stream using a worker that owns MCP connect/cleanup; forward events via a queue
+            event_queue: asyncio.Queue[Any] = asyncio.Queue()
 
-                    result = Runner.run_streamed(
-                        starting_agent=self.agent,
-                        input=history_for_runner,
-                        context=master_context_for_run,
-                        hooks=hooks_override or self.agent.hooks,
-                        run_config=run_config_override or RunConfig(),
-                        max_turns=kwargs.get("max_turns", DEFAULT_MAX_TURNS),
-                    )
+            async def _streaming_worker() -> None:
+                local_result = None
+                try:
+                    async with AsyncExitStack() as mcp_stack:
+                        for server in self.agent.mcp_servers:
+                            await mcp_stack.enter_async_context(server)
 
-                    current_stream_agent_name = self.agent.name
-                    # Suppress SDK-emitted send_message tool call pair (we inject a sentinel earlier)
-                    suppress_next_send_message_output: bool = False
-                    async for event in result.stream_events():
-                        # Collect all new items for potential post-processing
-                        if hasattr(event, "item") and event.item:
-                            # Check for SDK-emitted send_message tool call and suppress it (and its immediate output)
-                            itm = getattr(event, "item", None)
-                            if itm is not None:
-                                itm_type = getattr(itm, "type", None)
-                                raw = getattr(itm, "raw_item", None)
-                                tool_name = getattr(raw, "name", None) if raw is not None else None
-
-                                if itm_type == "tool_call_item" and tool_name == "send_message":
-                                    suppress_next_send_message_output = True
-                                    continue
-
-                                if itm_type == "tool_call_output_item" and suppress_next_send_message_output:
-                                    suppress_next_send_message_output = False
-                                    continue
-
-                            collected_items.append(event.item)
-
-                        # Update active agent on handoff events or explicit agent update events
-                        try:
-                            if (
-                                getattr(event, "type", None) == "run_item_stream_event"
-                                and getattr(event, "name", None) == "handoff_occured"
-                            ):
-                                item = getattr(event, "item", None)
-                                target = self._extract_handoff_target_name(item) if item is not None else None
-                                if target:
-                                    current_stream_agent_name = target
-                                    # New agent context after handoff; assign a new run id
-                                    current_agent_run_id = f"agent_run_{uuid.uuid4().hex}"
-                            elif getattr(event, "type", None) == "agent_updated_stream_event":
-                                new_agent = getattr(event, "new_agent", None)
-                                if new_agent is not None and hasattr(new_agent, "name") and new_agent.name:
-                                    current_stream_agent_name = new_agent.name
-                                    # For each new agent event, generate a stable id for this instance
-                                    # Prefer the event id if present to keep determinism across layers
-                                    event_id = getattr(event, "id", None)
-                                    if isinstance(event_id, str) and event_id:
-                                        current_agent_run_id = event_id
-                                    else:
-                                        current_agent_run_id = f"agent_run_{uuid.uuid4().hex}"
-                        except Exception:
-                            pass
-
-                        # Add agent name and caller to the event
-                        event = add_agent_name_to_event(
-                            event,
-                            current_stream_agent_name,
-                            sender_name,
-                            agent_run_id=current_agent_run_id,
+                        local_result = Runner.run_streamed(
+                            starting_agent=self.agent,
+                            input=history_for_runner,
+                            context=master_context_for_run,
+                            hooks=hooks_override or self.agent.hooks,
+                            run_config=run_config_override or RunConfig(),
+                            max_turns=kwargs.get("max_turns", DEFAULT_MAX_TURNS),
                         )
 
-                        # Incrementally persist the item to maintain exact stream order in storage
-                        if hasattr(event, "item") and event.item and agency_context and agency_context.thread_manager:
-                            run_item_obj = event.item
-                            # Convert to input item (dict) using SDK helper
-                            item_dict = self._run_item_to_tresponse_input_item(run_item_obj)
-                            if item_dict:
-                                # Extract citations for this single message if applicable
-                                if isinstance(run_item_obj, MessageOutputItem):
-                                    single_citation_map = extract_direct_file_annotations(
-                                        [run_item_obj], agent_name=self.agent.name
-                                    )
-                                    self._add_citations_to_message(
-                                        run_item_obj, item_dict, single_citation_map, is_streaming=True
-                                    )
+                        async for ev in local_result.stream_events():
+                            await event_queue.put(ev)
+                except Exception as e:
+                    await event_queue.put({"type": "error", "content": str(e)})
+                finally:
+                    try:
+                        if local_result is not None:
+                            local_result.cancel()
+                    except Exception:
+                        pass
+                    await event_queue.put(None)
 
-                                # Add agency metadata with the current active agent
-                                formatted_item = MessageFormatter.add_agency_metadata(
-                                    item_dict,
-                                    agent=current_stream_agent_name,
-                                    caller_agent=sender_name,
-                                    agent_run_id=current_agent_run_id,
+            worker_task = asyncio.create_task(_streaming_worker())
+
+            try:
+                current_stream_agent_name = self.agent.name
+                # Suppress SDK-emitted send_message tool call pair (we inject a sentinel earlier)
+                suppress_next_send_message_output: bool = False
+                while True:
+                    event = await event_queue.get()
+                    if event is None:
+                        break
+                    # Pass through worker-surfaced errors
+                    if isinstance(event, dict) and event.get("type") == "error":
+                        yield event
+                        continue
+
+                    # Collect all new items for potential post-processing
+                    if hasattr(event, "item") and event.item:
+                        # Check for SDK-emitted send_message tool call and suppress it (and its immediate output)
+                        itm = getattr(event, "item", None)
+                        if itm is not None:
+                            itm_type = getattr(itm, "type", None)
+                            raw = getattr(itm, "raw_item", None)
+                            tool_name = getattr(raw, "name", None) if raw is not None else None
+
+                            if itm_type == "tool_call_item" and tool_name == "send_message":
+                                suppress_next_send_message_output = True
+                                continue
+
+                            if itm_type == "tool_call_output_item" and suppress_next_send_message_output:
+                                suppress_next_send_message_output = False
+                                continue
+
+                        collected_items.append(event.item)
+
+                    # Update active agent on handoff events or explicit agent update events
+                    try:
+                        if (
+                            getattr(event, "type", None) == "run_item_stream_event"
+                            and getattr(event, "name", None) == "handoff_occured"
+                        ):
+                            item = getattr(event, "item", None)
+                            target = self._extract_handoff_target_name(item) if item is not None else None
+                            if target:
+                                current_stream_agent_name = target
+                                # New agent context after handoff; assign a new run id
+                                current_agent_run_id = f"agent_run_{uuid.uuid4().hex}"
+                        elif getattr(event, "type", None) == "agent_updated_stream_event":
+                            new_agent = getattr(event, "new_agent", None)
+                            if new_agent is not None and hasattr(new_agent, "name") and new_agent.name:
+                                current_stream_agent_name = new_agent.name
+                                # For each new agent event, generate a stable id for this instance
+                                # Prefer the event id if present to keep determinism across layers
+                                event_id = getattr(event, "id", None)
+                                if isinstance(event_id, str) and event_id:
+                                    current_agent_run_id = event_id
+                                else:
+                                    current_agent_run_id = f"agent_run_{uuid.uuid4().hex}"
+                    except Exception:
+                        pass
+
+                    # Add agent name and caller to the event
+                    event = add_agent_name_to_event(
+                        event,
+                        current_stream_agent_name,
+                        sender_name,
+                        agent_run_id=current_agent_run_id,
+                    )
+
+                    # Incrementally persist the item to maintain exact stream order in storage
+                    if hasattr(event, "item") and event.item and agency_context and agency_context.thread_manager:
+                        run_item_obj = event.item
+                        # Convert to input item (dict) using SDK helper
+                        item_dict = self._run_item_to_tresponse_input_item(run_item_obj)
+                        if item_dict:
+                            # Extract citations for this single message if applicable
+                            if isinstance(run_item_obj, MessageOutputItem):
+                                single_citation_map = extract_direct_file_annotations(
+                                    [run_item_obj], agent_name=self.agent.name
+                                )
+                                self._add_citations_to_message(
+                                    run_item_obj, item_dict, single_citation_map, is_streaming=True
                                 )
 
-                                # Filter and save immediately
-                                if not MessageFilter.should_filter(formatted_item):
-                                    agency_context.thread_manager.add_messages([formatted_item])
+                            # Add agency metadata with the current active agent
+                            formatted_item = MessageFormatter.add_agency_metadata(
+                                item_dict,
+                                agent=current_stream_agent_name,
+                                caller_agent=sender_name,
+                                agent_run_id=current_agent_run_id,
+                            )
 
-                        yield event
+                            # Filter and save immediately
+                            if not MessageFilter.should_filter(formatted_item):
+                                agency_context.thread_manager.add_messages([formatted_item])
+
+                    yield event
             except Exception as e:
                 logger.exception("Error during streamed run for agent '%s'", self.agent.name)
                 yield {"type": "error", "content": str(e)}
             finally:
-                # Ensure the SDK's background task is cancelled before closing MCP servers
                 try:
-                    if result is not None:
-                        result.cancel()
+                    if not worker_task.done():
+                        worker_task.cancel()
                 except Exception:
                     pass
 
