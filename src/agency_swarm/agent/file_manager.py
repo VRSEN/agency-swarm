@@ -95,7 +95,9 @@ class AttachmentManager:
             extension = Path(filename).suffix.lower()
             # Use code interpreter for all file types except .go, pdf, and images
             code_interpreter_extensions = [
-                ext for ext in CODE_INTERPRETER_FILE_EXTENSIONS + FILE_SEARCH_FILE_EXTENSIONS if ext != ".go"
+                ext
+                for ext in CODE_INTERPRETER_FILE_EXTENSIONS + FILE_SEARCH_FILE_EXTENSIONS
+                if ext not in [".go", ".pdf"]
             ]
             if extension in code_interpreter_extensions:
                 code_interpreter_ids.append(file_id)
