@@ -41,6 +41,8 @@ from agency_swarm.utils.citation_extractor import extract_direct_file_annotation
 if TYPE_CHECKING:
     from agency_swarm.agent_core import AgencyContext, Agent
 
+DEFAULT_MAX_TURNS = 1000000  # Unlimited by default
+
 
 class Execution:
     """Handles agent execution logic for responses and streaming."""
@@ -304,7 +306,7 @@ class Execution:
                         context=master_context_for_run,
                         hooks=hooks_override or self.agent.hooks,
                         run_config=run_config_override or RunConfig(),
-                        max_turns=kwargs.get("max_turns", 1000000), # Unlimited by default
+                        max_turns=kwargs.get("max_turns", DEFAULT_MAX_TURNS),
                     )
                 completion_info = (
                     f"Output Type: {type(run_result.final_output).__name__}"
@@ -529,7 +531,7 @@ class Execution:
                         context=master_context_for_run,
                         hooks=hooks_override or self.agent.hooks,
                         run_config=run_config_override or RunConfig(),
-                        max_turns=kwargs.get("max_turns", 1000000), # Unlimited by default
+                        max_turns=kwargs.get("max_turns", DEFAULT_MAX_TURNS),
                     )
 
                     current_stream_agent_name = self.agent.name
