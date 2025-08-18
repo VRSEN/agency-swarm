@@ -20,8 +20,10 @@ from agency_swarm.agent import (
     validate_hosted_tools,
 )
 from agency_swarm.agent.file_manager import AgentFileManager, AttachmentManager
+from agency_swarm.agent.tools import _attach_one_call_guard
 from agency_swarm.context import MasterContext
 from agency_swarm.thread import ThreadManager
+from agency_swarm.tools.concurrency import ToolConcurrencyManager
 
 logger = logging.getLogger(__name__)
 
@@ -121,6 +123,7 @@ class Agent(BaseAgent[MasterContext]):
     _openai_client_sync: OpenAI | None = None
     file_manager: AgentFileManager | None = None
     attachment_manager: AttachmentManager | None = None
+    _tool_concurrency_manager: ToolConcurrencyManager
 
     # --- SDK Agent Compatibility ---
     # Re-declare attributes from BaseAgent for clarity and potential overrides
@@ -200,6 +203,7 @@ class Agent(BaseAgent[MasterContext]):
         # Internal state
         self._openai_client = None
         self._openai_client_sync = None
+        self._tool_concurrency_manager = ToolConcurrencyManager()
 
         # Initialize execution handler
         self._execution = Execution(self)
@@ -216,6 +220,10 @@ class Agent(BaseAgent[MasterContext]):
         self.file_manager._parse_files_folder_for_vs_id()
         parse_schemas(self)
         load_tools_from_folder(self)
+
+        # Wrap any FunctionTool instances that were provided directly via constructor
+        for tool in self.tools:
+            _attach_one_call_guard(tool, self)
 
     # --- Properties ---
     def __repr__(self) -> str:
