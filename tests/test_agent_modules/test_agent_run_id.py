@@ -89,7 +89,16 @@ async def test_send_message_sentinel_persists_and_event_has_agent_run_id(mock_th
 
     recipient.get_response_stream = _empty_stream  # type: ignore[attr-defined]
 
-    arguments_json_string = '{"recipient_agent":"RiskAnalyst","my_primary_instructions":"Conduct risk assessment on the given market data for Apple (AAPL). Provide insights into volatility, valuation risks, and sector-specific concerns.","message":"Please analyze the risk profile for Apple Inc. (AAPL) using the following market data: Current Price: $231.59, Market Cap: $3.437T, P/E Ratio: 35.089394, Forward P/E: 27.868832, Analyst Rating: buy. Focus on volatility, valuation risks, and sector-specific concerns.","additional_instructions":"The company operates in the Technology sector, specifically in the Consumer Electronics industry."}'
+    import json
+
+    # Keep content minimal to satisfy linter while preserving test semantics
+    arguments_json = {
+        "recipient_agent": "RiskAnalyst",
+        "my_primary_instructions": "Conduct risk assessment.",
+        "message": "Analyze AAPL risk profile.",
+        "additional_instructions": "Tech sector context.",
+    }
+    arguments_json_string = json.dumps(arguments_json)
 
     await tool.on_invoke_tool(wrapper, arguments_json_string)
 

@@ -508,6 +508,11 @@ class Execution:
             master_context_for_run = self._prepare_master_context(context_override, agency_context)
             # Set streaming flag so SendMessage knows to use streaming
             master_context_for_run._is_streaming = True
+            # Expose the current agent run identifier for tools (e.g., send_message) to tag sentinel/events
+            try:
+                master_context_for_run._current_agent_run_id = current_agent_run_id
+            except Exception:
+                pass
             # Pass streaming context if available
             if context_override and "_streaming_context" in context_override:
                 master_context_for_run._streaming_context = context_override["_streaming_context"]
@@ -563,6 +568,10 @@ class Execution:
                                     current_stream_agent_name = target
                                     # New agent context after handoff; assign a new run id
                                     current_agent_run_id = f"agent_run_{uuid.uuid4().hex}"
+                                    try:
+                                        master_context_for_run._current_agent_run_id = current_agent_run_id
+                                    except Exception:
+                                        pass
                             elif getattr(event, "type", None) == "agent_updated_stream_event":
                                 new_agent = getattr(event, "new_agent", None)
                                 if new_agent is not None and hasattr(new_agent, "name") and new_agent.name:
@@ -574,6 +583,10 @@ class Execution:
                                         current_agent_run_id = event_id
                                     else:
                                         current_agent_run_id = f"agent_run_{uuid.uuid4().hex}"
+                                    try:
+                                        master_context_for_run._current_agent_run_id = current_agent_run_id
+                                    except Exception:
+                                        pass
                         except Exception:
                             pass
 

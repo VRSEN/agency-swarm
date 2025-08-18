@@ -136,6 +136,7 @@ def make_stream_endpoint(request_model, agency_factory: Callable[..., Agency], v
             # Get only new messages added during this request
             all_messages = agency_instance.thread_manager.get_all_messages()
             new_messages = all_messages[initial_message_count:]  # Only messages added during this request
+            # Preserve agent_run_id grouping for UI correlation
             filtered_messages = MessageFilter.filter_messages(new_messages)
             result = {"new_messages": filtered_messages}
             if request.file_urls is not None and file_ids_map is not None:
