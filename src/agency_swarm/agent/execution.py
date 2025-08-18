@@ -24,7 +24,6 @@ from agents import (
 )
 from agents.exceptions import AgentsException
 from agents.items import ItemHelpers, MessageOutputItem, ToolCallItem
-from agents.run import DEFAULT_MAX_TURNS
 from agents.stream_events import RunItemStreamEvent
 from openai._utils._logs import logger
 from openai.types.responses import ResponseFileSearchToolCall, ResponseFunctionWebSearch
@@ -41,6 +40,8 @@ from agency_swarm.utils.citation_extractor import extract_direct_file_annotation
 
 if TYPE_CHECKING:
     from agency_swarm.agent_core import AgencyContext, Agent
+
+DEFAULT_MAX_TURNS = 1000000  # Unlimited by default
 
 
 class Execution:
