@@ -2015,7 +2015,7 @@ class Agency:
         with open(self.context_path, "w", encoding='utf-8') as f:
             json.dump(contexts, f, indent=2, ensure_ascii=False)
         
-    def init_context_tree(self, request_id, content):
+    def init_context_tree(self, request_id: str, content):
         """
         初始化任务树，在任务开始时创建根节点
         """
@@ -2046,7 +2046,7 @@ class Agency:
             context_tree = json.load(f)
 
         # 获取当前任务
-        request = context_tree.get(request_id)
+        request = context_tree.get(str(request_id))
         if not request:
             raise Exception(f"Request {request_id} not found in task tree.")
 
@@ -2130,7 +2130,7 @@ class Agency:
             context_tree = json.load(f)
 
         # 获取当前任务
-        request = context_tree.get(request_id)
+        request = context_tree.get(str(request_id))
         if not request:
             raise Exception(f"Request {request_id} not found in task tree.")
         

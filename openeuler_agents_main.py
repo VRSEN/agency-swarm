@@ -167,7 +167,7 @@ def main():
             "操作系统能力群": [permissions_agent_instance, network_agent_instance,],
         }
 
-        text ="""请更新 secscanner 的本地漏洞数据库，然后扫描系统中软件包的 CVE 漏洞。"""
+        text ="""请使用已安装的`secScanner`工具检测当前系统存在的不安全的配置信息，并将系统上存在安全弱项的配置进行修改，以满足安全基线。报告检测到的不安全配置与修复情况。"""
 
         files_path = os.path.join("agents", "files")
         context_path = os.path.join(files_path, "context.json")
