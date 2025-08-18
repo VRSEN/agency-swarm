@@ -36,7 +36,7 @@ from agency_swarm.messages import (
     ensure_tool_calls_content_safety,
     sanitize_tool_calls_in_history,
 )
-from agency_swarm.streaming_utils import add_agent_name_to_event
+from agency_swarm.streaming.utils import add_agent_name_to_event
 from agency_swarm.utils.citation_extractor import extract_direct_file_annotations
 
 if TYPE_CHECKING:

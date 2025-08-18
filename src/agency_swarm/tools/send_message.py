@@ -16,7 +16,7 @@ from agents import FunctionTool, RunContextWrapper, RunItemStreamEvent, ToolCall
 from openai.types.responses import ResponseFunctionToolCall
 
 from ..context import MasterContext
-from ..streaming_utils import add_agent_name_to_event
+from ..streaming.utils import add_agent_name_to_event
 
 if TYPE_CHECKING:
     from ..agent_core import AgencyContext, Agent
