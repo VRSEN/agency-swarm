@@ -26,7 +26,6 @@ from agents import (
 )
 from agents.exceptions import AgentsException
 from agents.items import ItemHelpers, MessageOutputItem, ToolCallItem
-from agents.run import DEFAULT_MAX_TURNS
 from agents.stream_events import RunItemStreamEvent
 from openai._utils._logs import logger
 from openai.types.responses import ResponseFileSearchToolCall, ResponseFunctionWebSearch
@@ -38,11 +37,13 @@ from agency_swarm.messages import (
     ensure_tool_calls_content_safety,
     sanitize_tool_calls_in_history,
 )
-from agency_swarm.streaming_utils import add_agent_name_to_event
+from agency_swarm.streaming.utils import add_agent_name_to_event
 from agency_swarm.utils.citation_extractor import extract_direct_file_annotations
 
 if TYPE_CHECKING:
     from agency_swarm.agent_core import AgencyContext, Agent
+
+DEFAULT_MAX_TURNS = 1000000  # Unlimited by default
 
 
 class Execution:
@@ -510,6 +511,11 @@ class Execution:
             master_context_for_run = self._prepare_master_context(context_override, agency_context)
             # Set streaming flag so SendMessage knows to use streaming
             master_context_for_run._is_streaming = True
+            # Expose the current agent run identifier for tools (e.g., send_message) to tag sentinel/events
+            try:
+                master_context_for_run._current_agent_run_id = current_agent_run_id
+            except Exception:
+                pass
             # Pass streaming context if available
             if context_override and "_streaming_context" in context_override:
                 master_context_for_run._streaming_context = context_override["_streaming_context"]
@@ -611,6 +617,25 @@ class Execution:
                                     current_agent_run_id = event_id
                                 else:
                                     current_agent_run_id = f"agent_run_{uuid.uuid4().hex}"
+                                try:
+                                    master_context_for_run._current_agent_run_id = current_agent_run_id
+                                except Exception:
+                                    pass
+                        elif getattr(event, "type", None) == "agent_updated_stream_event":
+                            new_agent = getattr(event, "new_agent", None)
+                            if new_agent is not None and hasattr(new_agent, "name") and new_agent.name:
+                                current_stream_agent_name = new_agent.name
+                                # For each new agent event, generate a stable id for this instance
+                                # Prefer the event id if present to keep determinism across layers
+                                event_id = getattr(event, "id", None)
+                                if isinstance(event_id, str) and event_id:
+                                    current_agent_run_id = event_id
+                                else:
+                                    current_agent_run_id = f"agent_run_{uuid.uuid4().hex}"
+                                try:
+                                    master_context_for_run._current_agent_run_id = current_agent_run_id
+                                except Exception:
+                                    pass
                     except Exception:
                         pass
 

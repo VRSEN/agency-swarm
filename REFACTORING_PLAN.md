@@ -17,7 +17,7 @@
 ## 3) Consolidation
 - [ ] Centralize message sanitization/formatting in one shared module
 - [ ] Remove duplicates from `agent/messages.py` and `messages/message_formatter.py`
-- [ ] Move `streaming_utils.py` into `utils/` or dedicated `streaming/` subpackage
+- [x] Move `streaming_utils.py` into `utils/` or dedicated `streaming/` subpackage
 - [ ] Relocate `agent_core.py` into `agent/core.py`
 - [ ] Move `thread.py` into `threads/` or `utils/threads.py`
 - [ ] Expand and organize `utils/` to host shared helpers

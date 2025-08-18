@@ -15,7 +15,7 @@ from agents import (
 
 from agency_swarm.agent_core import AgencyContext, Agent
 from agency_swarm.hooks import PersistenceHooks
-from agency_swarm.streaming_utils import event_stream_merger
+from agency_swarm.streaming.utils import event_stream_merger
 from agency_swarm.thread import ThreadLoadCallback, ThreadManager, ThreadSaveCallback
 from agency_swarm.tools.send_message import SendMessageHandoff
 
