@@ -139,41 +139,12 @@ class AttachmentManager:
                 logger.warning(f"Invalid file_id format: {file_id} for agent {self.agent.name}")
 
         # Add temporary tools for other file types
-        if file_search_ids:
-            temp_vs_id = self.init_attachments_vs(vs_name=f"temp_attachments_vs_{uuid.uuid4().hex[:8]}")
-            self._temp_vector_store_id = temp_vs_id
-            logger.info(f"Adding file ids: {file_search_ids} for {self.agent.name}'s file search")
-            self.agent.file_manager.add_file_search_tool(temp_vs_id, file_search_ids)
-            await self._wait_for_temp_vector_store_processing()
-
         if code_interpreter_ids:
             logger.info(f"Adding file ids: {code_interpreter_ids} for {self.agent.name}'s code interpreter")
             self.agent.file_manager.add_code_interpreter_tool(code_interpreter_ids)
             self._temp_code_interpreter_file_ids = code_interpreter_ids
 
         return content_list
-
-    async def _wait_for_temp_vector_store_processing(self, timeout: int = 30) -> None:
-        """Wait for the temporary vector store to finish processing."""
-        if not self._temp_vector_store_id:
-            return
-        try:
-            for _ in range(timeout):
-                vs = await self.agent.client.vector_stores.retrieve(self._temp_vector_store_id)
-                if vs.status == "completed":
-                    return
-                if vs.status == "failed":
-                    raise AgentsException(f"Vector store processing failed: {vs}")
-                await asyncio.sleep(1)
-            # If we've gone through all iterations without completing, it's a timeout
-            raise AgentsException(
-                f"Vector store processing timed out after {timeout} seconds: {self._temp_vector_store_id}"
-            )
-        except AgentsException:
-            # Re-raise our own exceptions
-            raise
-        except Exception as e:  # pragma: no cover - best effort
-            logger.warning(f"Failed while waiting for vector store {self._temp_vector_store_id}: {e}")
 
     def attachments_cleanup(self):
         """
