@@ -24,7 +24,6 @@ from agents import (
 )
 from agents.exceptions import AgentsException
 from agents.items import ItemHelpers, MessageOutputItem, ToolCallItem
-from agents.run import DEFAULT_MAX_TURNS
 from agents.stream_events import RunItemStreamEvent
 from openai._utils._logs import logger
 from openai.types.responses import ResponseFileSearchToolCall, ResponseFunctionWebSearch
@@ -305,7 +304,7 @@ class Execution:
                         context=master_context_for_run,
                         hooks=hooks_override or self.agent.hooks,
                         run_config=run_config_override or RunConfig(),
-                        max_turns=kwargs.get("max_turns", DEFAULT_MAX_TURNS),
+                        max_turns=kwargs.get("max_turns", 1000000), # Unlimited by default
                     )
                 completion_info = (
                     f"Output Type: {type(run_result.final_output).__name__}"
@@ -530,7 +529,7 @@ class Execution:
                         context=master_context_for_run,
                         hooks=hooks_override or self.agent.hooks,
                         run_config=run_config_override or RunConfig(),
-                        max_turns=kwargs.get("max_turns", DEFAULT_MAX_TURNS),
+                        max_turns=kwargs.get("max_turns", 1000000), # Unlimited by default
                     )
 
                     current_stream_agent_name = self.agent.name
