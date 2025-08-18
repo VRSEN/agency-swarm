@@ -65,22 +65,36 @@ class FormatProfessionalReportTool(BaseTool):
                     key_risks = [risk.strip().strip('"') for risk in risks_content.split(",") if risk.strip()]
 
             # Generate executive summary
-            executive_summary = f"""
-This investment analysis provides a comprehensive evaluation of {symbol} based on current market conditions and risk assessment.
-The analysis incorporates market data, valuation metrics, risk factors, and competitive positioning to deliver actionable investment guidance.
-Current market price stands at ${current_price} with a risk assessment of {risk_level} level ({risk_score}).
-"""
+            executive_summary = (
+                f"This investment analysis provides a comprehensive evaluation of {symbol} "
+                "based on current market conditions and risk assessment.\n"
+                "The analysis incorporates market data, valuation metrics, risk factors, and "
+                "competitive positioning to deliver actionable investment guidance.\n"
+                f"Current market price stands at ${current_price} "
+                f"with a risk assessment of {risk_level} level ({risk_score})."
+            )
 
             # Generate market position analysis
-            market_position = f"""
-{symbol} demonstrates the following market characteristics:
-- Current trading price: ${current_price}
-- Market positioning reflects current sector dynamics and competitive landscape
-- Valuation metrics indicate {"potential overvaluation concerns" if "high" in risk_level.lower() else "reasonable valuation levels"}
-- Company fundamentals {"require careful monitoring" if risk_level == "High" else "appear stable"}
+            valuation_note = (
+                "potential overvaluation concerns" if "high" in risk_level.lower() else "reasonable valuation levels"
+            )
 
-The security's market position is {"challenged by elevated risk factors" if risk_level == "High" else "supported by manageable risk profile"}.
-"""
+            company_fundamentals = "require careful monitoring" if risk_level == "High" else "appear stable"
+
+            position_summary = (
+                "challenged by elevated risk factors"
+                if risk_level == "High"
+                else "supported by manageable risk profile"
+            )
+
+            market_position = (
+                f"{symbol} demonstrates the following market characteristics:\n"
+                f"- Current trading price: ${current_price}\n"
+                "- Market positioning reflects current sector dynamics and competitive landscape\n"
+                f"- Valuation metrics indicate {valuation_note}\n"
+                f"- Company fundamentals {company_fundamentals}\n\n"
+                f"The security's market position is {position_summary}."
+            )
 
             # Generate risk analysis summary
             risk_analysis = f"""
@@ -96,7 +110,13 @@ Key Risk Factors Identified:
             else:
                 risk_analysis += "No significant risk factors identified in the analysis."
 
-            risk_analysis += f"\nThe risk assessment indicates {'heightened caution is warranted' if risk_level == 'High' else 'manageable risk levels for appropriate investment strategies'}."
+            risk_assessment_phrase = (
+                "heightened caution is warranted"
+                if risk_level == "High"
+                else "manageable risk levels for appropriate investment strategies"
+            )
+
+            risk_analysis += f"\nThe risk assessment indicates {risk_assessment_phrase}."
 
             # Generate final recommendation
             if risk_level == "High":

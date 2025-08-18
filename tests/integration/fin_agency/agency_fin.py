@@ -37,7 +37,10 @@ if __name__ == "__main__":
 
     # test 1 message (optional)
     # async def main():
-    #     response = await agency.get_response("Search for machine learning tutorials and find detailed information about neural networks")
+    #     response = await agency.get_response(
+    #         "Search for machine learning tutorials and find detailed information about "
+    #         "neural networks"
+    #     )
     #     print(response)
     # asyncio.run(main())
 
