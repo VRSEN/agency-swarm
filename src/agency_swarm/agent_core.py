@@ -251,6 +251,11 @@ class Agent(BaseAgent[MasterContext]):
             self._openai_client_sync = OpenAI()
         return self._openai_client_sync
 
+    @property
+    def tool_concurrency_manager(self) -> ToolConcurrencyManager:
+        """Provides access to the agent's tool concurrency manager."""
+        return self._tool_concurrency_manager
+
     # --- Tool Management ---
     def add_tool(self, tool: Tool) -> None:
         """

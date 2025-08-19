@@ -373,13 +373,13 @@ def test_agent_has_concurrency_manager():
     """Test that Agent instances have a tool concurrency manager."""
     agent = Agent(name="test", instructions="test")
 
-    assert hasattr(agent, "_tool_concurrency_manager")
-    assert agent._tool_concurrency_manager is not None
+    assert hasattr(agent, "tool_concurrency_manager")
+    assert agent.tool_concurrency_manager is not None
 
     # Test that it's the right type
     from agency_swarm.tools.concurrency import ToolConcurrencyManager
 
-    assert isinstance(agent._tool_concurrency_manager, ToolConcurrencyManager)
+    assert isinstance(agent.tool_concurrency_manager, ToolConcurrencyManager)
 
 
 def test_agent_concurrency_manager_independence():
@@ -388,13 +388,13 @@ def test_agent_concurrency_manager_independence():
     agent2 = Agent(name="agent2", instructions="test")
 
     # Should be different instances
-    assert agent1._tool_concurrency_manager is not agent2._tool_concurrency_manager
+    assert agent1.tool_concurrency_manager is not agent2.tool_concurrency_manager
 
     # Test independence
-    agent1._tool_concurrency_manager.acquire_lock("tool1")
+    agent1.tool_concurrency_manager.acquire_lock("tool1")
 
-    busy1, owner1 = agent1._tool_concurrency_manager.is_lock_active()
-    busy2, owner2 = agent2._tool_concurrency_manager.is_lock_active()
+    busy1, owner1 = agent1.tool_concurrency_manager.is_lock_active()
+    busy2, owner2 = agent2.tool_concurrency_manager.is_lock_active()
 
     assert busy1 is True and owner1 == "tool1"
     assert busy2 is False and owner2 is None

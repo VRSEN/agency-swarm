@@ -34,7 +34,7 @@ def _attach_one_call_guard(tool: Tool, agent: "Agent") -> None:
         )
 
     async def guarded_on_invoke(ctx, input_json: str):
-        concurrency_manager = agent._tool_concurrency_manager
+        concurrency_manager = agent.tool_concurrency_manager
 
         # First, block if any one_call tool is currently running for this agent
         busy, owner = concurrency_manager.is_lock_active()
