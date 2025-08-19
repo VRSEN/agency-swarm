@@ -11,11 +11,11 @@ _description = """
 """
 _tool_instruction = """你可以使用secscanner扫描系统漏洞，使用方法如下：
 
-`secscanner db update`: 下载漏洞数据库更新。
+`secscanner db update`: 下载漏洞数据库更新而非工具本身的更新。
 `secscanner check cve`: 对照漏洞数据库，检查系统中存在的CVE漏洞。
 `secscanner check basic`: 识别当前系统中的不安全配置
 `secscanner fix basic`: 修复当前系统中的不安全配置
-`secscanner --version`: 通过查看版本的方式确认secscanner工具已经安装 
+`secscanner --version`: 通过查看版本的方式确认secscanner工具已经安装情况 
 
 """
 

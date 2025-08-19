@@ -2046,7 +2046,7 @@ class Agency:
             context_tree = json.load(f)
 
         # 获取当前任务
-        request = context_tree.get(str(request_id))
+        request = context_tree.get(request_id)
         if not request:
             raise Exception(f"Request {request_id} not found in task tree.")
 
@@ -2130,7 +2130,7 @@ class Agency:
             context_tree = json.load(f)
 
         # 获取当前任务
-        request = context_tree.get(str(request_id))
+        request = context_tree.get(request_id)
         if not request:
             raise Exception(f"Request {request_id} not found in task tree.")
         

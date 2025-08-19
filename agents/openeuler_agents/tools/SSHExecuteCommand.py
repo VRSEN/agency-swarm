@@ -34,8 +34,9 @@ class SSHExecuteCommand(BaseTool):
         check_result = self.send_message_to_agent(recipient_agent_name="check_log_agent", message=json.dumps({"command": self.command, "result": res}, indent=4, ensure_ascii=False))
 
         if "该任务执行失败" in check_result:
-            return {"result": "FAIL", "context": check_result}
-        return {"result": "SUCCESS", "context": check_result}
+            return {"tool":"SSHExecuteCommand","command":self.command,"result": "FAIL", "reason":check_result}
+
+        return  {"tool":"SSHExecuteCommand","command":self.command,"result": "SUCCESS", "reason":check_result}
 
 # if __name__=="__main__":
 #     tool = SSHExecuteCommand(command="for i in $(seq 1 3); do echo 'Line $i (yield)'; sleep 1; done")
