@@ -258,9 +258,10 @@ class SendMessage(FunctionTool):
                     streaming_context = getattr(wrapper.context, "_streaming_context", None)
 
                 # Emit a single ordered marker and persist a minimal record before forwarding child events
+                emitted_call_id = None
                 if streaming_context:
                     try:
-                        await self._emit_send_message_start(
+                        emitted_call_id = await self._emit_send_message_start(
                             streaming_context=streaming_context,
                             sender_agent_name=self.sender_agent.name,
                             thread_manager=getattr(wrapper.context, "thread_manager", None),
@@ -322,6 +323,34 @@ class SendMessage(FunctionTool):
                     logger.info(f"Sub-agent '{recipient_name_for_call}' executed tools: {tool_calls_seen}")
 
                 response = type("StreamedResponse", (), {"final_output": final_output_text})()
+
+                # Claude-only: persist matching function_call_output immediately after the call
+                try:
+                    model_name = None
+                    if hasattr(self.sender_agent, "model"):
+                        model_config = getattr(self.sender_agent, "model", "") or ""
+                        if hasattr(model_config, "model"):
+                            model_name = model_config.model
+                    model_lower = (model_name or "").lower()
+                    if (
+                        emitted_call_id
+                        and getattr(wrapper.context, "thread_manager", None) is not None
+                        and ("anthropic" in model_lower or "claude" in model_lower)
+                    ):
+                        output_record = {
+                            "type": "function_call_output",
+                            "agent": self.sender_agent.name,
+                            "callerAgent": None,
+                            "call_id": emitted_call_id,
+                            "output": final_output_text or "",
+                            "timestamp": int(time.time() * 1000),
+                        }
+                        agent_run_id = getattr(wrapper.context, "_current_agent_run_id", None)
+                        if agent_run_id:
+                            output_record["agent_run_id"] = agent_run_id
+                        wrapper.context.thread_manager.add_messages([output_record])
+                except Exception as e:
+                    logger.warning(f"Failed to persist Claude function_call_output for send_message: {e}")
             else:
                 logger.debug(f"Calling target agent '{recipient_name_for_call}'.get_response...")
 
