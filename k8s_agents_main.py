@@ -293,16 +293,35 @@ def main():
             "pod编排调度能力群": [stateful_workload_manage_agent_instance, stateless_workload_manage_agent_instance, task_manage_agent_instance, daemonSet_manage_agent_instance, affinity_antiAffinity_scheduling_agent_instance],
             "配置管理能力群": [env_config_manage_agent_instance, privacy_manage_agent_instance],
             "监控能力群": [monitor_configuration_agent_instance, monitor_observe_agent_instance,flexible_strategy_manage_agent_instance],
-            "软件管理能力群": [software_config_modify_agent_instance, software_install_agent_instance, software_monitor_agent_instance],
+            "软件管理能力群": [software_config_modify_agent_instance, software_install_agent_instance, software_monitor_agent_instance, stress_test_agent_instance],
             "存储能力群": [pv_agent_instance, pvc_agent_instance, storageclass_agent_instance, csi_agent_instance, emptydir_agent_instance, hostpath_agent_instance, disk_agent_instance,],
             "虚拟机交互能力群":[package_agent_instance, status_agent_instance,kubeadm_agent_instance],
             "综合能力群":[file_io_agent_instance,text_output_agent_instance]
         }
 
         text = """
-        对mysql进行高吞吐量测试
-使用 JMeter 执行挂载于pod-name上的/jmeter/test-plan.jmx文件，并根据结果生成报告
-
+我需要为华为云 CCE 集群上的MySQL集群制定扩容预案，以应对电商618大促活动。请提供 MySQL 数据库扩容的预案方案。
+- 华为云 CCE 集群k8s上的MySQL配置如下:
+    - 集群架构：
+        - 数据库版本：MySQL 8.0.32
+        - 集群架构：1 个主节点（mysql-master），3 个从节点（mysql-slave-1、mysql-slave-2、mysql-slave-3），读写分离架构
+        - 主节点配置：16 核 CPU，32GB 内存，1TB SSD 硬盘
+		        - CPU requests/limits: 16核(50%)
+						- Memory requests/limits: 32GB
+        - 从节点配置：8 核 CPU，16GB 内存，500GB SSD 硬盘
+        - 数据库参数配置：
+            - innodb_buffer_pool_size: 24GB
+            - max_connections: 1000
+            - innodb_io_capacity: 20000
+    - 监控系统：Prometheus ，监控指标包括QPS、连接数、复制延迟
+    - CCE 集群节点: 4个工作节点（node1、node2、node3、node4），CPU平均使用率65%
+    - 当前数据总量：1.2TB，分片数量：15个
+- 预算限制：2万元/月以内
+- 业务需求：
+	- 预计618峰值QPS将达到50,000/s
+	- 要求99%查询延迟<10ms
+	- 读写比例7:3
+- 安全需求：启用TLS加密和RBAC访问控制
         """
         # text = input("请输入新的请求描述（或输入exit退出）：")
 
