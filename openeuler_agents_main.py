@@ -170,12 +170,12 @@ def main():
         text ="""请更新 secscanner 的本地漏洞数据库，然后扫描系统中软件包的 CVE 漏洞。"""
 
         files_path = os.path.join("agents", "files")
-        context_path = os.path.join(files_path, "context.json")
+        comtext_tree = os.path.join(files_path, "context_tree.json")
         # 确保文件目录存在
         if not os.path.exists(files_path):  
             os.mkdir(files_path)    
-        # 清空context.json
-        with open(context_path, "w", encoding='utf-8') as f:
+        # 清空context_tree.json
+        with open(comtext_tree, "w", encoding='utf-8') as f:
             pass
 
         request_id = 0
