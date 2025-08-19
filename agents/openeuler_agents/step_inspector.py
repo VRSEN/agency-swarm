@@ -33,7 +33,7 @@ _instruction = f"""作为审查者，你将从step_planner那里收到一个 JSO
 输入格式为:
 {_input_format}
 
-同时，你需要先通过`ReadJsonFile`从context.json中读取已经完成的所有过程的上下文信息。
+同时，你需要先通过`ReadJsonFile`从context_tree.json中读取已经完成的所有过程的上下文信息。
 
 获得以上信息后，请谨慎专业地一步步思考: 
 1. 你需要确保输入中的 <task_graph> 是JSON格式；

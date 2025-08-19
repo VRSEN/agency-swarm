@@ -25,7 +25,7 @@ def planner_instruction(_group_name, _input_format, _agents, _output_format):
 
 对于每个step，你需要在 "id" 字段中以"step_正整数"的形式为其分配一个单独的step ID，并在"agent"字段填入完成该step所需的所有能力agent名称列表 (注意**agent名称列表不应该为空，即每个step都至少需要一个agent**，所有用到的能力agent应该都在你能力范围之内)，并在 "description" 字段中描述step内容，并在 "dep" 字段中写入该step依赖的前置step ID 列表（如果没有前置step，则写入 []）。
 
-# 请逐步思考，综合考虑完成此subtask所需的step，确保规划的每个step的内容不能与之前已经完成（completed）的所有过程内容有重复，也不能与其他还未执行（pending）的内容有重复，尽可能避免过度规划。。
+# 请逐步思考，综合考虑完成此subtask所需的step，确保规划的每个step的内容不能与之前已经完成（completed）的所有过程内容有重复，也不能与其他还未执行（pending）的内容有重复，尽可能避免过度规划。
 
 # 注意：你不允许调用`multi_tool_use.parallel`；
 
