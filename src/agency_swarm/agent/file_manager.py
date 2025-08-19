@@ -85,7 +85,6 @@ class AttachmentManager:
         Returns:
             list: Content items for PDF files that can be directly attached to messages
         """
-        file_search_ids = []
         pdf_file_ids = []
         code_interpreter_ids = []
         image_file_ids = []
@@ -103,10 +102,6 @@ class AttachmentManager:
                 code_interpreter_ids.append(file_id)
             elif extension == ".pdf":
                 pdf_file_ids.append(file_id)
-            # For now, all file search files will be attached to code interpreter
-            # to avoid creating temporary vector stores
-            # elif extension in FILE_SEARCH_FILE_EXTENSIONS:
-            #     file_search_ids.append(file_id)
             elif extension in IMAGE_FILE_EXTENSIONS:
                 image_file_ids.append(file_id)
             else:
