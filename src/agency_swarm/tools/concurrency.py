@@ -10,6 +10,7 @@ from typing import NamedTuple
 
 class LockState(NamedTuple):
     """Represents the state of a concurrency lock."""
+
     busy: bool
     owner: str | None
 

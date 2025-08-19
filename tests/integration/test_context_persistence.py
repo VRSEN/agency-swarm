@@ -5,7 +5,6 @@ This test verifies that modifications to user_context are preserved
 between different agent invocations within the same agency.
 """
 
-
 import pytest
 from pydantic import Field
 

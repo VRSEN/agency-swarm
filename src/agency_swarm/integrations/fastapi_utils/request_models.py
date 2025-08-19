@@ -48,6 +48,7 @@ class BaseRequest(BaseModel):
 
 class LogRequest(BaseModel):
     """Request model for retrieving logs."""
+
     log_id: str = Field(..., description="The log ID to retrieve")
 
 

@@ -5,7 +5,6 @@ This test verifies that agents can share data through the agency context,
 ensuring that changes made by one agent are visible to other agents.
 """
 
-
 import pytest
 from agents import RunContextWrapper, function_tool
 

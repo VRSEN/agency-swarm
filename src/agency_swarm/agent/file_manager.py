@@ -601,9 +601,7 @@ class AgentFileManager:
             return
 
         # Try class-relative path first
-        class_instructions_path = os.path.normpath(
-            os.path.join(self.get_class_folder_path(), self.agent.instructions)
-        )
+        class_instructions_path = os.path.normpath(os.path.join(self.get_class_folder_path(), self.agent.instructions))
         if os.path.isfile(class_instructions_path):
             with open(class_instructions_path) as f:
                 self.agent.instructions = f.read()

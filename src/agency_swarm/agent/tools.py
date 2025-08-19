@@ -28,8 +28,10 @@ def _attach_one_call_guard(tool: Tool, agent: "Agent") -> None:
 
     one_call = bool(getattr(tool, "one_call_at_a_time", False))
     if one_call:
-        tool.description = f"{tool.description} This tool can only be used sequentially. "\
-        "Do not try to run it in parallel with other tools."
+        tool.description = (
+            f"{tool.description} This tool can only be used sequentially. "
+            "Do not try to run it in parallel with other tools."
+        )
 
     async def guarded_on_invoke(ctx, input_json: str):
         concurrency_manager = agent._tool_concurrency_manager

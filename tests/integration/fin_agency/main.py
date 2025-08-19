@@ -175,14 +175,14 @@ async def get_logs(request: Request):
             )
 
         log_entries = []
-        with open(log_file, "r", encoding="utf-8") as f:
+        with open(log_file, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line:
                     try:
                         log_entry = json.loads(line)
                         log_entries.append(log_entry)
-                    except json.JSONDecodeError as e:
+                    except json.JSONDecodeError:
                         pass
 
         os.remove(log_file)
@@ -193,7 +193,7 @@ async def get_logs(request: Request):
             media_type="application/json",
         )
 
-    except Exception as e:
+    except Exception:
         return Response(
             status_code=500,
             content='{"error": "Internal server error"}',

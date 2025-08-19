@@ -153,9 +153,7 @@ def test_agent_instruction_file_loading(tmp_path):
     assert agent.instructions == instruction_content
 
     # Relative path resolved from caller directory
-    relative_agent = Agent(
-        name="TestAgent", instructions="../data/files/instructions.md", model="gpt-4o-mini"
-    )
+    relative_agent = Agent(name="TestAgent", instructions="../data/files/instructions.md", model="gpt-4o-mini")
     assert relative_agent.instructions == "Test instructions"
 
 
