@@ -1,5 +1,4 @@
 import logging
-import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -214,11 +213,6 @@ class ThreadManager:
                 logger.debug("Loading messages using callback...")
                 loaded_messages = self._load_threads_callback()
 
-                if isinstance(loaded_messages, dict):
-                    # Handle old format - convert from thread dictionary to flat list
-                    logger.info("Detected old thread format, migrating to flat structure...")
-                    loaded_messages = self._migrate_old_format(loaded_messages)
-
                 if isinstance(loaded_messages, list):
                     self._store.messages = loaded_messages
                     logger.info(f"Loaded {len(loaded_messages)} messages from callback.")
@@ -227,45 +221,3 @@ class ThreadManager:
 
             except Exception as e:
                 logger.error(f"Error loading messages from callback: {e}", exc_info=True)
-
-    def _migrate_old_format(self, old_threads: dict[str, Any]) -> list[TResponseInputItem]:
-        """Migrate from old thread-based format to flat message list.
-
-        Args:
-            old_threads: Dictionary with thread IDs as keys
-
-        Returns:
-            list[TResponseInputItem]: Flat list of messages with metadata
-        """
-        messages = []
-
-        for thread_id, thread_data in old_threads.items():
-            # Parse thread_id (e.g., "user->Agent1" or "Agent1->Agent2")
-            parts = thread_id.split("->")
-            if len(parts) != 2:
-                logger.warning(f"Invalid thread ID format: {thread_id}, skipping...")
-                continue
-
-            caller = parts[0] if parts[0] != "user" else None
-            agent = parts[1]
-
-            # Convert each message in the thread
-            items = thread_data.get("items", [])
-            for item in items:
-                # Add agency metadata
-                item = dict(item)  # Make a copy
-                item["agent"] = agent
-                item["callerAgent"] = caller
-
-                # Add timestamp if missing
-                if "timestamp" not in item:
-                    # time.time() returns UTC seconds since epoch (timezone-independent)
-                    item["timestamp"] = int(time.time() * 1000)  # milliseconds UTC
-
-                messages.append(item)
-
-        # Sort by timestamp to maintain chronological order
-        messages.sort(key=lambda m: m.get("timestamp", 0))
-
-        logger.info(f"Migrated {len(messages)} messages from {len(old_threads)} threads")
-        return messages

@@ -110,7 +110,7 @@ def run_fastapi(
             agency_names.append(agency_name)
 
             # Store agent instances for easy lookup
-            preview_instance = agency_factory(load_threads_callback=lambda: {})
+            preview_instance = agency_factory(load_threads_callback=lambda: [])
             AGENT_INSTANCES: dict[str, Agent] = dict(preview_instance.agents.items())
             AgencyRequest = add_agent_validator(BaseRequest, AGENT_INSTANCES)
             agency_metadata = preview_instance.get_agency_structure()
