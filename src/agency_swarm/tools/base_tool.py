@@ -52,6 +52,9 @@ class BaseTool(BaseModel, ABC):
 
     class ToolConfig:
         strict: bool = False
+        # When True, this tool runs with a one-call-at-a-time policy per agent; any concurrent
+        # tool call for the same agent will immediately error until completion.
+        one_call_at_a_time: bool = False
 
     @classproperty
     def openai_schema(cls) -> dict[str, Any]:

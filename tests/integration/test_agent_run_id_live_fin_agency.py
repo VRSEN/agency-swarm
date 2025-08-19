@@ -9,7 +9,7 @@ import requests
 
 SERVER_START_TIMEOUT = 20
 SERVER_PORT = 3088
-SERVER_URL = f"http://0.0.0.0:{SERVER_PORT}"
+SERVER_URL = f"http://localhost:{SERVER_PORT}"
 
 
 @pytest.fixture(scope="module")

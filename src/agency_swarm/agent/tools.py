@@ -16,6 +16,61 @@ from openai._utils._logs import logger
 
 from agency_swarm.tools import BaseTool, ToolFactory
 
+
+def _attach_one_call_guard(tool: Tool, agent: "Agent") -> None:
+    """Attach a one-call-at-a-time guard to a FunctionTool in-place (idempotent)."""
+    if not isinstance(tool, FunctionTool):
+        return
+
+    original_on_invoke = getattr(tool, "on_invoke_tool", None)
+    if not callable(original_on_invoke) or getattr(tool, "_one_call_guard_installed", False):
+        return
+
+    one_call = bool(getattr(tool, "one_call_at_a_time", False))
+    if one_call:
+        tool.description = (
+            f"{tool.description} This tool can only be used sequentially. "
+            "Do not try to run it in parallel with other tools."
+        )
+
+    async def guarded_on_invoke(ctx, input_json: str):
+        concurrency_manager = agent.tool_concurrency_manager
+
+        # First, block if any one_call tool is currently running for this agent
+        busy, owner = concurrency_manager.is_lock_active()
+        if busy:
+            return (
+                f"Error: Tool concurrency violation. '{owner or 'unknown'}' tool is still running. "
+                f"No other tools may run until it finishes. Wait for the tool to finish before running another one."
+            )
+
+        # If this tool enforces one_call and ANY tool is already running for this agent, block
+        if one_call and concurrency_manager.get_active_count() > 0:
+            return (
+                f"Error: Tool concurrency violation. Tool {tool.name} can only be used sequentially. "
+                "Make sure no other tools are running while using this tool."
+            )
+
+        # Track that a tool is starting for this agent
+        concurrency_manager.increment_active_count()
+
+        # If this tool enforces one_call, acquire the lock for the duration of this run
+        if one_call:
+            concurrency_manager.acquire_lock(getattr(tool, "name", "FunctionTool"))
+
+        try:
+            return await original_on_invoke(ctx, input_json)
+        finally:
+            # Release lock if held
+            if one_call:
+                concurrency_manager.release_lock()
+            # Decrement active tool count
+            concurrency_manager.decrement_active_count()
+
+    tool.on_invoke_tool = guarded_on_invoke  # type: ignore[attr-defined]
+    tool._one_call_guard_installed = True  # type: ignore[attr-defined]
+
+
 if TYPE_CHECKING:
     from agency_swarm.agent_core import Agent
 
@@ -42,6 +97,9 @@ def add_tool(agent: "Agent", tool: Tool) -> None:
 
     if not isinstance(tool, Tool):
         raise TypeError(f"Expected an instance of Tool, got {type(tool)}")
+
+    # Ensure FunctionTools get one-call guard if needed
+    _attach_one_call_guard(tool, agent)
 
     agent.tools.append(tool)
     logger.debug(f"Tool '{getattr(tool, 'name', '(unknown)')}' added to agent '{agent.name}'")

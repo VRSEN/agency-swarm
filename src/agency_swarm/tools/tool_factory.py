@@ -536,10 +536,16 @@ class ToolFactory:
             except Exception as e:
                 return f"Error running BaseTool: {e}"
 
-        return FunctionTool(
+        func_tool = FunctionTool(
             name=name,
             description=description.strip(),
             params_json_schema=params_json_schema,
             on_invoke_tool=on_invoke_tool,
             strict_json_schema=base_tool.ToolConfig.strict,
         )
+        # Propagate one_call_at_a_time from BaseTool.ToolConfig to the FunctionTool instance
+        try:
+            func_tool.one_call_at_a_time = bool(getattr(base_tool.ToolConfig, "one_call_at_a_time", False))
+        except Exception:
+            pass
+        return func_tool

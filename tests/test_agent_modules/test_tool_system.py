@@ -295,6 +295,111 @@ async def test_shared_state_property(mock_run_context_wrapper):
         assert tool._shared_state is mock_run_context_wrapper.context
 
 
+# --- one_call_at_a_time Tests ---
+
+
+def test_base_tool_one_call_at_a_time_config():
+    """Test that BaseTool ToolConfig supports one_call_at_a_time parameter."""
+
+    class OneCallTool(BaseTool):
+        input: str = Field(description="Tool input")
+
+        class ToolConfig:
+            one_call_at_a_time = True
+
+        def run(self):
+            return f"processed: {self.input}"
+
+    class NormalTool(BaseTool):
+        input: str = Field(description="Tool input")
+
+        def run(self):
+            return f"processed: {self.input}"
+
+    # Test that the config attribute exists and has correct values
+    assert hasattr(OneCallTool.ToolConfig, "one_call_at_a_time")
+    assert OneCallTool.ToolConfig.one_call_at_a_time is True
+
+    # Normal tool should default to False
+    assert (
+        not hasattr(NormalTool.ToolConfig, "one_call_at_a_time")
+        or getattr(NormalTool.ToolConfig, "one_call_at_a_time", False) is False
+    )
+
+
+@pytest.mark.asyncio
+async def test_base_tool_one_call_propagation():
+    """Test that one_call_at_a_time is propagated from BaseTool to FunctionTool."""
+    from agency_swarm.tools import ToolFactory
+
+    class OneCallTool(BaseTool):
+        input: str = Field(description="Tool input")
+
+        class ToolConfig:
+            one_call_at_a_time = True
+            strict = False
+
+        def run(self):
+            return f"sequential: {self.input}"
+
+    # Adapt to FunctionTool
+    function_tool = ToolFactory.adapt_base_tool(OneCallTool)
+
+    # Check that the attribute was propagated
+    assert hasattr(function_tool, "one_call_at_a_time")
+    assert function_tool.one_call_at_a_time is True
+
+
+@pytest.mark.asyncio
+async def test_base_tool_normal_tool_no_one_call():
+    """Test that normal tools don't have one_call_at_a_time set."""
+    from agency_swarm.tools import ToolFactory
+
+    class NormalTool(BaseTool):
+        input: str = Field(description="Tool input")
+
+        def run(self):
+            return f"normal: {self.input}"
+
+    # Adapt to FunctionTool
+    function_tool = ToolFactory.adapt_base_tool(NormalTool)
+
+    # Check that one_call_at_a_time is False or not set
+    one_call_value = getattr(function_tool, "one_call_at_a_time", False)
+    assert one_call_value is False
+
+
+def test_agent_has_concurrency_manager():
+    """Test that Agent instances have a tool concurrency manager."""
+    agent = Agent(name="test", instructions="test")
+
+    assert hasattr(agent, "tool_concurrency_manager")
+    assert agent.tool_concurrency_manager is not None
+
+    # Test that it's the right type
+    from agency_swarm.tools.concurrency import ToolConcurrencyManager
+
+    assert isinstance(agent.tool_concurrency_manager, ToolConcurrencyManager)
+
+
+def test_agent_concurrency_manager_independence():
+    """Test that different agents have independent concurrency managers."""
+    agent1 = Agent(name="agent1", instructions="test")
+    agent2 = Agent(name="agent2", instructions="test")
+
+    # Should be different instances
+    assert agent1.tool_concurrency_manager is not agent2.tool_concurrency_manager
+
+    # Test independence
+    agent1.tool_concurrency_manager.acquire_lock("tool1")
+
+    busy1, owner1 = agent1.tool_concurrency_manager.is_lock_active()
+    busy2, owner2 = agent2.tool_concurrency_manager.is_lock_active()
+
+    assert busy1 is True and owner1 == "tool1"
+    assert busy2 is False and owner2 is None
+
+
 # TODO: Add tests for response validation aspects
 # TODO: Add tests for context/hooks propagation (more complex, might need integration tests)
 # TODO: Add parameterized tests for various message inputs (empty, long, special chars)

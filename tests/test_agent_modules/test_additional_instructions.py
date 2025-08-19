@@ -217,5 +217,3 @@ async def test_agent_with_none_original_instructions(mock_run_result):
 
     # Verify original None instructions are restored
     assert agent.instructions is None
-
-
