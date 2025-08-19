@@ -195,3 +195,100 @@ async def test_fin_agency_send_message_agent_run_ids(fin_agency_server):
             missing.append({"path": ".".join(path), "obj_keys": list(obj.keys())})
 
     assert not missing, f"Found runtime send_message occurrences missing agent_run_id: {missing}"
+
+
+@pytest.mark.asyncio
+async def test_no_duplicate_function_calls_in_stream(fin_agency_server):
+    """Test that streaming doesn't produce duplicate function_call events.
+
+    This test verifies the fix for the bug where duplicate event handling
+    caused duplicate function_call events to be saved, leading to 400 errors
+    like 'No tool call found for function call output'.
+    """
+    # Use streaming endpoint directly to catch duplication errors faster
+    stream_url = f"{SERVER_URL}/my-agency/get_response_stream"
+
+    payload = {
+        "message": "Please analyze TESLA (TSLA)"  # Simpler prompt for faster test
+    }
+
+    stream_resp = requests.post(stream_url, json=payload, stream=True, timeout=(10, 45))
+    assert stream_resp.status_code == 200
+
+    function_calls_by_id = {}
+    function_call_outputs_by_id = {}
+    error_found = None
+    max_time = 45  # Maximum time to wait for response
+
+    try:
+        start_time = time.time()
+        for raw in stream_resp.iter_lines(decode_unicode=True):
+            if time.time() - start_time > max_time:
+                break  # Timeout protection
+            if not raw:
+                continue
+            line = raw.strip()
+            if line.startswith("data:"):
+                js = line[len("data:") :].strip()
+                try:
+                    event = json.loads(js)
+                except Exception:
+                    continue
+
+                # Check for error events indicating the bug
+                if isinstance(event, dict):
+                    event_type = event.get("type")
+                    if event_type == "error":
+                        error_content = event.get("content", "")
+                        if "No tool call found for function call output" in error_content:
+                            error_found = error_content
+                            break
+
+                    # Track function calls and outputs from saved messages
+                    if "new_messages" in event:
+                        for msg in event.get("new_messages", []):
+                            if isinstance(msg, dict):
+                                msg_type = msg.get("type")
+                                call_id = msg.get("call_id")
+
+                                if msg_type == "function_call" and call_id:
+                                    if call_id in function_calls_by_id:
+                                        # Found duplicate!
+                                        pytest.fail(
+                                            f"Duplicate function_call found with call_id {call_id}. "
+                                            f"This indicates the event handling duplication bug is present."
+                                        )
+                                    function_calls_by_id[call_id] = msg
+
+                                elif msg_type == "function_call_output" and call_id:
+                                    function_call_outputs_by_id[call_id] = msg
+
+            if line.startswith("event:") and line.endswith("end"):
+                break
+
+    except requests.exceptions.RequestException:
+        pass  # Stream ended, proceed with validation
+    finally:
+        try:
+            stream_resp.close()
+        except Exception:
+            pass
+
+    # Check if we found the specific error
+    if error_found:
+        pytest.fail(f"Found the duplicate function_call bug error: {error_found}")
+
+    # Verify all function_calls have matching outputs (no orphaned calls)
+    orphaned_calls = []
+    for call_id, call_msg in function_calls_by_id.items():
+        if call_id not in function_call_outputs_by_id:
+            # send_message calls might not have outputs yet if they're in-progress
+            if call_msg.get("name") != "send_message" or call_msg.get("status") == "completed":
+                orphaned_calls.append(call_id)
+
+    # Some tolerance for in-progress calls, but there shouldn't be many orphaned completed calls
+    if len(orphaned_calls) > 3:
+        pytest.fail(
+            f"Found {len(orphaned_calls)} function_calls without matching outputs. "
+            f"This may indicate incomplete processing. Orphaned call_ids: {orphaned_calls[:5]}..."
+        )

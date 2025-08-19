@@ -621,21 +621,6 @@ class Execution:
                                     master_context_for_run._current_agent_run_id = current_agent_run_id
                                 except Exception:
                                     pass
-                        elif getattr(event, "type", None) == "agent_updated_stream_event":
-                            new_agent = getattr(event, "new_agent", None)
-                            if new_agent is not None and hasattr(new_agent, "name") and new_agent.name:
-                                current_stream_agent_name = new_agent.name
-                                # For each new agent event, generate a stable id for this instance
-                                # Prefer the event id if present to keep determinism across layers
-                                event_id = getattr(event, "id", None)
-                                if isinstance(event_id, str) and event_id:
-                                    current_agent_run_id = event_id
-                                else:
-                                    current_agent_run_id = f"agent_run_{uuid.uuid4().hex}"
-                                try:
-                                    master_context_for_run._current_agent_run_id = current_agent_run_id
-                                except Exception:
-                                    pass
                     except Exception:
                         pass
 
