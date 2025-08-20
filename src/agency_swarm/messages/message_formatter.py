@@ -16,6 +16,7 @@ class MessageFormatter:
         agent: str,
         caller_agent: str | None = None,
         agent_run_id: str | None = None,
+        parent_run_id: str | None = None,
     ) -> dict[str, Any]:
         """Add agency-specific metadata to a message.
 
@@ -23,6 +24,8 @@ class MessageFormatter:
             message: The message dictionary to enhance
             agent: The recipient agent name
             caller_agent: The sender agent name (None for user)
+            agent_run_id: The current agent's execution ID
+            parent_run_id: The calling agent's execution ID
 
         Returns:
             dict[str, Any]: Message with added metadata
@@ -32,6 +35,8 @@ class MessageFormatter:
         message["callerAgent"] = caller_agent
         if agent_run_id is not None:
             message["agent_run_id"] = agent_run_id
+        if parent_run_id is not None:
+            message["parent_run_id"] = parent_run_id
         # time.time() always returns UTC seconds since epoch (timezone-independent)
         message["timestamp"] = int(time.time() * 1000)  # milliseconds since epoch UTC, sortable
         # Add type field if not present (for easier parsing/navigation)
@@ -127,7 +132,7 @@ class MessageFormatter:
             clean_msg = {
                 k: v
                 for k, v in msg.items()
-                if k not in ["agent", "callerAgent", "timestamp", "citations", "agent_run_id"]
+                if k not in ["agent", "callerAgent", "timestamp", "citations", "agent_run_id", "parent_run_id"]
             }
             cleaned.append(clean_msg)
         return cleaned
