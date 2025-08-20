@@ -816,7 +816,7 @@ class Execution:
             elif isinstance(tool_call, ResponseFunctionWebSearch):
                 search_results_content = f"[WEB_SEARCH_RESULTS] Tool Call ID: {tool_call.id}\nTool Type: web_search\n"
 
-                # Capture FULL search results (not truncated to 500 chars)
+                # Capture FULL search results
                 for msg_item in assistant_messages:
                     message = msg_item.raw_item
                     if hasattr(message, "content") and message.content:

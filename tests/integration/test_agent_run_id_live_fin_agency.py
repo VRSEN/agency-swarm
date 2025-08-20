@@ -208,9 +208,7 @@ async def test_no_duplicate_function_calls_in_stream(fin_agency_server):
     # Use streaming endpoint directly to catch duplication errors faster
     stream_url = f"{SERVER_URL}/my-agency/get_response_stream"
 
-    payload = {
-        "message": "Please analyze TESLA (TSLA)"  # Simpler prompt for faster test
-    }
+    payload = {"message": "Please analyze TESLA (TSLA), SPY (SPY), and AMZN (AMZN)"}
 
     stream_resp = requests.post(stream_url, json=payload, stream=True, timeout=(10, 45))
     assert stream_resp.status_code == 200

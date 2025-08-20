@@ -123,34 +123,59 @@ async def test_parent_run_id_three_level_orchestration(three_level_agency):
             assert msg.get("parent_run_id") is None, f"CEO's initial execution should have no parent_run_id: {msg}"
             break
 
-    # Find Manager's messages (should have CEO as parent)
+    # Find send_message calls from CEO to Manager
+    ceo_send_messages = [
+        msg
+        for msg in captured_messages
+        if msg.get("type") == "function_call" and msg.get("name") == "send_message" and msg.get("agent") == "CEO"
+    ]
+
+    # Manager's parent_run_id should be the call_id of a send_message from CEO
     manager_messages = [msg for msg in captured_messages if msg.get("agent") == "Manager" and "agent_run_id" in msg]
 
     manager_run_id = None
+    manager_parent_call_id = None
     if manager_messages:
+        # Get Manager's parent_run_id (should be a call_id from CEO's send_message)
         for msg in manager_messages:
-            if msg.get("parent_run_id") == ceo_run_id:
+            parent_id = msg.get("parent_run_id")
+            if parent_id and parent_id.startswith("call_"):
                 manager_run_id = msg["agent_run_id"]
-                logger.info(f"Found Manager execution with parent_run_id={ceo_run_id}")
+                manager_parent_call_id = parent_id
+                logger.info(f"Found Manager execution with parent_run_id={parent_id} (send_message call_id)")
                 break
 
-        # Verify Manager has CEO as parent
-        assert any(msg.get("parent_run_id") == ceo_run_id for msg in manager_messages), (
-            f"Manager should have CEO's run_id ({ceo_run_id}) as parent_run_id"
+        # Verify Manager's parent_run_id is a valid send_message call_id from CEO
+        ceo_call_ids = [msg.get("call_id") for msg in ceo_send_messages]
+        assert manager_parent_call_id in ceo_call_ids, (
+            f"Manager's parent_run_id ({manager_parent_call_id}) should be a send_message call_id from CEO"
         )
 
-    # Find Worker's messages (should have Manager as parent)
+    # Find send_message calls from Manager to Worker
+    manager_send_messages = [
+        msg
+        for msg in captured_messages
+        if msg.get("type") == "function_call" and msg.get("name") == "send_message" and msg.get("agent") == "Manager"
+    ]
+
+    # Worker's parent_run_id should be the call_id of a send_message from Manager
     worker_messages = [msg for msg in captured_messages if msg.get("agent") == "Worker" and "agent_run_id" in msg]
 
-    if worker_messages and manager_run_id:
-        # Verify Worker has Manager as parent
-        assert any(msg.get("parent_run_id") == manager_run_id for msg in worker_messages), (
-            f"Worker should have Manager's run_id ({manager_run_id}) as parent_run_id"
-        )
+    worker_parent_call_id = None
+    if worker_messages and manager_send_messages:
+        # Get Worker's parent_run_id (should be a call_id from Manager's send_message)
+        for msg in worker_messages:
+            parent_id = msg.get("parent_run_id")
+            if parent_id and parent_id.startswith("call_"):
+                worker_parent_call_id = parent_id
+                logger.info(f"Found Worker execution with parent_run_id={parent_id} (send_message call_id)")
+                break
 
-        worker_with_parent = next((msg for msg in worker_messages if msg.get("parent_run_id") == manager_run_id), None)
-        if worker_with_parent:
-            logger.info(f"Found Worker execution with parent_run_id={manager_run_id}")
+        # Verify Worker's parent_run_id is a valid send_message call_id from Manager
+        manager_call_ids = [msg.get("call_id") for msg in manager_send_messages]
+        assert worker_parent_call_id in manager_call_ids, (
+            f"Worker's parent_run_id ({worker_parent_call_id}) should be a send_message call_id from Manager"
+        )
 
     # Verify delegation chain can be traversed
     assert len(delegation_chain) >= 2, f"Should have at least 2 levels in delegation chain, got {len(delegation_chain)}"
@@ -158,22 +183,24 @@ async def test_parent_run_id_three_level_orchestration(three_level_agency):
     # Log the delegation chain for debugging
     logger.info(f"Delegation chain: {json.dumps(delegation_chain, indent=2)}")
 
-    # Verify we can traverse from Worker back to CEO
-    if manager_run_id and ceo_run_id:
-        # Find a Worker execution
-        worker_run_ids = [run_id for run_id, parent in delegation_chain.items() if parent == manager_run_id]
+    # Verify we can trace the delegation chain through call_ids
+    if manager_parent_call_id and worker_parent_call_id:
+        # We should be able to trace:
+        # 1. Worker's parent_run_id -> Manager's send_message call_id
+        # 2. Manager's parent_run_id -> CEO's send_message call_id
+        # 3. CEO has no parent_run_id
 
-        if worker_run_ids:
-            worker_run_id = worker_run_ids[0]
-            # Traverse back: Worker -> Manager -> CEO
-            assert delegation_chain.get(worker_run_id) == manager_run_id, "Worker should point to Manager"
-            assert delegation_chain.get(manager_run_id) == ceo_run_id, "Manager should point to CEO"
-            assert delegation_chain.get(ceo_run_id) is None, "CEO should have no parent"
+        assert ceo_run_id is not None, "Should have found CEO's run_id"
+        assert delegation_chain.get(ceo_run_id) is None, "CEO should have no parent"
 
-            logger.info(
-                f"Successfully traversed chain: "
-                f"Worker({worker_run_id}) -> Manager({manager_run_id}) -> CEO({ceo_run_id})"
-            )
+        logger.info(
+            f"Successfully traced delegation chain:\n"
+            f"  CEO (run_id={ceo_run_id}, parent=None)\n"
+            f"  └─> send_message (call_id={manager_parent_call_id})\n"
+            f"      └─> Manager (run_id={manager_run_id}, parent={manager_parent_call_id})\n"
+            f"          └─> send_message (call_id={worker_parent_call_id})\n"
+            f"              └─> Worker (parent={worker_parent_call_id})"
+        )
 
 
 @pytest.mark.asyncio
@@ -198,16 +225,22 @@ async def test_parent_run_id_in_streaming(three_level_agency):
                     ceo_run_id = event.agent_run_id
             elif agent_name == "Manager":
                 manager_run_id = event.agent_run_id
-                # Manager should have CEO as parent
-                if hasattr(event, "parent_run_id") and ceo_run_id:
-                    assert event.parent_run_id == ceo_run_id, "Manager's parent_run_id should be CEO's run_id"
-                    logger.info(f"Streaming: Manager has parent_run_id={event.parent_run_id}")
+                # Manager's parent should be a send_message call_id from CEO
+                if hasattr(event, "parent_run_id") and event.parent_run_id:
+                    # Verify it's a call_id format
+                    assert event.parent_run_id.startswith("call_"), (
+                        f"Manager's parent_run_id should be a send_message call_id, got: {event.parent_run_id}"
+                    )
+                    logger.info(f"Streaming: Manager has parent_run_id={event.parent_run_id} (send_message call_id)")
             elif agent_name == "Worker":
                 worker_run_id = event.agent_run_id
-                # Worker should have Manager as parent
-                if hasattr(event, "parent_run_id") and manager_run_id:
-                    assert event.parent_run_id == manager_run_id, "Worker's parent_run_id should be Manager's run_id"
-                    logger.info(f"Streaming: Worker has parent_run_id={event.parent_run_id}")
+                # Worker's parent should be a send_message call_id from Manager
+                if hasattr(event, "parent_run_id") and event.parent_run_id:
+                    # Verify it's a call_id format
+                    assert event.parent_run_id.startswith("call_"), (
+                        f"Worker's parent_run_id should be a send_message call_id, got: {event.parent_run_id}"
+                    )
+                    logger.info(f"Streaming: Worker has parent_run_id={event.parent_run_id} (send_message call_id)")
 
         captured_events.append(event)
 
