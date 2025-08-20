@@ -13,6 +13,7 @@ import warnings
 from collections.abc import AsyncGenerator
 from contextlib import AsyncExitStack
 from typing import TYPE_CHECKING, Any
+import time
 
 from agents import (
     InputGuardrailTripwireTriggered,
@@ -36,6 +37,7 @@ from agency_swarm.messages import (
     MessageFormatter,
     ensure_tool_calls_content_safety,
     sanitize_tool_calls_in_history,
+    adjust_history_for_claude
 )
 from agency_swarm.streaming.utils import add_agent_name_to_event
 from agency_swarm.utils.citation_extractor import extract_direct_file_annotations
@@ -155,9 +157,31 @@ class Execution:
         history_for_runner = ensure_tool_calls_content_safety(history_for_runner)
         # Ensure send_message function_call has a paired output for model input (in-memory only)
         history_for_runner = MessageFormatter.ensure_send_message_pairing(history_for_runner)
+        # Claude-specific requirement: tool_use must be immediately followed by tool_result
+        if self._is_claude_model():
+            history_for_runner = adjust_history_for_claude(history_for_runner)
         # Strip agency metadata before sending to OpenAI
         history_for_runner = MessageFormatter.strip_agency_metadata(history_for_runner)
         return history_for_runner
+
+    def _get_model_name(self) -> str:
+        """Retrieve model name using the same approach used previously in send_message tool."""
+        try:
+            model_name = None
+            if hasattr(self.agent, "model"):
+                model_config = getattr(self.agent, "model", "") or ""
+                if hasattr(model_config, "model"):
+                    model_name = model_config.model
+                elif isinstance(model_config, str) and model_config:
+                    model_name = model_config
+            return (model_name or "")
+        except Exception:
+            return ""
+
+    def _is_claude_model(self) -> bool:
+        """Detect if the current agent is using an Anthropic/Claude model."""
+        model_lower = self._get_model_name().lower()
+        return "anthropic" in model_lower or "claude" in model_lower
 
     def _add_citations_to_message(
         self,
