@@ -12,13 +12,21 @@ import logging
 import time
 from typing import TYPE_CHECKING
 
-from agents import FunctionTool, RunContextWrapper, RunItemStreamEvent, ToolCallItem, handoff
+from agents import (
+    FunctionTool,
+    RunContextWrapper,
+    RunItemStreamEvent,
+    ToolCallItem,
+    handoff,
+    OpenAIChatCompletionsModel,
+)
+from agents.extensions.models.litellm_model import LitellmModel
 from openai.types.responses import ResponseFunctionToolCall
 from dataclasses import replace
 
 from ..context import MasterContext
 from ..streaming.utils import add_agent_name_to_event
-from ..agent.messages import adjust_history_for_claude
+from ..agent.messages import adjust_history_for_litellm
 
 if TYPE_CHECKING:
     from ..agent_core import AgencyContext, Agent
@@ -428,12 +436,12 @@ class SendMessageHandoff:
     def create_handoff(self, recipient_agent: "Agent"):
         """Create and return the handoff object."""
         # Check if recipient agent uses Claude
-        if self._is_claude_agent(recipient_agent):            
+        if self._is_litellm_model(recipient_agent):
             # Create input filter to adjust history for Claude
             def claude_input_filter(handoff_data):
                 # Extract the conversation history
                 input_history = handoff_data.input_history
-                
+
                 # Convert to list if it's a tuple
                 if isinstance(input_history, tuple):
                     history_list = list(input_history)
@@ -442,13 +450,13 @@ class SendMessageHandoff:
                     return handoff_data
                 else:
                     history_list = input_history
-                                
+
                 # Apply Claude adjustments
-                adjusted_history = adjust_history_for_claude(history_list)
-                                
+                adjusted_history = adjust_history_for_litellm(history_list)
+
                 # Create new handoff data with adjusted history
                 return replace(handoff_data, input_history=tuple(adjusted_history))
-            
+
             # Create handoff with Claude input filter
             return handoff(
                 agent=recipient_agent,
@@ -462,19 +470,22 @@ class SendMessageHandoff:
                 tool_description_override=recipient_agent.description,
             )
 
-    def _is_claude_agent(self, agent) -> bool:
-        """Check if an agent uses Claude models."""
+    def _is_litellm_model(self, agent: "Agent") -> str:
+        """Retrieve model name using the same approach used previously in send_message tool."""
         try:
-            model_name = ""
-            if hasattr(agent, "model"):
-                model_config = getattr(agent, "model", "") or ""
-                if hasattr(model_config, "model"):
-                    model_name = model_config.model
-                elif isinstance(model_config, str) and model_config:
-                    model_name = model_config
-            model_name = (model_name or "").lower()
-            return any(claude_indicator in model_name for claude_indicator in ["claude", "anthropic"])
+            if hasattr(self.agent, "model"):
+                model_config = getattr(self.agent, "model", "") or ""
+                if type(model_config) == LitellmModel:
+                    return True
+                elif type(model_config) == OpenAIChatCompletionsModel:
+                    model_name = None
+                    if hasattr(model_config, "model"):
+                        model_name = model_config.model
+                    elif isinstance(model_config, str) and model_config:
+                        model_name = model_config
+                    # Look if model specifies a provider
+                    if model_name and "/" in model_name:
+                        return True
         except Exception:
             return False
-
-
+        return False

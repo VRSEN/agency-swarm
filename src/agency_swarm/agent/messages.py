@@ -108,9 +108,9 @@ def resolve_token_settings(model_settings_dict: dict[str, Any], agent_name: str 
     return model_settings_dict
 
 
-def adjust_history_for_claude(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def adjust_history_for_litellm(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """
-    Anthropic/Claude requires each tool_use to be immediately followed by a tool_result
+    Litellm requires each tool_use to be immediately followed by a tool_result
     in the next message. Due to unique approach to send_message tool, we need to adjust
     the history to ensure this requirement is met.
     """

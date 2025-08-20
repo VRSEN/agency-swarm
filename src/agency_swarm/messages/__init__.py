@@ -1,7 +1,7 @@
 """Message handling utilities for Agency Swarm."""
 
 from agency_swarm.agent.messages import (
-    adjust_history_for_claude,
+    adjust_history_for_litellm,
     ensure_tool_calls_content_safety,
     sanitize_tool_calls_in_history,
 )
@@ -14,5 +14,5 @@ __all__ = [
     "MessageFormatter",
     "sanitize_tool_calls_in_history",
     "ensure_tool_calls_content_safety",
-    "adjust_history_for_claude"
+    "adjust_history_for_litellm"
 ]

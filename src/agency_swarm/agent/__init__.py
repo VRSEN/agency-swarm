@@ -8,7 +8,7 @@ to maintain clean separation of concerns and reduce file sizes.
 from .execution import Execution
 from .initialization import handle_deprecated_parameters, separate_kwargs, setup_file_manager
 from .messages import (
-    adjust_history_for_claude,
+    adjust_history_for_litellm,
     ensure_tool_calls_content_safety,
     resolve_token_settings,
     sanitize_tool_calls_in_history,
@@ -28,7 +28,7 @@ __all__ = [
     "sanitize_tool_calls_in_history",
     "ensure_tool_calls_content_safety",
     "resolve_token_settings",
-    "adjust_history_for_claude",
+    "adjust_history_for_litellm",
     # Initialization functions
     "handle_deprecated_parameters",
     "separate_kwargs",
