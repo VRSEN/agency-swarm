@@ -159,7 +159,7 @@ class Execution:
         history_for_runner = ensure_tool_calls_content_safety(history_for_runner)
         # Ensure send_message function_call has a paired output for model input (in-memory only)
         history_for_runner = MessageFormatter.ensure_send_message_pairing(history_for_runner)
-        # Claude-specific requirement: tool_use must be immediately followed by tool_result
+        # LiteLLM-specific requirement: tool_use must be immediately followed by tool_result
         if self._is_litellm_model():
             history_for_runner = adjust_history_for_litellm(history_for_runner)
         # Strip agency metadata before sending to OpenAI
