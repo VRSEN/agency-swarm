@@ -299,8 +299,8 @@ Product Sales:
         agent = AgencySwarmAgent(
             name="DataSearchAgent",
             instructions=(
-                "You are a data search assistant. Use file search to find information but be "
-                "concise in your initial responses."
+                "You are a data search assistant. You MUST use the FileSearch tool to find information. "
+                "Always search files before answering. Be concise in your initial responses."
             ),
             model="gpt-4.1",
             model_settings=ModelSettings(temperature=0.0),
@@ -311,16 +311,16 @@ Product Sales:
         # Create an agency with the agent
         agency = Agency(agent)
 
-        # Wait longer for file processing and vector store indexing
+        # Wait for file processing and vector store indexing
         # FileSearch requires time to process and index uploaded files
-        await asyncio.sleep(10)
+        await asyncio.sleep(15)
 
         # TURN 1: Agent searches but gives summary only
         logger.info("=== TURN 1: Agent searches with FileSearch ===")
 
         result1 = await agency.get_response(
             message=(
-                "Search the company data for financial information and employee data. "
+                "Use FileSearch to search the company data for financial information and employee data. "
                 "Just confirm you found it, don't give me the specific numbers yet."
             )
         )

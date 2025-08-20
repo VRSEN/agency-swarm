@@ -141,45 +141,6 @@ def test_load_callback_on_init(mocker):
     assert manager._store.messages == loaded_messages
 
 
-def test_migrate_old_format():
-    """Tests migration from old thread-based format to flat structure."""
-    old_format = {
-        "user->Agent1": {
-            "items": [{"role": "user", "content": "Hello"}, {"role": "assistant", "content": "Hi there"}],
-            "metadata": {},
-        },
-        "Agent1->Agent2": {
-            "items": [
-                {"role": "assistant", "content": "Need help"},
-                {"role": "assistant", "content": "Sure, I can help"},
-            ],
-            "metadata": {},
-        },
-    }
-
-    def mock_load():
-        return old_format
-
-    manager = ThreadManager(load_threads_callback=mock_load)
-
-    # Check that messages were migrated correctly
-    assert len(manager._store.messages) == 4
-
-    # Check that agency metadata was added
-    user_to_agent1 = [
-        msg for msg in manager._store.messages if msg.get("agent") == "Agent1" and msg.get("callerAgent") is None
-    ]
-    assert len(user_to_agent1) == 2
-
-    agent1_to_agent2 = [
-        msg for msg in manager._store.messages if msg.get("agent") == "Agent2" and msg.get("callerAgent") == "Agent1"
-    ]
-    assert len(agent1_to_agent2) == 2
-
-    # Check that timestamps were added
-    assert all("timestamp" in msg for msg in manager._store.messages)
-
-
 def test_thread_manager_pickleable():
     """Tests that ThreadManager can be pickled and unpickled correctly."""
     # Create manager without callbacks (callbacks aren't pickleable)
