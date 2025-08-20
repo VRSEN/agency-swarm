@@ -127,6 +127,7 @@ class Execution:
         sender_name: str | None,
         agency_context: "AgencyContext | None" = None,
         agent_run_id: str | None = None,
+        parent_run_id: str | None = None,
     ) -> list[TResponseInputItem]:
         """Prepare conversation history for the runner."""
         # Get thread manager from context (required)
@@ -139,7 +140,11 @@ class Execution:
         messages_to_save: list[TResponseInputItem] = []
         for msg in processed_current_message_items:
             formatted_msg = MessageFormatter.add_agency_metadata(
-                msg, agent=self.agent.name, caller_agent=sender_name, agent_run_id=agent_run_id
+                msg,
+                agent=self.agent.name,
+                caller_agent=sender_name,
+                agent_run_id=agent_run_id,
+                parent_run_id=parent_run_id,
             )
             messages_to_save.append(formatted_msg)
 
@@ -213,6 +218,7 @@ class Execution:
         file_ids: list[str] | None = None,  # New parameter
         additional_instructions: str | None = None,  # New parameter for v1.x
         agency_context: "AgencyContext | None" = None,  # New stateless context parameter
+        parent_run_id: str | None = None,  # Parent agent's execution ID
         **kwargs: Any,
     ) -> RunResult:
         """
@@ -277,9 +283,13 @@ class Execution:
             # Generate a unique run id for this agent execution (non-streaming)
             current_agent_run_id = f"agent_run_{uuid.uuid4().hex}"
 
-            # Prepare history for runner, persisting initiating messages with agent_run_id
+            # Prepare history for runner, persisting initiating messages with agent_run_id and parent_run_id
             history_for_runner = self._prepare_history_for_runner(
-                processed_current_message_items, sender_name, agency_context, agent_run_id=current_agent_run_id
+                processed_current_message_items,
+                sender_name,
+                agency_context,
+                agent_run_id=current_agent_run_id,
+                parent_run_id=parent_run_id,
             )
             logger.debug(f"Running agent '{self.agent.name}' with history length {len(history_for_runner)}:")
             for i, m in enumerate(history_for_runner):
@@ -296,6 +306,12 @@ class Execution:
                 )
                 # Prepare context and store reference for potential sync-back
                 master_context_for_run = self._prepare_master_context(context_override, agency_context)
+                # Store current and parent run IDs for tools to access
+                try:
+                    master_context_for_run._current_agent_run_id = current_agent_run_id
+                    master_context_for_run._parent_run_id = parent_run_id
+                except Exception:
+                    pass
 
                 # Ensure MCP servers connect/cleanup within the same task using a context stack
                 async with AsyncExitStack() as mcp_stack:
@@ -361,6 +377,7 @@ class Execution:
                             agent=current_agent_name,
                             caller_agent=sender_name,
                             agent_run_id=current_agent_run_id,
+                            parent_run_id=parent_run_id,
                         )
                         items_to_save.append(formatted_item)
                         content_preview = str(item_dict.get("content", ""))[:50]
@@ -409,6 +426,7 @@ class Execution:
         file_ids: list[str] | None = None,  # New parameter
         additional_instructions: str | None = None,  # New parameter for v1.x
         agency_context: "AgencyContext | None" = None,  # New stateless context parameter
+        parent_run_id: str | None = None,  # Parent agent's execution ID
         **kwargs: Any,
     ) -> AsyncGenerator[RunItemStreamEvent]:
         """
@@ -482,9 +500,13 @@ class Execution:
             # Assign a run id for the current active agent in the stream (may change on handoff/new-agent)
             current_agent_run_id = f"agent_run_{uuid.uuid4().hex}"
 
-            # Prepare history for runner, persisting initiating messages with agent_run_id
+            # Prepare history for runner, persisting initiating messages with agent_run_id and parent_run_id
             history_for_runner = self._prepare_history_for_runner(
-                processed_current_message_items, sender_name, agency_context, agent_run_id=current_agent_run_id
+                processed_current_message_items,
+                sender_name,
+                agency_context,
+                agent_run_id=current_agent_run_id,
+                parent_run_id=parent_run_id,
             )
 
             logger.debug(
@@ -514,6 +536,7 @@ class Execution:
             # Expose the current agent run identifier for tools (e.g., send_message) to tag sentinel/events
             try:
                 master_context_for_run._current_agent_run_id = current_agent_run_id
+                master_context_for_run._parent_run_id = parent_run_id
             except Exception:
                 pass
             # Pass streaming context if available
@@ -630,6 +653,7 @@ class Execution:
                         current_stream_agent_name,
                         sender_name,
                         agent_run_id=current_agent_run_id,
+                        parent_run_id=parent_run_id,
                     )
 
                     # Incrementally persist the item to maintain exact stream order in storage
@@ -653,6 +677,7 @@ class Execution:
                                 agent=current_stream_agent_name,
                                 caller_agent=sender_name,
                                 agent_run_id=current_agent_run_id,
+                                parent_run_id=parent_run_id,
                             )
 
                             # Filter and save immediately

@@ -257,6 +257,11 @@ class SendMessage(FunctionTool):
                 if wrapper and hasattr(wrapper, "context") and wrapper.context:
                     streaming_context = getattr(wrapper.context, "_streaming_context", None)
 
+                # Get the current agent's run_id to pass as parent_run_id
+                parent_run_id = (
+                    getattr(wrapper.context, "_current_agent_run_id", None) if wrapper and wrapper.context else None
+                )
+
                 # Emit a single ordered marker and persist a minimal record before forwarding child events
                 if streaming_context:
                     try:
@@ -266,6 +271,7 @@ class SendMessage(FunctionTool):
                             thread_manager=getattr(wrapper.context, "thread_manager", None),
                             arguments_json=arguments_json_string,
                             agent_run_id=getattr(wrapper.context, "_current_agent_run_id", None),
+                            parent_run_id=parent_run_id,
                         )
                     except Exception as e:
                         logger.warning(f"Failed to emit/persist send_message start: {e}")
@@ -287,8 +293,10 @@ class SendMessage(FunctionTool):
                     sender_name=self.sender_agent.name,
                     additional_instructions=combined_instructions,
                     agency_context=recipient_agency_context,
+                    parent_run_id=parent_run_id,
                 ):
                     # Add agent name and caller to the event before forwarding
+                    # Note: We don't pass parent_run_id here as the sub-agent already has it
                     event = add_agent_name_to_event(event, self.recipient_agent.name, self.sender_agent.name)
 
                     # Forward event to streaming context if available
@@ -325,6 +333,11 @@ class SendMessage(FunctionTool):
             else:
                 logger.debug(f"Calling target agent '{recipient_name_for_call}'.get_response...")
 
+                # Get the current agent's run_id to pass as parent_run_id
+                parent_run_id = (
+                    getattr(wrapper.context, "_current_agent_run_id", None) if wrapper and wrapper.context else None
+                )
+
                 # Create agency context for the recipient agent
                 recipient_agency_context = self._create_recipient_agency_context(wrapper)
 
@@ -338,6 +351,7 @@ class SendMessage(FunctionTool):
                     sender_name=self.sender_agent.name,
                     additional_instructions=combined_instructions,
                     agency_context=recipient_agency_context,
+                    parent_run_id=parent_run_id,
                 )
 
             current_final_output = response.final_output
@@ -371,6 +385,7 @@ class SendMessage(FunctionTool):
         thread_manager,
         arguments_json: str | None = None,
         agent_run_id: str | None = None,
+        parent_run_id: str | None = None,
     ) -> str | None:
         """Emit a sentinel for send_message and persist a minimal record to align saved order with stream."""
         import uuid
@@ -389,7 +404,9 @@ class SendMessage(FunctionTool):
             name="tool_called",
             item=ToolCallItem(agent=self.sender_agent, raw_item=raw_item),
         )
-        event = add_agent_name_to_event(event, sender_agent_name, None, agent_run_id=agent_run_id)
+        event = add_agent_name_to_event(
+            event, sender_agent_name, None, agent_run_id=agent_run_id, parent_run_id=parent_run_id
+        )
         await streaming_context.put_event(event)
 
         if thread_manager is not None and hasattr(thread_manager, "add_messages"):
@@ -408,6 +425,8 @@ class SendMessage(FunctionTool):
             }
             if agent_run_id:
                 minimal_record["agent_run_id"] = agent_run_id
+            if parent_run_id:
+                minimal_record["parent_run_id"] = parent_run_id
             thread_manager.add_messages([minimal_record])
 
         # Return call_id so caller can persist matching output later
