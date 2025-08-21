@@ -20,9 +20,8 @@ def create_agency(load_threads_callback=None, save_threads_callback=None):
         report_generator,
         risk_analyst,
         communication_flows=[
-            (portfolio_manager, report_generator),
             (portfolio_manager, risk_analyst),
-            (report_generator, risk_analyst),
+            (risk_analyst, report_generator),
         ],
         # ],
         shared_instructions="financial_research_agency/agency_manifesto.md",

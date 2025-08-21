@@ -364,6 +364,7 @@ class Execution:
                 )
 
                 current_agent_name = self.agent.name
+
                 for i, run_item_obj in enumerate(run_result.new_items):
                     # _run_item_to_tresponse_input_item converts RunItem to TResponseInputItem (dict)
                     item_dict = self._run_item_to_tresponse_input_item(run_item_obj)
@@ -379,6 +380,7 @@ class Execution:
                             agent_run_id=current_agent_run_id,
                             parent_run_id=parent_run_id,
                         )
+
                         items_to_save.append(formatted_item)
                         content_preview = str(item_dict.get("content", ""))[:50]
                         logger.debug(
@@ -805,11 +807,7 @@ class Execution:
 
                 if file_count > 0:
                     synthetic_outputs.append(
-                        MessageFormatter.add_agency_metadata(
-                            {"role": "user", "content": search_results_content},
-                            agent=self.agent.name,
-                            caller_agent=None,
-                        )
+                        {"role": "user", "content": search_results_content, "agent": self.agent.name}
                     )
                     logger.debug(f"Created file_search results message for call_id: {tool_call.id}")
 
@@ -824,11 +822,7 @@ class Execution:
                             if hasattr(content_item, "text") and content_item.text:
                                 search_results_content += f"Search Results:\n{content_item.text}\n"
                                 synthetic_outputs.append(
-                                    MessageFormatter.add_agency_metadata(
-                                        {"role": "user", "content": search_results_content},
-                                        agent=self.agent.name,
-                                        caller_agent=None,
-                                    )
+                                    {"role": "user", "content": search_results_content, "agent": self.agent.name}
                                 )
                                 logger.debug(f"Created web_search results message for call_id: {tool_call.id}")
                                 break  # Process only first text content item to avoid duplicates

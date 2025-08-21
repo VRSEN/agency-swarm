@@ -37,8 +37,9 @@ class MessageFormatter:
             message["agent_run_id"] = agent_run_id
         if parent_run_id is not None:
             message["parent_run_id"] = parent_run_id
+        # Use microsecond precision to reduce timestamp collisions
         # time.time() always returns UTC seconds since epoch (timezone-independent)
-        message["timestamp"] = int(time.time() * 1000)  # milliseconds since epoch UTC, sortable
+        message["timestamp"] = int(time.time() * 1000000) // 1000  # microseconds -> milliseconds, sortable
         # Add type field if not present (for easier parsing/navigation)
         if "type" not in message:
             message["type"] = "message"
@@ -132,7 +133,15 @@ class MessageFormatter:
             clean_msg = {
                 k: v
                 for k, v in msg.items()
-                if k not in ["agent", "callerAgent", "timestamp", "citations", "agent_run_id", "parent_run_id"]
+                if k
+                not in [
+                    "agent",
+                    "callerAgent",
+                    "timestamp",
+                    "citations",
+                    "agent_run_id",
+                    "parent_run_id",
+                ]
             }
             cleaned.append(clean_msg)
         return cleaned
