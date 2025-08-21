@@ -268,10 +268,9 @@ class SendMessage(FunctionTool):
                     streaming_context = getattr(wrapper.context, "_streaming_context", None)
 
                 # Emit a single ordered marker and persist a minimal record before forwarding child events
-                emitted_call_id = None
                 if streaming_context:
                     try:
-                        emitted_call_id = await self._emit_send_message_start(
+                        await self._emit_send_message_start(
                             streaming_context=streaming_context,
                             sender_agent_name=self.sender_agent.name,
                             thread_manager=getattr(wrapper.context, "thread_manager", None),

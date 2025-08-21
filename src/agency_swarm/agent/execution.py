@@ -13,10 +13,10 @@ import warnings
 from collections.abc import AsyncGenerator
 from contextlib import AsyncExitStack
 from typing import TYPE_CHECKING, Any
-import time
 
 from agents import (
     InputGuardrailTripwireTriggered,
+    OpenAIChatCompletionsModel,
     OutputGuardrailTripwireTriggered,
     RunConfig,
     RunHooks,
@@ -26,10 +26,9 @@ from agents import (
     TResponseInputItem,
 )
 from agents.exceptions import AgentsException
+from agents.extensions.models.litellm_model import LitellmModel
 from agents.items import ItemHelpers, MessageOutputItem, ToolCallItem
 from agents.stream_events import RunItemStreamEvent
-from agents.extensions.models.litellm_model import LitellmModel
-from agents import OpenAIChatCompletionsModel
 from openai._utils._logs import logger
 from openai.types.responses import ResponseFileSearchToolCall, ResponseFunctionWebSearch
 
@@ -37,9 +36,9 @@ from agency_swarm.context import MasterContext
 from agency_swarm.messages import (
     MessageFilter,
     MessageFormatter,
+    adjust_history_for_litellm,
     ensure_tool_calls_content_safety,
     sanitize_tool_calls_in_history,
-    adjust_history_for_litellm
 )
 from agency_swarm.streaming.utils import add_agent_name_to_event
 from agency_swarm.utils.citation_extractor import extract_direct_file_annotations
@@ -171,9 +170,9 @@ class Execution:
         try:
             if hasattr(self.agent, "model"):
                 model_config = getattr(self.agent, "model", "") or ""
-                if type(model_config) == LitellmModel:
+                if isinstance(model_config, LitellmModel):
                     return True
-                elif type(model_config) == OpenAIChatCompletionsModel:
+                elif isinstance(model_config, OpenAIChatCompletionsModel):
                     model_name = None
                     if hasattr(model_config, "model"):
                         model_name = model_config.model
