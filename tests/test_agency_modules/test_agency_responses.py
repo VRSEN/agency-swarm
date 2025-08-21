@@ -15,6 +15,7 @@ def mock_agent():
     agent.name = "MockAgent"
     agent.get_response = AsyncMock()
     agent.get_response_stream = AsyncMock()
+    agent.send_message_tool_class = None  # Add missing attribute
     return agent
 
 
@@ -25,6 +26,8 @@ def mock_agent2():
     agent.name = "MockAgent2"
     agent.get_response = AsyncMock()
     agent.get_response_stream = AsyncMock()
+    agent.send_message_tool_class = None  # Add missing attribute
+
     return agent
 
 

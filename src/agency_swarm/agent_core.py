@@ -21,6 +21,7 @@ from agency_swarm.agent import (
 )
 from agency_swarm.agent.file_manager import AgentFileManager, AttachmentManager
 from agency_swarm.agent.tools import _attach_one_call_guard
+from agency_swarm.agent.agent_flows import AgentFlow
 from agency_swarm.context import MasterContext
 from agency_swarm.thread import ThreadManager
 from agency_swarm.tools.concurrency import ToolConcurrencyManager
@@ -66,6 +67,9 @@ class AgencyContext:
     load_threads_callback: Callable[[], dict[str, Any]] | None = None
     save_threads_callback: Callable[[dict[str, Any]], None] | None = None
     shared_instructions: str | None = None
+
+
+
 
 
 class Agent(BaseAgent[MasterContext]):
@@ -408,6 +412,26 @@ class Agent(BaseAgent[MasterContext]):
             save_threads_callback=None,
             shared_instructions=None,
         )
+
+    def __gt__(self, other: "Agent") -> "AgentFlow":
+        """
+        Allow creating agent flows with > operator.
+        
+        Usage: agent1 > agent2 > agent3 > agent4 creates complete chain
+        """
+        if not isinstance(other, Agent):
+            raise TypeError("Can only chain to Agent instances")
+        return AgentFlow([self, other])
+
+    def __lt__(self, other: "Agent") -> "AgentFlow":
+        """
+        Allow creating agent flows with < operator.
+        
+        Usage: agent1 < agent2 creates a flow from agent2 to agent1 (reversed)
+        """
+        if not isinstance(other, Agent):
+            raise TypeError("Can only chain to Agent instances")
+        return AgentFlow([other, self])
 
     def register_subagent(self, recipient_agent: "Agent") -> None:
         """

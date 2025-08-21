@@ -12,6 +12,7 @@ def mock_agent():
     """Provides a mocked Agent instance for testing."""
     agent = MagicMock(spec=Agent)
     agent.name = "MockAgent"
+    agent.send_message_tool_class = None  # Add missing attribute
     return agent
 
 
@@ -20,6 +21,7 @@ def mock_agent2():
     """Provides a second mocked Agent instance for testing."""
     agent = MagicMock(spec=Agent)
     agent.name = "MockAgent2"
+    agent.send_message_tool_class = None  # Add missing attribute
     return agent
 
 
