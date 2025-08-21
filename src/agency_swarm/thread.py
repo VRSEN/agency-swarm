@@ -175,15 +175,24 @@ class ThreadManager:
         self._save_messages()
 
     def get_conversation_history(self, agent: str, caller_agent: str | None = None) -> list[TResponseInputItem]:
-        """Get conversation history for a specific agent pair.
+        """Get conversation history for a specific interaction pair.
+
+        When ``caller_agent`` is ``None`` (user conversation), returns the shared user
+        thread containing all messages where ``callerAgent`` is ``None`` regardless of
+        the recipient agent. This ensures that all entry-point agents operate on the
+        same user thread.
 
         Args:
-            agent: The recipient agent
-            caller_agent: The sender agent (None for user)
+            agent: The recipient agent (ignored for user thread retrieval)
+            caller_agent: The sender agent (``None`` for user interactions)
 
         Returns:
             list[TResponseInputItem]: Relevant conversation history
         """
+        if caller_agent is None:
+            messages = self._store.get_messages()
+            return [m for m in messages if m.get("callerAgent") is None]
+
         return self._store.get_conversation_between(agent, caller_agent)
 
     def get_all_messages(self) -> list[TResponseInputItem]:

@@ -107,14 +107,10 @@ def file_persistence_callbacks(temp_persistence_dir):
 
 
 @pytest.mark.asyncio
-async def test_thread_persistence_isolation_structural(
+async def test_thread_persistence_shared_structural(
     file_persistence_callbacks, ceo_agent_instance, developer_agent_instance
 ):
-    """
-    Test thread persistence isolation using direct structural verification.
-
-    Most reliable approach - checks actual saved/loaded thread data.
-    """
+    """Test that shared user thread is persisted and restored correctly."""
     load_cb, save_cb = file_persistence_callbacks
     test_id = uuid.uuid4().hex[:8]
 
@@ -133,76 +129,31 @@ async def test_thread_persistence_isolation_structural(
     ceo_info = f"CEOPROJECT{uuid.uuid4().hex[:8]}"
     dev_info = f"DEVPROJECT{uuid.uuid4().hex[:8]}"
 
-    # Step 1: Create threads with unique information
+    # Step 1: Create messages with unique information
     await agency.get_response(message=f"CEO project: {ceo_info}", recipient_agent="CEO")
-
     await agency.get_response(message=f"Developer project: {dev_info}", recipient_agent="Developer")
 
-    # Step 2: Direct verification of conversation state before persistence
+    # Step 2: Verify shared user thread before persistence
     thread_manager = agency.thread_manager
     ceo_messages = thread_manager.get_conversation_history("CEO", None)
     dev_messages = thread_manager.get_conversation_history("Developer", None)
 
-    # Verify conversations contain expected information and are isolated
-    ceo_content = str(ceo_messages).lower()
-    dev_content = str(dev_messages).lower()
+    assert ceo_messages == dev_messages, "User thread should be shared before persistence"
+    thread_content = str(ceo_messages).lower()
+    assert ceo_info.lower() in thread_content, "User thread missing CEO info"
+    assert dev_info.lower() in thread_content, "User thread missing Developer info"
 
-    assert ceo_info.lower() in ceo_content, "CEO thread missing CEO info before persistence"
-    assert dev_info.lower() not in ceo_content, "CEO thread contaminated before persistence"
-    assert dev_info.lower() in dev_content, "Developer thread missing Developer info before persistence"
-    assert ceo_info.lower() not in dev_content, "Developer thread contaminated before persistence"
-
-    # Step 3: Direct verification of saved data using load callbacks
-    # This tests that persistence maintains isolation at the storage level
+    # Step 3: Verify saved data contains the full shared conversation
     all_saved_messages = load_cb()
+    saved_content = str(all_saved_messages).lower()
+    assert ceo_info.lower() in saved_content, "Saved data missing CEO info"
+    assert dev_info.lower() in saved_content, "Saved data missing Developer info"
 
-    # Filter messages by conversation
-    ceo_saved_messages = [
-        msg for msg in all_saved_messages if msg.get("agent") == "CEO" and msg.get("callerAgent") is None
-    ]
-    dev_saved_messages = [
-        msg for msg in all_saved_messages if msg.get("agent") == "Developer" and msg.get("callerAgent") is None
-    ]
-
-    assert len(ceo_saved_messages) > 0, "CEO messages should be saved"
-    assert len(dev_saved_messages) > 0, "Developer messages should be saved"
-
-    # Verify saved message structure
-    for msg in ceo_saved_messages:
-        assert "agent" in msg, "CEO message should have agent field"
-        assert msg["agent"] == "CEO", "CEO message should have correct agent"
-    for msg in dev_saved_messages:
-        assert "agent" in msg, "Developer message should have agent field"
-        assert msg["agent"] == "Developer", "Developer message should have correct agent"
-
-    # Step 4: Verify persistence isolation at storage level
-    ceo_saved_content = str(ceo_saved_messages).lower()
-    dev_saved_content = str(dev_saved_messages).lower()
-
-    # CEO saved data should contain only CEO info
-    assert ceo_info.lower() in ceo_saved_content, "CEO saved data missing CEO info"
-    assert dev_info.lower() not in ceo_saved_content, "CEO saved data contaminated with Developer info"
-
-    # Developer saved data should contain only Developer info
-    assert dev_info.lower() in dev_saved_content, "Developer saved data missing Developer info"
-    assert ceo_info.lower() not in dev_saved_content, "Developer saved data contaminated with CEO info"
-
-    # Step 5: Verify loaded messages match expected counts
+    # Step 4: Verify loaded messages match saved messages
     all_loaded_messages = load_cb()
-    loaded_ceo_messages = [
-        msg for msg in all_loaded_messages if msg.get("agent") == "CEO" and msg.get("callerAgent") is None
-    ]
-    loaded_dev_messages = [
-        msg for msg in all_loaded_messages if msg.get("agent") == "Developer" and msg.get("callerAgent") is None
-    ]
+    assert all_loaded_messages == all_saved_messages, "Loaded messages should match saved messages"
 
-    assert len(loaded_ceo_messages) == len(ceo_saved_messages), "CEO messages should load consistently"
-    assert len(loaded_dev_messages) == len(dev_saved_messages), "Developer messages should load consistently"
-
-    print("✓ Conversation isolation maintained in memory")
-    print("✓ Conversation isolation maintained in persistence storage")
-    print("✓ Each conversation saved/loaded with correct content")
-    print("✓ No cross-contamination in persisted conversations")
+    print("✓ Shared user thread preserved in memory and persistence")
 
 
 @pytest.mark.asyncio
