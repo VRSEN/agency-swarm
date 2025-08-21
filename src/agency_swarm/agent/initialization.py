@@ -222,9 +222,8 @@ def separate_kwargs(kwargs: dict[str, Any]) -> tuple[dict[str, Any], dict[str, A
         base_param_names = {
             "name",
             "instructions",
-            # Handoffs should be defined by providing SendMessageHandoff
-            # "handoff_description",
-            # "handoffs",
+            "handoff_description",
+            "handoffs",
             "model",
             "model_settings",
             "tools",
@@ -248,6 +247,14 @@ def separate_kwargs(kwargs: dict[str, Any]) -> tuple[dict[str, Any], dict[str, A
     # Add name to current_agent_params as well since we need it
     if "name" in base_agent_params:
         current_agent_params["name"] = base_agent_params["name"]
+
+    # Handoffs should be defined by providing SendMessageHandoff
+    if "handoffs" in kwargs:
+        logger.warning(
+            "Manually setting the 'handoffs' parameter can lead to unexpected behavior. "
+            "Handoffs are automatically managed by the Agency based on communication flows. "
+            "Use SendMessageHandoff to customize inter-agent communication instead."
+        )
 
     return base_agent_params, current_agent_params
 

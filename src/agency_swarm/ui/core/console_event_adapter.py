@@ -91,7 +91,7 @@ class ConsoleEventAdapter:
                         item = data.item
                         if hasattr(item, "arguments"):
                             # Handle agent to agent communication
-                            if item.name == "send_message":
+                            if item.name.startswith("send_message"):
                                 # Unified tool - extract recipient from arguments
                                 args = json.loads(item.arguments)
                                 called_agent = args.get("recipient_agent", "Unknown")

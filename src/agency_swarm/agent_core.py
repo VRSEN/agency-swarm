@@ -69,9 +69,6 @@ class AgencyContext:
     shared_instructions: str | None = None
 
 
-
-
-
 class Agent(BaseAgent[MasterContext]):
     """
     Agency Swarm Agent: Extends the base `agents.Agent` with capabilities for
@@ -433,7 +430,7 @@ class Agent(BaseAgent[MasterContext]):
             raise TypeError("Can only chain to Agent instances")
         return AgentFlow([other, self])
 
-    def register_subagent(self, recipient_agent: "Agent") -> None:
+    def register_subagent(self, recipient_agent: "Agent", send_message_tool_class: type | None = None) -> None:
         """
         Registers another agent as a subagent that this agent can communicate with.
 
@@ -441,12 +438,14 @@ class Agent(BaseAgent[MasterContext]):
 
         Args:
             recipient_agent (Agent): The `Agent` instance to register as a recipient.
+            send_message_tool_class: Optional custom send message tool class to use for this specific
+                               agent-to-agent communication. If None, uses agent's default or SendMessage.
         """
         # Import to avoid circular dependency
         from .agent.subagents import register_subagent as register_subagent_func
 
         # Use the existing register_subagent function for tool creation
-        register_subagent_func(self, recipient_agent)
+        register_subagent_func(self, recipient_agent, send_message_tool_class)
 
     def _get_caller_directory(self) -> str:
         """Get the directory where this agent is being instantiated (caller's directory)."""

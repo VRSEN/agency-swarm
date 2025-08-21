@@ -96,7 +96,7 @@ class MessageFormatter:
         outputs_by_call_id = {m.get("call_id"): m for m in normalized if m.get("type") == "function_call_output"}
         needs_output: list[tuple[int, dict[str, Any]]] = []
         for idx, m in enumerate(normalized):
-            if m.get("type") == "function_call" and m.get("name") == "send_message":
+            if m.get("type") == "function_call" and m.get("name").startswith("send_message"):
                 cid = m.get("call_id")
                 if cid and cid not in outputs_by_call_id:
                     needs_output.append((idx, m))
@@ -150,7 +150,7 @@ class MessageFormatter:
             m
             for m in history
             if m.get("type") == "function_call"
-            and m.get("name") == "send_message"
+            and m.get("name").startswith("send_message")
             and m.get("call_id")
             and m.get("call_id") not in outputs_by_call_id
         ]

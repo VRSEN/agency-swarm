@@ -573,19 +573,14 @@ class Agency:
                             agent_instance.handoffs.append(handoff_instance)
                             logger.debug(f"Added SendMessageHandoff for {agent_name} -> {recipient_name}")
                         else:
-                            # Temporarily set the tool class for this registration
-                            original_tool_class = agent_instance.send_message_tool_class
+                            # Register subagent with optional custom tool class
                             if custom_tool_class:
-                                agent_instance.send_message_tool_class = custom_tool_class
                                 logger.debug(
                                     f"Using custom tool class {custom_tool_class.__name__} "
                                     f"for {agent_name} -> {recipient_name}"
                                 )
 
-                            agent_instance.register_subagent(recipient_agent)
-
-                            # Restore original tool class
-                            agent_instance.send_message_tool_class = original_tool_class
+                            agent_instance.register_subagent(recipient_agent, send_message_tool_class=custom_tool_class)
 
                     except Exception as e:
                         logger.error(
@@ -1020,7 +1015,7 @@ class Agency:
                     tool_name = getattr(tool, "name", getattr(tool, "__name__", str(tool)))
 
                     # Skip send_message tools in visualization
-                    if tool_name == "send_message":
+                    if tool_name.startswith("send_message"):
                         continue
 
                     tool_type = getattr(tool, "type", tool.__class__.__name__)
