@@ -19,9 +19,9 @@ from agency_swarm.agent import (
     setup_file_manager,
     validate_hosted_tools,
 )
+from agency_swarm.agent.agent_flows import AgentFlow
 from agency_swarm.agent.file_manager import AgentFileManager, AttachmentManager
 from agency_swarm.agent.tools import _attach_one_call_guard
-from agency_swarm.agent.agent_flows import AgentFlow
 from agency_swarm.context import MasterContext
 from agency_swarm.thread import ThreadManager
 from agency_swarm.tools.concurrency import ToolConcurrencyManager
@@ -416,7 +416,7 @@ class Agent(BaseAgent[MasterContext]):
     def __gt__(self, other: "Agent") -> "AgentFlow":
         """
         Allow creating agent flows with > operator.
-        
+
         Usage: agent1 > agent2 > agent3 > agent4 creates complete chain
         """
         if not isinstance(other, Agent):
@@ -426,7 +426,7 @@ class Agent(BaseAgent[MasterContext]):
     def __lt__(self, other: "Agent") -> "AgentFlow":
         """
         Allow creating agent flows with < operator.
-        
+
         Usage: agent1 < agent2 creates a flow from agent2 to agent1 (reversed)
         """
         if not isinstance(other, Agent):
