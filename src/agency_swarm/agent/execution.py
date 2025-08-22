@@ -584,8 +584,6 @@ class Execution:
                 current_stream_agent_name = self.agent.name
                 # Suppress SDK-emitted send_message tool call pair (we inject a sentinel earlier)
                 suppress_next_send_message_output: bool = False
-                # Track originating agent for each function_call by call_id to persist matching outputs under same agent
-                call_origin_agent_by_call_id: dict[str, str] = {}
                 while True:
                     # If worker finished and there are no pending events, exit cleanly
                     if worker_task.done() and event_queue.empty():
@@ -666,21 +664,6 @@ class Execution:
                         # Convert to input item (dict) using SDK helper
                         item_dict = self._run_item_to_tresponse_input_item(run_item_obj)
                         if item_dict:
-                            # For function_calls, adjust agent for persistence to keep pairing intact
-                            # to avoid switchup on handoffs
-                            target_agent_for_persistence = current_stream_agent_name
-                            try:
-                                item_type = item_dict.get("type")
-                                if item_type == "function_call":
-                                    call_id = item_dict.get("call_id")
-                                    if isinstance(call_id, str) and call_id:
-                                        call_origin_agent_by_call_id[call_id] = current_stream_agent_name
-                                elif item_type == "function_call_output":
-                                    call_id = item_dict.get("call_id")
-                                    if isinstance(call_id, str) and call_id in call_origin_agent_by_call_id:
-                                        target_agent_for_persistence = call_origin_agent_by_call_id.pop(call_id)
-                            except Exception:
-                                pass
                             # Extract citations for this single message if applicable
                             if isinstance(run_item_obj, MessageOutputItem):
                                 single_citation_map = extract_direct_file_annotations(
@@ -693,7 +676,7 @@ class Execution:
                             # Add agency metadata with the current active agent
                             formatted_item = MessageFormatter.add_agency_metadata(
                                 item_dict,
-                                agent=target_agent_for_persistence,
+                                agent=current_stream_agent_name,
                                 caller_agent=sender_name,
                                 agent_run_id=current_agent_run_id,
                             )
