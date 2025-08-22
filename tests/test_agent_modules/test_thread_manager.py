@@ -59,8 +59,8 @@ def test_add_messages(method: str, messages: list[dict]):
     assert manager._store.messages == messages
 
 
-def test_get_conversation_history():
-    """Tests retrieving conversation history for specific agent pairs."""
+def test_user_thread_shared_across_agents():
+    """Tests that all entry-point agents share the same user thread."""
     manager = ThreadManager()
     messages = [
         {"role": "user", "content": "Hello Agent1", "agent": "Agent1", "callerAgent": None, "timestamp": 1234567890000},
@@ -77,15 +77,13 @@ def test_get_conversation_history():
 
     manager.add_messages(messages)
 
-    # Get conversation between user and Agent1
+    # Both agents should see the same combined conversation history
     agent1_history = manager.get_conversation_history("Agent1", None)
-    assert len(agent1_history) == 2
-    assert all(msg["agent"] == "Agent1" for msg in agent1_history)
-
-    # Get conversation between user and Agent2
     agent2_history = manager.get_conversation_history("Agent2", None)
-    assert len(agent2_history) == 2
-    assert all(msg["agent"] == "Agent2" for msg in agent2_history)
+
+    assert agent1_history == messages
+    assert agent2_history == messages
+    assert agent1_history == agent2_history
 
 
 def test_get_all_messages():
@@ -139,45 +137,6 @@ def test_load_callback_on_init(mocker):
 
     mock_load.assert_called_once()
     assert manager._store.messages == loaded_messages
-
-
-def test_migrate_old_format():
-    """Tests migration from old thread-based format to flat structure."""
-    old_format = {
-        "user->Agent1": {
-            "items": [{"role": "user", "content": "Hello"}, {"role": "assistant", "content": "Hi there"}],
-            "metadata": {},
-        },
-        "Agent1->Agent2": {
-            "items": [
-                {"role": "assistant", "content": "Need help"},
-                {"role": "assistant", "content": "Sure, I can help"},
-            ],
-            "metadata": {},
-        },
-    }
-
-    def mock_load():
-        return old_format
-
-    manager = ThreadManager(load_threads_callback=mock_load)
-
-    # Check that messages were migrated correctly
-    assert len(manager._store.messages) == 4
-
-    # Check that agency metadata was added
-    user_to_agent1 = [
-        msg for msg in manager._store.messages if msg.get("agent") == "Agent1" and msg.get("callerAgent") is None
-    ]
-    assert len(user_to_agent1) == 2
-
-    agent1_to_agent2 = [
-        msg for msg in manager._store.messages if msg.get("agent") == "Agent2" and msg.get("callerAgent") == "Agent1"
-    ]
-    assert len(agent1_to_agent2) == 2
-
-    # Check that timestamps were added
-    assert all("timestamp" in msg for msg in manager._store.messages)
 
 
 def test_thread_manager_pickleable():

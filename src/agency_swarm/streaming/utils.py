@@ -20,6 +20,7 @@ def add_agent_name_to_event(
     agent_name: str,
     caller_agent: str | None = None,
     agent_run_id: str | None = None,
+    parent_run_id: str | None = None,
 ) -> Any:
     """Add agent name and caller to a streaming event.
 
@@ -27,24 +28,32 @@ def add_agent_name_to_event(
         event: The streaming event (dict or object)
         agent_name: Name of the agent to add to the event
         caller_agent: Name of the calling agent (None for user)
+        agent_run_id: The current agent's execution ID
+        parent_run_id: The calling agent's execution ID
 
     Returns:
-        The event with agent, callerAgent, and call_id (when available) added
+        The event with agent, callerAgent, agent_run_id, and parent_run_id added
     """
     # Add agent metadata
     if isinstance(event, dict):
         event["agent"] = agent_name
         event["callerAgent"] = caller_agent
-        # Only attach agent_run_id for structured SDK events (they have a 'type' key)
-        if agent_run_id and "type" in event:
-            event["agent_run_id"] = agent_run_id
+        # Only attach agent_run_id and parent_run_id for structured SDK events (they have a 'type' key)
+        if "type" in event:
+            if agent_run_id:
+                event["agent_run_id"] = agent_run_id
+            if parent_run_id:
+                event["parent_run_id"] = parent_run_id
     elif hasattr(event, "__dict__"):
         # For object-like events, add as attributes
         event.agent = agent_name
         event.callerAgent = caller_agent
-        # Only attach agent_run_id for objects that expose a 'type' attribute (SDK events)
-        if agent_run_id and hasattr(event, "type"):
-            event.agent_run_id = agent_run_id
+        # Only attach agent_run_id and parent_run_id for objects that expose a 'type' attribute (SDK events)
+        if hasattr(event, "type"):
+            if agent_run_id:
+                event.agent_run_id = agent_run_id
+            if parent_run_id:
+                event.parent_run_id = parent_run_id
 
     # Extract and propagate call_id if present in the event structure
     call_id = None

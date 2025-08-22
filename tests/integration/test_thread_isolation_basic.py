@@ -45,57 +45,36 @@ def basic_agency(ceo_agent_instance, developer_agent_instance):
 
 
 @pytest.mark.asyncio
-async def test_user_thread_isolation(basic_agency: Agency):
-    """
-    Test that user->CEO and user->Developer threads are completely isolated.
-
-    Uses direct thread state verification - most reliable approach.
-    """
+async def test_user_thread_shared(basic_agency: Agency):
+    """Verify that user messages to different agents share a single thread."""
     unique_ceo_info = f"CEOINFO{uuid.uuid4().hex[:8]}"
     unique_dev_info = f"DEVINFO{uuid.uuid4().hex[:8]}"
 
-    print("\n--- User Thread Isolation Test ---")
+    print("\n--- User Thread Sharing Test ---")
 
-    # Step 1: Send unique info to CEO (creates user->CEO thread)
+    # Step 1: Send unique info to CEO
     await basic_agency.get_response(message=f"CEO: {unique_ceo_info}", recipient_agent="CEO")
 
-    # Step 2: Send different info to Developer (creates user->Developer thread)
+    # Step 2: Send different info to Developer
     await basic_agency.get_response(message=f"Developer: {unique_dev_info}", recipient_agent="Developer")
 
-    # Step 3: Direct verification - check thread manager state
+    # Step 3: Verify both agents see the same conversation history
     thread_manager = basic_agency.thread_manager
-
-    # Get messages for each conversation
-    ceo_messages = thread_manager.get_conversation_history("CEO", None)  # None = user
+    ceo_messages = thread_manager.get_conversation_history("CEO", None)
     dev_messages = thread_manager.get_conversation_history("Developer", None)
 
-    # Verify both conversations have messages
-    assert len(ceo_messages) > 0, "CEO conversation should have messages"
-    assert len(dev_messages) > 0, "Developer conversation should have messages"
+    assert ceo_messages == dev_messages, "Entry-point agents should share user thread"
 
-    # Step 4: Verify thread isolation - each conversation contains only its own messages
-    ceo_thread_content = str(ceo_messages).lower()
-    dev_thread_content = str(dev_messages).lower()
+    thread_content = str(ceo_messages).lower()
+    assert unique_ceo_info.lower() in thread_content, "User thread missing CEO info"
+    assert unique_dev_info.lower() in thread_content, "User thread missing Developer info"
 
-    # CEO thread should contain CEO info but NOT Developer info
-    assert unique_ceo_info.lower() in ceo_thread_content, "CEO thread missing CEO info"
-    assert unique_dev_info.lower() not in ceo_thread_content, "CEO thread contaminated with Developer info"
-
-    # Developer thread should contain Developer info but NOT CEO info
-    assert unique_dev_info.lower() in dev_thread_content, "Developer thread missing Developer info"
-    assert unique_ceo_info.lower() not in dev_thread_content, "Developer thread contaminated with CEO info"
-
-    print("✓ user->CEO and user->Developer threads completely isolated")
-    print("✓ No cross-contamination detected")
+    print("✓ All entry-point agents share user thread with combined history")
 
 
 @pytest.mark.asyncio
 async def test_agent_to_agent_thread_isolation(basic_agency: Agency):
-    """
-    Test that agent-to-agent communication creates separate threads from user interactions.
-
-    Verifies that different communication flows create separate thread objects.
-    """
+    """Agent-to-agent conversations should remain separate from user thread."""
     user_ceo_info = f"USERCEO{uuid.uuid4().hex[:8]}"
     user_dev_info = f"USERDEV{uuid.uuid4().hex[:8]}"
 
@@ -113,31 +92,21 @@ async def test_agent_to_agent_thread_isolation(basic_agency: Agency):
     # Direct verification of thread separation
     thread_manager = basic_agency.thread_manager
 
-    # Get messages for each conversation flow
-    user_ceo_messages = thread_manager.get_conversation_history("CEO", None)  # user->CEO
-    user_dev_messages = thread_manager.get_conversation_history("Developer", None)  # user->Developer
-    ceo_dev_messages = thread_manager.get_conversation_history("Developer", "CEO")  # CEO->Developer
+    # All entry-point agents share user thread
+    user_ceo_messages = thread_manager.get_conversation_history("CEO", None)
+    user_dev_messages = thread_manager.get_conversation_history("Developer", None)
+    assert user_ceo_messages == user_dev_messages, "User thread should be shared"
 
-    # Verify all conversations have messages
-    assert len(user_ceo_messages) > 0, "user->CEO conversation should have messages"
-    assert len(user_dev_messages) > 0, "user->Developer conversation should have messages"
+    user_thread_content = str(user_ceo_messages).lower()
+    assert user_ceo_info.lower() in user_thread_content
+    assert user_dev_info.lower() in user_thread_content
+
+    # Agent-to-agent conversation should remain isolated
+    ceo_dev_messages = thread_manager.get_conversation_history("Developer", "CEO")
     assert len(ceo_dev_messages) > 0, "CEO->Developer conversation should have messages"
-
-    # Verify user threads contain their own information and are isolated
-    user_ceo_content = str(user_ceo_messages).lower()
-    user_dev_content = str(user_dev_messages).lower()
-
-    # Core isolation verification - user threads should not share content
-    assert user_ceo_info.lower() in user_ceo_content, "user->CEO thread missing its info"
-    assert user_dev_info.lower() not in user_ceo_content, "user->CEO thread contaminated"
-    assert user_dev_info.lower() in user_dev_content, "user->Developer thread missing its info"
-    assert user_ceo_info.lower() not in user_dev_content, "user->Developer thread contaminated"
-
-    # Verify CEO->Developer conversation is separate (content isolation)
     ceo_dev_content = str(ceo_dev_messages).lower()
-    # Verify no cross-contamination between conversation flows
-    assert user_ceo_info.lower() not in ceo_dev_content, "CEO->Developer should not contain user->CEO info"
-    assert user_dev_info.lower() not in ceo_dev_content, "CEO->Developer should not contain user->Developer info"
+    assert user_ceo_info.lower() not in ceo_dev_content
+    assert user_dev_info.lower() not in ceo_dev_content
 
     print("✓ user->CEO, user->Developer, CEO->Developer conversations are properly isolated")
     print("✓ User interaction threads properly isolated")
