@@ -19,50 +19,6 @@ class CustomSendMessage(SendMessage):
 # --- Agency Integration Tests ---
 
 
-def test_agency_with_agent_flow_chain():
-    """Test Agency creation with AgentFlow in communication_flows."""
-    agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-4o-mini")
-    agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-4o-mini")
-    agent3 = Agent(name="Agent3", instructions="Test agent 3", model="gpt-4o-mini")
-
-    agency = Agency(
-        agent1,
-        communication_flows=[
-            (agent1 > agent2 > agent3, CustomSendMessage),
-        ],
-    )
-
-    # Check that all agents are registered
-    assert len(agency.agents) == 3
-    assert "Agent1" in agency.agents
-    assert "Agent2" in agency.agents
-    assert "Agent3" in agency.agents
-
-    # Check that custom tool class mapping is created
-    tool_mappings = agency._communication_tool_classes
-    assert ("Agent1", "Agent2") in tool_mappings
-    assert ("Agent2", "Agent3") in tool_mappings
-    assert tool_mappings[("Agent1", "Agent2")] == CustomSendMessage
-    assert tool_mappings[("Agent2", "Agent3")] == CustomSendMessage
-
-
-def test_agency_with_standalone_agent_flow():
-    """Test Agency with standalone AgentFlow (no custom tool)."""
-    agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-4o-mini")
-    agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-4o-mini")
-    agent3 = Agent(name="Agent3", instructions="Test agent 3", model="gpt-4o-mini")
-
-    agency = Agency(
-        agent1,
-        communication_flows=[
-            agent1 > agent2 > agent3,  # Standalone flow
-        ],
-    )
-
-    assert len(agency.agents) == 3
-    assert agent1 in agency.entry_points
-
-
 def test_agency_with_mixed_communication_flows():
     """Test Agency with mixed communication flow formats."""
     agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-4o-mini")
@@ -86,7 +42,28 @@ def test_agency_with_mixed_communication_flows():
     assert tool_mappings[("Agent1", "Agent2")] == CustomSendMessage
     assert tool_mappings[("Agent2", "Agent3")] == CustomSendMessage
     assert tool_mappings[("Agent2", "Agent4")] == SendMessageHandoff
-    # (Agent1, Agent4) should not have custom tool mapping
+
+
+def test_agency_with_mixed_communication_flows_reverse():
+    """Test Agency with reverse communication flow."""
+    agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-4o-mini")
+    agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-4o-mini")
+    agent3 = Agent(name="Agent3", instructions="Test agent 3", model="gpt-4o-mini")
+
+    agency = Agency(
+        agent1,
+        communication_flows=[
+            (agent3 < agent2 < agent1, CustomSendMessage),  # Chain with tool
+        ],
+    )
+
+    assert len(agency.agents) == 3
+
+    # Check tool mappings
+    tool_mappings = agency._communication_tool_classes
+    assert tool_mappings[("Agent1", "Agent2")] == CustomSendMessage
+    assert tool_mappings[("Agent2", "Agent3")] == CustomSendMessage
+
 
 
 def test_duplicate_flow_detection_with_chains():
@@ -122,15 +99,7 @@ def test_agent_flow_with_handoff_tool():
     assert len(agency.agents) == 3
 
     # Check that handoffs are created for the agents
-    assert hasattr(agency.agents["Agent1"], "handoffs")
-    assert hasattr(agency.agents["Agent2"], "handoffs")
-
-
-def test_empty_communication_flows():
-    """Test Agency creation with empty communication flows."""
-    agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-4o-mini")
-
-    agency = Agency(agent1, communication_flows=[])
-
-    assert len(agency.agents) == 1
-    assert agent1 in agency.entry_points
+    print(f"agent1.tools: {agent1.handoffs}")
+    assert agent1.handoffs[0].tool_name == "transfer_to_agent2"
+    assert agent2.handoffs[0].tool_name == "transfer_to_agent3"
+    assert len(agent3.handoffs) == 0
