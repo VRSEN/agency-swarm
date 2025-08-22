@@ -143,7 +143,11 @@ def adjust_history_for_litellm(history: list[dict[str, Any]]) -> list[dict[str, 
 
             adjusted.append(msg)
 
-            if isinstance(msg, dict) and msg.get("type") == "function_call" and msg.get("name") == "send_message":
+            if (
+                isinstance(msg, dict)
+                and msg.get("type") == "function_call"
+                and msg.get("name").startswith("send_message")
+            ):
                 cid = msg.get("call_id")
                 if isinstance(cid, str) and cid:
                     # If next item is already the correct output, do nothing
@@ -156,12 +160,12 @@ def adjust_history_for_litellm(history: list[dict[str, Any]]) -> list[dict[str, 
                         ):
                             i += 1  # advance past the adjacent output we just acknowledged
                             adjusted.append(nxt)
+                            consumed_call_ids.add(cid)
                             continue
                     # Otherwise, move an existing matching output if present later
                     if cid in outputs_by_call_id:
                         adjusted.append(outputs_by_call_id[cid]["item"])
                         consumed_call_ids.add(cid)
-                        # do not continue; allow loop increment below
                     else:
                         # Look ahead for the first assistant message with non-empty content
                         synthesized_output = None
