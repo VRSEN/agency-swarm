@@ -568,8 +568,8 @@ class Agency:
                     )
 
                     try:
-                        if isinstance(effective_tool_class, SendMessageHandoff) or issubclass(
-                            effective_tool_class, SendMessageHandoff
+                        if isinstance(effective_tool_class, SendMessageHandoff) or (
+                            isinstance(effective_tool_class, type) and issubclass(effective_tool_class, SendMessageHandoff)
                         ):
                             handoff_instance = SendMessageHandoff().create_handoff(recipient_agent=recipient_agent)
                             agent_instance.handoffs.append(handoff_instance)
