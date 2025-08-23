@@ -14,11 +14,16 @@ Agency Swarm implements an **orchestrator pattern** where agents use other agent
 - **Agents act as specialized tools** - Each agent can be thought of as a specialized tool that another agent can invoke
 - **Orchestrator agents coordinate workflows** - Typically, one agent orchestrates the entire workflow by calling multiple other agents and compiling their responses
 
-### Example: Investment Research Platform
+<Tabs defaultValue="v1.x (Latest)">
+<Tab title="v1.x (Latest)">
 
-<CodeGroup>
+<Warning>
+v1.x is currently in **beta preview**. Install with: `pip install -U "agency-swarm>=1.0.0-beta"`
+</Warning>
 
-```python v1.x (Latest)
+## Example: Investment Research Platform
+
+```python
 # Portfolio Manager orchestrates investment research using output_type for structured responses
 portfolio_manager = Agent(
     name="PortfolioManager",
@@ -43,8 +48,47 @@ agency = Agency(
 )
 ```
 
-```python v0.x (Production)
-# Portfolio Manager orchestrates investment research using output_type for structured responses
+In this example, the Portfolio Manager needs responses from both specialists to make an informed investment decision. The RiskAnalyst provides structured risk assessment data using `output_type`, and control always returns to the Portfolio Manager who compiles the final recommendation.
+
+Updated version of the library now also supports `>` and `<` symbols to define communication flow in a more intuitive and readable way.
+
+## Defining Your Own Communication Flows
+
+```python
+from agency_swarm import Agency
+
+# New structure with explicit communication flows
+agency = Agency(
+    ceo, dev,  # Entry points - agents that can communicate with users
+    communication_flows=[
+        (ceo, dev),   # CEO can initiate communication with Developer
+        (ceo > va),   # CEO can initiate communication with Virtual Assistant
+        (va < dev)    # Developer can initiate communication with Virtual Assistant
+        # Or using a single line:
+        # (va < ceo > dev > va),
+    ]
+)
+```
+
+## Communication Flow Patterns
+
+Communication flows are established using explicit tuples in the `communication_flows` parameter. Each tuple defined as either `(sender, receiver)` or `(sender > receiver)` or `(receiver < sender)` defines a directional communication path. Entry points are defined as positional arguments to the Agency constructor.
+
+The CEO can initiate communication and send tasks to the Developer and the Virtual Assistant, and they can respond back in the same thread, but the Developer or VA cannot initiate a conversation and assign tasks to the CEO.
+
+All agents added as entry points can talk to the user. You can add as many levels of communication as you want.
+
+</Tab>
+<Tab title="v0.x (Production)">
+
+<Info>
+v0.x is the **current production version**. Install with: `pip install "agency-swarm<1.0.0"`
+</Info>
+
+## Example: Investment Research Platform
+
+```python
+# Portfolio Manager orchestrates investment research using response_format for structured responses
 portfolio_manager = Agent(
     name="PortfolioManager",
     instructions="Orchestrate investment research by gathering data, delegating analysis, and compiling recommendations",
@@ -65,29 +109,11 @@ agency = Agency([
 ])
 ```
 
-</CodeGroup>
-
-In this example, the Portfolio Manager needs responses from both specialists to make an informed investment decision. The RiskAnalyst provides structured risk assessment data using `output_type`, and control always returns to the Portfolio Manager who compiles the final recommendation.
+In this example, the Portfolio Manager needs responses from both specialists to make an informed investment decision. The RiskAnalyst provides structured risk assessment data using `response_format`, and control always returns to the Portfolio Manager who compiles the final recommendation.
 
 ## Defining Your Own Communication Flows
 
-<CodeGroup>
-
-```python v1.x (Latest)
-from agency_swarm import Agency
-
-# New structure with explicit communication flows
-agency = Agency(
-    ceo, dev,  # Entry points - agents that can communicate with users
-    communication_flows=[
-        (ceo, dev),  # CEO can initiate communication with Developer
-        (ceo, va),   # CEO can initiate communication with Virtual Assistant
-        (dev, va)    # Developer can initiate communication with Virtual Assistant
-    ]
-)
-```
-
-```python v0.x (Production)
+```python
 from agency_swarm import Agency
 
 agency = Agency([
@@ -98,20 +124,19 @@ agency = Agency([
 ])
 ```
 
-</CodeGroup>
+## Communication Flow Patterns
 
-### Communication Flow Patterns
+Communication flows are established from left to right inside the `agency_chart`. Agents in the top-level list can talk to users, while nested lists define agent-to-agent communication paths.
 
-**v1.x (Latest)**: Communication flows are established using explicit tuples in the `communication_flows` parameter. Each tuple `(sender, receiver)` defines a directional communication path. Entry points are defined as positional arguments to the Agency constructor.
-
-**v0.x (Production)**: Communication flows are established from left to right inside the `agency_chart`. Agents in the top-level list can talk to users, while nested lists define agent-to-agent communication paths.
-
-In both versions, the CEO can initiate communication and send tasks to the Developer and the Virtual Assistant, and they can respond back in the same thread, but the Developer or VA cannot initiate a conversation and assign tasks to the CEO.
+The CEO can initiate communication and send tasks to the Developer and the Virtual Assistant, and they can respond back in the same thread, but the Developer or VA cannot initiate a conversation and assign tasks to the CEO.
 
 All agents added as entry points can talk to the user. You can add as many levels of communication as you want.
 
+</Tab>
+</Tabs>
+
 ## Under the Hood
 
-Agency Swarm uses a special `SendMessage` to allow agents to communicate with each other. By defining communication flows, it adds new recipients to the `SendMessage` function. If you'd like to modify the behavior of this tool, you can do so by creating your own [Custom Communication Flows](/additional-features/custom-communication-flows/overview) (**Advanced**).
+Agency Swarm uses a special `SendMessage` tool to allow agents to communicate with each other. By defining communication flows, it adds new recipients to the `SendMessage` function. If you'd like to modify the behavior of this tool, you can do so by creating your own [Custom Communication Flows](/additional-features/custom-communication-flows/overview) (**Advanced**).
 
 It's important to understand that each defined communication flow establishes a distinct context for interaction. When the `SendMessage` tool is invoked by a sender agent (e.g., CEO) to a recipient agent (e.g., Developer), this happens within a dedicated conversation thread specific to that CEO-Developer pair. In this thread, the sender agent effectively takes on the role of a "user," and the recipient agent responds as the "assistant." This ensures that the history and context of communication between any two agents are isolated and maintained separately for each specific flow.
