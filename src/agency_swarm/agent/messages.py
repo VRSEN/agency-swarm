@@ -5,6 +5,7 @@ This module contains functions for processing, sanitizing, and validating
 messages in agent conversations.
 """
 
+import time
 from typing import Any
 
 from openai._utils._logs import logger
@@ -105,3 +106,93 @@ def resolve_token_settings(model_settings_dict: dict[str, Any], agent_name: str 
             model_settings_dict.pop("max_prompt_tokens", None)
 
     return model_settings_dict
+
+
+def adjust_history_for_litellm(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """
+    Litellm requires each tool_use to be immediately followed by a tool_result
+    in the next message. Due to unique approach to send_message tool, we need to adjust
+    the history to ensure this requirement is met.
+    """
+    try:
+        # Index existing outputs by call_id and store their original indices
+        outputs_by_call_id: dict[str, dict[str, Any]] = {}
+        for idx, msg in enumerate(history):
+            if isinstance(msg, dict) and msg.get("type") == "function_call_output":
+                cid = msg.get("call_id")
+                if isinstance(cid, str) and cid:
+                    outputs_by_call_id[cid] = {"item": msg, "idx": idx}
+
+        adjusted: list[dict[str, Any]] = []
+        consumed_call_ids: set[str] = set()
+
+        i = 0
+        n = len(history)
+        while i < n:
+            msg = history[i]
+
+            # Skip original outputs that we will relocate next to their calls
+            if (
+                isinstance(msg, dict)
+                and msg.get("type") == "function_call_output"
+                and isinstance(msg.get("call_id"), str)
+                and msg.get("call_id") in consumed_call_ids
+            ):
+                i += 1
+                continue
+
+            adjusted.append(msg)
+
+            if (
+                isinstance(msg, dict)
+                and msg.get("type") == "function_call"
+                and msg.get("name").startswith("send_message")
+            ):
+                cid = msg.get("call_id")
+                if isinstance(cid, str) and cid:
+                    # If next item is already the correct output, do nothing
+                    if i + 1 < n:
+                        nxt = history[i + 1]
+                        if (
+                            isinstance(nxt, dict)
+                            and nxt.get("type") == "function_call_output"
+                            and nxt.get("call_id") == cid
+                        ):
+                            i += 1  # advance past the adjacent output we just acknowledged
+                            adjusted.append(nxt)
+                            consumed_call_ids.add(cid)
+                            continue
+                    # Otherwise, move an existing matching output if present later
+                    if cid in outputs_by_call_id:
+                        adjusted.append(outputs_by_call_id[cid]["item"])
+                        consumed_call_ids.add(cid)
+                    else:
+                        # Look ahead for the first assistant message with non-empty content
+                        synthesized_output = None
+                        for j in range(i + 1, n):
+                            cand = history[j]
+                            if isinstance(cand, dict) and cand.get("role") == "assistant":
+                                content = cand.get("content")
+                                if isinstance(content, str) and content.strip():
+                                    synthesized_output = content
+                                    break
+                        if synthesized_output is not None:
+                            synthesized_item: dict[str, Any] = {
+                                "type": "function_call_output",
+                                "call_id": cid,
+                                "output": synthesized_output,
+                                # Include agency metadata fields in-memory to mirror original snippet
+                                # (they will be stripped before sending to the model)
+                                "agent": msg.get("agent"),
+                                "callerAgent": msg.get("callerAgent"),
+                                "timestamp": int(time.time() * 1000),
+                            }
+                            if "agent_run_id" in msg:
+                                synthesized_item["agent_run_id"] = msg.get("agent_run_id")
+                            adjusted.append(synthesized_item)
+            i += 1
+
+        return adjusted
+    except Exception:
+        # On any unexpected error, return history unchanged
+        return history

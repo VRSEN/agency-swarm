@@ -59,21 +59,34 @@ class ConsoleEventAdapter:
                     data = event.data
                     data_type = data.type
                     if data_type == "response.output_text.delta":
-                        # Use Live as a context manager for the live region
+                        # Skip empty deltas entirely to avoid rendering blank messages
+                        try:
+                            delta_text = getattr(data, "delta", "") or ""
+                        except Exception:
+                            delta_text = ""
+                        if not str(delta_text).strip():
+                            return
+                        # Use Live as a context manager for the live region only when we have non-empty text
                         if self.message_output is None:
                             self.response_buffer = ""
                             self.message_output = Live("", console=self.console, refresh_per_second=10)
                             self.message_output.__enter__()
-                        self.response_buffer += data.delta
-                        header_text = f"🤖 {agent_name} 🗣️ @{speaking_to}"
-                        md_content = Markdown(self.response_buffer)
-                        self.message_output.update(Group(header_text, md_content))
-                    elif data_type == "response.output_text.done":
+                        self.response_buffer += str(delta_text)
                         if self.message_output is not None:
                             header_text = f"🤖 {agent_name} 🗣️ @{speaking_to}"
                             md_content = Markdown(self.response_buffer)
                             self.message_output.update(Group(header_text, md_content))
-                            self.message_output.__exit__(None, None, None)
+                    elif data_type in ["response.output_text.done", "response.content_part.done"]:
+                        # Only render final content if there's actually something to show
+                        if self.message_output is not None:
+                            if self.response_buffer.strip():
+                                header_text = f"🤖 {agent_name} 🗣️ @{speaking_to}"
+                                md_content = Markdown(self.response_buffer)
+                                self.message_output.update(Group(header_text, md_content))
+                            try:
+                                self.message_output.__exit__(None, None, None)
+                            except Exception:
+                                pass
                         self.message_output = None
                         self.response_buffer = ""
 
@@ -87,6 +100,15 @@ class ConsoleEventAdapter:
                         self.mcp_calls.pop(data.item_id)
 
                     elif data_type == "response.output_item.done":
+                        if self.message_output is not None:
+                            try:
+                                if self.response_buffer.strip():
+                                    header_text = f"🤖 {agent_name} 🗣️ @{speaking_to}"
+                                    md_content = Markdown(self.response_buffer)
+                                    self.message_output.update(Group(header_text, md_content))
+                                self.message_output.__exit__(None, None, None)
+                            except Exception:
+                                pass
                         self.message_output = None
                         item = data.item
                         if hasattr(item, "arguments"):

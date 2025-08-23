@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 
 from agents import (
     InputGuardrailTripwireTriggered,
+    OpenAIChatCompletionsModel,
     OutputGuardrailTripwireTriggered,
     RunConfig,
     RunHooks,
@@ -25,6 +26,7 @@ from agents import (
     TResponseInputItem,
 )
 from agents.exceptions import AgentsException
+from agents.extensions.models.litellm_model import LitellmModel
 from agents.items import ItemHelpers, MessageOutputItem, ToolCallItem
 from agents.stream_events import RunItemStreamEvent
 from openai._utils._logs import logger
@@ -34,6 +36,7 @@ from agency_swarm.context import MasterContext
 from agency_swarm.messages import (
     MessageFilter,
     MessageFormatter,
+    adjust_history_for_litellm,
     ensure_tool_calls_content_safety,
     sanitize_tool_calls_in_history,
 )
@@ -160,9 +163,32 @@ class Execution:
         history_for_runner = ensure_tool_calls_content_safety(history_for_runner)
         # Ensure send_message function_call has a paired output for model input (in-memory only)
         history_for_runner = MessageFormatter.ensure_send_message_pairing(history_for_runner)
+        # LiteLLM-specific requirement: tool_use must be immediately followed by tool_result
+        if self._is_litellm_model():
+            history_for_runner = adjust_history_for_litellm(history_for_runner)
         # Strip agency metadata before sending to OpenAI
         history_for_runner = MessageFormatter.strip_agency_metadata(history_for_runner)
         return history_for_runner
+
+    def _is_litellm_model(self) -> str:
+        """Retrieve model name using the same approach used previously in send_message tool."""
+        try:
+            if hasattr(self.agent, "model"):
+                model_config = getattr(self.agent, "model", "") or ""
+                if isinstance(model_config, LitellmModel):
+                    return True
+                elif isinstance(model_config, OpenAIChatCompletionsModel):
+                    model_name = None
+                    if hasattr(model_config, "model"):
+                        model_name = model_config.model
+                    elif isinstance(model_config, str) and model_config:
+                        model_name = model_config
+                    # Look if model specifies a provider
+                    if model_name and "/" in model_name:
+                        return True
+        except Exception:
+            return False
+        return False
 
     def _add_citations_to_message(
         self,
