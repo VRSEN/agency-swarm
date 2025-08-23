@@ -607,7 +607,7 @@ class Execution:
                             raw = getattr(itm, "raw_item", None)
                             tool_name = getattr(raw, "name", None) if raw is not None else None
 
-                            if itm_type == "tool_call_item" and tool_name == "send_message":
+                            if itm_type == "tool_call_item" and tool_name.startswith("send_message"):
                                 suppress_next_send_message_output = True
                                 continue
 
