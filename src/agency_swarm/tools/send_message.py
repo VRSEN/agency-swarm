@@ -10,11 +10,21 @@ recipient details.
 import json
 import logging
 import time
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
-from agents import FunctionTool, RunContextWrapper, RunItemStreamEvent, ToolCallItem, handoff
+from agents import (
+    FunctionTool,
+    OpenAIChatCompletionsModel,
+    RunContextWrapper,
+    RunItemStreamEvent,
+    ToolCallItem,
+    handoff,
+)
+from agents.extensions.models.litellm_model import LitellmModel
 from openai.types.responses import ResponseFunctionToolCall
 
+from ..agent.messages import adjust_history_for_litellm
 from ..context import MasterContext
 from ..streaming.utils import add_agent_name_to_event
 
@@ -444,7 +454,57 @@ class SendMessageHandoff:
 
     def create_handoff(self, recipient_agent: "Agent"):
         """Create and return the handoff object."""
-        return handoff(
-            agent=recipient_agent,
-            tool_description_override=recipient_agent.description,
-        )
+        # Check if recipient agent uses litellm
+        if self._is_litellm_model(recipient_agent):
+            # Create input filter to adjust history for litellm
+            def litellm_input_filter(handoff_data):
+                # Extract the conversation history
+                input_history = handoff_data.input_history
+
+                # Convert to list if it's a tuple
+                if isinstance(input_history, tuple):
+                    history_list = list(input_history)
+                elif isinstance(input_history, str):
+                    # If it's a string, we can't adjust it easily
+                    return handoff_data
+                else:
+                    history_list = input_history
+
+                # Apply litellm adjustments
+                adjusted_history = adjust_history_for_litellm(history_list)
+
+                # Create new handoff data with adjusted history
+                return replace(handoff_data, input_history=tuple(adjusted_history))
+
+            # Create handoff with litellm input filter
+            return handoff(
+                agent=recipient_agent,
+                tool_description_override=recipient_agent.description,
+                input_filter=litellm_input_filter,
+            )
+        else:
+            # Standard handoff for non-litellm agents
+            return handoff(
+                agent=recipient_agent,
+                tool_description_override=recipient_agent.description,
+            )
+
+    def _is_litellm_model(self, agent: "Agent") -> str:
+        """Retrieve model name using the same approach used previously in send_message tool."""
+        try:
+            if hasattr(self.agent, "model"):
+                model_config = getattr(self.agent, "model", "") or ""
+                if isinstance(model_config, LitellmModel):
+                    return True
+                elif isinstance(model_config, OpenAIChatCompletionsModel):
+                    model_name = None
+                    if hasattr(model_config, "model"):
+                        model_name = model_config.model
+                    elif isinstance(model_config, str) and model_config:
+                        model_name = model_config
+                    # Look if model specifies a provider
+                    if model_name and "/" in model_name:
+                        return True
+        except Exception:
+            return False
+        return False
