@@ -53,47 +53,75 @@ class MessageFormatter:
 
     @staticmethod
     def prepare_history_for_runner(
-        processed_current_message_items: list[TResponseInputItem],
-        agent: "Agent",
-        sender_name: str | None,
-        agency_context: "AgencyContext | None" = None,
-        agent_run_id: str | None = None,
-        parent_run_id: str | None = None,
-    ) -> list[TResponseInputItem]:
-        """Prepare conversation history for the runner."""
-        # Get thread manager from context (required)
-        if not agency_context or not agency_context.thread_manager:
-            raise RuntimeError("Missing ThreadManager in agency context.")
+        messages: list[dict[str, Any]], current_agent: str, sender_name: str | None
+    ) -> list[dict[str, Any]]:
+        """Filter and prepare messages for a specific agent's context.
 
-        thread_manager = agency_context.thread_manager
+        Args:
+            messages: All messages in flat structure
+            current_agent: The agent that will process these messages
+            sender_name: The sender's name (None for user)
 
-        # Add agency metadata to incoming messages
-        messages_to_save: list[TResponseInputItem] = []
-        for msg in processed_current_message_items:
-            formatted_msg = MessageFormatter.add_agency_metadata(
-                msg,
-                agent=agent.name,
-                caller_agent=sender_name,
-                agent_run_id=agent_run_id,
-                parent_run_id=parent_run_id,
-            )
-            messages_to_save.append(formatted_msg)
+        Returns:
+            list[dict[str, Any]]: Filtered messages for the agent pair
+        """
+        # Filter to relevant messages for this agent pair
+        relevant = []
+        for msg in messages:
+            # Include messages where current agent is recipient from sender
+            if msg.get("agent") == current_agent and msg.get("callerAgent") == sender_name:
+                relevant.append(msg)
+            # Include messages where current agent sent to sender (for context)
+            elif msg.get("callerAgent") == current_agent and msg.get("agent") == sender_name:
+                relevant.append(msg)
 
-        # Save messages to flat storage
-        thread_manager.add_messages(messages_to_save)
-        logger.debug(f"Added {len(messages_to_save)} messages to storage.")
+        # Normalize tool-call shape for Responses API compatibility
+        # If a tool-call item carries a nested object under key 'function_call' with
+        # fields {name, arguments}, copy those fields to the top-level keys
+        # ('name', 'arguments') and remove the nested object. This normalization
+        # runs only during history preparation (in-memory), not persistence.
+        normalized: list[dict[str, Any]] = []
+        for msg in relevant:
+            if msg.get("type") == "function_call" and "function_call" in msg:
+                fc = msg.get("function_call") or {}
+                name = fc.get("name")
+                arguments = fc.get("arguments")
+                # Only flatten when top-level fields are missing
+                if name is not None and "name" not in msg:
+                    msg = dict(msg)
+                    msg["name"] = name
+                if arguments is not None and "arguments" not in msg:
+                    msg = dict(msg)
+                    msg["arguments"] = arguments
+                # Remove nested object to avoid API rejection
+                msg.pop("function_call", None)
+            normalized.append(msg)
 
-        # Get relevant conversation history for this agent pair
-        full_history = thread_manager.get_conversation_history(agent.name, sender_name)
+        # Ensure function_call ↔ function_call_output pairing for send_message in prepared history
+        # If a send_message function_call exists without a corresponding output, synthesize a minimal output
+        # for Runner input only. Do not modify persisted storage here.
+        outputs_by_call_id = {m.get("call_id"): m for m in normalized if m.get("type") == "function_call_output"}
+        needs_output: list[tuple[int, dict[str, Any]]] = []
+        for idx, m in enumerate(normalized):
+            if m.get("type") == "function_call" and m.get("name").startswith("send_message"):
+                cid = m.get("call_id")
+                if cid and cid not in outputs_by_call_id:
+                    needs_output.append((idx, m))
 
-        # Prepare history for runner (sanitize and ensure content safety)
-        history_for_runner = MessageFormatter.sanitize_tool_calls_in_history(full_history)
-        history_for_runner = MessageFormatter.ensure_tool_calls_content_safety(history_for_runner)
-        # Ensure send_message function_call has a paired output for model input (in-memory only)
-        history_for_runner = MessageFormatter.ensure_send_message_pairing(history_for_runner)
-        # Strip agency metadata before sending to OpenAI
-        history_for_runner = MessageFormatter.strip_agency_metadata(history_for_runner)
-        return history_for_runner
+        if needs_output:
+            patched = list(normalized)
+            for _idx, fc in needs_output:
+                cid = fc.get("call_id")
+                patched.append(
+                    {
+                        "type": "function_call_output",
+                        "call_id": cid,
+                        "output": "",
+                    }
+                )
+            normalized = patched
+
+        return normalized
 
     @staticmethod
     def strip_agency_metadata(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -129,7 +157,7 @@ class MessageFormatter:
             m
             for m in history
             if m.get("type") == "function_call"
-            and m.get("name") == "send_message"
+            and m.get("name").startswith("send_message")
             and m.get("call_id")
             and m.get("call_id") not in outputs_by_call_id
         ]

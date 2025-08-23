@@ -45,6 +45,7 @@ class SendMessage(FunctionTool):
         self,
         sender_agent: "Agent",
         recipients: dict[str, "Agent"] | None = None,
+        name: str = "send_message",
     ):
         self.sender_agent = sender_agent
         self.recipients = recipients or {}
@@ -104,7 +105,7 @@ class SendMessage(FunctionTool):
         final_description = "".join(description_parts)
 
         super().__init__(
-            name="send_message",
+            name=name,
             description=final_description,
             params_json_schema=params_schema,
             on_invoke_tool=self.on_invoke_tool,
@@ -392,7 +393,7 @@ class SendMessage(FunctionTool):
 
         # Create a proper ResponseFunctionToolCall object that matches the SDK structure
         raw_item = ResponseFunctionToolCall(
-            name="send_message",
+            name=self.name,
             arguments=arguments_json or "",
             call_id=f"call_{uuid.uuid4().hex[:20]}",  # Generate unique call_id
             type="function_call",
@@ -416,7 +417,7 @@ class SendMessage(FunctionTool):
                 "callerAgent": None,
                 # FLAT shape expected by Responses API input items
                 # Top-level name and arguments (no nested function_call object)
-                "name": "send_message",
+                "name": self.name,
                 "arguments": arguments_json or "",
                 "call_id": raw_item.call_id,
                 "id": raw_item.id,

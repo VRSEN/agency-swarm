@@ -13,6 +13,7 @@ from agents import (
     RunResult,
 )
 
+from agency_swarm.agent.agent_flows import AgentFlow
 from agency_swarm.agent_core import AgencyContext, Agent
 from agency_swarm.hooks import PersistenceHooks
 from agency_swarm.streaming.utils import EventStreamMerger
@@ -25,6 +26,14 @@ logger = logging.getLogger(__name__)
 # --- Type Aliases ---
 AgencyChartEntry = Agent | list[Agent]
 AgencyChart = list[AgencyChartEntry]
+
+# Type aliases for agent communication flows
+CommunicationFlowEntry = (
+    tuple[Agent, Agent]  # Basic (sender, receiver) pair
+    | tuple[AgentFlow, type]  # Agent flow with tool class
+    | tuple[Agent, Agent, type]  # Individual (sender, receiver, tool_class)
+    | AgentFlow  # Standalone agent flow (uses default tool)
+)
 
 # --- Import visualization dependencies (for modern HTML visualization only) ---
 
@@ -52,8 +61,8 @@ class Agency:
         shared_instructions (str | None): Optional instructions prepended to every agent's system prompt.
         user_context (dict[str, Any]): A dictionary for shared user-defined context accessible
                                         within `MasterContext` during runs.
-        send_message_tool_class (type | None): Custom SendMessage tool class to use for all agents
-                                               that don't have their own send_message_tool_class set.
+        send_message_tool_class (type | None): Custom SendMessage tool class to use for all agents that don't have
+                                               send_message_tool_class defined on agent or communication flow level.
     """
 
     agents: dict[str, Agent]
@@ -68,10 +77,13 @@ class Agency:
     # Context Factory Pattern - Agency owns agent contexts
     _agent_contexts: dict[str, AgencyContext]  # agent_name -> context mapping
 
+    # Communication tool class mappings for agent-to-agent specific tools
+    _communication_tool_classes: dict[tuple[str, str], type]  # (sender_name, receiver_name) -> tool_class
+
     def __init__(
         self,
         *entry_point_agents: Agent,
-        communication_flows: list[tuple[Agent, Agent]] | None = None,
+        communication_flows: list[CommunicationFlowEntry] | None = None,
         agency_chart: AgencyChart | None = None,
         name: str | None = None,
         shared_instructions: str | None = None,
@@ -91,8 +103,14 @@ class Agency:
 
         Args:
             *entry_point_agents (Agent): Positional Agent instances serving as entry points for external interaction.
-            communication_flows (list[tuple[Agent, Agent]] | None, optional): Allowed agent-to-agent (sender, receiver)
-                message paths. Defaults to None.
+            communication_flows (list[CommunicationFlowEntry] | None, optional):
+                Communication flows supporting multiple formats:
+                - tuple[Agent, Agent]: Basic (sender, receiver) pair
+                - tuple[Agent, Agent, type]: Individual pair with custom send_message_tool_class
+                - AgentFlow: Standalone agent flow using default tool (e.g., agent1 > agent2 > agent3)
+                - tuple[AgentFlow, type]: Agent flow with custom send_message_tool_class
+                  (e.g., agent1 > agent2 > agent3, CustomSendMessageTool)
+                Defaults to None.
             agency_chart (AgencyChart | None, optional): Deprecated structure definition; if provided, it takes
                 precedence over `entry_point_agents` and `communication_flows` (a warning is issued). Defaults to None.
             name (str | None, optional): Display name for the agency.
@@ -175,6 +193,7 @@ class Agency:
         # --- Logic for new vs. old chart/flow definition ---
         _derived_entry_points: list[Agent] = []
         _derived_communication_flows: list[tuple[Agent, Agent]] = []
+        _communication_tool_classes: dict[tuple[str, str], type] = {}  # (sender_name, receiver_name) -> tool_class
 
         if agency_chart is not None:
             warnings.warn(
@@ -191,19 +210,19 @@ class Agency:
                 )
             # Parse the deprecated chart regardless if it was provided
             _derived_entry_points, _derived_communication_flows = self._parse_deprecated_agency_chart(agency_chart)
+            _communication_tool_classes = {}  # No custom tool classes in deprecated format
 
         elif entry_point_agents or communication_flows is not None:
             # Using new method
             _derived_entry_points = list(entry_point_agents)
-            _derived_communication_flows = communication_flows or []
-            # Validate inputs for new method
+            # Validate entry point agents
             if not all(isinstance(ep, Agent) for ep in _derived_entry_points):
                 raise TypeError("All positional arguments (entry points) must be Agent instances.")
-            if not all(
-                isinstance(flow, tuple) and len(flow) == 2 and isinstance(flow[0], Agent) and isinstance(flow[1], Agent)
-                for flow in _derived_communication_flows
-            ):
-                raise TypeError("communication_flows must be a list of (SenderAgent, ReceiverAgent) tuples.")
+
+            # Parse agent communication flows
+            _derived_communication_flows, _communication_tool_classes = self._parse_agent_flows(
+                communication_flows or []
+            )
         else:
             # Neither old nor new method provided chart/flows
             raise ValueError(
@@ -265,6 +284,7 @@ class Agency:
 
         # --- Store communication flows for visualization ---
         self._derived_communication_flows = _derived_communication_flows
+        self._communication_tool_classes = _communication_tool_classes
 
         # --- Configure Agents & Communication ---
         # _configure_agents uses _derived_communication_flows determined above
@@ -318,6 +338,106 @@ class Agency:
             temp_entry_points = list(unique_senders_as_entry_points.values())
 
         return temp_entry_points, temp_comm_flows
+
+    def _parse_agent_flows(
+        self, communication_flows: list[CommunicationFlowEntry]
+    ) -> tuple[list[tuple[Agent, Agent]], dict[tuple[str, str], type]]:
+        """
+        Parse communication flows supporting AgentFlow chains and custom tool classes.
+
+        Returns:
+            tuple: (basic_flows, tool_class_mapping)
+                - basic_flows: List of (sender, receiver) agent pairs
+                - tool_class_mapping: Dict mapping (sender_name, receiver_name) to tool class
+        """
+        basic_flows: list[tuple[Agent, Agent]] = []
+        tool_class_mapping: dict[tuple[str, str], type] = {}
+        seen_flows: set[tuple[str, str]] = set()  # Track already defined flows
+
+        # Capture chain flows ONCE at the start (from any evaluation during flow creation)
+        chain_flows = AgentFlow.get_and_clear_chain_flows()
+        chain_flows_used = False  # Track if we've already used chain flows
+
+        for flow_entry in communication_flows:
+            # Handle AgentFlow objects directly (when using agent1 > agent2 without tuple)
+            if isinstance(flow_entry, AgentFlow):
+                # Convert AgentFlow to (AgentFlow, default_tool) format
+                flow_entry = (flow_entry, None)
+
+            if len(flow_entry) == 2:
+                # Could be (Agent, Agent) or (AgentFlow, tool_class)
+                first, second = flow_entry
+
+                if isinstance(first, Agent) and isinstance(second, Agent):
+                    # Basic (sender, receiver) pair
+                    flow_key = (first.name, second.name)
+                    if flow_key in seen_flows:
+                        raise ValueError(
+                            f"Duplicate communication flow detected: {first.name} -> {second.name}. "
+                            "Each agent-to-agent communication can only be defined once."
+                        )
+                    seen_flows.add(flow_key)
+                    basic_flows.append((first, second))
+
+                elif isinstance(first, AgentFlow) and (isinstance(second, type) or second is None):
+                    # (AgentFlow, tool_class) or standalone AgentFlow - use all flows from the complete chain
+                    tool_class = second  # Can be None for default behavior
+
+                    # Get flows from the AgentFlow itself
+                    direct_flows = first.get_all_flows()
+
+                    # Combine with previously captured chain flows, but only use them once
+                    if not chain_flows_used:
+                        all_flows = direct_flows + [f for f in chain_flows if f not in direct_flows]
+                        chain_flows_used = True
+                    else:
+                        all_flows = direct_flows
+
+                    # Create communication flows with the tool class (if specified)
+                    for sender, receiver in all_flows:
+                        flow_key = (sender.name, receiver.name)
+                        if flow_key in seen_flows:
+                            raise ValueError(
+                                f"Duplicate communication flow detected: {sender.name} -> {receiver.name}. "
+                                "Each agent-to-agent communication can only be defined once."
+                            )
+                        seen_flows.add(flow_key)
+                        basic_flows.append((sender, receiver))
+                        if tool_class is not None:
+                            tool_class_mapping[(sender.name, receiver.name)] = tool_class
+
+                else:
+                    raise TypeError(
+                        f"Invalid communication flow entry: {flow_entry}. "
+                        "Expected (Agent, Agent) or (AgentFlow, tool_class)."
+                    )
+
+            elif len(flow_entry) == 3:
+                # (Agent, Agent, tool_class) format
+                sender, receiver, tool_class = flow_entry
+
+                if not isinstance(sender, Agent) or not isinstance(receiver, Agent):
+                    raise TypeError(
+                        f"Invalid communication flow entry: {flow_entry}. Expected (Agent, Agent, tool_class)."
+                    )
+
+                if not isinstance(tool_class, type):
+                    raise TypeError(f"Invalid tool class in communication flow: {tool_class}. Expected a class type.")
+
+                flow_key = (sender.name, receiver.name)
+                if flow_key in seen_flows:
+                    raise ValueError(
+                        f"Duplicate communication flow detected: {sender.name} -> {receiver.name}. "
+                        "Each agent-to-agent communication can only be defined once."
+                    )
+                seen_flows.add(flow_key)
+                basic_flows.append((sender, receiver))
+                tool_class_mapping[(sender.name, receiver.name)] = tool_class
+
+            else:
+                raise ValueError(f"Invalid communication flow entry: {flow_entry}. Expected 2 or 3 elements.")
+
+        return basic_flows, tool_class_mapping
 
     def _get_caller_directory(self) -> str:
         """Get the directory where this agency is being instantiated (caller's directory)."""
@@ -438,13 +558,34 @@ class Agency:
                 logger.debug(f"Agent '{agent_name}' can send messages to: {allowed_recipients}")
                 for recipient_name in allowed_recipients:
                     recipient_agent = self.agents[recipient_name]
+
+                    # Check if there's a custom tool class for this specific pair
+                    pair_key = (agent_name, recipient_name)
+                    custom_tool_class = self._communication_tool_classes.get(pair_key)
+
+                    # Determine which tool class to use
+                    effective_tool_class = (
+                        custom_tool_class or agent_instance.send_message_tool_class or self.send_message_tool_class
+                    )
+
                     try:
-                        if agent_instance.send_message_tool_class == SendMessageHandoff:
+                        if isinstance(effective_tool_class, SendMessageHandoff) or (
+                            isinstance(effective_tool_class, type)
+                            and issubclass(effective_tool_class, SendMessageHandoff)
+                        ):
                             handoff_instance = SendMessageHandoff().create_handoff(recipient_agent=recipient_agent)
                             agent_instance.handoffs.append(handoff_instance)
                             logger.debug(f"Added SendMessageHandoff for {agent_name} -> {recipient_name}")
                         else:
-                            agent_instance.register_subagent(recipient_agent)
+                            # Register subagent with optional custom tool class
+                            if custom_tool_class:
+                                logger.debug(
+                                    f"Using custom tool class {custom_tool_class.__name__} "
+                                    f"for {agent_name} -> {recipient_name}"
+                                )
+
+                            agent_instance.register_subagent(recipient_agent, send_message_tool_class=custom_tool_class)
+
                     except Exception as e:
                         logger.error(
                             f"Error registering subagent '{recipient_name}' for sender '{agent_name}': {e}",
@@ -878,7 +1019,7 @@ class Agency:
                     tool_name = getattr(tool, "name", getattr(tool, "__name__", str(tool)))
 
                     # Skip send_message tools in visualization
-                    if tool_name == "send_message":
+                    if tool_name.startswith("send_message"):
                         continue
 
                     tool_type = getattr(tool, "type", tool.__class__.__name__)

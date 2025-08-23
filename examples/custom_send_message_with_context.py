@@ -120,6 +120,13 @@ agency = Agency(
 #     send_message_tool_class=SendMessageWithContext,  # Enhanced communication for all agents
 # )
 
+# Option 3: Set custom SendMessage class on communication flow
+# agency = Agency(
+#     coordinator,
+#     communication_flows=[(coordinator > specialist, SendMessageWithContext)],
+#     shared_instructions="Use key decisions to guide analysis tool selection.",
+# )
+
 
 async def main():
     """Demonstrate key decisions being passed via enhanced SendMessage."""
