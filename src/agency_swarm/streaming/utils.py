@@ -215,7 +215,3 @@ class EventStreamMerger:
         """Consume one event from the queue."""
         event = await context.get_event()
         return event  # None is sentinel for end
-
-
-# Global instance for the agency
-event_stream_merger = EventStreamMerger()

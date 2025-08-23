@@ -183,9 +183,6 @@ def handle_deprecated_parameters(kwargs: dict[str, Any]) -> dict[str, Any]:
         for key in keys_to_remove:
             merged_model_settings.pop(key)
 
-        # Resolve token setting conflicts
-        from .messages import resolve_token_settings
-
         resolve_token_settings(merged_model_settings, kwargs.get("name", "unknown"))
 
         # Create new ModelSettings instance from merged dict
@@ -262,3 +259,48 @@ def setup_file_manager(agent: "Agent") -> None:
     """
     agent.file_manager = AgentFileManager(agent)
     agent.attachment_manager = AttachmentManager(agent)
+
+def resolve_token_settings(model_settings_dict: dict[str, Any], agent_name: str = "unknown") -> None:
+    """
+    Resolves conflicts between max_tokens, max_prompt_tokens, and max_completion_tokens.
+
+    Args:
+        model_settings_dict: Dictionary of model settings to modify in place
+        agent_name: Name of the agent for logging purposes
+    """
+    has_max_tokens = "max_tokens" in model_settings_dict
+    has_max_prompt_tokens = "max_prompt_tokens" in model_settings_dict
+    has_max_completion_tokens = "max_completion_tokens" in model_settings_dict
+
+    # Since oai only kept 1 parameter to manage tokens, write one of the existing parameters to max_tokens
+    if has_max_tokens:
+        # If max_tokens is specified, drop prompt and completion tokens
+        if has_max_prompt_tokens or has_max_completion_tokens:
+            logger.info(
+                f"max_tokens is specified, ignoring max_prompt_tokens and max_completion_tokens "
+                f"for agent '{agent_name}'"
+            )
+            model_settings_dict.pop("max_prompt_tokens", None)
+            model_settings_dict.pop("max_completion_tokens", None)
+    else:
+        # If max_tokens is not specified, handle prompt/completion tokens
+        if has_max_prompt_tokens and has_max_completion_tokens:
+            # Both are present, prefer completion tokens and warn
+            model_settings_dict["max_tokens"] = model_settings_dict["max_completion_tokens"]
+            model_settings_dict.pop("max_prompt_tokens", None)
+            model_settings_dict.pop("max_completion_tokens", None)
+            logger.warning(
+                f"Both max_prompt_tokens and max_completion_tokens specified for agent '{agent_name}'. "
+                f"Using max_completion_tokens value ({model_settings_dict['max_tokens']}) "
+                f"for max_tokens and ignoring max_prompt_tokens."
+            )
+        elif has_max_completion_tokens:
+            # Only completion tokens present
+            model_settings_dict["max_tokens"] = model_settings_dict["max_completion_tokens"]
+            model_settings_dict.pop("max_completion_tokens", None)
+        elif has_max_prompt_tokens:
+            # Only prompt tokens present
+            model_settings_dict["max_tokens"] = model_settings_dict["max_prompt_tokens"]
+            model_settings_dict.pop("max_prompt_tokens", None)
+
+    return model_settings_dict

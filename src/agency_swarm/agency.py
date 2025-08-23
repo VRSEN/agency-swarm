@@ -15,7 +15,7 @@ from agents import (
 
 from agency_swarm.agent_core import AgencyContext, Agent
 from agency_swarm.hooks import PersistenceHooks
-from agency_swarm.streaming.utils import event_stream_merger
+from agency_swarm.streaming.utils import EventStreamMerger
 from agency_swarm.thread import ThreadLoadCallback, ThreadManager, ThreadSaveCallback
 from agency_swarm.tools.send_message import SendMessageHandoff
 
@@ -243,6 +243,7 @@ class Agency:
         self.thread_manager = ThreadManager(
             load_threads_callback=final_load_threads_callback, save_threads_callback=final_save_threads_callback
         )
+        self.event_stream_merger = EventStreamMerger()
         self.persistence_hooks = None
         if final_load_threads_callback and final_save_threads_callback:
             self.persistence_hooks = PersistenceHooks(final_load_threads_callback, final_save_threads_callback)
@@ -636,7 +637,7 @@ class Agency:
         effective_hooks = hooks_override or self.persistence_hooks
 
         # Create streaming context for collecting sub-agent events
-        async with event_stream_merger.create_streaming_context() as streaming_context:
+        async with self.event_stream_merger.create_streaming_context() as streaming_context:
             # Add streaming context to the context override
             enhanced_context = context_override or {}
             enhanced_context["_streaming_context"] = streaming_context
@@ -662,7 +663,7 @@ class Agency:
             )
 
             # Merge primary stream with events from sub-agents
-            async for event in event_stream_merger.merge_streams(primary_stream, streaming_context):
+            async for event in self.event_stream_merger.merge_streams(primary_stream, streaming_context):
                 yield event
 
     def _resolve_agent(self, agent_ref: str | Agent) -> Agent:

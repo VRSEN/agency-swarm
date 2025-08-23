@@ -12,9 +12,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from agents import FunctionTool, Tool
-from openai._utils._logs import logger
+import logging
 
 from agency_swarm.tools import BaseTool, ToolFactory
+
+logger = logging.getLogger(__name__)
 
 
 def _attach_one_call_guard(tool: Tool, agent: "Agent") -> None:

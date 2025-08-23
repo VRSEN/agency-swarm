@@ -4,19 +4,19 @@
 - [x] Rename `tools/BaseTool.py` → `tools/base_tool.py`
 - [x] Rename `tools/ToolFactory.py` → `tools/tool_factory.py`
 - [x] Update all imports to reflect renamed files
-- [ ] Standardize logging: use `logging` from stdlib everywhere
-- [ ] Remove non-standard/internal logger imports
+- [x] Standardize logging: use `logging` from stdlib everywhere
+- [x] Remove non-standard/internal logger imports
 
 ## 2) Side Effects & Globals
-- [ ] Remove `.env` loading from `agency_swarm/__init__.py`
+- [x] Remove `.env` loading from `agency_swarm/__init__.py`
 - [ ] Provide explicit bootstrap/init utilities instead
-- [ ] Replace global `event_stream_merger` with injected/factory instance
-- [ ] Refactor `AguiAdapter` to use per-instance run state (no global mutable state)
-- [ ] Avoid client instantiation/logging config at import time
+- [x] Replace global `event_stream_merger` with injected/factory instance
+- [x] Refactor `AguiAdapter` to use per-instance run state (no global mutable state)
+- [x] Avoid client instantiation/logging config at import time
 
 ## 3) Consolidation
-- [ ] Centralize message sanitization/formatting in one shared module
-- [ ] Remove duplicates from `agent/messages.py` and `messages/message_formatter.py`
+- [x] Centralize message sanitization/formatting in one shared module
+- [x] Remove duplicates from `agent/messages.py` and `messages/message_formatter.py`
 - [x] Move `streaming_utils.py` into `utils/` or dedicated `streaming/` subpackage
 - [ ] Relocate `agent_core.py` into `agent/core.py`
 - [ ] Move `thread.py` into `threads/` or `utils/threads.py`

@@ -1,9 +1,11 @@
 import logging
 import os
 import re
+import warnings
 from pathlib import Path
+from typing import Any
 
-from agents import CodeInterpreterTool, FileSearchTool
+from agents import CodeInterpreterTool, FileSearchTool, TResponseInputItem
 from agents.exceptions import AgentsException
 from openai import NotFoundError
 from openai.types.responses.tool_param import CodeInterpreter
@@ -193,6 +195,51 @@ class AttachmentManager:
         """Get the filename of a file by its ID"""
         file_data = self.agent.client_sync.files.retrieve(file_id)
         return file_data.filename
+
+    async def prepare_and_attach_files(
+        self,
+        processed_current_message_items: list[TResponseInputItem],
+        file_ids: list[str] | None,
+        message_files: list[str] | None,
+        kwargs: dict[str, Any],
+    ) -> None:
+        """Handle file attachments for messages."""
+        files_to_attach = file_ids or message_files or kwargs.get("file_ids") or kwargs.get("message_files")
+        if files_to_attach and isinstance(files_to_attach, list):
+            # Warn about deprecated message_files usage
+            if message_files or kwargs.get("message_files"):
+                warnings.warn(
+                    "'message_files' parameter is deprecated. Use 'file_ids' instead.",
+                    DeprecationWarning,
+                    stacklevel=3,
+                )
+
+            # Add file items to the last user message content
+            if processed_current_message_items:
+                last_message = processed_current_message_items[-1]
+                if isinstance(last_message, dict) and last_message.get("role") == "user":
+                    # Ensure content is a list for multi-content messages
+                    current_content = last_message.get("content", "")
+                    if isinstance(current_content, str):
+                        # Convert string content to list format
+                        content_list = [{"type": "input_text", "text": current_content}] if current_content else []
+                    elif isinstance(current_content, list):
+                        content_list = list(current_content)
+                    else:
+                        content_list = []
+
+                    file_content_items = await self.sort_file_attachments(files_to_attach)
+                    content_list.extend(file_content_items)
+
+                    # Update the message content
+                    if content_list != []:
+                        last_message["content"] = content_list
+                else:
+                    logger.warning(
+                        f"Cannot attach files: Last message is not a user message for agent {self.agent.name}"
+                    )
+            else:
+                logger.warning(f"Cannot attach files: No messages to attach to for agent {self.agent.name}")
 
 
 class AgentFileManager:
@@ -574,6 +621,7 @@ class AgentFileManager:
 
         # Try class-relative path first
         class_instructions_path = os.path.normpath(os.path.join(self.get_class_folder_path(), self.agent.instructions))
+        print(f"class_instructions_path: {class_instructions_path}")
         if os.path.isfile(class_instructions_path):
             with open(class_instructions_path) as f:
                 self.agent.instructions = f.read()

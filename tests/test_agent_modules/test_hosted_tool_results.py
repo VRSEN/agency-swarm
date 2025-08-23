@@ -5,6 +5,7 @@ from openai.types.responses.response_output_message import ResponseOutputMessage
 
 from agency_swarm.agent.execution import Execution
 from agency_swarm.agent_core import Agent
+from agency_swarm.messages import MessageFormatter
 
 
 @pytest.mark.asyncio
@@ -33,7 +34,7 @@ async def test_web_search_results_have_metadata():
         MessageOutputItem(agent, assistant_msg),
     ]
 
-    results = exec_handler._extract_hosted_tool_results(run_items)
+    results = MessageFormatter.extract_hosted_tool_results(agent, run_items)
 
     assert results, "Expected hosted tool result"
     result = results[0]
@@ -47,5 +48,5 @@ def test_extract_no_results_returns_empty():
     agent = Agent(name="EmptyAgent", instructions="Test")
     exec_handler = Execution(agent)
 
-    results = exec_handler._extract_hosted_tool_results([])
+    results = MessageFormatter.extract_hosted_tool_results(agent, [])
     assert results == []

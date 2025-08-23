@@ -7,9 +7,8 @@ including both sync and streaming variants.
 
 import asyncio
 import contextlib
-import json
+import logging
 import uuid
-import warnings
 from collections.abc import AsyncGenerator
 from contextlib import AsyncExitStack
 from typing import TYPE_CHECKING, Any
@@ -27,15 +26,12 @@ from agents import (
 from agents.exceptions import AgentsException
 from agents.items import ItemHelpers, MessageOutputItem, ToolCallItem
 from agents.stream_events import RunItemStreamEvent
-from openai._utils._logs import logger
 from openai.types.responses import ResponseFileSearchToolCall, ResponseFunctionWebSearch
 
 from agency_swarm.context import MasterContext
 from agency_swarm.messages import (
     MessageFilter,
     MessageFormatter,
-    ensure_tool_calls_content_safety,
-    sanitize_tool_calls_in_history,
 )
 from agency_swarm.streaming.utils import add_agent_name_to_event
 from agency_swarm.utils.citation_extractor import extract_direct_file_annotations
@@ -44,6 +40,8 @@ if TYPE_CHECKING:
     from agency_swarm.agent_core import AgencyContext, Agent
 
 DEFAULT_MAX_TURNS = 1000000  # Unlimited by default
+
+logger = logging.getLogger(__name__)
 
 
 class Execution:
@@ -75,137 +73,6 @@ class Execution:
                 raise RuntimeError(
                     f"Agent '{self.agent.name}' has invalid Agency instance for agent-to-agent communication."
                 )
-
-    async def _prepare_and_attach_files(
-        self,
-        processed_current_message_items: list[TResponseInputItem],
-        file_ids: list[str] | None,
-        message_files: list[str] | None,
-        kwargs: dict[str, Any],
-    ) -> None:
-        """Handle file attachments for messages."""
-        files_to_attach = file_ids or message_files or kwargs.get("file_ids") or kwargs.get("message_files")
-        if files_to_attach and isinstance(files_to_attach, list):
-            # Warn about deprecated message_files usage
-            if message_files or kwargs.get("message_files"):
-                warnings.warn(
-                    "'message_files' parameter is deprecated. Use 'file_ids' instead.",
-                    DeprecationWarning,
-                    stacklevel=3,
-                )
-
-            # Add file items to the last user message content
-            if processed_current_message_items:
-                last_message = processed_current_message_items[-1]
-                if isinstance(last_message, dict) and last_message.get("role") == "user":
-                    # Ensure content is a list for multi-content messages
-                    current_content = last_message.get("content", "")
-                    if isinstance(current_content, str):
-                        # Convert string content to list format
-                        content_list = [{"type": "input_text", "text": current_content}] if current_content else []
-                    elif isinstance(current_content, list):
-                        content_list = list(current_content)
-                    else:
-                        content_list = []
-
-                    file_content_items = await self.agent.attachment_manager.sort_file_attachments(files_to_attach)
-                    content_list.extend(file_content_items)
-
-                    # Update the message content
-                    if content_list != []:
-                        last_message["content"] = content_list
-                else:
-                    logger.warning(
-                        f"Cannot attach files: Last message is not a user message for agent {self.agent.name}"
-                    )
-            else:
-                logger.warning(f"Cannot attach files: No messages to attach to for agent {self.agent.name}")
-
-    def _prepare_history_for_runner(
-        self,
-        processed_current_message_items: list[TResponseInputItem],
-        sender_name: str | None,
-        agency_context: "AgencyContext | None" = None,
-        agent_run_id: str | None = None,
-        parent_run_id: str | None = None,
-    ) -> list[TResponseInputItem]:
-        """Prepare conversation history for the runner."""
-        # Get thread manager from context (required)
-        if not agency_context or not agency_context.thread_manager:
-            raise RuntimeError(f"Agent '{self.agent.name}' missing ThreadManager in agency context.")
-
-        thread_manager = agency_context.thread_manager
-
-        # Add agency metadata to incoming messages
-        messages_to_save: list[TResponseInputItem] = []
-        for msg in processed_current_message_items:
-            formatted_msg = MessageFormatter.add_agency_metadata(
-                msg,
-                agent=self.agent.name,
-                caller_agent=sender_name,
-                agent_run_id=agent_run_id,
-                parent_run_id=parent_run_id,
-            )
-            messages_to_save.append(formatted_msg)
-
-        # Save messages to flat storage
-        thread_manager.add_messages(messages_to_save)
-        logger.debug(f"Added {len(messages_to_save)} messages to storage.")
-
-        # Get relevant conversation history for this agent pair
-        full_history = thread_manager.get_conversation_history(self.agent.name, sender_name)
-
-        # Prepare history for runner (sanitize and ensure content safety)
-        history_for_runner = sanitize_tool_calls_in_history(full_history)
-        history_for_runner = ensure_tool_calls_content_safety(history_for_runner)
-        # Ensure send_message function_call has a paired output for model input (in-memory only)
-        history_for_runner = MessageFormatter.ensure_send_message_pairing(history_for_runner)
-        # Strip agency metadata before sending to OpenAI
-        history_for_runner = MessageFormatter.strip_agency_metadata(history_for_runner)
-        return history_for_runner
-
-    def _add_citations_to_message(
-        self,
-        run_item_obj: RunItem,
-        item_dict: TResponseInputItem,
-        citations_by_message: dict[str, list[dict]],
-        is_streaming: bool = False,
-    ) -> None:
-        """Add citations to an assistant message if applicable."""
-        if (
-            isinstance(run_item_obj, MessageOutputItem)
-            and hasattr(run_item_obj.raw_item, "id")
-            and run_item_obj.raw_item.id in citations_by_message
-        ):
-            item_dict["citations"] = citations_by_message[run_item_obj.raw_item.id]
-            msg_type = "streamed message" if is_streaming else "message"
-            logger.debug(f"Added {len(item_dict['citations'])} citations to {msg_type} {run_item_obj.raw_item.id}")
-
-    def _extract_handoff_target_name(self, run_item_obj: RunItem) -> str | None:
-        """Extract target agent name from a handoff output item.
-
-        Prefers parsing raw_item.output JSON {"assistant": "AgentName"}. Falls back to
-        run_item_obj.target_agent.name if available.
-        """
-        try:
-            raw = getattr(run_item_obj, "raw_item", None)
-            if isinstance(raw, dict):
-                output_val = raw.get("output")
-                if isinstance(output_val, str):
-                    try:
-                        parsed = json.loads(output_val)
-                        assistant_name = parsed.get("assistant")
-                        if isinstance(assistant_name, str) and assistant_name.strip():
-                            return assistant_name.strip()
-                    except Exception:
-                        pass
-            # Fallback if SDK provides target_agent attribute
-            target_agent = getattr(run_item_obj, "target_agent", None)
-            if target_agent is not None and hasattr(target_agent, "name") and target_agent.name:
-                return target_agent.name
-        except Exception:
-            return None
-        return None
 
     async def get_response(
         self,
@@ -278,14 +145,17 @@ class Execution:
                 raise AgentsException(f"Failed to process input message for agent {self.agent.name}") from e
 
             # Handle file attachments
-            await self._prepare_and_attach_files(processed_current_message_items, file_ids, message_files, kwargs)
+            await self.agent.attachment_manager.prepare_and_attach_files(
+                processed_current_message_items, file_ids, message_files, kwargs
+            )
 
             # Generate a unique run id for this agent execution (non-streaming)
             current_agent_run_id = f"agent_run_{uuid.uuid4().hex}"
 
             # Prepare history for runner, persisting initiating messages with agent_run_id and parent_run_id
-            history_for_runner = self._prepare_history_for_runner(
+            history_for_runner = MessageFormatter.prepare_history_for_runner(
                 processed_current_message_items,
+                self.agent,
                 sender_name,
                 agency_context,
                 agent_run_id=current_agent_run_id,
@@ -369,7 +239,7 @@ class Execution:
                     item_dict = self._run_item_to_tresponse_input_item(run_item_obj)
                     if item_dict:
                         # Add citations if applicable
-                        self._add_citations_to_message(run_item_obj, item_dict, citations_by_message)
+                        MessageFormatter.add_citations_to_message(run_item_obj, item_dict, citations_by_message)
 
                         # Add agency metadata to the response items
                         formatted_item = MessageFormatter.add_agency_metadata(
@@ -388,7 +258,7 @@ class Execution:
 
                         # If this item indicates a handoff, update current agent for subsequent items
                         if getattr(run_item_obj, "type", None) == "handoff_output_item":
-                            target = self._extract_handoff_target_name(run_item_obj)
+                            target = MessageFormatter.extract_handoff_target_name(run_item_obj)
                             if target:
                                 current_agent_name = target
 
@@ -495,14 +365,17 @@ class Execution:
                 raise AgentsException(f"Failed to process input message for agent {self.agent.name}") from e
 
             # Handle file attachments
-            await self._prepare_and_attach_files(processed_current_message_items, file_ids, message_files, kwargs)
+            await self.agent.attachment_manager.prepare_and_attach_files(
+                processed_current_message_items, file_ids, message_files, kwargs
+            )
 
             # Assign a run id for the current active agent in the stream (may change on handoff/new-agent)
             current_agent_run_id = f"agent_run_{uuid.uuid4().hex}"
 
             # Prepare history for runner, persisting initiating messages with agent_run_id and parent_run_id
-            history_for_runner = self._prepare_history_for_runner(
+            history_for_runner = MessageFormatter.prepare_history_for_runner(
                 processed_current_message_items,
+                self.agent,
                 sender_name,
                 agency_context,
                 agent_run_id=current_agent_run_id,
@@ -624,7 +497,7 @@ class Execution:
                             and getattr(event, "name", None) == "handoff_occured"
                         ):
                             item = getattr(event, "item", None)
-                            target = self._extract_handoff_target_name(item) if item is not None else None
+                            target = MessageFormatter.extract_handoff_target_name(item) if item is not None else None
                             if target:
                                 current_stream_agent_name = target
                                 # New agent context after handoff; assign a new run id
@@ -667,7 +540,7 @@ class Execution:
                                 single_citation_map = extract_direct_file_annotations(
                                     [run_item_obj], agent_name=self.agent.name
                                 )
-                                self._add_citations_to_message(
+                                MessageFormatter.add_citations_to_message(
                                     run_item_obj, item_dict, single_citation_map, is_streaming=True
                                 )
 
@@ -731,10 +604,7 @@ class Execution:
         """
         try:
             # Use the SDK's built-in conversion method instead of manual conversion
-            # This fixes the critical bug where ToolCallOutputItem was incorrectly converted
-            # to assistant messages instead of proper function call output format
             converted_item = item.to_input_item()
-
             logger.debug(f"Converting {type(item).__name__} using SDK to_input_item(): {converted_item}")
             return converted_item
 
@@ -765,75 +635,7 @@ class Execution:
             logger.debug("No hosted tool calls found in run_items")
             return []  # Early exit - no hosted tools used
 
-        return self._extract_hosted_tool_results(run_items)
-
-    def _extract_hosted_tool_results(self, run_items: list[RunItem]) -> list[TResponseInputItem]:
-        """
-        Extract hosted tool results (FileSearch, WebSearch) from assistant message content
-        and create special assistant messages to capture search results in conversation history.
-        """
-        synthetic_outputs = []
-
-        # Find hosted tool calls and assistant messages
-        hosted_tool_calls = []
-        assistant_messages = []
-
-        for item in run_items:
-            if isinstance(item, ToolCallItem):
-                if isinstance(item.raw_item, ResponseFileSearchToolCall | ResponseFunctionWebSearch):
-                    hosted_tool_calls.append(item)
-            elif isinstance(item, MessageOutputItem):
-                assistant_messages.append(item)
-
-        # Extract results for each hosted tool call
-        for tool_call_item in hosted_tool_calls:
-            tool_call = tool_call_item.raw_item
-
-            # Capture search results for tool output persistence
-            if isinstance(tool_call, ResponseFileSearchToolCall):
-                search_results_content = f"[SEARCH_RESULTS] Tool Call ID: {tool_call.id}\nTool Type: file_search\n"
-
-                file_count = 0
-
-                # Extract results directly from tool call response
-                if hasattr(tool_call, "results") and tool_call.results:
-                    for result in tool_call.results:
-                        file_count += 1
-                        file_id = getattr(result, "file_id", "unknown")
-                        content_text = getattr(result, "text", "")
-                        search_results_content += f"File {file_count}: {file_id}\nContent: {content_text}\n\n"
-
-                if file_count > 0:
-                    synthetic_outputs.append(
-                        MessageFormatter.add_agency_metadata(
-                            {"role": "user", "content": search_results_content},
-                            agent=self.agent.name,
-                            caller_agent=None,
-                        )
-                    )
-                    logger.debug(f"Created file_search results message for call_id: {tool_call.id}")
-
-            elif isinstance(tool_call, ResponseFunctionWebSearch):
-                search_results_content = f"[WEB_SEARCH_RESULTS] Tool Call ID: {tool_call.id}\nTool Type: web_search\n"
-
-                # Capture FULL search results (not truncated to 500 chars)
-                for msg_item in assistant_messages:
-                    message = msg_item.raw_item
-                    if hasattr(message, "content") and message.content:
-                        for content_item in message.content:
-                            if hasattr(content_item, "text") and content_item.text:
-                                search_results_content += f"Search Results:\n{content_item.text}\n"
-                                synthetic_outputs.append(
-                                    MessageFormatter.add_agency_metadata(
-                                        {"role": "user", "content": search_results_content},
-                                        agent=self.agent.name,
-                                        caller_agent=None,
-                                    )
-                                )
-                                logger.debug(f"Created web_search results message for call_id: {tool_call.id}")
-                                break  # Process only first text content item to avoid duplicates
-
-        return synthetic_outputs
+        return MessageFormatter.extract_hosted_tool_results(self.agent, run_items)
 
     def _prepare_master_context(
         self, context_override: dict[str, Any] | None, agency_context: "AgencyContext | None" = None
