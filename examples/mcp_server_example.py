@@ -20,8 +20,11 @@ import time
 
 from agents import HostedMCPTool
 from agents.mcp.server import MCPServerStdio, MCPServerStdioParams
+from dotenv import load_dotenv
 
 from agency_swarm import Agency, Agent
+
+load_dotenv()
 
 stdio_server = MCPServerStdio(
     MCPServerStdioParams(command="python", args=["./examples/utils/stdio_mcp_server.py"]), cache_tools_list=True
@@ -93,4 +96,4 @@ async def public_mcp_server_example():
 
 if __name__ == "__main__":
     asyncio.run(local_mcp_server_example())
-    asyncio.run(public_mcp_server_example())  # <- comment this out if you want to run local example only
+    # asyncio.run(public_mcp_server_example())  # <- comment this out if you want to run local example only

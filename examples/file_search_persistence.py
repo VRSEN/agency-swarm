@@ -9,6 +9,9 @@ from pathlib import Path
 from typing import Any
 
 from agents import ModelSettings
+from dotenv import load_dotenv
+
+load_dotenv()
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
@@ -33,10 +36,11 @@ def load_thread_data_from_file() -> dict[str, Any]:
     """Load all thread data from a file for hosted tool preservation demo."""
     file_path = PERSISTENCE_DIR / "thread_data.json"
     if not file_path.exists():
-        return {}
+        return []
 
     with open(file_path) as f:
-        all_thread_data: dict[str, Any] = json.load(f)
+        all_thread_data: list[dict[str, Any]] = json.load(f)
+        print(f"all_thread_data: {all_thread_data}")
 
     return all_thread_data
 

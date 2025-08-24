@@ -14,12 +14,15 @@ import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
 from agents import function_tool
+from dotenv import load_dotenv
 
 from agency_swarm import Agency, Agent
 
 # ===== DEBUG CONFIGURATION =====
 # Set to True to see ALL raw events for frontend integration
 DEBUG_MODE = False
+
+load_dotenv()
 
 logging.basicConfig(level=logging.WARNING)
 
@@ -155,7 +158,7 @@ async def main():
 
     await stream_response("What's the weather in London?")
 
-    print("\n🎉 Demo complete! Streaming works perfectly.")
+    print("\n🎉 Demo complete!")
 
 
 if __name__ == "__main__":
