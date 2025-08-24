@@ -4,7 +4,7 @@ from openai.types.responses.response_function_web_search import ActionSearch, Re
 from openai.types.responses.response_output_message import ResponseOutputMessage, ResponseOutputText
 
 from agency_swarm.agent.execution import Execution
-from agency_swarm.agent_core import Agent
+from agency_swarm.agent.core import Agent
 from agency_swarm.messages import MessageFormatter
 
 

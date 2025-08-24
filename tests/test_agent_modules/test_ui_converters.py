@@ -8,7 +8,7 @@ pytest.importorskip("ag_ui")
 from ag_ui.core import AssistantMessage, FunctionCall, ToolCall, ToolMessage, UserMessage
 from pydantic import BaseModel
 
-from agency_swarm.agent_core import Agent
+from agency_swarm.agent.core import Agent
 from agency_swarm.ui.core.agui_adapter import AguiAdapter, serialize
 from agency_swarm.ui.core.console_event_adapter import ConsoleEventAdapter
 

@@ -15,12 +15,12 @@ from agents import CodeInterpreterTool, FileSearchTool
 from agents.exceptions import AgentsException
 from openai import NotFoundError
 
+from agency_swarm.agent.attachment_manager import AttachmentManager
 from agency_swarm.agent.file_manager import (
     CODE_INTERPRETER_FILE_EXTENSIONS,
     FILE_SEARCH_FILE_EXTENSIONS,
     IMAGE_FILE_EXTENSIONS,
     AgentFileManager,
-    AttachmentManager,
 )
 
 

@@ -96,7 +96,7 @@ async def test_get_response_stream_agent_to_agent_communication(
     mock_runner_run_streamed_patch, minimal_agent, mock_thread_manager
 ):
     """Test that get_response_stream works correctly for agent-to-agent communication."""
-    from agency_swarm.agent_core import AgencyContext
+    from agency_swarm.agent.core import AgencyContext
 
     async def mock_stream_wrapper():
         yield {"event": "text", "data": "Hello"}
