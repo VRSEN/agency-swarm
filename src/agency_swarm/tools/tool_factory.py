@@ -269,28 +269,6 @@ class ToolFactory:
         return tools
 
     @staticmethod
-    def validate_openapi_spec(spec: str):
-        spec = json.loads(spec)
-
-        # Validate that 'paths' is present in the spec
-        if "paths" not in spec:
-            raise ValueError("The spec must contain 'paths'.")
-
-        for path, path_item in spec["paths"].items():
-            # Check that each path item is a dictionary
-            if not isinstance(path_item, dict):
-                raise ValueError(f"Path item for '{path}' must be a dictionary.")
-
-            for operation in path_item.values():
-                # Basic validation for each operation
-                if "operationId" not in operation:
-                    raise ValueError("Each operation must contain an 'operationId'.")
-                if "description" not in operation:
-                    raise ValueError("Each operation must contain a 'description'.")
-
-        return spec
-
-    @staticmethod
     def _create_invoke_for_path(path, verb, openapi, tool_schema, function_name, headers=None, params=None, timeout=90):
         """
         Creates a callback function for a specific path and method.

@@ -6,15 +6,15 @@ and OpenAPI schema parsing for the Agent class.
 """
 
 import inspect
+import logging
 import os
 import typing
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from agents import FunctionTool, Tool
-import logging
 
-from agency_swarm.tools import BaseTool, ToolFactory
+from agency_swarm.tools import BaseTool, ToolFactory, validate_openapi_spec
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +74,7 @@ def _attach_one_call_guard(tool: Tool, agent: "Agent") -> None:
 
 
 if TYPE_CHECKING:
-    from agency_swarm.agent_core import Agent
+    from agency_swarm.agent.core import Agent
 
 
 def add_tool(agent: "Agent", tool: Tool) -> None:
@@ -170,7 +170,7 @@ def parse_schemas(agent: "Agent") -> None:
                         openapi_spec = f.read()
                         f.close()  # fix permission error on windows
                     try:
-                        ToolFactory.validate_openapi_spec(openapi_spec)
+                        validate_openapi_spec(openapi_spec)
                     except Exception as e:
                         logger.error("Invalid OpenAPI schema: " + os.path.basename(f_path))
                         raise e

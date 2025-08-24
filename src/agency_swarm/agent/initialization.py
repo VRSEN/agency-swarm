@@ -13,11 +13,12 @@ from typing import TYPE_CHECKING, Any
 
 from agents import Agent as BaseAgent, ModelSettings
 
-from agency_swarm.agent.file_manager import AgentFileManager, AttachmentManager
+from agency_swarm.agent.file_manager import AgentFileManager
+from agency_swarm.agent.attachment_manager import AttachmentManager
 from agency_swarm.tools import BaseTool, ToolFactory
 
 if TYPE_CHECKING:
-    from agency_swarm.agent_core import Agent
+    from agency_swarm.agent.core import Agent
 
 logger = logging.getLogger(__name__)
 

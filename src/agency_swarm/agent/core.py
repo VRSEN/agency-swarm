@@ -20,11 +20,12 @@ from agency_swarm.agent import (
     validate_hosted_tools,
 )
 from agency_swarm.agent.agent_flows import AgentFlow
-from agency_swarm.agent.file_manager import AgentFileManager, AttachmentManager
+from agency_swarm.agent.file_manager import AgentFileManager
+from agency_swarm.agent.attachment_manager import AttachmentManager
 from agency_swarm.agent.tools import _attach_one_call_guard
 from agency_swarm.context import MasterContext
-from agency_swarm.thread import ThreadManager
 from agency_swarm.tools.concurrency import ToolConcurrencyManager
+from agency_swarm.utils.thread import ThreadManager
 
 logger = logging.getLogger(__name__)
 
@@ -399,7 +400,7 @@ class Agent(BaseAgent[MasterContext]):
 
     def _create_minimal_context(self) -> AgencyContext:
         """Create a minimal context for standalone agent usage (no agency)."""
-        from .thread import ThreadManager
+        from ..utils.thread import ThreadManager
 
         return AgencyContext(
             agency_instance=None,
@@ -442,7 +443,7 @@ class Agent(BaseAgent[MasterContext]):
                                agent-to-agent communication. If None, uses agent's default or SendMessage.
         """
         # Import to avoid circular dependency
-        from .agent.subagents import register_subagent as register_subagent_func
+        from .subagents import register_subagent as register_subagent_func
 
         # Use the existing register_subagent function for tool creation
         register_subagent_func(self, recipient_agent, send_message_tool_class)

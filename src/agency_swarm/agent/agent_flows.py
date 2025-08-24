@@ -8,7 +8,7 @@ agent communication chains using the > and < operators.
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from agency_swarm.agent_core import Agent
+    from agency_swarm.agent.core import Agent
 
 
 class AgentFlow:
@@ -32,7 +32,7 @@ class AgentFlow:
     def __gt__(self, other: "Agent") -> "AgentFlow":
         """Allow chaining with > operator: flow > agent"""
         # Import here to avoid circular import
-        from agency_swarm.agent_core import Agent
+        from agency_swarm.agent.core import Agent
 
         if not isinstance(other, Agent):
             raise TypeError("Can only chain to Agent instances")
@@ -49,7 +49,7 @@ class AgentFlow:
     def __lt__(self, other: "Agent") -> "AgentFlow":
         """Allow chaining with < operator: flow < agent (prepends to chain)"""
         # Import here to avoid circular import
-        from agency_swarm.agent_core import Agent
+        from agency_swarm.agent.core import Agent
 
         if not isinstance(other, Agent):
             raise TypeError("Can only chain to Agent instances")

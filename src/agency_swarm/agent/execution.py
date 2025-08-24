@@ -15,7 +15,6 @@ from typing import TYPE_CHECKING, Any
 
 from agents import (
     InputGuardrailTripwireTriggered,
-    OpenAIChatCompletionsModel,
     OutputGuardrailTripwireTriggered,
     RunConfig,
     RunHooks,
@@ -25,7 +24,6 @@ from agents import (
     TResponseInputItem,
 )
 from agents.exceptions import AgentsException
-from agents.extensions.models.litellm_model import LitellmModel
 from agents.items import ItemHelpers, MessageOutputItem, ToolCallItem
 from agents.stream_events import RunItemStreamEvent
 from openai.types.responses import ResponseFileSearchToolCall, ResponseFunctionWebSearch
@@ -34,15 +32,12 @@ from agency_swarm.context import MasterContext
 from agency_swarm.messages import (
     MessageFilter,
     MessageFormatter,
-    adjust_history_for_litellm,
-    ensure_tool_calls_content_safety,
-    sanitize_tool_calls_in_history,
 )
 from agency_swarm.streaming.utils import add_agent_name_to_event
 from agency_swarm.utils.citation_extractor import extract_direct_file_annotations
 
 if TYPE_CHECKING:
-    from agency_swarm.agent_core import AgencyContext, Agent
+    from agency_swarm.agent.core import AgencyContext, Agent
 
 DEFAULT_MAX_TURNS = 1000000  # Unlimited by default
 
@@ -78,160 +73,6 @@ class Execution:
                 raise RuntimeError(
                     f"Agent '{self.agent.name}' has invalid Agency instance for agent-to-agent communication."
                 )
-
-    async def _prepare_and_attach_files(
-        self,
-        processed_current_message_items: list[TResponseInputItem],
-        file_ids: list[str] | None,
-        message_files: list[str] | None,
-        kwargs: dict[str, Any],
-    ) -> None:
-        """Handle file attachments for messages."""
-        files_to_attach = file_ids or message_files or kwargs.get("file_ids") or kwargs.get("message_files")
-        if files_to_attach and isinstance(files_to_attach, list):
-            # Warn about deprecated message_files usage
-            if message_files or kwargs.get("message_files"):
-                warnings.warn(
-                    "'message_files' parameter is deprecated. Use 'file_ids' instead.",
-                    DeprecationWarning,
-                    stacklevel=3,
-                )
-
-            # Add file items to the last user message content
-            if processed_current_message_items:
-                last_message = processed_current_message_items[-1]
-                if isinstance(last_message, dict) and last_message.get("role") == "user":
-                    # Ensure content is a list for multi-content messages
-                    current_content = last_message.get("content", "")
-                    if isinstance(current_content, str):
-                        # Convert string content to list format
-                        content_list = [{"type": "input_text", "text": current_content}] if current_content else []
-                    elif isinstance(current_content, list):
-                        content_list = list(current_content)
-                    else:
-                        content_list = []
-
-                    file_content_items = await self.agent.attachment_manager.sort_file_attachments(files_to_attach)
-                    content_list.extend(file_content_items)
-
-                    # Update the message content
-                    if content_list != []:
-                        last_message["content"] = content_list
-                else:
-                    logger.warning(
-                        f"Cannot attach files: Last message is not a user message for agent {self.agent.name}"
-                    )
-            else:
-                logger.warning(f"Cannot attach files: No messages to attach to for agent {self.agent.name}")
-
-    def _prepare_history_for_runner(
-        self,
-        processed_current_message_items: list[TResponseInputItem],
-        sender_name: str | None,
-        agency_context: "AgencyContext | None" = None,
-        agent_run_id: str | None = None,
-        parent_run_id: str | None = None,
-    ) -> list[TResponseInputItem]:
-        """Prepare conversation history for the runner."""
-        # Get thread manager from context (required)
-        if not agency_context or not agency_context.thread_manager:
-            raise RuntimeError(f"Agent '{self.agent.name}' missing ThreadManager in agency context.")
-
-        thread_manager = agency_context.thread_manager
-
-        # Add agency metadata to incoming messages
-        messages_to_save: list[TResponseInputItem] = []
-        for msg in processed_current_message_items:
-            formatted_msg = MessageFormatter.add_agency_metadata(
-                msg,
-                agent=self.agent.name,
-                caller_agent=sender_name,
-                agent_run_id=agent_run_id,
-                parent_run_id=parent_run_id,
-            )
-            messages_to_save.append(formatted_msg)
-
-        # Save messages to flat storage
-        thread_manager.add_messages(messages_to_save)
-        logger.debug(f"Added {len(messages_to_save)} messages to storage.")
-
-        # Get relevant conversation history for this agent pair
-        full_history = thread_manager.get_conversation_history(self.agent.name, sender_name)
-
-        # Prepare history for runner (sanitize and ensure content safety)
-        history_for_runner = sanitize_tool_calls_in_history(full_history)
-        history_for_runner = ensure_tool_calls_content_safety(history_for_runner)
-        # Ensure send_message function_call has a paired output for model input (in-memory only)
-        history_for_runner = MessageFormatter.ensure_send_message_pairing(history_for_runner)
-        # LiteLLM-specific requirement: tool_use must be immediately followed by tool_result
-        if self._is_litellm_model():
-            history_for_runner = adjust_history_for_litellm(history_for_runner)
-        # Strip agency metadata before sending to OpenAI
-        history_for_runner = MessageFormatter.strip_agency_metadata(history_for_runner)
-        return history_for_runner
-
-    def _is_litellm_model(self) -> str:
-        """Retrieve model name using the same approach used previously in send_message tool."""
-        try:
-            if hasattr(self.agent, "model"):
-                model_config = getattr(self.agent, "model", "") or ""
-                if isinstance(model_config, LitellmModel):
-                    return True
-                elif isinstance(model_config, OpenAIChatCompletionsModel):
-                    model_name = None
-                    if hasattr(model_config, "model"):
-                        model_name = model_config.model
-                    elif isinstance(model_config, str) and model_config:
-                        model_name = model_config
-                    # Look if model specifies a provider
-                    if model_name and "/" in model_name:
-                        return True
-        except Exception:
-            return False
-        return False
-
-    def _add_citations_to_message(
-        self,
-        run_item_obj: RunItem,
-        item_dict: TResponseInputItem,
-        citations_by_message: dict[str, list[dict]],
-        is_streaming: bool = False,
-    ) -> None:
-        """Add citations to an assistant message if applicable."""
-        if (
-            isinstance(run_item_obj, MessageOutputItem)
-            and hasattr(run_item_obj.raw_item, "id")
-            and run_item_obj.raw_item.id in citations_by_message
-        ):
-            item_dict["citations"] = citations_by_message[run_item_obj.raw_item.id]
-            msg_type = "streamed message" if is_streaming else "message"
-            logger.debug(f"Added {len(item_dict['citations'])} citations to {msg_type} {run_item_obj.raw_item.id}")
-
-    def _extract_handoff_target_name(self, run_item_obj: RunItem) -> str | None:
-        """Extract target agent name from a handoff output item.
-
-        Prefers parsing raw_item.output JSON {"assistant": "AgentName"}. Falls back to
-        run_item_obj.target_agent.name if available.
-        """
-        try:
-            raw = getattr(run_item_obj, "raw_item", None)
-            if isinstance(raw, dict):
-                output_val = raw.get("output")
-                if isinstance(output_val, str):
-                    try:
-                        parsed = json.loads(output_val)
-                        assistant_name = parsed.get("assistant")
-                        if isinstance(assistant_name, str) and assistant_name.strip():
-                            return assistant_name.strip()
-                    except Exception:
-                        pass
-            # Fallback if SDK provides target_agent attribute
-            target_agent = getattr(run_item_obj, "target_agent", None)
-            if target_agent is not None and hasattr(target_agent, "name") and target_agent.name:
-                return target_agent.name
-        except Exception:
-            return None
-        return None
 
     async def get_response(
         self,

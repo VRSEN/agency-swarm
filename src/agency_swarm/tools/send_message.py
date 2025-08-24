@@ -24,12 +24,12 @@ from agents import (
 from agents.extensions.models.litellm_model import LitellmModel
 from openai.types.responses import ResponseFunctionToolCall
 
-from ..agent.messages import adjust_history_for_litellm
 from ..context import MasterContext
+from ..messages.message_formatter import MessageFormatter
 from ..streaming.utils import add_agent_name_to_event
 
 if TYPE_CHECKING:
-    from ..agent_core import AgencyContext, Agent
+    from ..agent.core import AgencyContext, Agent
 
 logger = logging.getLogger(__name__)
 
@@ -176,7 +176,7 @@ class SendMessage(FunctionTool):
     def _create_recipient_agency_context(self, wrapper: RunContextWrapper[MasterContext]) -> "AgencyContext":
         """Create agency context for the recipient agent."""
         # Avoid circular import
-        from ..agent_core import AgencyContext
+        from ..agent.core import AgencyContext
 
         # Create a minimal agency context for multi-agent communication
         class MinimalAgency:
@@ -471,7 +471,7 @@ class SendMessageHandoff:
                     history_list = input_history
 
                 # Apply litellm adjustments
-                adjusted_history = adjust_history_for_litellm(history_list)
+                adjusted_history = MessageFormatter.adjust_history_for_litellm(history_list)
 
                 # Create new handoff data with adjusted history
                 return replace(handoff_data, input_history=tuple(adjusted_history))

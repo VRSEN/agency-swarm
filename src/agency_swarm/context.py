@@ -11,8 +11,8 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from .agent_core import Agent
-    from .thread import ThreadManager
+    from .agent.core import Agent
+    from .utils.thread import ThreadManager
 
 logger = logging.getLogger(__name__)
 

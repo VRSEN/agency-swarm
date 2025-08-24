@@ -18,14 +18,14 @@
 - [x] Centralize message sanitization/formatting in one shared module
 - [x] Remove duplicates from `agent/messages.py` and `messages/message_formatter.py`
 - [x] Move `streaming_utils.py` into `utils/` or dedicated `streaming/` subpackage
-- [ ] Relocate `agent_core.py` into `agent/core.py`
-- [ ] Move `thread.py` into `threads/` or `utils/threads.py`
-- [ ] Expand and organize `utils/` to host shared helpers
+- [x] Relocate `agent_core.py` into `agent/core.py`
+- [x] Move `thread.py` into `threads/` or `utils/threads.py`
+- [x] Expand and organize `utils/` to host shared helpers
 
 ## 4) Decomposition
-- [ ] Split `agency.py` into smaller modules (init, persistence, streaming, deprecated APIs)
+- [x] Split `agency.py` into smaller modules (core, setup, responses, completions, helpers, visualization)
 - [ ] Split `agent/execution.py` into validation, file handling, streaming, tool coordination
-- [ ] Split `agent/file_manager.py` into file I/O, attachment validation, vector-store logic
+- [x] Split `agent/file_manager.py` into file I/O, attachment validation, vector-store logic
 - [ ] Split `tools/tool_factory.py` into adapters/builders/invokers with registry pattern
 - [ ] Convert procedural helpers (`register_subagent`, `add_tool`) into `Agent` methods or service classes
 - [ ] Introduce dedicated services:
