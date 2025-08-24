@@ -80,29 +80,9 @@ class Agent(BaseAgent[MasterContext]):
     structure defined by an `AgencyChart`. It relies on the underlying `agents` SDK
     for core execution logic via the `Runner`.
 
-    Attributes:
-        files_folder (str | Path | None): Path to a local folder for managing files associated with this agent.
-                                          If the folder name follows the pattern `*_vs_<vector_store_id>`,
-                                          files uploaded via `upload_file` will also be added to the specified
-                                          OpenAI Vector Store, and a `FileSearchTool` will be automatically added.
-        tools_folder (str | Path | None): Path to a directory containing tool definitions. Tools are automatically
-                                           discovered and loaded from this directory. Supports both BaseTool
-                                           subclasses and FunctionTool instances. Python files starting with
-                                           underscore are ignored.
-        description (str | None): A description of the agent's role or purpose, used when generating
-                                  dynamic `send_message` tools for other agents.
-        output_type (type[Any] | None): The type of the agent's final output.
-        send_message_tool_class (type | None): Custom SendMessage tool class to use for inter-agent communication.
-                                               If None, uses the default SendMessage class.
-        include_search_results (bool): Whether to include search results in FileSearchTool output for
-                                      citation extraction. Defaults to False for backward compatibility.
-        instructions (str | None): Path to a file containing instructions for the agent or a string of instructions.
-        _associated_vector_store_id (str | None): The ID of the OpenAI Vector Store associated via `files_folder`.
-        files_folder_path (Path | None): The resolved absolute path for `files_folder`.
-        _openai_client (AsyncOpenAI | None): Internal reference to the initialized AsyncOpenAI client instance.
-        _openai_client_sync (OpenAI | None): Internal reference to the initialized sync OpenAI client instance.
-        file_manager (AgentFileManager | None): File management utility for handling file uploads and vector stores.
-        attachment_manager (AttachmentManager | None): Helper for managing message attachments.
+    Agents are stateless. Agency-specific resources like thread managers,
+    subagent mappings and shared instructions are provided at runtime via
+    :class:`AgencyContext` from the owning :class:`Agency`.
 
     Note:
         Agents are stateless. Agency-specific resources like thread managers,
@@ -134,38 +114,48 @@ class Agent(BaseAgent[MasterContext]):
         """
         Initializes the Agency Swarm Agent.
 
-        Handles backward compatibility with deprecated parameters from older versions
-        of Agency Swarm and passes relevant parameters to the base `agents.Agent` constructor.
-        Initializes file handling based on `files_folder` and the internal subagent dictionary.
-
-        Args:
-            name (str): The name of the agent. Required.
-            instructions (str | Path | None): Either direct instruction text or a file path. If a path is provided,
-                it is resolved relative to the caller's directory first, then treated as absolute/CWD-relative if
-                found, and the file contents are loaded as the agent's instructions. Otherwise, the string value is
-                used directly.
-            description (str | None): Description of the agent's role; used when generating dynamic `send_message`
-                tools for other agents.
-            model (str | None): The model identifier (e.g., "gpt-4o").
-            model_settings (ModelSettings | None): Model configuration settings.
-            tools (list[Tool] | None): Tool instances for the agent. Defaults to empty list.
-            hooks (RunHooks | None): Hooks for customizing agent execution.
-            output_guardrails (list[OutputGuardrail] | None): Output validation rules.
-            mcp_servers (list[MCPServer] | None): Model Context Protocol servers.
-            files_folder (str | Path | None): Path to a folder of files associated with this agent. If the folder name
-                matches `*_vs_<vector_store_id>`, uploaded files are added to the specified OpenAI Vector Store and a
-                FileSearch tool is added automatically.
-            tools_folder (str | Path | None): Path to a directory containing tool definitions.
-            schemas_folder (str | Path | list[str | Path] | None): Path(s) to directories containing OpenAPI schema
-                files for automatic tool generation.
-            api_headers (dict[str, str] | None): Per-schema headers for OpenAPI schema-generated tools. Format:
-                {"schema_filename.json": {"header_name": "header_value"}}. Defaults to {}.
-            api_params (dict[str, Any] | None): Per-schema parameters for OpenAPI schema-generated tools. Format:
-                {"schema_filename.json": {"param_name": "param_value"}}. Defaults to {}.
-            output_type (type[Any] | None): Type of the agent's final output.
+        ## Agency Swarm-Specific Parameters:
+            name (str): The name of the agent. **Required**.
+            instructions (str | Path | None): System prompt for the agent. Can be provided as a string or a file path.
+            description (str | None): Agent role description for dynamic send_message and handoff tool generation.
+            files_folder (str | Path | None): Path to agent's file directory. If named `*_vs_<vector_store_id>`,
+                files are automatically added to the specified OpenAI Vector Store and FileSearchTool is added.
+            tools_folder (str | Path | None): Directory for automatic tool discovery and loading.
+            schemas_folder (str | Path | list[str | Path] | None): Directories containing OpenAPI schema files
+                for automatic tool generation.
+            api_headers (dict[str, dict[str, str]] | None): Per-schema headers for OpenAPI tools. Format:
+                {"schema_filename.json": {"header_name": "header_value"}}.
+            api_params (dict[str, dict[str, Any]] | None): Per-schema parameters for OpenAPI tools. Format:
+                {"schema_filename.json": {"param_name": "param_value"}}.
             send_message_tool_class (type | None): Custom SendMessage tool class for inter-agent communication.
+                Note: This parameter can be used to define handoffs by using SendMessageHandoff here.
             include_search_results (bool): Include search results in FileSearchTool output for citation extraction.
                 Defaults to False.
+
+        ## OpenAI Agents SDK Parameters:
+            prompt (Prompt | DynamicPromptFunction | None): Dynamic prompt configuration.
+            model (str | Model | None): Model identifier (e.g., "gpt-4o") or Model instance.
+            model_settings (ModelSettings | None): Model configuration (temperature, max_tokens, etc.).
+            tools (list[Tool] | None): Tool instances for the agent. Defaults to empty list.
+            mcp_servers (list[MCPServer] | None): Model Context Protocol servers.
+            mcp_config (MCPConfig | None): MCP server configuration.
+            input_guardrails (list[InputGuardrail] | None): Pre-execution validation checks.
+            output_guardrails (list[OutputGuardrail] | None): Post-execution validation checks.
+            output_type (type[Any] | AgentOutputSchemaBase | None): Type of agent's final output.
+            hooks (AgentHooks | None): Lifecycle event callbacks.
+            tool_use_behavior ("run_llm_again" | "stop_on_first_tool" | list[str] | Callable): Tool usage behavior.
+                How tool usage is handled:
+                • "run_llm_again": The default behavior. Tools are run, and then the LLM receives the results
+                    and gets to respond.
+                • "stop_on_first_tool": The output of the first tool call is used as the final output. This
+                    means that the LLM does not process the result of the tool call.
+                • A list of tool names: The agent will stop running if any of the tools in the list are called.
+                    The final output will be the output of the first matching tool call. The LLM does not
+                    process the result of the tool call.
+                • A function: If you pass a function, it will be called with the run context and the list of
+                    tool results. It must return a `ToolToFinalOutputResult`, which determines whether the tool
+                    calls result in a final output.
+            reset_tool_choice (bool | None): Whether to reset tool choice after tool calls.
         """
         # Handle deprecated parameters
         handle_deprecated_parameters(kwargs)
