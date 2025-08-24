@@ -5,6 +5,7 @@ from typing import Any
 
 from agents import CodeInterpreterTool, FileSearchTool, TResponseInputItem
 from agents.exceptions import AgentsException
+from agents.items import ItemHelpers
 
 from .file_manager import CODE_INTERPRETER_FILE_EXTENSIONS, FILE_SEARCH_FILE_EXTENSIONS, IMAGE_FILE_EXTENSIONS
 
@@ -211,3 +212,26 @@ class AttachmentManager:
                     )
             else:
                 logger.warning(f"Cannot attach files: No messages to attach to for agent {self.agent.name}")
+
+    async def process_message_and_files(
+        self,
+        message: str | list[dict[str, Any]],
+        file_ids: list[str] | None,
+        message_files: list[str] | None,
+        kwargs: dict[str, Any],
+        method_name: str = "execution",
+    ) -> tuple[list[TResponseInputItem], str]:
+        """Process message and handle file attachments. Returns (processed_items, agent_run_id)."""
+        # Process current message items
+        try:
+            processed_current_message_items = ItemHelpers.input_to_new_input_list(message)
+        except Exception as e:
+            logger.error(f"Error processing current input message for {method_name}: {e}", exc_info=True)
+            raise AgentsException(f"Failed to process input message for agent {self.agent.name}") from e
+
+        # Handle file attachments
+        await self.prepare_and_attach_files(
+            processed_current_message_items, file_ids, message_files, kwargs
+        )
+
+        return processed_current_message_items

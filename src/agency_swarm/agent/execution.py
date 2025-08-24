@@ -1,10 +1,3 @@
-"""
-Agent execution functionality.
-
-This module handles the core execution logic for agent responses,
-including both sync and streaming variants.
-"""
-
 import asyncio
 import contextlib
 import logging
@@ -24,11 +17,16 @@ from agents import (
     TResponseInputItem,
 )
 from agents.exceptions import AgentsException
-from agents.items import ItemHelpers, MessageOutputItem, ToolCallItem
+from agents.items import MessageOutputItem
 from agents.stream_events import RunItemStreamEvent
-from openai.types.responses import ResponseFileSearchToolCall, ResponseFunctionWebSearch
 
-from agency_swarm.context import MasterContext
+from agency_swarm.agent.execution_helpers import (
+    cleanup_execution,
+    extract_hosted_tool_results_if_needed,
+    prepare_master_context,
+    run_item_to_tresponse_input_item,
+    setup_execution,
+)
 from agency_swarm.messages import (
     MessageFilter,
     MessageFormatter,
@@ -45,34 +43,8 @@ logger = logging.getLogger(__name__)
 
 
 class Execution:
-    """Handles agent execution logic for responses and streaming."""
-
     def __init__(self, agent: "Agent"):
         self.agent = agent
-
-    def _validate_agency_for_delegation(
-        self, sender_name: str | None, agency_context: "AgencyContext | None" = None
-    ) -> None:
-        """Validate that agency context exists if delegation is needed."""
-        # If this is agent-to-agent communication, we need an agency context with a valid agency
-        if sender_name is not None:
-            if not agency_context:
-                raise RuntimeError(
-                    f"Agent '{self.agent.name}' missing AgencyContext for agent-to-agent communication. "
-                    f"Agent-to-agent communication requires an Agency to manage the context."
-                )
-
-            agency_instance = agency_context.agency_instance
-            if not agency_instance:
-                raise RuntimeError(
-                    f"Agent '{self.agent.name}' received agent-to-agent message from '{sender_name}' but is running "
-                    f"in standalone mode. Agent-to-agent communication requires agents to be managed by an Agency."
-                )
-
-            if not hasattr(agency_instance, "agents"):
-                raise RuntimeError(
-                    f"Agent '{self.agent.name}' has invalid Agency instance for agent-to-agent communication."
-                )
 
     async def get_response(
         self,
@@ -81,19 +53,16 @@ class Execution:
         context_override: dict[str, Any] | None = None,
         hooks_override: RunHooks | None = None,
         run_config_override: RunConfig | None = None,
-        message_files: list[str] | None = None,  # Backward compatibility
-        file_ids: list[str] | None = None,  # New parameter
-        additional_instructions: str | None = None,  # New parameter for v1.x
-        agency_context: "AgencyContext | None" = None,  # New stateless context parameter
+        message_files: list[str] | None = None,
+        file_ids: list[str] | None = None,
+        additional_instructions: str | None = None,
+        agency_context: "AgencyContext | None" = None,
         parent_run_id: str | None = None,  # Parent agent's execution ID
         **kwargs: Any,
     ) -> RunResult:
         """
         Runs the agent's turn in the conversation loop, handling both user and agent-to-agent interactions.
-
-        This method serves as the primary interface for interacting with the agent. It processes
-        the input message, manages conversation history via threads, runs the agent using the
-        `agents.Runner`, validates responses, and persists the results.
+        Runs the agent using the `agents.Runner` to get the response, validate it, and save the results.
 
         Args:
             message: The input message as a string or structured input items list
@@ -111,44 +80,17 @@ class Execution:
             RunResult: The complete execution result
         """
         logger.info(f"Agent '{self.agent.name}' starting run.")
-        # Validate agency instance exists if this is agent-to-agent communication
-        self._validate_agency_for_delegation(sender_name, agency_context)
 
-        # Store original instructions for restoration
-        original_instructions = self.agent.instructions
-
-        # Temporarily modify instructions if additional_instructions provided
-        if additional_instructions:
-            if not isinstance(additional_instructions, str):
-                raise ValueError("additional_instructions must be a string")
-            logger.debug(
-                f"Appending additional instructions to agent '{self.agent.name}': {additional_instructions[:100]}..."
-            )
-            if self.agent.instructions:
-                self.agent.instructions = self.agent.instructions + "\n\n" + additional_instructions
-            else:
-                self.agent.instructions = additional_instructions
+        # Common setup and validation
+        original_instructions = setup_execution(
+            self.agent, sender_name, agency_context, additional_instructions, "get_response"
+        )
 
         try:
-            # Log the conversation context
-            logger.info(f"Agent '{self.agent.name}' handling get_response from sender: {sender_name}")
-
-            processed_current_message_items: list[TResponseInputItem]
-            try:
-                # Note: Agent-to-agent messages are processed as "user" role messages
-                # This is intentional - from the receiving agent's perspective, any
-                # incoming message (whether from a user or another agent) is treated
-                # as a "user" message in the OpenAI conversation format
-                processed_current_message_items = ItemHelpers.input_to_new_input_list(message)
-            except Exception as e:
-                logger.error(f"Error processing current input message for get_response: {e}", exc_info=True)
-                raise AgentsException(f"Failed to process input message for agent {self.agent.name}") from e
-
-            # Handle file attachments
-            await self.agent.attachment_manager.prepare_and_attach_files(
-                processed_current_message_items, file_ids, message_files, kwargs
+            # Process message and file attachments
+            processed_current_message_items = await self.agent.attachment_manager.process_message_and_files(
+                message, file_ids, message_files, kwargs, "get_response"
             )
-
             # Generate a unique run id for this agent execution (non-streaming)
             current_agent_run_id = f"agent_run_{uuid.uuid4().hex}"
 
@@ -175,7 +117,7 @@ class Execution:
                     f"Calling Runner.run for agent '{self.agent.name}' with {len(history_for_runner)} history items."
                 )
                 # Prepare context and store reference for potential sync-back
-                master_context_for_run = self._prepare_master_context(context_override, agency_context)
+                master_context_for_run = prepare_master_context(self.agent, context_override, agency_context)
                 # Store current and parent run IDs for tools to access
                 try:
                     master_context_for_run._current_agent_run_id = current_agent_run_id
@@ -223,7 +165,7 @@ class Execution:
                 logger.debug(f"Preparing to save {len(run_result.new_items)} new items from RunResult")
 
                 # Only extract hosted tool results if hosted tools were actually used
-                hosted_tool_outputs = self._extract_hosted_tool_results_if_needed(run_result.new_items)
+                hosted_tool_outputs = extract_hosted_tool_results_if_needed(self.agent, run_result.new_items)
 
                 # Extract direct file annotations from assistant messages
                 assistant_messages = [item for item in run_result.new_items if isinstance(item, MessageOutputItem)]
@@ -235,10 +177,8 @@ class Execution:
 
                 current_agent_name = self.agent.name
                 for i, run_item_obj in enumerate(run_result.new_items):
-                    # _run_item_to_tresponse_input_item converts RunItem to TResponseInputItem (dict)
-                    item_dict = self._run_item_to_tresponse_input_item(run_item_obj)
+                    item_dict = run_item_to_tresponse_input_item(run_item_obj) # Convert RunItems to TResponseInputItems
                     if item_dict:
-                        # Add citations if applicable
                         MessageFormatter.add_citations_to_message(run_item_obj, item_dict, citations_by_message)
 
                         # Add agency metadata to the response items
@@ -263,12 +203,8 @@ class Execution:
                                 current_agent_name = target
 
                 items_to_save.extend(hosted_tool_outputs)
-
-                # Filter out unwanted message types before saving
-                filtered_items = MessageFilter.filter_messages(items_to_save)
-
-                # Save filtered items to flat storage
-                agency_context.thread_manager.add_messages(filtered_items)
+                filtered_items = MessageFilter.filter_messages(items_to_save) # Filter out unwanted message types
+                agency_context.thread_manager.add_messages(filtered_items) # Save filtered items to flat storage
                 logger.debug(f"Saved {len(filtered_items)} items to storage (filtered from {len(items_to_save)}).")
 
             # Sync back context changes if we used a merged context due to override
@@ -282,8 +218,10 @@ class Execution:
             return run_result
 
         finally:
-            # Always restore original instructions
-            self.agent.instructions = original_instructions
+            # Cleanup execution state
+            cleanup_execution(
+                self.agent, original_instructions, context_override, agency_context, master_context_for_run
+            )
 
     async def get_response_stream(
         self,
@@ -293,9 +231,9 @@ class Execution:
         hooks_override: RunHooks | None = None,
         run_config_override: RunConfig | None = None,
         message_files: list[str] | None = None,  # Backward compatibility
-        file_ids: list[str] | None = None,  # New parameter
-        additional_instructions: str | None = None,  # New parameter for v1.x
-        agency_context: "AgencyContext | None" = None,  # New stateless context parameter
+        file_ids: list[str] | None = None,
+        additional_instructions: str | None = None,
+        agency_context: "AgencyContext | None" = None,
         parent_run_id: str | None = None,  # Parent agent's execution ID
         **kwargs: Any,
     ) -> AsyncGenerator[RunItemStreamEvent]:
@@ -333,42 +271,16 @@ class Execution:
 
         logger.info(f"Agent '{self.agent.name}' starting streaming run.")
 
-        # agency_context is required and contains thread_manager (validated by caller)
-
-        # Validate agency instance exists if this is agent-to-agent communication
-        self._validate_agency_for_delegation(sender_name, agency_context)
-
-        # Store original instructions for restoration
-        original_instructions = self.agent.instructions
-
-        # Temporarily modify instructions if additional_instructions provided
-        if additional_instructions:
-            if not isinstance(additional_instructions, str):
-                raise ValueError("additional_instructions must be a string")
-            logger.debug(
-                f"Appending additional instructions to agent '{self.agent.name}': {additional_instructions[:100]}..."
-            )
-            if self.agent.instructions:
-                self.agent.instructions = self.agent.instructions + "\n\n" + additional_instructions
-            else:
-                self.agent.instructions = additional_instructions
+        # Common setup and validation
+        original_instructions = setup_execution(
+            self.agent, sender_name, agency_context, additional_instructions, "get_response_stream"
+        )
 
         try:
-            # Log the conversation context
-            logger.info(f"Agent '{self.agent.name}' handling get_response_stream from sender: {sender_name}")
-
-            processed_current_message_items: list[TResponseInputItem]
-            try:
-                processed_current_message_items = ItemHelpers.input_to_new_input_list(message)
-            except Exception as e:
-                logger.error(f"Error processing current input message for get_response_stream: {e}", exc_info=True)
-                raise AgentsException(f"Failed to process input message for agent {self.agent.name}") from e
-
-            # Handle file attachments
-            await self.agent.attachment_manager.prepare_and_attach_files(
-                processed_current_message_items, file_ids, message_files, kwargs
+            # Process message and file attachments
+            processed_current_message_items = await self.agent.attachment_manager.process_message_and_files(
+                message, file_ids, message_files, kwargs, "get_response_stream"
             )
-
             # Assign a run id for the current active agent in the stream (may change on handoff/new-agent)
             current_agent_run_id = f"agent_run_{uuid.uuid4().hex}"
 
@@ -403,7 +315,7 @@ class Execution:
             collected_items: list[RunItem] = []
 
             # Prepare context with streaming indicator
-            master_context_for_run = self._prepare_master_context(context_override, agency_context)
+            master_context_for_run = prepare_master_context(self.agent, context_override, agency_context)
             # Set streaming flag so SendMessage knows to use streaming
             master_context_for_run._is_streaming = True
             # Expose the current agent run identifier for tools (e.g., send_message) to tag sentinel/events
@@ -483,7 +395,6 @@ class Execution:
                             if itm_type == "tool_call_item" and tool_name.startswith("send_message"):
                                 suppress_next_send_message_output = True
                                 continue
-
                             if itm_type == "tool_call_output_item" and suppress_next_send_message_output:
                                 suppress_next_send_message_output = False
                                 continue
@@ -513,10 +424,7 @@ class Execution:
                                     current_agent_run_id = event_id
                                 else:
                                     current_agent_run_id = f"agent_run_{uuid.uuid4().hex}"
-                                try:
-                                    master_context_for_run._current_agent_run_id = current_agent_run_id
-                                except Exception:
-                                    pass
+                                master_context_for_run._current_agent_run_id = current_agent_run_id
                     except Exception:
                         pass
 
@@ -532,10 +440,9 @@ class Execution:
                     # Incrementally persist the item to maintain exact stream order in storage
                     if hasattr(event, "item") and event.item and agency_context and agency_context.thread_manager:
                         run_item_obj = event.item
-                        # Convert to input item (dict) using SDK helper
-                        item_dict = self._run_item_to_tresponse_input_item(run_item_obj)
+                        # Convert RunItems to TResponseInputItems
+                        item_dict = run_item_to_tresponse_input_item(run_item_obj)
                         if item_dict:
-                            # Extract citations for this single message if applicable
                             if isinstance(run_item_obj, MessageOutputItem):
                                 single_citation_map = extract_direct_file_annotations(
                                     [run_item_obj], agent_name=self.agent.name
@@ -552,7 +459,6 @@ class Execution:
                                 agent_run_id=current_agent_run_id,
                                 parent_run_id=parent_run_id,
                             )
-
                             # Filter and save immediately
                             if not MessageFilter.should_filter(formatted_item):
                                 agency_context.thread_manager.add_messages([formatted_item])
@@ -573,7 +479,7 @@ class Execution:
             # Save all collected items after streaming completes
             if agency_context and agency_context.thread_manager and collected_items:
                 # Only extract hosted tool results if hosted tools were actually used
-                hosted_tool_outputs = self._extract_hosted_tool_results_if_needed(collected_items)
+                hosted_tool_outputs = extract_hosted_tool_results_if_needed(self.agent, collected_items)
                 if hosted_tool_outputs:
                     # Filter and save any synthetic hosted tool outputs after stream completion
                     filtered_items = MessageFilter.filter_messages(hosted_tool_outputs)
@@ -584,87 +490,9 @@ class Execution:
                             len(filtered_items),
                         )
 
-            # Sync back context changes if we used a merged context due to override
-            if context_override and agency_context and agency_context.agency_instance:
-                base_user_context = getattr(agency_context.agency_instance, "user_context", {})
-                # Sync back any new keys that weren't part of the original override
-                for key, value in master_context_for_run.user_context.items():
-                    if key not in context_override:  # Don't sync back override keys
-                        base_user_context[key] = value
-
         finally:
-            # Always restore original instructions
-            self.agent.instructions = original_instructions
-            self.agent.attachment_manager.attachments_cleanup()
-
-    def _run_item_to_tresponse_input_item(self, item: RunItem) -> TResponseInputItem | None:
-        """Converts a RunItem from a RunResult into TResponseInputItem dictionary format for history.
-        Uses the SDK's built-in to_input_item() method for proper conversion.
-        Returns None if the item should not be directly added to history.
-        """
-        try:
-            # Use the SDK's built-in conversion method instead of manual conversion
-            converted_item = item.to_input_item()
-            logger.debug(f"Converting {type(item).__name__} using SDK to_input_item(): {converted_item}")
-            return converted_item
-
-        except Exception as e:
-            logger.warning(f"Failed to convert {type(item).__name__} using to_input_item(): {e}")
-            return None
-
-    def _extract_hosted_tool_results_if_needed(self, run_items: list[RunItem]) -> list[TResponseInputItem]:
-        """
-        Optimized version that only extracts hosted tool results if hosted tools were actually used.
-        This prevents expensive parsing on every response when no hosted tools exist.
-        """
-        # Quick check: do we have any hosted tool calls?
-        has_hosted_tools = any(
-            isinstance(item, ToolCallItem)
-            and isinstance(item.raw_item, ResponseFileSearchToolCall | ResponseFunctionWebSearch)
-            for item in run_items
-        )
-
-        # Log debugging info for file search
-        for item in run_items:
-            if isinstance(item, ToolCallItem):
-                logger.debug(f"ToolCallItem type: {type(item.raw_item).__name__}")
-                if hasattr(item.raw_item, "name"):
-                    logger.debug(f"  Tool name: {item.raw_item.name}")
-
-        if not has_hosted_tools:
-            logger.debug("No hosted tool calls found in run_items")
-            return []  # Early exit - no hosted tools used
-
-        return MessageFormatter.extract_hosted_tool_results(self.agent, run_items)
-
-    def _prepare_master_context(
-        self, context_override: dict[str, Any] | None, agency_context: "AgencyContext | None" = None
-    ) -> MasterContext:
-        """Constructs the MasterContext for the current run."""
-        if not agency_context or not agency_context.thread_manager:
-            raise RuntimeError("Cannot prepare context: AgencyContext with ThreadManager required.")
-
-        thread_manager = agency_context.thread_manager
-        agency_instance = agency_context.agency_instance
-
-        # For standalone agent usage (no agency), create minimal context
-        if not agency_instance or not hasattr(agency_instance, "agents"):
-            return MasterContext(
-                thread_manager=thread_manager,
-                agents={self.agent.name: self.agent},  # Only include self
-                user_context=context_override or {},
-                current_agent_name=self.agent.name,
-                shared_instructions=agency_context.shared_instructions,
+            # Cleanup execution state
+            cleanup_execution(
+                self.agent, original_instructions, context_override, agency_context, master_context_for_run
             )
-
-        # Use reference for persistence, or create merged copy if override provided
-        base_user_context = getattr(agency_instance, "user_context", {})
-        user_context = {**base_user_context, **context_override} if context_override else base_user_context
-
-        return MasterContext(
-            thread_manager=thread_manager,
-            agents=agency_instance.agents,
-            user_context=user_context,
-            current_agent_name=self.agent.name,
-            shared_instructions=agency_context.shared_instructions,
-        )
+            self.agent.attachment_manager.attachments_cleanup()

@@ -2,13 +2,20 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any
+from collections.abc import Callable
+from datetime import date, datetime
+from decimal import Decimal
+from enum import Enum
+from typing import Any, Literal, Optional, Union
 
 import httpx
 import jsonref
 from agents import FunctionTool
 from agents.run_context import RunContextWrapper
 from agents.strict_schema import ensure_strict_json_schema
+from datamodel_code_generator import DataModelType, PythonVersion
+from datamodel_code_generator.model import get_data_model_types
+from datamodel_code_generator.parser.jsonschema import JsonSchemaParser
 
 logger = logging.getLogger(__name__)
 
@@ -181,3 +188,53 @@ def validate_openapi_spec(spec: str):
                 raise ValueError("Each operation must contain a 'description'.")
 
     return spec
+
+def generate_model_from_schema(schema: dict, class_name: str, strict: bool) -> type:
+    data_model_types = get_data_model_types(
+        DataModelType.PydanticV2BaseModel,
+        target_python_version=PythonVersion.PY_310,
+    )
+    parser = JsonSchemaParser(
+        json.dumps(schema),
+        data_model_type=data_model_types.data_model,
+        data_model_root_type=data_model_types.root_model,
+        data_model_field_type=data_model_types.field_model,
+        data_type_manager_type=data_model_types.data_type_manager,
+        dump_resolve_reference_action=data_model_types.dump_resolve_reference_action,
+        use_schema_description=True,
+        validation=False,
+        class_name=class_name,
+        strip_default_none=strict,
+    )
+    result = parser.parse()
+    imports_str = (
+        "from typing import List, Dict, Any, Optional, Union, Set, Tuple, Literal\nfrom enum import Enum\n"
+    )
+    result = imports_str + result
+    result = result.replace("from __future__ import annotations\n", "")
+    result += f"\n\n{class_name}.model_rebuild(force=True)"
+    exec_globals = {
+        "List": list,
+        "Dict": dict,
+        "Type": type,
+        "Union": Union,
+        "Optional": Optional,
+        "datetime": datetime,
+        "date": date,
+        "Set": set,
+        "Tuple": tuple,
+        "Any": Any,
+        "Callable": Callable,
+        "Decimal": Decimal,
+        "Literal": Literal,
+        "Enum": Enum,
+    }
+    exec(result, exec_globals)
+    model = exec_globals.get(class_name)
+    if not model:
+        raise ValueError(f"Could not extract model from schema {class_name}")
+    try:
+        model.model_rebuild(force=True)
+    except Exception as e:
+        print(f"Warning: Could not rebuild model {class_name} after exec: {e}")
+    return model

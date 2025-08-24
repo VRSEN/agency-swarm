@@ -13,8 +13,8 @@ from typing import TYPE_CHECKING, Any
 
 from agents import Agent as BaseAgent, ModelSettings
 
-from agency_swarm.agent.file_manager import AgentFileManager
 from agency_swarm.agent.attachment_manager import AttachmentManager
+from agency_swarm.agent.file_manager import AgentFileManager
 from agency_swarm.tools import BaseTool, ToolFactory
 
 if TYPE_CHECKING:
@@ -253,6 +253,13 @@ def separate_kwargs(kwargs: dict[str, Any]) -> tuple[dict[str, Any], dict[str, A
             "Handoffs are automatically managed by the Agency based on communication flows. "
             "Use SendMessageHandoff to customize inter-agent communication instead."
         )
+
+    if "handoff_description" in base_agent_params and "description" in current_agent_params:
+        logger.warning(
+            "'description' and 'handoff_description' are both provided. "
+            "Using 'description' instead of 'handoff_description'."
+        )
+        base_agent_params.pop("handoff_description")
 
     return base_agent_params, current_agent_params
 

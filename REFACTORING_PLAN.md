@@ -24,10 +24,10 @@
 
 ## 4) Decomposition
 - [x] Split `agency.py` into smaller modules (core, setup, responses, completions, helpers, visualization)
-- [ ] Split `agent/execution.py` into validation, file handling, streaming, tool coordination
+- [x] Split `agent/execution.py` into validation, file handling, streaming, tool coordination
 - [x] Split `agent/file_manager.py` into file I/O, attachment validation, vector-store logic
-- [ ] Split `tools/tool_factory.py` into adapters/builders/invokers with registry pattern
-- [ ] Convert procedural helpers (`register_subagent`, `add_tool`) into `Agent` methods or service classes
+- [x] Split `tools/tool_factory.py` into adapters/builders/invokers with registry pattern
+- [x] Convert procedural helpers (`register_subagent`, `add_tool`) into `Agent` methods or service classes
 - [ ] Introduce dedicated services:
   - [ ] `ToolLoader`
   - [ ] `SubagentRegistry`
@@ -36,15 +36,9 @@
   - [ ] `VisualizationService`
   - [ ] `ToolAdapterRegistry`
 
-## 5) Boundaries
-- [ ] Reorganize `integrations/` into `integrations/fastapi/` and `integrations/mcp/`
-- [ ] Define stable interfaces/registries for integrations
-- [ ] Move demo launchers out of `ui/` into `examples/` or `demos/`
-- [ ] Keep `ui/` focused only on reusable adapters/components
-
-## 6) Hygiene
+## 5) Hygiene
 - [ ] Shorten long methods (<100 lines where feasible)
-- [ ] Add missing imports (e.g., `import inspect` in `mcp_server.py`)
+- [x] Add missing imports (e.g., `import inspect` in `mcp_server.py`)
 - [ ] Standardize docstrings across public APIs
 - [ ] Enforce type hints across all public classes/functions
 - [ ] Centralize cross-cutting concerns (logging, tracing) via adapters/middleware

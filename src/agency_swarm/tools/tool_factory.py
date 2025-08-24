@@ -5,12 +5,8 @@ import json
 import logging
 import sys
 import uuid
-from collections.abc import Callable
-from datetime import date, datetime
-from decimal import Decimal
-from enum import Enum
 from pathlib import Path
-from typing import Any, Literal, Optional, Union
+from typing import Any
 
 import httpx
 import jsonref
@@ -18,12 +14,10 @@ from agents import FunctionTool
 from agents.exceptions import ModelBehaviorError
 from agents.run_context import RunContextWrapper
 from agents.strict_schema import ensure_strict_json_schema
-from datamodel_code_generator import DataModelType, PythonVersion
-from datamodel_code_generator.model import get_data_model_types
-from datamodel_code_generator.parser.jsonschema import JsonSchemaParser
 from pydantic import BaseModel, ValidationError
 
 from .base_tool import BaseTool
+from .utils import generate_model_from_schema
 
 logger = logging.getLogger(__name__)
 
@@ -80,62 +74,6 @@ class ToolFactory:
         return ToolFactory.from_openai_schema(format_tool_to_openai_function(tool), callback)
 
     @staticmethod
-    def _to_camel_case(s: str) -> str:
-        """Converts a string to CamelCase (PascalCase) for class names."""
-        return "".join(word.capitalize() for word in s.replace("_", " ").split())
-
-    @staticmethod
-    def _generate_model_from_schema(schema: dict, class_name: str, strict: bool) -> type:
-        data_model_types = get_data_model_types(
-            DataModelType.PydanticV2BaseModel,
-            target_python_version=PythonVersion.PY_310,
-        )
-        parser = JsonSchemaParser(
-            json.dumps(schema),
-            data_model_type=data_model_types.data_model,
-            data_model_root_type=data_model_types.root_model,
-            data_model_field_type=data_model_types.field_model,
-            data_type_manager_type=data_model_types.data_type_manager,
-            dump_resolve_reference_action=data_model_types.dump_resolve_reference_action,
-            use_schema_description=True,
-            validation=False,
-            class_name=class_name,
-            strip_default_none=strict,
-        )
-        result = parser.parse()
-        imports_str = (
-            "from typing import List, Dict, Any, Optional, Union, Set, Tuple, Literal\nfrom enum import Enum\n"
-        )
-        result = imports_str + result
-        result = result.replace("from __future__ import annotations\n", "")
-        result += f"\n\n{class_name}.model_rebuild(force=True)"
-        exec_globals = {
-            "List": list,
-            "Dict": dict,
-            "Type": type,
-            "Union": Union,
-            "Optional": Optional,
-            "datetime": datetime,
-            "date": date,
-            "Set": set,
-            "Tuple": tuple,
-            "Any": Any,
-            "Callable": Callable,
-            "Decimal": Decimal,
-            "Literal": Literal,
-            "Enum": Enum,
-        }
-        exec(result, exec_globals)
-        model = exec_globals.get(class_name)
-        if not model:
-            raise ValueError(f"Could not extract model from schema {class_name}")
-        try:
-            model.model_rebuild(force=True)
-        except Exception as e:
-            print(f"Warning: Could not rebuild model {class_name} after exec: {e}")
-        return model
-
-    @staticmethod
     def from_openai_schema(schema: dict[str, Any], function_name: str) -> dict:
         """
         Converts an OpenAI schema into Pydantic models for parameters and request body.
@@ -145,18 +83,18 @@ class ToolFactory:
         param_model = None
         request_body_model = None
         strict = schema.get("strict", False)
-        camel_func_name = ToolFactory._to_camel_case(function_name)
+        camel_func_name = "".join(word.capitalize() for word in function_name.replace("_", " ").split())
 
         # Parameters model
         if "parameters" in schema["properties"] and schema["properties"]["parameters"]:
-            param_model = ToolFactory._generate_model_from_schema(
+            param_model = generate_model_from_schema(
                 schema["properties"]["parameters"], camel_func_name, strict
             )
 
         # Request body model (first schema in any content type)
         request_body_schema = schema.get("properties", {}).get("requestBody", {})
         if request_body_schema:
-            request_body_model = ToolFactory._generate_model_from_schema(request_body_schema, camel_func_name, strict)
+            request_body_model = generate_model_from_schema(request_body_schema, camel_func_name, strict)
 
         return param_model, request_body_model
 
