@@ -20,8 +20,8 @@ from agency_swarm.agent import (
     validate_hosted_tools,
 )
 from agency_swarm.agent.agent_flows import AgentFlow
-from agency_swarm.agent.file_manager import AgentFileManager
 from agency_swarm.agent.attachment_manager import AttachmentManager
+from agency_swarm.agent.file_manager import AgentFileManager
 from agency_swarm.agent.tools import _attach_one_call_guard
 from agency_swarm.context import MasterContext
 from agency_swarm.tools.concurrency import ToolConcurrencyManager

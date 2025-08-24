@@ -8,8 +8,8 @@ from pydantic import Field
 
 from agency_swarm import Agent, BaseTool
 from agency_swarm.context import MasterContext
-from agency_swarm.utils.thread import ThreadManager
 from agency_swarm.tools.send_message import SendMessage
+from agency_swarm.utils.thread import ThreadManager
 
 # --- Fixtures ---
 

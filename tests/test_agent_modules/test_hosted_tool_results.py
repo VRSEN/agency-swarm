@@ -3,7 +3,6 @@ from agents.items import MessageOutputItem, ToolCallItem
 from openai.types.responses.response_function_web_search import ActionSearch, ResponseFunctionWebSearch
 from openai.types.responses.response_output_message import ResponseOutputMessage, ResponseOutputText
 
-from agency_swarm.agent.execution import Execution
 from agency_swarm.agent.core import Agent
 from agency_swarm.messages import MessageFormatter
 
@@ -12,7 +11,6 @@ from agency_swarm.messages import MessageFormatter
 async def test_web_search_results_have_metadata():
     """Verify web search results are returned as user messages with metadata."""
     agent = Agent(name="MetaAgent", instructions="Test")
-    exec_handler = Execution(agent)
 
     web_call = ResponseFunctionWebSearch(
         id="1",
@@ -46,7 +44,6 @@ async def test_web_search_results_have_metadata():
 def test_extract_no_results_returns_empty():
     """Ensure empty list is returned when no hosted tool calls present."""
     agent = Agent(name="EmptyAgent", instructions="Test")
-    exec_handler = Execution(agent)
 
     results = MessageFormatter.extract_hosted_tool_results(agent, [])
     assert results == []
