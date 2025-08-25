@@ -21,12 +21,9 @@ import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
 from agents import ModelSettings, function_tool
-from dotenv import load_dotenv
 
 from agency_swarm import Agency, Agent
 from agency_swarm.tools.send_message import SendMessage
-
-load_dotenv()
 
 # Setup logging
 logging.basicConfig(level=logging.WARNING)

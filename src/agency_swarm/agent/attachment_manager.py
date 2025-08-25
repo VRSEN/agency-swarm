@@ -1,11 +1,14 @@
 import logging
 import warnings
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from agents import CodeInterpreterTool, FileSearchTool, TResponseInputItem
 from agents.exceptions import AgentsException
 from agents.items import ItemHelpers
+
+if TYPE_CHECKING:
+    from agency_swarm import Agent
 
 from .file_manager import CODE_INTERPRETER_FILE_EXTENSIONS, FILE_SEARCH_FILE_EXTENSIONS, IMAGE_FILE_EXTENSIONS
 
@@ -15,7 +18,7 @@ logger = logging.getLogger(__name__)
 class AttachmentManager:
     """Manages temporary file attachments for agent requests."""
 
-    def __init__(self, agent):
+    def __init__(self, agent: "Agent"):
         self.agent = agent
 
         if not agent.file_manager:

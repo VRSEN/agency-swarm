@@ -16,13 +16,9 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 
 import agentops  # noqa: E402
 from agents import ModelSettings, RunContextWrapper, function_tool, trace  # noqa: E402
-from dotenv import load_dotenv
 from langfuse import observe  # noqa: E402
 
 from agency_swarm import Agency, Agent  # noqa: E402
-
-load_dotenv()
-
 
 logging.basicConfig(level=logging.INFO)
 
