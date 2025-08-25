@@ -232,12 +232,15 @@ def make_agui_chat_endpoint(request_model, agency_factory: Callable[..., Agency]
             )
 
             try:
+                # Create AguiAdapter instance with clean state for this request
+                agui_adapter = AguiAdapter()
+
                 # Store in dict format to avoid converting to classes
                 snapshot_messages = [message.model_dump() for message in request.messages]
                 async for event in agency.get_response_stream(
                     message=request.messages[-1].content,
                 ):
-                    agui_event = AguiAdapter.openai_to_agui_events(
+                    agui_event = agui_adapter.openai_to_agui_events(
                         event,
                         run_id=request.run_id,
                     )

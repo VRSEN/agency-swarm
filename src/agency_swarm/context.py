@@ -11,8 +11,8 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from .agent_core import Agent
-    from .thread import ThreadManager
+    from .agent.core import Agent
+    from .utils.thread import ThreadManager
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +30,10 @@ class MasterContext:
     user_context: dict[str, Any] = field(default_factory=dict)
     current_agent_name: str | None = None  # Name of the agent currently executing
     shared_instructions: str | None = None  # Shared instructions from the agency
+    _current_agent_run_id: str | None = None  # Current agent run ID for tracking
+    _parent_run_id: str | None = None  # Parent run ID for nested agent calls
+    _is_streaming: bool = False  # Flag to indicate if we're in streaming mode
+    _streaming_context: Any = None  # Streaming context for passing state
 
     def __post_init__(self):
         """Basic validation after initialization."""

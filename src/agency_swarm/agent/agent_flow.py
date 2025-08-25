@@ -8,7 +8,7 @@ agent communication chains using the > and < operators.
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from agency_swarm.agent_core import Agent
+    from agency_swarm.agent.core import Agent
 
 
 class AgentFlow:
@@ -18,6 +18,9 @@ class AgentFlow:
     This class allows building flows like: agent1 > agent2 > agent3 > agent4 > ...
     Stores the complete chain for proper expansion in Agency parsing.
     """
+
+    # Class variable to track flows during chain evaluation
+    _chain_flows: list[tuple["Agent", "Agent"]] = []
 
     def __init__(self, agents: list["Agent"], _all_flows: list[tuple["Agent", "Agent"]] | None = None):
         self.agents = agents
@@ -32,7 +35,7 @@ class AgentFlow:
     def __gt__(self, other: "Agent") -> "AgentFlow":
         """Allow chaining with > operator: flow > agent"""
         # Import here to avoid circular import
-        from agency_swarm.agent_core import Agent
+        from agency_swarm.agent.core import Agent
 
         if not isinstance(other, Agent):
             raise TypeError("Can only chain to Agent instances")
@@ -49,7 +52,7 @@ class AgentFlow:
     def __lt__(self, other: "Agent") -> "AgentFlow":
         """Allow chaining with < operator: flow < agent (prepends to chain)"""
         # Import here to avoid circular import
-        from agency_swarm.agent_core import Agent
+        from agency_swarm.agent.core import Agent
 
         if not isinstance(other, Agent):
             raise TypeError("Can only chain to Agent instances")
@@ -71,8 +74,6 @@ class AgentFlow:
         """AgentFlow is always truthy, but this is called in comparison chains."""
         # Store this flow globally when it's being evaluated in a comparison chain
         # This is a hack to work around Python's comparison chaining
-        if not hasattr(AgentFlow, "_chain_flows"):
-            AgentFlow._chain_flows = []
 
         # Add all flows from this AgentFlow to the global tracker
         for flow in self._all_flows:
@@ -84,8 +85,6 @@ class AgentFlow:
     @classmethod
     def get_and_clear_chain_flows(cls) -> list[tuple["Agent", "Agent"]]:
         """Get all flows accumulated during chain evaluation and clear the tracker."""
-        if not hasattr(cls, "_chain_flows"):
-            return []
         flows = cls._chain_flows.copy()
         cls._chain_flows.clear()
         return flows

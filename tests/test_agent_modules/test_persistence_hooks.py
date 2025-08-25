@@ -5,7 +5,7 @@ from agents import RunContextWrapper, RunResult
 
 from agency_swarm.context import MasterContext
 from agency_swarm.hooks import PersistenceHooks
-from agency_swarm.thread import ThreadManager
+from agency_swarm.utils.thread import ThreadManager
 
 
 @pytest.fixture

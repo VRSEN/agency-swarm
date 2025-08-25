@@ -15,21 +15,19 @@ from typing import TYPE_CHECKING
 
 from agents import (
     FunctionTool,
-    OpenAIChatCompletionsModel,
     RunContextWrapper,
     RunItemStreamEvent,
     ToolCallItem,
     handoff,
 )
-from agents.extensions.models.litellm_model import LitellmModel
 from openai.types.responses import ResponseFunctionToolCall
 
-from ..agent.messages import adjust_history_for_litellm
 from ..context import MasterContext
+from ..messages.message_formatter import MessageFormatter
 from ..streaming.utils import add_agent_name_to_event
 
 if TYPE_CHECKING:
-    from ..agent_core import AgencyContext, Agent
+    from ..agent.core import AgencyContext, Agent
 
 logger = logging.getLogger(__name__)
 
@@ -106,7 +104,7 @@ class SendMessage(FunctionTool):
         }
 
         # Build description with all recipient roles
-        description_parts = [self.__doc__]
+        description_parts = [self.__doc__ or "Send a message to another agent."]
         if recipient_names:
             description_parts.append("\n\nAvailable recipient agents:")
             for agent in recipient_names:
@@ -152,7 +150,7 @@ class SendMessage(FunctionTool):
         self.params_json_schema["properties"]["recipient_agent"]["enum"] = recipient_enum
 
         # Update description with all recipient roles
-        description_parts = [self.__doc__]
+        description_parts = [self.__doc__ or "Send a message to another agent."]
         if recipient_names:
             description_parts.append("\n\nAvailable recipient agents:")
             for agent in recipient_names:
@@ -176,7 +174,7 @@ class SendMessage(FunctionTool):
     def _create_recipient_agency_context(self, wrapper: RunContextWrapper[MasterContext]) -> "AgencyContext":
         """Create agency context for the recipient agent."""
         # Avoid circular import
-        from ..agent_core import AgencyContext
+        from ..agent.core import AgencyContext
 
         # Create a minimal agency context for multi-agent communication
         class MinimalAgency:
@@ -455,7 +453,7 @@ class SendMessageHandoff:
     def create_handoff(self, recipient_agent: "Agent"):
         """Create and return the handoff object."""
         # Check if recipient agent uses litellm
-        if self._is_litellm_model(recipient_agent):
+        if MessageFormatter._is_litellm_model(recipient_agent):
             # Create input filter to adjust history for litellm
             def litellm_input_filter(handoff_data):
                 # Extract the conversation history
@@ -471,7 +469,7 @@ class SendMessageHandoff:
                     history_list = input_history
 
                 # Apply litellm adjustments
-                adjusted_history = adjust_history_for_litellm(history_list)
+                adjusted_history = MessageFormatter.adjust_history_for_litellm(history_list)
 
                 # Create new handoff data with adjusted history
                 return replace(handoff_data, input_history=tuple(adjusted_history))
@@ -488,23 +486,3 @@ class SendMessageHandoff:
                 agent=recipient_agent,
                 tool_description_override=recipient_agent.description,
             )
-
-    def _is_litellm_model(self, agent: "Agent") -> str:
-        """Retrieve model name using the same approach used previously in send_message tool."""
-        try:
-            if hasattr(self.agent, "model"):
-                model_config = getattr(self.agent, "model", "") or ""
-                if isinstance(model_config, LitellmModel):
-                    return True
-                elif isinstance(model_config, OpenAIChatCompletionsModel):
-                    model_name = None
-                    if hasattr(model_config, "model"):
-                        model_name = model_config.model
-                    elif isinstance(model_config, str) and model_config:
-                        model_name = model_config
-                    # Look if model specifies a provider
-                    if model_name and "/" in model_name:
-                        return True
-        except Exception:
-            return False
-        return False

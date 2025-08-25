@@ -5,14 +5,15 @@ This module handles the registration of subagents and dynamic creation
 of send_message tools for inter-agent communication.
 """
 
+import logging
 from typing import TYPE_CHECKING
-
-from openai._utils._logs import logger
 
 from agency_swarm.tools.send_message import SendMessage
 
+logger = logging.getLogger(__name__)
+
 if TYPE_CHECKING:
-    from agency_swarm.agent_core import Agent
+    from agency_swarm.agent.core import Agent
 
 
 def register_subagent(agent: "Agent", recipient_agent: "Agent", send_message_tool_class: type | None = None) -> None:
@@ -35,7 +36,7 @@ def register_subagent(agent: "Agent", recipient_agent: "Agent", send_message_too
         ValueError: If attempting to register the agent itself as a subagent
     """
     # Import here to avoid circular import
-    from agency_swarm.agent_core import Agent
+    from agency_swarm.agent.core import Agent
 
     if not isinstance(recipient_agent, Agent):
         raise TypeError(

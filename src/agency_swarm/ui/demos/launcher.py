@@ -88,6 +88,10 @@ class TerminalDemoLauncher:
         logger = logging.getLogger(__name__)
 
         recipient_agents = [str(agent.name) for agent in agency_instance.entry_points]
+        if not recipient_agents:
+            raise ValueError(
+                "Cannot start terminal demo without entry points. Please specify at least one entry point."
+            )
 
         chat_id = f"run_demo_chat_{uuid.uuid4()}"
 

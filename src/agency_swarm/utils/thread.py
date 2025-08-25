@@ -1,7 +1,7 @@
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 from agents import TResponseInputItem
 
@@ -72,7 +72,7 @@ class MessageStore:
             messages = filtered
 
         # Sort by timestamp to maintain chronological order
-        messages.sort(key=lambda m: m.get("timestamp", 0))
+        messages.sort(key=lambda m: cast(dict, m).get("timestamp", 0) or 0)  # Ensure numeric return
 
         logger.debug(
             f"Filtered {len(messages)} messages for agent='{agent}', callerAgent='{caller_agent}' "
@@ -101,7 +101,7 @@ class MessageStore:
                 conversation.append(msg)
 
         # Sort by timestamp to maintain chronological order
-        conversation.sort(key=lambda m: m.get("timestamp", 0))
+        conversation.sort(key=lambda m: cast(dict, m).get("timestamp", 0) or 0)  # Ensure numeric return
 
         return conversation
 
@@ -121,9 +121,9 @@ class MessageStore:
 
 # Placeholder imports for callbacks - Update Typehint
 # User's load callback should return flat message list
-ThreadLoadCallback = Callable[[], list[dict[str, Any]]]
+ThreadLoadCallback = Callable[[], list[TResponseInputItem]]
 # User's save callback should accept flat message list
-ThreadSaveCallback = Callable[[list[dict[str, Any]]], None]
+ThreadSaveCallback = Callable[[list[TResponseInputItem]], None]
 
 
 class ThreadManager:
@@ -202,7 +202,8 @@ class ThreadManager:
             list[TResponseInputItem]: All messages in chronological order
         """
         messages = self._store.messages.copy()
-        messages.sort(key=lambda m: m.get("timestamp", 0))
+        # Sort by timestamp to maintain chronological order
+        messages.sort(key=lambda m: cast(dict, m).get("timestamp", 0) or 0)  # Ensure numeric return
         return messages
 
     def _save_messages(self) -> None:

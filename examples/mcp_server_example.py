@@ -93,4 +93,4 @@ async def public_mcp_server_example():
 
 if __name__ == "__main__":
     asyncio.run(local_mcp_server_example())
-    asyncio.run(public_mcp_server_example())  # <- comment this out if you want to run local example only
+    # asyncio.run(public_mcp_server_example())  # <- comment this out if you want to run local example only

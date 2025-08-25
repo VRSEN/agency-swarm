@@ -4,7 +4,7 @@ import pytest
 from agents import RunConfig, RunHooks
 
 from agency_swarm import Agent
-from agency_swarm.agent_core import AgencyContext
+from agency_swarm.agent.core import AgencyContext
 
 # --- Core Response Tests ---
 

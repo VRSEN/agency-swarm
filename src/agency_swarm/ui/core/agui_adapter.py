@@ -70,37 +70,48 @@ def serialize(obj, _visited=None):
 
 class AguiAdapter:
     """
-    Contains class methods for converting between AG-UI and other formats (e.g., OpenAI Agents SDK),
-    as well as helpers for translating events and messages for AG-UI integration.
+    Converts between AG-UI and other formats (e.g., OpenAI Agents SDK),
+    and provides helpers for translating events and messages for AG-UI integration.
+
+    Each instance maintains its own run state to avoid global mutable state issues.
     """
 
-    # Internal per-run bookkeeping so consecutive calls can share context.
-    _RUN_STATE: dict[str, dict[str, Any]] = {}
     _TOOL_TYPES = {"function_call", "file_search_call", "code_interpreter_call"}
     _TOOL_ARG_DELTA_TYPES = {
         "response.function_call_arguments.delta",
         "response.code_interpreter_call_code.delta",
     }
 
-    @classmethod
+    def __init__(self):
+        """Initialize a new AguiAdapter with clean per-instance run state."""
+        # Per-instance run state to avoid global mutable state issues
+        self._run_state: dict[str, dict[str, Any]] = {}
+
+    def clear_run_state(self, run_id: str | None = None) -> None:
+        """Clear run state for a specific run_id or all runs if run_id is None."""
+        if run_id is None:
+            self._run_state.clear()
+        else:
+            self._run_state.pop(run_id, None)
+
     def openai_to_agui_events(
-        cls,
+        self,
         event,
         *,
         run_id: str,
     ) -> BaseEvent | list[BaseEvent] | None:
         """Convert a single OpenAI Agents SDK *StreamEvent* into one or more AG-UI events."""
-        state = cls._RUN_STATE.setdefault(run_id, {"call_id_by_item": {}})
+        state = self._run_state.setdefault(run_id, {"call_id_by_item": {}})
         call_id_by_item: dict[str, str] = state["call_id_by_item"]
 
         logger.debug("Received event: %s", event)
         try:
             converted_event = None
             if getattr(event, "type", None) == "raw_response_event":
-                converted_event = cls._handle_raw_response(event.data, call_id_by_item)
+                converted_event = self._handle_raw_response(event.data, call_id_by_item)
 
             if getattr(event, "type", None) == "run_item_stream_event":
-                converted_event = cls._handle_run_item_stream(event)
+                converted_event = self._handle_run_item_stream(event)
 
             if converted_event is not None:
                 return converted_event
@@ -189,8 +200,7 @@ class AguiAdapter:
 
         return oai_messages
 
-    @staticmethod
-    def _tool_meta(raw_item):
+    def _tool_meta(self, raw_item):
         """Return (call_id, tool_name, arguments) for a tool *raw_item*."""
         item_type = getattr(raw_item, "type", "")
 
@@ -228,8 +238,7 @@ class AguiAdapter:
 
         return None, None, None
 
-    @staticmethod
-    def _snapshot_event(item_id, call_id, tool_name, arguments):
+    def _snapshot_event(self, item_id, call_id, tool_name, arguments):
         """Helper to build a minimal *MessagesSnapshotEvent* for a tool call."""
         return MessagesSnapshotEvent(
             type=EventType.MESSAGES_SNAPSHOT,
@@ -248,8 +257,7 @@ class AguiAdapter:
             ],
         )
 
-    @classmethod
-    def _handle_raw_response(cls, oe: Any, call_id_by_item: dict[str, str]) -> BaseEvent | list[BaseEvent] | None:
+    def _handle_raw_response(self, oe: Any, call_id_by_item: dict[str, str]) -> BaseEvent | list[BaseEvent] | None:
         """Translate low-level `raw_response_event.data` into AG-UI events."""
         etype = getattr(oe, "type", "")
 
@@ -273,8 +281,8 @@ class AguiAdapter:
                 return None
 
             # Tool call start
-            if getattr(raw_item, "type", "") in cls._TOOL_TYPES:
-                call_id, tool_name, _ = cls._tool_meta(raw_item)
+            if getattr(raw_item, "type", "") in self._TOOL_TYPES:
+                call_id, tool_name, _ = self._tool_meta(raw_item)
                 if not call_id:
                     logger.warning("raw_response_event ignored: tool call without call_id")
                     return None
@@ -315,20 +323,20 @@ class AguiAdapter:
                 logger.warning("raw_response_event ignored: message done without id")
                 return None
 
-            if getattr(raw_item, "type", "") in cls._TOOL_TYPES:
-                call_id, tool_name, arguments = cls._tool_meta(raw_item)
+            if getattr(raw_item, "type", "") in self._TOOL_TYPES:
+                call_id, tool_name, arguments = self._tool_meta(raw_item)
                 if not call_id:
                     logger.warning("raw_response_event ignored: tool done without call_id")
                     return None
                 return [
                     ToolCallEndEvent(type=EventType.TOOL_CALL_END, tool_call_id=call_id),
-                    cls._snapshot_event(raw_item.id, call_id, tool_name, arguments),
+                    self._snapshot_event(raw_item.id, call_id, tool_name, arguments),
                 ]
 
         # --- Tool-argument deltas ---------------------------------------------
-        if etype in cls._TOOL_ARG_DELTA_TYPES:
+        if etype in self._TOOL_ARG_DELTA_TYPES:
             item_id = getattr(oe, "item_id", None)
-            call_id = call_id_by_item.get(item_id)
+            call_id = call_id_by_item.get(item_id) if item_id else None
             if call_id:
                 return ToolCallArgsEvent(
                     type=EventType.TOOL_CALL_ARGS,
@@ -341,8 +349,7 @@ class AguiAdapter:
         logger.warning("raw_response_event ignored: no mapping for type %s", etype)
         return None
 
-    @staticmethod
-    def _handle_run_item_stream(event: Any) -> BaseEvent | list[BaseEvent] | None:
+    def _handle_run_item_stream(self, event: Any) -> BaseEvent | list[BaseEvent] | None:
         """Translate higher-level run_item_stream_event into AG-UI events."""
         name = getattr(event, "name", "")
 

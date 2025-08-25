@@ -2,7 +2,7 @@ import pickle
 
 import pytest
 
-from agency_swarm.thread import ThreadManager
+from agency_swarm.utils.thread import ThreadManager
 
 
 def test_thread_manager_initialization():

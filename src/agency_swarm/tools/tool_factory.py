@@ -5,12 +5,8 @@ import json
 import logging
 import sys
 import uuid
-from collections.abc import Callable
-from datetime import date, datetime
-from decimal import Decimal
-from enum import Enum
 from pathlib import Path
-from typing import Any, Literal, Optional, Union
+from typing import Any
 
 import httpx
 import jsonref
@@ -18,27 +14,25 @@ from agents import FunctionTool
 from agents.exceptions import ModelBehaviorError
 from agents.run_context import RunContextWrapper
 from agents.strict_schema import ensure_strict_json_schema
-from datamodel_code_generator import DataModelType, PythonVersion
-from datamodel_code_generator.model import get_data_model_types
-from datamodel_code_generator.parser.jsonschema import JsonSchemaParser
 from pydantic import BaseModel, ValidationError
 
 from .base_tool import BaseTool
+from .utils import generate_model_from_schema
 
 logger = logging.getLogger(__name__)
 
 
 class ToolFactory:
     @staticmethod
-    def from_langchain_tools(tools: list) -> list[type[BaseTool]]:
+    def from_langchain_tools(tools: list) -> list[FunctionTool]:
         """
-        Converts a list of langchain tools into a list of BaseTools.
+        Converts a list of langchain tools into a list of FunctionTools.
 
         Parameters:
             tools: The langchain tools to convert.
 
         Returns:
-            A list of BaseTools.
+            A list of FunctionTools.
         """
         converted_tools = []
         for tool in tools:
@@ -47,15 +41,15 @@ class ToolFactory:
         return converted_tools
 
     @staticmethod
-    def from_langchain_tool(tool) -> type[BaseTool]:
+    def from_langchain_tool(tool) -> FunctionTool:
         """
-        Converts a langchain tool into a BaseTool.
+        Converts a langchain tool into a FunctionTool.
 
         Parameters:
             tool: The langchain tool to convert.
 
         Returns:
-            A BaseTool.
+            A FunctionTool.
         """
         try:
             from langchain_community.tools import format_tool_to_openai_function
@@ -65,78 +59,54 @@ class ToolFactory:
         if inspect.isclass(tool):
             tool = tool()
 
-        def callback(self):
-            tool_input = self.model_dump()
+        # Get the OpenAI function schema from langchain tool
+        openai_schema = format_tool_to_openai_function(tool)
+
+        # Extract tool information
+        tool_name = openai_schema.get("name", tool.__class__.__name__)
+        tool_description = openai_schema.get("description", tool.description)
+
+        # Get parameters schema - this should be the full JSON schema for the FunctionTool
+        parameters_schema = openai_schema.get("parameters", {})
+
+        # Ensure proper schema structure for FunctionTool
+        if not parameters_schema:
+            parameters_schema = {"type": "object", "properties": {}, "required": [], "additionalProperties": False}
+
+        # Create the async callback function
+        async def on_invoke_tool(ctx, input_json: str):
+            """Callback function that executes the langchain tool."""
             try:
-                return tool.run(tool_input)
+                args = json.loads(input_json) if input_json else {}
+            except Exception as e:
+                return f"Error: Invalid JSON input: {e}"
+            try:
+                # Call the langchain tool
+                result = tool.run(args)
+                return str(result)
             except TypeError:
-                if len(tool_input) == 1:
-                    return tool.run(list(tool_input.values())[0])
+                # Try with single argument if direct dict fails (langchain specifics)
+                if len(args) == 1:
+                    result = tool.run(list(args.values())[0])
+                    return str(result)
                 else:
-                    raise TypeError(
-                        f"Error parsing input for tool '{tool.__class__.__name__}' Please open an issue on github."
-                    ) from None
+                    return f"Error parsing input for tool '{tool.__class__.__name__}'. Please open an issue on github."
+            except Exception as e:
+                return f"Error running LangChain tool: {e}"
 
-        return ToolFactory.from_openai_schema(format_tool_to_openai_function(tool), callback)
+        # Create and return the FunctionTool
+        func_tool = FunctionTool(
+            name=tool_name,
+            description=tool_description.strip(),
+            params_json_schema=parameters_schema,
+            on_invoke_tool=on_invoke_tool,
+            strict_json_schema=False,  # LangChain tools are not strict by default
+        )
+
+        return func_tool
 
     @staticmethod
-    def _to_camel_case(s: str) -> str:
-        """Converts a string to CamelCase (PascalCase) for class names."""
-        return "".join(word.capitalize() for word in s.replace("_", " ").split())
-
-    @staticmethod
-    def _generate_model_from_schema(schema: dict, class_name: str, strict: bool) -> type:
-        data_model_types = get_data_model_types(
-            DataModelType.PydanticV2BaseModel,
-            target_python_version=PythonVersion.PY_310,
-        )
-        parser = JsonSchemaParser(
-            json.dumps(schema),
-            data_model_type=data_model_types.data_model,
-            data_model_root_type=data_model_types.root_model,
-            data_model_field_type=data_model_types.field_model,
-            data_type_manager_type=data_model_types.data_type_manager,
-            dump_resolve_reference_action=data_model_types.dump_resolve_reference_action,
-            use_schema_description=True,
-            validation=False,
-            class_name=class_name,
-            strip_default_none=strict,
-        )
-        result = parser.parse()
-        imports_str = (
-            "from typing import List, Dict, Any, Optional, Union, Set, Tuple, Literal\nfrom enum import Enum\n"
-        )
-        result = imports_str + result
-        result = result.replace("from __future__ import annotations\n", "")
-        result += f"\n\n{class_name}.model_rebuild(force=True)"
-        exec_globals = {
-            "List": list,
-            "Dict": dict,
-            "Type": type,
-            "Union": Union,
-            "Optional": Optional,
-            "datetime": datetime,
-            "date": date,
-            "Set": set,
-            "Tuple": tuple,
-            "Any": Any,
-            "Callable": Callable,
-            "Decimal": Decimal,
-            "Literal": Literal,
-            "Enum": Enum,
-        }
-        exec(result, exec_globals)
-        model = exec_globals.get(class_name)
-        if not model:
-            raise ValueError(f"Could not extract model from schema {class_name}")
-        try:
-            model.model_rebuild(force=True)
-        except Exception as e:
-            print(f"Warning: Could not rebuild model {class_name} after exec: {e}")
-        return model
-
-    @staticmethod
-    def from_openai_schema(schema: dict[str, Any], function_name: str) -> dict:
+    def from_openai_schema(schema: dict[str, Any], function_name: str) -> tuple[type | None, type | None]:
         """
         Converts an OpenAI schema into Pydantic models for parameters and request body.
         Returns:
@@ -145,18 +115,16 @@ class ToolFactory:
         param_model = None
         request_body_model = None
         strict = schema.get("strict", False)
-        camel_func_name = ToolFactory._to_camel_case(function_name)
+        camel_func_name = "".join(word.capitalize() for word in function_name.replace("_", " ").split())
 
         # Parameters model
         if "parameters" in schema["properties"] and schema["properties"]["parameters"]:
-            param_model = ToolFactory._generate_model_from_schema(
-                schema["properties"]["parameters"], camel_func_name, strict
-            )
+            param_model = generate_model_from_schema(schema["properties"]["parameters"], camel_func_name, strict)
 
         # Request body model (first schema in any content type)
         request_body_schema = schema.get("properties", {}).get("requestBody", {})
         if request_body_schema:
-            request_body_model = ToolFactory._generate_model_from_schema(request_body_schema, camel_func_name, strict)
+            request_body_model = generate_model_from_schema(request_body_schema, camel_func_name, strict)
 
         return param_model, request_body_model
 
@@ -269,28 +237,6 @@ class ToolFactory:
         return tools
 
     @staticmethod
-    def validate_openapi_spec(spec: str):
-        spec = json.loads(spec)
-
-        # Validate that 'paths' is present in the spec
-        if "paths" not in spec:
-            raise ValueError("The spec must contain 'paths'.")
-
-        for path, path_item in spec["paths"].items():
-            # Check that each path item is a dictionary
-            if not isinstance(path_item, dict):
-                raise ValueError(f"Path item for '{path}' must be a dictionary.")
-
-            for operation in path_item.values():
-                # Basic validation for each operation
-                if "operationId" not in operation:
-                    raise ValueError("Each operation must contain an 'operationId'.")
-                if "description" not in operation:
-                    raise ValueError("Each operation must contain a 'description'.")
-
-        return spec
-
-    @staticmethod
     def _create_invoke_for_path(path, verb, openapi, tool_schema, function_name, headers=None, params=None, timeout=90):
         """
         Creates a callback function for a specific path and method.
@@ -383,7 +329,7 @@ class ToolFactory:
         return _invoke
 
     @staticmethod
-    def from_file(file_path: str) -> type[BaseTool] | FunctionTool:
+    def from_file(file_path: str | Path) -> list[type[BaseTool] | FunctionTool]:
         """Dynamically imports a BaseTool class from a Python file within a package structure.
 
         Parameters:
@@ -393,7 +339,7 @@ class ToolFactory:
             The imported BaseTool class.
         """
         file = Path(file_path)
-        tools = []
+        tools: list[type[BaseTool] | FunctionTool] = []
 
         module_name = file.stem
         try:
@@ -441,7 +387,7 @@ class ToolFactory:
         Returns:
             A JSON string representing the OpenAPI schema with all the tools combined as separate endpoints.
         """
-        schema = {
+        schema: dict[str, Any] = {
             "openapi": "3.1.0",
             "info": {"title": title, "description": description, "version": "v1.0.0"},
             "servers": [
@@ -457,7 +403,7 @@ class ToolFactory:
         }
 
         for tool in tools:
-            if issubclass(tool, BaseTool):
+            if inspect.isclass(tool) and issubclass(tool, BaseTool):
                 openai_schema = tool.openai_schema
                 print(openai_schema)
             elif isinstance(tool, FunctionTool):
@@ -483,11 +429,12 @@ class ToolFactory:
                 }
             }
 
-            schema["components"]["schemas"].update(defs)
+            if isinstance(defs, dict):
+                schema["components"]["schemas"].update(defs)
 
-        schema = json.dumps(schema, indent=2).replace("#/$defs/", "#/components/schemas/")
+        schema_str = json.dumps(schema, indent=2).replace("#/$defs/", "#/components/schemas/")
 
-        return schema
+        return schema_str
 
     @staticmethod
     def adapt_base_tool(base_tool: type[BaseTool]) -> FunctionTool:
@@ -544,8 +491,7 @@ class ToolFactory:
             strict_json_schema=base_tool.ToolConfig.strict,
         )
         # Propagate one_call_at_a_time from BaseTool.ToolConfig to the FunctionTool instance
-        try:
-            func_tool.one_call_at_a_time = bool(getattr(base_tool.ToolConfig, "one_call_at_a_time", False))
-        except Exception:
-            pass
+        # Store as a private attribute since FunctionTool doesn't have this field
+        if hasattr(base_tool.ToolConfig, "one_call_at_a_time"):
+            func_tool.one_call_at_a_time = bool(base_tool.ToolConfig.one_call_at_a_time)  # type: ignore[attr-defined]
         return func_tool
