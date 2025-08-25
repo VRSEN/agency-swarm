@@ -364,6 +364,23 @@ class Execution:
 
             worker_task = asyncio.create_task(_streaming_worker())
 
+            # Forward sub-agent events from streaming_context
+            async def _forward_subagent_events():
+                """Forward events from sub-agents via streaming_context to main queue."""
+                while True:
+                    try:
+                        sub_event = await streaming_context.get_event()
+                        if sub_event is None:
+                            break
+                        # Mark forwarded events so we don't let them change current_stream_agent_name
+                        if hasattr(sub_event, "__dict__"):
+                            sub_event._forwarded = True
+                        await event_queue.put(sub_event)
+                    except Exception:
+                        break
+
+            forward_task = asyncio.create_task(_forward_subagent_events())
+
             try:
                 current_stream_agent_name = self.agent.name
                 while True:
@@ -388,43 +405,56 @@ class Execution:
                         collected_items.append(event.item)
 
                     # Update active agent on handoff events or explicit agent update events
-                    try:
-                        if (
-                            getattr(event, "type", None) == "run_item_stream_event"
-                            and getattr(event, "name", None) == "handoff_occured"
-                        ):
-                            item = getattr(event, "item", None)
-                            target = MessageFormatter.extract_handoff_target_name(item) if item is not None else None
-                            if target:
-                                current_stream_agent_name = target
-                                # New agent context after handoff; assign a new run id
-                                current_agent_run_id = f"agent_run_{uuid.uuid4().hex}"
-                        elif getattr(event, "type", None) == "agent_updated_stream_event":
-                            new_agent = getattr(event, "new_agent", None)
-                            if new_agent is not None and hasattr(new_agent, "name") and new_agent.name:
-                                current_stream_agent_name = new_agent.name
-                                # For each new agent event, generate a stable id for this instance
-                                # Prefer the event id if present to keep determinism across layers
-                                event_id = getattr(event, "id", None)
-                                if isinstance(event_id, str) and event_id:
-                                    current_agent_run_id = event_id
-                                else:
+                    # But don't let forwarded events from sub-agents change the main stream's agent
+                    if not getattr(event, "_forwarded", False):
+                        try:
+                            if (
+                                getattr(event, "type", None) == "run_item_stream_event"
+                                and getattr(event, "name", None) == "handoff_occured"
+                            ):
+                                item = getattr(event, "item", None)
+                                target = (
+                                    MessageFormatter.extract_handoff_target_name(item) if item is not None else None
+                                )
+                                if target:
+                                    current_stream_agent_name = target
+                                    # New agent context after handoff; assign a new run id
                                     current_agent_run_id = f"agent_run_{uuid.uuid4().hex}"
-                                master_context_for_run._current_agent_run_id = current_agent_run_id
-                    except Exception:
-                        pass
+                            elif getattr(event, "type", None) == "agent_updated_stream_event":
+                                new_agent = getattr(event, "new_agent", None)
+                                if new_agent is not None and hasattr(new_agent, "name") and new_agent.name:
+                                    current_stream_agent_name = new_agent.name
+                                    # For each new agent event, generate a stable id for this instance
+                                    # Prefer the event id if present to keep determinism across layers
+                                    event_id = getattr(event, "id", None)
+                                    if isinstance(event_id, str) and event_id:
+                                        current_agent_run_id = event_id
+                                    else:
+                                        current_agent_run_id = f"agent_run_{uuid.uuid4().hex}"
+                                    master_context_for_run._current_agent_run_id = current_agent_run_id
+                        except Exception:
+                            pass
 
                     # Add agent name and caller to the event
-                    event = add_agent_name_to_event(
-                        event,
-                        current_stream_agent_name,
-                        sender_name,
-                        agent_run_id=current_agent_run_id,
-                        parent_run_id=parent_run_id,
-                    )
+                    # Don't re-tag forwarded events - they already have correct agent names
+                    if not getattr(event, "_forwarded", False):
+                        event = add_agent_name_to_event(
+                            event,
+                            current_stream_agent_name,
+                            sender_name,
+                            agent_run_id=current_agent_run_id,
+                            parent_run_id=parent_run_id,
+                        )
 
                     # Incrementally persist the item to maintain exact stream order in storage
-                    if hasattr(event, "item") and event.item and agency_context and agency_context.thread_manager:
+                    # Skip saving forwarded events from sub-agents - they're already saved in sub-agent context
+                    if (
+                        hasattr(event, "item")
+                        and event.item
+                        and agency_context
+                        and agency_context.thread_manager
+                        and not getattr(event, "_forwarded", False)
+                    ):
                         run_item_obj = event.item
                         # Convert RunItems to TResponseInputItems
                         item_dict = run_item_to_tresponse_input_item(run_item_obj)
@@ -462,6 +492,10 @@ class Execution:
                         worker_task.cancel()
                         with contextlib.suppress(asyncio.CancelledError):
                             await worker_task
+                    if not forward_task.done():
+                        forward_task.cancel()
+                        with contextlib.suppress(asyncio.CancelledError):
+                            await forward_task
                 except Exception:
                     pass
 
