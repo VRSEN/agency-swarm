@@ -14,12 +14,9 @@ from pathlib import Path
 # Path setup for standalone examples
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
-from dotenv import load_dotenv
-
 from agency_swarm import Agency, Agent
 from agency_swarm.utils.citation_extractor import display_citations, extract_vector_store_citations
 
-load_dotenv()
 
 async def main():
     """Demonstrate FileSearch functionality with citations."""

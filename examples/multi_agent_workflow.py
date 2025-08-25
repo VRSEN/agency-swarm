@@ -25,10 +25,7 @@ import sys
 from typing import Any
 
 from agents import RunContextWrapper, function_tool
-from dotenv import load_dotenv
 from pydantic import BaseModel, Field
-
-load_dotenv()
 
 # Configure basic logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")

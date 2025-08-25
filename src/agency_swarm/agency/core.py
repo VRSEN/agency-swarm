@@ -7,7 +7,7 @@ from typing import Any
 
 from agents import RunConfig, RunHooks, RunResult
 
-from agency_swarm.agent.agent_flows import AgentFlow
+from agency_swarm.agent.agent_flow import AgentFlow
 from agency_swarm.agent.core import AgencyContext, Agent
 from agency_swarm.hooks import PersistenceHooks
 from agency_swarm.streaming.utils import EventStreamMerger

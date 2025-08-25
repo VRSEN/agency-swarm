@@ -9,9 +9,6 @@ from pathlib import Path
 from typing import Any
 
 from agents import ModelSettings
-from dotenv import load_dotenv
-
-load_dotenv()
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
@@ -40,7 +37,6 @@ def load_thread_data_from_file() -> dict[str, Any]:
 
     with open(file_path) as f:
         all_thread_data: list[dict[str, Any]] = json.load(f)
-        print(f"all_thread_data: {all_thread_data}")
 
     return all_thread_data
 

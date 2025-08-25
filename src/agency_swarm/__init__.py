@@ -1,4 +1,9 @@
-from .agency.core import Agency
+from dotenv import load_dotenv
+
+# Automatically load environment variables from .env when the package is imported
+load_dotenv(override=True)
+
+from .agency.core import Agency  # noqa: E402
 from .agent.core import AgencyContext, Agent  # noqa: E402
 from .context import MasterContext  # noqa: E402
 from .hooks import PersistenceHooks  # noqa: E402

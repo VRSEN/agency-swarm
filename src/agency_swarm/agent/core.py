@@ -19,7 +19,7 @@ from agency_swarm.agent import (
     setup_file_manager,
     validate_hosted_tools,
 )
-from agency_swarm.agent.agent_flows import AgentFlow
+from agency_swarm.agent.agent_flow import AgentFlow
 from agency_swarm.agent.attachment_manager import AttachmentManager
 from agency_swarm.agent.file_manager import AgentFileManager
 from agency_swarm.agent.tools import _attach_one_call_guard
@@ -83,11 +83,6 @@ class Agent(BaseAgent[MasterContext]):
     Agents are stateless. Agency-specific resources like thread managers,
     subagent mappings and shared instructions are provided at runtime via
     :class:`AgencyContext` from the owning :class:`Agency`.
-
-    Note:
-        Agents are stateless. Agency-specific resources like thread managers,
-        subagent mappings and shared instructions are provided at runtime via
-        :class:`AgencyContext` from the owning :class:`Agency`.
     """
 
     # --- Agency Swarm Specific Parameters ---
