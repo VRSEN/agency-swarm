@@ -3,11 +3,44 @@ title: "State Management"
 description: "Learn how Agency Swarm manages state across agents and sessions."
 icon: "database"
 ---
+
+Agency Swarm conveniently manages the state of your agents and threads, simplifying the agent creation and management process.
+
+<Tabs defaultValue="v1.x (Latest)">
+<Tab title="v1.x (Latest)">
+
 <Warning>
-This page only applies for older versions of the library (v0.7 and earlier)
+v1.x is currently in **beta preview**. Install with: `pip install -U "agency-swarm>=1.0.0-beta"`
 </Warning>
 
-Agency Swarm conveniently manages the state of your agents and threads, simplifying the assistant creation and management process on [OpenAI's Assistants API](https://platform.openai.com/docs/assistants/deep-dive).
+## Agent State Management
+
+Starting with the new release of [Agents SDK](https://openai.github.io/openai-agents-python), agents (previously assistants) are now stateless, 
+meaning that there is no longer a need to save and pass agent settings to maintain chat persistence.    
+The only parameter that needs to be maintained is the chat history, which, within the agency-swarm framework, is called a thread.
+
+## Thread State Management
+
+Since in the Agents SDK history management is transferred to the end user, the agency-swarm framework introduced a thread management system 
+that utilizes the SDK's `PersistenceHooks` and internal `ThreadManager` classes to handle, automate and simplify history management.  
+All agent outputs will be processed and stored locally to allow for seamless agency usage within a single session.
+To maintain persistence across multiple sessions, it also provides convenient callback methods which require minimal input to set up.
+
+<CardGroup cols={2}>
+  <Card title="Automatic Context Management" icon="arrows-rotate">
+    Handles agents outputs and automatically converts them into Agents SDK - compatible chat history
+  </Card>
+  <Card title="Persistent Conversations" icon="messages">
+    Maintains ongoing conversations without manual history management.
+  </Card>
+</CardGroup>
+
+</Tab>
+<Tab title="v0.x (Production)">
+
+<Info>
+v0.x is the **current production version**. Install with: `pip install "agency-swarm<1.0.0"`
+</Info>
 
 ## Agent State Management
 
@@ -28,7 +61,11 @@ Additionally, OpenAI's Assistants API manages the conversation context through t
   </Card>
 </CardGroup>
 
+</Tab>
+</Tabs>
+
 ## Next Steps
 
 - [Read all available agent parameters](/core-framework/agents/overview)
 - [Learn how to manage your agents on a remote server](/additional-features/deployment-to-production)
+- [Learn how to implement thread saving and loading to maintain chat persistence between sessions](/additional-features/deployment-to-production)
