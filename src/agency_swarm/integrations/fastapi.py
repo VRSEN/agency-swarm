@@ -5,7 +5,7 @@ from collections.abc import Callable, Mapping
 from agents.tool import FunctionTool
 
 from agency_swarm.agency import Agency
-from agency_swarm.agent_core import Agent
+from agency_swarm.agent.core import Agent
 
 logger = logging.getLogger(__name__)
 

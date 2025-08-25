@@ -155,7 +155,7 @@ async def main():
 
     await stream_response("What's the weather in London?")
 
-    print("\n🎉 Demo complete! Streaming works perfectly.")
+    print("\n🎉 Demo complete!")
 
 
 if __name__ == "__main__":

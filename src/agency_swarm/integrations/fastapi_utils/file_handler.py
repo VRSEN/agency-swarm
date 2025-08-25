@@ -10,10 +10,12 @@ import filetype
 import httpx
 from openai import AsyncOpenAI
 
-client = AsyncOpenAI()
-
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
+
+
+def _get_openai_client() -> AsyncOpenAI:
+    """Get OpenAI client lazily to avoid import-time instantiation."""
+    return AsyncOpenAI()
 
 
 def get_extension_from_name(name):
@@ -74,6 +76,7 @@ async def download_file(url, name, save_dir):
 
 async def upload_to_openai(file_path):
     try:
+        client = _get_openai_client()
         with open(file_path, "rb") as f:
             uploaded_file = await client.files.create(file=f, purpose="assistants")
     except Exception as e:
@@ -84,6 +87,7 @@ async def upload_to_openai(file_path):
 
 async def _wait_for_file_processed(file_id: str, timeout: int = 60) -> None:
     """Poll OpenAI until the uploaded file is processed."""
+    client = _get_openai_client()
     for _ in range(timeout):
         try:
             file_info = await client.files.retrieve(file_id)

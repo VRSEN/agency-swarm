@@ -5,17 +5,18 @@ This module handles the registration of subagents and dynamic creation
 of send_message tools for inter-agent communication.
 """
 
+import logging
 from typing import TYPE_CHECKING
-
-from openai._utils._logs import logger
 
 from agency_swarm.tools.send_message import SendMessage
 
+logger = logging.getLogger(__name__)
+
 if TYPE_CHECKING:
-    from agency_swarm.agent_core import Agent
+    from agency_swarm.agent.core import Agent
 
 
-def register_subagent(agent: "Agent", recipient_agent: "Agent") -> None:
+def register_subagent(agent: "Agent", recipient_agent: "Agent", send_message_tool_class: type | None = None) -> None:
     """
     Registers another agent as a subagent that this agent can communicate with.
 
@@ -27,13 +28,15 @@ def register_subagent(agent: "Agent", recipient_agent: "Agent") -> None:
     Args:
         agent: The agent that will be able to send messages
         recipient_agent: The agent instance to register as a recipient
+        send_message_tool_class: Optional custom send message tool class to use for this specific
+                               agent-to-agent communication. If None, uses agent's default or SendMessage.
 
     Raises:
         TypeError: If `recipient_agent` is not a valid `Agent` instance or lacks a name
         ValueError: If attempting to register the agent itself as a subagent
     """
     # Import here to avoid circular import
-    from agency_swarm.agent_core import Agent
+    from agency_swarm.agent.core import Agent
 
     if not isinstance(recipient_agent, Agent):
         raise TypeError(
@@ -65,20 +68,28 @@ def register_subagent(agent: "Agent", recipient_agent: "Agent") -> None:
 
     # --- Create or update the unified send_message tool --- #
 
-    # Check if we already have a send_message tool
+    # Check if we already have a send_message tool of the specific class
     send_message_tool = None
     for tool in agent.tools:
-        if hasattr(tool, "name") and tool.name == "send_message":
-            send_message_tool = tool
-            break
+        if hasattr(tool, "name") and tool.name.startswith("send_message"):
+            if send_message_tool_class:
+                # If a specific tool class is requested, only match that exact class
+                if isinstance(tool, send_message_tool_class):
+                    send_message_tool = tool
+                    break
+            else:
+                # If no specific class is requested, only match the default SendMessage class
+                if isinstance(tool, SendMessage):
+                    send_message_tool = tool
+                    break
 
     if send_message_tool is None:
         # Create a new send_message tool
-        send_message_tool_class = agent.send_message_tool_class or SendMessage
+        effective_tool_class = send_message_tool_class or agent.send_message_tool_class or SendMessage
 
-        send_message_tool = send_message_tool_class(
+        send_message_tool = effective_tool_class(
             sender_agent=agent,
-            recipients=agent._subagents.copy(),
+            recipients={recipient_key: recipient_agent},
         )
 
         # Add the unified tool to this agent's tools

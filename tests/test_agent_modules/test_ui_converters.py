@@ -8,7 +8,7 @@ pytest.importorskip("ag_ui")
 from ag_ui.core import AssistantMessage, FunctionCall, ToolCall, ToolMessage, UserMessage
 from pydantic import BaseModel
 
-from agency_swarm.agent_core import Agent
+from agency_swarm.agent.core import Agent
 from agency_swarm.ui.core.agui_adapter import AguiAdapter, serialize
 from agency_swarm.ui.core.console_event_adapter import ConsoleEventAdapter
 
@@ -106,7 +106,7 @@ class TestAguiAdapter:
         event.type = "raw_response_event"
         type(event).data = property(lambda self: (_ for _ in ()).throw(Exception("Test error")))
 
-        result = AguiAdapter.openai_to_agui_events(event, run_id="test")
+        result = AguiAdapter().openai_to_agui_events(event, run_id="test")
         # Test that exception is handled
         assert result is not None
         assert hasattr(result, "type")
@@ -124,7 +124,7 @@ class TestAguiAdapter:
         else:
             msg = create_message(role=role, content=content)
 
-        result = AguiAdapter.agui_messages_to_chat_history([msg])
+        result = AguiAdapter().agui_messages_to_chat_history([msg])
         assert len(result) == 1
         assert all(result[0][k] == v for k, v in expected.items())
 
@@ -132,7 +132,7 @@ class TestAguiAdapter:
         tool_call = create_tool_call("tc1", "TestTool", '{"arg": "value"}')
         msg = create_message("assistant", "Using tool", id="msg1", tool_calls=[tool_call])
 
-        result = AguiAdapter.agui_messages_to_chat_history([msg])
+        result = AguiAdapter().agui_messages_to_chat_history([msg])
         assert result[0]["call_id"] == "tc1"
         assert result[0]["type"] == "function_call"
         assert result[0]["name"] == "TestTool"
@@ -141,7 +141,7 @@ class TestAguiAdapter:
         tool_call = create_tool_call("tc1", "FileSearchTool", '{"queries": ["test"], "results": ["result1"]}')
         msg = create_message("assistant", "Searching", tool_calls=[tool_call])
 
-        result = AguiAdapter.agui_messages_to_chat_history([msg])
+        result = AguiAdapter().agui_messages_to_chat_history([msg])
         assert result[0]["type"] == "file_search_call"
         assert result[0]["queries"] == ["test"]
 
@@ -165,7 +165,7 @@ class TestAguiAdapter:
             item.queries = ["test"]
             item.results = ["result1"]
 
-        call_id, tool_name, _ = AguiAdapter._tool_meta(item)
+        call_id, tool_name, _ = AguiAdapter()._tool_meta(item)
         assert call_id == expected_call_id
         assert tool_name == expected_name
 
@@ -218,7 +218,7 @@ class TestAguiAdapter:
             setattr(event_data.item, key, value)
 
         call_id_by_item = {}
-        result = AguiAdapter._handle_raw_response(event_data, call_id_by_item)
+        result = AguiAdapter()._handle_raw_response(event_data, call_id_by_item)
 
         assert result is not None
         if isinstance(result, list):
@@ -236,7 +236,7 @@ class TestAguiAdapter:
         event_data.item_id = "msg_123"
         event_data.delta = "Hello"
 
-        result = AguiAdapter._handle_raw_response(event_data, {})
+        result = AguiAdapter()._handle_raw_response(event_data, {})
         assert result.type == "TEXT_MESSAGE_CONTENT"
         assert result.delta == "Hello"
 
@@ -247,7 +247,7 @@ class TestAguiAdapter:
         event_data.item_id = "item_123"
         event_data.delta = '{"key":'
 
-        result = AguiAdapter._handle_raw_response(event_data, {"item_123": "call_123"})
+        result = AguiAdapter()._handle_raw_response(event_data, {"item_123": "call_123"})
         assert result.type == "TOOL_CALL_ARGS"
 
     @pytest.mark.parametrize(
@@ -283,7 +283,7 @@ class TestAguiAdapter:
             event.item.raw_item = {"call_id": "call_123"}
             event.item.output = "Tool result"
 
-        result = AguiAdapter._handle_run_item_stream(event)
+        result = AguiAdapter()._handle_run_item_stream(event)
 
         if is_list_result is None:
             assert result is None
@@ -307,18 +307,18 @@ class TestAguiAdapter:
         if message_type == "code_interpreter":
             tool_call = create_tool_call("tc1", tool_name, '{"code": "print(\\"hello\\")"}')
             msg = create_message("assistant", "Running code", tool_calls=[tool_call])
-            result = AguiAdapter.agui_messages_to_chat_history([msg])
+            result = AguiAdapter().agui_messages_to_chat_history([msg])
             assert result[0]["type"] == "code_interpreter_call"
             assert expected_key in result[0]
         elif message_type == "plain_assistant":
             msg = create_message("assistant", "Plain response")
-            result = AguiAdapter.agui_messages_to_chat_history([msg])
+            result = AguiAdapter().agui_messages_to_chat_history([msg])
             assert result[0]["role"] == "assistant"
         elif message_type == "developer":
             from ag_ui.core import DeveloperMessage
 
             msg = DeveloperMessage(id="msg_id", role="developer", content="Debug info")
-            result = AguiAdapter.agui_messages_to_chat_history([msg])
+            result = AguiAdapter().agui_messages_to_chat_history([msg])
             assert result[0]["role"] == "system"
 
     def test_openai_to_agui_events_run_item_stream(self):
@@ -333,7 +333,7 @@ class TestAguiAdapter:
         event.item.raw_item.content[0].text = "Test response"
         event.item.raw_item.content[0].annotations = None
 
-        result = AguiAdapter.openai_to_agui_events(event, run_id="test_run")
+        result = AguiAdapter().openai_to_agui_events(event, run_id="test_run")
         assert result is not None
         assert isinstance(result, list)
 
@@ -344,7 +344,7 @@ class TestAguiAdapter:
         event_data.type = "response.output_item.added"
         event_data.item = None
 
-        result = AguiAdapter._handle_raw_response(event_data, {})
+        result = AguiAdapter()._handle_raw_response(event_data, {})
         assert result is None
 
         # Test missing item_id for text delta
@@ -352,7 +352,7 @@ class TestAguiAdapter:
         event_data.type = "response.output_text.delta"
         event_data.item_id = None
 
-        result = AguiAdapter._handle_raw_response(event_data, {})
+        result = AguiAdapter()._handle_raw_response(event_data, {})
         assert result is None
 
 
@@ -471,7 +471,7 @@ class TestConsoleEventAdapter:
         raw_item.container_id = "container_456"
         raw_item.outputs = ["hello"]
 
-        call_id, tool_name, arguments = AguiAdapter._tool_meta(raw_item)
+        call_id, tool_name, arguments = AguiAdapter()._tool_meta(raw_item)
 
         assert call_id == "ci_123"
         assert tool_name == "CodeInterpreterTool"
@@ -511,7 +511,7 @@ class TestConsoleEventAdapter:
                 event.item = MagicMock()
                 event.item.raw_item = {}
                 event.item.call_id = None
-            result = AguiAdapter._handle_run_item_stream(event)
+            result = AguiAdapter()._handle_run_item_stream(event)
         else:
             # Raw response scenarios
             event_data = MagicMock()
@@ -525,6 +525,6 @@ class TestConsoleEventAdapter:
                     event_data.item.call_id = event_setup["call_id"]
             elif "item_id" in event_setup:
                 event_data.item_id = event_setup["item_id"]
-            result = AguiAdapter._handle_raw_response(event_data, {})
+            result = AguiAdapter()._handle_raw_response(event_data, {})
 
         assert result == expected_result

@@ -2,7 +2,7 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
-from agents import RunHooks, RunResult
+from agents import RunHooks, RunResult, TResponseInputItem
 
 from .context import MasterContext
 
@@ -34,23 +34,23 @@ class PersistenceHooks(RunHooks[MasterContext]):  # type: ignore[misc]
     """
 
     # Type hints for flat message structure
-    _load_threads_callback: Callable[[], list[dict[str, Any]]]
-    _save_threads_callback: Callable[[list[dict[str, Any]]], None]
+    _load_threads_callback: Callable[[], list[TResponseInputItem]]
+    _save_threads_callback: Callable[[list[TResponseInputItem]], None]
 
     def __init__(
         self,
-        load_threads_callback: Callable[[], list[dict[str, Any]]],
-        save_threads_callback: Callable[[list[dict[str, Any]]], None],
+        load_threads_callback: Callable[[], list[TResponseInputItem]],
+        save_threads_callback: Callable[[list[TResponseInputItem]], None],
     ):
         """
         Initializes the PersistenceHooks.
 
         Args:
-            load_threads_callback (Callable[[], list[dict[str, Any]]]):
+            load_threads_callback (Callable[[], list[TResponseInputItem]]):
                 The function to call at the start of a run to load all messages.
                 It should return a flat list of message dictionaries with
                 'agent', 'callerAgent', 'timestamp' and other OpenAI fields.
-            save_threads_callback (Callable[[list[dict[str, Any]]], None]):
+            save_threads_callback (Callable[[list[TResponseInputItem]], None]):
                 The function to call at the end of a run to save all messages.
                 It receives a flat list of message dictionaries.
 

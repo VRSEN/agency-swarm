@@ -312,3 +312,41 @@ class TestComplexHandoffScenarios:
         assert agent_b_final.send_message_tool_class == SendMessageHandoff, (
             "AgentB should have SendMessageHandoff as send_message_tool_class"
         )
+
+
+    def test_agency_flow_handoffs(self):
+        """Test bidirectional communication flows combined with SendMessageHandoff tool class."""
+        agent_a = Agent(name="AgentA", instructions="Primary orchestrator")
+        agent_b = Agent(
+            name="AgentB",
+            instructions="Secondary orchestrator with handoffs",
+        )
+        agent_c = Agent(name="AgentC", instructions="Specialist")
+
+        # Configure bidirectional communication between A and B, plus handoff capability from B to C
+        agency = Agency(
+            agent_a,
+            communication_flows=[
+                (agent_a > agent_b),  # A can send to B
+                (agent_b > agent_a, SendMessageHandoff),  # B can send to A (using SendMessageHandoff tool class)
+                (agent_a > agent_c),  # A can send to C
+                (agent_b > agent_c, SendMessageHandoff),  # B can hand off to C (using SendMessageHandoff tool class)
+            ],
+        )
+
+        agent_a_final = agency.agents["AgentA"]
+        agent_b_final = agency.agents["AgentB"]
+
+        # Both AgentA and AgentB should have send_message tools
+        agent_a_tools = [tool.name if hasattr(tool, "name") else str(tool) for tool in agent_a_final.tools]
+
+        # AgentA should have send_message tool
+        assert "send_message" in agent_a_tools, f"AgentA should have send_message tool, got: {agent_a_tools}"
+
+        # AgentB should have handoffs to both AgentA and AgentC in .handoffs attribute
+        assert hasattr(agent_b_final, "handoffs"), "AgentB should have handoffs attribute"
+        assert len(agent_b_final.handoffs) == 2, f"AgentB should have 2 handoffs, got: {len(agent_b_final.handoffs)}"
+
+        handoff_targets = [h.agent_name for h in agent_b_final.handoffs]
+        assert "AgentA" in handoff_targets, f"AgentB should have handoff to AgentA, got: {handoff_targets}"
+        assert "AgentC" in handoff_targets, f"AgentB should have handoff to AgentC, got: {handoff_targets}"

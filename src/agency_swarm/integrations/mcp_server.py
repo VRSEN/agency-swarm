@@ -5,7 +5,9 @@ import os
 import sys
 from typing import Any
 
+from agents.run_context import RunContextWrapper
 from agents.tool import FunctionTool
+from agents.tool_context import ToolContext
 from fastmcp import FastMCP
 from fastmcp.exceptions import McpError
 from fastmcp.server.dependencies import get_http_headers
@@ -20,9 +22,9 @@ from agency_swarm.tools import ToolFactory
 logger = logging.getLogger(__name__)
 
 
-def _load_tools_from_directory(tools_dir: str) -> list[type[BaseTool] | type[FunctionTool]]:
-    """Load BaseTool classes from a directory."""
-    tools: list[type[BaseTool] | type[FunctionTool]] = []
+def _load_tools_from_directory(tools_dir: str) -> list[type[BaseTool] | FunctionTool]:
+    """Load BaseTool classes and FunctionTool instances from a directory."""
+    tools: list[type[BaseTool] | FunctionTool] = []
 
     # Add tools directory to Python path if it's not already there
     if tools_dir not in sys.path:
@@ -33,8 +35,6 @@ def _load_tools_from_directory(tools_dir: str) -> list[type[BaseTool] | type[Fun
         for file in files:
             if file.endswith(".py") and not file.startswith("__"):
                 module_path = os.path.join(root, file)
-
-                # Import the module
                 file_tools = ToolFactory.from_file(module_path)
                 tools.extend(file_tools)
 
@@ -42,7 +42,7 @@ def _load_tools_from_directory(tools_dir: str) -> list[type[BaseTool] | type[Fun
 
 
 def run_mcp(
-    tools: list[type[BaseTool] | type[FunctionTool]] | str,
+    tools: list[type[BaseTool] | FunctionTool] | str,
     host: str = "0.0.0.0",
     port: int = 8000,
     app_token_env: str | None = "APP_TOKEN",
@@ -63,6 +63,7 @@ def run_mcp(
     Returns:
         FastMCP instance if return_app=True, otherwise None
     """
+    app_token_env = app_token_env or ""
     # Handle tools input - either list of classes or directory path
     if isinstance(tools, str):
         # It's a directory path
@@ -77,7 +78,7 @@ def run_mcp(
             raise ValueError("No tools provided. Please provide at least one tool class.")
 
     # stateless_http is required for oai agents
-    mcp = FastMCP(server_name, stateless_http=True)
+    mcp: FastMCP = FastMCP(server_name, stateless_http=True)
 
     # Get authentication token
     app_token = os.getenv(app_token_env)
@@ -111,7 +112,12 @@ def run_mcp(
     tool_registry = {}
 
     for tool in tools_list:
-        tool_name = getattr(tool, "name", None) or tool.__name__
+        if inspect.isclass(tool):
+            # For BaseTool classes, use __name__
+            tool_name = getattr(tool, "name", None) or tool.__name__
+        else:
+            # For FunctionTool instances, use the name attribute
+            tool_name = getattr(tool, "name", None) or "unknown_tool"
         if tool_name in tool_registry:
             raise ValueError(f"Duplicate tool name detected: {tool_name}. Please use a different tool name.")
         tool_registry[tool_name] = tool
@@ -128,6 +134,8 @@ def run_mcp(
         if isinstance(tool_obj, FunctionTool):
             # Create a custom tool class that extends Tool
             class CustomTool(Tool):
+                _function_tool: FunctionTool  # Declare the attribute for MyPy
+
                 def __init__(self, function_tool):
                     super().__init__(
                         key=function_tool.name,
@@ -142,8 +150,15 @@ def run_mcp(
                 async def run(self, arguments: dict[str, Any]) -> ToolResult:
                     # Convert to JSON string format expected by FunctionTool
                     args_json = json.dumps(arguments)
+
+                    # Create a minimal ToolContext for the FunctionTool
+                    # Since we're in MCP environment, create a dummy context
+                    tool_context = ToolContext.from_agent_context(
+                        RunContextWrapper(context={}), tool_call_id=f"mcp_call_{self.name}"
+                    )
+
                     # Call the original tool function
-                    result = await self._function_tool.on_invoke_tool(None, args_json)
+                    result = await self._function_tool.on_invoke_tool(tool_context, args_json)
                     return ToolResult(content=result)
 
             # Create and add the custom tool
@@ -151,7 +166,7 @@ def run_mcp(
             mcp.add_tool(custom_tool)
         else:
             # For non-FunctionTool instances, fall back to the decorator approach
-            raise ValueError(f"Unexpected tool type: {type(tool_obj)} for tool: {tool_obj.name}")
+            raise ValueError(f"Unexpected tool type: {type(tool_obj)} for tool: {_tool_name}")
 
     if return_app:
         return mcp

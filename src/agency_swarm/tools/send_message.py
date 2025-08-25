@@ -14,10 +14,11 @@ from typing import TYPE_CHECKING
 from agents import FunctionTool, RunContextWrapper, handoff
 
 from ..context import MasterContext
+from ..messages.message_formatter import MessageFormatter
 from ..streaming.utils import add_agent_name_to_event
 
 if TYPE_CHECKING:
-    from ..agent_core import AgencyContext, Agent
+    from ..agent.core import AgencyContext, Agent
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +44,7 @@ class SendMessage(FunctionTool):
         self,
         sender_agent: "Agent",
         recipients: dict[str, "Agent"] | None = None,
+        name: str = "send_message",
     ):
         self.sender_agent = sender_agent
         self.recipients = recipients or {}
@@ -93,7 +95,7 @@ class SendMessage(FunctionTool):
         }
 
         # Build description with all recipient roles
-        description_parts = [self.__doc__]
+        description_parts = [self.__doc__ or "Send a message to another agent."]
         if recipient_names:
             description_parts.append("\n\nAvailable recipient agents:")
             for agent in recipient_names:
@@ -102,7 +104,7 @@ class SendMessage(FunctionTool):
         final_description = "".join(description_parts)
 
         super().__init__(
-            name="send_message",
+            name=name,
             description=final_description,
             params_json_schema=params_schema,
             on_invoke_tool=self.on_invoke_tool,
@@ -139,7 +141,7 @@ class SendMessage(FunctionTool):
         self.params_json_schema["properties"]["recipient_agent"]["enum"] = recipient_enum
 
         # Update description with all recipient roles
-        description_parts = [self.__doc__]
+        description_parts = [self.__doc__ or "Send a message to another agent."]
         if recipient_names:
             description_parts.append("\n\nAvailable recipient agents:")
             for agent in recipient_names:
@@ -163,7 +165,7 @@ class SendMessage(FunctionTool):
     def _create_recipient_agency_context(self, wrapper: RunContextWrapper[MasterContext]) -> "AgencyContext":
         """Create agency context for the recipient agent."""
         # Avoid circular import
-        from ..agent_core import AgencyContext
+        from ..agent.core import AgencyContext
 
         # Create a minimal agency context for multi-agent communication
         class MinimalAgency:
@@ -368,7 +370,37 @@ class SendMessageHandoff:
 
     def create_handoff(self, recipient_agent: "Agent"):
         """Create and return the handoff object."""
-        return handoff(
-            agent=recipient_agent,
-            tool_description_override=recipient_agent.description,
-        )
+        # Check if recipient agent uses litellm
+        if MessageFormatter._is_litellm_model(recipient_agent):
+            # Create input filter to adjust history for litellm
+            def litellm_input_filter(handoff_data):
+                # Extract the conversation history
+                input_history = handoff_data.input_history
+
+                # Convert to list if it's a tuple
+                if isinstance(input_history, tuple):
+                    history_list = list(input_history)
+                elif isinstance(input_history, str):
+                    # If it's a string, we can't adjust it easily
+                    return handoff_data
+                else:
+                    history_list = input_history
+
+                # Apply litellm adjustments
+                adjusted_history = MessageFormatter.adjust_history_for_litellm(history_list)
+
+                # Create new handoff data with adjusted history
+                return replace(handoff_data, input_history=tuple(adjusted_history))
+
+            # Create handoff with litellm input filter
+            return handoff(
+                agent=recipient_agent,
+                tool_description_override=recipient_agent.description,
+                input_filter=litellm_input_filter,
+            )
+        else:
+            # Standard handoff for non-litellm agents
+            return handoff(
+                agent=recipient_agent,
+                tool_description_override=recipient_agent.description,
+            )

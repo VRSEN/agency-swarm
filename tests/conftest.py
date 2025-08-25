@@ -1,10 +1,12 @@
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from dotenv import load_dotenv
 
 from agency_swarm import Agency, AgencyContext, Agent
-from agency_swarm.thread import ThreadManager
+from agency_swarm.utils.thread import ThreadManager
 
+load_dotenv()
 
 @pytest.fixture
 def mock_thread_manager():

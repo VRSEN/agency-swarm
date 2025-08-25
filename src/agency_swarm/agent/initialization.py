@@ -13,11 +13,12 @@ from typing import TYPE_CHECKING, Any
 
 from agents import Agent as BaseAgent, ModelSettings
 
-from agency_swarm.agent.file_manager import AgentFileManager, AttachmentManager
+from agency_swarm.agent.attachment_manager import AttachmentManager
+from agency_swarm.agent.file_manager import AgentFileManager
 from agency_swarm.tools import BaseTool, ToolFactory
 
 if TYPE_CHECKING:
-    from agency_swarm.agent_core import Agent
+    from agency_swarm.agent.core import Agent
 
 logger = logging.getLogger(__name__)
 
@@ -183,9 +184,6 @@ def handle_deprecated_parameters(kwargs: dict[str, Any]) -> dict[str, Any]:
         for key in keys_to_remove:
             merged_model_settings.pop(key)
 
-        # Resolve token setting conflicts
-        from .messages import resolve_token_settings
-
         resolve_token_settings(merged_model_settings, kwargs.get("name", "unknown"))
 
         # Create new ModelSettings instance from merged dict
@@ -222,9 +220,8 @@ def separate_kwargs(kwargs: dict[str, Any]) -> tuple[dict[str, Any], dict[str, A
         base_param_names = {
             "name",
             "instructions",
-            # Handoffs should be defined by providing SendMessageHandoff
-            # "handoff_description",
-            # "handoffs",
+            "handoff_description",
+            "handoffs",
             "model",
             "model_settings",
             "tools",
@@ -249,6 +246,21 @@ def separate_kwargs(kwargs: dict[str, Any]) -> tuple[dict[str, Any], dict[str, A
     if "name" in base_agent_params:
         current_agent_params["name"] = base_agent_params["name"]
 
+    # Handoffs should be defined by providing SendMessageHandoff
+    if "handoffs" in kwargs:
+        logger.warning(
+            "Manually setting the 'handoffs' parameter can lead to unexpected behavior. "
+            "Handoffs are automatically managed by the Agency based on communication flows. "
+            "Use SendMessageHandoff to customize inter-agent communication instead."
+        )
+
+    if "handoff_description" in base_agent_params and "description" in current_agent_params:
+        logger.warning(
+            "'description' and 'handoff_description' are both provided. "
+            "Using 'description' instead of 'handoff_description'."
+        )
+        base_agent_params.pop("handoff_description")
+
     return base_agent_params, current_agent_params
 
 
@@ -262,3 +274,49 @@ def setup_file_manager(agent: "Agent") -> None:
     """
     agent.file_manager = AgentFileManager(agent)
     agent.attachment_manager = AttachmentManager(agent)
+
+
+def resolve_token_settings(model_settings_dict: dict[str, Any], agent_name: str = "unknown") -> dict[str, Any]:
+    """
+    Resolves conflicts between max_tokens, max_prompt_tokens, and max_completion_tokens.
+
+    Args:
+        model_settings_dict: Dictionary of model settings to modify in place
+        agent_name: Name of the agent for logging purposes
+    """
+    has_max_tokens = "max_tokens" in model_settings_dict
+    has_max_prompt_tokens = "max_prompt_tokens" in model_settings_dict
+    has_max_completion_tokens = "max_completion_tokens" in model_settings_dict
+
+    # Since oai only kept 1 parameter to manage tokens, write one of the existing parameters to max_tokens
+    if has_max_tokens:
+        # If max_tokens is specified, drop prompt and completion tokens
+        if has_max_prompt_tokens or has_max_completion_tokens:
+            logger.info(
+                f"max_tokens is specified, ignoring max_prompt_tokens and max_completion_tokens "
+                f"for agent '{agent_name}'"
+            )
+            model_settings_dict.pop("max_prompt_tokens", None)
+            model_settings_dict.pop("max_completion_tokens", None)
+    else:
+        # If max_tokens is not specified, handle prompt/completion tokens
+        if has_max_prompt_tokens and has_max_completion_tokens:
+            # Both are present, prefer completion tokens and warn
+            model_settings_dict["max_tokens"] = model_settings_dict["max_completion_tokens"]
+            model_settings_dict.pop("max_prompt_tokens", None)
+            model_settings_dict.pop("max_completion_tokens", None)
+            logger.warning(
+                f"Both max_prompt_tokens and max_completion_tokens specified for agent '{agent_name}'. "
+                f"Using max_completion_tokens value ({model_settings_dict['max_tokens']}) "
+                f"for max_tokens and ignoring max_prompt_tokens."
+            )
+        elif has_max_completion_tokens:
+            # Only completion tokens present
+            model_settings_dict["max_tokens"] = model_settings_dict["max_completion_tokens"]
+            model_settings_dict.pop("max_completion_tokens", None)
+        elif has_max_prompt_tokens:
+            # Only prompt tokens present
+            model_settings_dict["max_tokens"] = model_settings_dict["max_prompt_tokens"]
+            model_settings_dict.pop("max_prompt_tokens", None)
+
+    return model_settings_dict
