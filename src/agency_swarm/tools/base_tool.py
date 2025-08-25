@@ -8,7 +8,7 @@ are fully supported approaches for tool creation.
 
 import warnings
 from abc import ABC, abstractmethod
-from typing import Any, ClassVar
+from typing import Any
 
 from agents import RunContextWrapper
 from docstring_parser import parse
