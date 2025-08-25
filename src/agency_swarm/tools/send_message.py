@@ -9,21 +9,11 @@ recipient details.
 
 import json
 import logging
-import time
-from dataclasses import replace
 from typing import TYPE_CHECKING
 
-from agents import (
-    FunctionTool,
-    RunContextWrapper,
-    RunItemStreamEvent,
-    ToolCallItem,
-    handoff,
-)
-from openai.types.responses import ResponseFunctionToolCall
+from agents import FunctionTool, RunContextWrapper, handoff
 
 from ..context import MasterContext
-from ..messages.message_formatter import MessageFormatter
 from ..streaming.utils import add_agent_name_to_event
 
 if TYPE_CHECKING:
@@ -206,6 +196,16 @@ class SendMessage(FunctionTool):
         When the original request was made with get_response_stream, this will use
         get_response_stream for the sub-agent call to maintain streaming consistency.
         """
+        # Get the tool_call_id from the wrapper (it's a ToolContext)
+        # This is the call_id that OpenAI assigned to this send_message invocation
+        tool_call_id = getattr(wrapper, "tool_call_id", None)
+        if not tool_call_id:
+            logger.warning(f"No tool_call_id found in wrapper. Type: {type(wrapper).__name__}")
+            # Fallback to using agent's run_id if no tool_call_id available
+            tool_call_id = (
+                getattr(wrapper.context, "_current_agent_run_id", None) if wrapper and wrapper.context else None
+            )
+
         try:
             kwargs = json.loads(arguments_json_string)
         except json.JSONDecodeError as e:
@@ -266,25 +266,6 @@ class SendMessage(FunctionTool):
                 if wrapper and hasattr(wrapper, "context") and wrapper.context:
                     streaming_context = getattr(wrapper.context, "_streaming_context", None)
 
-                # Get the current agent's run_id to pass as parent_run_id
-                parent_run_id = (
-                    getattr(wrapper.context, "_current_agent_run_id", None) if wrapper and wrapper.context else None
-                )
-
-                # Emit a single ordered marker and persist a minimal record before forwarding child events
-                if streaming_context:
-                    try:
-                        await self._emit_send_message_start(
-                            streaming_context=streaming_context,
-                            sender_agent_name=self.sender_agent.name,
-                            thread_manager=getattr(wrapper.context, "thread_manager", None),
-                            arguments_json=arguments_json_string,
-                            agent_run_id=getattr(wrapper.context, "_current_agent_run_id", None),
-                            parent_run_id=parent_run_id,
-                        )
-                    except Exception as e:
-                        logger.warning(f"Failed to emit/persist send_message start: {e}")
-
                 # Use streaming and collect the final output
                 final_output_text = ""
                 tool_calls_seen = []
@@ -302,10 +283,9 @@ class SendMessage(FunctionTool):
                     sender_name=self.sender_agent.name,
                     additional_instructions=combined_instructions,
                     agency_context=recipient_agency_context,
-                    parent_run_id=parent_run_id,
+                    parent_run_id=tool_call_id,  # Use tool_call_id as parent_run_id
                 ):
                     # Add agent name and caller to the event before forwarding
-                    # Note: We don't pass parent_run_id here as the sub-agent already has it
                     event = add_agent_name_to_event(event, self.recipient_agent.name, self.sender_agent.name)
 
                     # Forward event to streaming context if available
@@ -342,11 +322,6 @@ class SendMessage(FunctionTool):
             else:
                 logger.debug(f"Calling target agent '{recipient_name_for_call}'.get_response...")
 
-                # Get the current agent's run_id to pass as parent_run_id
-                parent_run_id = (
-                    getattr(wrapper.context, "_current_agent_run_id", None) if wrapper and wrapper.context else None
-                )
-
                 # Create agency context for the recipient agent
                 recipient_agency_context = self._create_recipient_agency_context(wrapper)
 
@@ -360,7 +335,7 @@ class SendMessage(FunctionTool):
                     sender_name=self.sender_agent.name,
                     additional_instructions=combined_instructions,
                     agency_context=recipient_agency_context,
-                    parent_run_id=parent_run_id,
+                    parent_run_id=tool_call_id,  # Use tool_call_id as parent_run_id
                 )
 
             current_final_output = response.final_output
@@ -386,64 +361,6 @@ class SendMessage(FunctionTool):
             )
             return f"Error: Failed to get response from agent '{recipient_name_for_call}'. Reason: {e}"
 
-    async def _emit_send_message_start(
-        self,
-        *,
-        streaming_context,
-        sender_agent_name: str,
-        thread_manager,
-        arguments_json: str | None = None,
-        agent_run_id: str | None = None,
-        parent_run_id: str | None = None,
-    ) -> str | None:
-        """Emit a sentinel for send_message and persist a minimal record to align saved order with stream."""
-        import uuid
-
-        # Create a proper ResponseFunctionToolCall object that matches the SDK structure
-        raw_item = ResponseFunctionToolCall(
-            name=self.name,
-            arguments=arguments_json or "",
-            call_id=f"call_{uuid.uuid4().hex[:20]}",  # Generate unique call_id
-            type="function_call",
-            id=f"fc_{uuid.uuid4().hex}",  # Generate unique id
-            status="in_progress",  # Start as in_progress like the SDK does
-        )
-
-        event = RunItemStreamEvent(
-            name="tool_called",
-            item=ToolCallItem(agent=self.sender_agent, raw_item=raw_item),
-        )
-        event = add_agent_name_to_event(
-            event, sender_agent_name, None, agent_run_id=agent_run_id, parent_run_id=parent_run_id
-        )
-        await streaming_context.put_event(event)
-
-        if thread_manager is not None and hasattr(thread_manager, "add_messages"):
-            minimal_record = {
-                "type": "function_call",
-                "agent": sender_agent_name,
-                "callerAgent": None,
-                # FLAT shape expected by Responses API input items
-                # Top-level name and arguments (no nested function_call object)
-                "name": self.name,
-                "arguments": arguments_json or "",
-                "call_id": raw_item.call_id,
-                "id": raw_item.id,
-                "status": raw_item.status,
-                "timestamp": int(time.time() * 1000),
-            }
-            if agent_run_id:
-                minimal_record["agent_run_id"] = agent_run_id
-            if parent_run_id:
-                minimal_record["parent_run_id"] = parent_run_id
-            thread_manager.add_messages([minimal_record])
-
-        # Return call_id so caller can persist matching output later
-        try:
-            return raw_item.call_id
-        except Exception:
-            return None
-
 
 class SendMessageHandoff:
     """
@@ -452,37 +369,7 @@ class SendMessageHandoff:
 
     def create_handoff(self, recipient_agent: "Agent"):
         """Create and return the handoff object."""
-        # Check if recipient agent uses litellm
-        if MessageFormatter._is_litellm_model(recipient_agent):
-            # Create input filter to adjust history for litellm
-            def litellm_input_filter(handoff_data):
-                # Extract the conversation history
-                input_history = handoff_data.input_history
-
-                # Convert to list if it's a tuple
-                if isinstance(input_history, tuple):
-                    history_list = list(input_history)
-                elif isinstance(input_history, str):
-                    # If it's a string, we can't adjust it easily
-                    return handoff_data
-                else:
-                    history_list = input_history
-
-                # Apply litellm adjustments
-                adjusted_history = MessageFormatter.adjust_history_for_litellm(history_list)
-
-                # Create new handoff data with adjusted history
-                return replace(handoff_data, input_history=tuple(adjusted_history))
-
-            # Create handoff with litellm input filter
-            return handoff(
-                agent=recipient_agent,
-                tool_description_override=recipient_agent.description,
-                input_filter=litellm_input_filter,
-            )
-        else:
-            # Standard handoff for non-litellm agents
-            return handoff(
-                agent=recipient_agent,
-                tool_description_override=recipient_agent.description,
-            )
+        return handoff(
+            agent=recipient_agent,
+            tool_description_override=recipient_agent.description,
+        )

@@ -12,7 +12,7 @@ import json
 import requests
 
 
-def debug_streaming():
+def debug_streaming() -> None:
     """Debug streaming to see exact event structure."""
     print("🔍 Debugging FastAPI Streaming Events")
     print("=" * 60)
@@ -56,8 +56,8 @@ def debug_streaming():
                             print(f"Number of messages: {len(data['new_messages'])}")
                             for i, msg in enumerate(data["new_messages"][:3], 1):
                                 print(f"\nMessage {i}:")
-                                print(f"  agent: {msg.get('agent', 'MISSING')}")
-                                print(f"  callerAgent: {msg.get('callerAgent', 'MISSING')}")
+                                print(f"  agent: {msg.get('agent', None)}")
+                                print(f"  callerAgent: {msg.get('callerAgent', None)}")
                                 print(f"  type: {msg.get('type', msg.get('role', 'unknown'))}")
                             continue
 
@@ -80,23 +80,23 @@ def debug_streaming():
 
                             if has_agent:
                                 agent_count += 1
-                                print(f"✅ agent: {event_content['agent']}")
+                                print(f"  agent: {event_content['agent']}")
                             else:
-                                print("❌ agent: MISSING")
+                                print("  agent: None")
 
                             if has_caller:
                                 caller_agent_count += 1
-                                print(f"✅ callerAgent: {event_content['callerAgent']}")
+                                print(f"  callerAgent: {event_content['callerAgent']}")
                             else:
-                                print("❌ callerAgent: MISSING")
+                                print("  callerAgent: None")
 
                             if has_call_id:
                                 call_id_count += 1
-                                print(f"✅ call_id: {event_content['call_id'][:30]}...")
+                                print(f"  call_id: {event_content['call_id'][:30]}...")
 
                             if has_item_id:
                                 item_id_count += 1
-                                print(f"✅ item_id: {event_content['item_id'][:30]}...")
+                                print(f"  item_id: {event_content['item_id'][:30]}...")
 
                             # Show event type
                             if "type" in event_content:

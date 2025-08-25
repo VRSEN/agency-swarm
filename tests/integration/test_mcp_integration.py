@@ -92,5 +92,3 @@ async def test_mcp_stdio_get_response_stream(caplog):
         or ("Error cleaning up server:" in msg)
         for msg in err_msgs
     ), f"Found MCP cleanup error logs: {err_msgs}"
-
-

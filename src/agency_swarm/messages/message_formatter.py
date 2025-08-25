@@ -7,12 +7,10 @@ from typing import TYPE_CHECKING, Any
 
 from agents import (
     MessageOutputItem,
-    OpenAIChatCompletionsModel,
     RunItem,
     ToolCallItem,
     TResponseInputItem,
 )
-from agents.extensions.models.litellm_model import LitellmModel
 from openai.types.responses import ResponseFileSearchToolCall, ResponseFunctionWebSearch
 
 if TYPE_CHECKING:
@@ -51,8 +49,9 @@ class MessageFormatter:
             modified_message["agent_run_id"] = agent_run_id  # type: ignore[typeddict-unknown-key]
         if parent_run_id is not None:
             modified_message["parent_run_id"] = parent_run_id  # type: ignore[typeddict-unknown-key]
+        # Use microsecond precision to reduce timestamp collisions
         # time.time() always returns UTC seconds since epoch (timezone-independent)
-        modified_message["timestamp"] = int(time.time() * 1000)  # type: ignore[typeddict-unknown-key]
+        modified_message["timestamp"] = int(time.time() * 1000000) // 1000  # type: ignore[typeddict-unknown-key] # microseconds -> milliseconds, sortable
         # Add type field if not present (for easier parsing/navigation)
         if "type" not in modified_message:
             modified_message["type"] = "message"  # type: ignore[arg-type]
@@ -96,11 +95,6 @@ class MessageFormatter:
         # Prepare history for runner (sanitize and ensure content safety)
         history_for_runner = MessageFormatter.sanitize_tool_calls_in_history(full_history)  # type: ignore[arg-type]
         history_for_runner = MessageFormatter.ensure_tool_calls_content_safety(history_for_runner)
-        # Ensure send_message function_call has a paired output for model input (in-memory only)
-        history_for_runner = MessageFormatter.ensure_send_message_pairing(history_for_runner)
-        # LiteLLM-specific requirement: tool_use must be immediately followed by tool_result
-        if MessageFormatter._is_litellm_model(agent):
-            history_for_runner = MessageFormatter.adjust_history_for_litellm(history_for_runner)
         # Strip agency metadata before sending to OpenAI
         history_for_runner = MessageFormatter.strip_agency_metadata(history_for_runner)
         return history_for_runner  # type: ignore[return-value]
@@ -121,44 +115,18 @@ class MessageFormatter:
             clean_msg = {
                 k: v
                 for k, v in msg.items()
-                if k not in ["agent", "callerAgent", "timestamp", "citations", "agent_run_id", "parent_run_id"]
+                if k
+                not in [
+                    "agent",
+                    "callerAgent",
+                    "timestamp",
+                    "citations",
+                    "agent_run_id",
+                    "parent_run_id",
+                ]
             }
             cleaned.append(clean_msg)
         return cleaned
-
-    @staticmethod
-    def ensure_send_message_pairing(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """
-        Ensure any 'send_message' function_call in the prepared history has a
-        corresponding function_call_output with the same call_id. If missing,
-        append a minimal output item (empty output). This affects ONLY the
-        in-memory list passed to the SDK on the next turn and does not persist.
-        """
-        outputs_by_call_id = {m.get("call_id"): True for m in history if m.get("type") == "function_call_output"}
-        needs_output = []
-        for m in history:
-            if m.get("type") == "function_call":
-                name = m.get("name")
-                call_id = m.get("call_id")
-                if (
-                    name is not None
-                    and name.startswith("send_message")
-                    and call_id
-                    and call_id not in outputs_by_call_id
-                ):
-                    needs_output.append(m)
-        if not needs_output:
-            return history
-        patched = list(history)
-        for fc in needs_output:
-            patched.append(
-                {
-                    "type": "function_call_output",
-                    "call_id": fc.get("call_id"),
-                    "output": "",
-                }
-            )
-        return patched
 
     @staticmethod
     def sanitize_tool_calls_in_history(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -323,112 +291,3 @@ class MessageFormatter:
         except Exception:
             return None
         return None
-
-    @staticmethod
-    def adjust_history_for_litellm(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """
-        Litellm requires each tool_use to be immediately followed by a tool_result
-        in the next message. Due to unique approach to send_message tool, we need to adjust
-        the history to ensure this requirement is met.
-        """
-        try:
-            # Index existing outputs by call_id and store their original indices
-            outputs_by_call_id: dict[str, dict[str, Any]] = {}
-            for idx, msg in enumerate(history):
-                if isinstance(msg, dict) and msg.get("type") == "function_call_output":
-                    cid = msg.get("call_id")
-                    if isinstance(cid, str) and cid:
-                        outputs_by_call_id[cid] = {"item": msg, "idx": idx}
-
-            adjusted: list[dict[str, Any]] = []
-            consumed_call_ids: set[str] = set()
-
-            i = 0
-            n = len(history)
-            while i < n:
-                msg = history[i]
-
-                # Skip original outputs that we will relocate next to their calls
-                if (
-                    isinstance(msg, dict)
-                    and msg.get("type") == "function_call_output"
-                    and isinstance(msg.get("call_id"), str)
-                    and msg.get("call_id") in consumed_call_ids
-                ):
-                    i += 1
-                    continue
-
-                adjusted.append(msg)
-
-                if isinstance(msg, dict) and msg.get("type") == "function_call":
-                    name = msg.get("name")
-                    if name is not None and name.startswith("send_message"):
-                        cid = msg.get("call_id")
-                        if isinstance(cid, str) and cid:
-                            # If next item is already the correct output, do nothing
-                            if i + 1 < n:
-                                nxt = history[i + 1]
-                                if (
-                                    isinstance(nxt, dict)
-                                    and nxt.get("type") == "function_call_output"
-                                    and nxt.get("call_id") == cid
-                                ):
-                                    i += 1  # advance past the adjacent output we just acknowledged
-                                    adjusted.append(nxt)
-                                    consumed_call_ids.add(cid)
-                                    continue
-                            # Otherwise, move an existing matching output if present later
-                            if cid in outputs_by_call_id:
-                                adjusted.append(outputs_by_call_id[cid]["item"])
-                                consumed_call_ids.add(cid)
-                            else:
-                                # Look ahead for the first assistant message with non-empty content
-                                synthesized_output = None
-                                for j in range(i + 1, n):
-                                    cand = history[j]
-                                    if isinstance(cand, dict) and cand.get("role") == "assistant":
-                                        content = cand.get("content")
-                                        if isinstance(content, str) and content.strip():
-                                            synthesized_output = content
-                                            break
-                                if synthesized_output is not None:
-                                    synthesized_item: dict[str, Any] = {
-                                        "type": "function_call_output",
-                                        "call_id": cid,
-                                        "output": synthesized_output,
-                                        # Include agency metadata fields in-memory to mirror original snippet
-                                        # (they will be stripped before sending to the model)
-                                        "agent": msg.get("agent"),
-                                        "callerAgent": msg.get("callerAgent"),
-                                        "timestamp": int(time.time() * 1000),
-                                    }
-                                    if "agent_run_id" in msg:
-                                        synthesized_item["agent_run_id"] = msg.get("agent_run_id")
-                                    adjusted.append(synthesized_item)
-                i += 1
-
-            return adjusted
-        except Exception:
-            # On any unexpected error, return history unchanged
-            return history
-
-    @staticmethod
-    def _is_litellm_model(agent: "Agent") -> bool:
-        """Retrieve model name using the same approach used previously in send_message tool."""
-        try:
-            if hasattr(agent, "model"):
-                model_config = getattr(agent, "model", "") or ""
-                if isinstance(model_config, LitellmModel):
-                    return True
-                elif isinstance(model_config, OpenAIChatCompletionsModel):
-                    model_name = None
-                    if hasattr(model_config, "model"):
-                        model_name = model_config.model
-                    elif isinstance(model_config, str) and model_config:
-                        model_name = model_config
-                    # Look if model specifies a provider
-                    if model_name and "/" in model_name:
-                        return True
-        except Exception:
-            return False
-        return False
