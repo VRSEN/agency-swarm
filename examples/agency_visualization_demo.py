@@ -91,7 +91,6 @@ def main():
         # Generate interactive HTML visualization
         html_file = agency.visualize(
             output_file="agency_interactive_demo.html",
-            layout_algorithm="hierarchical",
             include_tools=True,
             open_browser=True,  # auto-open the demo
         )

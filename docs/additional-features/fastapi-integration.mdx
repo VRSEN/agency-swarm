@@ -41,7 +41,8 @@ run_fastapi(
 - **cors_origins**: List of allowed CORS origins. If omitted, all origins are allowed (`["*"]`).
 
 Agency endpoints accept parameters such as `message`, `recipient_agent`, `additional_instructions` and `message_files`. You should also pass the previous `chat_history` dictionary (see hooks documentation for the exact format).
-Responses include a `response` field with the agent reply and a `chat_history` field containing the serialized conversation threads. The streaming endpoint sends `chat_history` as the final event once generation is complete.
+Responses include a `response` field with the agent reply and a `chat_history` field containing the serialized conversation threads. The streaming endpoint sends `new_messages` as the final event once generation is complete.
+To maintain chat persistence, append those new messages to the previously passed chat_history before sending a new request.
 
 If the environment variable specified by `app_token_env` is set, a bearer token is required for all requests. Otherwise, authentication is disabled.
 
@@ -104,7 +105,7 @@ run_fastapi({"agency_name": create_agency}, tools=[MyTool])
 - **Always accept and pass `load_threads_callback`** in your factory, or chat history will not be restored.
 - The mapping key must be URL-friendly (no spaces or special characters).
 - Each request gets a new agency instance - do not store state in the agency object itself.
-- Use the returned `chat_history` in your client to persist and send back for the next request.
+- Add the returned `new_messages` to chat_history in your client to maintain chat persistence.
 
 ---
 
@@ -115,10 +116,11 @@ You can interact with your agents and tools using HTTP requests. Here's an examp
 ```python
 import requests
 
-history = {}
+history = []
 payload = {"message": "Hello", "chat_history": history}
 resp = requests.post("http://127.0.0.1:8000/agency_name/get_response", json=payload)
-history = resp.json()["chat_history"]
+new_messages = resp.json()["new_messages"]
+history.extend(new_messages)
 ```
 
 ---
@@ -130,3 +132,42 @@ history = resp.json()["chat_history"]
   - `/your_agency_name/get_response_stream` (POST, streaming responses)
 - **Tool Endpoints:**
   - `/tool/ToolClassName` (POST)
+
+## Streaming Event Structure
+
+When using the streaming endpoint (`/your_agency_name/get_response_stream`), the API returns Server-Sent Events (SSE) with the following structure:
+
+### Event Fields
+
+All streaming events include these standard fields:
+
+- **`agent`**: The name of the agent that generated this event
+- **`callerAgent`**: The name of the agent that called this agent (null for user-initiated requests)
+
+### Function/Tool/MCP Call Events
+
+For events related to function calls, tool calls, or MCP calls, the following additional field is included where applicable:
+
+- **`call_id`**: The unique identifier for this call, useful for correlating all events related to the same function/tool/MCP invocation
+  - Present in: `response.output_item.added`, `response.output_item.done`, `tool_call_item`, `function_call` events
+  - Note: For `response.function_call_arguments.delta` and similar delta events, the `call_id` will be added when the item_id to call_id mapping is available
+
+### Example Event Structure
+
+```json
+{
+  "type": "tool_call_item",
+  "agent": "Developer",
+  "callerAgent": "CEO",
+  "call_id": "call_abc123...",
+  "item": {
+    "type": "tool_call_item",
+    "raw_item": {
+      "name": "write_code",
+      "arguments": "{\"language\": \"python\"}"
+    }
+  }
+}
+```
+
+This consistent structure makes it easy to track which agent is performing actions and maintain proper context in multi-agent conversations, especially when agents call sub-agents simultaneously.

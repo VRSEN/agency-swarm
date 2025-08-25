@@ -9,12 +9,10 @@ not direct file attachment citations which are tested separately.
 """
 
 import asyncio
-import os
 import tempfile
 from pathlib import Path
 
 import pytest
-from agents import FileSearchTool
 
 from agency_swarm import Agency, Agent
 from agency_swarm.utils.citation_extractor import extract_vector_store_citations
@@ -49,7 +47,10 @@ Equipment Status: Mass Spectrometer operational
         # Create agent with FileSearch capability and citations enabled
         search_agent = Agent(
             name="VectorSearchAgent",
-            instructions="You are a research assistant that searches documents for specific information using your FileSearch tool.",
+            instructions=(
+                "You are a research assistant that searches documents for specific information "
+                "using your FileSearch tool."
+            ),
             files_folder=str(temp_path),
             include_search_results=True,
         )
@@ -95,10 +96,3 @@ Equipment Status: Mass Spectrometer operational
         print(f"   File ID: {citation['file_id']}")
         print(f"   Tool Call: {citation['tool_call_id']}")
         print(f"   Content preview: {citation['text'][:50]}...")
-
-
-if __name__ == "__main__":
-    # Allow running this test directly
-    if os.name == "nt":
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    asyncio.run(test_vector_store_citation_extraction())

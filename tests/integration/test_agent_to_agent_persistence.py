@@ -20,7 +20,7 @@ def coordinator_agent():
         name="Coordinator",
         instructions=(
             "You are a coordinator agent. Your job is to receive tasks and delegate them. "
-            "When you receive a task, use the `send_message_to_Worker` tool "
+            "When you receive a task, use the `send_message` tool and select 'Worker' as the recipient "
             "to ask the Worker agent to perform the task. Always include the full "
             "task details in your message. "
             "When delegating, only relay the exact task text and never include unrelated user information."
@@ -33,7 +33,10 @@ def coordinator_agent():
 def worker_agent():
     return Agent(
         name="Worker",
-        instructions="You perform tasks. When you receive a task, respond with 'TASK_COMPLETED: [task description]' to confirm completion.",
+        instructions=(
+            "You perform tasks. When you receive a task, "
+            "respond with 'TASK_COMPLETED: [task description]' to confirm completion."
+        ),
         model_settings=ModelSettings(temperature=0.0),
     )
 
@@ -42,7 +45,10 @@ def worker_agent():
 def memory_agent():
     return Agent(
         name="Memory",
-        instructions="You have perfect memory. When told to remember something, confirm with 'REMEMBERED: [item]'. When asked to recall, respond with 'RECALLED: [item]'.",
+        instructions=(
+            "You have perfect memory. When told to remember something, "
+            "confirm with 'REMEMBERED: [item]'. When asked to recall, respond with 'RECALLED: [item]'."
+        ),
         model_settings=ModelSettings(temperature=0.0),
     )
 
@@ -83,45 +89,39 @@ class TestAgentToAgentPersistence:
 
         print(f"\n--- Testing Agent-to-Agent Persistence --- TASK: {task_id}")
 
-        # Step 1: Verify no agent-to-agent thread exists initially
-        agent_thread_id = "Coordinator->Worker"
-        assert agent_thread_id not in coordinator_worker_agency.thread_manager._threads, (
-            "Agent-to-agent thread should not exist initially"
-        )
+        # Step 1: Verify no agent-to-agent messages exist initially
+        initial_messages = coordinator_worker_agency.thread_manager.get_conversation_history("Worker", "Coordinator")
+        assert len(initial_messages) == 0, "No agent-to-agent messages should exist initially"
 
         # Step 2: Trigger communication that should create agent-to-agent thread
         await coordinator_worker_agency.get_response(message=user_message)
 
-        # Step 3: CRITICAL VERIFICATION - Agent-to-agent thread must contain conversation items
-        assert agent_thread_id in coordinator_worker_agency.thread_manager._threads, (
-            f"Agent-to-agent thread {agent_thread_id} should be created"
-        )
+        # Step 3: CRITICAL VERIFICATION - Agent-to-agent messages must exist
+        agent_messages = coordinator_worker_agency.thread_manager.get_conversation_history("Worker", "Coordinator")
+        assert len(agent_messages) > 0, "Agent-to-agent messages should be created after communication"
 
-        agent_thread = coordinator_worker_agency.thread_manager._threads[agent_thread_id]
-        assert len(agent_thread.items) > 0, (
-            f"Agent-to-agent thread {agent_thread_id} exists but contains no conversation items"
-        )
-
-        # Step 4: Verify thread contains both input and output messages
-        thread_items = agent_thread.items
-        print(f"Agent-to-agent thread contains {len(thread_items)} items:")
-        for i, item in enumerate(thread_items):
+        # Step 4: Verify messages contain both input and output
+        print(f"Agent-to-agent conversation contains {len(agent_messages)} messages:")
+        for i, item in enumerate(agent_messages):
             print(
-                f"  Item {i + 1}: role={item.get('role')}, type={item.get('type')}, content_preview={str(item.get('content', ''))[:50]}..."
+                f"  Message {i + 1}: role={item.get('role')}, agent={item.get('agent')}, "
+                f"callerAgent={item.get('callerAgent')}, content_preview={str(item.get('content', ''))[:50]}..."
             )
 
         # Should have at least user message to Worker and Worker's response
-        user_messages = [item for item in thread_items if item.get("role") == "user"]
-        assistant_messages = [item for item in thread_items if item.get("role") == "assistant"]
+        user_messages = [msg for msg in agent_messages if msg.get("role") == "user"]
+        assistant_messages = [msg for msg in agent_messages if msg.get("role") == "assistant"]
 
-        assert len(user_messages) > 0, "Agent-to-agent thread should contain user message (from Coordinator)"
-        assert len(assistant_messages) > 0, "Agent-to-agent thread should contain assistant response (from Worker)"
+        assert len(user_messages) > 0, "Should have user messages (from Coordinator to Worker)"
+        assert len(assistant_messages) > 0, "Should have assistant responses (from Worker)"
 
         # Verify task context is preserved in the conversation
-        thread_content = str(thread_items).lower()
-        assert task_id.lower() in thread_content, f"Task {task_id} should be referenced in agent-to-agent conversation"
+        conversation_content = str(agent_messages).lower()
+        assert task_id.lower() in conversation_content, (
+            f"Task {task_id} should be referenced in agent-to-agent conversation"
+        )
 
-        print(f"✅ SUCCESS: Agent-to-agent conversation properly persisted to thread {agent_thread_id}")
+        print("✅ SUCCESS: Agent-to-agent conversation properly persisted")
 
     @pytest.mark.asyncio
     async def test_agent_to_agent_memory_across_turns(self, memory_agency):
@@ -139,31 +139,27 @@ class TestAgentToAgentPersistence:
         remember_message = f"Please ask the memory agent to remember this secret code: {secret_code}"
         await memory_agency.get_response(message=remember_message)
 
-        # Verify agent-to-agent thread was created and contains the secret
-        agent_thread_id = "Coordinator->Memory"
-        assert agent_thread_id in memory_agency.thread_manager._threads, (
-            "Agent-to-agent thread should be created after first interaction"
-        )
+        # Verify agent-to-agent messages were created and contain the secret
+        agent_messages = memory_agency.thread_manager.get_conversation_history("Memory", "Coordinator")
+        first_turn_count = len(agent_messages)
+        assert first_turn_count > 0, "Agent-to-agent messages should be created after first interaction"
 
-        agent_thread = memory_agency.thread_manager._threads[agent_thread_id]
-        first_turn_items = len(agent_thread.items)
-        assert first_turn_items > 0, "Agent-to-agent thread should contain conversation from first turn"
-
-        thread_content = str(agent_thread.items).lower()
-        assert secret_code.lower() in thread_content, (
+        conversation_content = str(agent_messages).lower()
+        assert secret_code.lower() in conversation_content, (
             f"Secret code {secret_code} should be in agent-to-agent conversation history"
         )
 
-        print(f"Turn 1 complete: Agent-to-agent thread has {first_turn_items} items")
+        print(f"Turn 1 complete: {first_turn_count} agent-to-agent messages")
 
         # Turn 2: Ask coordinator to ask memory agent to recall the secret
         recall_message = "Please ask the memory agent what secret code it was told to remember earlier."
         response = await memory_agency.get_response(message=recall_message)
 
-        # Verify thread history grew (new conversation items added)
-        second_turn_items = len(agent_thread.items)
-        assert second_turn_items > first_turn_items, (
-            f"Agent-to-agent thread should grow from {first_turn_items} to {second_turn_items} items"
+        # Verify conversation history grew (new messages added)
+        agent_messages_after = memory_agency.thread_manager.get_conversation_history("Memory", "Coordinator")
+        second_turn_count = len(agent_messages_after)
+        assert second_turn_count > first_turn_count, (
+            f"Agent-to-agent conversation should grow from {first_turn_count} to {second_turn_count} messages"
         )
 
         # Verify the memory agent successfully recalled the secret from previous turn
@@ -172,7 +168,7 @@ class TestAgentToAgentPersistence:
             f"Memory agent should recall secret {secret_code} from previous agent-to-agent conversation"
         )
 
-        print(f"Turn 2 complete: Agent-to-agent thread has {second_turn_items} items")
+        print(f"Turn 2 complete: {second_turn_count} agent-to-agent messages")
         print(f"✅ SUCCESS: Agent-to-agent memory preserved across turns - secret {secret_code} recalled")
 
     @pytest.mark.asyncio
@@ -185,7 +181,7 @@ class TestAgentToAgentPersistence:
         # Create coordinator and two workers
         coordinator = Agent(
             name="Coordinator",
-            instructions="You coordinate tasks. Use send_message_to_Worker or send_message_to_Worker2 to delegate tasks.",
+            instructions=("You coordinate tasks. Use the send_message tool to delegate tasks to Worker or Worker2."),
             model_settings=ModelSettings(temperature=0.0),
         )
 
@@ -224,34 +220,34 @@ class TestAgentToAgentPersistence:
         # Send task to Worker2
         await agency.get_response(f"Please ask Worker2 to handle {task2_id}")
 
-        # Verify separate threads were created
-        thread1_id = "Coordinator->Worker"
-        thread2_id = "Coordinator->Worker2"
-
+        # Verify separate conversations exist
         thread_manager = agency.thread_manager
-        assert thread1_id in thread_manager._threads, f"Thread {thread1_id} should exist"
-        assert thread2_id in thread_manager._threads, f"Thread {thread2_id} should exist"
 
-        thread1 = thread_manager._threads[thread1_id]
-        thread2 = thread_manager._threads[thread2_id]
+        # Get messages for each conversation
+        worker1_messages = thread_manager.get_conversation_history("Worker", "Coordinator")
+        worker2_messages = thread_manager.get_conversation_history("Worker2", "Coordinator")
 
-        # Verify both threads have conversation items
-        assert len(thread1.items) > 0, f"Thread {thread1_id} should contain conversation items"
-        assert len(thread2.items) > 0, f"Thread {thread2_id} should contain conversation items"
+        # Verify both conversations have messages
+        assert len(worker1_messages) > 0, "Coordinator->Worker conversation should have messages"
+        assert len(worker2_messages) > 0, "Coordinator->Worker2 conversation should have messages"
 
-        # Verify thread isolation - each thread should only contain its own task
-        thread1_content = str(thread1.items).lower()
-        thread2_content = str(thread2.items).lower()
+        # Verify conversation isolation - each conversation should only contain its own task
+        worker1_content = str(worker1_messages).lower()
+        worker2_content = str(worker2_messages).lower()
 
-        assert task1_id.lower() in thread1_content, f"Thread1 should contain {task1_id}"
-        assert task1_id.lower() not in thread2_content, f"Thread2 should NOT contain {task1_id} (isolation breach)"
+        assert task1_id.lower() in worker1_content, f"Worker1 conversation should contain {task1_id}"
+        assert task1_id.lower() not in worker2_content, (
+            f"Worker2 conversation should NOT contain {task1_id} (isolation breach)"
+        )
 
-        assert task2_id.lower() in thread2_content, f"Thread2 should contain {task2_id}"
-        assert task2_id.lower() not in thread1_content, f"Thread1 should NOT contain {task2_id} (isolation breach)"
+        assert task2_id.lower() in worker2_content, f"Worker2 conversation should contain {task2_id}"
+        assert task2_id.lower() not in worker1_content, (
+            f"Worker1 conversation should NOT contain {task2_id} (isolation breach)"
+        )
 
-        print("✅ SUCCESS: Agent-to-agent threads properly isolated:")
-        print(f"  {thread1_id}: {len(thread1.items)} items (contains {task1_id})")
-        print(f"  {thread2_id}: {len(thread2.items)} items (contains {task2_id})")
+        print("✅ SUCCESS: Agent-to-agent conversations properly isolated:")
+        print(f"  Coordinator->Worker: {len(worker1_messages)} messages (contains {task1_id})")
+        print(f"  Coordinator->Worker2: {len(worker2_messages)} messages (contains {task2_id})")
 
     @pytest.mark.asyncio
     async def test_conversation_content_preservation(self, coordinator_worker_agency):
@@ -266,38 +262,39 @@ class TestAgentToAgentPersistence:
 
         await coordinator_worker_agency.get_response(f"Please delegate task {task_id} to worker")
 
-        # Verify agent-to-agent thread contains properly formatted conversation
-        agent_thread_id = "Coordinator->Worker"
-        assert agent_thread_id in coordinator_worker_agency.thread_manager._threads
+        # Verify agent-to-agent conversation contains properly formatted messages
+        agent_messages = coordinator_worker_agency.thread_manager.get_conversation_history("Worker", "Coordinator")
+        assert len(agent_messages) > 0, "Agent-to-agent conversation should contain messages"
 
-        agent_thread = coordinator_worker_agency.thread_manager._threads[agent_thread_id]
-        assert len(agent_thread.items) > 0, "Agent-to-agent thread should contain conversation items"
-
-        print(f"Agent-to-agent thread contains {len(agent_thread.items)} items:")
-        for i, item in enumerate(agent_thread.items):
+        print(f"Agent-to-agent conversation contains {len(agent_messages)} messages:")
+        for i, item in enumerate(agent_messages):
             item_role = item.get("role", "NO_ROLE")
-            item_type = item.get("type", "NO_TYPE")
+            item_agent = item.get("agent", "NO_AGENT")
+            item_caller = item.get("callerAgent", "NO_CALLER")
             content_preview = str(item.get("content", "NO_CONTENT"))[:50]
-            print(f"  Item {i + 1}: role={item_role}, type={item_type}, content='{content_preview}...'")
+            print(
+                f"  Message {i + 1}: role={item_role}, agent={item_agent}, "
+                f"caller={item_caller}, content='{content_preview}...'"
+            )
 
-        # Verify we have proper conversation structure (user message and assistant response)
-        user_messages = [item for item in agent_thread.items if item.get("role") == "user"]
-        assistant_messages = [item for item in agent_thread.items if item.get("role") == "assistant"]
+        # Verify we have proper conversation structure
+        user_messages = [msg for msg in agent_messages if msg.get("role") == "user"]
+        assistant_messages = [msg for msg in agent_messages if msg.get("role") == "assistant"]
 
-        assert len(user_messages) > 0, "Agent-to-agent thread should contain user messages (from Coordinator)"
-        assert len(assistant_messages) > 0, "Agent-to-agent thread should contain assistant responses (from Worker)"
+        assert len(user_messages) > 0, "Should have user messages (from Coordinator)"
+        assert len(assistant_messages) > 0, "Should have assistant responses (from Worker)"
 
-        # Verify no items have role=None or content=None (regression check)
-        for item in agent_thread.items:
-            assert item.get("role") is not None, f"Item should not have role=None: {item}"
+        # Verify no messages have role=None or content=None (regression check)
+        for item in agent_messages:
+            assert item.get("role") is not None, f"Message should not have role=None: {item}"
             if item.get("role") in ["user", "assistant"]:
-                assert item.get("content") is not None, f"User/assistant item should not have content=None: {item}"
+                assert item.get("content") is not None, f"User/assistant message should not have content=None: {item}"
 
         # Verify task context is preserved
-        thread_content = str(agent_thread.items).lower()
-        assert task_id.lower() in thread_content, f"Task {task_id} should be referenced in conversation"
+        conversation_content = str(agent_messages).lower()
+        assert task_id.lower() in conversation_content, f"Task {task_id} should be referenced in conversation"
 
-        print("✅ SUCCESS: Conversation content properly preserved in agent-to-agent thread")
+        print("✅ SUCCESS: Conversation content properly preserved in agent-to-agent messages")
 
     @pytest.mark.asyncio
     async def test_agent_to_agent_thread_isolation_from_user_context(self, coordinator_worker_agency):
@@ -322,41 +319,39 @@ class TestAgentToAgentPersistence:
         # Step 2: User asks coordinator to relay different info to worker
         await coordinator_worker_agency.get_response(f"Now please tell the worker this message: {relay_info}")
 
-        # Verify separate threads exist
-        user_thread_id = "user->Coordinator"
-        agent_thread_id = "Coordinator->Worker"
-
+        # Verify separate conversations exist
         thread_manager = coordinator_worker_agency.thread_manager
-        assert user_thread_id in thread_manager._threads, f"User thread {user_thread_id} should exist"
-        assert agent_thread_id in thread_manager._threads, f"Agent thread {agent_thread_id} should exist"
 
-        user_thread = thread_manager._threads[user_thread_id]
-        agent_thread = thread_manager._threads[agent_thread_id]
+        # Get messages for each conversation
+        user_messages = thread_manager.get_conversation_history("Coordinator", None)  # None = user
+        agent_messages = thread_manager.get_conversation_history("Worker", "Coordinator")
 
-        # Verify both threads have content
-        assert len(user_thread.items) > 0, "User thread should contain conversation items"
-        assert len(agent_thread.items) > 0, "Agent-to-agent thread should contain conversation items"
+        # Verify both conversations have content
+        assert len(user_messages) > 0, "User->Coordinator conversation should have messages"
+        assert len(agent_messages) > 0, "Agent-to-agent conversation should have messages"
 
-        # Analyze thread contents
-        user_content = str(user_thread.items).lower()
-        agent_content = str(agent_thread.items).lower()
+        # Analyze conversation contents
+        user_content = str(user_messages).lower()
+        agent_content = str(agent_messages).lower()
 
-        print("User thread content check:")
+        print("User conversation content check:")
         print(f"  Contains private info: {private_info.lower() in user_content}")
         print(f"  Contains relay info: {relay_info.lower() in user_content}")
 
-        print("Agent thread content check:")
+        print("Agent conversation content check:")
         print(f"  Contains private info: {private_info.lower() in agent_content}")
         print(f"  Contains relay info: {relay_info.lower() in agent_content}")
 
-        # User thread should contain both (user said both to coordinator)
-        assert private_info.lower() in user_content, f"User thread should contain private info {private_info}"
-        assert relay_info.lower() in user_content, f"User thread should contain relay info {relay_info}"
+        # User conversation should contain both (user said both to coordinator)
+        assert private_info.lower() in user_content, f"User conversation should contain private info {private_info}"
+        assert relay_info.lower() in user_content, f"User conversation should contain relay info {relay_info}"
 
-        # Agent thread should only contain what was relayed to worker
-        assert relay_info.lower() in agent_content, f"Agent thread should contain relay info {relay_info}"
-        assert private_info.lower() not in agent_content, f"Agent thread should NOT contain private info {private_info}"
+        # Agent conversation should only contain what was relayed to worker
+        assert relay_info.lower() in agent_content, f"Agent conversation should contain relay info {relay_info}"
+        assert private_info.lower() not in agent_content, (
+            f"Agent conversation should NOT contain private info {private_info}"
+        )
 
-        print("✅ SUCCESS: Agent-to-agent thread properly isolated:")
-        print(f"  User thread: {len(user_thread.items)} items (has both secrets)")
-        print(f"  Agent thread: {len(agent_thread.items)} items (only has relayed info, not private info)")
+        print("✅ SUCCESS: Agent-to-agent conversation properly isolated:")
+        print(f"  User conversation: {len(user_messages)} messages (has both secrets)")
+        print(f"  Agent conversation: {len(agent_messages)} messages (only has relayed info, not private info)")

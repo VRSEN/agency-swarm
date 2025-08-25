@@ -1,47 +1,51 @@
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from dotenv import load_dotenv
 
-from agency_swarm import Agent
-from agency_swarm.thread import ConversationThread, ThreadManager
+from agency_swarm import Agency, AgencyContext, Agent
+from agency_swarm.utils.thread import ThreadManager
 
+load_dotenv()
 
 @pytest.fixture
 def mock_thread_manager():
-    """Provides a mocked ThreadManager instance that returns threads with matching IDs."""
+    """Provides a mocked ThreadManager instance with flat message storage."""
     manager = MagicMock(spec=ThreadManager)
-    created_threads = {}
+    messages = []
 
-    def get_thread_side_effect(thread_id):
-        """Side effect for get_thread to create/return mock threads with correct ID."""
-        if thread_id not in created_threads:
-            mock_thread_fixture_created = MagicMock(spec=ConversationThread)
-            mock_thread_fixture_created.thread_id = thread_id
-            mock_thread_fixture_created.items = []
+    def add_message_side_effect(message):
+        """Side effect for add_message to append to message list."""
+        messages.append(message)
 
-            def add_item_side_effect(item):
-                mock_thread_fixture_created.items.append(item)
+    def add_messages_side_effect(msgs):
+        """Side effect for add_messages to extend message list."""
+        messages.extend(msgs)
 
-            mock_thread_fixture_created.add_item.side_effect = add_item_side_effect
+    def get_conversation_history_side_effect(agent, caller_agent=None):
+        """Side effect for get_conversation_history to filter messages."""
+        filtered = []
+        for msg in messages:
+            if (msg.get("agent") == agent and msg.get("callerAgent") == caller_agent) or (
+                msg.get("callerAgent") == agent and msg.get("agent") == caller_agent
+            ):
+                filtered.append(msg)
+        return filtered
 
-            def add_items_side_effect(items):
-                mock_thread_fixture_created.items.extend(items)
+    def get_all_messages_side_effect():
+        """Side effect for get_all_messages to return all messages."""
+        return messages.copy()
 
-            mock_thread_fixture_created.add_items.side_effect = add_items_side_effect
-            mock_thread_fixture_created.get_history.return_value = []
-            created_threads[thread_id] = mock_thread_fixture_created
-        return created_threads[thread_id]
+    manager.add_message.side_effect = add_message_side_effect
+    manager.add_messages.side_effect = add_messages_side_effect
+    manager.get_conversation_history.side_effect = get_conversation_history_side_effect
+    manager.get_all_messages.side_effect = get_all_messages_side_effect
 
-    manager.get_thread.side_effect = get_thread_side_effect
-
-    def add_items_and_save_side_effect(thread_obj, items_to_add):
-        if hasattr(thread_obj, "items") and isinstance(thread_obj.items, list):
-            thread_obj.items.extend(items_to_add)
-        else:
-            pass
-
+    # Legacy compatibility - these should not be used but may be called
+    manager.get_thread = MagicMock()
     manager.add_item_and_save = MagicMock()
-    manager.add_items_and_save = MagicMock(side_effect=add_items_and_save_side_effect)
+    manager.add_items_and_save = MagicMock()
+
     return manager
 
 
@@ -57,10 +61,26 @@ def mock_agency_instance(mock_thread_manager):
 @pytest.fixture
 def minimal_agent(mock_thread_manager, mock_agency_instance):
     """Provides a minimal Agent instance for basic tests."""
+
     agent = Agent(name="TestAgent", instructions="Test instructions")
-    agent._set_agency_instance(mock_agency_instance)
-    agent._set_thread_manager(mock_thread_manager)
-    mock_agency_instance.agents[agent.name] = agent
+
+    # Create an agency and replace its thread manager with our mock
+    agency = Agency(agent)
+    agency.thread_manager = mock_thread_manager
+
+    # Mock the agent's context creation to always return a context with our mock thread manager
+    def mock_create_minimal_context():
+        return AgencyContext(
+            agency_instance=None,
+            thread_manager=mock_thread_manager,
+            subagents={},
+            load_threads_callback=None,
+            save_threads_callback=None,
+            shared_instructions=None,
+        )
+
+    agent._create_minimal_context = mock_create_minimal_context
+
     return agent
 
 

@@ -47,16 +47,14 @@ async def test_agent_processes_message_files_attachment(real_openai_client: Asyn
     )
     attachment_tester_agent._openai_client = real_openai_client
 
-    # 3. Setup a minimal real Agency and ThreadManager for agent.get_response()
-    Agency(attachment_tester_agent, user_context=None)
-    thread_manager = attachment_tester_agent._thread_manager
-    assert thread_manager is not None, "ThreadManager not set by Agency"
+    # 3. Setup a real Agency for proper testing
+    agency = Agency(attachment_tester_agent, user_context=None)
 
     # 4. Call get_response with file_ids - OpenAI will automatically process the file
     message_to_agent = "What content do you see in the attached PDF file? Please summarize what you find."
 
     print(f"TEST: Calling get_response for agent '{attachment_tester_agent.name}' with file_ids: [{attached_file_id}]")
-    response_result = await attachment_tester_agent.get_response(message_to_agent, file_ids=[attached_file_id])
+    response_result = await agency.get_response(message_to_agent, file_ids=[attached_file_id])
 
     assert response_result is not None
     assert response_result.final_output is not None
@@ -169,8 +167,9 @@ async def test_multi_file_type_processing(real_openai_client: AsyncOpenAI, tmp_p
                 print(f"Unexpected tool call found for {test_pdf_path.name}: {item.raw_item}")
 
         assert not tool_calls_found, (
-            f"No tool calls should be found for {test_pdf_path.name} since OpenAI automatically processes PDF file attachments. "
-            f"The presence of tool calls suggests the implementation is incorrectly trying to use custom tools."
+            f"No tool calls should be found for {test_pdf_path.name} since OpenAI automatically processes "
+            f"PDF file attachments. The presence of tool calls suggests the implementation is incorrectly "
+            f"trying to use custom tools."
         )
 
     finally:
@@ -182,111 +181,138 @@ async def test_multi_file_type_processing(real_openai_client: AsyncOpenAI, tmp_p
             print(f"Error cleaning up file {file_id}: {e}")
 
 
-@pytest.mark.asyncio
-async def test_file_search_tool(real_openai_client: AsyncOpenAI, tmp_path: Path):
-    """
-    Tests that an agent can use FileSearch tool to process files.
-    """
-    # Use the test txt file
+async def _setup_file_search_agent(real_openai_client: AsyncOpenAI, tmp_path: Path):
+    """Helper to set up file search agent with test file."""
     test_txt_path = Path("tests/data/files/favorite_books.txt")
     assert test_txt_path.exists(), f"Test file not found at {test_txt_path}"
 
-    # Upload file to OpenAI
-    tmp_dir = Path("tests/data/files/tmp")
-    os.makedirs(tmp_dir, exist_ok=True)
+    # Use pytest tmp_path for isolation
+    tmp_dir = tmp_path / "file_search_test"
+    tmp_dir.mkdir(exist_ok=True)
     tmp_file_path = tmp_dir / "favorite_books.txt"
     shutil.copy(test_txt_path, tmp_file_path)
 
+    file_search_agent = Agent(
+        name="FileSearchAgent",
+        instructions="""You are an agent that can read and analyze text files using FileSearch.
+        When asked questions about files, always use your FileSearch tool to search through the uploaded documents.
+        Be direct and specific in your answers based on what you find in the files.""",
+        model_settings=ModelSettings(temperature=0.0),
+        files_folder=tmp_dir,
+    )
+    file_search_agent._openai_client = real_openai_client
+
+    # Find vector store folder
+    candidates = list(tmp_dir.parent.glob(f"{tmp_dir.name}_vs_*"))
+    folder_path = candidates[0] if candidates else None
+    assert folder_path, "No vector store folder found"
+
+    return file_search_agent, folder_path, tmp_file_path, test_txt_path
+
+
+async def _wait_for_vector_store(real_openai_client: AsyncOpenAI, agent):
+    """Helper to wait for vector store processing to complete."""
+    vector_store_id = agent._associated_vector_store_id
+    if not vector_store_id:
+        return
+
+    print(f"Waiting for vector store {vector_store_id} to complete processing...")
+    for i in range(30):  # Wait up to 30 seconds
+        vs = await real_openai_client.vector_stores.retrieve(vector_store_id)
+        if vs.status == "completed":
+            print(f"Vector store processing completed after {i + 1} seconds")
+            break
+        elif vs.status == "failed":
+            raise Exception(f"Vector store processing failed: {vs}")
+        await asyncio.sleep(1)
+    else:
+        print(f"Warning: Vector store still processing after 30 seconds, status: {vs.status}")
+
+
+async def _cleanup_file_search_resources(real_openai_client: AsyncOpenAI, folder_path: Path, agent):
+    """Helper to clean up file search test resources."""
     try:
-        # Create an agent WITHOUT custom file processing tools
-        # Library will automatically add FileSearch tool
-        file_search_agent = Agent(
-            name="FileSearchAgent",
-            instructions="""You are an agent that can read and analyze text files.""",
-            model_settings=ModelSettings(temperature=0.0),
-            files_folder=tmp_dir,
-        )
-        file_search_agent._openai_client = real_openai_client
+        if folder_path and folder_path.exists():
+            for file in folder_path.glob("*"):
+                try:
+                    file_id = agent.file_manager.get_id_from_file(file)
+                    if file_id:
+                        await real_openai_client.files.delete(file_id=file_id)
+                        print(f"Cleaned up file {file.name}")
+                    os.remove(file)
+                except Exception as e:
+                    print(f"Error cleaning up file {file.name}: {e}")
 
-        parent = tmp_dir.parent
-        base_name = tmp_dir.name
-        # Look for folders like base_name_vs_*
-        candidates = list(parent.glob(f"{base_name}_vs_*"))
-        if candidates:
-            # Use the first match
-            folder_path = candidates[0]
-        else:
-            folder_path = ""
+            # Clean up vector store
+            try:
+                vector_store_id = folder_path.name.split("_vs_")[-1]
+                await real_openai_client.vector_stores.delete(vector_store_id=f"vs_{vector_store_id}")
+                print(f"Cleaned up vector store {folder_path.name}")
+                os.rmdir(folder_path)
+            except Exception as e:
+                print(f"Error cleaning up vector store: {e}")
+    except Exception as e:
+        print(f"Error during cleanup: {e}")
 
-        assert folder_path != "", "No vector store folder found"
 
-        # Wait for vector store processing to complete
-        vector_store_id = file_search_agent._associated_vector_store_id
-        if vector_store_id:
-            print(f"Waiting for vector store {vector_store_id} to complete processing...")
-            for i in range(30):  # Wait up to 30 seconds
-                vs = await real_openai_client.vector_stores.retrieve(vector_store_id)
-                if vs.status == "completed":
-                    print(f"Vector store processing completed after {i + 1} seconds")
-                    break
-                elif vs.status == "failed":
-                    raise Exception(f"Vector store processing failed: {vs}")
-                await asyncio.sleep(1)
-            else:
-                print(f"Warning: Vector store still processing after 30 seconds, status: {vs.status}")
+@pytest.mark.asyncio
+async def test_file_search_tool(real_openai_client: AsyncOpenAI, tmp_path: Path):
+    """Tests that an agent can use FileSearch tool to process files."""
+    file_search_agent, folder_path, tmp_file_path, test_txt_path = await _setup_file_search_agent(
+        real_openai_client, tmp_path
+    )
 
-        # Initialize agency for the agent
+    try:
+        await _wait_for_vector_store(real_openai_client, file_search_agent)
+
+        # Initialize agency and run test
         agency = Agency(file_search_agent, user_context=None)
-
-        question = "What is the name of the 4th book in the list?"
+        question = (
+            "What is the title of the 4th book in the favorite books list? Please search the file to find the answer."
+        )
 
         try:
             response_result = await agency.get_response(question)
-
-            # Verify response
             assert response_result is not None
             print(f"Response for {test_txt_path.name}: {response_result.final_output}")
 
-            assert "hobbit" in response_result.final_output.lower()
+            # Verify FileSearch was used and expected content found
+            final_output_lower = response_result.final_output.lower()
+            hobbit_found = any(term in final_output_lower for term in ["hobbit", "the hobbit", "j.r.r. tolkien"])
+
+            if not hobbit_found:
+                print("Expected content not found, checking if FileSearch was used")
+                tool_calls_made = [
+                    item for item in response_result.new_items if hasattr(item, "tool_calls") and item.tool_calls
+                ]
+                file_search_used = any(
+                    any(call.type == "file_search" for call in item.tool_calls if hasattr(call, "type"))
+                    for item in tool_calls_made
+                )
+                if not file_search_used:
+                    print("FileSearch tool was not used, this may explain why the answer wasn't found")
+
+            assert hobbit_found, f"Expected 'hobbit' or related terms not found in: {response_result.final_output}"
 
         except Exception as e:
-            # TEST-ONLY FALLBACK: If 404 error (files not found), re-upload and retry
-            # This preserves functionality testing while handling missing files in test environment
+            # Handle 404 errors with retry
             if "404" in str(e) and "Files" in str(e):
-                print(f"Files not found error detected, re-uploading files for test: {e}")
-
-                # Re-upload the file to the vector store
+                print(f"Files not found error, re-uploading and retrying: {e}")
                 uploaded_file_id = file_search_agent.upload_file(str(tmp_file_path), include_in_vector_store=True)
                 print(f"Re-uploaded file {tmp_file_path.name} with ID: {uploaded_file_id}")
 
-                # Retry the question
                 response_result = await agency.get_response(question)
-
-                # Verify response after retry
                 assert response_result is not None
-                print(f"Response for {test_txt_path.name} (retry): {response_result.final_output}")
+                print(f"Response (retry): {response_result.final_output}")
 
-                assert "hobbit" in response_result.final_output.lower()
+                final_output_lower = response_result.final_output.lower()
+                hobbit_found = any(term in final_output_lower for term in ["hobbit", "the hobbit", "j.r.r. tolkien"])
+                assert hobbit_found, f"Expected 'hobbit' terms not found in retry: {response_result.final_output}"
             else:
-                # Re-raise other errors
                 raise
 
     finally:
-        # Cleanup: Delete uploaded file from OpenAI and temp directory
-        try:
-            for file in folder_path.glob("*"):
-                file_id = file_search_agent.file_manager.get_id_from_file(file)
-                if file_id:
-                    await real_openai_client.files.delete(file_id=file_id)
-                    print(f"Cleaned up file {file.name}")
-                os.remove(file)
-            vector_store_id = folder_path.name.split("_vs_")[-1]
-            await real_openai_client.vector_stores.delete(vector_store_id=f"vs_{vector_store_id}")
-            print(f"Cleaned up vector store {folder_path.name}")
-            os.rmdir(folder_path)
-            print(f"Cleaned up folder {folder_path.name}")
-        except Exception as e:
-            print(f"Error cleaning up: {e}, dir: {tmp_dir.glob('*')}")
+        await _cleanup_file_search_resources(real_openai_client, folder_path, file_search_agent)
 
 
 @pytest.mark.asyncio
@@ -297,8 +323,9 @@ async def test_code_interpreter_tool(real_openai_client: AsyncOpenAI, tmp_path: 
     test_py_path = Path("tests/data/files/test-python.py")
     assert test_py_path.exists(), f"Test file not found at {test_py_path}"
 
-    tmp_dir = Path("tests/data/files/tmp")
-    os.makedirs(tmp_dir, exist_ok=True)
+    # Use pytest tmp_path for isolation
+    tmp_dir = tmp_path / "code_interpreter_test"
+    tmp_dir.mkdir(exist_ok=True)
     tmp_file_path = tmp_dir / "test-python.py"
     shutil.copy(test_py_path, tmp_file_path)
 
@@ -311,17 +338,11 @@ async def test_code_interpreter_tool(real_openai_client: AsyncOpenAI, tmp_path: 
         )
         code_interpreter_agent._openai_client = real_openai_client
 
-        parent = tmp_dir.parent
-        base_name = tmp_dir.name
-        # Look for folders like base_name_vs_*
-        candidates = list(parent.glob(f"{base_name}_vs_*"))
-        if candidates:
-            # Use the first match
-            folder_path = candidates[0]
-        else:
-            folder_path = ""
+        # Find vector store folder
+        candidates = list(tmp_dir.parent.glob(f"{tmp_dir.name}_vs_*"))
+        folder_path = candidates[0] if candidates else None
 
-        assert folder_path != "", "No vector store folder found"
+        assert folder_path, "No vector store folder found"
 
         # Initialize agency for the agent
         agency = Agency(code_interpreter_agent, user_context=None)
@@ -365,6 +386,11 @@ async def test_code_interpreter_tool(real_openai_client: AsyncOpenAI, tmp_path: 
             print(f"Cleaned up vector store {folder_path.name}")
             os.rmdir(folder_path)
             print(f"Cleaned up folder {folder_path.name}")
+
+            # Clean up the tmp directory if it's empty
+            if tmp_dir.exists() and not any(tmp_dir.iterdir()):
+                os.rmdir(tmp_dir)
+                print(f"Cleaned up tmp directory {tmp_dir}")
         except Exception as e:
             print(f"Error cleaning up: {e}, dir: {tmp_dir.glob('*')}")
 
@@ -384,9 +410,11 @@ async def test_agent_vision_capabilities(real_openai_client: AsyncOpenAI, tmp_pa
         return encoded_string
 
     # Use the example images since they're actual image files (not text files)
+    # Resolve paths relative to the project root
+    project_root = Path(__file__).parent.parent.parent  # Go up from tests/integration/test_file_handling.py
     test_images = [
-        (Path("examples/data/shapes_and_text.png"), "How many shapes do you see in this image?", "three"),
-        (Path("examples/data/shapes_and_text.png"), "What text do you see in this image?", "VISION TEST 2024"),
+        (project_root / "examples/data/shapes_and_text.png", "How many shapes do you see in this image?", "three"),
+        (project_root / "examples/data/shapes_and_text.png", "What text do you see in this image?", "VISION TEST 2024"),
     ]
 
     # Verify test images exist

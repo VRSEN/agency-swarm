@@ -35,8 +35,8 @@ logging.getLogger("agency_swarm").setLevel(
 class SendMessageWithContext(SendMessage):
     """SendMessage with key moments and decisions tracking."""
 
-    def __init__(self, sender_agent, recipient_agent, tool_name):
-        super().__init__(sender_agent, recipient_agent, tool_name)
+    def __init__(self, sender_agent: Agent, recipients: dict[str, Agent] | None = None) -> None:
+        super().__init__(sender_agent, recipients)
 
         # Add 2 additional fields to the params schema with rich descriptions
         self.params_json_schema["properties"]["key_moments"] = {
@@ -118,6 +118,13 @@ agency = Agency(
 #     communication_flows=[(coordinator, specialist)],
 #     shared_instructions="Use key decisions to guide analysis tool selection.",
 #     send_message_tool_class=SendMessageWithContext,  # Enhanced communication for all agents
+# )
+
+# Option 3: Set custom SendMessage class on communication flow
+# agency = Agency(
+#     coordinator,
+#     communication_flows=[(coordinator > specialist, SendMessageWithContext)],
+#     shared_instructions="Use key decisions to guide analysis tool selection.",
 # )
 
 

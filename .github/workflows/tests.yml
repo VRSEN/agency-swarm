@@ -1,58 +1,68 @@
-name: Tests
+name: CI
 
 on:
   push:
     branches:
       - main
-      - "release/*"  # Run tests on all release branches
+      - "release/*"
+      - "dev/migrate-to-responses-api-agents-sdk"
   pull_request:
-    # All PRs, including stacked PRs
 
 env:
   UV_FROZEN: "1"
 
 jobs:
   lint:
-    if: false  # Temporarily disabled
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
-      - name: Setup uv
+      - name: Set up uv (3.13)
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
+          python-version: "3.13"
       - name: Install dependencies
         run: make sync
       - name: Run lint
         run: make lint
 
   typecheck:
-    if: false  # Temporarily disabled
+    if: false  # Temporarily disabled: mypy failing locally
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
-      - name: Setup uv
+      - name: Set up uv (3.13)
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
+          python-version: "3.13"
       - name: Install dependencies
         run: make sync
-      - name: Run typecheck
+      - name: Run mypy
         run: make mypy
 
   tests:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
-      - name: Setup uv
+
+      - name: Set up uv (Python ${{ matrix.python-version }})
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
+          python-version: ${{ matrix.python-version }}
+
       - name: Install dependencies
         run: make sync
+
       - name: Run tests with coverage
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}

@@ -3,14 +3,11 @@ import os
 from collections.abc import Callable, Mapping
 
 from agents.tool import FunctionTool
-from dotenv import load_dotenv
 
 from agency_swarm.agency import Agency
-from agency_swarm.agent import Agent
+from agency_swarm.agent.core import Agent
 
 logger = logging.getLogger(__name__)
-
-load_dotenv()
 
 
 def run_fastapi(
@@ -22,6 +19,8 @@ def run_fastapi(
     return_app: bool = False,
     cors_origins: list[str] | None = None,
     enable_agui: bool = False,
+    enable_logging: bool = False,
+    logs_dir: str = "activity-logs",
 ):
     """Launch a FastAPI server exposing endpoints for multiple agencies and tools.
 
@@ -36,6 +35,13 @@ def run_fastapi(
         Optional tools to expose under ``/tool`` routes.
     host, port, app_token_env, return_app, cors_origins :
         Standard FastAPI configuration options.
+    enable_logging : bool
+        Enable enhanced logging with request tracking and file logging.
+        When enabled, adds middleware to track requests and allows conditional
+        file logging based on 'x-agency-log-id' header.
+    logs_dir : str
+        Directory to store log files when enhanced logging is enabled.
+        Defaults to 'activity-logs'.
     """
     if (agencies is None or len(agencies) == 0) and (tools is None or len(tools) == 0):
         logger.warning("No endpoints to deploy. Please provide at least one agency or tool.")
@@ -50,14 +56,19 @@ def run_fastapi(
             exception_handler,
             get_verify_token,
             make_agui_chat_endpoint,
+            make_logs_endpoint,
             make_metadata_endpoint,
             make_response_endpoint,
             make_stream_endpoint,
             make_tool_endpoint,
         )
-        from .fastapi_utils.request_models import BaseRequest, RunAgentInputCustom, add_agent_validator
-    except ImportError:
-        logger.error("FastAPI deployment dependencies are missing. Please install agency-swarm[fastapi] package")
+        from .fastapi_utils.logging_middleware import (
+            RequestTracker,
+            setup_enhanced_logging,
+        )
+        from .fastapi_utils.request_models import BaseRequest, LogRequest, RunAgentInputCustom, add_agent_validator
+    except ImportError as e:
+        logger.error(f"FastAPI deployment dependencies are missing: {e}. Please install agency-swarm[fastapi] package")
         return
 
     app_token = os.getenv(app_token_env)
@@ -66,6 +77,11 @@ def run_fastapi(
     verify_token = get_verify_token(app_token)
 
     app = FastAPI()
+
+    # Setup enhanced logging if enabled
+    if enable_logging:
+        setup_enhanced_logging(logs_dir)
+        app.add_middleware(RequestTracker)
 
     if cors_origins is None:
         cors_origins = ["*"]
@@ -94,7 +110,7 @@ def run_fastapi(
             agency_names.append(agency_name)
 
             # Store agent instances for easy lookup
-            preview_instance = agency_factory(load_threads_callback=lambda: {})
+            preview_instance = agency_factory(load_threads_callback=lambda: [])
             AGENT_INSTANCES: dict[str, Agent] = dict(preview_instance.agents.items())
             AgencyRequest = add_agent_validator(BaseRequest, AGENT_INSTANCES)
             agency_metadata = preview_instance.get_agency_structure()
@@ -129,12 +145,17 @@ def run_fastapi(
 
     if tools:
         for tool in tools:
-            tool_name = tool.name
+            tool_name = tool.name if hasattr(tool, "name") else tool.__name__
             tool_handler = make_tool_endpoint(tool, verify_token)
             app.add_api_route(f"/tool/{tool_name}", tool_handler, methods=["POST"], name=tool_name)
             endpoints.append(f"/tool/{tool_name}")
 
     app.add_exception_handler(Exception, exception_handler)
+
+    # Add get_logs endpoint if enhanced logging is enabled
+    if enable_logging:
+        app.add_api_route("/get_logs", make_logs_endpoint(LogRequest, logs_dir, verify_token), methods=["POST"])
+        endpoints.append("/get_logs")
 
     logger.info("Created endpoints:\n" + "\n".join(endpoints))
 

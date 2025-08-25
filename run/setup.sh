@@ -23,6 +23,9 @@ fi
 export UV_FROZEN=1
 make sync
 
+# Install package in editable mode to ensure dependencies like openai-agents are available
+pip install -e .
+
 # Create .env if missing
 if [ ! -f ".env" ]; then
     cat > .env << EOF

@@ -10,7 +10,12 @@ This example demonstrates Agency Swarm's built-in capabilities for:
 
 import asyncio
 import base64
+import os
+import sys
 from pathlib import Path
+
+# Path setup for standalone examples
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
 from agents import ModelSettings
 

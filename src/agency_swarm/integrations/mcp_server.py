@@ -1,15 +1,13 @@
-import asyncio
-import importlib
 import inspect
 import json
 import logging
 import os
 import sys
-from typing import Any, List, Type, Union
+from typing import Any
 
-from agents.strict_schema import ensure_strict_json_schema
+from agents.run_context import RunContextWrapper
 from agents.tool import FunctionTool
-from dotenv import load_dotenv
+from agents.tool_context import ToolContext
 from fastmcp import FastMCP
 from fastmcp.exceptions import McpError
 from fastmcp.server.dependencies import get_http_headers
@@ -19,13 +17,14 @@ from fastmcp.tools.tool import Tool, ToolResult
 from mcp.types import ErrorData
 
 from agency_swarm import BaseTool
+from agency_swarm.tools import ToolFactory
 
 logger = logging.getLogger(__name__)
-load_dotenv()
 
-def _load_tools_from_directory(tools_dir: str) -> List[Union[type[BaseTool], type[FunctionTool]]]:
-    """Load BaseTool classes from a directory."""
-    tools: List[Union[type[BaseTool], type[FunctionTool]]] = []
+
+def _load_tools_from_directory(tools_dir: str) -> list[type[BaseTool] | FunctionTool]:
+    """Load BaseTool classes and FunctionTool instances from a directory."""
+    tools: list[type[BaseTool] | FunctionTool] = []
 
     # Add tools directory to Python path if it's not already there
     if tools_dir not in sys.path:
@@ -34,35 +33,16 @@ def _load_tools_from_directory(tools_dir: str) -> List[Union[type[BaseTool], typ
     # Find all Python files in the tools directory
     for root, _, files in os.walk(tools_dir):
         for file in files:
-            if file.endswith('.py') and not file.startswith('__'):
+            if file.endswith(".py") and not file.startswith("__"):
                 module_path = os.path.join(root, file)
-                module_name = os.path.splitext(file)[0]
-
-                # Import the module
-                try:
-                    spec = importlib.util.spec_from_file_location(module_name, module_path)
-                    if spec and spec.loader:
-                        module = importlib.util.module_from_spec(spec)
-                        spec.loader.exec_module(module)
-
-                        # Find BaseTool subclasses in the module
-                        for item_name, item in inspect.getmembers(module):
-                            if (
-                                (
-                                    inspect.isclass(item)
-                                    and issubclass(item, BaseTool)
-                                    and item != BaseTool
-                                ) or
-                                isinstance(item, FunctionTool)
-                            ):
-                                tools.append(item)
-                except Exception as e:
-                    logger.error(f"Could not load module {module_name}: {e}")
+                file_tools = ToolFactory.from_file(module_path)
+                tools.extend(file_tools)
 
     return tools
 
+
 def run_mcp(
-    tools: Union[List[Union[Type[BaseTool], Type[FunctionTool]]], str],
+    tools: list[type[BaseTool] | FunctionTool] | str,
     host: str = "0.0.0.0",
     port: int = 8000,
     app_token_env: str | None = "APP_TOKEN",
@@ -83,6 +63,7 @@ def run_mcp(
     Returns:
         FastMCP instance if return_app=True, otherwise None
     """
+    app_token_env = app_token_env or ""
     # Handle tools input - either list of classes or directory path
     if isinstance(tools, str):
         # It's a directory path
@@ -97,7 +78,7 @@ def run_mcp(
             raise ValueError("No tools provided. Please provide at least one tool class.")
 
     # stateless_http is required for oai agents
-    mcp = FastMCP(server_name, stateless_http=True)
+    mcp: FastMCP = FastMCP(server_name, stateless_http=True)
 
     # Get authentication token
     app_token = os.getenv(app_token_env)
@@ -107,6 +88,7 @@ def run_mcp(
         if transport == "stdio":
             logger.warning("Stdio servers do not support authentication.")
         else:
+
             class StaticBearer(Middleware):
                 def __init__(self, token: str) -> None:
                     self.expected = f"Bearer {token}"
@@ -130,48 +112,61 @@ def run_mcp(
     tool_registry = {}
 
     for tool in tools_list:
-        tool_name = getattr(tool, 'name', None) or tool.__name__
+        if inspect.isclass(tool):
+            # For BaseTool classes, use __name__
+            tool_name = getattr(tool, "name", None) or tool.__name__
+        else:
+            # For FunctionTool instances, use the name attribute
+            tool_name = getattr(tool, "name", None) or "unknown_tool"
         if tool_name in tool_registry:
             raise ValueError(f"Duplicate tool name detected: {tool_name}. Please use a different tool name.")
         tool_registry[tool_name] = tool
         logger.info(f"Registered tool: {tool_name}")
 
-    for tool_name, tool in tool_registry.items():
+    for _tool_name, tool_obj in tool_registry.items():
         # Handle different tool types
-        if inspect.isclass(tool) and issubclass(tool, BaseTool):
-            logger.info(f"Converting BaseTool: {tool}")
-            tool = _adapt_legacy_tool(tool)
+        if inspect.isclass(tool_obj) and issubclass(tool_obj, BaseTool):
+            logger.info(f"Converting BaseTool: {tool_obj}")
+            tool_obj = ToolFactory.adapt_base_tool(tool_obj)
 
         # on_invoke_tool does not contain input type hints
         # Create a custom tool to maintain input schema
-        if isinstance(tool, FunctionTool):
-
+        if isinstance(tool_obj, FunctionTool):
             # Create a custom tool class that extends Tool
             class CustomTool(Tool):
+                _function_tool: FunctionTool  # Declare the attribute for MyPy
+
                 def __init__(self, function_tool):
                     super().__init__(
                         key=function_tool.name,
                         name=function_tool.name,
                         description=function_tool.description,
-                        parameters=function_tool.params_json_schema,  # Use your existing JSON schema directly
-                        enabled=True
+                        parameters=function_tool.params_json_schema,  # Use existing JSON schema directly
+                        enabled=True,
                     )
                     # Store the function_tool reference after super().__init__
-                    object.__setattr__(self, '_function_tool', function_tool)
+                    object.__setattr__(self, "_function_tool", function_tool)
 
                 async def run(self, arguments: dict[str, Any]) -> ToolResult:
                     # Convert to JSON string format expected by FunctionTool
                     args_json = json.dumps(arguments)
+
+                    # Create a minimal ToolContext for the FunctionTool
+                    # Since we're in MCP environment, create a dummy context
+                    tool_context = ToolContext.from_agent_context(
+                        RunContextWrapper(context={}), tool_call_id=f"mcp_call_{self.name}"
+                    )
+
                     # Call the original tool function
-                    result = await self._function_tool.on_invoke_tool(None, args_json)
+                    result = await self._function_tool.on_invoke_tool(tool_context, args_json)
                     return ToolResult(content=result)
 
             # Create and add the custom tool
-            custom_tool = CustomTool(tool)
+            custom_tool = CustomTool(tool_obj)
             mcp.add_tool(custom_tool)
         else:
             # For non-FunctionTool instances, fall back to the decorator approach
-            raise ValueError(f"Unexpected tool type: {type(tool)} for tool: {tool.name}")
+            raise ValueError(f"Unexpected tool type: {type(tool_obj)} for tool: {_tool_name}")
 
     if return_app:
         return mcp
@@ -180,54 +175,3 @@ def run_mcp(
         mcp.run(transport=transport)
     else:
         mcp.run(transport=transport, host=host, port=port)
-
-def _adapt_legacy_tool(legacy_tool: type[BaseTool]):
-        """
-        Adapts a legacy BaseTool (class-based) to a FunctionTool (function-based).
-        Args:
-            legacy_tool: A class inheriting from BaseTool.
-        Returns:
-            A FunctionTool instance.
-        """
-        name = legacy_tool.__name__
-        description = legacy_tool.__doc__ or ""
-        if bool(getattr(legacy_tool, "__abstractmethods__", set())):
-            raise TypeError(f"Legacy tool '{name}' must implement all abstract methods.")
-        if description == "":
-            logger.warning(f"Warning: Tool {name} has no docstring.")
-        # Use the Pydantic model schema for parameters
-        params_json_schema = legacy_tool.model_json_schema()
-        if legacy_tool.ToolConfig.strict:
-            params_json_schema = ensure_strict_json_schema(params_json_schema)
-        # Remove title/description at the top level, keep only in properties
-        params_json_schema = {k: v for k, v in params_json_schema.items() if k not in ("title", "description")}
-        params_json_schema["additionalProperties"] = False
-
-        # The on_invoke_tool function
-        async def on_invoke_tool(ctx: Any, input_json: str):
-            # Parse input_json to dict
-            import json
-
-            try:
-                args = json.loads(input_json) if input_json else {}
-            except Exception as e:
-                return f"Error: Invalid JSON input: {e}"
-            try:
-                # Instantiate the legacy tool with args
-                tool_instance = legacy_tool(**args)
-                if inspect.iscoroutinefunction(tool_instance.run):
-                    result = await tool_instance.run()
-                else:
-                    # Always run sync run() in a thread for async compatibility
-                    result = await asyncio.to_thread(tool_instance.run)
-                return str(result)
-            except Exception as e:
-                return f"Error running legacy tool: {e}"
-
-        return FunctionTool(
-            name=name,
-            description=description.strip(),
-            params_json_schema=params_json_schema,
-            on_invoke_tool=on_invoke_tool,
-            strict_json_schema=legacy_tool.ToolConfig.strict,
-        )

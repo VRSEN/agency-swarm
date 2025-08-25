@@ -4,16 +4,13 @@ import pytest
 from agents.lifecycle import RunHooks
 
 from agency_swarm import Agent
-from agency_swarm.thread import ThreadManager
 
 # --- Streaming Tests ---
 
 
 @pytest.mark.asyncio
-async def test_get_response_stream_basic(tmp_path):
+async def test_get_response_stream_basic():
     agent = Agent(name="TestAgent", instructions="Test instructions")
-    agent._thread_manager = ThreadManager()
-    agent._agency_instance = type("Agency", (), {"agents": {"TestAgent": agent}, "user_context": {}})()
     message_content = "Stream this"
 
     async def dummy_stream():
@@ -25,22 +22,20 @@ async def test_get_response_stream_basic(tmp_path):
         def stream_events(self):
             return dummy_stream()
 
-    with patch("agency_swarm.agent.Runner.run_streamed", return_value=DummyStreamedResult()):
+    with patch("agents.Runner.run_streamed", return_value=DummyStreamedResult()):
         events = []
         async for event in agent.get_response_stream(message_content):
             events.append(event)
         assert events == [
-            {"event": "text", "data": "Hello "},
-            {"event": "text", "data": "World"},
-            {"event": "done"},
+            {"event": "text", "data": "Hello ", "agent": "TestAgent", "callerAgent": None},
+            {"event": "text", "data": "World", "agent": "TestAgent", "callerAgent": None},
+            {"event": "done", "agent": "TestAgent", "callerAgent": None},
         ]
 
 
 @pytest.mark.asyncio
-async def test_get_response_stream_final_result_processing(tmp_path):
+async def test_get_response_stream_final_result_processing():
     agent = Agent(name="TestAgent", instructions="Test instructions")
-    agent._thread_manager = ThreadManager()
-    agent._agency_instance = type("Agency", (), {"agents": {"TestAgent": agent}, "user_context": {}})()
     final_content = {"final_key": "final_value"}
 
     async def dummy_stream():
@@ -52,19 +47,19 @@ async def test_get_response_stream_final_result_processing(tmp_path):
         def stream_events(self):
             return dummy_stream()
 
-    with patch("agency_swarm.agent.Runner.run_streamed", return_value=DummyStreamedResult()):
+    with patch("agents.Runner.run_streamed", return_value=DummyStreamedResult()):
         events = []
         async for event in agent.get_response_stream("Process this"):
             events.append(event)
         assert events == [
-            {"event": "text", "data": "Thinking..."},
-            {"event": "final_result", "data": final_content},
-            {"event": "done"},
+            {"event": "text", "data": "Thinking...", "agent": "TestAgent", "callerAgent": None},
+            {"event": "final_result", "data": final_content, "agent": "TestAgent", "callerAgent": None},
+            {"event": "done", "agent": "TestAgent", "callerAgent": None},
         ]
 
 
 @pytest.mark.asyncio
-@patch("agency_swarm.agent.Runner.run_streamed")
+@patch("agents.Runner.run_streamed")
 async def test_get_response_stream_generates_thread_id(
     mock_runner_run_streamed_patch, minimal_agent, mock_thread_manager
 ):
@@ -85,19 +80,23 @@ async def test_get_response_stream_generates_thread_id(
         events.append(event)
 
     assert len(events) == 2
-    # Verify that get_thread was called with the consistent user->agent format
-    mock_thread_manager.get_thread.assert_called()
-    call_args = mock_thread_manager.get_thread.call_args[0]
-    assert len(call_args) == 1
-    assert call_args[0] == "user->TestAgent"
+    # Verify that messages were added to the thread manager
+    mock_thread_manager.add_messages.assert_called()
+    # Messages should be saved with proper agent metadata
+    call_args = mock_thread_manager.add_messages.call_args[0]
+    messages = call_args[0]
+    assert len(messages) > 0
+    for msg in messages:
+        assert msg.get("agent") == "TestAgent"
 
 
 @pytest.mark.asyncio
-@patch("agency_swarm.agent.Runner.run_streamed")
+@patch("agents.Runner.run_streamed")
 async def test_get_response_stream_agent_to_agent_communication(
     mock_runner_run_streamed_patch, minimal_agent, mock_thread_manager
 ):
     """Test that get_response_stream works correctly for agent-to-agent communication."""
+    from agency_swarm.agent.core import AgencyContext
 
     async def mock_stream_wrapper():
         yield {"event": "text", "data": "Hello"}
@@ -109,17 +108,35 @@ async def test_get_response_stream_agent_to_agent_communication(
 
     mock_runner_run_streamed_patch.return_value = MockStreamedResult()
 
+    # Create agency context for agent-to-agent communication
+    mock_agency = MagicMock()
+    mock_agency.agents = {"SomeAgent": MagicMock(name="SomeAgent")}
+    mock_agency.user_context = {}
+
+    agency_context = AgencyContext(
+        agency_instance=mock_agency,
+        thread_manager=mock_thread_manager,
+        subagents={},
+        load_threads_callback=None,
+        save_threads_callback=None,
+        shared_instructions=None,
+    )
+
     events = []
-    async for event in minimal_agent.get_response_stream("Test message", sender_name="SomeAgent"):
+    async for event in minimal_agent.get_response_stream(
+        "Test message", sender_name="SomeAgent", agency_context=agency_context
+    ):
         events.append(event)
 
     assert len(events) == 2
-    # Verify that get_thread was called with the sender->recipient format
-    mock_thread_manager.get_thread.assert_called_once()
-    call_args = mock_thread_manager.get_thread.call_args[0]
-    assert len(call_args) == 1
-    # Should be in format "SomeAgent->TestAgent"
-    assert call_args[0] == "SomeAgent->TestAgent"
+    # Verify that messages were added with proper sender metadata
+    mock_thread_manager.add_messages.assert_called()
+    call_args = mock_thread_manager.add_messages.call_args[0]
+    messages = call_args[0]
+    assert len(messages) > 0
+    for msg in messages:
+        assert msg.get("agent") == "TestAgent"
+        assert msg.get("callerAgent") == "SomeAgent"
 
 
 @pytest.mark.asyncio
@@ -143,7 +160,7 @@ async def test_get_response_stream_input_validation_none_empty(minimal_agent, mo
 
 
 @pytest.mark.asyncio
-@patch("agency_swarm.agent.Runner.run_streamed")
+@patch("agents.Runner.run_streamed")
 async def test_get_response_stream_context_propagation(
     mock_runner_run_streamed_patch, minimal_agent, mock_thread_manager
 ):
@@ -177,7 +194,7 @@ async def test_get_response_stream_context_propagation(
 
 
 @pytest.mark.asyncio
-@patch("agency_swarm.agent.Runner.run_streamed")
+@patch("agents.Runner.run_streamed")
 async def test_get_response_stream_thread_management(
     mock_runner_run_streamed_patch, minimal_agent, mock_thread_manager
 ):
@@ -198,11 +215,85 @@ async def test_get_response_stream_thread_management(
         events.append(event)
 
     assert len(events) == 2
-    # Verify thread was retrieved with the consistent user->agent format
-    mock_thread_manager.get_thread.assert_called_once()
-    call_args = mock_thread_manager.get_thread.call_args[0]
-    assert len(call_args) == 1
-    # Should be the consistent user->agent format
-    assert call_args[0] == "user->TestAgent"
-    # Verify items were added to thread
-    mock_thread_manager.add_items_and_save.assert_called()
+    # Verify messages were saved with proper metadata
+    mock_thread_manager.add_messages.assert_called()
+    call_args = mock_thread_manager.add_messages.call_args[0]
+    messages = call_args[0]
+    assert len(messages) > 0
+    for msg in messages:
+        assert msg.get("agent") == "TestAgent"
+        assert msg.get("callerAgent") is None  # None for user messages
+
+
+@pytest.mark.asyncio
+@patch("agents.Runner.run_streamed")
+async def test_stream_assigns_stable_agent_run_id_per_new_agent(
+    mock_runner_run_streamed_patch, minimal_agent, mock_thread_manager
+):
+    """Ensure each new_agent event establishes a stable agent_run_id that is
+    attached to all subsequent events and saved messages for that agent instance.
+    """
+
+    class Obj:
+        pass
+
+    def make_new_agent_event(agent_name: str, event_id: str):
+        e = Obj()
+        e.type = "agent_updated_stream_event"
+        new_agent = Obj()
+        new_agent.name = agent_name
+        e.new_agent = new_agent
+        e.id = event_id
+        return e
+
+    class DummyItem:
+        def __init__(self, text: str):
+            self.text = text
+
+        def to_input_item(self):
+            # Minimal assistant message dict compatible with storage
+            return {"role": "assistant", "content": self.text, "id": f"msg_{self.text}"}
+
+    def make_raw_response_item_event(item: DummyItem):
+        e = Obj()
+        e.type = "raw_response_event"
+        e.item = item
+        return e
+
+    async def mock_stream_wrapper():
+        # First agent instance
+        yield make_new_agent_event("RiskAnalyst", "agent_updated_stream_event_AAAA")
+        yield make_raw_response_item_event(DummyItem("A"))
+        # Second agent instance of the same name
+        yield make_new_agent_event("RiskAnalyst", "agent_updated_stream_event_BBBB")
+        yield make_raw_response_item_event(DummyItem("B"))
+
+    class MockStreamedResult:
+        def stream_events(self):
+            return mock_stream_wrapper()
+
+    mock_runner_run_streamed_patch.return_value = MockStreamedResult()
+
+    events = []
+    async for event in minimal_agent.get_response_stream("Test message"):
+        events.append(event)
+
+    # Validate agent_run_id propagation on emitted events
+    assert getattr(events[0], "type", None) == "agent_updated_stream_event"
+    assert getattr(events[0], "agent_run_id", None) == "agent_updated_stream_event_AAAA"
+    assert getattr(events[1], "type", None) == "raw_response_event"
+    assert getattr(events[1], "agent_run_id", None) == "agent_updated_stream_event_AAAA"
+
+    assert getattr(events[2], "type", None) == "agent_updated_stream_event"
+    assert getattr(events[2], "agent_run_id", None) == "agent_updated_stream_event_BBBB"
+    assert getattr(events[3], "type", None) == "raw_response_event"
+    assert getattr(events[3], "agent_run_id", None) == "agent_updated_stream_event_BBBB"
+
+    # Validate saved assistant messages include the correct agent_run_id grouping
+    saved_batches = [call.args[0] for call in mock_thread_manager.add_messages.call_args_list]
+    saved_msgs = [m for batch in saved_batches for m in batch]
+    # Keep only assistant outputs created from stream items in this test
+    saved_assistant = {m.get("id"): m for m in saved_msgs if isinstance(m, dict) and m.get("id", "").startswith("msg_")}
+    assert set(saved_assistant.keys()) == {"msg_A", "msg_B"}
+    assert saved_assistant["msg_A"]["agent_run_id"] == "agent_updated_stream_event_AAAA"
+    assert saved_assistant["msg_B"]["agent_run_id"] == "agent_updated_stream_event_BBBB"

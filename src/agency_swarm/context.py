@@ -11,8 +11,8 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from .agent import Agent
-    from .thread import ThreadManager
+    from .agent.core import Agent
+    from .utils.thread import ThreadManager
 
 logger = logging.getLogger(__name__)
 
@@ -29,14 +29,17 @@ class MasterContext:
     agents: dict[str, "Agent"]
     user_context: dict[str, Any] = field(default_factory=dict)
     current_agent_name: str | None = None  # Name of the agent currently executing
+    shared_instructions: str | None = None  # Shared instructions from the agency
+    _current_agent_run_id: str | None = None  # Current agent run ID for tracking
+    _parent_run_id: str | None = None  # Parent run ID for nested agent calls
+    _is_streaming: bool = False  # Flag to indicate if we're in streaming mode
+    _streaming_context: Any = None  # Streaming context for passing state
 
     def __post_init__(self):
         """Basic validation after initialization."""
         # Runtime checks are limited due to forward references.
         # More robust validation occurs in Agency during context creation.
-        if not hasattr(self.thread_manager, "get_thread"):
-            logger.warning("MasterContext received 'thread_manager' without expected 'get_thread' method.")
-            # raise TypeError("thread_manager must be an instance of ThreadManager or compatible class.")
+        # Thread manager validation is done at creation time in Agency
         if not isinstance(self.agents, dict):
             raise TypeError("MasterContext 'agents' must be a dictionary.")
         if not isinstance(self.user_context, dict):

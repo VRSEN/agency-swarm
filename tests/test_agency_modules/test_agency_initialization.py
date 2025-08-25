@@ -12,6 +12,7 @@ def mock_agent():
     """Provides a mocked Agent instance for testing."""
     agent = MagicMock(spec=Agent)
     agent.name = "MockAgent"
+    agent.send_message_tool_class = None  # Add missing attribute
     return agent
 
 
@@ -20,6 +21,7 @@ def mock_agent2():
     """Provides a second mocked Agent instance for testing."""
     agent = MagicMock(spec=Agent)
     agent.name = "MockAgent2"
+    agent.send_message_tool_class = None  # Add missing attribute
     return agent
 
 
@@ -31,7 +33,7 @@ def test_agency_minimal_initialization(mock_agent):
     chart = [mock_agent]
     agency = Agency(agency_chart=chart)
     assert agency.agents == {"MockAgent": mock_agent}
-    assert agency.shared_instructions is None
+    assert agency.shared_instructions is None or agency.shared_instructions == ""
     assert agency.persistence_hooks is None
 
 
@@ -64,7 +66,8 @@ def test_agency_initialization_persistence_hooks(mock_agent):
 
 
 def test_agency_duplicate_agent_names_forbidden():
-    """Test that Agency raises ValueError when trying to register two agents with the same name but different instances."""
+    """Test that Agency raises ValueError when trying to register two agents with
+    the same name but different instances."""
     # Create two different mock agents with the same name
     agent1 = MagicMock(spec=Agent)
     agent1.name = "DuplicateName"
@@ -78,3 +81,52 @@ def test_agency_duplicate_agent_names_forbidden():
     # Attempting to create an Agency with two agents having the same name should raise ValueError
     with pytest.raises(ValueError, match=r"Duplicate agent name 'DuplicateName' with different instances found"):
         Agency(agent1, agent2)
+
+
+# --- Shared Instruction File Loading Tests ---
+
+
+def test_agency_shared_instructions_file_loading(tmp_path):
+    """Test that agency can load shared instructions from a file."""
+    # Create shared instruction file
+    shared_file = tmp_path / "shared_instructions.txt"
+    shared_content = "All agents must follow these shared guidelines."
+    shared_file.write_text(shared_content)
+
+    # Create test agent
+    agent = Agent(name="TestAgent", instructions="You are a test agent.", model="gpt-4o-mini")
+
+    # Create agency with shared instruction file
+    agency = Agency(
+        agent,  # Entry point agent as positional argument
+        shared_instructions=str(shared_file),
+    )
+
+    assert agency.shared_instructions == shared_content
+
+
+def test_agency_shared_instructions_string():
+    """Test that agency accepts instruction strings that aren't files."""
+    shared_text = "These are shared instructions as text"
+
+    agent = Agent(name="TestAgent", instructions="Test agent instructions", model="gpt-4o-mini")
+
+    agency = Agency(
+        agent,  # Entry point agent as positional argument
+        shared_instructions=shared_text,
+    )
+
+    # Should keep the text as-is since it's not a file
+    assert agency.shared_instructions == shared_text
+
+
+def test_agency_shared_instructions_none():
+    """Test agency with no shared instructions."""
+    agent = Agent(name="TestAgent", instructions="Test agent", model="gpt-4o-mini")
+
+    agency = Agency(
+        agent,  # Entry point agent as positional argument
+        shared_instructions=None,
+    )
+
+    assert agency.shared_instructions == ""

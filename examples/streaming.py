@@ -17,7 +17,10 @@ from agents import function_tool
 
 from agency_swarm import Agency, Agent
 
-# Minimal logging setup
+# ===== DEBUG CONFIGURATION =====
+# Set to True to see ALL raw events for frontend integration
+DEBUG_MODE = False
+
 logging.basicConfig(level=logging.WARNING)
 
 # --- Simple Tool --- #
@@ -31,13 +34,38 @@ def get_weather(location: str) -> str:
 
 # --- Agent Setup --- #
 
-agent = Agent(
-    name="Assistant",
-    instructions="You are a helpful assistant. Use tools when appropriate and provide clear responses.",
-    tools=[get_weather],
-)
 
-agency = Agency(agent)
+def create_demo_agency():
+    """Create a demo agency for terminal demo"""
+
+    # Create agents using v1.x pattern (direct instantiation)
+    ceo = Agent(
+        name="CEO",
+        description="Chief Executive Officer - oversees all operations",
+        instructions="You are the CEO. When asked about weather, delegate to Worker with a specific location (use London if not specified).",
+        tools=[],
+    )
+
+    worker = Agent(
+        name="Worker",
+        description="Worker - performs tasks and writes weather reports",
+        instructions="You handle weather tasks. Use the get_weather tool which returns weather reports.",
+        tools=[get_weather],
+    )
+
+    # Create agency with communication flows (v1.x pattern)
+    agency = Agency(
+        ceo,  # Entry point agent (positional argument)
+        communication_flows=[
+            (ceo, worker),
+        ],
+        name="TerminalDemoAgency",
+    )
+
+    return agency
+
+
+agency = create_demo_agency()
 
 # --- Streaming Handler --- #
 
@@ -48,9 +76,43 @@ async def stream_response(message: str):
     print("📡 Response: ", end="", flush=True)
 
     full_text = ""
+    event_count = 0
 
     async for event in agency.get_response_stream(message):
-        # Handle streaming events with data
+        event_count += 1
+
+        # Debug logging for frontend developers
+        if DEBUG_MODE:
+            # Extract key fields
+            agent_name = getattr(event, "agent", None)
+            caller_agent = getattr(event, "callerAgent", None)
+            event_type = getattr(event, "type", None)
+            call_id = getattr(event, "call_id", None)
+            item_id = getattr(event, "item_id", None)
+
+            # For data events, get the nested type
+            if hasattr(event, "data") and hasattr(event.data, "type"):
+                data_type = event.data.type
+            else:
+                data_type = None
+
+            # Format the output
+            print(f"\n[EVENT #{event_count}]")
+            print(f"  agent: {agent_name}")
+            print(f"  callerAgent: {caller_agent}")
+            if call_id:
+                print(f"  call_id: {call_id}")
+            if item_id:
+                print(f"  item_id: {item_id}")
+            print(f"  event.type: {event_type}")
+            if data_type:
+                print(f"  data.type: {data_type}")
+
+            # Show raw event only if verbose
+            if DEBUG_MODE == "verbose":
+                print(f"  Raw: {event}")
+
+        # Normal streaming logic (unchanged)
         if hasattr(event, "data"):
             data = event.data
 
@@ -60,7 +122,8 @@ async def stream_response(message: str):
                     # Stream the actual response text in real-time
                     delta_text = data.delta
                     if delta_text:
-                        print(delta_text, end="", flush=True)
+                        if not DEBUG_MODE:
+                            print(delta_text, end="", flush=True)
                         full_text += delta_text
                 # Skip tool call deltas (we don't want to show those to users)
                 elif data.type == "response.function_call_arguments.delta":
@@ -72,6 +135,9 @@ async def stream_response(message: str):
             if event_type == "error":
                 print(f"\n❌ Error: {event.get('content', event.get('data', 'Unknown error'))}")
                 break
+
+    if DEBUG_MODE:
+        print(f"\n📊 Total events received: {event_count}")
 
     print("\n✅ Stream complete")
     print(f"📋 Total: {len(full_text)} characters streamed")
@@ -87,16 +153,9 @@ async def main():
     print("=" * 40)
     print("🎯 Watch text stream in real-time!")
 
-    # Test basic streaming
-    await stream_response("Hello! Tell me about yourself.")
-
-    # Test with tool call
     await stream_response("What's the weather in London?")
 
-    # Test longer response
-    await stream_response("Write a short poem about artificial intelligence.")
-
-    print("\n🎉 Demo complete! Streaming works perfectly.")
+    print("\n🎉 Demo complete!")
 
 
 if __name__ == "__main__":

@@ -10,9 +10,6 @@ from pathlib import Path
 from typing import Any
 
 from agents import ModelSettings
-from dotenv import load_dotenv
-
-load_dotenv()
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
@@ -26,42 +23,49 @@ from agency_swarm import Agency, Agent  # noqa: E402
 PERSISTENCE_DIR = Path(tempfile.mkdtemp(prefix="thread_persistence_"))
 
 
-def save_threads(new_threads: dict[str, Any]):
+def save_threads(messages: list[dict[str, Any]]):
     """
-    Save all threads data to a file.
+    Save all messages to a file.
 
     Args:
-        new_threads: Dictionary mapping thread_ids to their conversation data.
-                    Thread IDs follow the format "sender->recipient", for example:
-                    - "user->AssistantAgent" for user interactions with AssistantAgent
-                    - "AssistantAgent->HelperAgent" for agent-to-agent communication
+        messages: Flat list of all messages with agent/callerAgent metadata.
+                 Each message contains:
+                 - agent: The recipient agent name
+                 - callerAgent: The sender agent name (None for user)
+                 - timestamp: Message timestamp in milliseconds
+                 - Plus all standard OpenAI message fields
 
-    Each thread maintains completely isolated conversation history.
+    Messages from all conversations are stored in a single flat list.
 
     Note: In production, you would typically use a closure to capture chat_id
-    or use a database with user/session context for saving threads.
+    or use a database with user/session context for saving messages.
     """
     file_path = PERSISTENCE_DIR / "thread_data.json"
     with open(file_path, "w") as f:
-        json.dump(new_threads, f, indent=2)
+        json.dump(messages, f, indent=2)
 
     # Log the structure for demonstration
-    print(f"Saved thread data with {len(new_threads)} thread(s):")
-    for thread_id in new_threads.keys():
-        print(f"  - Thread: {thread_id}")
+    print(f"Saved {len(messages)} message(s)")
+    # Count unique conversations
+    conversations = set()
+    for msg in messages:
+        agent = msg.get("agent", "")
+        caller = msg.get("callerAgent", "user")
+        conversations.add(f"{caller}->{agent}")
+    for conv in sorted(conversations):
+        print(f"  - Conversation: {conv}")
 
 
-def load_threads(chat_id: str) -> dict[str, Any]:
+def load_threads(chat_id: str) -> list[dict[str, Any]]:
     """
-    Load ALL threads data from file for a specific chat session.
+    Load all messages from file for a specific chat session.
 
     Args:
-        chat_id: The chat session identifier to load threads for.
+        chat_id: The chat session identifier to load messages for.
 
     Returns:
-        Dictionary mapping thread_ids to their conversation data.
-        Each thread data dict should have 'items' and 'metadata' keys.
-        Returns empty dict if no data exists.
+        Flat list of all messages with agent/callerAgent metadata.
+        Returns empty list if no data exists.
 
     Note: This demonstrates the correct callback signature where the load_threads
     function accepts a chat_id parameter, which is passed via lambda closure.
@@ -70,20 +74,26 @@ def load_threads(chat_id: str) -> dict[str, Any]:
     # you would typically use the chat_id to load session-specific data from a database
     file_path = PERSISTENCE_DIR / "thread_data.json"
 
-    print(f"Loading threads for chat_id: {chat_id}")
+    print(f"Loading messages for chat_id: {chat_id}")
 
     if not file_path.exists():
-        print("No existing thread data file found - starting with empty threads")
-        return {}
+        print("No existing message data file found - starting with empty messages")
+        return []
 
     with open(file_path) as f:
-        all_threads_data: dict[str, Any] = json.load(f)
+        messages: list[dict[str, Any]] = json.load(f)
 
-    print(f"Loaded {len(all_threads_data)} thread(s) from file:")
-    for thread_id in all_threads_data.keys():
-        print(f"  - Thread: {thread_id}")
+    print(f"Loaded {len(messages)} message(s) from file")
+    # Count unique conversations
+    conversations = set()
+    for msg in messages:
+        agent = msg.get("agent", "")
+        caller = msg.get("callerAgent", "user")
+        conversations.add(f"{caller}->{agent}")
+    for conv in sorted(conversations):
+        print(f"  - Conversation: {conv}")
 
-    return all_threads_data
+    return messages
 
 
 # Initialize all agents and agencies at the top
@@ -102,23 +112,10 @@ agency = Agency(
     assistant_agent,  # AssistantAgent is the entry point (positional argument)
     shared_instructions="Be helpful and concise in your responses.",
     load_threads_callback=lambda: load_threads(chat_id),
-    save_threads_callback=lambda new_threads: save_threads(new_threads),
+    save_threads_callback=lambda messages: save_threads(messages),
 )
 
-# Create a second agent instance for the reloaded agency (to avoid agent reuse)
-assistant_agent_reloaded = Agent(
-    name="AssistantAgent",
-    instructions="You are a helpful assistant. Answer questions and help users with their tasks.",
-    tools=[],
-    model_settings=ModelSettings(temperature=0.0),  # Deterministic responses
-)
-
-agency_reloaded = Agency(
-    assistant_agent_reloaded,  # Use NEW agent instance to prevent reuse error
-    shared_instructions="Be helpful and concise in your responses.",
-    load_threads_callback=lambda: load_threads(chat_id),
-    save_threads_callback=lambda new_threads: save_threads(new_threads),
-)
+# Don't create the second agency here - we'll create it after the first run
 
 TEST_INFO = "blue and lucky number is 77"
 
@@ -143,9 +140,24 @@ async def run_persistent_conversation():
 
     await asyncio.sleep(1)
 
-    # Simulate application restart by using the pre-initialized reloaded agency
+    # Simulate application restart by creating a new agency
     print("\n--- Simulating Application Restart ---")
-    print("Using pre-initialized reloaded agency instance...")
+    print("Creating new agency instance that will load persisted messages...")
+
+    # Create a second agent instance for the reloaded agency (to avoid agent reuse)
+    assistant_agent_reloaded = Agent(
+        name="AssistantAgent",
+        instructions="You are a helpful assistant. Answer questions and help users with their tasks.",
+        tools=[],
+        model_settings=ModelSettings(temperature=0.0),  # Deterministic responses
+    )
+
+    agency_reloaded = Agency(
+        assistant_agent_reloaded,  # Use NEW agent instance to prevent reuse error
+        shared_instructions="Be helpful and concise in your responses.",
+        load_threads_callback=lambda: load_threads(chat_id),
+        save_threads_callback=lambda messages: save_threads(messages),
+    )
 
     print("\n--- Turn 2: User -> AssistantAgent (Recall Info using Reloaded Agency) ---")
     print("Thread identifier will be: user->AssistantAgent (same as before)")

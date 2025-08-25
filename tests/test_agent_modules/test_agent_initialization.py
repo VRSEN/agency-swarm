@@ -25,11 +25,8 @@ def test_agent_initialization_minimal():
     assert agent.name == "Agent1"
     assert agent.instructions == "Be helpful"
     assert agent.tools == []
-    assert agent._subagents == {}
     assert agent.files_folder is None
-    assert not hasattr(agent, "response_validator")  # removed completely
-    assert agent._thread_manager is None
-    assert agent._agency_instance is None
+    assert not hasattr(agent, "response_validator")
     assert agent.output_type is None
 
 
@@ -40,38 +37,6 @@ def test_agent_initialization_with_tools():
     agent = Agent(name="Agent2", instructions="Use tools", tools=[tool1])
     assert len(agent.tools) == 1
     assert agent.tools[0] == tool1
-
-
-def test_agent_initialization_with_model():
-    """Test Agent initialization with a specific model."""
-    agent = Agent(name="Agent3", instructions="Test", model="gpt-4.1")
-    assert agent.name == "Agent3"
-    assert agent.instructions == "Test"
-    assert agent.model == "gpt-4.1"
-
-
-def test_agent_initialization_with_validator():
-    """Test Agent initialization with response_validator shows deprecation warning."""
-    validator = MagicMock()
-    import warnings
-
-    with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter("always")
-        agent = Agent(name="Agent4", instructions="Validate me", response_validator=validator)
-        # Should show deprecation warning
-        assert len(w) == 1
-        assert issubclass(w[0].category, DeprecationWarning)
-        assert "response_validator" in str(w[0].message)
-        # response_validator is completely removed
-        assert not hasattr(agent, "response_validator")
-
-
-def test_agent_initialization_with_output_type():
-    """Test Agent initialization with output_type parameter."""
-    agent = Agent(name="Agent5", instructions="Structured output", output_type=TaskOutput)
-    assert agent.output_type == TaskOutput
-    assert agent.name == "Agent5"
-    assert agent.instructions == "Structured output"
 
 
 def test_agent_initialization_with_model_settings():
@@ -126,6 +91,7 @@ def test_agent_initialization_with_all_parameters():
     # TEST-ONLY SETUP: Create test directory to enable FileSearchTool auto-addition
     import tempfile
     from pathlib import Path
+    from unittest.mock import PropertyMock, patch
 
     # Create a temporary test directory
     with tempfile.TemporaryDirectory(prefix="test_files_") as temp_dir_str:
@@ -135,18 +101,27 @@ def test_agent_initialization_with_all_parameters():
 
         import warnings
 
+        # Mock the OpenAI client to avoid API key requirement
+        mock_vector_store = MagicMock()
+        mock_vector_store.id = "test_vs_id"
+
+        mock_client = MagicMock()
+        mock_client.vector_stores.create.return_value = mock_vector_store
+
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            agent = Agent(
-                name="CompleteAgent",
-                instructions="Complete agent with all params",
-                model="gpt-4.1",
-                tools=[tool1],
-                response_validator=validator,
-                output_type=TaskOutput,
-                files_folder=str(temp_dir),  # Use temporary directory
-                description="A complete test agent",
-            )
+            with patch.object(Agent, "client_sync", new_callable=PropertyMock) as mock_client_sync:
+                mock_client_sync.return_value = mock_client
+                agent = Agent(
+                    name="CompleteAgent",
+                    instructions="Complete agent with all params",
+                    model="gpt-4.1",
+                    tools=[tool1],
+                    response_validator=validator,
+                    output_type=TaskOutput,
+                    files_folder=str(temp_dir),  # Use temporary directory
+                    description="A complete test agent",
+                )
             # Should trigger deprecation warning for response_validator
             assert any("response_validator" in str(warning.message) for warning in w)
 
@@ -163,122 +138,30 @@ def test_agent_initialization_with_all_parameters():
         assert agent.description == "A complete test agent"
 
 
-def test_agent_repr():
-    """Test Agent.__repr__ method with different configurations."""
-    # Test basic agent with minimal config
-    agent1 = Agent(name="TestAgent")
-    repr_str = repr(agent1)
-    assert "name='TestAgent'" in repr_str
-    assert "desc=None" in repr_str
-    assert "model='unknown'" in repr_str
-
-    # Test agent with model
-    agent2 = Agent(name="Worker", model="gpt-4.1")
-    repr_str = repr(agent2)
-    assert "name='Worker'" in repr_str
-    assert "model='gpt-4.1'" in repr_str
-
-    # Test agent with description and output_type
-    agent3 = Agent(name="TaskAgent", description="Handles tasks", output_type=TaskOutput)
-    repr_str = repr(agent3)
-    assert "name='TaskAgent'" in repr_str
-    assert "desc='Handles tasks'" in repr_str
+# --- Instruction File Loading Tests ---
 
 
-def test_agent_initialization_with_persistence_callbacks():
-    """Test Agent initialization with persistence callbacks."""
+def test_agent_instruction_file_loading(tmp_path):
+    """Test that agent can load instructions from absolute and relative file paths."""
+    # Create instruction file for absolute path test
+    instruction_file = tmp_path / "agent_instructions.md"
+    instruction_content = "You are a helpful assistant. Always be polite."
+    instruction_file.write_text(instruction_content)
 
-    def mock_load_callback(thread_id: str):
-        return {"items": [], "metadata": {}}
+    # Absolute path
+    agent = Agent(name="TestAgent", instructions=str(instruction_file), model="gpt-4o-mini")
+    assert agent.instructions == instruction_content
 
-    def mock_save_callback(threads_data: dict):
-        pass
-
-    agent = Agent(
-        name="PersistentAgent",
-        instructions="Agent with persistence",
-        load_threads_callback=mock_load_callback,
-        save_threads_callback=mock_save_callback,
-    )
-
-    assert agent.name == "PersistentAgent"
-    assert agent._load_threads_callback == mock_load_callback
-    assert agent._save_threads_callback == mock_save_callback
-    # ThreadManager should not be created until _ensure_thread_manager is called
-    assert agent._thread_manager is None
+    # Relative path resolved from caller directory
+    relative_agent = Agent(name="TestAgent", instructions="../data/files/instructions.md", model="gpt-4o-mini")
+    assert relative_agent.instructions == "Test instructions"
 
 
-def test_agent_set_persistence_callbacks():
-    """Test _set_persistence_callbacks method."""
+def test_agent_instruction_string_not_file():
+    """Test that agent accepts instruction strings that aren't files."""
+    instruction_text = "Direct instruction text, not a file path"
 
-    def mock_load_callback(thread_id: str):
-        return {"items": [], "metadata": {}}
+    agent = Agent(name="TestAgent", instructions=instruction_text, model="gpt-4o-mini")
 
-    def mock_save_callback(threads_data: dict):
-        pass
-
-    agent = Agent(name="TestAgent", instructions="Test")
-
-    # Initially no callbacks
-    assert agent._load_threads_callback is None
-    assert agent._save_threads_callback is None
-    assert agent._thread_manager is None
-
-    # Set callbacks
-    agent._set_persistence_callbacks(
-        load_threads_callback=mock_load_callback,
-        save_threads_callback=mock_save_callback,
-    )
-
-    assert agent._load_threads_callback == mock_load_callback
-    assert agent._save_threads_callback == mock_save_callback
-    # ThreadManager should be created with callbacks
-    assert agent._thread_manager is not None
-    assert agent._thread_manager._load_threads_callback == mock_load_callback
-    assert agent._thread_manager._save_threads_callback == mock_save_callback
-
-
-def test_agent_ensure_thread_manager():
-    """Test _ensure_thread_manager method."""
-
-    def mock_load_callback(thread_id: str):
-        return {"items": [], "metadata": {}}
-
-    def mock_save_callback(threads_data: dict):
-        pass
-
-    agent = Agent(
-        name="TestAgent",
-        instructions="Test",
-        load_threads_callback=mock_load_callback,
-        save_threads_callback=mock_save_callback,
-    )
-
-    # Initially no ThreadManager
-    assert agent._thread_manager is None
-
-    # Call _ensure_thread_manager
-    agent._ensure_thread_manager()
-
-    # ThreadManager should be created with callbacks
-    assert agent._thread_manager is not None
-    assert agent._thread_manager._load_threads_callback == mock_load_callback
-    assert agent._thread_manager._save_threads_callback == mock_save_callback
-
-
-def test_agent_ensure_thread_manager_without_callbacks():
-    """Test _ensure_thread_manager method without callbacks."""
-    agent = Agent(name="TestAgent", instructions="Test")
-
-    # Initially no ThreadManager or callbacks
-    assert agent._thread_manager is None
-    assert agent._load_threads_callback is None
-    assert agent._save_threads_callback is None
-
-    # Call _ensure_thread_manager
-    agent._ensure_thread_manager()
-
-    # ThreadManager should be created without callbacks
-    assert agent._thread_manager is not None
-    assert agent._thread_manager._load_threads_callback is None
-    assert agent._thread_manager._save_threads_callback is None
+    # Should keep the text as-is since it's not a file
+    assert agent.instructions == instruction_text

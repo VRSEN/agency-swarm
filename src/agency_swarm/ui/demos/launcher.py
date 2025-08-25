@@ -1,4 +1,5 @@
 class CopilotDemoLauncher:
+    @staticmethod
     def start(
         agency_instance,
         host: str = "0.0.0.0",
@@ -72,42 +73,54 @@ class CopilotDemoLauncher:
 
 
 class TerminalDemoLauncher:
+    @staticmethod
     def start(agency_instance):
         """
         Executes agency in the terminal with autocomplete for recipient agent names.
         """
         import asyncio
         import logging
+        import re
         import uuid
 
-        from ..core.converters import ConsoleEventAdapter
+        from ..core.console_event_adapter import ConsoleEventAdapter
 
         logger = logging.getLogger(__name__)
 
         recipient_agents = [str(agent.name) for agent in agency_instance.entry_points]
+        if not recipient_agents:
+            raise ValueError(
+                "Cannot start terminal demo without entry points. Please specify at least one entry point."
+            )
 
         chat_id = f"run_demo_chat_{uuid.uuid4()}"
 
         event_converter = ConsoleEventAdapter()
+        event_converter.console.rule()
 
         async def main_loop():
             while True:
-                event_converter.console.rule()
                 message = input("👤 USER: ")
+                event_converter.console.rule()
 
                 if not message:
                     continue
 
                 recipient_agent = None
-                if "@" in message:
-                    recipient_agent_name = message.split("@")[1].split(" ")[0]
-                    message = message.replace(f"@{recipient_agent_name}", "").strip()
+                # Check for agent mentions that start with @ at the beginning of text or after whitespace
+                agent_mention_pattern = r"(?:^|\s)@(\w+)(?:\s|$)"
+                agent_match = re.search(agent_mention_pattern, message)
+
+                if agent_match:
+                    mentioned_agent = agent_match.group(1)
                     try:
                         recipient_agent = [
-                            agent for agent in recipient_agents if agent.lower() == recipient_agent_name.lower()
+                            agent for agent in recipient_agents if agent.lower() == mentioned_agent.lower()
                         ][0]
+                        # Remove the agent mention from the message
+                        message = re.sub(agent_mention_pattern, " ", message).strip()
                     except Exception:
-                        logger.error(f"Recipient agent {recipient_agent_name} not found.")
+                        logger.error(f"Recipient agent {mentioned_agent} not found.", exc_info=True)
                         continue
 
                 # Default to first entry point if not specified
@@ -115,14 +128,21 @@ class TerminalDemoLauncher:
                     recipient_agent = agency_instance.entry_points[0].name
 
                 try:
+                    response_buffer = ""
                     async for event in agency_instance.get_response_stream(
                         message=message,
                         recipient_agent=recipient_agent,
                         chat_id=chat_id,
                     ):
                         event_converter.openai_to_message_output(event, recipient_agent)
-                    print()  # Newline after stream
+                        # Accumulate the response if it's a text delta
+                        if hasattr(event, "data") and getattr(event.data, "type", None) == "response.output_text.delta":
+                            response_buffer += event.data.delta
+                    event_converter.console.rule()
                 except Exception as e:
                     logger.error(f"Error during streaming: {e}", exc_info=True)
 
-        asyncio.run(main_loop())
+        try:
+            asyncio.run(main_loop())
+        except (KeyboardInterrupt, EOFError):
+            print("\n\nExiting terminal demo...")
