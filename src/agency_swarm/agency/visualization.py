@@ -25,7 +25,7 @@ def get_agency_structure(agency: "Agency", include_tools: bool = True) -> dict[s
         else:
             instructions = agency.shared_instructions or getattr(agent, "instructions", "") or ""
 
-        agent_data = {
+        agent_data: dict[str, Any] = {
             "label": agent_name,
             "description": getattr(agent, "description", "") or "",
             "isEntryPoint": is_entry_point,

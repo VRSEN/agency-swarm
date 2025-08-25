@@ -5,7 +5,7 @@ import warnings
 from collections.abc import AsyncGenerator
 from typing import Any
 
-from agents import RunConfig, RunHooks, RunResult
+from agents import RunConfig, RunHooks, RunResult, TResponseInputItem
 
 from agency_swarm.agent.agent_flow import AgentFlow
 from agency_swarm.agent.core import AgencyContext, Agent
@@ -237,7 +237,7 @@ class Agency:
     # Import and bind methods from split modules with proper type hints
     async def get_response(
         self,
-        message: str | list[dict[str, Any]],
+        message: str | list[TResponseInputItem],
         recipient_agent: str | Agent | None = None,
         context_override: dict[str, Any] | None = None,
         hooks_override: RunHooks | None = None,
@@ -273,14 +273,23 @@ class Agency:
             RunResult: The result of the agent execution chain initiated by this call.
         """
         from .responses import get_response
+
         return await get_response(
-            self, message, recipient_agent, context_override, hooks_override,
-            run_config, message_files, file_ids, additional_instructions, **kwargs
+            self,
+            message,
+            recipient_agent,
+            context_override,
+            hooks_override,
+            run_config,
+            message_files,
+            file_ids,
+            additional_instructions,
+            **kwargs,
         )
 
     def get_response_sync(
         self,
-        message: str | list[dict[str, Any]],
+        message: str | list[TResponseInputItem],
         recipient_agent: str | Agent | None = None,
         context_override: dict[str, Any] | None = None,
         hooks_override: RunHooks | None = None,
@@ -292,14 +301,23 @@ class Agency:
     ) -> RunResult:
         """Synchronous wrapper around :meth:`get_response`."""
         from .responses import get_response_sync
+
         return get_response_sync(
-            self, message, recipient_agent, context_override, hooks_override,
-            run_config, message_files, file_ids, additional_instructions, **kwargs
+            self,
+            message,
+            recipient_agent,
+            context_override,
+            hooks_override,
+            run_config,
+            message_files,
+            file_ids,
+            additional_instructions,
+            **kwargs,
         )
 
     async def get_response_stream(
         self,
-        message: str | list[dict[str, Any]],
+        message: str | list[TResponseInputItem],
         recipient_agent: str | Agent | None = None,
         context_override: dict[str, Any] | None = None,
         hooks_override: RunHooks | None = None,
@@ -332,9 +350,18 @@ class Agency:
             Any: Events from the `agents.Runner.run_streamed` execution.
         """
         from .responses import get_response_stream
+
         async for event in get_response_stream(
-            self, message, recipient_agent, context_override, hooks_override,
-            run_config_override, message_files, file_ids, additional_instructions, **kwargs
+            self,
+            message,
+            recipient_agent,
+            context_override,
+            hooks_override,
+            run_config_override,
+            message_files,
+            file_ids,
+            additional_instructions,
+            **kwargs,
         ):
             yield event
 
@@ -355,9 +382,19 @@ class Agency:
         [DEPRECATED] Use get_response instead. Returns final text output.
         """
         from .completions import get_completion
+
         return get_completion(
-            self, message, message_files, yield_messages, recipient_agent,
-            additional_instructions, attachments, tool_choice, verbose, response_format, **kwargs
+            self,
+            message,
+            message_files,
+            yield_messages,
+            recipient_agent,
+            additional_instructions,
+            attachments,
+            tool_choice,
+            verbose,
+            response_format,
+            **kwargs,
         )
 
     def get_completion_stream(self, *args: Any, **kwargs: Any):
@@ -365,6 +402,7 @@ class Agency:
         [DEPRECATED] Use get_response_stream instead. Yields all events from the modern streaming API.
         """
         from .completions import get_completion_stream
+
         return get_completion_stream(self, *args, **kwargs)
 
     def run_fastapi(
@@ -386,11 +424,13 @@ class Agency:
             :func:`run_fastapi`.
         """
         from .helpers import run_fastapi
+
         return run_fastapi(self, host, port, app_token_env, cors_origins, enable_agui)
 
     def get_agency_structure(self, include_tools: bool = True) -> dict[str, Any]:
         """Return a ReactFlow-compatible JSON structure describing the agency."""
         from .visualization import get_agency_structure
+
         return get_agency_structure(self, include_tools)
 
     def visualize(
@@ -411,6 +451,7 @@ class Agency:
             Path to the generated file
         """
         from .visualization import visualize
+
         return visualize(self, output_file, include_tools, open_browser)
 
     def terminal_demo(self) -> None:
@@ -418,6 +459,7 @@ class Agency:
         Run a terminal demo of the agency.
         """
         from .visualization import terminal_demo
+
         return terminal_demo(self)
 
     def copilot_demo(
@@ -431,4 +473,5 @@ class Agency:
         Run a copilot demo of the agency.
         """
         from .visualization import copilot_demo
+
         return copilot_demo(self, host, port, frontend_port, cors_origins)

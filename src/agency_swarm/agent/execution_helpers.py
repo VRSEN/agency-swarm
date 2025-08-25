@@ -1,4 +1,6 @@
+import inspect
 import logging
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from agents.items import RunItem, ToolCallItem, TResponseInputItem
@@ -93,7 +95,7 @@ def setup_execution(
     agency_context: "AgencyContext | None",
     additional_instructions: str | None,
     method_name: str = "execution",
-) -> str:
+) -> str | Callable | None:
     """Common setup logic for both get_response and get_response_stream."""
     # Validate agency instance exists if this is agent-to-agent communication
     _validate_agency_for_delegation(agent, sender_name, agency_context)
@@ -106,9 +108,29 @@ def setup_execution(
         if not isinstance(additional_instructions, str):
             raise ValueError("additional_instructions must be a string")
         logger.debug(f"Appending additional instructions to agent '{agent.name}': {additional_instructions[:100]}...")
-        if agent.instructions:
+        if isinstance(agent.instructions, str) and agent.instructions:
+            # Only append if it's a non-empty string
             agent.instructions = agent.instructions + "\n\n" + additional_instructions
+        elif callable(agent.instructions):
+            # Create a wrapper function that calls original callable and appends additional instructions
+            original_callable = agent.instructions
+
+            async def combined_instructions(run_context, agent_instance):
+                # Call the original callable instructions (handle both sync and async)
+                if inspect.iscoroutinefunction(original_callable):
+                    base_instructions = await original_callable(run_context, agent_instance)
+                else:
+                    base_instructions = original_callable(run_context, agent_instance)
+
+                # Append additional instructions
+                if base_instructions:
+                    return base_instructions + "\n\n" + additional_instructions
+                else:
+                    return additional_instructions
+
+            agent.instructions = combined_instructions
         else:
+            # Replace if it's None or empty string
             agent.instructions = additional_instructions
 
     # Log the conversation context
@@ -139,21 +161,22 @@ def _validate_agency_for_delegation(
         if not hasattr(agency_instance, "agents"):
             raise RuntimeError(f"Agent '{agent.name}' has invalid Agency instance for agent-to-agent communication.")
 
-def cleanup_execution(
-        agent: "Agent",
-        original_instructions: str,
-        context_override: dict[str, Any] | None,
-        agency_context: "AgencyContext | None",
-        master_context_for_run: MasterContext,
-    ) -> None:
-        """Common cleanup logic for execution methods."""
-        # Sync back context changes if we used a merged context due to override
-        if context_override and agency_context and agency_context.agency_instance:
-            base_user_context = getattr(agency_context.agency_instance, "user_context", {})
-            # Sync back any new keys that weren't part of the original override
-            for key, value in master_context_for_run.user_context.items():
-                if key not in context_override:  # Don't sync back override keys
-                    base_user_context[key] = value
 
-        # Always restore original instructions
-        agent.instructions = original_instructions
+def cleanup_execution(
+    agent: "Agent",
+    original_instructions: str | Callable | None,
+    context_override: dict[str, Any] | None,
+    agency_context: "AgencyContext | None",
+    master_context_for_run: MasterContext,
+) -> None:
+    """Common cleanup logic for execution methods."""
+    # Sync back context changes if we used a merged context due to override
+    if context_override and agency_context and agency_context.agency_instance:
+        base_user_context = getattr(agency_context.agency_instance, "user_context", {})
+        # Sync back any new keys that weren't part of the original override
+        for key, value in master_context_for_run.user_context.items():
+            if key not in context_override:  # Don't sync back override keys
+                base_user_context[key] = value
+
+    # Always restore original instructions
+    agent.instructions = original_instructions

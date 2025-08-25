@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TypeVar
 
-from agents import Agent as BaseAgent, RunConfig, RunHooks, RunResult, Tool
+from agents import Agent as BaseAgent, RunConfig, RunHooks, RunResult, Tool, TResponseInputItem
 from openai import AsyncOpenAI, OpenAI
 
 from agency_swarm.agent import (
@@ -98,9 +98,10 @@ class Agent(BaseAgent[MasterContext]):
     files_folder_path: Path | None = None
     _openai_client: AsyncOpenAI | None = None
     _openai_client_sync: OpenAI | None = None
-    file_manager: AgentFileManager | None = None
-    attachment_manager: AttachmentManager | None = None
+    file_manager: AgentFileManager | None = None  # Initialized in setup_file_manager()
+    attachment_manager: AttachmentManager | None = None  # Initialized in setup_file_manager()
     _tool_concurrency_manager: ToolConcurrencyManager
+    _subagents: dict[str, "Agent"] | None = None  # Other agents that this agent can communicate with
 
     # --- SDK Agent Compatibility ---
     # Re-declare attributes from BaseAgent for clarity and potential overrides
@@ -203,6 +204,10 @@ class Agent(BaseAgent[MasterContext]):
 
         # Set up file manager and tools
         setup_file_manager(self)
+        # file_manager is always initialized by setup_file_manager()
+        if self.file_manager is None:
+            raise RuntimeError(f"Agent {self.name} has no file manager configured")
+
         self.file_manager.read_instructions()
         self.file_manager._parse_files_folder_for_vs_id()
         parse_schemas(self)
@@ -220,7 +225,7 @@ class Agent(BaseAgent[MasterContext]):
         if hasattr(self, "model_settings") and self.model_settings and hasattr(self.model_settings, "model"):
             model_info = self.model_settings.model
         elif hasattr(self, "model") and self.model:
-            model_info = self.model
+            model_info = str(self.model)
 
         return f"<Agent name={self.name!r} desc={self.description!r} model={model_info!r}>"
 
@@ -274,13 +279,15 @@ class Agent(BaseAgent[MasterContext]):
     # --- File Handling ---
     def upload_file(self, file_path: str, include_in_vector_store: bool = True) -> str:
         """Upload a file using the agent's file manager."""
-        return self.file_manager.upload_file(file_path, include_in_vector_store)
+        if self.file_manager:
+            return self.file_manager.upload_file(file_path, include_in_vector_store)
+        raise RuntimeError(f"Agent {self.name} has no file manager configured")
 
         # --- Core Execution Methods ---
 
     async def get_response(
         self,
-        message: str | list[dict[str, Any]],
+        message: str | list[TResponseInputItem],
         sender_name: str | None = None,
         context_override: dict[str, Any] | None = None,
         hooks_override: RunHooks | None = None,
@@ -333,7 +340,7 @@ class Agent(BaseAgent[MasterContext]):
 
     async def get_response_stream(
         self,
-        message: str | list[dict[str, Any]],
+        message: str | list[TResponseInputItem],
         sender_name: str | None = None,
         context_override: dict[str, Any] | None = None,
         hooks_override: RunHooks | None = None,

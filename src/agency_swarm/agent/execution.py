@@ -48,7 +48,7 @@ class Execution:
 
     async def get_response(
         self,
-        message: str | list[dict[str, Any]],
+        message: str | list[TResponseInputItem],
         sender_name: str | None = None,
         context_override: dict[str, Any] | None = None,
         hooks_override: RunHooks | None = None,
@@ -88,6 +88,9 @@ class Execution:
 
         try:
             # Process message and file attachments
+            # attachment_manager is always initialized in Agent.__init__ via setup_file_manager()
+            if self.agent.attachment_manager is None:
+                raise RuntimeError(f"attachment_manager not initialized for agent {self.agent.name}")
             processed_current_message_items = await self.agent.attachment_manager.process_message_and_files(
                 message, file_ids, message_files, kwargs, "get_response"
             )
@@ -128,13 +131,15 @@ class Execution:
                 # Ensure MCP servers connect/cleanup within the same task using a context stack
                 async with AsyncExitStack() as mcp_stack:
                     for server in self.agent.mcp_servers:
-                        await mcp_stack.enter_async_context(server)
+                        # MCPServer doesn't directly implement AbstractAsyncContextManager but has __aenter__/__aexit__
+                        await mcp_stack.enter_async_context(server)  # type: ignore[arg-type]
 
                     run_result: RunResult = await Runner.run(
                         starting_agent=self.agent,
                         input=history_for_runner,
                         context=master_context_for_run,
-                        hooks=hooks_override or self.agent.hooks,
+                        # AgentHooks extends RunHooks, but mypy doesn't recognize inheritance
+                        hooks=hooks_override or self.agent.hooks,  # type: ignore[arg-type]
                         run_config=run_config_override or RunConfig(),
                         max_turns=kwargs.get("max_turns", DEFAULT_MAX_TURNS),
                     )
@@ -157,6 +162,8 @@ class Execution:
                 logger.error(f"Error during Runner.run for agent '{self.agent.name}': {e}", exc_info=True)
                 raise AgentsException(f"Runner execution failed for agent {self.agent.name}") from e
             finally:
+                if self.agent.attachment_manager is None:
+                    raise RuntimeError(f"attachment_manager not initialized for agent {self.agent.name}")
                 self.agent.attachment_manager.attachments_cleanup()
 
             # Always save response items (both user and agent-to-agent calls)
@@ -177,7 +184,9 @@ class Execution:
 
                 current_agent_name = self.agent.name
                 for i, run_item_obj in enumerate(run_result.new_items):
-                    item_dict = run_item_to_tresponse_input_item(run_item_obj) # Convert RunItems to TResponseInputItems
+                    item_dict = run_item_to_tresponse_input_item(
+                        run_item_obj
+                    )  # Convert RunItems to TResponseInputItems
                     if item_dict:
                         MessageFormatter.add_citations_to_message(run_item_obj, item_dict, citations_by_message)
 
@@ -203,8 +212,8 @@ class Execution:
                                 current_agent_name = target
 
                 items_to_save.extend(hosted_tool_outputs)
-                filtered_items = MessageFilter.filter_messages(items_to_save) # Filter out unwanted message types
-                agency_context.thread_manager.add_messages(filtered_items) # Save filtered items to flat storage
+                filtered_items = MessageFilter.filter_messages(items_to_save)  # type: ignore[arg-type] # Filter out unwanted message types
+                agency_context.thread_manager.add_messages(filtered_items)  # type: ignore[arg-type] # Save filtered items to flat storage
                 logger.debug(f"Saved {len(filtered_items)} items to storage (filtered from {len(items_to_save)}).")
 
             # Sync back context changes if we used a merged context due to override
@@ -225,7 +234,7 @@ class Execution:
 
     async def get_response_stream(
         self,
-        message: str | list[dict[str, Any]],
+        message: str | list[TResponseInputItem],
         sender_name: str | None = None,
         context_override: dict[str, Any] | None = None,
         hooks_override: RunHooks | None = None,
@@ -262,11 +271,11 @@ class Execution:
         # Validate input
         if message is None:
             logger.error("message cannot be None")
-            yield {"type": "error", "content": "message cannot be None"}
+            yield {"type": "error", "content": "message cannot be None"}  # type: ignore[misc]
             return
         if isinstance(message, str) and not message.strip():
             logger.error("message cannot be empty")
-            yield {"type": "error", "content": "message cannot be empty"}
+            yield {"type": "error", "content": "message cannot be empty"}  # type: ignore[misc]
             return
 
         logger.info(f"Agent '{self.agent.name}' starting streaming run.")
@@ -278,6 +287,9 @@ class Execution:
 
         try:
             # Process message and file attachments
+            # attachment_manager is always initialized in Agent.__init__ via setup_file_manager()
+            if self.agent.attachment_manager is None:
+                raise RuntimeError(f"attachment_manager not initialized for agent {self.agent.name}")
             processed_current_message_items = await self.agent.attachment_manager.process_message_and_files(
                 message, file_ids, message_files, kwargs, "get_response_stream"
             )
@@ -337,13 +349,15 @@ class Execution:
                 try:
                     async with AsyncExitStack() as mcp_stack:
                         for server in self.agent.mcp_servers:
-                            await mcp_stack.enter_async_context(server)
+                            # MCPServer has __aenter__/__aexit__ methods for context management
+                            await mcp_stack.enter_async_context(server)  # type: ignore[arg-type]
 
                         local_result = Runner.run_streamed(
                             starting_agent=self.agent,
                             input=history_for_runner,
                             context=master_context_for_run,
-                            hooks=hooks_override or self.agent.hooks,
+                            # AgentHooks extends RunHooks, but mypy doesn't recognize inheritance
+                            hooks=hooks_override or self.agent.hooks,  # type: ignore[arg-type]
                             run_config=run_config_override or RunConfig(),
                             max_turns=kwargs.get("max_turns", DEFAULT_MAX_TURNS),
                         )
@@ -380,7 +394,7 @@ class Execution:
                         break
                     # Pass through worker-surfaced errors
                     if isinstance(event, dict) and event.get("type") == "error":
-                        yield event
+                        yield event  # type: ignore[misc]
                         continue
 
                     # Collect all new items for potential post-processing
@@ -392,7 +406,7 @@ class Execution:
                             raw = getattr(itm, "raw_item", None)
                             tool_name = getattr(raw, "name", None) if raw is not None else None
 
-                            if itm_type == "tool_call_item" and tool_name.startswith("send_message"):
+                            if itm_type == "tool_call_item" and tool_name and tool_name.startswith("send_message"):
                                 suppress_next_send_message_output = True
                                 continue
                             if itm_type == "tool_call_output_item" and suppress_next_send_message_output:
@@ -452,8 +466,10 @@ class Execution:
                                 )
 
                             # Add agency metadata with the current active agent
+                            # item_dict is TResponseInputItem but add_agency_metadata expects dict[str, Any]
+                            # TypedDicts are dicts at runtime, so this works
                             formatted_item = MessageFormatter.add_agency_metadata(
-                                item_dict,
+                                item_dict,  # type: ignore[arg-type]
                                 agent=current_stream_agent_name,
                                 caller_agent=sender_name,
                                 agent_run_id=current_agent_run_id,
@@ -461,12 +477,13 @@ class Execution:
                             )
                             # Filter and save immediately
                             if not MessageFilter.should_filter(formatted_item):
-                                agency_context.thread_manager.add_messages([formatted_item])
+                                # formatted_item is dict[str, Any] but add_messages expects list[TResponseInputItem]
+                                agency_context.thread_manager.add_messages([formatted_item])  # type: ignore[arg-type]
 
                     yield event
             except Exception as e:
                 logger.exception("Error during streamed run for agent '%s'", self.agent.name)
-                yield {"type": "error", "content": str(e)}
+                yield {"type": "error", "content": str(e)}  # type: ignore[misc]
             finally:
                 try:
                     if not worker_task.done():
@@ -482,9 +499,11 @@ class Execution:
                 hosted_tool_outputs = extract_hosted_tool_results_if_needed(self.agent, collected_items)
                 if hosted_tool_outputs:
                     # Filter and save any synthetic hosted tool outputs after stream completion
-                    filtered_items = MessageFilter.filter_messages(hosted_tool_outputs)
+                    # hosted_tool_outputs is list[TResponseInputItem] but filter_messages expects list[dict[str, Any]]
+                    filtered_items = MessageFilter.filter_messages(hosted_tool_outputs)  # type: ignore[arg-type]
                     if filtered_items:
-                        agency_context.thread_manager.add_messages(filtered_items)
+                        # filtered_items is list[dict[str, Any]] but add_messages expects list[TResponseInputItem]
+                        agency_context.thread_manager.add_messages(filtered_items)  # type: ignore[arg-type]
                         logger.debug(
                             "Saved %d hosted tool outputs after stream.",
                             len(filtered_items),
@@ -495,4 +514,6 @@ class Execution:
             cleanup_execution(
                 self.agent, original_instructions, context_override, agency_context, master_context_for_run
             )
+            if self.agent.attachment_manager is None:
+                raise RuntimeError(f"attachment_manager not initialized for agent {self.agent.name}")
             self.agent.attachment_manager.attachments_cleanup()

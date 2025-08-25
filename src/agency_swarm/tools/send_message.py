@@ -15,13 +15,11 @@ from typing import TYPE_CHECKING
 
 from agents import (
     FunctionTool,
-    OpenAIChatCompletionsModel,
     RunContextWrapper,
     RunItemStreamEvent,
     ToolCallItem,
     handoff,
 )
-from agents.extensions.models.litellm_model import LitellmModel
 from openai.types.responses import ResponseFunctionToolCall
 
 from ..context import MasterContext
@@ -106,7 +104,7 @@ class SendMessage(FunctionTool):
         }
 
         # Build description with all recipient roles
-        description_parts = [self.__doc__]
+        description_parts = [self.__doc__ or "Send a message to another agent."]
         if recipient_names:
             description_parts.append("\n\nAvailable recipient agents:")
             for agent in recipient_names:
@@ -152,7 +150,7 @@ class SendMessage(FunctionTool):
         self.params_json_schema["properties"]["recipient_agent"]["enum"] = recipient_enum
 
         # Update description with all recipient roles
-        description_parts = [self.__doc__]
+        description_parts = [self.__doc__ or "Send a message to another agent."]
         if recipient_names:
             description_parts.append("\n\nAvailable recipient agents:")
             for agent in recipient_names:
@@ -455,7 +453,7 @@ class SendMessageHandoff:
     def create_handoff(self, recipient_agent: "Agent"):
         """Create and return the handoff object."""
         # Check if recipient agent uses litellm
-        if self._is_litellm_model(recipient_agent):
+        if MessageFormatter._is_litellm_model(recipient_agent):
             # Create input filter to adjust history for litellm
             def litellm_input_filter(handoff_data):
                 # Extract the conversation history
@@ -488,23 +486,3 @@ class SendMessageHandoff:
                 agent=recipient_agent,
                 tool_description_override=recipient_agent.description,
             )
-
-    def _is_litellm_model(self, agent: "Agent") -> str:
-        """Retrieve model name using the same approach used previously in send_message tool."""
-        try:
-            if hasattr(self.agent, "model"):
-                model_config = getattr(self.agent, "model", "") or ""
-                if isinstance(model_config, LitellmModel):
-                    return True
-                elif isinstance(model_config, OpenAIChatCompletionsModel):
-                    model_name = None
-                    if hasattr(model_config, "model"):
-                        model_name = model_config.model
-                    elif isinstance(model_config, str) and model_config:
-                        model_name = model_config
-                    # Look if model specifies a provider
-                    if model_name and "/" in model_name:
-                        return True
-        except Exception:
-            return False
-        return False

@@ -26,12 +26,12 @@ class MessageFormatter:
 
     @staticmethod
     def add_agency_metadata(
-        message: dict[str, Any],
+        message: TResponseInputItem,
         agent: str,
         caller_agent: str | None = None,
         agent_run_id: str | None = None,
         parent_run_id: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> TResponseInputItem:
         """Add agency-specific metadata to a message.
 
         Args:
@@ -44,19 +44,19 @@ class MessageFormatter:
         Returns:
             dict[str, Any]: Message with added metadata
         """
-        message = message.copy()
-        message["agent"] = agent
-        message["callerAgent"] = caller_agent
+        modified_message = message.copy()  # type: ignore[arg-type]
+        modified_message["agent"] = agent  # type: ignore[typeddict-unknown-key]
+        modified_message["callerAgent"] = caller_agent  # type: ignore[typeddict-unknown-key]
         if agent_run_id is not None:
-            message["agent_run_id"] = agent_run_id
+            modified_message["agent_run_id"] = agent_run_id  # type: ignore[typeddict-unknown-key]
         if parent_run_id is not None:
-            message["parent_run_id"] = parent_run_id
+            modified_message["parent_run_id"] = parent_run_id  # type: ignore[typeddict-unknown-key]
         # time.time() always returns UTC seconds since epoch (timezone-independent)
-        message["timestamp"] = int(time.time() * 1000)  # milliseconds since epoch UTC, sortable
+        modified_message["timestamp"] = int(time.time() * 1000)  # type: ignore[typeddict-unknown-key]
         # Add type field if not present (for easier parsing/navigation)
-        if "type" not in message:
-            message["type"] = "message"
-        return message
+        if "type" not in modified_message:
+            modified_message["type"] = "message"  # type: ignore[arg-type]
+        return modified_message
 
     @staticmethod
     def prepare_history_for_runner(
@@ -78,13 +78,13 @@ class MessageFormatter:
         messages_to_save: list[TResponseInputItem] = []
         for msg in processed_current_message_items:
             formatted_msg = MessageFormatter.add_agency_metadata(
-                msg,
+                msg,  # type: ignore[arg-type]
                 agent=agent.name,
                 caller_agent=sender_name,
                 agent_run_id=agent_run_id,
                 parent_run_id=parent_run_id,
             )
-            messages_to_save.append(formatted_msg)
+            messages_to_save.append(formatted_msg)  # type: ignore[arg-type]
 
         # Save messages to flat storage
         thread_manager.add_messages(messages_to_save)
@@ -94,7 +94,7 @@ class MessageFormatter:
         full_history = thread_manager.get_conversation_history(agent.name, sender_name)
 
         # Prepare history for runner (sanitize and ensure content safety)
-        history_for_runner = MessageFormatter.sanitize_tool_calls_in_history(full_history)
+        history_for_runner = MessageFormatter.sanitize_tool_calls_in_history(full_history)  # type: ignore[arg-type]
         history_for_runner = MessageFormatter.ensure_tool_calls_content_safety(history_for_runner)
         # Ensure send_message function_call has a paired output for model input (in-memory only)
         history_for_runner = MessageFormatter.ensure_send_message_pairing(history_for_runner)
@@ -103,7 +103,7 @@ class MessageFormatter:
             history_for_runner = MessageFormatter.adjust_history_for_litellm(history_for_runner)
         # Strip agency metadata before sending to OpenAI
         history_for_runner = MessageFormatter.strip_agency_metadata(history_for_runner)
-        return history_for_runner
+        return history_for_runner  # type: ignore[return-value]
 
     @staticmethod
     def strip_agency_metadata(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -135,14 +135,18 @@ class MessageFormatter:
         in-memory list passed to the SDK on the next turn and does not persist.
         """
         outputs_by_call_id = {m.get("call_id"): True for m in history if m.get("type") == "function_call_output"}
-        needs_output = [
-            m
-            for m in history
-            if m.get("type") == "function_call"
-            and m.get("name").startswith("send_message")
-            and m.get("call_id")
-            and m.get("call_id") not in outputs_by_call_id
-        ]
+        needs_output = []
+        for m in history:
+            if m.get("type") == "function_call":
+                name = m.get("name")
+                call_id = m.get("call_id")
+                if (
+                    name is not None
+                    and name.startswith("send_message")
+                    and call_id
+                    and call_id not in outputs_by_call_id
+                ):
+                    needs_output.append(m)
         if not needs_output:
             return history
         patched = list(history)
@@ -220,9 +224,9 @@ class MessageFormatter:
             and hasattr(run_item_obj.raw_item, "id")
             and run_item_obj.raw_item.id in citations_by_message
         ):
-            item_dict["citations"] = citations_by_message[run_item_obj.raw_item.id]
+            item_dict["citations"] = citations_by_message[run_item_obj.raw_item.id]  # type: ignore[typeddict-unknown-key, typeddict-item]
             msg_type = "streamed message" if is_streaming else "message"
-            logger.debug(f"Added {len(item_dict['citations'])} citations to {msg_type} {run_item_obj.raw_item.id}")
+            logger.debug(f"Added {len(item_dict['citations'])} citations to {msg_type} {run_item_obj.raw_item.id}")  # type: ignore[typeddict-item]
 
     @staticmethod
     def extract_hosted_tool_results(agent: "Agent", run_items: list[RunItem]) -> list[TResponseInputItem]:
@@ -291,7 +295,7 @@ class MessageFormatter:
                                 logger.debug(f"Created web_search results message for call_id: {tool_call.id}")
                                 break  # Process only first text content item to avoid duplicates
 
-        return synthetic_outputs
+        return synthetic_outputs  # type: ignore[return-value]
 
     @staticmethod
     def extract_handoff_target_name(run_item_obj: RunItem) -> str | None:
@@ -356,53 +360,51 @@ class MessageFormatter:
 
                 adjusted.append(msg)
 
-                if (
-                    isinstance(msg, dict)
-                    and msg.get("type") == "function_call"
-                    and msg.get("name").startswith("send_message")
-                ):
-                    cid = msg.get("call_id")
-                    if isinstance(cid, str) and cid:
-                        # If next item is already the correct output, do nothing
-                        if i + 1 < n:
-                            nxt = history[i + 1]
-                            if (
-                                isinstance(nxt, dict)
-                                and nxt.get("type") == "function_call_output"
-                                and nxt.get("call_id") == cid
-                            ):
-                                i += 1  # advance past the adjacent output we just acknowledged
-                                adjusted.append(nxt)
+                if isinstance(msg, dict) and msg.get("type") == "function_call":
+                    name = msg.get("name")
+                    if name is not None and name.startswith("send_message"):
+                        cid = msg.get("call_id")
+                        if isinstance(cid, str) and cid:
+                            # If next item is already the correct output, do nothing
+                            if i + 1 < n:
+                                nxt = history[i + 1]
+                                if (
+                                    isinstance(nxt, dict)
+                                    and nxt.get("type") == "function_call_output"
+                                    and nxt.get("call_id") == cid
+                                ):
+                                    i += 1  # advance past the adjacent output we just acknowledged
+                                    adjusted.append(nxt)
+                                    consumed_call_ids.add(cid)
+                                    continue
+                            # Otherwise, move an existing matching output if present later
+                            if cid in outputs_by_call_id:
+                                adjusted.append(outputs_by_call_id[cid]["item"])
                                 consumed_call_ids.add(cid)
-                                continue
-                        # Otherwise, move an existing matching output if present later
-                        if cid in outputs_by_call_id:
-                            adjusted.append(outputs_by_call_id[cid]["item"])
-                            consumed_call_ids.add(cid)
-                        else:
-                            # Look ahead for the first assistant message with non-empty content
-                            synthesized_output = None
-                            for j in range(i + 1, n):
-                                cand = history[j]
-                                if isinstance(cand, dict) and cand.get("role") == "assistant":
-                                    content = cand.get("content")
-                                    if isinstance(content, str) and content.strip():
-                                        synthesized_output = content
-                                        break
-                            if synthesized_output is not None:
-                                synthesized_item: dict[str, Any] = {
-                                    "type": "function_call_output",
-                                    "call_id": cid,
-                                    "output": synthesized_output,
-                                    # Include agency metadata fields in-memory to mirror original snippet
-                                    # (they will be stripped before sending to the model)
-                                    "agent": msg.get("agent"),
-                                    "callerAgent": msg.get("callerAgent"),
-                                    "timestamp": int(time.time() * 1000),
-                                }
-                                if "agent_run_id" in msg:
-                                    synthesized_item["agent_run_id"] = msg.get("agent_run_id")
-                                adjusted.append(synthesized_item)
+                            else:
+                                # Look ahead for the first assistant message with non-empty content
+                                synthesized_output = None
+                                for j in range(i + 1, n):
+                                    cand = history[j]
+                                    if isinstance(cand, dict) and cand.get("role") == "assistant":
+                                        content = cand.get("content")
+                                        if isinstance(content, str) and content.strip():
+                                            synthesized_output = content
+                                            break
+                                if synthesized_output is not None:
+                                    synthesized_item: dict[str, Any] = {
+                                        "type": "function_call_output",
+                                        "call_id": cid,
+                                        "output": synthesized_output,
+                                        # Include agency metadata fields in-memory to mirror original snippet
+                                        # (they will be stripped before sending to the model)
+                                        "agent": msg.get("agent"),
+                                        "callerAgent": msg.get("callerAgent"),
+                                        "timestamp": int(time.time() * 1000),
+                                    }
+                                    if "agent_run_id" in msg:
+                                        synthesized_item["agent_run_id"] = msg.get("agent_run_id")
+                                    adjusted.append(synthesized_item)
                 i += 1
 
             return adjusted
@@ -411,7 +413,7 @@ class MessageFormatter:
             return history
 
     @staticmethod
-    def _is_litellm_model(agent: "Agent") -> str:
+    def _is_litellm_model(agent: "Agent") -> bool:
         """Retrieve model name using the same approach used previously in send_message tool."""
         try:
             if hasattr(agent, "model"):

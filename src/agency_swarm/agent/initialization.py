@@ -275,7 +275,8 @@ def setup_file_manager(agent: "Agent") -> None:
     agent.file_manager = AgentFileManager(agent)
     agent.attachment_manager = AttachmentManager(agent)
 
-def resolve_token_settings(model_settings_dict: dict[str, Any], agent_name: str = "unknown") -> None:
+
+def resolve_token_settings(model_settings_dict: dict[str, Any], agent_name: str = "unknown") -> dict[str, Any]:
     """
     Resolves conflicts between max_tokens, max_prompt_tokens, and max_completion_tokens.
 

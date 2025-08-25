@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from .core import Agency
 
-from agents import RunConfig, RunHooks, RunResult
+from agents import RunConfig, RunHooks, RunResult, TResponseInputItem
 
 from agency_swarm.agent.core import Agent
 
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 async def get_response(
     agency: "Agency",
-    message: str | list[dict[str, Any]],
+    message: str | list[TResponseInputItem],
     recipient_agent: str | Agent | None = None,
     context_override: dict[str, Any] | None = None,
     hooks_override: RunHooks | None = None,
@@ -106,7 +106,7 @@ async def get_response(
 
 def get_response_sync(
     agency: "Agency",
-    message: str | list[dict[str, Any]],
+    message: str | list[TResponseInputItem],
     recipient_agent: str | Agent | None = None,
     context_override: dict[str, Any] | None = None,
     hooks_override: RunHooks | None = None,
@@ -136,7 +136,7 @@ def get_response_sync(
 
 async def get_response_stream(
     agency: "Agency",
-    message: str | list[dict[str, Any]],
+    message: str | list[TResponseInputItem],
     recipient_agent: str | Agent | None = None,
     context_override: dict[str, Any] | None = None,
     hooks_override: RunHooks | None = None,
@@ -179,9 +179,7 @@ async def get_response_stream(
     if target_recipient is None:
         if agency.entry_points:
             target_recipient = agency.entry_points[0]
-            logger.debug(
-                f"No recipient_agent specified for stream, using first entry point: {target_recipient.name}"
-            )
+            logger.debug(f"No recipient_agent specified for stream, using first entry point: {target_recipient.name}")
         else:
             raise ValueError(
                 "No recipient_agent specified and no entry points available. "
