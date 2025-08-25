@@ -3,7 +3,7 @@
 import json
 import logging
 import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from agents import (
     MessageOutputItem,
@@ -26,12 +26,12 @@ class MessageFormatter:
 
     @staticmethod
     def add_agency_metadata(
-        message: dict[str, Any],
+        message: TResponseInputItem,
         agent: str,
         caller_agent: str | None = None,
         agent_run_id: str | None = None,
         parent_run_id: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> TResponseInputItem:
         """Add agency-specific metadata to a message.
 
         Args:
@@ -44,19 +44,19 @@ class MessageFormatter:
         Returns:
             dict[str, Any]: Message with added metadata
         """
-        message = message.copy()
-        message["agent"] = agent
-        message["callerAgent"] = caller_agent
+        modified_message = message.copy()  # type: ignore[arg-type]
+        modified_message["agent"] = agent  # type: ignore[typeddict-unknown-key]
+        modified_message["callerAgent"] = caller_agent  # type: ignore[typeddict-unknown-key]
         if agent_run_id is not None:
-            message["agent_run_id"] = agent_run_id
+            modified_message["agent_run_id"] = agent_run_id  # type: ignore[typeddict-unknown-key]
         if parent_run_id is not None:
-            message["parent_run_id"] = parent_run_id
+            modified_message["parent_run_id"] = parent_run_id  # type: ignore[typeddict-unknown-key]
         # time.time() always returns UTC seconds since epoch (timezone-independent)
-        message["timestamp"] = int(time.time() * 1000)  # milliseconds since epoch UTC, sortable
+        modified_message["timestamp"] = int(time.time() * 1000)  # type: ignore[typeddict-unknown-key]
         # Add type field if not present (for easier parsing/navigation)
-        if "type" not in message:
-            message["type"] = "message"
-        return message
+        if "type" not in modified_message:
+            modified_message["type"] = "message"  # type: ignore[arg-type]
+        return modified_message
 
     @staticmethod
     def prepare_history_for_runner(

@@ -7,7 +7,7 @@ from typing import Any
 
 from agents import RunConfig, RunHooks, RunResult, TResponseInputItem
 
-from agency_swarm.agent.agent_flows import AgentFlow
+from agency_swarm.agent.agent_flow import AgentFlow
 from agency_swarm.agent.core import AgencyContext, Agent
 from agency_swarm.hooks import PersistenceHooks
 from agency_swarm.streaming.utils import EventStreamMerger
@@ -289,7 +289,7 @@ class Agency:
 
     def get_response_sync(
         self,
-        message: str | list[dict[str, Any]],
+        message: str | list[TResponseInputItem],
         recipient_agent: str | Agent | None = None,
         context_override: dict[str, Any] | None = None,
         hooks_override: RunHooks | None = None,

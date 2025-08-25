@@ -1,7 +1,8 @@
 """Message filtering functionality for removing unwanted message types."""
 
 import logging
-from typing import Any
+
+from agents.items import TResponseInputItem
 
 logger = logging.getLogger(__name__)
 
@@ -13,11 +14,11 @@ class MessageFilter:
     FILTERED_TYPES = {"mcp_list_tools", "openai_list_tools"}
 
     @staticmethod
-    def should_filter(message: dict[str, Any]) -> bool:
+    def should_filter(message: TResponseInputItem) -> bool:
         """Determine if a message should be filtered out.
 
         Args:
-            message: The message dictionary to check
+            message: The input response item to check
 
         Returns:
             bool: True if the message should be filtered out, False otherwise
@@ -29,7 +30,7 @@ class MessageFilter:
         return False
 
     @staticmethod
-    def filter_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def filter_messages(messages: list[TResponseInputItem]) -> list[TResponseInputItem]:
         """Filter out unwanted message types from a message list.
 
         Args:

@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from .core import Agency, AgencyChart, CommunicationFlowEntry
 
-from agency_swarm.agent.agent_flows import AgentFlow
+from agency_swarm.agent.agent_flow import AgentFlow
 from agency_swarm.agent.core import AgencyContext, Agent
 from agency_swarm.tools.send_message import SendMessageHandoff
 

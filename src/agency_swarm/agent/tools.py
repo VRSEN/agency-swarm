@@ -10,7 +10,7 @@ import logging
 import os
 import typing
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, get_args
 
 from agents import FunctionTool, Tool
 
@@ -97,7 +97,8 @@ def add_tool(agent: "Agent", tool: Tool) -> None:
         )
         return
 
-    if not isinstance(tool, Tool):
+    tool_types = get_args(Tool)
+    if not isinstance(tool, tool_types):
         raise TypeError(f"Expected an instance of Tool, got {type(tool)}")
 
     # Ensure FunctionTools get one-call guard if needed
@@ -133,13 +134,18 @@ def load_tools_from_folder(agent: "Agent") -> None:
 
         tools = ToolFactory.from_file(file)
         for tool in tools:
-            if issubclass(tool, BaseTool):
+            if inspect.isclass(tool) and issubclass(tool, BaseTool):
                 try:
-                    tool = ToolFactory.adapt_base_tool(tool)
+                    adapted_tool = ToolFactory.adapt_base_tool(tool)
+                    add_tool(agent, adapted_tool)
                 except Exception as e:
                     logger.error("Error adapting tool %s: %s", file, e)
                     continue
-            add_tool(agent, tool)
+            elif isinstance(tool, FunctionTool):
+                # tool is already a FunctionTool instance
+                add_tool(agent, tool)
+            else:
+                logger.warning(f"Skipping unknown tool type: {type(tool)}")
 
 
 def parse_schemas(agent: "Agent") -> None:
@@ -218,7 +224,7 @@ def validate_hosted_tools(tools: list) -> None:
 
     # Get all hosted tool types from the Tool union (excluding FunctionTool)
     hosted_tool_types = typing.get_args(Tool)
-    hosted_tool_types = [t for t in hosted_tool_types if t != FunctionTool]
+    hosted_tool_types = tuple(t for t in hosted_tool_types if t != FunctionTool)
 
     uninitialized_tools = []
 

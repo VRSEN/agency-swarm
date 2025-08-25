@@ -19,6 +19,9 @@ class AgentFlow:
     Stores the complete chain for proper expansion in Agency parsing.
     """
 
+    # Class variable to track flows during chain evaluation
+    _chain_flows: list[tuple["Agent", "Agent"]] = []
+
     def __init__(self, agents: list["Agent"], _all_flows: list[tuple["Agent", "Agent"]] | None = None):
         self.agents = agents
         # Store all individual flows that should be created from this chain
@@ -71,8 +74,6 @@ class AgentFlow:
         """AgentFlow is always truthy, but this is called in comparison chains."""
         # Store this flow globally when it's being evaluated in a comparison chain
         # This is a hack to work around Python's comparison chaining
-        if not hasattr(AgentFlow, "_chain_flows"):
-            AgentFlow._chain_flows = []
 
         # Add all flows from this AgentFlow to the global tracker
         for flow in self._all_flows:
@@ -84,8 +85,6 @@ class AgentFlow:
     @classmethod
     def get_and_clear_chain_flows(cls) -> list[tuple["Agent", "Agent"]]:
         """Get all flows accumulated during chain evaluation and clear the tracker."""
-        if not hasattr(cls, "_chain_flows"):
-            return []
         flows = cls._chain_flows.copy()
         cls._chain_flows.clear()
         return flows

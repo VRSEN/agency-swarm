@@ -303,7 +303,7 @@ class ToolFactory:
         return _invoke
 
     @staticmethod
-    def from_file(file_path: str) -> list[type[BaseTool] | FunctionTool]:
+    def from_file(file_path: str | Path) -> list[type[BaseTool] | FunctionTool]:
         """Dynamically imports a BaseTool class from a Python file within a package structure.
 
         Parameters:

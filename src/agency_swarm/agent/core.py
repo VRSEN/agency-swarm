@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TypeVar
 
-from agents import Agent as BaseAgent, RunConfig, RunHooks, RunResult, Tool
+from agents import Agent as BaseAgent, RunConfig, RunHooks, RunResult, Tool, TResponseInputItem
 from openai import AsyncOpenAI, OpenAI
 
 from agency_swarm.agent import (
@@ -19,7 +19,7 @@ from agency_swarm.agent import (
     setup_file_manager,
     validate_hosted_tools,
 )
-from agency_swarm.agent.agent_flows import AgentFlow
+from agency_swarm.agent.agent_flow import AgentFlow
 from agency_swarm.agent.attachment_manager import AttachmentManager
 from agency_swarm.agent.file_manager import AgentFileManager
 from agency_swarm.agent.tools import _attach_one_call_guard
@@ -106,6 +106,7 @@ class Agent(BaseAgent[MasterContext]):
     file_manager: AgentFileManager | None = None  # Initialized in setup_file_manager()
     attachment_manager: AttachmentManager | None = None  # Initialized in setup_file_manager()
     _tool_concurrency_manager: ToolConcurrencyManager
+    _subagents: dict[str, "Agent"] | None = None  # Other agents that this agent can communicate with
 
     # --- SDK Agent Compatibility ---
     # Re-declare attributes from BaseAgent for clarity and potential overrides
@@ -291,7 +292,7 @@ class Agent(BaseAgent[MasterContext]):
 
     async def get_response(
         self,
-        message: str | list[dict[str, Any]],
+        message: str | list[TResponseInputItem],
         sender_name: str | None = None,
         context_override: dict[str, Any] | None = None,
         hooks_override: RunHooks | None = None,
@@ -344,7 +345,7 @@ class Agent(BaseAgent[MasterContext]):
 
     async def get_response_stream(
         self,
-        message: str | list[dict[str, Any]],
+        message: str | list[TResponseInputItem],
         sender_name: str | None = None,
         context_override: dict[str, Any] | None = None,
         hooks_override: RunHooks | None = None,
