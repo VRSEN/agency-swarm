@@ -106,38 +106,7 @@ class Execution:
                 agent_run_id=current_agent_run_id,
                 parent_run_id=parent_run_id,
             )
-            logger.debug(f"Running agent '{self.agent.name}' with history length {len(history_for_runner)}:")
-            for i, m in enumerate(history_for_runner):
-                content_preview = str(m.get("content", ""))[:70] if m.get("content") else ""
-                if i < 5:
-                    logger.debug(f"  [Message #{i}] role={m.get('role')}, content_preview='{content_preview}...'")
-                elif i == 5:
-                    logger.debug(f"  ... {len(history_for_runner) - 5} more messages ...")
-
-            # Log sample of assistant messages with tool_calls
-            try:
-                for i, m in enumerate(history_for_runner):
-                    if m.get("role") == "assistant" and m.get("tool_calls"):
-                        tool_calls_preview = str(m.get("tool_calls", []))[:100]
-                        logger.debug(
-                            f"  [Assistant #{i}] content={m.get('content')}, tool_calls='{tool_calls_preview}...'"
-                        )
-            except Exception:
-                pass
-
-            # Also log function_call and function_call_output items
-            try:
-                for i, m in enumerate(history_for_runner):
-                    if m.get("type") == "function_call":
-                        logger.debug(
-                            f"  [FC #{i}] name={m.get('name')}, call_id={m.get('call_id')}, "
-                            f"args_preview={str(m.get('arguments', ''))[:40]}..."
-                        )
-                    elif m.get("type") == "function_call_output":
-                        output_preview = str(m.get("output", ""))[:40]
-                        logger.debug(f"  [FCO #{i}] call_id={m.get('call_id')}, output_preview={output_preview}...")
-            except Exception:
-                pass
+            logger.debug(f"Running agent '{self.agent.name}' with history length {len(history_for_runner)}")
 
             try:
                 logger.debug(
@@ -338,28 +307,6 @@ class Execution:
             logger.debug(
                 f"Starting streaming run for agent '{self.agent.name}' with {len(history_for_runner)} history items."
             )
-
-            # Log sample of history for debugging
-            for i, m in enumerate(history_for_runner):
-                content_preview = str(m.get("content", ""))[:70] if m.get("content") else ""
-                if i < 3:
-                    logger.debug(f"  [Message #{i}] role={m.get('role')}, content_preview='{content_preview}...'")
-                elif i == 3:
-                    logger.debug(f"  ... {len(history_for_runner) - 3} more messages ...")
-
-            # Also log function_call and function_call_output items for debugging
-            try:
-                for _i, m in enumerate(history_for_runner):
-                    if m.get("type") == "function_call":
-                        args_preview = str(m.get("arguments", ""))[:40]
-                        logger.debug(
-                            f"  FC name={m.get('name')}, call_id={m.get('call_id')}, args_preview={args_preview}..."
-                        )
-                    elif m.get("type") == "function_call_output":
-                        output_preview = str(m.get("output", ""))[:40]
-                        logger.debug(f"  FCO call_id={m.get('call_id')} output_preview={output_preview}...")
-            except Exception:
-                pass
 
             # Stream the runner results
             collected_items: list[RunItem] = []
