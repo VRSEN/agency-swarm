@@ -354,10 +354,10 @@ class Execution:
                 except Exception as e:
                     await event_queue.put({"type": "error", "content": str(e)})
                 finally:
-                    # Signal completion to main loop
+                    # Cancel the streaming run to stop background tasks
                     try:
-                        if local_result and hasattr(local_result, "cleanup"):
-                            await local_result.cleanup()
+                        if local_result is not None:
+                            local_result.cancel()
                     except Exception:
                         pass
                     await event_queue.put(None)
