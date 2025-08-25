@@ -64,7 +64,7 @@ class ConsoleEventAdapter:
                             delta_text = getattr(data, "delta", "") or ""
                         except Exception:
                             delta_text = ""
-                        if not str(delta_text).strip():
+                        if len(str(delta_text)) < 1:
                             return
                         # Use Live as a context manager for the live region only when we have non-empty text
                         if self.message_output is None:
