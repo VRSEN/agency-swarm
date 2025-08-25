@@ -91,30 +91,6 @@ class MessageFormatter:
                 msg.pop("function_call", None)
             normalized.append(msg)
 
-        # Ensure function_call ↔ function_call_output pairing for send_message in prepared history
-        # If a send_message function_call exists without a corresponding output, synthesize a minimal output
-        # for Runner input only. Do not modify persisted storage here.
-        outputs_by_call_id = {m.get("call_id"): m for m in normalized if m.get("type") == "function_call_output"}
-        needs_output: list[tuple[int, dict[str, Any]]] = []
-        for idx, m in enumerate(normalized):
-            if m.get("type") == "function_call" and m.get("name") == "send_message":
-                cid = m.get("call_id")
-                if cid and cid not in outputs_by_call_id:
-                    needs_output.append((idx, m))
-
-        if needs_output:
-            patched = list(normalized)
-            for _idx, fc in needs_output:
-                cid = fc.get("call_id")
-                patched.append(
-                    {
-                        "type": "function_call_output",
-                        "call_id": cid,
-                        "output": "",
-                    }
-                )
-            normalized = patched
-
         return normalized
 
     @staticmethod
@@ -145,33 +121,3 @@ class MessageFormatter:
             }
             cleaned.append(clean_msg)
         return cleaned
-
-    @staticmethod
-    def ensure_send_message_pairing(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """
-        Ensure any 'send_message' function_call in the prepared history has a
-        corresponding function_call_output with the same call_id. If missing,
-        append a minimal output item (empty output). This affects ONLY the
-        in-memory list passed to the SDK on the next turn and does not persist.
-        """
-        outputs_by_call_id = {m.get("call_id"): True for m in history if m.get("type") == "function_call_output"}
-        needs_output = [
-            m
-            for m in history
-            if m.get("type") == "function_call"
-            and m.get("name") == "send_message"
-            and m.get("call_id")
-            and m.get("call_id") not in outputs_by_call_id
-        ]
-        if not needs_output:
-            return history
-        patched = list(history)
-        for fc in needs_output:
-            patched.append(
-                {
-                    "type": "function_call_output",
-                    "call_id": fc.get("call_id"),
-                    "output": "",
-                }
-            )
-        return patched

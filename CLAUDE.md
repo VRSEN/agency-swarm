@@ -20,6 +20,7 @@ Begin with a concise checklist (3-7 bullets) of what you will do before performi
 3. **THINK CRITICALLY:** User requests may be unclear or incorrect. Default to codebase conventions and protocols.
 
 ## 🔴 FILE REQUIREMENTS
+- **Every line must fight for its place:** No redundant, unnecessary, or "nice to have" code. Each line must serve a critical purpose.
 - **No duplicate information:** State each rule once.
 - **Clarity over verbosity:** Use the fewest words necessary without loss of meaning.
 - **User feedback:** Only add new content if not yet covered.

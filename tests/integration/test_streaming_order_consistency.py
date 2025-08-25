@@ -10,14 +10,16 @@ from agents import ModelSettings, function_tool
 from agency_swarm import Agency, Agent
 
 # Hardcoded expected flow (normalized stream type, agent, tool_name)
+# Note: SDK sends send_message AFTER sub-agent completes (natural order)
 EXPECTED_FLOW: list[tuple[str, str, str | None]] = [
     ("message_output_item", "MainAgent", None),
     ("tool_call_item", "MainAgent", "get_market_data"),
     ("tool_call_output_item", "MainAgent", None),
-    ("tool_call_item", "MainAgent", "send_message"),
-    ("tool_call_item", "SubAgent", "analyze_risk"),
+    ("tool_call_item", "SubAgent", "analyze_risk"),  # Sub-agent events come first
     ("tool_call_output_item", "SubAgent", None),
     ("message_output_item", "SubAgent", None),
+    ("tool_call_item", "MainAgent", "send_message"),  # SDK sends this after sub-agent
+    ("tool_call_output_item", "MainAgent", None),
     ("message_output_item", "MainAgent", None),
 ]
 

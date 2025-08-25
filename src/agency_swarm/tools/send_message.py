@@ -9,11 +9,9 @@ recipient details.
 
 import json
 import logging
-import time
 from typing import TYPE_CHECKING
 
-from agents import FunctionTool, RunContextWrapper, RunItemStreamEvent, ToolCallItem, handoff
-from openai.types.responses import ResponseFunctionToolCall
+from agents import FunctionTool, RunContextWrapper, handoff
 
 from ..context import MasterContext
 from ..streaming.utils import add_agent_name_to_event
@@ -267,20 +265,6 @@ class SendMessage(FunctionTool):
                 if wrapper and hasattr(wrapper, "context") and wrapper.context:
                     streaming_context = getattr(wrapper.context, "_streaming_context", None)
 
-                # Emit a single ordered marker and persist a minimal record before forwarding child events
-                if streaming_context:
-                    try:
-                        await self._emit_send_message_start(
-                            streaming_context=streaming_context,
-                            sender_agent_name=self.sender_agent.name,
-                            thread_manager=getattr(wrapper.context, "thread_manager", None),
-                            arguments_json=arguments_json_string,
-                            agent_run_id=getattr(wrapper.context, "_current_agent_run_id", None),
-                            tool_call_id=tool_call_id,  # Pass the real call_id
-                        )
-                    except Exception as e:
-                        logger.warning(f"Failed to emit/persist send_message start: {e}")
-
                 # Use streaming and collect the final output
                 final_output_text = ""
                 tool_calls_seen = []
@@ -375,63 +359,6 @@ class SendMessage(FunctionTool):
                 exc_info=True,
             )
             return f"Error: Failed to get response from agent '{recipient_name_for_call}'. Reason: {e}"
-
-    async def _emit_send_message_start(
-        self,
-        *,
-        streaming_context,
-        sender_agent_name: str,
-        thread_manager,
-        arguments_json: str | None = None,
-        agent_run_id: str | None = None,
-        tool_call_id: str | None = None,  # Accept the real call_id
-    ) -> str | None:
-        """Emit a sentinel for send_message and persist a minimal record to align saved order with stream."""
-        import uuid
-
-        # Use the real call_id from OpenAI if available, otherwise generate one
-        call_id = tool_call_id if tool_call_id else f"call_{uuid.uuid4().hex[:20]}"
-
-        # Create a proper ResponseFunctionToolCall object that matches the SDK structure
-        raw_item = ResponseFunctionToolCall(
-            name="send_message",
-            arguments=arguments_json or "",
-            call_id=call_id,  # Use the real or generated call_id
-            type="function_call",
-            id=f"fc_{uuid.uuid4().hex}",  # Generate unique id
-            status="in_progress",  # Start as in_progress like the SDK does
-        )
-
-        event = RunItemStreamEvent(
-            name="tool_called",
-            item=ToolCallItem(agent=self.sender_agent, raw_item=raw_item),
-        )
-        event = add_agent_name_to_event(event, sender_agent_name, None, agent_run_id=agent_run_id)
-        await streaming_context.put_event(event)
-
-        if thread_manager is not None and hasattr(thread_manager, "add_messages"):
-            minimal_record = {
-                "type": "function_call",
-                "agent": sender_agent_name,
-                "callerAgent": None,
-                # FLAT shape expected by Responses API input items
-                # Top-level name and arguments (no nested function_call object)
-                "name": "send_message",
-                "arguments": arguments_json or "",
-                "call_id": raw_item.call_id,
-                "id": raw_item.id,
-                "status": raw_item.status,
-                "timestamp": int(time.time() * 1000),
-            }
-            if agent_run_id:
-                minimal_record["agent_run_id"] = agent_run_id
-            thread_manager.add_messages([minimal_record])
-
-        # Return call_id so caller can persist matching output later
-        try:
-            return raw_item.call_id
-        except Exception:
-            return None
 
 
 class SendMessageHandoff:

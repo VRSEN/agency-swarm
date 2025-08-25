@@ -158,8 +158,6 @@ class Execution:
         # Prepare history for runner (sanitize and ensure content safety)
         history_for_runner = sanitize_tool_calls_in_history(full_history)
         history_for_runner = ensure_tool_calls_content_safety(history_for_runner)
-        # Ensure send_message function_call has a paired output for model input (in-memory only)
-        history_for_runner = MessageFormatter.ensure_send_message_pairing(history_for_runner)
         # Strip agency metadata before sending to OpenAI
         history_for_runner = MessageFormatter.strip_agency_metadata(history_for_runner)
         return history_for_runner
@@ -581,14 +579,12 @@ class Execution:
 
             try:
                 current_stream_agent_name = self.agent.name
-                # Suppress SDK-emitted send_message tool call pair (we inject a sentinel earlier)
-                suppress_next_send_message_output: bool = False
                 while True:
                     # If worker finished and there are no pending events, exit cleanly
                     if worker_task.done() and event_queue.empty():
                         break
 
-                    # Await next event with a short timeout to avoid hanging if sentinel wasn't enqueued
+                    # Await next event with a short timeout to avoid hanging
                     try:
                         event = await asyncio.wait_for(event_queue.get(), timeout=0.25)
                     except asyncio.TimeoutError:  # noqa: UP041
@@ -602,21 +598,6 @@ class Execution:
 
                     # Collect all new items for potential post-processing
                     if hasattr(event, "item") and event.item:
-                        # Check for SDK-emitted send_message tool call and suppress it (and its immediate output)
-                        itm = getattr(event, "item", None)
-                        if itm is not None:
-                            itm_type = getattr(itm, "type", None)
-                            raw = getattr(itm, "raw_item", None)
-                            tool_name = getattr(raw, "name", None) if raw is not None else None
-
-                            if itm_type == "tool_call_item" and tool_name == "send_message":
-                                suppress_next_send_message_output = True
-                                continue
-
-                            if itm_type == "tool_call_output_item" and suppress_next_send_message_output:
-                                suppress_next_send_message_output = False
-                                continue
-
                         collected_items.append(event.item)
 
                     # Update active agent on handoff events or explicit agent update events
