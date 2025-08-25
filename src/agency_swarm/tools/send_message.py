@@ -15,13 +15,11 @@ from typing import TYPE_CHECKING
 
 from agents import (
     FunctionTool,
-    OpenAIChatCompletionsModel,
     RunContextWrapper,
     RunItemStreamEvent,
     ToolCallItem,
     handoff,
 )
-from agents.extensions.models.litellm_model import LitellmModel
 from openai.types.responses import ResponseFunctionToolCall
 
 from ..context import MasterContext

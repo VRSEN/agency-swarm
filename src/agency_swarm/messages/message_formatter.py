@@ -3,7 +3,7 @@
 import json
 import logging
 import time
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any
 
 from agents import (
     MessageOutputItem,
