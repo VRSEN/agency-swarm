@@ -188,10 +188,9 @@ def register_all_agents_and_set_entry_points(
     # Set agency.entry_points - use the explicitly provided list
     agency.entry_points = defined_entry_points
     if not agency.entry_points and agency.agents:
-        logger.warning(
+        logger.info(
             "No explicit entry points provided (no positional Agent arguments). "
-            "To interact with the agency, you must use the agent's own get_response methods "
-            "or define entry points during Agency initialization if using agency.get_response."
+            "To interact with the agency, you must specify a recipient agent in get_response functions."
         )
         # Note: agency.entry_points remains empty if none were explicitly provided.
 

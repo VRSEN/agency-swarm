@@ -29,7 +29,7 @@ class AttachmentManager:
 
         # Temp variables used to hold attachment data to be used in cleanup
         self._temp_vector_store_id = None
-        self._temp_code_interpreter_file_ids = []
+        self._temp_code_interpreter_file_ids: list[str] = []
 
     def init_attachments_vs(self, vs_name: str = "attachments_vs"):
         """
@@ -111,7 +111,7 @@ class AttachmentManager:
         # Add temporary tools for other file types
         if code_interpreter_ids:
             logger.info(f"Adding file ids: {code_interpreter_ids} for {self.agent.name}'s code interpreter")
-            self.agent.file_manager.add_code_interpreter_tool(code_interpreter_ids)
+            self.agent.file_manager.add_code_interpreter_tool(code_interpreter_ids)  # type: ignore[union-attr]
             self._temp_code_interpreter_file_ids = code_interpreter_ids
 
         return content_list

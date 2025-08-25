@@ -24,15 +24,15 @@ logger = logging.getLogger(__name__)
 
 class ToolFactory:
     @staticmethod
-    def from_langchain_tools(tools: list) -> list[type[BaseTool]]:
+    def from_langchain_tools(tools: list) -> list[FunctionTool]:
         """
-        Converts a list of langchain tools into a list of BaseTools.
+        Converts a list of langchain tools into a list of FunctionTools.
 
         Parameters:
             tools: The langchain tools to convert.
 
         Returns:
-            A list of BaseTools.
+            A list of FunctionTools.
         """
         converted_tools = []
         for tool in tools:
@@ -41,15 +41,15 @@ class ToolFactory:
         return converted_tools
 
     @staticmethod
-    def from_langchain_tool(tool) -> type[BaseTool]:
+    def from_langchain_tool(tool) -> FunctionTool:
         """
-        Converts a langchain tool into a BaseTool.
+        Converts a langchain tool into a FunctionTool.
 
         Parameters:
             tool: The langchain tool to convert.
 
         Returns:
-            A BaseTool.
+            A FunctionTool.
         """
         try:
             from langchain_community.tools import format_tool_to_openai_function
@@ -59,24 +59,54 @@ class ToolFactory:
         if inspect.isclass(tool):
             tool = tool()
 
-        def callback(self):
-            tool_input = self.model_dump()
-            try:
-                return tool.run(tool_input)
-            except TypeError:
-                if len(tool_input) == 1:
-                    return tool.run(list(tool_input.values())[0])
-                else:
-                    raise TypeError(
-                        f"Error parsing input for tool '{tool.__class__.__name__}' Please open an issue on github."
-                    ) from None
+        # Get the OpenAI function schema from langchain tool
+        openai_schema = format_tool_to_openai_function(tool)
 
-        # TODO: BROKEN CODE - from_openai_schema expects (schema, function_name: str) but gets (schema, callback)
-        # This was broken in commit 90b8ea3 during refactoring
-        return ToolFactory.from_openai_schema(format_tool_to_openai_function(tool), callback)  # type: ignore[return-value, arg-type]
+        # Extract tool information
+        tool_name = openai_schema.get("name", tool.__class__.__name__)
+        tool_description = openai_schema.get("description", tool.description)
+
+        # Get parameters schema - this should be the full JSON schema for the FunctionTool
+        parameters_schema = openai_schema.get("parameters", {})
+
+        # Ensure proper schema structure for FunctionTool
+        if not parameters_schema:
+            parameters_schema = {"type": "object", "properties": {}, "required": [], "additionalProperties": False}
+
+        # Create the async callback function
+        async def on_invoke_tool(ctx, input_json: str):
+            """Callback function that executes the langchain tool."""
+            try:
+                args = json.loads(input_json) if input_json else {}
+            except Exception as e:
+                return f"Error: Invalid JSON input: {e}"
+            try:
+                # Call the langchain tool
+                result = tool.run(args)
+                return str(result)
+            except TypeError:
+                # Try with single argument if direct dict fails (langchain specifics)
+                if len(args) == 1:
+                    result = tool.run(list(args.values())[0])
+                    return str(result)
+                else:
+                    return f"Error parsing input for tool '{tool.__class__.__name__}'. Please open an issue on github."
+            except Exception as e:
+                return f"Error running LangChain tool: {e}"
+
+        # Create and return the FunctionTool
+        func_tool = FunctionTool(
+            name=tool_name,
+            description=tool_description.strip(),
+            params_json_schema=parameters_schema,
+            on_invoke_tool=on_invoke_tool,
+            strict_json_schema=False,  # LangChain tools are not strict by default
+        )
+
+        return func_tool
 
     @staticmethod
-    def from_openai_schema(schema: dict[str, Any], function_name: str) -> dict:
+    def from_openai_schema(schema: dict[str, Any], function_name: str) -> tuple[type | None, type | None]:
         """
         Converts an OpenAI schema into Pydantic models for parameters and request body.
         Returns:
@@ -96,9 +126,7 @@ class ToolFactory:
         if request_body_schema:
             request_body_model = generate_model_from_schema(request_body_schema, camel_func_name, strict)
 
-        # TODO: Return type mismatch - should return dict but returns tuple
-        # This was broken in commit 90b8ea3 during refactoring
-        return param_model, request_body_model  # type: ignore[return-value]
+        return param_model, request_body_model
 
     @staticmethod
     def from_openapi_schema(
@@ -227,9 +255,7 @@ class ToolFactory:
         Returns:
             An async callback function that makes the appropriate HTTP request.
         """
-        # TODO: from_openai_schema returns tuple but code expects it to return dict
-        # This was broken in commit 90b8ea3 during refactoring
-        param_model, request_body_model = ToolFactory.from_openai_schema(tool_schema, function_name)  # type: ignore[misc]
+        param_model, request_body_model = ToolFactory.from_openai_schema(tool_schema, function_name)
         fixed_params = params or {}
 
         async def _invoke(

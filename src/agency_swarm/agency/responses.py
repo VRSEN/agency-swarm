@@ -73,14 +73,6 @@ async def get_response(
             )
 
     target_agent = resolve_agent(agency, target_recipient)
-    if not agency.entry_points:
-        logger.warning("Agency has no designated entry points. Allowing call to any agent.")
-    elif target_agent not in agency.entry_points:
-        logger.warning(
-            f"Recipient agent '{target_agent.name}' is not a designated entry point "
-            f"(Entry points: {[ep.name for ep in agency.entry_points]}). "
-            f"Call allowed but may indicate unintended usage."
-        )
 
     effective_hooks = hooks_override or agency.persistence_hooks
 
@@ -187,14 +179,6 @@ async def get_response_stream(
             )
 
     target_agent = resolve_agent(agency, target_recipient)
-    if not agency.entry_points:
-        logger.warning("Agency has no designated entry points. Allowing stream call to any agent.")
-    elif target_agent not in agency.entry_points:
-        logger.warning(
-            f"Recipient agent '{target_agent.name}' is not a designated entry point "
-            f"(Entry points: {[ep.name for ep in agency.entry_points]}). "
-            f"Stream call allowed but may indicate unintended usage."
-        )
 
     effective_hooks = hooks_override or agency.persistence_hooks
 
