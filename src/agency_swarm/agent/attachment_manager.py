@@ -205,7 +205,7 @@ class AttachmentManager:
 
                     # Update the message content
                     if content_list != []:
-                        last_message["content"] = content_list
+                        last_message["content"] = content_list  # type: ignore[typeddict-unknown-key, arg-type]
                 else:
                     logger.warning(
                         f"Cannot attach files: Last message is not a user message for agent {self.agent.name}"
@@ -215,13 +215,13 @@ class AttachmentManager:
 
     async def process_message_and_files(
         self,
-        message: str | list[dict[str, Any]],
+        message: str | list[TResponseInputItem],
         file_ids: list[str] | None,
         message_files: list[str] | None,
         kwargs: dict[str, Any],
         method_name: str = "execution",
-    ) -> tuple[list[TResponseInputItem], str]:
-        """Process message and handle file attachments. Returns (processed_items, agent_run_id)."""
+    ) -> list[TResponseInputItem]:
+        """Process message and handle file attachments. Returns processed_items."""
         # Process current message items
         try:
             processed_current_message_items = ItemHelpers.input_to_new_input_list(message)
@@ -230,8 +230,6 @@ class AttachmentManager:
             raise AgentsException(f"Failed to process input message for agent {self.agent.name}") from e
 
         # Handle file attachments
-        await self.prepare_and_attach_files(
-            processed_current_message_items, file_ids, message_files, kwargs
-        )
+        await self.prepare_and_attach_files(processed_current_message_items, file_ids, message_files, kwargs)
 
         return processed_current_message_items

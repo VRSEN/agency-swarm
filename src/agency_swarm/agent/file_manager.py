@@ -2,6 +2,7 @@ import logging
 import os
 import re
 from pathlib import Path
+from typing import Any
 
 from agents import CodeInterpreterTool, FileSearchTool
 from agents.exceptions import AgentsException
@@ -371,7 +372,10 @@ class AgentFileManager:
                             "add them manually or switch to using file_ids list."
                         )
                     elif code_interpreter_file_ids:
-                        code_interpreter_container = tool.tool_config.get("container", {})
+                        container: Any = tool.tool_config.get("container", {})
+                        if not isinstance(container, dict):
+                            container = {}
+                        code_interpreter_container = container
                         existing_file_ids = code_interpreter_container.get("file_ids", [])
                         for file_id in code_interpreter_file_ids:
                             if file_id in existing_file_ids:
@@ -382,7 +386,7 @@ class AgentFileManager:
                                 continue
                             existing_file_ids.append(file_id)
                         code_interpreter_container["file_ids"] = existing_file_ids
-                        tool.tool_config["container"] = code_interpreter_container
+                        tool.tool_config["container"] = code_interpreter_container  # type: ignore[typeddict-item]
                         logger.info(
                             f"Agent {self.agent.name}: Added file IDs "
                             f"{code_interpreter_file_ids} to existing CodeInterpreter."

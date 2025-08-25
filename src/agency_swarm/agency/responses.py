@@ -179,9 +179,7 @@ async def get_response_stream(
     if target_recipient is None:
         if agency.entry_points:
             target_recipient = agency.entry_points[0]
-            logger.debug(
-                f"No recipient_agent specified for stream, using first entry point: {target_recipient.name}"
-            )
+            logger.debug(f"No recipient_agent specified for stream, using first entry point: {target_recipient.name}")
         else:
             raise ValueError(
                 "No recipient_agent specified and no entry points available. "

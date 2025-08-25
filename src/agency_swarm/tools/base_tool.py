@@ -27,11 +27,12 @@ class classproperty:
 
 
 class BaseTool(BaseModel, ABC):
+    model_config = {"ignored_types": (classproperty,)}
+
     _caller_agent: Any = None
     _event_handler: Any = None
     _tool_call: ToolCall | None = None
     _context: Any = None  # Will hold RunContextWrapper when available
-    openai_schema: ClassVar[dict[str, Any]]
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -82,8 +83,9 @@ class BaseTool(BaseModel, ABC):
             if docstring.short_description:
                 schema["description"] = docstring.short_description
             else:
+                class_name = cls.__name__ if hasattr(cls, "__name__") else "Tool"
                 schema["description"] = (
-                    f"Correctly extracted `{cls.__name__}` with all the required parameters with correct types"
+                    f"Correctly extracted `{class_name}` with all the required parameters with correct types"
                 )
 
         schema = {

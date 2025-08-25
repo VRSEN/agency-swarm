@@ -82,9 +82,9 @@ def parse_agent_flows(
         # Handle AgentFlow objects directly (when using agent1 > agent2 without tuple)
         if isinstance(flow_entry, AgentFlow):
             # Convert AgentFlow to (AgentFlow, default_tool) format
-            flow_entry = (flow_entry, None)
+            flow_entry = (flow_entry, None)  # type: ignore[assignment]
 
-        if len(flow_entry) == 2:
+        if isinstance(flow_entry, tuple | list) and len(flow_entry) == 2:
             # Could be (Agent, Agent) or (AgentFlow, tool_class)
             first, second = flow_entry
 
@@ -132,7 +132,7 @@ def parse_agent_flows(
                     "Expected (Agent, Agent) or (AgentFlow, tool_class)."
                 )
 
-        elif len(flow_entry) == 3:
+        elif isinstance(flow_entry, tuple | list) and len(flow_entry) == 3:
             # (Agent, Agent, tool_class) format
             sender, receiver, tool_class = flow_entry
 

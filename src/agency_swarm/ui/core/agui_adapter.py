@@ -336,7 +336,7 @@ class AguiAdapter:
         # --- Tool-argument deltas ---------------------------------------------
         if etype in self._TOOL_ARG_DELTA_TYPES:
             item_id = getattr(oe, "item_id", None)
-            call_id = call_id_by_item.get(item_id)
+            call_id = call_id_by_item.get(item_id) if item_id else None
             if call_id:
                 return ToolCallArgsEvent(
                     type=EventType.TOOL_CALL_ARGS,

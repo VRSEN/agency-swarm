@@ -50,8 +50,7 @@ async def async_get_completion(
 
     if tool_choice:
         raise NotImplementedError(
-            "tool_choice parameter is not yet implemented in v1.x. "
-            "TODO: Implement tool_choice support in get_response."
+            "tool_choice parameter is not yet implemented in v1.x. TODO: Implement tool_choice support in get_response."
         )
 
     if verbose:

@@ -106,7 +106,7 @@ class SendMessage(FunctionTool):
         }
 
         # Build description with all recipient roles
-        description_parts = [self.__doc__]
+        description_parts = [self.__doc__ or "Send a message to another agent."]
         if recipient_names:
             description_parts.append("\n\nAvailable recipient agents:")
             for agent in recipient_names:
@@ -152,7 +152,7 @@ class SendMessage(FunctionTool):
         self.params_json_schema["properties"]["recipient_agent"]["enum"] = recipient_enum
 
         # Update description with all recipient roles
-        description_parts = [self.__doc__]
+        description_parts = [self.__doc__ or "Send a message to another agent."]
         if recipient_names:
             description_parts.append("\n\nAvailable recipient agents:")
             for agent in recipient_names:
