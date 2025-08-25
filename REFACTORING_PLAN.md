@@ -8,7 +8,6 @@
 - [x] Remove non-standard/internal logger imports
 
 ## 2) Side Effects & Globals
-- [x] Remove `.env` loading from `agency_swarm/__init__.py`
 - [ ] Provide explicit bootstrap/init utilities instead
 - [x] Replace global `event_stream_merger` with injected/factory instance
 - [x] Refactor `AguiAdapter` to use per-instance run state (no global mutable state)

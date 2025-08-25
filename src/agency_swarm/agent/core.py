@@ -83,11 +83,6 @@ class Agent(BaseAgent[MasterContext]):
     Agents are stateless. Agency-specific resources like thread managers,
     subagent mappings and shared instructions are provided at runtime via
     :class:`AgencyContext` from the owning :class:`Agency`.
-
-    Note:
-        Agents are stateless. Agency-specific resources like thread managers,
-        subagent mappings and shared instructions are provided at runtime via
-        :class:`AgencyContext` from the owning :class:`Agency`.
     """
 
     # --- Agency Swarm Specific Parameters ---

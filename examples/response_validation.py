@@ -12,7 +12,6 @@ from agents import (
     input_guardrail,
     output_guardrail,
 )
-from dotenv import load_dotenv
 
 # Path setup for standalone examples
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
@@ -21,8 +20,6 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 # Minimal guardrails demo: input requires "Task:"; output forbids email addresses
 
 from agency_swarm import Agency, Agent
-
-load_dotenv()
 
 # Silence library logs and stack traces for a clean demo output
 logging.basicConfig(level=logging.ERROR)
