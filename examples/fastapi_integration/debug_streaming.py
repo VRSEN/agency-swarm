@@ -12,7 +12,7 @@ import json
 import requests
 
 
-def debug_streaming():
+def debug_streaming() -> None:
     """Debug streaming to see exact event structure."""
     print("🔍 Debugging FastAPI Streaming Events")
     print("=" * 60)

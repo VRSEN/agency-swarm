@@ -73,15 +73,15 @@ def three_level_agency():
 
 
 @pytest.mark.asyncio
-async def test_parent_run_id_three_level_orchestration(three_level_agency):
+async def test_parent_run_id_three_level_orchestration(three_level_agency) -> None:
     """Test parent_run_id tracking through CEO → Manager → Worker orchestration.
 
     Verifies:
     1. CEO's initial execution has no parent_run_id
-    2. Manager receives CEO's agent_run_id as parent_run_id
-    3. Worker receives Manager's agent_run_id as parent_run_id
+    2. Manager receives the call_id from CEO's send_message as parent_run_id
+    3. Worker receives the call_id from Manager's send_message as parent_run_id
     4. All messages are properly tagged with parent_run_id
-    5. The delegation chain can be fully traversed
+    5. The delegation chain can be fully traversed via send_message call_ids
     """
     agency, captured_messages = three_level_agency
     delegation_chain = {}  # Maps agent_run_id to parent_run_id

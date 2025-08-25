@@ -30,7 +30,7 @@ worker = Agent(
 agency = Agency(manager, communication_flows=[(manager, worker)])
 
 
-async def main():
+async def main() -> None:
     # Track messages before
     before_count = len(agency.thread_manager.get_all_messages())
 

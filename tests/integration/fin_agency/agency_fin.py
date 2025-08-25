@@ -1,3 +1,6 @@
+from collections.abc import Callable
+from typing import Any
+
 from dotenv import load_dotenv
 
 # Import the Search Agency agents
@@ -10,7 +13,10 @@ from agency_swarm import Agency
 load_dotenv()
 
 
-def create_agency(load_threads_callback=None, save_threads_callback=None):
+def create_agency(
+    load_threads_callback: Callable[[], list[dict[str, Any]]] | None = None,
+    save_threads_callback: Callable[[list[dict[str, Any]]], None] | None = None,
+) -> Agency:
     portfolio_manager = PortfolioManager()
     report_generator = ReportGenerator()
     risk_analyst = RiskAnalyst()

@@ -52,7 +52,7 @@ def analyze_risk(data: str) -> str:
 
 
 @pytest.mark.asyncio
-async def test_full_streaming_flow_hardcoded_sequence():
+async def test_full_streaming_flow_hardcoded_sequence() -> None:
     main = Agent(
         name="MainAgent",
         description="Coordinator",
@@ -157,7 +157,7 @@ EXPECTED_FLOW_MULTIPLE_CALLS: list[tuple[str, str, str | None]] = [
 
 
 @pytest.mark.asyncio
-async def test_multiple_sequential_subagent_calls():
+async def test_multiple_sequential_subagent_calls() -> None:
     """Test that multiple sequential calls to the same sub-agent stream correctly."""
     coordinator = Agent(
         name="Coordinator",
@@ -264,7 +264,7 @@ EXPECTED_FLOW_NESTED: list[tuple[str, str, str | None]] = [
 
 @pytest.mark.skip(reason="Expected flow needs to be validated with actual execution")
 @pytest.mark.asyncio
-async def test_nested_delegation_streaming():
+async def test_nested_delegation_streaming() -> None:
     """Test A->B->C nested delegation appears correctly in stream."""
     agent_a = Agent(
         name="AgentA",
@@ -386,7 +386,7 @@ EXPECTED_FLOW_PARALLEL: list[tuple[str, str, str | None]] = [
 
 @pytest.mark.skip(reason="Expected flow needs to be validated with actual execution")
 @pytest.mark.asyncio
-async def test_parallel_subagent_calls():
+async def test_parallel_subagent_calls() -> None:
     """Test calls to different sub-agents in sequence (simulating parallel work)."""
     orchestrator = Agent(
         name="Orchestrator",
