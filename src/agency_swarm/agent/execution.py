@@ -134,9 +134,8 @@ class Execution:
                             f"args_preview={str(m.get('arguments', ''))[:40]}..."
                         )
                     elif m.get("type") == "function_call_output":
-                        logger.debug(
-                            f"  [FCO #{i}] call_id={m.get('call_id')}, output_preview={str(m.get('output', ''))[:40]}..."
-                        )
+                        output_preview = str(m.get("output", ""))[:40]
+                        logger.debug(f"  [FCO #{i}] call_id={m.get('call_id')}, output_preview={output_preview}...")
             except Exception:
                 pass
 
@@ -350,15 +349,15 @@ class Execution:
 
             # Also log function_call and function_call_output items for debugging
             try:
-                for i, m in enumerate(history_for_runner):
+                for _i, m in enumerate(history_for_runner):
                     if m.get("type") == "function_call":
+                        args_preview = str(m.get("arguments", ""))[:40]
                         logger.debug(
-                            f"  FC name={m.get('name')}, call_id={m.get('call_id')}, args_preview={str(m.get('arguments', ''))[:40]}..."
+                            f"  FC name={m.get('name')}, call_id={m.get('call_id')}, args_preview={args_preview}..."
                         )
                     elif m.get("type") == "function_call_output":
-                        logger.debug(
-                            f"  FCO call_id={m.get('call_id')} output_preview={str(m.get('output', ''))[:40]}..."
-                        )
+                        output_preview = str(m.get("output", ""))[:40]
+                        logger.debug(f"  FCO call_id={m.get('call_id')} output_preview={output_preview}...")
             except Exception:
                 pass
 
@@ -377,7 +376,7 @@ class Execution:
                 pass
 
             # Create StreamingContext for forwarding sub-agent events
-            from agency_swarm.streaming.streaming_context import StreamingContext
+            from agency_swarm.streaming import StreamingContext
 
             streaming_context = StreamingContext()
             master_context_for_run._streaming_context = streaming_context

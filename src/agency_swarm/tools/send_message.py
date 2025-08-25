@@ -390,6 +390,8 @@ class SendMessageHandoff:
                 adjusted_history = MessageFormatter.adjust_history_for_litellm(history_list)
 
                 # Create new handoff data with adjusted history
+                from dataclasses import replace
+
                 return replace(handoff_data, input_history=tuple(adjusted_history))
 
             # Create handoff with litellm input filter

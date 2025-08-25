@@ -4,7 +4,6 @@ import pytest
 
 from agency_swarm import Agent
 from agency_swarm.agent.core import AgencyContext
-from agency_swarm.tools.send_message import SendMessage
 
 
 @pytest.mark.asyncio

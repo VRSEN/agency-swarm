@@ -121,7 +121,7 @@ async def main():
                 args_dict = json.loads(args)
                 if "recipient_agent" in args_dict:
                     content_preview = f"to={args_dict['recipient_agent']}"
-            except:
+            except Exception:
                 content_preview = args[:50]
         elif role == "assistant":
             content = msg.get("content", "")
