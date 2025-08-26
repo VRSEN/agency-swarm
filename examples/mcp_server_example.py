@@ -20,12 +20,20 @@ import time
 
 from agents import HostedMCPTool
 from agents.mcp.server import MCPServerStdio, MCPServerStdioParams
+from dotenv import load_dotenv
 
 from agency_swarm import Agency, Agent
+
+load_dotenv()
 
 stdio_server = MCPServerStdio(
     MCPServerStdioParams(command="python", args=["./examples/utils/stdio_mcp_server.py"]), cache_tools_list=True
 )
+
+app_token = os.getenv("APP_TOKEN", "test_token_123")
+if not app_token:
+    print("APP_TOKEN not set, using default token")
+    os.environ["APP_TOKEN"] = "test_token_123"
 
 
 # Launch the SSE MCP server
@@ -42,8 +50,6 @@ def launch_sse_server():
     time.sleep(2)
     return process
 
-
-sse_server = launch_sse_server()
 
 mcp_agent_local = Agent(
     name="local_MCP_Agent",
@@ -66,7 +72,7 @@ mcp_agent_public = Agent(
                 "type": "mcp",
                 "server_label": "mcp-tools-server",
                 # server_url must be accessible from the internet (not locally)
-                "server_url": "https://93b404880afc.ngrok-free.app/sse/",  # <- update this with your ngrok url
+                "server_url": "https://8ea519b4b5ec.ngrok-free.app/sse/",  # <- update this with your ngrok url, don't forget to add /sse/ at the end
                 "require_approval": "never",
                 "headers": {"Authorization": f"Bearer {os.getenv('APP_TOKEN', 'test_token_123')}"},
             }
@@ -78,19 +84,44 @@ agency_public = Agency(mcp_agent_public)
 
 
 async def local_mcp_server_example():
-    # Let the Agent's execution lifecycle manage MCP server connect/cleanup.
-    # Do not call connect()/cleanup() manually here.
-    response = await agency_local.get_response("Get unique id and then current time in Europe/Amsterdam")
-    print(response.final_output)
+    # Agent will handle execution lifecycle of the MCP server automatically.
+    print("Running local MCP server example")
+    print("-" * 25)
+    message = "Get unique id and then current time in Europe/Amsterdam"
+    print(f"💬 Sending message: {message}")
+    response = await agency_local.get_response(message)
+    print(f"🤖 Answer: {response.final_output}")
+    print("\nIf you see the time and id in the answer, that means agent used the local MCP server successfully")
+    print("Local MCP server example completed\n")
+    print("-" * 25 + "\n")
 
 
 async def public_mcp_server_example():
     # HostedMCPTools do not require manual connection
-    response = await agency_public.get_response("Get secret word and then list directory")
-    print(response.final_output)
-    sse_server.terminate()
-
+    print("Running public MCP server example")
+    print("-" * 25)
+    try:
+        sse_server = launch_sse_server()
+        await asyncio.sleep(5)  # wait for the server to start
+        response = await agency_public.get_response("Get secret word and then list directory")
+        print(response.final_output)
+    except Exception as e:
+        print(
+            f"Error using public MCP server: {e}\n Please check the ngrok url and try again.\n"
+            "If issue persists, try manually starting sse server by running `python examples/utils/sse_mcp_server.py`"
+        )
+        return
+    finally:
+        sse_server.terminate()
+    print(
+        "\nIf secret word is 'strawberry' and agent presented a list of files from the utils folder,"
+        " that means the public MCP server worked successfully"
+    )
+    print("Public MCP server example completed")
+    print("-" * 25)
 
 if __name__ == "__main__":
+    print("🚀 MCP Server Example")
+    print("=" * 50)
     asyncio.run(local_mcp_server_example())
-    # asyncio.run(public_mcp_server_example())  # <- comment this out if you want to run local example only
+    asyncio.run(public_mcp_server_example())  # <- comment this out if you want to run local example only

@@ -1,20 +1,21 @@
 """
 Custom SendMessage Tool with Context Example
 
-Demonstrates SendMessage with key moments and decisions via secret tool responses.
-Multi-turn conversation proves that key decisions are passed correctly between agents.
+Demonstrates how to use different approaches for agent-to-agent communication
+and provides an example of a custom send message tool setup.
 
-Shows two approaches:
+Shows three approaches:
 1. Agent-level: Set send_message_tool_class on individual Agents (per-agent customization)
 2. Agency-level: Set send_message_tool_class on Agency (applies to all agents)
+3. Communication flow level: Set send_message_tool_class on a communication flow (per-flow customization)
 
 Run with: python examples/custom_send_message_with_context.py
 """
 
 import asyncio
+import json
 import logging
 import os
-import random
 import sys
 
 # Path setup so the example can be run standalone
@@ -23,20 +24,22 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 from agents import ModelSettings, function_tool
 
 from agency_swarm import Agency, Agent
-from agency_swarm.tools.send_message import SendMessage
+from agency_swarm.tools.send_message import SendMessage, SendMessageHandoff
 
 # Setup logging
 logging.basicConfig(level=logging.WARNING)
 logging.getLogger("agency_swarm").setLevel(
-    logging.DEBUG if os.getenv("DEBUG_LOGS", "False").lower() == "true" else logging.INFO
+    logging.DEBUG if os.getenv("DEBUG_LOGS", "False").lower() == "true" else logging.WARNING
 )
 
-
+# Custom SendMessage tool that adds key moments and decisions to the message
 class SendMessageWithContext(SendMessage):
     """SendMessage with key moments and decisions tracking."""
 
     def __init__(self, sender_agent: Agent, recipients: dict[str, Agent] | None = None) -> None:
         super().__init__(sender_agent, recipients)
+        # Optionally set custom name for easier tracking (defaults to send_message)
+        self.name = "send_message_with_context" # Name must start with send_message
 
         # Add 2 additional fields to the params schema with rich descriptions
         self.params_json_schema["properties"]["key_moments"] = {
@@ -61,25 +64,23 @@ class SendMessageWithContext(SendMessage):
         }
         self.params_json_schema["required"].extend(["key_moments", "decisions"])
 
-
-# Two tools that return different secret strings
-@function_tool
-def analyze_performance() -> str:
-    """Analyze system performance and optimization opportunities."""
-    return "Performance analysis complete. PERF-SECRET-789: 23% efficiency gain possible."
-
-
+# Define tools for testing
 @function_tool
 def analyze_costs() -> str:
     """Analyze cost reduction and budget optimization opportunities."""
-    return "Cost analysis complete. COST-SECRET-456: $45,000 annual savings identified."
+    return "Cost analysis complete. $45,000 annual savings identified."
 
+@function_tool
+def analyze_performance() -> str:
+    """Analyze system performance and optimization opportunities."""
+    return "Performance analysis complete. 23% efficiency gain possible."
 
 # Coordinator with enhanced SendMessage
 coordinator = Agent(
     name="Coordinator",
     description="Project coordinator who delegates analysis tasks",
     instructions=(
+        "Your name is Coordinator agent."
         "You coordinate analysis work. When delegating tasks, make clear decisions about "
         "the focus area and approach needed. "
         "CRITICAL: When you receive responses from specialists, you MUST include their "
@@ -93,86 +94,89 @@ coordinator = Agent(
 # Specialist with both analysis tools
 specialist = Agent(
     name="Specialist",
-    description="Business analyst who performs performance or cost analysis",
+    description="Specialist agent who performs performance or cost analysis",
     instructions=(
+        "Your name is Specialist agent."
         "You perform analysis tasks using the appropriate tools. "
         "CRITICAL: After running any tool, you MUST copy the EXACT tool output "
         "into your response word-for-word, including any SECRET strings. "
         "Do not paraphrase, summarize, or rewrite the tool output. "
         "Include the complete raw result in your response."
     ),
-    tools=[analyze_performance, analyze_costs],
+    tools=[analyze_costs, analyze_performance],
     model_settings=ModelSettings(temperature=0.0),
+    send_message_tool_class=SendMessageHandoff,
 )
 
 # Option 1: Set custom SendMessage class at individual Agent level
 agency = Agency(
     coordinator,
-    communication_flows=[(coordinator, specialist)],
+    specialist,
+    communication_flows=[(coordinator, specialist), (specialist, coordinator)],
     shared_instructions="Use key decisions to guide analysis tool selection.",
 )
 
-# Option 2: Set custom SendMessage class at Agency level (applies to all agents)
+# # Option 2: Set custom SendMessage class at Agency level (applies to all agents)
+# # When this option, make sure to comment out custom send_message_tool_class for the coordinator
 # agency = Agency(
 #     coordinator,
+#     specialist,
 #     communication_flows=[(coordinator, specialist)],
 #     shared_instructions="Use key decisions to guide analysis tool selection.",
-#     send_message_tool_class=SendMessageWithContext,  # Enhanced communication for all agents
+#     send_message_tool_class=SendMessageWithContext,  # Default communication for all agents
 # )
 
 # Option 3: Set custom SendMessage class on communication flow
 # agency = Agency(
 #     coordinator,
-#     communication_flows=[(coordinator > specialist, SendMessageWithContext)],
+#     specialist,
+#     communication_flows=[(coordinator > specialist, SendMessageWithContext), (specialist > coordinator, SendMessageHandoff)],
 #     shared_instructions="Use key decisions to guide analysis tool selection.",
 # )
 
+# Helper function to visualize send message arguments
+def print_send_message_args(agency, agent_name: str) -> dict:
+    agent_messages = agency._agent_contexts[agent_name].thread_manager._store.messages
+    args_str = ""
+    for message in agent_messages:
+        if message["type"] == "function_call" and message["name"].startswith("send_message"):
+            args = json.loads(message["arguments"])
+            args_str = json.dumps(args, indent=2)
+            if "key_moments" in args_str and "decisions" in args_str:
+                args_str = args_str.replace('"key_moments"', '\033[32m"key_moments"\033[0m').replace('"decisions"', '\033[32m"decisions"\033[0m')
+            print(args_str)
 
 async def main():
     """Demonstrate key decisions being passed via enhanced SendMessage."""
     print("\n=== SendMessageWithContext Key Decisions Demo ===")
 
     # Turn 1: Initial discussion
-    print("\n--- Turn 1: Initial Discussion ---")
+    print("\n--- Turn 1: Send Message tool usage ---")
     initial_message = (
-        "Our Q4 operations need optimization. Should we focus on performance improvements or cost reduction?"
+        "Our Q4 operations need optimization. I want to focus on cost reduction."
     )
 
     print(f"💬 User: {initial_message}")
     response1 = await agency.get_response(message=initial_message)
     print(f"🎯 Coordinator: {response1.final_output}")
+    print("\nSend Message arguments:")
+    print_send_message_args(agency, "Coordinator")
 
     # Turn 2: Decision and delegation with random choice
-    print("\n--- Turn 2: Decision and Delegation ---")
-    choice = random.choice(["performance", "cost"])
-    print(f"🎲 Random choice for this run: {choice} analysis")
-
+    print("\n--- Turn 2: Handoff usage ---")
     delegate_message = (
-        f"I've decided to prioritize {choice} analysis for Q4. Please delegate this to the specialist immediately."
+        "I've decided to prioritize performance analysis for Q4. Use the corresponding tool and transfer chat to the coordinator."
     )
 
-    print(f"💬 User: {delegate_message}")
-    response2 = await agency.get_response(message=delegate_message)
-    print(f"🎯 Final Result: {response2.final_output}")
+    print(f"💬 Sending message to \033[32m{specialist.name}\033[0m: {delegate_message}")
+    response2 = await agency.get_response(message=delegate_message, recipient_agent=specialist)
+    print(f"🎯 \033[32m{response2.last_agent.name}\033[0m responded with: {response2.final_output}")
 
-    # Verify the correct tool was chosen based on the specific choice
-    expected_secret = "PERF-SECRET-789" if choice == "performance" else "COST-SECRET-456"
-    expected_tool = f"{choice} analysis"
-
-    if expected_secret in response2.final_output:
-        print(f"\n✅ SUCCESS: {expected_tool.title()} tool was chosen correctly!")
-        print(f"   Key decision for '{choice}' was passed via SendMessageWithContext")
-        print(f"   Found expected secret: {expected_secret}")
-    else:
-        print(f"\n❌ FAILURE: Expected {expected_tool} but wrong tool was chosen")
-        print(f"   Expected secret: {expected_secret}")
-        print("   Check debug logs to see what went wrong")
-
-    debug_enabled = os.getenv("DEBUG_LOGS", "False").lower() == "true"
-    if debug_enabled:
-        print("\n💡 Debug logs show key_moments and decisions in enhanced messages")
-    else:
-        print("\n💡 Set DEBUG_LOGS=True to see enhanced context in inter-agent messages")
+    print("""\n --- Key Takeaways: ---
+Inspecting the prints you can notice 2 main things, which are hinted with the green text:
+1. Coordinator agent's send message arguments contain custom-defined fields, which means it was using SendMessageWithContext tool
+2. User message in 2nd turn was passed to Specialist agent, but response came from Coordinator agent, which means Specialist agent used handoff to pass the message to Coordinator agent
+    """)
 
 
 if __name__ == "__main__":

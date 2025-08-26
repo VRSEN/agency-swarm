@@ -19,9 +19,41 @@ from agency_swarm import Agency, Agent
 
 # ===== DEBUG CONFIGURATION =====
 # Set to True to see ALL raw events for frontend integration
+# Set to "verbose" to see raw events
 DEBUG_MODE = False
 
 logging.basicConfig(level=logging.WARNING)
+
+# --- Logging Configuration --- #
+def print_event_info(event, event_count):
+    # Extract key fields
+    agent_name = getattr(event, "agent", None)
+    caller_agent = getattr(event, "callerAgent", None)
+    event_type = getattr(event, "type", None)
+    call_id = getattr(event, "call_id", None)
+    item_id = getattr(event, "item_id", None)
+
+    # For data events, get the nested type
+    if hasattr(event, "data") and hasattr(event.data, "type"):
+        data_type = event.data.type
+    else:
+        data_type = None
+
+    # Format the output
+    print(f"\n[EVENT #{event_count}]")
+    print(f"  agent: {agent_name}")
+    print(f"  callerAgent: {caller_agent}")
+    if call_id:
+        print(f"  call_id: {call_id}")
+    if item_id:
+        print(f"  item_id: {item_id}")
+    print(f"  event.type: {event_type}")
+    if data_type:
+        print(f"  data.type: {data_type}")
+
+    # Show raw event only if verbose
+    if DEBUG_MODE == "verbose":
+        print(f"  Raw: {event}")
 
 # --- Simple Tool --- #
 
@@ -38,7 +70,6 @@ def get_weather(location: str) -> str:
 def create_demo_agency():
     """Create a demo agency for terminal demo"""
 
-    # Create agents using v1.x pattern (direct instantiation)
     ceo = Agent(
         name="CEO",
         description="Chief Executive Officer - oversees all operations",
@@ -83,36 +114,9 @@ async def stream_response(message: str):
 
         # Debug logging for frontend developers
         if DEBUG_MODE:
-            # Extract key fields
-            agent_name = getattr(event, "agent", None)
-            caller_agent = getattr(event, "callerAgent", None)
-            event_type = getattr(event, "type", None)
-            call_id = getattr(event, "call_id", None)
-            item_id = getattr(event, "item_id", None)
+            print_event_info(event, event_count)
 
-            # For data events, get the nested type
-            if hasattr(event, "data") and hasattr(event.data, "type"):
-                data_type = event.data.type
-            else:
-                data_type = None
-
-            # Format the output
-            print(f"\n[EVENT #{event_count}]")
-            print(f"  agent: {agent_name}")
-            print(f"  callerAgent: {caller_agent}")
-            if call_id:
-                print(f"  call_id: {call_id}")
-            if item_id:
-                print(f"  item_id: {item_id}")
-            print(f"  event.type: {event_type}")
-            if data_type:
-                print(f"  data.type: {data_type}")
-
-            # Show raw event only if verbose
-            if DEBUG_MODE == "verbose":
-                print(f"  Raw: {event}")
-
-        # Normal streaming logic (unchanged)
+        # Normal streaming logic
         if hasattr(event, "data"):
             data = event.data
 

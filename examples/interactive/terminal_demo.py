@@ -30,7 +30,6 @@ def create_demo_agency():
         name="CEO",
         description="Chief Executive Officer - oversees all operations",
         instructions="You are the CEO. When asked about weather, delegate to Worker with a specific location (use London if not specified).",
-        tools=[],
     )
 
     worker = Agent(

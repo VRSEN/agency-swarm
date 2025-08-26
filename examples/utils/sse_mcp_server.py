@@ -1,10 +1,13 @@
 import os
 
 from agents import function_tool
+from dotenv import load_dotenv
 from pydantic import Field
 
 from agency_swarm import BaseTool
 from agency_swarm.integrations.mcp_server import run_mcp
+
+load_dotenv()
 
 
 # v0.X BaseTool-style tool example (equally supported)
@@ -27,5 +30,6 @@ async def list_directory() -> str:
 
 if __name__ == "__main__":
     if not os.getenv("APP_TOKEN") or os.getenv("APP_TOKEN") == "":
-        raise ValueError("Please set up APP_TOKEN in .env file to use this example.")
+        os.environ["APP_TOKEN"] = "test_token_123"
+        print("APP_TOKEN not set, using default token: test_token_123")
     run_mcp(tools=[GetSecretWordTool, list_directory], transport="sse")

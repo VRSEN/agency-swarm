@@ -1,4 +1,10 @@
-# examples/custom_persistence.py
+"""
+Agency Persistence Example
+
+This example demonstrates how to persist thread data between
+different sessions using callback functions.
+"""
+
 import asyncio
 import json
 import logging
@@ -11,7 +17,7 @@ from typing import Any
 
 from agents import ModelSettings
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(level=logging.WARNING, format="%(asctime)s - %(levelname)s - %(message)s")
 
 script_dir = Path(__file__).parent
 project_root = script_dir.parent.parent
@@ -44,18 +50,6 @@ def save_threads(messages: list[dict[str, Any]]):
     with open(file_path, "w") as f:
         json.dump(messages, f, indent=2)
 
-    # Log the structure for demonstration
-    print(f"Saved {len(messages)} message(s)")
-    # Count unique conversations
-    conversations = set()
-    for msg in messages:
-        agent = msg.get("agent", "")
-        caller = msg.get("callerAgent", "user")
-        conversations.add(f"{caller}->{agent}")
-    for conv in sorted(conversations):
-        print(f"  - Conversation: {conv}")
-
-
 def load_threads(chat_id: str) -> list[dict[str, Any]]:
     """
     Load all messages from file for a specific chat session.
@@ -82,16 +76,6 @@ def load_threads(chat_id: str) -> list[dict[str, Any]]:
 
     with open(file_path) as f:
         messages: list[dict[str, Any]] = json.load(f)
-
-    print(f"Loaded {len(messages)} message(s) from file")
-    # Count unique conversations
-    conversations = set()
-    for msg in messages:
-        agent = msg.get("agent", "")
-        caller = msg.get("callerAgent", "user")
-        conversations.add(f"{caller}->{agent}")
-    for conv in sorted(conversations):
-        print(f"  - Conversation: {conv}")
 
     return messages
 
@@ -131,10 +115,8 @@ async def run_persistent_conversation():
     4. Correct callback signatures: load() -> all_threads, save(all_threads) -> None
     """
 
-    print("\n--- Turn 1: User -> AssistantAgent (Share Info) ---")
-    print("Thread identifier will be: user->AssistantAgent")
-
     user_message_1 = f"Hello. Please remember that my favorite color is {TEST_INFO}. I'll ask you about it later."
+    print(f"\n--- Turn 1:  --- \nSending message to assistant: {user_message_1}")
     response1 = await agency.get_response(message=user_message_1)
     print(f"Response from AssistantAgent: {response1.final_output}")
 
@@ -142,7 +124,7 @@ async def run_persistent_conversation():
 
     # Simulate application restart by creating a new agency
     print("\n--- Simulating Application Restart ---")
-    print("Creating new agency instance that will load persisted messages...")
+    print("Creating new agency instance that will share the same thread...")
 
     # Create a second agent instance for the reloaded agency (to avoid agent reuse)
     assistant_agent_reloaded = Agent(
@@ -159,17 +141,15 @@ async def run_persistent_conversation():
         save_threads_callback=lambda messages: save_threads(messages),
     )
 
-    print("\n--- Turn 2: User -> AssistantAgent (Recall Info using Reloaded Agency) ---")
-    print("Thread identifier will be: user->AssistantAgent (same as before)")
-
     user_message_2 = "What was my favorite color and lucky number I told you earlier?"
+    print(f"\n--- Turn 2:  --- \nSending message to assistant: {user_message_2}")
     response2 = await agency_reloaded.get_response(message=user_message_2)
     print(f"Response from Reloaded AssistantAgent: {response2.final_output}")
 
     # Test result
     if response2.final_output and "blue" in response2.final_output.lower() and "77" in response2.final_output.lower():
         print(f"\n✅ SUCCESS: AssistantAgent remembered the information ('{TEST_INFO}')!")
-        print("Thread isolation and persistence working correctly.")
+        print("Demo completed successfully.")
     else:
         print(f"\n❌ FAILURE: AssistantAgent did NOT remember the information ('{TEST_INFO}').")
         print(f"Agent's response: {response2.final_output}")
@@ -182,11 +162,6 @@ async def run_persistent_conversation():
 
 if __name__ == "__main__":
     print("\n=== Agency Swarm v1.x Thread Isolation & Persistence Demo ===")
-    print("This example demonstrates:")
-    print("• Automatic thread isolation using 'sender->recipient' identifiers")
-    print("• Complete conversation persistence across application restarts")
-    print("• Correct callback signatures: load() -> all_threads, save(all_threads) -> None")
-    print("=" * 60)
 
     if os.name == "nt":
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())

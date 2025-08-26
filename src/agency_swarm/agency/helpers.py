@@ -220,7 +220,7 @@ def resolve_agent(agency: "Agency", agent_ref: str | Agent) -> Agent:
             raise ValueError(f"Agent instance {agent_ref.name} is not part of this agency.")
     elif isinstance(agent_ref, str):
         if agent_ref not in agency.agents:
-            raise ValueError(f"AgAgent with name '{agent_ref}' not found.")
+            raise ValueError(f"Agent with name '{agent_ref}' not found.")
         return agency.agents[agent_ref]
     else:
         raise TypeError(f"Invalid agent reference: {agent_ref}. Must be Agent instance or str.")
