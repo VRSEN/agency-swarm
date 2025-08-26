@@ -15,9 +15,7 @@ v1.x is currently in **beta preview**. Install with: `pip install -U "agency-swa
 
 ## Agent State Management
 
-Starting with the new release of [Agents SDK](https://openai.github.io/openai-agents-python), agents (previously assistants) are now stateless, 
-meaning that there is no longer a need to save and pass agent settings to maintain chat persistence.    
-The only parameter that needs to be maintained is the chat history, which, within the agency-swarm framework, is called a thread.
+With the new https://openai.github.io/openai-agents-python, agents (formerly assistants) are now stateless - eliminating the need to save and pass agent settings for chat persistence. The framework only needs to maintain the conversation history, which Agency Swarm manages through its thread system.
 
 ## Thread State Management
 
