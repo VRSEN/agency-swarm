@@ -21,10 +21,7 @@ The only parameter that needs to be maintained is the chat history, which, withi
 
 ## Thread State Management
 
-Since in the Agents SDK history management is transferred to the end user, the agency-swarm framework introduced a thread management system 
-that utilizes the SDK's `PersistenceHooks` and internal `ThreadManager` classes to handle, automate and simplify history management.  
-All agent outputs will be processed and stored locally to allow for seamless agency usage within a single session.
-To maintain persistence across multiple sessions, it also provides convenient callback methods which require minimal input to set up.
+Since managing conversation state is now a responsibility of the developer in the Agents SDK, the Agency Swarm framework has introduced a thread management system to handle, automate, and simplify history management. All agent outputs are processed and stored locally to allow for seamless agency usage within a single session. To maintain persistence across multiple sessions, the framework also provides convenient callback methods that require minimal input to set up.
 
 <CardGroup cols={2}>
   <Card title="Automatic Context Management" icon="arrows-rotate">
