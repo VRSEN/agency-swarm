@@ -19,7 +19,7 @@ from agency_swarm import Agency, Agent, MasterContext
 
 # Minimal logging setup
 logging.basicConfig(level=logging.WARNING)
-logging.getLogger("agency_swarm").setLevel(logging.INFO)
+logging.getLogger("agency_swarm").setLevel(logging.WARNING)
 
 # --- Data Storage Tools --- #
 
