@@ -27,16 +27,16 @@ def combine_results(results: str) -> str:
 
 
 # Hardcoded expected flow (normalized stream type, agent, tool_name)
-# Note: SDK sends send_message AFTER sub-agent completes (natural order)
+# Note: SDK v0.2.x emits send_message tool_call immediately, then sub-agent events
 EXPECTED_FLOW: list[tuple[str, str, str | None]] = [
     ("message_output_item", "MainAgent", None),
     ("tool_call_item", "MainAgent", "get_market_data"),
     ("tool_call_output_item", "MainAgent", None),
-    ("tool_call_item", "SubAgent", "analyze_risk"),  # Sub-agent events come first
+    ("tool_call_item", "MainAgent", "send_message"),  # SDK v0.2.x emits this immediately
+    ("tool_call_item", "SubAgent", "analyze_risk"),  # Then sub-agent events follow
     ("tool_call_output_item", "SubAgent", None),
     ("message_output_item", "SubAgent", None),
-    ("tool_call_item", "MainAgent", "send_message"),  # SDK sends this after sub-agent
-    ("tool_call_output_item", "MainAgent", None),
+    ("tool_call_output_item", "MainAgent", None),  # send_message output after sub-agent completes
     ("message_output_item", "MainAgent", None),
 ]
 
@@ -137,21 +137,21 @@ async def test_full_streaming_flow_hardcoded_sequence() -> None:
 
 # Expected flow for multiple sequential sub-agent calls
 EXPECTED_FLOW_MULTIPLE_CALLS: list[tuple[str, str, str | None]] = [
-    ("message_output_item", "Coordinator", None),  # ACK
+    # SDK v0.2.x: Agent may not output ACK message first when tool calls are immediate
     ("tool_call_item", "Coordinator", "get_market_data"),  # First data fetch
     ("tool_call_output_item", "Coordinator", None),
-    # First sub-agent call
+    # First sub-agent call - SDK v0.2.x emits send_message immediately
+    ("tool_call_item", "Coordinator", "send_message"),  # SDK emits send_message immediately
     ("tool_call_item", "Worker", "process_data"),  # Worker processes
     ("tool_call_output_item", "Worker", None),
     ("message_output_item", "Worker", None),  # Worker responds
-    ("tool_call_item", "Coordinator", "send_message"),  # SDK adds send_message
-    ("tool_call_output_item", "Coordinator", None),
-    # Second sub-agent call
+    ("tool_call_output_item", "Coordinator", None),  # send_message completes
+    # Second sub-agent call - SDK v0.2.x emits send_message immediately
+    ("tool_call_item", "Coordinator", "send_message"),  # SDK emits send_message immediately
     ("tool_call_item", "Worker", "validate_result"),  # Worker validates
     ("tool_call_output_item", "Worker", None),
     ("message_output_item", "Worker", None),  # Worker responds again
-    ("tool_call_item", "Coordinator", "send_message"),  # SDK adds send_message
-    ("tool_call_output_item", "Coordinator", None),
+    ("tool_call_output_item", "Coordinator", None),  # send_message completes
     ("message_output_item", "Coordinator", None),  # Final response
 ]
 

@@ -12,7 +12,7 @@ license = "MIT"
 authors = [{ name = "Vrsen AI Solutions", email = "me@vrsen.ai" }]
 dependencies = [
     "openai>=1.76.0",
-    "openai-agents>=0.1.0,<0.2.0",
+    "openai-agents>=0.2.0,<0.3.0",
     "pydantic>=2.10, <3",
     "griffe>=1.5.6, <2",
     "typing-extensions>=4.12.2, <5",
