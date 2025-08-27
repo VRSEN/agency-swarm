@@ -138,7 +138,7 @@ uv run python examples/agency_context.py
 ## Code Quality
 - Max file size: 500 lines
 - Max method size: 100 lines (prefer 10-40)
-- Test coverage: 85%+ mandatory
+- Test coverage: 86%+ mandatory
 - Integration tests: `tests/integration/` (no mocks)
 - Never script tests ad-hoc—use standard infrastructure
 
