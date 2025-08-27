@@ -9,7 +9,7 @@ Shows three approaches:
 2. Agency-level: Set send_message_tool_class on Agency (applies to all agents)
 3. Communication flow level: Set send_message_tool_class on a communication flow (per-flow customization)
 
-Run with: python examples/custom_send_message_with_context.py
+Run with: python examples/custom_send_message.py
 """
 
 import asyncio
@@ -32,6 +32,7 @@ logging.getLogger("agency_swarm").setLevel(
     logging.DEBUG if os.getenv("DEBUG_LOGS", "False").lower() == "true" else logging.WARNING
 )
 
+
 # Custom SendMessage tool that adds key moments and decisions to the message
 class SendMessageWithContext(SendMessage):
     """SendMessage with key moments and decisions tracking."""
@@ -39,7 +40,7 @@ class SendMessageWithContext(SendMessage):
     def __init__(self, sender_agent: Agent, recipients: dict[str, Agent] | None = None) -> None:
         super().__init__(sender_agent, recipients)
         # Optionally set custom name for easier tracking (defaults to send_message)
-        self.name = "send_message_with_context" # Name must start with send_message
+        self.name = "send_message_with_context"  # Name must start with send_message
 
         # Add 2 additional fields to the params schema with rich descriptions
         self.params_json_schema["properties"]["key_moments"] = {
@@ -64,16 +65,19 @@ class SendMessageWithContext(SendMessage):
         }
         self.params_json_schema["required"].extend(["key_moments", "decisions"])
 
+
 # Define tools for testing
 @function_tool
 def analyze_costs() -> str:
     """Analyze cost reduction and budget optimization opportunities."""
     return "Cost analysis complete. $45,000 annual savings identified."
 
+
 @function_tool
 def analyze_performance() -> str:
     """Analyze system performance and optimization opportunities."""
     return "Performance analysis complete. 23% efficiency gain possible."
+
 
 # Coordinator with enhanced SendMessage
 coordinator = Agent(
@@ -134,8 +138,9 @@ agency = Agency(
 #     shared_instructions="Use key decisions to guide analysis tool selection.",
 # )
 
+
 # Helper function to visualize send message arguments
-def print_send_message_args(agency, agent_name: str) -> dict:
+def print_send_message_args(agency, agent_name: str) -> None:
     agent_messages = agency._agent_contexts[agent_name].thread_manager._store.messages
     args_str = ""
     for message in agent_messages:
@@ -143,8 +148,11 @@ def print_send_message_args(agency, agent_name: str) -> dict:
             args = json.loads(message["arguments"])
             args_str = json.dumps(args, indent=2)
             if "key_moments" in args_str and "decisions" in args_str:
-                args_str = args_str.replace('"key_moments"', '\033[32m"key_moments"\033[0m').replace('"decisions"', '\033[32m"decisions"\033[0m')
+                args_str = args_str.replace('"key_moments"', '\033[32m"key_moments"\033[0m').replace(
+                    '"decisions"', '\033[32m"decisions"\033[0m'
+                )
             print(args_str)
+
 
 async def main():
     """Demonstrate key decisions being passed via enhanced SendMessage."""
@@ -152,9 +160,7 @@ async def main():
 
     # Turn 1: Initial discussion
     print("\n--- Turn 1: Send Message tool usage ---")
-    initial_message = (
-        "Our Q4 operations need optimization. I want to focus on cost reduction."
-    )
+    initial_message = "Our Q4 operations need optimization. I want to focus on cost reduction."
 
     print(f"💬 User: {initial_message}")
     response1 = await agency.get_response(message=initial_message)
@@ -164,9 +170,7 @@ async def main():
 
     # Turn 2: Decision and delegation with random choice
     print("\n--- Turn 2: Handoff usage ---")
-    delegate_message = (
-        "I've decided to prioritize performance analysis for Q4. Use the corresponding tool and transfer chat to the coordinator."
-    )
+    delegate_message = "I've decided to prioritize performance analysis for Q4. Use the corresponding tool and transfer chat to the coordinator."
 
     print(f"💬 Sending message to \033[32m{specialist.name}\033[0m: {delegate_message}")
     response2 = await agency.get_response(message=delegate_message, recipient_agent=specialist)

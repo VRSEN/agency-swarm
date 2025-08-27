@@ -313,7 +313,6 @@ class TestComplexHandoffScenarios:
             "AgentB should have SendMessageHandoff as send_message_tool_class"
         )
 
-
     def test_agency_flow_handoffs(self):
         """Test bidirectional communication flows combined with SendMessageHandoff tool class."""
         agent_a = Agent(name="AgentA", instructions="Primary orchestrator")

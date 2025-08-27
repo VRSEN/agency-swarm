@@ -46,7 +46,8 @@ class SendMessage(FunctionTool):
         name: str = "send_message",
     ):
         self.sender_agent = sender_agent
-        self.recipients = recipients or {}
+        # Normalize recipient keys to lowercase for case-insensitive lookup
+        self.recipients = {k.lower(): v for k, v in (recipients or {}).items()}
 
         # Build the recipient agent enum values for the schema
         recipient_names = list(self.recipients.values())
@@ -89,6 +90,7 @@ class SendMessage(FunctionTool):
                     ),
                 },
             },
+            # OpenAI API requires all properties in 'required' array, even optional ones
             "required": ["recipient_agent", "my_primary_instructions", "message", "additional_instructions"],
             "additionalProperties": False,
         }

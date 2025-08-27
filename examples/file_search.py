@@ -110,6 +110,7 @@ async def main():
     print("   • Agent is capable of analyzing all files from the given folder")
     print("   • Use citations to find files that were used to answer the query")
 
+
 if __name__ == "__main__":
     if os.name == "nt":
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())

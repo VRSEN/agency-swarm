@@ -405,12 +405,12 @@ class ToolFactory:
         for tool in tools:
             if inspect.isclass(tool) and issubclass(tool, BaseTool):
                 openai_schema = tool.openai_schema
-                print(openai_schema)
+                logger.debug(f"OpenAPI schema for {tool.__name__}: {openai_schema}")
             elif isinstance(tool, FunctionTool):
                 openai_schema = {}
                 openai_schema["parameters"] = tool.params_json_schema
                 openai_schema["name"] = tool.name
-                print(openai_schema)
+                logger.debug(f"OpenAPI schema for {tool.name}: {openai_schema}")
             else:
                 raise TypeError(f"Tool {tool} is not a BaseTool or FunctionTool.")
 

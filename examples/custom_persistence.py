@@ -50,6 +50,7 @@ def save_threads(messages: list[dict[str, Any]]):
     with open(file_path, "w") as f:
         json.dump(messages, f, indent=2)
 
+
 def load_threads(chat_id: str) -> list[dict[str, Any]]:
     """
     Load all messages from file for a specific chat session.

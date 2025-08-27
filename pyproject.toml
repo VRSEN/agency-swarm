@@ -142,5 +142,7 @@ filterwarnings = [
     "ignore:coroutine 'test_async_input_filter_fails.<locals>.invalid_input_filter' was never awaited:RuntimeWarning",
 ]
 
+testpaths = ["tests"]
+
 [tool.inline-snapshot]
 format-command = "ruff format --stdin-filename {filename}"

@@ -88,12 +88,13 @@ After each tool call or code edit, validate the result in 1-2 lines and proceed 
 ## Common Commands
 ```bash
 make sync && make ci   # Install, lint, type-check, test, check coverage
-make tests             # Run test suite
+make coverage          # Run test suite
 make format && make lint && make mypy && make coverage
 ```
 
 ### Execution Environment
 - Use project virtual environments (`uv run`, Make). Never use global interpreters or absolute paths.
+- For long-running commands (ci, coverage), use Bash tool with timeout=600000 (10 minutes)
 
 ### Example Runs
 ```bash

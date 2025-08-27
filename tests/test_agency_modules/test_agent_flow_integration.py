@@ -65,7 +65,6 @@ def test_agency_with_mixed_communication_flows_reverse():
     assert tool_mappings[("Agent2", "Agent3")] == CustomSendMessage
 
 
-
 def test_duplicate_flow_detection_with_chains():
     """Test that duplicate flows are detected with AgentFlow chains."""
     agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-4o-mini")
