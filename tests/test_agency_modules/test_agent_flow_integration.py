@@ -21,10 +21,10 @@ class CustomSendMessage(SendMessage):
 
 def test_agency_with_mixed_communication_flows():
     """Test Agency with mixed communication flow formats."""
-    agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-4o-mini")
-    agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-4o-mini")
-    agent3 = Agent(name="Agent3", instructions="Test agent 3", model="gpt-4o-mini")
-    agent4 = Agent(name="Agent4", instructions="Test agent 4", model="gpt-4o-mini")
+    agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-5-mini")
+    agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-5-mini")
+    agent3 = Agent(name="Agent3", instructions="Test agent 3", model="gpt-5-mini")
+    agent4 = Agent(name="Agent4", instructions="Test agent 4", model="gpt-5-mini")
 
     agency = Agency(
         agent1,
@@ -46,9 +46,9 @@ def test_agency_with_mixed_communication_flows():
 
 def test_agency_with_mixed_communication_flows_reverse():
     """Test Agency with reverse communication flow."""
-    agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-4o-mini")
-    agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-4o-mini")
-    agent3 = Agent(name="Agent3", instructions="Test agent 3", model="gpt-4o-mini")
+    agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-5-mini")
+    agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-5-mini")
+    agent3 = Agent(name="Agent3", instructions="Test agent 3", model="gpt-5-mini")
 
     agency = Agency(
         agent1,
@@ -67,9 +67,9 @@ def test_agency_with_mixed_communication_flows_reverse():
 
 def test_duplicate_flow_detection_with_chains():
     """Test that duplicate flows are detected with AgentFlow chains."""
-    agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-4o-mini")
-    agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-4o-mini")
-    agent3 = Agent(name="Agent3", instructions="Test agent 3", model="gpt-4o-mini")
+    agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-5-mini")
+    agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-5-mini")
+    agent3 = Agent(name="Agent3", instructions="Test agent 3", model="gpt-5-mini")
 
     with pytest.raises(ValueError, match="Duplicate communication flow detected"):
         Agency(
@@ -83,9 +83,9 @@ def test_duplicate_flow_detection_with_chains():
 
 def test_agent_flow_with_handoff_tool():
     """Test that SendMessageHandoff works with AgentFlow."""
-    agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-4o-mini")
-    agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-4o-mini")
-    agent3 = Agent(name="Agent3", instructions="Test agent 3", model="gpt-4o-mini")
+    agent1 = Agent(name="Agent1", instructions="Test agent 1", model="gpt-5-mini")
+    agent2 = Agent(name="Agent2", instructions="Test agent 2", model="gpt-5-mini")
+    agent3 = Agent(name="Agent3", instructions="Test agent 3", model="gpt-5-mini")
 
     # This should work without errors
     agency = Agency(

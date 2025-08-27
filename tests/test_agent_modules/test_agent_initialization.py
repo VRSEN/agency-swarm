@@ -149,11 +149,11 @@ def test_agent_instruction_file_loading(tmp_path):
     instruction_file.write_text(instruction_content)
 
     # Absolute path
-    agent = Agent(name="TestAgent", instructions=str(instruction_file), model="gpt-4o-mini")
+    agent = Agent(name="TestAgent", instructions=str(instruction_file), model="gpt-5-mini")
     assert agent.instructions == instruction_content
 
     # Relative path resolved from caller directory
-    relative_agent = Agent(name="TestAgent", instructions="../data/files/instructions.md", model="gpt-4o-mini")
+    relative_agent = Agent(name="TestAgent", instructions="../data/files/instructions.md", model="gpt-5-mini")
     assert relative_agent.instructions == "Test instructions"
 
 
@@ -161,7 +161,7 @@ def test_agent_instruction_string_not_file():
     """Test that agent accepts instruction strings that aren't files."""
     instruction_text = "Direct instruction text, not a file path"
 
-    agent = Agent(name="TestAgent", instructions=instruction_text, model="gpt-4o-mini")
+    agent = Agent(name="TestAgent", instructions=instruction_text, model="gpt-5-mini")
 
     # Should keep the text as-is since it's not a file
     assert agent.instructions == instruction_text

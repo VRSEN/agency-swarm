@@ -130,7 +130,7 @@ class Agent(BaseAgent[MasterContext]):
 
         ## OpenAI Agents SDK Parameters:
             prompt (Prompt | DynamicPromptFunction | None): Dynamic prompt configuration.
-            model (str | Model | None): Model identifier (e.g., "gpt-4o") or Model instance.
+            model (str | Model | None): Model identifier (e.g., "gpt-5") or Model instance.
             model_settings (ModelSettings | None): Model configuration (temperature, max_tokens, etc.).
             tools (list[Tool] | None): Tool instances for the agent. Defaults to empty list.
             mcp_servers (list[MCPServer] | None): Model Context Protocol servers.
