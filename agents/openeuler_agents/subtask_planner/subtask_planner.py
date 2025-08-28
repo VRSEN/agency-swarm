@@ -9,20 +9,20 @@ _description = """
 
 _input_format = """
 {
-    "title": <任务名称>,
-    "description": <任务描述>,
-    "total_task_graph": <所有任务规划图>,
+    "title": <本次任务的名称>,
+    "description": <本次任务的描述>,
+    "total_task_graph": <所有任务的规划图>
 }
 """
 
 _output_format = """
 {
     "subtask_1": {
-        "title": 任务名称,
-        "id": 任务ID, 
+        "title": 子任务名称,
+        "id": 子任务ID, 
         "capability_group": <能力群名称>,
-        "description": 任务描述, 
-        "dep": <前置任务ID列表>
+        "description": 子任务描述, 
+        "dep": <前置子任务ID列表>
     },
     ...
 }
@@ -33,9 +33,9 @@ _instruction = f"""作为子任务规划者，你将接收到一个任务，并�
 输入格式如下: 
 {_input_format}
 
-其中，"title"和"description"字段描述了本次需要规划的task，"total_task_graph"将描述所有task的规划图，包括任务信息和依赖关系。你接下来对本task中各个subtask的规划不要与其它的task冲突或重叠。
+其中，"title"和"description"字段描述了本次需要规划的task，"total_task_graph"将描述所有task的规划图，包括任务信息和依赖关系。你接下来对本task进行各个subtask的规划，**且不要与其它的task冲突或重复**。
 
-同时，你需要先调用工具`ReadJsonFile`从context.json中读取已经完成的所有任务过程的上下文信息。（直接调用工具，不要把它规划为一个subtask）
+同时，你需要先调用工具`ReadJsonFile`从context_tree.json中读取已经完成的所有任务过程的上下文信息。（直接调用工具，不要把它规划为一个subtask）
 获取以上信息后，你需要判断用户输入请求是否与之前已完成的过程有关，如果有关，从上下文信息中提取有用信息，并结合该信息进行后续的任务规划。
 
 你需要严谨专业地一步步思考，根据任务描述对该任务进行拆分。你需要确保:
@@ -44,7 +44,7 @@ _instruction = f"""作为子任务规划者，你将接收到一个任务，并�
 
 2. 子任务不能偏离任务目的；
 
-3. 子任务的内容不能与已经完成的子任务或已经完成的步骤有重复，要尽可能避免过度规划。
+3. 子任务的内容不能与其他任何任务的内容有重复，避免过度规划。
 
 现有的能力群名称和介绍如下: 
 
@@ -59,7 +59,7 @@ _instruction = f"""作为子任务规划者，你将接收到一个任务，并�
 
 请注意，每个subtask你都需要仔细思考任务描述中与该子任务相关的信息，并**详细地**写入"description"字段中。参数值等信息不能省略，但不要写出完整的命令。
 
-请逐步思考，综合考虑完成此任务所需的步骤。
+请逐步思考，综合考虑完成此任务所需的子任务。
 
 # 注意：每个subtask的"dep"字段中填入的id必须是当前这次输出的规划中存在的subtask；
 

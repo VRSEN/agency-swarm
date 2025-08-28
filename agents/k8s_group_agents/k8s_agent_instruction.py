@@ -41,11 +41,12 @@ def k8s_agent_instruction(_name, _description):
 {{
     "tool": "...",
     "command": "...",
-    "result": "...",
+    "command_result": "...",
+    "execution_result": "...",
     "reason": "..."
 }}
 
-其中"result"和"reason"需要填入工具的返回结果中相同字段的内容。
-若你多次执行工具，只输出最终的总的result和reason。"""
+其中"execution_result"和"reason"需要填入工具的返回结果中相同字段的内容。
+若你多次执行工具，只输出最终的总的execution_result和reason。"""
 
     return _instruction

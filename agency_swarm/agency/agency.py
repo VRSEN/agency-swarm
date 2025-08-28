@@ -1589,7 +1589,9 @@ class Agency:
                     self.update_context_tree(
                         request_id = request_id,
                         task_id = next_task_id,
-                        status = "executing"
+                        status = "executing",
+                        title = next_task['title'],
+                        description = next_task['description']
                     )
 
                     console.rule()
@@ -1645,11 +1647,13 @@ class Agency:
                                 }
 
                                 # self.update_context("step_plan_input", {"subtask_id": next_subtask_id, "title": next_subtask.get("title"), "description": next_subtask.get("description")})
-                                self.update_context_tree(
+                                self.update_context_tree (
                                     request_id = request_id,
                                     task_id = next_task_id,
                                     subtask_id = next_subtask_id,
-                                    status = "executing"
+                                    status = "executing",
+                                    title = next_subtask['title'], 
+                                    description = next_subtask['description']
                                 )
 
                                 console.rule()
@@ -1706,7 +1710,9 @@ class Agency:
                                                 task_id = next_task_id,
                                                 subtask_id = next_subtask_id,
                                                 step_id = next_step_id,
-                                                status = "executing"
+                                                status = "executing",
+                                                title = next_step['title'],
+                                                description = next_step['description']
                                             )
 
                                             console.rule()
@@ -1720,7 +1726,9 @@ class Agency:
                                             while True: 
                                                 try:
                                                     # 7. 能力agent执行单个step
-                                                    tool, command, result, reason = self.capability_agents_processor(step=next_step, cap_group=next_subtask_cap_group, cap_agent_threads=cap_agent_threads)
+                                                    aciton = self.capability_agents_processor(step=next_step, cap_group=next_subtask_cap_group, cap_agent_threads=cap_agent_threads)
+                                                    result = aciton.get('execution_result', "FAIL")
+                                                    reason = aciton.get('reason', "No reason provided.")
                                                     assert result == 'SUCCESS' or result == 'FAIL', f"Unknown result: {result}"
                                                     
                                                     # self.update_context("agent_completion_result", {
@@ -1734,12 +1742,7 @@ class Agency:
                                                         task_id = next_task_id,
                                                         subtask_id = next_subtask_id,
                                                         step_id = next_step_id,
-                                                        action = {
-                                                            "tool": tool,
-                                                            "command": command,
-                                                            "result": result,
-                                                            "reason": reason
-                                                        }
+                                                        action = aciton
                                                     )
 
                                                     if result == 'SUCCESS':
@@ -1749,6 +1752,7 @@ class Agency:
                                                         error_id = error_id + 1
                                                         step_error_flag = True
                                                         step_error_message = reason
+
                                                         self.update_error(error_id = error_id, error = reason, step = next_step)
                                                         # self.update_context("error", {
                                                         #     "stage": "step_execution",
@@ -2064,17 +2068,8 @@ class Agency:
                             step = next((step for step in subtask["steps"] if step["id"] == step_id), None)
                             if step:
                                 # 更新现有步骤
-                                if action:
-                                    command = action.get("command")
-                                    if not command:
-                                        action_entry = {
-                                            "tool": action['tool'],
-                                            "result": action['result'],
-                                            "reason": action['reason']
-                                        }
-                                    else:
-                                        action_entry = action                                        
-                                    step["actions"].append(action_entry)
+                                if action:                                       
+                                    step["actions"].append(action)
                                 else:
                                     step["status"] = status
                             else:
@@ -2182,7 +2177,7 @@ class Agency:
         # 取出工具tool、命令command、执行结果result和原因reason
         tool = cap_agent_result_json.get('tool')
         command = cap_agent_result_json.get('command')
-        result = cap_agent_result_json['result']
+        result = cap_agent_result_json['execution_result']
         reason = cap_agent_result_json['reason']
 
         output_data = {
@@ -2192,7 +2187,7 @@ class Agency:
         output_str = json.dumps(output_data, indent=4, ensure_ascii=False)
         print(f"THREAD output:\n{output_str}")
         
-        return tool, command, result, reason # 返回工具tool、命令command、执行结果result和原因reason
+        return  cap_agent_result_json# 返回工具tool、命令command、执行结果result和原因reason
 
     def scheduling_layer(self, message: str, scheduler_thread: Thread):
         console.rule()

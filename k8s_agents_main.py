@@ -293,18 +293,38 @@ def main():
             "pod编排调度能力群": [stateful_workload_manage_agent_instance, stateless_workload_manage_agent_instance, task_manage_agent_instance, daemonSet_manage_agent_instance, affinity_antiAffinity_scheduling_agent_instance],
             "配置管理能力群": [env_config_manage_agent_instance, privacy_manage_agent_instance],
             "监控能力群": [monitor_configuration_agent_instance, monitor_observe_agent_instance,flexible_strategy_manage_agent_instance],
-            "软件管理能力群": [software_config_modify_agent_instance, software_install_agent_instance, software_monitor_agent_instance],
+            "软件管理能力群": [software_config_modify_agent_instance, software_install_agent_instance, software_monitor_agent_instance, stress_test_agent_instance],
             "存储能力群": [pv_agent_instance, pvc_agent_instance, storageclass_agent_instance, csi_agent_instance, emptydir_agent_instance, hostpath_agent_instance, disk_agent_instance,],
             "虚拟机交互能力群":[package_agent_instance, status_agent_instance,kubeadm_agent_instance],
             "综合能力群":[file_io_agent_instance,text_output_agent_instance]
         }
 
-        text = """
-        对mysql进行高吞吐量测试
-使用 JMeter 执行挂载于pod-name上的/jmeter/test-plan.jmx文件，并根据结果生成报告
-
+        text = """我需要为华为云 CCE 上的物联网时序MySQL集群制定扩容预案，应对设备数据上报高峰。请输出一个扩容预案方案。
+- 集群配置：
+    - MySQL版本：MySQL 8.0.26 with Time-Series引擎
+      - username：root
+      - password：c2VjdXJlcGFzc3dvcmQ=
+    - 架构：
+        - 分片集群，4个分片（shard-0 到 shard-3），每个分片包含1个主节点（primary）和1个副本节点（replica）
+        - 使用StatefulSet确保每个MySQL实例有稳定的网络标识和持久化存储
+    - 分片规格：16核32GB，2TB ESSD/节点
+		        - CPU requests/limits: 16核(60%)
+				- Memory requests/limits: 32GB
+    - 参数配置：
+        - innodb_adaptive_hash_index: OFF
+        - bulk_insert_buffer_size: 256MB
+- 监控：
+    - 已经部署 Prometheus 在 monitoring 命名空间
+    - 华为云LTS代理（DaemonSet部署）
+- CCE节点：10个工作节点（node01-node10），每个节点: 16核CPU/64GB内存
+- 数据量：15TB，日均增长200GB
+- 预算：2.5万元/月
+- 业务需求：
+	- 峰值写入速率：100,000行/秒
+	- 数据写入延迟<100ms
+	- 读操作占比仅10%
+- 安全需求：设备证书认证，字段级加密
         """
-        # text = input("请输入新的请求描述（或输入exit退出）：")
 
         files_path = os.path.join("agents", "files")
         comtext_tree = os.path.join(files_path, "context_tree.json")
