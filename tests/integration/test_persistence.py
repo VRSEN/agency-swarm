@@ -213,7 +213,7 @@ async def test_multi_agent_tracking_with_persistence(temp_persistence_dir, file_
     # Create agency with both agents
     agency = Agency(
         agent1,  # Entry point agent
-        communication_flows=[(agent1, agent2)],
+        communication_flows=[agent1 > agent2],
         load_threads_callback=lambda: load_messages(),
         save_threads_callback=lambda messages: save_messages(messages),
     )
@@ -283,7 +283,7 @@ async def test_persistence_load_all_messages(temp_persistence_dir, file_persiste
     # Create agency with communication flow
     agency = Agency(
         ceo,
-        communication_flows=[(ceo, dev)],
+        communication_flows=[ceo > dev],
         load_threads_callback=lambda: load_messages(),
         save_threads_callback=lambda messages: save_messages(messages),
     )

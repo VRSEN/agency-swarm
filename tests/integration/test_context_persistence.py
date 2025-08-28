@@ -46,7 +46,7 @@ async def test_context_persistence_between_calls():
         name="ContextAgent",
         instructions="You store and retrieve data using the provided tools.",
         tools=[StoreValueTool, ReadValueTool],
-        model="gpt-4o-mini",
+        model="gpt-5-mini",
     )
 
     # Create agency with initial context
@@ -82,7 +82,7 @@ async def test_context_override_does_not_affect_agency():
         name="TestAgent",
         instructions="You read data using ReadValueTool.",
         tools=[ReadValueTool],
-        model="gpt-4o-mini",
+        model="gpt-5-mini",
     )
 
     agency = Agency(

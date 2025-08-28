@@ -28,7 +28,7 @@ def coordinator_agent():
         ),
         model_settings=ModelSettings(temperature=0.0),
         model=LitellmModel(model="openai/gpt-4.1", api_key=os.getenv("OPENAI_API_KEY")),
-        send_message_tool_class=SendMessageHandoff
+        send_message_tool_class=SendMessageHandoff,
     )
 
 
@@ -36,21 +36,18 @@ def coordinator_agent():
 def worker_agent():
     return Agent(
         name="Worker",
-        instructions=(
-            "You perform tasks. When you receive a task, "
-        ),
+        instructions=("You perform tasks. When you receive a task, "),
         model_settings=ModelSettings(temperature=0.0),
         model=LitellmModel(model="openai/gpt-4.1", api_key=os.getenv("OPENAI_API_KEY")),
     )
+
 
 @pytest.fixture
 def data_agent():
     return Agent(
         name="DataAgent",
         instructions=(
-            "You are a DataAgent that provides information about the user. "
-            "User name is John Doe. "
-            "User age is 30."
+            "You are a DataAgent that provides information about the user. User name is John Doe. User age is 30."
         ),
         description="Has information about the user.",
         model_settings=ModelSettings(temperature=0.0),
@@ -64,7 +61,7 @@ def coordinator_worker_agency(coordinator_agent, worker_agent, data_agent) -> Ag
     return Agency(
         coordinator_agent,
         worker_agent,
-        communication_flows=[(coordinator_agent, data_agent), (worker_agent, data_agent)],
+        communication_flows=[coordinator_agent > data_agent, worker_agent > data_agent],
         shared_instructions="Test agency for agent-to-agent persistence verification.",
     )
 

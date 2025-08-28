@@ -63,8 +63,8 @@ def three_level_agency():
     agency = Agency(
         ceo,  # CEO is the entry point
         communication_flows=[
-            (ceo, manager),  # CEO can orchestrate Manager
-            (manager, worker),  # Manager can orchestrate Worker
+            ceo > manager,  # CEO can orchestrate Manager
+            manager > worker,  # Manager can orchestrate Worker
         ],
         save_threads_callback=capture_message,
     )

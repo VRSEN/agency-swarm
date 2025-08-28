@@ -123,14 +123,15 @@ report_generator = Agent(
 agency = Agency(
     portfolio_manager,  # Entry point and orchestrator
     communication_flows=[
-        (portfolio_manager, risk_analyst),
-        (portfolio_manager, report_generator),
+        portfolio_manager > risk_analyst,
+        portfolio_manager > report_generator,
     ],
     shared_instructions="Provide accurate, professional financial analysis.",
 )
 
+
 # Helper function to visualize send message arguments
-def print_send_message_history(agency, agent_name: str) -> dict:
+def print_send_message_history(agency, agent_name: str) -> None:
     agent_messages = agency._agent_contexts[agent_name].thread_manager._store.messages
     call_ids = []
     print("Message history for inter-agent communications:")
@@ -142,8 +143,9 @@ def print_send_message_history(agency, agent_name: str) -> dict:
             print(f"{i}. {agent_name} -> {args['recipient_agent']} message: {args['message']}\n")
             i += 1
         if message["type"] == "function_call_output" and message["call_id"] in call_ids:
-            print(f"{i}. {message["agent"]} -> {agent_name} response: {message['output']}\n")
+            print(f"{i}. {message['agent']} -> {agent_name} response: {message['output']}\n")
             i += 1
+
 
 async def run_workflow():
     print("\n--- Investment Research Platform Demo ---")
@@ -166,7 +168,6 @@ async def run_workflow():
     print("\nFinal Investment Analysis:")
     print(f"{response.final_output}")
     print(f"\nCompleted in {len(response.new_items)} agent actions.")
-
 
 
 if __name__ == "__main__":

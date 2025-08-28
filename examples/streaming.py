@@ -24,6 +24,7 @@ DEBUG_MODE = False
 
 logging.basicConfig(level=logging.WARNING)
 
+
 # --- Logging Configuration --- #
 def print_event_info(event, event_count):
     # Extract key fields
@@ -54,6 +55,7 @@ def print_event_info(event, event_count):
     # Show raw event only if verbose
     if DEBUG_MODE == "verbose":
         print(f"  Raw: {event}")
+
 
 # --- Simple Tool --- #
 
@@ -87,9 +89,7 @@ def create_demo_agency():
     # Create agency with communication flows (v1.x pattern)
     agency = Agency(
         ceo,  # Entry point agent (positional argument)
-        communication_flows=[
-            (ceo, worker),
-        ],
+        communication_flows=[ceo > worker],
         name="TerminalDemoAgency",
     )
 

@@ -63,7 +63,7 @@ class TestToolConcurrencyEndToEnd:
             If you encounter tool concurrency violations, include them in the errors_encountered list.""",
             tools=[SequentialTool, ParallelTool],
             output_type=self.ToolExecutionReport,
-            model="gpt-4o-mini",
+            model="gpt-5-mini",
         )
 
         # Ask agent to use both tools simultaneously
@@ -130,7 +130,7 @@ def parallel_tool(message: str) -> str:
             name="ToolsFolderAgent",
             instructions="Test tools folder integration.",
             tools_folder=str(tools_dir),
-            model="gpt-4o-mini",
+            model="gpt-5-mini",
         )
 
         # Should have loaded both tools

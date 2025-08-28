@@ -8,6 +8,7 @@ from agency_swarm.utils.thread import ThreadManager
 
 load_dotenv()
 
+
 @pytest.fixture
 def mock_thread_manager():
     """Provides a mocked ThreadManager instance with flat message storage."""

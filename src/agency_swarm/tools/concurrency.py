@@ -19,7 +19,7 @@ class ToolConcurrencyManager:
     """
     Manages tool concurrency for a single agent instance.
 
-    Provides thread-safe tracking of tool execution state to enforce
+    Provides tracking of tool execution state to enforce
     one-call-at-a-time constraints for tools that require sequential execution.
     """
 

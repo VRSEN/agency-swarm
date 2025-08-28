@@ -98,7 +98,6 @@ def test_streaming_endpoint():
                 if not PARSE_STREAM:
                     print(line_str)
                 else:
-
                     # Parse SSE format
                     if line_str.startswith("data: "):
                         data_str = line_str[6:]  # Remove "data: " prefix

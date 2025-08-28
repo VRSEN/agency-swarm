@@ -57,8 +57,8 @@ def multi_agent_agency(planner_agent_instance, worker_agent_instance, reporter_a
     agency = Agency(
         planner_agent_instance,
         communication_flows=[
-            (planner_agent_instance, worker_agent_instance),
-            (worker_agent_instance, reporter_agent_instance),
+            planner_agent_instance > worker_agent_instance,
+            worker_agent_instance > reporter_agent_instance,
         ],
         shared_instructions="This is a test agency.",
     )
@@ -163,8 +163,8 @@ async def test_non_blocking_parallel_agent_interactions(
     agency = Agency(
         planner_agent_instance,
         communication_flows=[
-            (planner_agent_instance, worker_agent_instance),
-            (planner_agent_instance, reporter_agent_instance),
+            planner_agent_instance > worker_agent_instance,
+            planner_agent_instance > reporter_agent_instance,
         ],
         shared_instructions="",
     )

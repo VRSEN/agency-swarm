@@ -120,6 +120,7 @@ async def public_mcp_server_example():
     print("Public MCP server example completed")
     print("-" * 25)
 
+
 if __name__ == "__main__":
     print("🚀 MCP Server Example")
     print("=" * 50)

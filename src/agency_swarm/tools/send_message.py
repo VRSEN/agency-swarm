@@ -7,6 +7,7 @@ Agency Swarm framework. The tool is dynamically configured with sender and
 recipient details.
 """
 
+import asyncio
 import json
 import logging
 from typing import TYPE_CHECKING
@@ -38,6 +39,10 @@ class SendMessage(FunctionTool):
     sender_agent: "Agent"
     # Dict mapping lowercase recipient names to Agent instances
     recipients: dict[str, "Agent"]
+    # Track recipients with pending messages (thread-safe)
+    _pending_recipients: set[str]
+    # Lock to protect concurrent access to _pending_recipients
+    _pending_lock: asyncio.Lock
 
     def __init__(
         self,
@@ -46,7 +51,12 @@ class SendMessage(FunctionTool):
         name: str = "send_message",
     ):
         self.sender_agent = sender_agent
-        self.recipients = recipients or {}
+        # Normalize recipient keys to lowercase for case-insensitive lookup
+        self.recipients = {k.lower(): v for k, v in (recipients or {}).items()}
+        # Initialize tracking set for pending recipients
+        self._pending_recipients = set()
+        # Create lock for thread-safe access
+        self._pending_lock = asyncio.Lock()
 
         # Build the recipient agent enum values for the schema
         recipient_names = list(self.recipients.values())
@@ -89,6 +99,7 @@ class SendMessage(FunctionTool):
                     ),
                 },
             },
+            # OpenAI API requires all properties in 'required' array, even optional ones
             "required": ["recipient_agent", "my_primary_instructions", "message", "additional_instructions"],
             "additionalProperties": False,
         }
@@ -238,6 +249,22 @@ class SendMessage(FunctionTool):
                 f"Available agents: {', '.join(available_names)}"
             )
 
+        # Thread-safe check and add for pending recipients
+        async with self._pending_lock:
+            # Check if this recipient already has a pending message
+            if recipient_key in self._pending_recipients:
+                logger.warning(
+                    f"Attempted to send message to '{recipient_agent_name}' while previous message is still pending"
+                )
+                return (
+                    f"Error: Cannot send another message to '{recipient_agent_name}' "
+                    f"while the previous message is still being processed. "
+                    f"Please wait for the agent to respond before sending another message."
+                )
+
+            # Mark this recipient as having a pending message
+            self._pending_recipients.add(recipient_key)
+
         self.recipient_agent = self.recipients[recipient_key]
         sender_name_for_call = self.sender_agent.name
         recipient_name_for_call = self.recipient_agent.name
@@ -360,6 +387,10 @@ class SendMessage(FunctionTool):
                 exc_info=True,
             )
             return f"Error: Failed to get response from agent '{recipient_name_for_call}'. Reason: {e}"
+        finally:
+            # Always remove the recipient from pending set when done (thread-safe)
+            async with self._pending_lock:
+                self._pending_recipients.discard(recipient_key)
 
 
 class SendMessageHandoff:

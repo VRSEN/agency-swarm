@@ -52,7 +52,7 @@ def agency1(shared_agent):
     agency = Agency(
         shared_agent,
         assistant1,
-        communication_flows=[(shared_agent, assistant1)],
+        communication_flows=[shared_agent > assistant1],
         name="Agency1",
         user_context={"agency_name": "Agency1", "test_data": "agency1_data"},
     )
@@ -67,7 +67,7 @@ def agency2(shared_agent):
     agency = Agency(
         shared_agent,
         assistant2,
-        communication_flows=[(shared_agent, assistant2)],
+        communication_flows=[shared_agent > assistant2],
         name="Agency2",
         user_context={"agency_name": "Agency2", "test_data": "agency2_data"},
     )

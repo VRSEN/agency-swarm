@@ -119,7 +119,7 @@ async def test_thread_persistence_shared_structural(
     # Create agency with persistence
     agency = Agency(
         ceo_agent_instance,
-        communication_flows=[(ceo_agent_instance, developer_agent_instance)],
+        communication_flows=[ceo_agent_instance > developer_agent_instance],
         shared_instructions="Persistence isolation test agency",
         load_threads_callback=load_cb,
         save_threads_callback=save_cb,
@@ -171,7 +171,7 @@ async def test_persistence_thread_file_separation(
 
     agency = Agency(
         ceo_agent_instance,
-        communication_flows=[(ceo_agent_instance, developer_agent_instance)],
+        communication_flows=[ceo_agent_instance > developer_agent_instance],
         shared_instructions="File separation test agency",
         load_threads_callback=load_cb,
         save_threads_callback=save_cb,

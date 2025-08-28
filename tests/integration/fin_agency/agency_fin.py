@@ -26,8 +26,8 @@ def create_agency(
         report_generator,
         risk_analyst,
         communication_flows=[
-            (portfolio_manager, risk_analyst),
-            (risk_analyst, report_generator),
+            portfolio_manager > risk_analyst,
+            risk_analyst > report_generator,
         ],
         # ],
         shared_instructions="financial_research_agency/agency_manifesto.md",
