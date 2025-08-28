@@ -3,7 +3,7 @@ import select
 import time
 
 class SSHCommandExecutor:
-    def __init__(self,hostname,username,password,port = 22,timeout=10):
+    def __init__(self,hostname,username,password,port = 22,timeout=1000):
         self.client = paramiko.SSHClient()
         self.hostname = hostname
         self.port = port

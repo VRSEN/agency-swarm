@@ -8,6 +8,8 @@ from agents.openeuler_agents.tools.SSHExecuteCommand import SSHExecuteCommand
 _name = "network_agent"
 _description = """
 负责管理OpenEuler系统上的防火墙规则等网络配置。
+注意：
+1. 在使用ping测试网络的时候优先使用www.baidu.com
 """
 
 import os
