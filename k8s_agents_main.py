@@ -299,31 +299,32 @@ def main():
             "综合能力群":[file_io_agent_instance,text_output_agent_instance]
         }
 
-        text = """
-我需要为华为云 CCE 集群上的MySQL集群制定扩容预案，以应对电商618大促活动。请提供 MySQL 数据库扩容的预案方案。
-- 华为云 CCE 集群k8s上的MySQL配置如下:
-    - 集群架构：
-        - 数据库版本：MySQL 8.0.32
-        - 集群架构：1 个主节点（mysql-master），3 个从节点（mysql-slave-1、mysql-slave-2、mysql-slave-3），读写分离架构
-        - 主节点配置：16 核 CPU，32GB 内存，1TB SSD 硬盘
-		        - CPU requests/limits: 16核(50%)
-						- Memory requests/limits: 32GB
-        - 从节点配置：8 核 CPU，16GB 内存，500GB SSD 硬盘
-        - 数据库参数配置：
-            - innodb_buffer_pool_size: 24GB
-            - max_connections: 1000
-            - innodb_io_capacity: 20000
-    - 监控系统：Prometheus ，监控指标包括QPS、连接数、复制延迟
-    - CCE 集群节点: 4个工作节点（node1、node2、node3、node4），CPU平均使用率65%
-    - 当前数据总量：1.2TB，分片数量：15个
-- 预算限制：2万元/月以内
+        text = """我需要为华为云 CCE 上的物联网时序MySQL集群制定扩容预案，应对设备数据上报高峰。请输出一个扩容预案方案。
+- 集群配置：
+    - MySQL版本：MySQL 8.0.26 with Time-Series引擎
+      - username：root
+      - password：c2VjdXJlcGFzc3dvcmQ=
+    - 架构：
+        - 分片集群，4个分片（shard-0 到 shard-3），每个分片包含1个主节点（primary）和1个副本节点（replica）
+        - 使用StatefulSet确保每个MySQL实例有稳定的网络标识和持久化存储
+    - 分片规格：16核32GB，2TB ESSD/节点
+		        - CPU requests/limits: 16核(60%)
+				- Memory requests/limits: 32GB
+    - 参数配置：
+        - innodb_adaptive_hash_index: OFF
+        - bulk_insert_buffer_size: 256MB
+- 监控：
+    - 已经部署 Prometheus 在 monitoring 命名空间
+    - 华为云LTS代理（DaemonSet部署）
+- CCE节点：10个工作节点（node01-node10），每个节点: 16核CPU/64GB内存
+- 数据量：15TB，日均增长200GB
+- 预算：2.5万元/月
 - 业务需求：
-	- 预计618峰值QPS将达到50,000/s
-	- 要求99%查询延迟<10ms
-	- 读写比例7:3
-- 安全需求：启用TLS加密和RBAC访问控制
+	- 峰值写入速率：100,000行/秒
+	- 数据写入延迟<100ms
+	- 读操作占比仅10%
+- 安全需求：设备证书认证，字段级加密
         """
-        # text = input("请输入新的请求描述（或输入exit退出）：")
 
         files_path = os.path.join("agents", "files")
         comtext_tree = os.path.join(files_path, "context_tree.json")
