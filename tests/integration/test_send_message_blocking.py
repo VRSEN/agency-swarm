@@ -6,6 +6,7 @@ Tests both same-agent (blocking) and different-agent (no blocking) scenarios.
 import json
 
 import pytest
+from agents import ModelSettings
 
 from agency_swarm import Agency, Agent
 
@@ -31,13 +32,15 @@ async def test_concurrent_messages_to_same_agent():
             "using send_message tool without waiting between calls. "
             "Message 1: 'First task', Message 2: 'Second task'"
         ),
-        model="gpt-5-mini",
+        model="gpt-4o-mini",
+        model_settings=ModelSettings(temperature=0.0),
     )
 
     worker = Agent(
         name="Worker",
         instructions="Reply with: 'Received: [the message you got]'",
-        model="gpt-5-mini",
+        model="gpt-4o-mini",
+        model_settings=ModelSettings(temperature=0.0),
     )
 
     # Create agency
@@ -134,19 +137,22 @@ async def test_messages_to_different_agents():
             "When asked to test, send one message to Worker1 and one message to Worker2. "
             "Message to Worker1: 'Task for worker 1', Message to Worker2: 'Task for worker 2'"
         ),
-        model="gpt-5-mini",
+        model="gpt-4o-mini",
+        model_settings=ModelSettings(temperature=0.0),
     )
 
     worker1 = Agent(
         name="Worker1",
         instructions="Reply with: 'Worker1 received: [the message]'",
-        model="gpt-5-mini",
+        model="gpt-4o-mini",
+        model_settings=ModelSettings(temperature=0.0),
     )
 
     worker2 = Agent(
         name="Worker2",
         instructions="Reply with: 'Worker2 received: [the message]'",
-        model="gpt-5-mini",
+        model="gpt-4o-mini",
+        model_settings=ModelSettings(temperature=0.0),
     )
 
     # Create agency with two communication flows
