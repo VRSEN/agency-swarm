@@ -47,3 +47,39 @@ def test_extract_no_results_returns_empty():
 
     results = MessageFormatter.extract_hosted_tool_results(agent, [])
     assert results == []
+
+
+def test_web_search_results_deduplicated():
+    """Only one synthetic result should be created for multiple assistant messages."""
+    agent = Agent(name="MetaAgent", instructions="Test")
+
+    web_call = ResponseFunctionWebSearch(
+        id="1",
+        action=ActionSearch(query="hello", type="search"),
+        status="completed",
+        type="web_search_call",
+    )
+
+    assistant_msgs = [
+        ResponseOutputMessage(
+            id="m1",
+            content=[ResponseOutputText(annotations=[], text="result1", type="output_text")],
+            role="assistant",
+            status="completed",
+            type="message",
+        ),
+        ResponseOutputMessage(
+            id="m2",
+            content=[ResponseOutputText(annotations=[], text="result2", type="output_text")],
+            role="assistant",
+            status="completed",
+            type="message",
+        ),
+    ]
+
+    run_items = [ToolCallItem(agent, web_call)] + [MessageOutputItem(agent, m) for m in assistant_msgs]
+
+    results = MessageFormatter.extract_hosted_tool_results(agent, run_items)
+    assert len(results) == 1
+    assert "result1" in results[0]["content"]
+    assert "result2" not in results[0]["content"]
