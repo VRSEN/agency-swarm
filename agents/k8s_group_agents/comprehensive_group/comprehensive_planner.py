@@ -13,8 +13,7 @@ _group_name = "综合能力群"
 _input_format = """
 {
     "title": <任务名称>,
-    "description": <任务描述>,
-    "total_subtask_graph": <所有子任务的规划图>
+    "description": <任务描述>
 }
 """
 

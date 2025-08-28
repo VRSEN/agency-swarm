@@ -299,8 +299,13 @@ def main():
             "综合能力群":[file_io_agent_instance,text_output_agent_instance]
         }
 
-        text = """我需要为华为云 CCE 上的物联网时序MySQL集群制定扩容预案，应对设备数据上报高峰。请输出一个扩容预案方案。
-- 集群配置：
+        text = """使用 Sysbench 测试环境的 MySQL 数据库进行加压，模拟设备数据爆发。
+当直到触发预设的扩容条件后，执行垂直扩容。
+扩容触发条件:
+  - 当磁盘IO延迟>20ms连续10分钟时，执行垂直扩容。
+垂直扩容方案：
+  - 升级热点分片存储至 4TB UltraSSD，调整 innodb_write_io_threads 至 16。
+- 集群配置如下：
     - MySQL版本：MySQL 8.0.26 with Time-Series引擎
       - username：root
       - password：c2VjdXJlcGFzc3dvcmQ=

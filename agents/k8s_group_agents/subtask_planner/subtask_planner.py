@@ -10,8 +10,7 @@ _description = """
 _input_format = """
 {
     "title": <本次任务的名称>,
-    "description": <本次任务的描述>,
-    "total_task_graph": <所有任务的规划图>
+    "description": <本次任务的描述>
 }
 """
 
@@ -33,13 +32,13 @@ _instruction = f"""作为subtask规划者，你将接收到一个task，并尝�
 输入格式如下: 
 {_input_format}
 
-其中，"title"和"description"字段描述了本次需要规划的task，"total_task_graph"将描述所有task的规划图，包括task信息和依赖关系。你接下来需要对本次task进行各个subtask的规划，且**不要与total_task_graph里其它的task有冲突或重复**。
+其中，"title"和"description"字段描述了本次需要规划的task，你接下来需要对本次task进行各个subtask的规划。
 
 # 规划开始之前，你需要判断任务请求是否只涉及输出文字到用户端，而不涉及k8s集群环境的修改（例如：输出复盘报告、输出预案、输出自动化脚本等简单文字输出请求），如果是，你只需要将任务请求中的相关信息传递给综合能力群中的文本输出agent来进行输出（只有这一个subtask），不需要规划其他任何多余的subtask。
 如果任务涉及k8s集群环境文件的增添修改（例如：将文件写入k8s环境、将jmeter计划添加到k8s环境等），请正常规划。
 
 同时，你需要先调用工具`ReadJsonFile`从context_tree.json中读取上下文信息（直接调用工具，不要把它规划为一个subtask）。其中，"status"为"completed"的表示已经完成，"status"为"executing"的表示当前正在执行，"status"为"pending"的表示还未执行。
-获取以上信息后，你需要判断用户输入请求是否与之前**已经完成的过程**有关，如果有关，从上下文信息中提取有用信息，并结合该信息进行后续的subtask规划。
+获取以上信息后，你需要判断用户输入请求是否与之前**"status"为"completed"的过程**有关，如果有关，从上下文信息中提取有用信息，并结合该信息进行后续的subtask规划。
 
 你需要严谨专业地一步步思考，根据任务描述对该任务进行拆分。你需要确保:
 
