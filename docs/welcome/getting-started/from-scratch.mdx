@@ -26,14 +26,6 @@ v1.x is currently in **beta preview**. Install with: `pip install -U "agency-swa
   </Step>
 
   <Step title="Create Project Structure">
-    Use the `create-agent-template` command to create the recommended directory structure for each agent.
-
-    **Command Syntax:**
-
-    ```bash
-    agency-swarm create-agent-template --name "AgentName" --description "Agent Description" [--path "/path/to/directory"] [--use_txt]
-    ```
-
     **Agent Folder Structure:**
 
     When you run the create-agent-template command, it creates the following folder structure for your agent:
@@ -68,7 +60,46 @@ v1.x is currently in **beta preview**. Install with: `pip install -U "agency-swa
   </Step>
 
   <Step title="Create Tools">
-    Define your custom tools using the `@function_tool` decorator.
+    In 1.x versions of the library, you have 2 ways of defining custom tools:
+
+    By extending agency_swarm's `BaseTool` class and implementing the `run` method.
+
+    **MyCustomTool.py:**
+
+    ```python
+    from agency_swarm.tools import BaseTool
+    from pydantic import Field
+
+    class MyCustomTool(BaseTool):
+        """
+        A brief description of what the custom tool does.
+        The docstring should clearly explain the tool's purpose and functionality.
+        It will be used by the agent to determine when to use this tool.
+        """
+
+        # Define the fields with descriptions using Pydantic Field
+        example_field: str = Field(
+            ..., description="Description of the example field, explaining its purpose and usage for the Agent."
+        )
+
+        # Additional Pydantic fields as required
+        # ...
+
+        def run(self):
+            """
+            The implementation of the run method, where the tool's main functionality is executed.
+            This method should utilize the fields defined above to perform the task.
+            Doc string is not required for this method and will not be used by your agent.
+            """
+
+            # Your custom tool logic goes here
+            do_something(self.example_field)
+
+            # Return the result of the tool's operation as a string
+            return "Result of MyCustomTool operation"
+    ```
+
+    Or by using openai's `@function_tool` decorator.
 
     **my_custom_tool.py:**
 
@@ -114,7 +145,7 @@ v1.x is currently in **beta preview**. Install with: `pip install -U "agency-swa
                 name="Developer",
                 description="Responsible for executing tasks.",
                 instructions="./instructions.md",
-                tools=[my_custom_tool],  # Import tools directly
+                tools=[my_custom_tool, MyCustomTool],  # Import tools directly
                 model_settings=ModelSettings(
                     temperature=0.3,
                     max_completion_tokens=25000,
@@ -166,7 +197,7 @@ v1.x is currently in **beta preview**. Install with: `pip install -U "agency-swa
     The first positional argument is the entry point agent that users interact with directly. Communication flows are defined separately.
 
     <Note title="Note on Communication Flows">
-      In Agency Swarm, communication flows are directional tuples. For instance, in the example above, the CEO can initiate a chat with the Developer (`(ceo, developer)`), and the Developer can respond in this chat. However, the Developer cannot initiate a chat with the CEO.
+      In Agency Swarm, communication flows are directional tuples. For instance, in the example above: `(ceo, developer)`, the CEO can initiate a chat with the Developer, and the Developer can respond in this chat. However, the Developer cannot initiate a chat with the CEO.
     </Note>
 
   </Step>
@@ -189,6 +220,12 @@ v1.x is currently in **beta preview**. Install with: `pip install -U "agency-swa
 
     ```python
     agency.terminal_demo()
+    ```
+
+    **Backend Version (Sync):**
+
+    ```python
+    result = agency.get_response_sync("Please create a new website for our client.")
     ```
 
     **Backend Version (Async):**

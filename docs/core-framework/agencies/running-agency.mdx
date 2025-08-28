@@ -64,6 +64,17 @@ async def main():
 asyncio.run(main())
 ```
 
+**Synchronous version:**
+
+```python
+result = agency.get_response_sync(
+    message="I want you to build me a website",
+    additional_instructions="This is an additional instruction for the task.",
+    recipient_agent=dev  # Optional: specify which agent to send to
+)
+print(result.final_output)
+```
+
 **Parameters**:
 
 - `message`: The message to send to the agency.

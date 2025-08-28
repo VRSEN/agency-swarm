@@ -64,15 +64,47 @@ class Agency:
 
 ```python get_response
 async def get_response(self,
-                      message: str | list[dict[str, Any]],
-                      recipient_agent: str | Agent | None = None,
-                      context_override: dict[str, Any] | None = None,
-                      hooks_override: RunHooks | None = None,
-                      run_config: RunConfig | None = None,
-                      message_files: list[str] | None = None,
-                      file_ids: list[str] | None = None,
-                      additional_instructions: str | None = None,
-                      **kwargs: Any) -> RunResult:
+        message: str | list[dict[str, Any]],
+        recipient_agent: str | Agent | None = None,
+        context_override: dict[str, Any] | None = None,
+        hooks_override: RunHooks | None = None,
+        run_config: RunConfig | None = None,
+        message_files: list[str] | None = None,
+        file_ids: list[str] | None = None,
+        additional_instructions: str | None = None,
+        **kwargs: Any
+    ) -> RunResult:
+    """
+    Initiate an interaction with a specified agent within the agency.
+
+    Parameters:
+        message: The input message for the agent
+        recipient_agent: Target agent instance or name (defaults to first entry point)
+        context_override: Additional context to pass to the agent run
+        hooks_override: Specific hooks to use for this run, overriding agency defaults
+        run_config: Configuration for the agent run
+        message_files: Backward compatibility parameter for file attachments
+        file_ids: Additional file IDs for the agent run
+        additional_instructions: Additional instructions for this run only
+        **kwargs: Additional arguments passed to the target agent's get_response
+
+    Returns:
+        RunResult: The result of the agent execution chain
+    """
+```
+
+```python get_response_sync
+async def def get_response_sync(self,
+        message: str | list[TResponseInputItem],
+        recipient_agent: str | Agent | None = None,
+        context_override: dict[str, Any] | None = None,
+        hooks_override: RunHooks | None = None,
+        run_config: RunConfig | None = None,
+        message_files: list[str] | None = None,
+        file_ids: list[str] | None = None,
+        additional_instructions: str | None = None,
+        **kwargs: Any,
+    ) -> RunResult:
     """
     Initiate an interaction with a specified agent within the agency.
 
@@ -94,15 +126,16 @@ async def get_response(self,
 
 ```python get_response_stream
 async def get_response_stream(self,
-                             message: str | list[dict[str, Any]],
-                             recipient_agent: str | Agent | None = None,
-                             context_override: dict[str, Any] | None = None,
-                             hooks_override: RunHooks | None = None,
-                             run_config_override: RunConfig | None = None,
-                             message_files: list[str] | None = None,
-                             file_ids: list[str] | None = None,
-                             additional_instructions: str | None = None,
-                             **kwargs: Any) -> AsyncGenerator[Any]:
+        message: str | list[dict[str, Any]],
+        recipient_agent: str | Agent | None = None,
+        context_override: dict[str, Any] | None = None,
+        hooks_override: RunHooks | None = None,
+        run_config_override: RunConfig | None = None,
+        message_files: list[str] | None = None,
+        file_ids: list[str] | None = None,
+        additional_instructions: str | None = None,
+        **kwargs: Any
+    ) -> AsyncGenerator[Any]:
     """
     Initiate a streaming interaction with a specified agent within the agency.
 
@@ -124,11 +157,12 @@ async def get_response_stream(self,
 
 ```python run_fastapi
 def run_fastapi(self,
-               host: str = "0.0.0.0",
-               port: int = 8000,
-               app_token_env: str = "APP_TOKEN",
-               cors_origins: list[str] | None = None,
-               enable_agui: bool = False):
+        host: str = "0.0.0.0",
+        port: int = 8000,
+        app_token_env: str = "APP_TOKEN",
+        cors_origins: list[str] | None = None,
+        enable_agui: bool = False
+    ):
     """
     Serve this agency via the FastAPI integration.
 
@@ -143,8 +177,9 @@ def run_fastapi(self,
 
 ```python get_agency_structure
 def get_agency_structure(self,
-                        include_tools: bool = True,
-                        layout_algorithm: str = "hierarchical") -> dict[str, Any]:
+        include_tools: bool = True,
+        layout_algorithm: str = "hierarchical"
+    ) -> dict[str, Any]:
     """
     Returns a ReactFlow-compatible JSON structure representing the agency's organization.
 
@@ -159,10 +194,11 @@ def get_agency_structure(self,
 
 ```python visualize
 def visualize(self,
-             output_file: str = "agency_visualization.html",
-             layout_algorithm: str = "force_directed",
-             include_tools: bool = True,
-             open_browser: bool = True) -> str:
+        output_file: str = "agency_visualization.html",
+        layout_algorithm: str = "force_directed",
+        include_tools: bool = True,
+        open_browser: bool = True
+    ) -> str:
     """
     Create an HTML visualization of the agency structure.
 
@@ -177,6 +213,13 @@ def visualize(self,
     """
 ```
 
+```python terminal_demo
+def terminal_demo(self) -> None:
+    """
+    Run a terminal demo of the agency.
+    """
+```
+
 </CodeGroup>
 
 ### Deprecated Methods (Backward Compatibility)
@@ -185,16 +228,17 @@ def visualize(self,
 
 ```python get_completion
 def get_completion(self,
-                  message: str,
-                  message_files: list[str] | None = None,
-                  yield_messages: bool = False,
-                  recipient_agent: str | Agent | None = None,
-                  additional_instructions: str | None = None,
-                  attachments: list[dict] | None = None,
-                  tool_choice: dict | None = None,
-                  verbose: bool = False,
-                  response_format: dict | None = None,
-                  **kwargs: Any) -> str:
+        message: str,
+        message_files: list[str] | None = None,
+        yield_messages: bool = False,
+        recipient_agent: str | Agent | None = None,
+        additional_instructions: str | None = None,
+        attachments: list[dict] | None = None,
+        tool_choice: dict | None = None,
+        verbose: bool = False,
+        response_format: dict | None = None,
+        **kwargs: Any
+    ) -> str:
     """
     [DEPRECATED] Use get_response instead. Returns final text output.
 
