@@ -39,7 +39,7 @@ Begin with a concise checklist (3-7 bullets) of what you will do before performi
 make prime
 ```
 - Run this before reading or modifying files—no exceptions.
-- Run Step 0 twice: once before starting work (to understand current state) and once during review before finishing (to double‑check your work).
+- Run Step 0 twice: once before starting work and once during review before finishing.
 
 #### Step 1: Proactive Analysis
 - Search for similar patterns; identify required related changes globally.
@@ -54,12 +54,10 @@ make prime
 #### Step 2: Comprehensive Validation
 ```bash
 make ci
-uv run python examples/interactive/terminal_demo.py
-uv run python examples/multi_agent_workflow.py
 uv run pytest tests/integration/ -v
 ```
 
-After each tool call or code edit, validate the result in 1-2 lines and proceed or self-correct if validation fails. If you have not run Step 0 and Step 1 in the current session, run `make prime` first.
+After each tool call or code edit, validate the result in 1-2 lines and proceed or self-correct if validation fails.
 
 ##### Additional Required Validations (Streaming & Tool Contract)
 
@@ -89,7 +87,6 @@ After each tool call or code edit, validate the result in 1-2 lines and proceed 
 ```bash
 make sync && make ci   # Install, lint, type-check, test, check coverage
 make coverage          # Run test suite
-make format && make lint && make mypy && make coverage
 ```
 
 ### Execution Environment
@@ -97,11 +94,7 @@ make format && make lint && make mypy && make coverage
 - For long-running commands (ci, coverage), use Bash tool with timeout=600000 (10 minutes)
 
 ### Example Runs
-```bash
-uv run python examples/interactive/terminal_demo.py
-uv run python examples/multi_agent_workflow.py
-uv run python examples/agency_context.py
-```
+Run non-interactive examples from /examples directory. Never run examples/interactive/* as they require user input.
 
 ### Test Guidelines
 - Keep tests deterministic and minimal. Avoid model dependency when practical.
@@ -218,12 +211,8 @@ The following files currently exceed limits and are considered problematic. Do n
 ```bash
 find src/ -name "*.py" | grep -v __pycache__ | sort  # Initial structure
 make ci                                              # Full validation
-uv run python examples/interactive/terminal_demo.py  # Run examples
-uv run python examples/multi_agent_workflow.py       #
 uv run pytest tests/integration/ -v                  # Integration tests
 ```
-
-**Remember:** Trust test evidence; always verify outcomes.
 
 ## Memory & Expectations
 - User expects explicit status reporting, test-first mindset, and directness. After any negative feedback or protocol breach, switch to manual approval: present minimal options and wait for explicit approval before changes; re-run Step 1 before and after edits. Update `CLAUDE.md` first after negative feedback.

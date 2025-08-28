@@ -215,6 +215,9 @@ class MessageFormatter:
             elif isinstance(item, MessageOutputItem):
                 assistant_messages.append(item)
 
+        # Track which assistant messages have been used for web search
+        used_assistant_msg_indices = set()
+
         # Extract results for each hosted tool call
         for tool_call_item in hosted_tool_calls:
             tool_call = tool_call_item.raw_item
@@ -247,21 +250,31 @@ class MessageFormatter:
                 search_results_content = f"[WEB_SEARCH_RESULTS] Tool Call ID: {tool_call.id}\nTool Type: web_search\n"
 
                 # Capture FULL search results (not truncated to 500 chars)
-                for msg_item in assistant_messages:
+                found_content = False
+                for idx, msg_item in enumerate(assistant_messages):
+                    # Skip if this message was already used for another web search
+                    if idx in used_assistant_msg_indices:
+                        continue
                     message = msg_item.raw_item
                     if hasattr(message, "content") and message.content:
                         for content_item in message.content:
                             if hasattr(content_item, "text") and content_item.text:
                                 search_results_content += f"Search Results:\n{content_item.text}\n"
-                                synthetic_outputs.append(
-                                    MessageFormatter.add_agency_metadata(
-                                        {"role": "user", "content": search_results_content},
-                                        agent=agent.name,
-                                        caller_agent=None,
-                                    )
-                                )
-                                logger.debug(f"Created web_search results message for call_id: {tool_call.id}")
-                                break  # Process only first text content item to avoid duplicates
+                                found_content = True
+                                used_assistant_msg_indices.add(idx)
+                                break  # Process only first text content item per message
+                        if found_content:
+                            break  # Process only first available assistant message with content
+
+                if found_content:
+                    synthetic_outputs.append(
+                        MessageFormatter.add_agency_metadata(
+                            {"role": "user", "content": search_results_content},
+                            agent=agent.name,
+                            caller_agent=None,
+                        )
+                    )
+                    logger.debug(f"Created web_search results message for call_id: {tool_call.id}")
 
         return synthetic_outputs  # type: ignore[return-value]
 
