@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from agents import ModelSettings
 
 from agency_swarm import Agency, Agent
 
@@ -197,8 +198,8 @@ async def test_multi_agent_tracking_with_persistence(temp_persistence_dir, file_
     chat_id = "multi_agent_test_456"
 
     # Create two different agents
-    agent1 = Agent(name="Agent1", instructions="You are Agent1.")
-    agent2 = Agent(name="Agent2", instructions="You are Agent2.")
+    agent1 = Agent(name="Agent1", instructions="You are Agent1.", model_settings=ModelSettings(temperature=0.0))
+    agent2 = Agent(name="Agent2", instructions="You are Agent2.", model_settings=ModelSettings(temperature=0.0))
 
     # Get callback functions
     load_messages_for_chat, save_messages_for_chat = file_persistence_callbacks
@@ -219,8 +220,8 @@ async def test_multi_agent_tracking_with_persistence(temp_persistence_dir, file_
     )
 
     # Send messages to different agents
-    message_to_agent1 = "Hello Agent1, remember: SECRET_CODE_ALPHA"
-    message_to_agent2 = "Hello Agent2, remember: SECRET_CODE_BETA"
+    message_to_agent1 = "Hello Agent1, remember: SECRET_CODE_ALPHA. DO NOT SHARE IT WITH OTHER AGENTS."
+    message_to_agent2 = "Hello Agent2, remember: SECRET_CODE_BETA. DO NOT SHARE IT WITH OTHER AGENTS."
 
     print(f"\n--- Sending to Agent1: {message_to_agent1}")
     await agency.get_response(message=message_to_agent1, recipient_agent="Agent1")

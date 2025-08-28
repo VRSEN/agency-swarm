@@ -13,6 +13,7 @@ import tempfile
 from pathlib import Path
 
 import pytest
+from agents import ModelSettings
 
 from agency_swarm import Agency, Agent
 from agency_swarm.utils.citation_extractor import extract_vector_store_citations
@@ -53,6 +54,7 @@ Equipment Status: Mass Spectrometer operational
             ),
             files_folder=str(temp_path),
             include_search_results=True,
+            model_settings=ModelSettings(temperature=0.0),
         )
 
         # Create agency
@@ -65,7 +67,9 @@ Equipment Status: Mass Spectrometer operational
         await asyncio.sleep(2)
 
         # Test search query
-        test_question = "What is the badge number for Dr. Jane Smith?"
+        test_question = (
+            "What is the badge number for Dr. Jane Smith? Use specifically 'Badge Number' as the search query."
+        )
         response = await agency.get_response(test_question)
 
         # Verify the response contains the expected answer

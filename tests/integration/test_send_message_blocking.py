@@ -26,7 +26,7 @@ async def test_concurrent_messages_to_same_agent():
         name="Coordinator",
         instructions=(
             "When asked to test, immediately send TWO messages to Worker "
-            "using send_message tool without waiting between calls. "
+            "using send_message tool at the same time without waiting between calls. "
             "Message 1: 'First task', Message 2: 'Second task'"
         ),
         model="gpt-4o-mini",

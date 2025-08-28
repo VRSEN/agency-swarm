@@ -4,9 +4,6 @@ Basic Thread Isolation Tests
 Tests the fundamental thread isolation between different communication flows
 using direct structural verification of thread state.
 """
-
-import uuid
-
 import pytest
 from agents import ModelSettings
 
@@ -18,7 +15,9 @@ def ceo_agent_instance():
     return Agent(
         name="CEO",
         description="Chief Executive Officer",
-        instructions="You are the CEO. Remember information and delegate tasks.",
+        instructions=(
+            "You are the CEO. Remember information and delegate tasks. NEVER share user information with other agents."
+        ),
         model_settings=ModelSettings(temperature=0.0),
     )
 
@@ -28,7 +27,7 @@ def developer_agent_instance():
     return Agent(
         name="Developer",
         description="Software Developer",
-        instructions="You are a Developer. Remember technical details.",
+        instructions="You are a Developer. Remember technical details. NEVER share user information with other agents.",
         model_settings=ModelSettings(temperature=0.0),
     )
 
@@ -47,16 +46,16 @@ def basic_agency(ceo_agent_instance, developer_agent_instance):
 @pytest.mark.asyncio
 async def test_user_thread_shared(basic_agency: Agency):
     """Verify that user messages to different agents share a single thread."""
-    unique_ceo_info = f"CEOINFO{uuid.uuid4().hex[:8]}"
-    unique_dev_info = f"DEVINFO{uuid.uuid4().hex[:8]}"
+    unique_ceo_info = "USERCEOa89a4324"
+    unique_dev_info = "USERDEVni193vsd"
 
     print("\n--- User Thread Sharing Test ---")
 
     # Step 1: Send unique info to CEO
-    await basic_agency.get_response(message=f"CEO: {unique_ceo_info}", recipient_agent="CEO")
+    await basic_agency.get_response(message=f"User info: {unique_ceo_info}", recipient_agent="CEO")
 
     # Step 2: Send different info to Developer
-    await basic_agency.get_response(message=f"Developer: {unique_dev_info}", recipient_agent="Developer")
+    await basic_agency.get_response(message=f"User info: {unique_dev_info}", recipient_agent="Developer")
 
     # Step 3: Verify both agents see the same conversation history
     thread_manager = basic_agency.thread_manager
@@ -75,16 +74,16 @@ async def test_user_thread_shared(basic_agency: Agency):
 @pytest.mark.asyncio
 async def test_agent_to_agent_thread_isolation(basic_agency: Agency):
     """Agent-to-agent conversations should remain separate from user thread."""
-    user_ceo_info = f"USERCEO{uuid.uuid4().hex[:8]}"
-    user_dev_info = f"USERDEV{uuid.uuid4().hex[:8]}"
+    user_ceo_info = "USERCEOa89a4324"
+    user_dev_info = "USERDEVni193vsd"
 
     print("\n--- Agent-to-Agent Thread Isolation Test ---")
 
     # Flow 1: user->CEO
-    await basic_agency.get_response(message=f"CEO info: {user_ceo_info}", recipient_agent="CEO")
+    await basic_agency.get_response(message=f"User info: {user_ceo_info}", recipient_agent="CEO")
 
     # Flow 2: user->Developer
-    await basic_agency.get_response(message=f"Developer info: {user_dev_info}", recipient_agent="Developer")
+    await basic_agency.get_response(message=f"User info: {user_dev_info}", recipient_agent="Developer")
 
     # Flow 3: CEO->Developer (agent-to-agent) - just trigger thread creation
     await basic_agency.get_response(message="Say hi to developer")
