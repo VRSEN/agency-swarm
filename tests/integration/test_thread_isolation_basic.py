@@ -39,7 +39,7 @@ def basic_agency(ceo_agent_instance, developer_agent_instance):
     return Agency(
         ceo_agent_instance,
         developer_agent_instance,
-        communication_flows=[(ceo_agent_instance, developer_agent_instance)],
+        communication_flows=[ceo_agent_instance > developer_agent_instance],
         shared_instructions="Basic thread isolation test agency.",
     )
 

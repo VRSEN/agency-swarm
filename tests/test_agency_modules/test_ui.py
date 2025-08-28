@@ -19,7 +19,7 @@ def sample_agency():
     manager = Agent(name="Manager", instructions="You manage projects")
     worker = Agent(name="Worker", instructions="You do the work")
 
-    agency = Agency(ceo, communication_flows=[(ceo, manager), (manager, worker)])
+    agency = Agency(ceo, communication_flows=[ceo > manager, manager > worker])
     return agency
 
 

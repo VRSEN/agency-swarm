@@ -61,7 +61,7 @@ def coordinator_worker_agency(coordinator_agent, worker_agent, data_agent) -> Ag
     return Agency(
         coordinator_agent,
         worker_agent,
-        communication_flows=[(coordinator_agent, data_agent), (worker_agent, data_agent)],
+        communication_flows=[coordinator_agent > data_agent, worker_agent > data_agent],
         shared_instructions="Test agency for agent-to-agent persistence verification.",
     )
 

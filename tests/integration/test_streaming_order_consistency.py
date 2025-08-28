@@ -75,7 +75,7 @@ async def test_full_streaming_flow_hardcoded_sequence() -> None:
 
     agency = Agency(
         main,
-        communication_flows=[(main, helper)],
+        communication_flows=[main > helper],
         shared_instructions="",
     )
 
@@ -185,7 +185,7 @@ async def test_multiple_sequential_subagent_calls() -> None:
 
     agency = Agency(
         coordinator,
-        communication_flows=[(coordinator, worker)],
+        communication_flows=[coordinator > worker],
         shared_instructions="",
     )
 
@@ -301,7 +301,7 @@ async def test_nested_delegation_streaming() -> None:
 
     agency = Agency(
         agent_a,
-        communication_flows=[(agent_a, agent_b), (agent_b, agent_c)],
+        communication_flows=[agent_a > agent_b, agent_b > agent_c],
         shared_instructions="",
     )
 
@@ -419,7 +419,7 @@ async def test_parallel_subagent_calls() -> None:
 
     agency = Agency(
         orchestrator,
-        communication_flows=[(orchestrator, processor_a), (orchestrator, processor_b)],
+        communication_flows=[orchestrator > processor_a, orchestrator > processor_b],
         shared_instructions="",
     )
 

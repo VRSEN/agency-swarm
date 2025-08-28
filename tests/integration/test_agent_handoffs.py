@@ -74,9 +74,9 @@ def mixed_communication_agency(orchestrator_agent, intermediate_agent, specialis
     agency = Agency(
         orchestrator_agent,  # Entry point
         communication_flows=[
-            (orchestrator_agent, intermediate_agent),  # AgentA -> AgentB (regular SendMessage)
-            (orchestrator_agent, specialist_agent),  # AgentA -> AgentC (regular SendMessage)
-            (intermediate_agent, specialist_agent),  # AgentB -> AgentC (SendMessageHandoff - enables handoffs)
+            orchestrator_agent > intermediate_agent,  # AgentA -> AgentB (regular SendMessage)
+            orchestrator_agent > specialist_agent,  # AgentA -> AgentC (regular SendMessage)
+            intermediate_agent > specialist_agent,  # AgentB -> AgentC (SendMessageHandoff - enables handoffs)
         ],
         shared_instructions="Test agency for mixed communication patterns.",
     )
@@ -247,9 +247,9 @@ class TestComplexHandoffScenarios:
         agency = Agency(
             agent_a,
             communication_flows=[
-                (agent_a, agent_b),
-                (agent_b, agent_c),  # AgentB can hand off to AgentC
-                (agent_b, agent_d),  # AgentB can hand off to AgentD
+                agent_a > agent_b,
+                agent_b > agent_c,  # AgentB can hand off to AgentC
+                agent_b > agent_d,  # AgentB can hand off to AgentD
             ],
         )
 
@@ -283,10 +283,10 @@ class TestComplexHandoffScenarios:
         agency = Agency(
             agent_a,
             communication_flows=[
-                (agent_a, agent_b),  # A can send to B
-                (agent_b, agent_a),  # B can send to A (using SendMessageHandoff tool class)
-                (agent_a, agent_c),  # A can send to C
-                (agent_b, agent_c),  # B can hand off to C (using SendMessageHandoff tool class)
+                agent_a > agent_b,  # A can send to B
+                agent_b > agent_a,  # B can send to A (using SendMessageHandoff tool class)
+                agent_a > agent_c,  # A can send to C
+                agent_b > agent_c,  # B can hand off to C (using SendMessageHandoff tool class)
             ],
         )
 

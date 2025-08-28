@@ -116,7 +116,7 @@ specialist = Agent(
 agency = Agency(
     coordinator,
     specialist,
-    communication_flows=[(coordinator, specialist), (specialist, coordinator)],
+    communication_flows=[coordinator > specialist, specialist > coordinator],
     shared_instructions="Use key decisions to guide analysis tool selection.",
 )
 

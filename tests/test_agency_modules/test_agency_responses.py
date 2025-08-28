@@ -125,7 +125,7 @@ async def test_agency_get_response_stream_with_hooks(mock_agent):
 @pytest.mark.asyncio
 async def test_agency_agent_to_agent_communication(mock_agent, mock_agent2):
     """Test agent-to-agent communication through Agency."""
-    agency = Agency(mock_agent, communication_flows=[(mock_agent, mock_agent2)])
+    agency = Agency(mock_agent, communication_flows=[mock_agent > mock_agent2])
 
     # Mock the first agent to call the second agent
     mock_agent.get_response.return_value = MagicMock(final_output="Response from MockAgent")
@@ -144,7 +144,7 @@ async def test_agent_communication_context_hooks_propagation(mock_agent, mock_ag
     mock_save_cb = MagicMock()
     agency = Agency(
         mock_agent,
-        communication_flows=[(mock_agent, mock_agent2)],
+        communication_flows=[mock_agent > mock_agent2],
         load_threads_callback=mock_load_cb,
         save_threads_callback=mock_save_cb,
     )

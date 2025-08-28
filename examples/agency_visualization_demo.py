@@ -61,10 +61,10 @@ def create_demo_agency():
     agency = Agency(
         ceo,  # Entry point agent (positional argument)
         communication_flows=[
-            (ceo, pm),  # CEO can communicate with PM
-            (pm, dev),  # PM can communicate with Developer
-            (pm, qa),  # PM can communicate with QA
-            (dev, qa),  # Developer can communicate with QA
+            (ceo > pm),  # CEO can communicate with PM
+            (pm > dev),  # PM can communicate with Developer
+            (pm > qa),  # PM can communicate with QA
+            (dev > qa),  # Developer can communicate with QA
         ],
         name="Software Development Agency",
         shared_instructions="This is a software development agency with clear hierarchy and communication flows.",

@@ -27,7 +27,7 @@ worker = Agent(
     tools=[analyze_data],
 )
 
-agency = Agency(manager, communication_flows=[(manager, worker)])
+agency = Agency(manager, communication_flows=[manager > worker])
 
 
 async def main() -> None:

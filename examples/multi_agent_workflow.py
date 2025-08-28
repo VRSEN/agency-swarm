@@ -123,8 +123,8 @@ report_generator = Agent(
 agency = Agency(
     portfolio_manager,  # Entry point and orchestrator
     communication_flows=[
-        (portfolio_manager, risk_analyst),
-        (portfolio_manager, report_generator),
+        portfolio_manager > risk_analyst,
+        portfolio_manager > report_generator,
     ],
     shared_instructions="Provide accurate, professional financial analysis.",
 )

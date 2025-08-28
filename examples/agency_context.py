@@ -106,7 +106,7 @@ analyst_agent = Agent(
 
 agency = Agency(
     data_agent,
-    communication_flows=[(data_agent, analyst_agent)],
+    communication_flows=[data_agent > analyst_agent],
     user_context={"session_id": "demo_session", "system": "agency_context_demo"},
 )
 

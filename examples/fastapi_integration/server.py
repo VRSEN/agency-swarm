@@ -63,7 +63,7 @@ def create_agency(load_threads_callback=None):
     agency = Agency(
         agent,
         agent2,
-        communication_flows=[(agent, agent2)],
+        communication_flows=[agent > agent2],
         shared_instructions="Be helpful and demonstrate inter-agent communication.",
         load_threads_callback=load_threads_callback,
     )

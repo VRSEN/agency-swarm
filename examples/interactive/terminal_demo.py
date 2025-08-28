@@ -42,9 +42,7 @@ def create_demo_agency():
     # Create agency with communication flows (v1.x pattern)
     agency = Agency(
         ceo,  # Entry point agent (positional argument)
-        communication_flows=[
-            (ceo, worker),
-        ],
+        communication_flows=[ceo > worker],
         name="TerminalDemoAgency",
     )
 

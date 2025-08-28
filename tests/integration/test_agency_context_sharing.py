@@ -50,7 +50,7 @@ async def test_context_sharing_between_agents():
     agency = Agency(
         agent1,
         agent2,
-        communication_flows=[(agent1, agent2)],
+        communication_flows=[agent1 > agent2],
         user_context={"initial": "test"},
     )
 

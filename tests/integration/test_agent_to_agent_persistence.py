@@ -58,7 +58,7 @@ def coordinator_worker_agency(coordinator_agent, worker_agent):
     """Agency with coordinator->worker communication flow."""
     return Agency(
         coordinator_agent,
-        communication_flows=[(coordinator_agent, worker_agent)],
+        communication_flows=[coordinator_agent > worker_agent],
         shared_instructions="Test agency for agent-to-agent persistence verification.",
     )
 
@@ -68,7 +68,7 @@ def memory_agency(coordinator_agent, memory_agent):
     """Agency with coordinator->memory communication flow for memory testing."""
     return Agency(
         coordinator_agent,
-        communication_flows=[(coordinator_agent, memory_agent)],
+        communication_flows=[coordinator_agent > memory_agent],
         shared_instructions="Test agency for agent-to-agent memory persistence.",
     )
 
@@ -201,8 +201,8 @@ class TestAgentToAgentPersistence:
         agency = Agency(
             coordinator,
             communication_flows=[
-                (coordinator, worker1),
-                (coordinator, worker2),
+                coordinator > worker1,
+                coordinator > worker2,
             ],
             shared_instructions="Test agency for multiple thread isolation.",
         )

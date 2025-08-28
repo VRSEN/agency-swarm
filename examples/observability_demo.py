@@ -81,8 +81,8 @@ def create_agency() -> Agency:
     return Agency(
         ceo,
         communication_flows=[
-            (ceo, developer),
-            (ceo, analyst),
+            ceo > developer,
+            ceo > analyst,
         ],
     )
 
