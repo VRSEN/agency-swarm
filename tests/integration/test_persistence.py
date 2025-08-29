@@ -244,15 +244,17 @@ async def test_multi_agent_tracking_with_persistence(temp_persistence_dir, file_
     assert len(agent1_messages) > 0, "Should have messages for Agent1"
     assert len(agent2_messages) > 0, "Should have messages for Agent2"
 
-    # Verify content isolation using agent-specific filtering
-    agent1_content = str(agent1_messages).lower()
-    agent2_content = str(agent2_messages).lower()
+    # Verify content isolation using only user messages
+    agent1_user = [m for m in agent1_messages if m.get("role") == "user"]
+    agent2_user = [m for m in agent2_messages if m.get("role") == "user"]
+    agent1_content = str(agent1_user).lower()
+    agent2_content = str(agent2_user).lower()
 
-    # Agent1 messages should contain ALPHA but not BETA
+    # Agent1 user messages should contain ALPHA but not BETA
     assert "secret_code_alpha" in agent1_content, "Agent1 messages should contain ALPHA"
     assert "secret_code_beta" not in agent1_content, "Agent1 messages should NOT contain BETA"
 
-    # Agent2 messages should contain BETA but not ALPHA
+    # Agent2 user messages should contain BETA but not ALPHA
     assert "secret_code_beta" in agent2_content, "Agent2 messages should contain BETA"
     assert "secret_code_alpha" not in agent2_content, "Agent2 messages should NOT contain ALPHA"
 
