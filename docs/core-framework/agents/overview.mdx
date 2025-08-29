@@ -31,12 +31,8 @@ Agents are the core building blocks of the Agency Swarm framework. Each agent is
   </Card>
 </CardGroup>
 
-<Tabs defaultValue="v1.x (Latest)">
-<Tab title="v1.x (Latest)">
-
-<Warning>
-v1.x is currently in **beta preview**. Install with: `pip install -U "agency-swarm>=1.0.0-beta"`
-</Warning>
+<Tabs defaultValue="v1.x">
+<Tab title="v1.x">
 
 In the latest version, agents are built on top of the `agents` SDK with enhanced capabilities for multi-agent collaboration within an `Agency`. The agent class provides improved context management, async execution, and streamlined tool integration.
 
@@ -98,10 +94,10 @@ example_agent = Agent(
 You can adjust the parameters to fit the agent to your use case.
 
 </Tab>
-<Tab title="v0.x (Production)">
+<Tab title="v0.x">
 
 <Info>
-v0.x is the **current production version**. Install with: `pip install "agency-swarm<1.0.0"`
+v0.x is the **previous production version**. Install with: `pip install "agency-swarm<1.0.0"`
 </Info>
 
 From a technical perspective, in Agency Swarm, agents are essentially wrappers for [OpenAI Assistants](https://platform.openai.com/docs/assistants/deep-dive#creating-assistants). The `Agent` class includes convenience methods to help you manage the state of your assistant, upload files, attach tools, and more.

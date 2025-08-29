@@ -44,7 +44,7 @@ To persist conversations between application restarts, implement callbacks that 
 
 <CodeGroup>
 
-```python v1.x (Latest)
+```python v1.x
 import os
 import json
 from agents import ConversationThread
@@ -70,7 +70,7 @@ agency = Agency(
 )
 ```
 
-```python v0.x (Production)
+```python v0.x
 import os
 import json
 
@@ -124,7 +124,7 @@ Embed your agency within a FastAPI endpoint:
 
 <CodeGroup>
 
-```python v1.x (Latest)
+```python v1.x
 from fastapi import FastAPI
 from uuid import uuid4
 
@@ -147,7 +147,7 @@ async def chat(user_request: UserRequest):
 agency.run_fastapi(host="0.0.0.0", port=8000)
 ```
 
-```python v0.x (Production)
+```python v0.x
 from fastapi import FastAPI
 from uuid import uuid4
 

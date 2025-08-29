@@ -29,11 +29,7 @@ In Agency Swarm, threads are stored in a dictionary that contains all conversati
 Loading threads from a database before processing a new request allows you to continue conversations from where they left off, even if you are using stateless backend.
 
 <Tabs>
-<Tab title="v1.x (Latest)">
-
-<Warning>
-v1.x is currently in **beta preview**. Install with: `pip install -U "agency-swarm>=1.0.0-beta"`
-</Warning>
+<Tab title="v1.x">
 
 In v1.x, persistence is handled through callback functions that are passed directly as parameters to the Agency constructor:
 
@@ -59,10 +55,10 @@ agency = Agency(
 ```
 
 </Tab>
-<Tab title="v0.x (Production)">
+<Tab title="v0.x">
 
 <Info>
-This is the current production version. Install with: `pip install agency-swarm`
+This is the previous production version. Install with: `pip install agency-swarm<1.0.0`
 </Info>
 
 <Info>
@@ -107,10 +103,10 @@ Settings is a list of dictionaries that contains settings of all agents. If a ch
 </Info>
 
 <Tabs>
-<Tab title="v0.x (Production)">
+<Tab title="v0.x">
 
 <Info>
-This is the current production version. Install with: `pip install agency-swarm`
+This is the previous production version. Install with: `pip install agency-swarm<1.0.0`
 </Info>
 
 `settings_callbacks` are executed every time agent settings are loaded or saved. Just like `threads_callbacks`, you can use it to load or save agent configurations based on your identifier (e.g. user_id):

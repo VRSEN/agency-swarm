@@ -21,11 +21,7 @@ There are 4 different validators in Agency Swarm:
 ### Agent Response Validator
 
 <Tabs>
-<Tab title="v1.x (Latest)">
-
-<Warning>
-v1.x is currently in **beta preview**. Install with: `pip install -U "agency-swarm>=1.0.0-beta"`
-</Warning>
+<Tab title="v1.x">
 
 In v1.x, validation is handled through **guardrails** using the agents SDK. Guardrails provide more flexible validation for both input and output.
 
@@ -73,10 +69,10 @@ except OutputGuardrailTripwireTriggered as e:
 ```
 
 </Tab>
-<Tab title="v0.x (Production)">
+<Tab title="v0.x">
 
 <Info>
-This is the current production version. Install with: `pip install agency-swarm`
+This is the previous production version. Install with: `pip install agency-swarm<1.0.0`
 </Info>
 
 You can define a `response_validator` method inside your Agent class to validate responses before sending them to the user or other agents. This method should raise an error if the response is invalid, allowing the agent to handle the error and generate a corrected response.

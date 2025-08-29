@@ -12,12 +12,12 @@ FastAPI integration is an **optional installation**. To install all required dep
 
 <CodeGroup>
 
-```bash v1.x (Latest)
-pip install "agency-swarm[fastapi]>=1.0.0-beta"
+```bash v1.x
+pip install "agency-swarm[fastapi]"
 ```
 
-```bash v0.x (Production)
-pip install agency-swarm[fastapi]
+```bash v0.x
+pip install agency-swarm[fastapi]<1.0.0
 ```
 
 </CodeGroup>
@@ -30,7 +30,7 @@ You can expose your agencies and tools as API endpoints using the `run_fastapi()
 
 <CodeGroup>
 
-```python v1.x (Latest)
+```python v1.x
 from agency_swarm import Agency, Agent
 
 agent = Agent(
@@ -43,7 +43,7 @@ agency = Agency(agent, name="test_agency")
 agency.run_fastapi()
 ```
 
-```python v0.x (Production)
+```python v0.x
 from agency_swarm.agency import Agency
 
 agency = Agency([ceo], name="test_agency")
@@ -68,7 +68,7 @@ Both of these endpoints will accept following input parameters:
 
 <CodeGroup>
 
-```python v1.x (Latest)
+```python v1.x
 message: str
 # Entire chat history containing previous messages across all threads in a form of {'thread_1': ConversationThread, 'thread_2': ConversationThread, ...}
 chat_history: dict[str, ConversationThread] = None
@@ -79,7 +79,7 @@ file_urls: dict[str, str] = None
 additional_instructions: str = None
 ```
 
-```python v0.x (Production)
+```python v0.x
 message: str
 message_files: List[str] = None
 # Name of the agent, as defined within it's name attribute
@@ -100,7 +100,7 @@ Additionally, you will need to provide a bearer token in the authorization if yo
 
 <CodeGroup>
 
-```python v1.x (Latest)
+```python v1.x
 from agents import function_tool
 from agency_swarm import Agency, Agent
 from agency_swarm.integrations.fastapi import run_fastapi
@@ -130,7 +130,7 @@ run_fastapi(
 )
 ```
 
-```python v0.x (Production)
+```python v0.x
 from pydantic import Field
 
 from agency_swarm.agency import Agency
@@ -179,7 +179,7 @@ You can interact with your agents and tools using HTTP requests. Here's an examp
 
 <CodeGroup>
 
-```python v1.x (Latest)
+```python v1.x
 import requests
 
 agency_url = "http://127.0.0.1:8000/test_agency_1/get_completion"
@@ -205,7 +205,7 @@ print("Status code:", tool_response.status_code)
 print("Response:", tool_response.json())
 ```
 
-```python v0.x (Production)
+```python v0.x
 import requests
 
 agency_url = "http://127.0.0.1:8000/test_agency_1/get_completion"
