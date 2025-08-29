@@ -171,7 +171,9 @@ async def test_non_blocking_parallel_agent_interactions(
 
     before_count = len(agency.thread_manager.get_all_messages())
 
-    result: RunResult = await agency.get_response(message="Say hello to both agents in parallel")
+    result: RunResult = await agency.get_response(
+        message="Say hello to both agents at the same time in parallel. Do not wait for their responses."
+    )
 
     assert result is not None and isinstance(result.final_output, str)
 
