@@ -119,10 +119,8 @@ class MessageStore:
         return bool(self.messages)
 
 
-# Placeholder imports for callbacks - Update Typehint
-# User's load callback should return flat message list
+# Type definitions for persistence callbacks
 ThreadLoadCallback = Callable[[], list[TResponseInputItem]]
-# User's save callback should accept flat message list
 ThreadSaveCallback = Callable[[list[TResponseInputItem]], None]
 
 
