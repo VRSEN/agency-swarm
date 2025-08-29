@@ -163,3 +163,5 @@ test_agents/
 
 # SQLite
 *.db
+
+references/
