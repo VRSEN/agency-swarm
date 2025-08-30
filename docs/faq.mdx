@@ -47,7 +47,6 @@ To persist conversations between application restarts, implement callbacks that 
 ```python v1.x
 import os
 import json
-from agents import ConversationThread
 
 def load_threads(chat_id: str) -> list[dict[str, TResponseInputItem]]:
     """Load all threads data for a specific chat session."""

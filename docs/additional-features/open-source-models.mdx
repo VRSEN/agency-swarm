@@ -120,8 +120,7 @@ Create an agent that connects to your LiteLLM proxy:
 ```python
 import os
 from openai import AsyncOpenAI
-from agency_swarm import Agent
-from agents import OpenAIChatCompletionsModel
+from agency_swarm import Agent, OpenAIChatCompletionsModel
 
 custom_client = AsyncOpenAI(
     api_key="xxx",  # Any if proxy key wasn't set
@@ -393,7 +392,7 @@ Be aware of the limitations when using open-source models.
 - **Patched and unpatched models should not use handoffs to communicate**: You may use standard OpenAI client and patched agents in a single agency, however using handoff to transfer chat from patched model to unpatched or vice-versa will lead to an error.
 - **Function calling may not be supported by some open-source models**: This limitation prevents the agent from communicating with other agents in the agency. Therefore, it must be positioned at the end of the agency chart and cannot utilize any tools.
 - **RAG is typically limited**: Most open-source implementations have restricted Retrieval-Augmented Generation capabilities. It is recommended to develop a custom tool with your own vector database.
-- **Potential library conflicts**: Agents SDK is still a fairly new framework which is being actively developed and improved. Due to that, there might be potential conflicts between litellm and openai-agents libraries on recent releases.
+- **Potential library conflicts**: the Agents SDK is still a fairly new framework which is being actively developed and improved. Due to that, there might be potential conflicts between litellm and openai-agents packages on recent releases.
 
 ## Future Plans
 

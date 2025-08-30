@@ -4,7 +4,7 @@ import os
 import re
 import sys
 
-from agents import (
+from agency_swarm import (
     GuardrailFunctionOutput,
     InputGuardrailTripwireTriggered,
     OutputGuardrailTripwireTriggered,

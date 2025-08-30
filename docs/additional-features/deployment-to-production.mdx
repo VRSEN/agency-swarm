@@ -34,8 +34,6 @@ Loading threads from a database before processing a new request allows you to co
 In v1.x, persistence is handled through callback functions that are passed directly as parameters to the Agency constructor:
 
 ```python
-from agents import ConversationThread
-
 def save_threads(thread_dict: list[dict[str, TResponseInputItem]], chat_id: str):
     # Save updated threads to your database
     # Use the provided thread_dict when persisting threads
@@ -93,7 +91,7 @@ agency = Agency(
 
 <Step title="Step 2: Dynamically Load Assistant Settings" icon="gear">
 <Warning>
-This step only applies to older versions of the library (v0.x)
+This step only applies to older versions of the framework (v0.x)
 </Warning>
 
 By default, agencies store assistant settings (such as name, description, instructions, tools, and model) in a local file defined in the `settings_path` parameter (`settings.json` by default). While this works well for development, in production environments, we recommend storing these settings in a database to persist changes between deployments.

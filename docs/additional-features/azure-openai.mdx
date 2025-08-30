@@ -48,8 +48,7 @@ azure_agent = AsyncAzureOpenAI(
 Set the `model` parameter inside each agent to use your custom client and model:
 
 ```python
-from agency_swarm import Agent
-from agents import OpenAIChatCompletionsModel
+from agency_swarm import Agent, OpenAIChatCompletionsModel
 
 # Define your agent and pass the custom client into the model
 azure_agent = Agent(

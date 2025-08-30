@@ -83,7 +83,7 @@ The migration from v0.x to v1.x represents a fundamental shift in how Agency Swa
 
 ### State Management
 - **v0.x**: Relied on Assistant/Thread objects managed by OpenAI
-- **v1.x**: Uses `ThreadManager` and `ConversationThread` managed via `RunHooks` and shared `MasterContext`
+- **v1.x**: Uses `ThreadManager` and `MessageStore` managed via `RunHooks` and shared `MasterContext`
 
 ### Agent Definition
 - **v0.x**: Custom `Agent` class with Assistants API integration
@@ -352,8 +352,14 @@ result = agency.get_completion("Analyze sample data")
 
 <Tab title="After (v1.x)">
 ```python
-from agency_swarm import Agency, Agent
-from agents import function_tool, ModelSettings, output_guardrail, GuardrailFunctionOutput
+from agency_swarm import (
+    Agency,
+    Agent,
+    function_tool,
+    ModelSettings,
+    output_guardrail,
+    GuardrailFunctionOutput,
+)
 from pydantic import BaseModel, Field
 import asyncio
 

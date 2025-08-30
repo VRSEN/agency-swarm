@@ -61,8 +61,8 @@ Optionally, you can specify following parameters:
 - cors_origins: (default: ["*"])
 
 This will create 2 endpoints for the agency:
-- `/test_agency/get_completion`
-- `/test_agency/get_completion_stream`
+- `/test_agency/get_response`
+- `/test_agency/get_response_stream`
 
 Both of these endpoints will accept following input parameters:
 
@@ -101,9 +101,7 @@ Additionally, you will need to provide a bearer token in the authorization if yo
 <CodeGroup>
 
 ```python v1.x
-from agents import function_tool
-from agency_swarm import Agency, Agent
-from agency_swarm.integrations.fastapi import run_fastapi
+from agency_swarm import Agency, Agent, function_tool, run_fastapi
 
 # Example tools using agents SDK
 @function_tool
@@ -133,9 +131,7 @@ run_fastapi(
 ```python v0.x
 from pydantic import Field
 
-from agency_swarm.agency import Agency
-from agency_swarm.tools import BaseTool
-from agency_swarm.integrations.fastapi import run_fastapi
+from agency_swarm import Agency, BaseTool, run_fastapi
 
 
 # Example tools
@@ -162,10 +158,10 @@ run_fastapi(
 </CodeGroup>
 
 This will create 6 following endpoints:
-- `/test_agency_1/get_completion`
-- `/test_agency_1/get_completion_stream`
-- `/test_agency_2/get_completion`
-- `/test_agency_2/get_completion_stream`
+- `/test_agency_1/get_response`
+- `/test_agency_1/get_response_stream`
+- `/test_agency_2/get_response`
+- `/test_agency_2/get_response_stream`
 - `/tool/ExampleTool` (for BaseTools) or `/tool/example_tool` (for function tools)
 - `/tool/TestTool` (for BaseTools) or `/tool/test_tool` (for function tools)
 
@@ -182,7 +178,7 @@ You can interact with your agents and tools using HTTP requests. Here's an examp
 ```python v1.x
 import requests
 
-agency_url = "http://127.0.0.1:8000/test_agency_1/get_completion"
+agency_url = "http://127.0.0.1:8000/test_agency_1/get_response"
 payload = {
     "message": "Hello",
 }
@@ -239,8 +235,8 @@ print("Response:", tool_response.json())
 
 - **Agency Endpoints:**
   Each agency is served at:
-  - `/your_agency_name/get_completion` (POST)
-  - `/your_agency_name/get_completion_stream` (POST, streaming responses)
+  - `/your_agency_name/get_response` (POST)
+  - `/your_agency_name/get_response_stream` (POST, streaming responses)
 
 - **Tool Endpoints:**
   Each tool is served at:

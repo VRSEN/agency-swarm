@@ -12,14 +12,14 @@ The following parameters are supported, with version compatibility noted:
 
 | Name               | Type    | Version | Description                                                                                                      | When to Use                                                                                          | Default Value |
 |--------------------|---------|---------|------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------|---------------|
-| `one_call_at_a_time` | `bool` | All     | Prevents concurrent execution for a specific tool. To prevent the agent from executing **any** tools concurrently, set `parallel_tool_calls=False` in the Agent class. | Use for database operations, API calls with rate limits, or actions that depend on previous results. | `False`         |
+| `one_call_at_a_time` | `bool` | All     | Prevents concurrent execution for a specific tool. In v1.x the Agent-level `parallel_tool_calls` parameter is deprecated (still accepted and forwarded to `ModelSettings`). Prefer configuring via `model_settings=ModelSettings(parallel_tool_calls=...)`. Use this per-tool setting when you need strict sequencing. | Use for database operations, API calls with rate limits, or actions that depend on previous results. | `False`         |
 | `strict`             | `bool` | All     | Enables strict mode, which ensures the agent will always provide **perfect** tool inputs that 100% match your schema. Has limitations. See [OpenAI Docs](https://platform.openai.com/docs/guides/structured-outputs#supported-schemas). | Use for mission-critical tools or tools that have nested Pydantic model schemas.                     | `False`         |
 | `async_mode`     | `str` | v0.x  | When set to "threading," executes this tool in a separate thread.  **Deprecated:** Tools are now always async in v1.x | Use when your agent needs to execute multiple tools or the same tool multiple times in a single message to decrease latency. Beware of resource allocation. | `None`      |
 | `output_as_result` | `bool` | v0.x | Forces the output of this tool as the final message from the agent that called it.  **Deprecated:** No longer supported in v1.x. Use agent's `tool_use_behavior` parameter instead. | Only recommended for very specific use cases and only if you know what you're doing. | `False`    |
 
 <Info>
 **Version Changes:**
-- **v1.x**: `async_mode` and `output_as_result` parameters have been removed as tools are now always asynchronous and tool output handling settings have been moved into the agent class.
+- **v1.x**: `async_mode` and `output_as_result` parameters have been removed as tools are now always asynchronous and tool output handling moved into the Agent/ModelSettings layer. The v0.x top-level Agent parameter `parallel_tool_calls` is deprecated in v1.x (still accepted and forwarded to `ModelSettings`); prefer configuring Agent-level parallelism via `model_settings=ModelSettings(parallel_tool_calls=...)` and/or per-tool `one_call_at_a_time`.
 </Info>
 
 ## Usage

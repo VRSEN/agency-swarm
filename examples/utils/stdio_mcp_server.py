@@ -1,7 +1,6 @@
-from agents import function_tool
 from pydantic import BaseModel, Field
 
-from agency_swarm.integrations.mcp_server import run_mcp
+from agency_swarm import function_tool, run_mcp
 
 
 class TimeArgs(BaseModel):

@@ -33,15 +33,15 @@ Since managing conversation state is now a responsibility of the developer in th
 v0.x is the **previous production version**. Install with: `pip install "agency-swarm<1.0.0"`
 </Info>
 
-## Agent State Management
+## Agent State Management (Assistants API)
 
-In OpenAI Assistants API, all agents need to be updated before they can be used. Agency Swarm manages this by maintaining a local `settings.json` file, and the comparing local settings with the ones stored on OpenAI's servers. If there are any differences, the Assistants are updated on OpenAI's servers. This ensures that the agents are only created once, and are only updated when needed.
+This section applies to older versions (v0.x). In OpenAI Assistants API, all agents needed to be updated before they could be used. Agency Swarm managed this by maintaining a local `settings.json` file and comparing local settings with the ones stored on OpenAI's servers. If there were any differences, the Assistants were updated on OpenAI's servers.
 
 <img src="/images/state-management.png" alt="State Management" />
 
-## Thread State Management
+## Thread State Management (Assistants API)
 
-Additionally, OpenAI's Assistants API manages the conversation context through threads. A thread represents a persistent conversation between an assistant and a user, automatically handling the storage and truncation of messages to fit within the model's context window. This approach offloads the complexity of conversation state management to OpenAI, ensuring efficient and seamless context handling.
+Additionally, OpenAI's Assistants API managed the conversation context through threads. A thread represented a persistent conversation between an assistant and a user, automatically handling the storage and truncation of messages to fit within the model's context window.
 
 <CardGroup cols={2}>
   <Card title="Persistent Conversations" icon="messages">

@@ -6,7 +6,6 @@ including handling deprecated parameters and setting up file management.
 """
 
 import inspect
-import json
 import logging
 import warnings
 from typing import TYPE_CHECKING, Any
@@ -47,6 +46,7 @@ def handle_deprecated_parameters(kwargs: dict[str, Any]) -> dict[str, Any]:
         "max_prompt_tokens",
         "reasoning_effort",
         "truncation_strategy",
+        "parallel_tool_calls",
     ]
 
     for param in model_related_params:
@@ -104,26 +104,6 @@ def handle_deprecated_parameters(kwargs: dict[str, Any]) -> dict[str, Any]:
             stacklevel=3,
         )
         deprecated_args_used["file_ids"] = kwargs.pop("file_ids")
-
-    if "examples" in kwargs:
-        examples = kwargs.pop("examples")
-        warnings.warn(
-            "'examples' parameter is deprecated. Consider incorporating examples directly "
-            "into the agent's 'instructions'.",
-            DeprecationWarning,
-            stacklevel=3,
-        )
-        # Attempt to prepend examples to instructions
-        if examples and isinstance(examples, list):
-            try:
-                # Basic formatting, might need refinement
-                examples_str = "\n\nExamples:\n" + "\n".join(f"- {json.dumps(ex)}" for ex in examples)
-                current_instructions = kwargs.get("instructions", "")
-                kwargs["instructions"] = current_instructions + examples_str
-                logger.info("Prepended 'examples' content to agent instructions.")
-            except Exception as e:
-                logger.warning(f"Could not automatically prepend 'examples' to instructions: {e}")
-        deprecated_args_used["examples"] = examples
 
     if "file_search" in kwargs:
         warnings.warn(

@@ -56,7 +56,7 @@ Agency Swarm has two major versions with different approaches. Choose the versio
   </Step>
 
   <Step title="Create Tools">
-    In 1.x versions of the library, you have 2 ways of defining custom tools:
+    In 1.x versions of the framework, you have 2 ways of defining custom tools:
 
     By extending agency_swarm's `BaseTool` class and implementing the `run` method.
 
@@ -100,7 +100,7 @@ Agency Swarm has two major versions with different approaches. Choose the versio
     **my_custom_tool.py:**
 
     ```python
-    from agents import function_tool
+    from agency_swarm import function_tool
 
     @function_tool
     def my_custom_tool(example_field: str) -> str:
@@ -131,8 +131,7 @@ Agency Swarm has two major versions with different approaches. Choose the versio
     **Developer.py:**
 
     ```python
-    from agency_swarm import Agent
-    from agents import ModelSettings
+    from agency_swarm import Agent, ModelSettings
     from .tools.my_custom_tool import my_custom_tool
 
     class Developer(Agent):

@@ -13,9 +13,8 @@ Use chain-of-thought prompting to allow the agent to think and plan before execu
 <CodeGroup>
 
 ```python v1.x
-from agents import function_tool, RunContextWrapper
+from agency_swarm import MasterContext, RunContextWrapper, function_tool
 from pydantic import BaseModel, Field
-from agency_swarm import MasterContext
 
 class ComplexAnalysisArgs(BaseModel):
     chain_of_thought: str = Field(
@@ -61,9 +60,8 @@ Based on your tool's logic, you can provide hints for the agent in tool output o
 <CodeGroup>
 
 ```python v1.x
-from agents import function_tool, RunContextWrapper
+from agency_swarm import MasterContext, RunContextWrapper, function_tool
 from pydantic import BaseModel, Field
-from agency_swarm import MasterContext
 
 class QueryDatabaseArgs(BaseModel):
     question: str = Field(..., description="Question to query the database")
@@ -115,9 +113,8 @@ Use agency context (previously shared state) to validate previous actions taken 
 <CodeGroup>
 
 ```python v1.x
-from agents import function_tool, RunContextWrapper
+from agency_swarm import MasterContext, RunContextWrapper, function_tool
 from pydantic import BaseModel, Field
-from agency_swarm import MasterContext
 
 class Action2Args(BaseModel):
     input: str = Field(..., description="Input for the action")
@@ -156,10 +153,10 @@ Restrict the agent to only use specific values for a field, instead of letting i
 <CodeGroup>
 
 ```python v1.x
-from agents import function_tool, RunContextWrapper
-from pydantic import BaseModel, Field, EmailStr
 from typing import Literal
-from agency_swarm import MasterContext
+
+from agency_swarm import MasterContext, RunContextWrapper, function_tool
+from pydantic import BaseModel, EmailStr, Field
 
 class RunCommandArgs(BaseModel):
     command: Literal["start", "stop"] = Field(..., description="Command to execute: 'start' or 'stop'.")
@@ -228,9 +225,8 @@ Combine multiple methods to make your execution flow more readable.
 <CodeGroup>
 
 ```python v1.x
-from agents import function_tool, RunContextWrapper
+from agency_swarm import MasterContext, RunContextWrapper, function_tool
 from pydantic import BaseModel, Field
-from agency_swarm import MasterContext
 
 class CompositeToolArgs(BaseModel):
     input_data: str = Field(..., description="Input data for the composite operation.")
@@ -302,8 +298,7 @@ Include test cases at the bottom of each tool file.
 if __name__ == "__main__":
     import asyncio
     import json
-    from agents import RunContextWrapper
-    from agency_swarm import MasterContext
+    from agency_swarm import MasterContext, RunContextWrapper
 
     async def test_email_sender():
         # Test the email sender tool

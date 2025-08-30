@@ -19,7 +19,7 @@ Think of MCP as a universal translator that lets your agent talk to specialized 
 
 ## Supported MCP Server Types
 
-In v1.x, Agency Swarm provides helpers to connect to MCP servers using the openai-agents library. Choose the server type based on how your tool provider operates:
+In v1.x, Agency Swarm provides helpers to connect to MCP servers using the Agents SDK. Choose the server type based on how your tool provider operates:
 
 <Accordion title="MCPServerStdio: For Command-Line Tools" icon="terminal">
 Use this if your tool server is a **command-line program or script**. Agency Swarm will start this program for you and communicate with it directly using its standard input/output.
@@ -83,7 +83,7 @@ Use this if your tool server is a **publicly accessible web service**. This appr
 *   **When to use:** Your tool server is accessible from the internet and you want to leverage OpenAI's infrastructure for MCP connections.
 
 ```python
-from agents import HostedMCPTool
+from agency_swarm import HostedMCPTool
 
 hosted_tool = HostedMCPTool(
     tool_config={
@@ -131,7 +131,7 @@ stdio_server = MCPServerStdio(
 Configure hosted MCP tools for publicly accessible servers.
 
 ```python
-from agents import HostedMCPTool
+from agency_swarm import HostedMCPTool
 
 hosted_tool = HostedMCPTool(
     tool_config={

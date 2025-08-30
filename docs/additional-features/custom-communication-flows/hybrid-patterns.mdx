@@ -4,10 +4,20 @@ description: "Learn how to effectively combine Agency Swarm's SendMessage tools 
 icon: "arrows-split-up-and-left"
 ---
 <Warning>
-This page only applies to newer versions of the library (v1.x and higher)
+This page only applies to newer versions of the framework (v1.x and higher)
 </Warning>
 
 Agency Swarm supports two powerful paradigms for inter-agent communication that can work together seamlessly: **SendMessage tools** (orchestrator pattern) and **OpenAI SDK Handoffs** (sequential pattern). This guide explains how these patterns interact and provides practical examples for building sophisticated multi-agent systems.
+
+<CardGroup cols={2}>
+  <Card title="SendMessage Tools" icon="arrow-right-arrow-left">
+    Control returns to the caller, ideal for coordination with oversight. Implemented via `SendMessage` tool variants.
+  </Card>
+  <Card title="Handoffs" icon="right-left">
+    Control transfers to the target, ideal for full task delegation and specialization. Powered by `SendMessageHandoff` + OpenAI SDK.
+  </Card>
+  
+</CardGroup>
 
 ## Understanding the Two Paradigms
 
@@ -31,25 +41,25 @@ When both patterns are used together, you can use Agency Swarm to implement a **
 
 The hybrid approach works by layering the two communication patterns strategically:
 
-1. **Primary Communication Uses Orchestrator Pattern**
-   - When Agent A sends a message to Agent B using `SendMessage`, Agent B will **always** send its response back to Agent A
-   - This ensures predictable communication flow - you always know where responses will go
-
-2. **Internal Processing Can Use Handoffs**
-   - While Agent B is working on Agent A's request, Agent B can consult with specialist agents using handoffs
-   - Specialist gets the full context, as received by the Agent B.
-   - Agent B gathers insights from specialists before formulating its final response.
-
-3. **Best of Both Worlds**
-   - Agent A gets the coordination benefits of the orchestrator pattern (responses come back)
-   - Agent B gets the specialization benefits of handoffs (can consult experts)
-   - The final response to Agent A includes a summary of the specialist knowledge (as an output of SendMessage), without needing to manage multiple conversations
+<Steps>
+  <Step title="Primary Communication Uses Orchestrator Pattern">
+    When Agent A sends a message to Agent B using `SendMessage`, Agent B will **always** send its response back to Agent A. This ensures predictable communication flow—you always know where responses will go.
+  </Step>
+  <Step title="Internal Processing Can Use Handoffs">
+    While Agent B is working on Agent A's request, Agent B can consult with specialist agents using handoffs. The specialist receives the full context as provided to Agent B, and Agent B aggregates insights before formulating its final response.
+  </Step>
+  <Step title="Best of Both Worlds">
+    - Agent A gets the coordination benefits of the orchestrator pattern (responses come back)
+    - Agent B gets the specialization benefits of handoffs (can consult experts)
+    - The final response to Agent A includes a summary of the specialist knowledge, without needing to manage multiple conversations
+  </Step>
+</Steps>
 
 ## Setting Up Handoffs
 
-In this library, handoffs are configured via the `SendMessageHandoff` tool.
+In this framework, handoffs are configured via the `SendMessageHandoff` tool.
 
-```python
+```python agency_setup.py
 from agency_swarm import Agency, Agent
 from agency_swarm.tools import SendMessageHandoff
 
@@ -88,17 +98,23 @@ agency = Agency(
 
 ### Execution Flow
 
-1. **ProjectManager** uses `send_message_to_Developer`: *"Implement user authentication with security best practices"*
-
-2. **Developer** receives the task and decides to consult the security expert
-
-3. **Developer** hands off to **SecurityExpert** (internal to Developer's execution)
-
-4. **SecurityExpert** provides security recommendations
-
-5. **Developer** incorporates the expert advice and responds to **ProjectManager**
-
-6. **ProjectManager** receives a comprehensive response with security considerations included
+<Steps>
+  <Step title="ProjectManager delegates to Developer">
+    ProjectManager uses `send_message_to_Developer`: "Implement user authentication with security best practices".
+  </Step>
+  <Step title="Developer consults a specialist">
+    Developer decides to consult SecurityExpert and performs an internal handoff.
+  </Step>
+  <Step title="SecurityExpert advises">
+    SecurityExpert provides security recommendations.
+  </Step>
+  <Step title="Developer finalizes and responds">
+    Developer incorporates the advice and responds to ProjectManager.
+  </Step>
+  <Step title="ProjectManager receives a comprehensive answer">
+    The response includes the necessary security considerations.
+  </Step>
+</Steps>
 
 ## When to Use Hybrid Patterns
 
@@ -111,17 +127,24 @@ agency = Agency(
 
 ### Design Guidelines
 
-**Use SendMessage when you need**:
-- Control and visibility
-- Coordination between multiple agents
-- Task-focused agent boundaries
+<Tabs>
+  <Tab title="SendMessage (Orchestrator)">
+    **Use when you need:**
+    
+    - Control and visibility
+    - Coordination between multiple agents
+    - Task-focused agent boundaries
+  </Tab>
+  <Tab title="Sequential Handoffs">
+    **Use when you need:**
+    
+    - Internal agent decision-making
+    - Agents to have entire context
+    - Fewer agent-to-agent passes
+  </Tab>
+</Tabs>
 
-**Use Sequential Handoffs when you need**:
-- Internal agent decision-making
-- Agents to have entire context
-- Limit the amount of agent-to-agent passes
-
-**⚠️ Important**: In this library, handoffs must be configured using `SendMessageHandoff` tools only. The `agent.handoffs` parameter is not supported.
+**⚠️ Important**: In this framework, handoffs must be configured using `SendMessageHandoff` tools only. The `agent.handoffs` parameter is not supported.
 
 ## Benefits of the Hybrid Approach
 

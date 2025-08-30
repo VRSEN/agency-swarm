@@ -21,8 +21,9 @@ import os
 import sys
 from typing import Any
 
-from agents import RunContextWrapper, function_tool
 from pydantic import BaseModel, Field
+
+from agency_swarm import RunContextWrapper, function_tool
 
 # Configure basic logging
 logging.basicConfig(level=logging.WARNING, format="%(asctime)s - %(levelname)s - %(message)s")

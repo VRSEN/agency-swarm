@@ -156,6 +156,19 @@ class Agent(BaseAgent[MasterContext]):
         # Handle deprecated parameters
         handle_deprecated_parameters(kwargs)
 
+        # examples are appended to instructions
+        if "examples" in kwargs:
+            examples = kwargs.pop("examples")
+            if examples and isinstance(examples, list):
+                try:
+                    import json as _json
+
+                    examples_str = "\n\nExamples:\n" + "\n".join(f"- {_json.dumps(ex)}" for ex in examples)
+                    current_instructions = kwargs.get("instructions", "")
+                    kwargs["instructions"] = current_instructions + examples_str
+                except Exception:
+                    pass
+
         # Separate kwargs into base agent params and agency swarm params
         base_agent_params, current_agent_params = separate_kwargs(kwargs)
 

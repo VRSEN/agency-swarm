@@ -260,8 +260,7 @@ def get_completion_stream(self, *args: Any, **kwargs: Any):
 The Agent class extends the base `agents.Agent` with capabilities for multi-agent collaboration within an Agency.
 
 ```python
-from agency_swarm import Agent
-from agents import ModelSettings
+from agency_swarm import Agent, ModelSettings
 
 class Agent(BaseAgent[MasterContext]):
     def __init__(self, **kwargs: Any):
@@ -844,3 +843,4 @@ def get_openapi_schema(
 
 </Tab>
 </Tabs>
+

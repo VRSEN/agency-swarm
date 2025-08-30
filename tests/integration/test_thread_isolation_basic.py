@@ -4,6 +4,7 @@ Basic Thread Isolation Tests
 Tests the fundamental thread isolation between different communication flows
 using direct structural verification of thread state.
 """
+
 import pytest
 from agents import ModelSettings
 

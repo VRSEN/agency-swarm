@@ -18,10 +18,8 @@ This will create an MCP server that will serve provided tools over the streamabl
 ### Example: Serving Individual Tools
 
 ```python
-from agents import function_tool
+from agency_swarm import function_tool, run_mcp
 from pydantic import BaseModel, Field
-
-from agency_swarm.integrations.mcp_server import run_mcp
 
 class InputArgs(BaseModel):
     input_field: str = Field(..., description="Test input for the tool")
@@ -113,8 +111,7 @@ This example shows how to connect to a hosted MCP server over HTTP:
 ```python
 import os
 import asyncio
-from agents import HostedMCPTool
-from agency_swarm import Agency, Agent
+from agency_swarm import Agency, Agent, HostedMCPTool
 
 # Create agent with hosted MCP server
 mcp_agent = Agent(
@@ -172,8 +169,7 @@ This will create an MCP server that will serve provided tools over the streamabl
 
 ```python
 from pydantic import Field
-from agency_swarm import BaseTool
-from agency_swarm.integrations import run_mcp
+from agency_swarm import BaseTool, run_mcp
 
 
 class TestTool(BaseTool):

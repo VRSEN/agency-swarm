@@ -21,9 +21,7 @@ import sys
 # Path setup so the example can be run standalone
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
-from agents import ModelSettings, function_tool
-
-from agency_swarm import Agency, Agent
+from agency_swarm import Agency, Agent, ModelSettings, function_tool
 from agency_swarm.tools.send_message import SendMessage, SendMessageHandoff
 
 # Setup logging

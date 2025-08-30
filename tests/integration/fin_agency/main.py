@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from agency_swarm.integrations.fastapi import run_fastapi
+from agency_swarm import run_fastapi
 
 load_dotenv()
 

@@ -92,7 +92,7 @@ Agency Swarm supports two primary paradigms for inter-agent communication: direc
 
 - **Purpose**: The `SendMessageHandoff` tool class enables an agent to **unidirectionally delegate** a task or an entire interaction flow to another specialized agent. When a handoff occurs, the receiving agent takes over that specific interaction; control does **not** automatically return to the initiating agent for that particular interaction thread.
 - **How it Works**: From the perspective of the underlying language model, a handoff is treated like a special tool (e.g., `transfer_to_BillingAgent`). To enable handoffs, you configure an agent with the `send_message_tool_class=SendMessageHandoff` parameter. The agent's description will be used as the handoff tool instructions.
-- **Configuration**: Set `send_message_tool_class=SendMessageHandoff` when creating the agent. The library will automatically detect this and configure handoffs using the OpenAI SDK internally.
+- **Configuration**: Set `send_message_tool_class=SendMessageHandoff` when creating the agent. The framework will automatically detect this and configure handoffs using the OpenAI SDK internally.
 - **Analogy**: Transferring a customer in a call center to a specialized department (e.g., Billing). The Billing specialist handles the customer's request from that point forward for that specific issue.
 - **When to use (handoffs)**:
     - **Routing Use Cases**: Such as an initial customer support agent routing a query to a specialized support agent (e.g., for billing, technical issues). A new, focused interaction begins with the specialist.
@@ -108,7 +108,7 @@ To create your own communication flow, you will first need to extend the `Functi
 By default, Agency Swarm uses the following `FunctionTool`-based implementation for communication:
 
 ```python
-from agents import FunctionTool
+from agency_swarm import FunctionTool
 import json
 
 class CustomSendMessage(FunctionTool):
