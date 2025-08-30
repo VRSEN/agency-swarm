@@ -10,13 +10,12 @@ _description = """
 负责使用secscanner工具扫描OpenEuler系统上多种类型的漏洞，例如rootkit、CVE等。
 """
 _tool_instruction = """你可以使用secscanner扫描系统漏洞，使用方法如下：
-
-`secscanner db update`: 下载漏洞数据库更新而非工具本身的更新。
-`secscanner check cve`: 对照漏洞数据库，检查系统中存在的CVE漏洞。
-`secscanner check basic`: 识别当前系统中的不安全配置
-`secscanner fix basic`: 修复当前系统中的不安全配置
+`secscanner check all`: 查询系统综合的安全配置信息
+`secscanner db update`: 更新漏洞数据库而非工具本身的更新。
+`secscanner check cve`: 对照漏洞数据库，检查系统软件包中存在的CVE漏洞。
+`secscanner check basic`: 识别当前系统中基础的安全问题
+`secscanner fix basic`: 修复当前系统中基础的安全问题
 `secscanner --version`: 通过查看版本的方式确认secscanner工具已经安装情况 
-
 """
 
 import os
