@@ -8,14 +8,19 @@ Besides standard Pydantic features, you can also use a special `ToolConfig` clas
 
 ## Available `ToolConfig` Parameters
 
-Currently, the following parameters are supported:
+The following parameters are supported, with version compatibility noted:
 
-| Name               | Type    | Description                                                                                                      | When to Use                                                                                          | Default Value |
-|--------------------|---------|------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------|---------------|
-| `one_call_at_a_time` | `bool` | Prevents concurrent execution for a specific tool. To prevent the agent from executing **any** tools concurrently, set `parallel_tool_calls=False` in the Agent class. | Use for database operations, API calls with rate limits, or actions that depend on previous results. | `False`         |
-| `strict`             | `bool` | Enables strict mode, which ensures the agent will always provide **perfect** tool inputs that 100% match your schema. Has limitations. See [OpenAI Docs](https://platform.openai.com/docs/guides/structured-outputs#supported-schemas). | Use for mission-critical tools or tools that have nested Pydantic model schemas.                     | `False`         |
-| `async_mode`         | `str`  | When set to "threading," executes this tool in a separate thread.                                                  | Use when your agent needs to execute multiple tools or the same tool multiple times in a single message to decrease latency. Beware of resource allocation. | `None`          |
-| `output_as_result`   | `bool` | Forces the output of this tool as the final message from the agent that called it.                                     | Only recommended for very specific use cases and only if you know what you're doing.                 | `False`         |
+| Name               | Type    | Version | Description                                                                                                      | When to Use                                                                                          | Default Value |
+|--------------------|---------|---------|------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------|---------------|
+| `one_call_at_a_time` | `bool` | All     | Prevents concurrent execution for a specific tool. To prevent the agent from executing **any** tools concurrently, set `parallel_tool_calls=False` in the Agent class. | Use for database operations, API calls with rate limits, or actions that depend on previous results. | `False`         |
+| `strict`             | `bool` | All     | Enables strict mode, which ensures the agent will always provide **perfect** tool inputs that 100% match your schema. Has limitations. See [OpenAI Docs](https://platform.openai.com/docs/guides/structured-outputs#supported-schemas). | Use for mission-critical tools or tools that have nested Pydantic model schemas.                     | `False`         |
+| `async_mode`     | `str` | v0.x  | When set to "threading," executes this tool in a separate thread.  **Deprecated:** Tools are now always async in v1.x | Use when your agent needs to execute multiple tools or the same tool multiple times in a single message to decrease latency. Beware of resource allocation. | `None`      |
+| `output_as_result` | `bool` | v0.x | Forces the output of this tool as the final message from the agent that called it.  **Deprecated:** No longer supported in v1.x. Use agent's `tool_use_behavior` parameter instead. | Only recommended for very specific use cases and only if you know what you're doing. | `False`    |
+
+<Info>
+**Version Changes:**
+- **v1.x**: `async_mode` and `output_as_result` parameters have been removed as tools are now always asynchronous and tool output handling settings have been moved into the agent class.
+</Info>
 
 ## Usage
 
@@ -26,7 +31,10 @@ class MyCustomTool(BaseTool):
     # ...
 
     class ToolConfig:
+        one_call_at_a_time = True
         strict = False
+        async_mode = "threading"  # Deprecated in v1.x and newer
+        output_as_result = True   # Deprecated in v1.x and newer
 
     def run(self):
         # ...

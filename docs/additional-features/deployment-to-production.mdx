@@ -13,7 +13,7 @@ To deploy your agency to production, typically the process is as follows:
 </Note>
 
 <Warning>
-  Before deploying your agency, ensure you have thoroughly tested all tools and agents in isolation and in combination. Run the test cases in each tool file and verify the agency works end-to-end using the `run_demo()` or `demo_gradio` methods.
+  Before deploying your agency, ensure you have thoroughly tested all tools and agents in isolation and in combination. Run the test cases in each tool file and verify the agency works end-to-end using demo methods.
 </Warning>
 
 <Steps>
@@ -28,77 +28,73 @@ In Agency Swarm, threads are stored in a dictionary that contains all conversati
 
 Loading threads from a database before processing a new request allows you to continue conversations from where they left off, even if you are using stateless backend.
 
+<Tabs>
+<Tab title="v1.x">
+
+In v1.x, persistence is handled through callback functions that are passed directly as parameters to the Agency constructor:
+
+```python
+from agents import ConversationThread
+
+def save_threads(thread_dict: list[dict[str, TResponseInputItem]], chat_id: str):
+    # Save updated threads to your database
+    # Use the provided thread_dict when persisting threads
+    save_threads_to_db(thread_dict)
+
+def load_threads(chat_id: str) -> list[dict[str, TResponseInputItem]]:
+    threads = load_threads_from_db(chat_id)
+    return threads
+
+agency = Agency(
+    agent1,
+    agent2,
+    communication_flows=[(agent1, agent2)],
+    load_threads_callback=lambda: load_threads(chat_id),
+    save_threads_callback=lambda thread_dict: save_threads(thread_dict, chat_id),
+)
+```
+
+</Tab>
+<Tab title="v0.x">
+
+<Info>
+This is the previous production version. Install with: `pip install agency-swarm<1.0.0`
+</Info>
+
 <Info>
 Callbacks are functions that are called by the framework automatically when Agency is initialized.
 </Info>
 
-Example persistence callbacks in a FastAPI application:
-
-<Tabs>
-<Tab title="v1.x (Current)" defaultOpen={true}>
+Example threads callbacks:
 
 ```python
-from fastapi import FastAPI, Request
-from agency_swarm import Agency
+def load_threads(chat_id):
+    # Load threads from your database using the chat_id
+    threads = load_threads_from_db(chat_id)
+    return threads
 
-app = FastAPI()
+def save_threads(new_threads):
+    # Save updated threads to your database
+    save_threads_to_db(new_threads)
 
-@app.post("/chat/{chat_id}")
-async def handle_chat(chat_id: str, message: str):
-    
-    def load_threads(chat_id):
-        # Load threads from your database using the chat_id
-        threads = load_threads_from_db(chat_id)
-        return threads
-    
-    def save_threads(new_threads):
-        # Save updated threads to your database
-        save_threads_to_db(new_threads)
-
-    agency = Agency(
-        ceo, dev,  # your agents
-        load_threads_callback=lambda: load_threads(chat_id),
-        save_threads_callback=lambda new_threads: save_threads(new_threads)
-    )
-
-    response = await agency.get_response(message, recipient_agent="CEO")
-    return {"response": response.final_output}
-```
-
-</Tab>
-<Tab title="v0.x (Legacy)">
-
-```python
-@app.post("/chat/{chat_id}")
-def handle_chat(chat_id: str, message: str):
-
-    # define callbacks the same way
-    # ...
-
-    agency = Agency(
-        ceo, dev,  # your agents
-        threads_callbacks={
-            'load': lambda: load_threads(chat_id),
-            'save': lambda new_threads: save_threads(new_threads)
-        },
-    )
-
-    response = agency.get_completion(message)
-    return {"response": response}
+agency = Agency(
+    ...
+    threads_callbacks={
+        'load': lambda: load_threads(chat_id),
+        'save': lambda new_threads: save_threads(new_threads)
+    },
+)
 ```
 
 </Tab>
 </Tabs>
 
-<Warning>
-**v1.x Change:** The old `threads_callbacks` parameter is deprecated. Use `load_threads_callback` and `save_threads_callback` instead for better clarity and functionality.
-
-**Data Structure Change:** v1.x saves complete conversation history for each thread, while v0.x only saved thread IDs. When migrating to v1.x, test in a staging environment first as this may impact database storage requirements and user privacy considerations.
-</Warning>
-
 </Step>
 
 <Step title="Step 2: Dynamically Load Assistant Settings" icon="gear">
+<Warning>
+This step only applies to older versions of the library (v0.x)
+</Warning>
 
 By default, agencies store assistant settings (such as name, description, instructions, tools, and model) in a local file defined in the `settings_path` parameter (`settings.json` by default). While this works well for development, in production environments, we recommend storing these settings in a database to persist changes between deployments.
 
@@ -106,12 +102,14 @@ By default, agencies store assistant settings (such as name, description, instru
 Settings is a list of dictionaries that contains settings of all agents. If a change is detected in the settings, the framework will automatically save the new settings to a local file and trigger the `save` callback.
 </Info>
 
-<Warning>
-**Note:** Agent settings persistence via `settings_callbacks` is deprecated in v1.x. Agent configurations should be managed through code and version control rather than dynamic persistence. This approach provides better reliability and deployment consistency.
-</Warning>
-
 <Tabs>
-<Tab title="v0.x (Legacy)" defaultOpen={true}>
+<Tab title="v0.x">
+
+<Info>
+This is the previous production version. Install with: `pip install agency-swarm<1.0.0`
+</Info>
+
+`settings_callbacks` are executed every time agent settings are loaded or saved. Just like `threads_callbacks`, you can use it to load or save agent configurations based on your identifier (e.g. user_id):
 
 ```python
 def load_settings(user_id):
@@ -130,25 +128,6 @@ agency = Agency(
         'save': lambda new_settings: save_settings(new_settings)
     },
 )
-```
-
-</Tab>
-<Tab title="v1.x (Current)">
-
-Agent settings persistence is deprecated in v1.x. Agent configurations should be managed through code and version control rather than dynamic persistence.
-
-```python
-# v1.x approach: Define agents with fixed configurations
-from agency_swarm import Agent, Agency
-
-ceo = Agent(
-    name="CEO",
-    description="Chief Executive Officer",
-    instructions="Your fixed instructions here...",
-    model="gpt-4o"
-)
-
-agency = Agency([ceo])
 ```
 
 </Tab>

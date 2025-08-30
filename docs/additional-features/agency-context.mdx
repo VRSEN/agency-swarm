@@ -4,6 +4,10 @@ description: "Sharing data and state across tools and agents using agency contex
 icon: "database"
 ---
 
+<Info>
+**Agency Context** was formerly known as **Shared State** in version 0.x of the Agency Swarm library. If you're migrating from v0.x, see the [Legacy Shared State (v0.x)](#legacy-shared-state-v0-x) section below.
+</Info>
+
 `Agency Context` is a centralized data store accessible by all tools and agents within an agency. It allows you to share data between agents, control execution flow, and maintain state across tool calls without passing large data structures in messages.
 
 <Note>
@@ -22,7 +26,7 @@ Agency context is particularly useful when your agents interact with multiple to
 
 ![With Agency Context](/images/shared-state-with.png)
 
-## Using Agency Context in v1.0.0-beta
+## Using Agency Context in v1.x
 
 The agency context is accessed through the `MasterContext` object in function tools. The two basic operations are:
 - **Setting** a value: `ctx.context.set('key', value)`
@@ -73,8 +77,15 @@ You can use agency context in your function tools and access it in agents. Here'
     ```
 </Tab>
 
-<Tab title="BaseTool Class">
-For BaseTool classes, you can access agency context using the following pattern:
+<Tab title="BaseTool">
+  <Warning>
+  This section applies only to version 0.x of the Agency Swarm library. For 1.x library versions, use the agency context patterns shown in the other tabs.
+  </Warning>
+
+  In version 0.x, shared state was a centralized Python dictionary accessible by all tools and agents. The two basic operations were:
+  - **Setting** a value in the shared state: `shared_state.set('key', value)`
+  - **Getting** a value from the shared state: `shared_state.get('key')`
+
     ```python
     from agency_swarm.tools import BaseTool
     from pydantic import Field
@@ -82,21 +93,18 @@ For BaseTool classes, you can access agency context using the following pattern:
     class QueryDatabase(BaseTool):
         """
         Retrieves data from the database and stores it in agency context.
-        Note: This is deprecated. Use function_tool instead.
         """
         question: str = Field(..., description="The query to execute.")
 
         def run(self):
             # Fetch data based on the question
             context = query_database_api(self.question)
-            # Store the context in agency context (legacy way - deprecated)
-            self._shared_state.set('database_context', context)
+            # Store the context in agency context
+            self.shared_state.set('database_context', context)
             return "Context has been retrieved and stored successfully."
     ```
-</Tab>
 
-<Tab title="Agent: Accessing in Response Validation">
-  You can access agency context within your agent's response validation or other methods:
+    You can access agency context within your agent's response validation or other methods:
     ```python
     from agency_swarm import Agent
 
@@ -114,7 +122,6 @@ For BaseTool classes, you can access agency context using the following pattern:
             return message
     ```
 </Tab>
-
 </Tabs>
 
 ## Advanced Agency Context Patterns
@@ -271,7 +278,7 @@ async def show_context_status(ctx: RunContextWrapper[MasterContext]) -> str:
     return status
 ```
 
-## Migration from v0.x
+## Legacy Shared State (v0.x)
 
 If you're migrating from Agency Swarm v0.x, here's how to update your shared state usage:
 

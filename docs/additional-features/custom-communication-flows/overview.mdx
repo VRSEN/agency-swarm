@@ -4,7 +4,198 @@ description: "Learn how to customize communication flows for your agency."
 icon: "globe"
 ---
 
-Multi-agent communication is the core functionality of any Multi-Agent System. Unlike in all other frameworks, Agency Swarm not only allows you to define communication flows in any way you want (uniform communication flows), but also to configure the underlying logic for this feature. This means that you can create entirely new types of communication or adjust it to your own needs. Below you will find a guide on how to do all this, along with some common examples.
+Multi-agent communication is the core functionality of any multi-agent system. Unlike all other frameworks, Agency Swarm not only allows you to define communication flows in any way you want (uniform communication flows), but also to configure the underlying logic for this feature. This means that you can create entirely new types of communication or adjust it to your own needs. Below you will find a guide on how to do all this, along with some common examples.
+
+<Tabs>
+<Tab title="v1.x">
+
+## Pre-Made SendMessage Classes
+
+Agency Swarm contains multiple commonly requested classes for communication flows. Currently, the following classes are available:
+
+| Class Name                  | Description                                                                                                                                                                                                                               | When to Use                                                                                                    | Code Link                                                                                                            |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `SendMessage` (default)     | This is the default class for sending messages to other agents. It uses synchronous communication with basic COT (Chain of Thought) prompting and allows agents to relay files and modify system instructions for each other.             | Suitable for most use cases. Balances speed and functionality.                                                 | [link](https://github.com/VRSEN/agency-swarm/blob/main/src/agency_swarm/tools/send_message.py)               |
+| `SendMessageHandoff`        | Enables unidirectional delegation of tasks or entire interaction flows to specialized agents. When a handoff occurs, the receiving agent takes over the interaction.                                                                        | Use for routing queries to specialized agents or sequential workflows where control should transfer completely. | [link](https://github.com/VRSEN/agency-swarm/blob/main/src/agency_swarm/tools/send_message.py#L439)       |
+
+There are 3 main ways to define custom custom send message tools:
+
+#### Agency-level
+
+```python
+from agency_swarm import Agent
+from agency_swarm.tools import SendMessageHandoff
+
+agent = Agent(
+    name="MyAgent",
+    instructions="You are a helpful assistant.",
+)
+
+agency = Agency(agent, send_message_tool_class=SendMessageHandoff)
+```
+
+That sets a default send message tool for all agents that do not have it explicitly defined.
+
+#### Agent-level
+
+```python
+from agency_swarm import Agent
+from agency_swarm.tools import SendMessageHandoff
+
+agent = Agent(
+    name="MyAgent",
+    instructions="You are a helpful assistant.",
+    send_message_tool_class=SendMessageHandoff
+)
+
+agency = Agency(agent)
+```
+
+In this example, agent will be using a custom send message for every interaction with other agents. This setting will **override custom agency send message tool**, if present.
+
+#### Communication-level
+
+```python
+from agency_swarm import Agent
+from agency_swarm.tools import SendMessageHandoff
+
+ceo = Agent(
+    name="CeoAgent",
+    instructions="You are a helpful assistant.",
+)
+
+worker = Agent(
+    name="WorkerAgent",
+    instructions="You are a helpful assistant.",
+)
+
+agency = Agency(ceo, communication_flows=[(ceo > worker, SendMessageHandoff)])
+```
+
+Here, the `SendMessageHandoff` tool will be used specifically for `ceo -> worker` communication and nowhere else. If there were other agents in the agency connected to ceo, they would be using regular `SendMessage` for agent-to-agent conversations. This setting **overrides both agency and agent-level custom send message tools within this particular thread**.
+
+## Choosing the Right Communication Method: SendMessage vs. handoffs
+
+Agency Swarm supports two primary paradigms for inter-agent communication: direct messaging using `SendMessage` tool variants (native to Agency Swarm) and handoffs via the `SendMessageHandoff` tool class.
+
+### Direct Messaging (`SendMessage` tools)
+
+- **Purpose**: Use Agency Swarm's `SendMessage` tools (e.g., `SendMessage`) when one agent needs to request information or a discrete action from another, expecting a response to continue its own work. Unlike in handoffs, control returns to the calling agent, making this suitable for true collaboration and agent orchestration.
+- **Data Exchange**: Primarily string-based messages, with support for file attachments.
+- **Analogy**: An orchestrator agent assigning a sub-task to a worker agent and awaiting the result to proceed.
+- **When to use**:
+    - Implementing orchestrator-worker pattern.
+    - Collaborative tasks requiring back-and-forth dialogue (evaluator-optimizer pattern) or result aggregation by a calling agent.
+    - When an agent needs to retain control of the overall workflow while delegating specific parts.
+
+### Handoffs (via `SendMessageHandoff`)
+
+- **Purpose**: The `SendMessageHandoff` tool class enables an agent to **unidirectionally delegate** a task or an entire interaction flow to another specialized agent. When a handoff occurs, the receiving agent takes over that specific interaction; control does **not** automatically return to the initiating agent for that particular interaction thread.
+- **How it Works**: From the perspective of the underlying language model, a handoff is treated like a special tool (e.g., `transfer_to_BillingAgent`). To enable handoffs, you configure an agent with the `send_message_tool_class=SendMessageHandoff` parameter. The agent's description will be used as the handoff tool instructions.
+- **Configuration**: Set `send_message_tool_class=SendMessageHandoff` when creating the agent. The library will automatically detect this and configure handoffs using the OpenAI SDK internally.
+- **Analogy**: Transferring a customer in a call center to a specialized department (e.g., Billing). The Billing specialist handles the customer's request from that point forward for that specific issue.
+- **When to use (handoffs)**:
+    - **Routing Use Cases**: Such as an initial customer support agent routing a query to a specialized support agent (e.g., for billing, technical issues). A new, focused interaction begins with the specialist.
+    - **Sequential interaction flows**: Where a task must pass through a series of different specialists, and each specialist completes their part and passes it on, without the original agent resuming that specific flow.
+- **Further Details**: For comprehensive information on configuring and utilizing handoffs, consult the [Hybrid Patterns Documentation](/additional-features/custom-communication-flows/hybrid-patterns).
+
+## Creating Your Own Unique Communication Flows
+
+To create your own communication flow, you will first need to extend the `FunctionTool` class from the agents SDK. In v1.x, the `SendMessage` class is built on top of `FunctionTool`, providing a flexible foundation for creating custom communication patterns tailored to your specific needs.
+
+### Default `SendMessage` Class
+
+By default, Agency Swarm uses the following `FunctionTool`-based implementation for communication:
+
+```python
+from agents import FunctionTool
+import json
+
+class CustomSendMessage(FunctionTool):
+    """
+    Use this tool to facilitate direct, synchronous communication between specialized agents within your agency.
+    """
+
+    def __init__(self, sender_agent: "Agent", recipient_agent: "Agent", tool_name: str):
+        self.sender_agent = sender_agent
+        self.recipient_agent = recipient_agent
+
+        # Define JSON schema for tool parameters
+        params_schema = {
+            "type": "object",
+            "properties": {
+                "my_primary_instructions": {
+                    "type": "string",
+                    "description": (
+                        "Please repeat your primary instructions step-by-step, including both completed "
+                        "and the following next steps that you need to perform. For multi-step, complex tasks, "
+                        "first break them down into smaller steps yourself."
+                    ),
+                },
+                "message": {
+                    "type": "string",
+                    "description": (
+                        "Specify the task required for the recipient agent to complete. Focus on clarifying "
+                        "what the task entails, rather than providing exact instructions."
+                    ),
+                },
+                "additional_instructions": {
+                    "type": "string",
+                    "description": (
+                        "Optional. Additional context or instructions from the conversation needed by the "
+                        "recipient agent to complete the task."
+                    ),
+                },
+            },
+            "required": ["my_primary_instructions", "message", "additional_instructions"],
+        }
+
+        super().__init__(
+            name=tool_name,
+            description=f"{self.__doc__}\n\nRecipient role: {recipient_agent.description}",
+            params_json_schema=params_schema,
+            on_invoke_tool=self.on_invoke_tool,
+        )
+
+    async def on_invoke_tool(self, wrapper, arguments_json_string: str) -> str:
+        kwargs = json.loads(arguments_json_string)
+        message_content = kwargs.get("message")
+        additional_instructions = kwargs.get("additional_instructions", "")
+
+        response = await self.recipient_agent.get_response(
+            message=message_content,
+            sender_name=self.sender_agent.name,
+            additional_instructions=additional_instructions,
+        )
+        return response.final_output
+```
+
+### Key Components
+
+In general, all `SendMessage` tools in v1.x have the following components:
+
+1. **FunctionTool Base**: Extends the `FunctionTool` class from the agents SDK, providing async execution and standardized tool interfaces.
+2. **Dynamic Initialization**: Tools are created dynamically for specific sender->recipient pairs with custom parameter schemas.
+3. **JSON Schema**: Parameters are defined using JSON schema for validation and type safety.
+4. **Async Communication**: Uses `async/await` for non-blocking communication between agents.
+
+When creating your own `SendMessage` tools, extend `FunctionTool` and implement the `on_invoke_tool` method with your custom communication logic.
+
+<Warning>
+If you are planning to create an agent that has access to multiple SendMessage tools (using communication flow pattern), each tool **must** have a unique name, which **must** start with `send_message`.
+For example, `name="send_message_formatted"` or `name="send_message_custom"` and so on.
+</Warning>
+
+### Common Use Cases
+
+For detailed **Common Use Cases**, please refer to the [Common Use Cases](./common-use-cases) subpage.
+
+</Tab>
+<Tab title="v0.x">
+
+<Info>
+v0.x is the **previous production version**. Install with: `pip install "agency-swarm<1.0.0"`
+</Info>
 
 ## Pre-Made SendMessage Classes
 
@@ -15,6 +206,7 @@ Agency Swarm contains multiple commonly requested classes for communication flow
 | `SendMessage` (default)     | This is the default class for sending messages to other agents. It uses synchronous communication with basic COT (Chain of Thought) prompting and allows agents to relay files and modify system instructions for each other.             | Suitable for most use cases. Balances speed and functionality.                                                 | [link](https://github.com/VRSEN/agency-swarm/blob/main/agency_swarm/tools/send_message/SendMessage.py)               |
 | `SendMessageQuick`          | A variant of the SendMessage class without Chain of Thought prompting, files, and additional instructions. It allows for faster communication without the overhead of COT.                                                                | Use for simpler use cases or when you want to save tokens and increase speed.                                  | [link](https://github.com/VRSEN/agency-swarm/blob/main/agency_swarm/tools/send_message/SendMessageQuick.py)          |
 | `SendMessageAsyncThreading` | Similar to `SendMessage` but with `async_mode='threading'`. Each agent will execute asynchronously in a separate thread. In the meantime, the caller agent can continue the conversation with the user and check the results later.       | Use for asynchronous applications or when sub-agents take significant amounts of time to complete their tasks. | [link](https://github.com/VRSEN/agency-swarm/blob/main/agency_swarm/tools/send_message/SendMessageAsyncThreading.py) |
+| `SendMessageSwarm`          | Instead of sending a message to another agent, it replaces the caller agent with the recipient agent, similar to [OpenAI's Swarm](https://github.com/openai/swarm). The recipient agent will then have access to the entire conversation. | When you need more granular control. It is not able to handle complex multi-step, multi-agent tasks.           | [link](https://github.com/VRSEN/agency-swarm/blob/main/agency_swarm/tools/send_message/SendMessageSwarm.py)          |
 
 **To use any of the pre-made `SendMessage` classes**, simply put it in the `send_message_tool_class` parameter when initializing the `Agency` class:
 
@@ -28,37 +220,6 @@ agency = Agency(
 ```
 
 That's it! Now, your agents will use your own custom `SendMessageQuick` class for communication.
-
-<Note>
-**`SendMessageSwarm` is Deprecated**: `SendMessageSwarm` will be removed in a future version. For sequential flows or transferring control between agents in one direction, use the `SendMessageHandoff` tool class.
-
-Detailed guidance on implementing handoffs is available in the [Hybrid Patterns Documentation](/additional-features/custom-communication-flows/hybrid-patterns).
-</Note>
-
-## Choosing the Right Communication Method: SendMessage vs. Handoffs
-
-Agency Swarm supports two primary paradigms for inter-agent communication: direct messaging using `SendMessage` tool variants (native to Agency Swarm) and Handoffs via the `SendMessageHandoff` tool class.
-
-### Direct Messaging (`SendMessage` tools)
-
-- **Purpose**: Use Agency Swarm's `SendMessage` tools (e.g., `SendMessage`, `SendMessageQuick`, `SendMessageAsyncThreading`) when one agent needs to request information or a discrete action from another, expecting a response to continue its own work. Unlike in Handoffs, control returns to the calling agent, making this suitable for true collaboration and agent orchestration.
-- **Data Exchange**: Primarily string-based messages, with support for file attachments.
-- **Analogy**: An orchestrator agent assigning a sub-task to a worker agent and awaiting the result to proceed.
-- **When to use**:
-    - Implementing orchestrator-worker pattern.
-    - Collaborative tasks requiring back-and-forth dialogue (evaluator-optimizer pattern) or result aggregation by a calling agent.
-    - When an agent needs to retain control of the overall workflow while delegating specific parts.
-
-### Handoffs (via SendMessageHandoff)
-
-- **Purpose**: The `SendMessageHandoff` tool class enables an agent to **unidirectionally delegate** a task or an entire interaction flow to another specialized agent. When a handoff occurs, the receiving agent takes over that specific interaction; control does **not** automatically return to the initiating agent for that particular interaction thread.
-- **How it Works**: From the perspective of the underlying language model, a handoff is treated like a special tool (e.g., `transfer_to_BillingAgent`). To enable handoffs, you configure an agent with the `send_message_tool_class=SendMessageHandoff` parameter. The agent's description will be used as the handoff tool instructions.
-- **Configuration**: Place a `SendMessageHandoff` tool in your agent's tools folder or set `send_message_tool_class=SendMessageHandoff` when creating the agent. The library will automatically detect this and configure handoffs using the OpenAI SDK internally.
-- **Analogy**: Transferring a customer in a call center to a specialized department (e.g., Billing). The Billing specialist handles the customer's request from that point forward for that specific issue.
-- **When to use (Handoffs)**:
-    - **Routing Use Cases**: Such as an initial customer support agent routing a query to a specialized support agent (e.g., for billing, technical issues). A new, focused interaction begins with the specialist.
-    - **Sequential interaction flows**: Where a task must pass through a series of different specialists, and each specialist completes their part and passes it on, without the original agent resuming that specific flow.
-- **Further Details**: For comprehensive information on configuring and utilizing handoffs, consult the [Hybrid Patterns Documentation](/additional-features/custom-communication-flows/hybrid-patterns).
 
 ## Creating Your Own Unique Communication Flows
 
@@ -115,7 +276,7 @@ class SendMessage(SendMessageBase):
                                     additional_instructions=self.additional_instructions)
 ```
 
-Let's break down the code.
+Let's break down the code:
 
 In general, all `SendMessage` tools have the following components:
 
@@ -128,6 +289,9 @@ When creating your own `SendMessage` tools, you can use the above components as 
 ### Common Use Cases
 
 For detailed **Common Use Cases**, please refer to the [Common Use Cases](./common-use-cases) subpage.
+
+</Tab>
+</Tabs>
 
 ## Conclusion
 

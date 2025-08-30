@@ -4,8 +4,52 @@ description: "Learn how to use built-in tools in Agency Swarm."
 icon: "wrench"
 ---
 
-Each agent in Agency Swarm also with some built-in tools inherited from [OpenAI Assistants API](https://platform.openai.com/docs/api-reference/assistants/createAssistant#assistants-createassistant-tools).
+<Tabs defaultValue="v1.x">
+<Tab title="v1.x">
+In the latest version, Agency Swarm leverages tools from the [agents SDK](https://openai.github.io/openai-agents-python/ref/tool/) instead of providing its own built-in tools. This provides access to a comprehensive set of production-ready tools maintained by OpenAI.
 
+## Available Tools
+
+The agents SDK provides the following built-in tools:
+
+### Hosted Tools
+
+- **`WebSearchTool`** - Lets an agent search the web
+- **`FileSearchTool`** - Allows retrieving information from your OpenAI Vector Stores
+- **`ComputerTool`** - Allows automating computer use tasks
+- **`CodeInterpreterTool`** - Lets the LLM execute code in a sandboxed environment
+- **`ImageGenerationTool`** - Generates images from a prompt
+- **`LocalShellTool`** - Runs shell commands on your machine
+
+### Function Tools
+
+- **`FunctionTool`** - Custom function-based tools using the `@function_tool` decorator
+
+### MCP (Model Context Protocol) Tools
+
+- **`HostedMCPTool`** - Exposes a remote MCP server's tools to the model
+
+**When to use each tool:**
+
+- **Web Search**: Real-time information retrieval, current events, up-to-date data
+- **File Search**: Enriching agent knowledge, reducing hallucinations, querying documents
+- **Computer Tool**: Automating computer use tasks, UI interactions, testing applications
+- **Code Interpreter**: Data analysis, calculations, executing code in a sandboxed environment
+- **Image Generation**: Creating visual content, illustrations, design assets from prompts
+- **Local Shell**: System administration, file operations, running shell commands
+- **Function Tool**: Creating custom tools with specific business logic using Python functions
+- **Hosted MCP Tool**: Accessing tools from remote Model Context Protocol servers
+
+For detailed documentation and additional configuration options, refer to the [agents SDK tool documentation](https://openai.github.io/openai-agents-python/ref/tool/).
+
+</Tab>
+<Tab title="v0.x">
+
+<Info>
+v0.x is the **previous production version**. Install with: `pip install "agency-swarm<1.0.0"`
+</Info>
+
+Each agent in Agency Swarm also with some built-in tools inherited from [OpenAI Assistants API](https://platform.openai.com/docs/api-reference/assistants/createAssistant#assistants-createassistant-tools).
 
 ## Code Interpreter
 
@@ -51,3 +95,6 @@ File Search allows agents to search through their knowledge base to improve thei
 - To enrich your agent's knowledge about specific topics
 - To reduce hallucinations by grounding agent responses in your documents
 - To enable users to query their own documents
+
+</Tab>
+</Tabs>

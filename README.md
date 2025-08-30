@@ -19,7 +19,7 @@ Agency Swarm enhances the underlying SDK by introducing:
 
 This framework continues the original vision of Arsenii Shatokhin (aka VRSEN) to simplify the creation of sophisticated AI agencies by thinking about automation in terms of real-world organizational structures.
 
-**Migrating from v0.x?** Please see our [Migration Guide](./docs/migration_guide.mdx) for details on adapting your project to this new SDK-based version.
+**Migrating from v0.x?** Please see our [Migration Guide](./docs/migration/guide.mdx) for details on adapting your project to this new SDK-based version.
 
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1qGVyK-vIoxZD0dMrMVqCxCsgL1euMLKj)
 [![Docs](https://img.shields.io/website?label=Docs&up_message=available&url=https://vrsen.github.io/agency-swarm/)](https://vrsen.github.io/agency-swarm/)

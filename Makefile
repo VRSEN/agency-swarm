@@ -26,16 +26,16 @@ prime:
 
 .PHONY: format
 format:
-	uv run ruff format
-	uv run ruff check --fix
+	uv run ruff format --exclude docs
+	uv run ruff check --fix --exclude docs
 
 .PHONY: lint
 lint:
-	uv run ruff check
+	uv run ruff check --exclude docs
 
 .PHONY: lint-unsafe
 lint-unsafe:
-	uv run ruff check --fix --unsafe-fixes
+	uv run ruff check --fix --unsafe-fixes --exclude docs
 
 .PHONY: mypy
 mypy:

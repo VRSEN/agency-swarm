@@ -4,6 +4,7 @@ description: "Learn advanced configuration options for your agents in Agency Swa
 icon: "gears"
 ---
 
+
 All parameters inside the `Agent` class, follow the same structure as [OpenAI's Assistants API](https://platform.openai.com/docs/api-reference/assistants). However, there are a few advanced parameters that require more explanation.
 
 ### Parallel Tool Calls
@@ -56,9 +57,11 @@ class MyAgent(Agent):
         return message
 ```
 
+See also: [Output Validation](/additional-features/output-validation).
+
 ### Few-Shot Examples
 
-Few-show examples help the agent to understand how to respond. The format for examples follows [message object format on OpenAI](https://platform.openai.com/docs/api-reference/messages/createMessage):
+Few-shot examples help the agent understand how to respond. Provide them at initialization; they will be appended to `instructions`. The format follows the [message object format](https://platform.openai.com/docs/api-reference/messages/createMessage):
 
 ```python
 from agency_swarm import Agent
@@ -78,8 +81,7 @@ examples=[
     }
 ]
 
-agent = Agent(
-    name='MyAgent',
-    examples=examples
-)
+agent = Agent(name='MyAgent', examples=examples)
 ```
+
+See also: [Few-Shot Examples](/additional-features/few-shot-examples).

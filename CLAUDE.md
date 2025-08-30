@@ -120,8 +120,11 @@ Run non-interactive examples from /examples directory. Never run examples/intera
 ## Version and Documentation
 - **v1.x:** Beta built on OpenAI Agents SDK (Responses API)
 - **v0.x:** Legacy production-ready
-- See `docs/migration_guide.mdx` for breaking changes
+- See `docs/migration/guide.mdx` for breaking changes
 - **/docs/** is outdated (v0.x)—do not use for current reference
+
+### Documentation Rules (Mandatory)
+- All documentation writing and updates MUST follow `docs/mintlify.cursorrules` for formatting, components, links, and page metadata. Treat it as a mandatory rules file alongside this `CLAUDE.md`.
 
 ## Python Requirements
 - **Python >= 3.12 (development on 3.13)** — project developed and primarily tested on 3.13; CI ensures 3.12 compatibility.
@@ -203,7 +206,7 @@ The following files currently exceed limits and are considered problematic. Do n
 
 ## Key References
 - `examples/` – v1.x modern usage
-- `docs/migration_guide.mdx` – Breaking changes
+- `docs/migration/guide.mdx` – Breaking changes
 - `tests/integration/` – Real-world behaviors
 - `/docs/` – Framework documentation
 
