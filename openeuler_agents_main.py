@@ -167,7 +167,8 @@ def main():
             "操作系统能力群": [permissions_agent_instance, network_agent_instance,],
         }
 
-        text ="""请用 secScanner 扫描系统综合的不安全配置，并输出生成的报告。"""
+        # text ="""git工具已经配置完成，直接可用，redis的github链接地址为：https://github.tbedu.top/https://github.com/redis/redis.git，修复漏洞的commit-hash为0fe67435935cc5724ff6eb9c4ca4120c58a15765，请生成patch文件"""
+        text ="""redis源码已经保存在本地，地址为：`/root/redis/`，修复漏洞的commit-hash为0fe67435935cc5724ff6eb9c4ca4120c58a15765，请生成patch文件"""
 
 
         files_path = os.path.join("agents", "files")
