@@ -11,10 +11,7 @@ _description = """
 支持的命令：
 - `git clone <仓库地址>`：克隆指定的git仓库。例如：git clone https://github.com/redis/redis.git
 - `git format-patch -1 <commit-hash>`：根据指定的commit哈希生成补丁文件。执行后会在当前目录生成类似 0001-commit-message.patch 的补丁文件，文件名包含序号和提交信息。
-标准操作流程：
-1. 使用 `git clone <仓库地址>` 拉取目标仓库代码到本地。
-2. 进入克隆下来的仓库目录。
-3. 使用 `git format-patch -1 <commit-hash>` 针对指定commit生成补丁文件。
+- `git checkout <commit-hash>`：检测出特定commit是否存在
 注意：
 1. cd命令和git命令一起执行，使用`&&`连接，例如：`cd repo && git format-patch -1 <commit-hash>`。
 2. 请确保在执行 `git format-patch` 前已经进入了正确的仓库目录。

@@ -129,7 +129,7 @@ def main():
             secscanner_agent_instance,
             syscare_agent_instance,
             
-            # 操作系统能力 agent
+            # 远程控制访问能力 agent
             permissions_agent_instance,
             network_agent_instance,
         ]
@@ -158,13 +158,13 @@ def main():
         cap_group_agents = {
             "软件能力群": [software_planner_instance, software_step_scheduler_instance],
             "安全能力群": [security_planner_instance, security_step_scheduler_instance],
-            "操作系统能力群": [os_planner_instance, os_step_scheduler_instance],
+            "远程控制访问能力群": [os_planner_instance, os_step_scheduler_instance],
         }
 
         cap_agents = {
             "软件能力群": [package_agent_instance, repository_agent_instance, atune_agent_instance,],
             "安全能力群": [secscanner_agent_instance, syscare_agent_instance,],
-            "操作系统能力群": [permissions_agent_instance, network_agent_instance,],
+            "远程控制访问能力群": [permissions_agent_instance, network_agent_instance,],
         }
 
         # text ="""git工具已经配置完成，直接可用，redis的github链接地址为：https://github.tbedu.top/https://github.com/redis/redis.git，修复漏洞的commit-hash为0fe67435935cc5724ff6eb9c4ca4120c58a15765，请生成patch文件"""
