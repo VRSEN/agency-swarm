@@ -166,10 +166,17 @@ def main():
             "安全能力群": [secscanner_agent_instance, syscare_agent_instance,],
             "远程控制访问能力群": [permissions_agent_instance, network_agent_instance,],
         }
-
-        # text ="""git工具已经配置完成，直接可用，redis的github链接地址为：https://github.tbedu.top/https://github.com/redis/redis.git，修复漏洞的commit-hash为0fe67435935cc5724ff6eb9c4ca4120c58a15765，请生成patch文件"""
-        text ="""redis源码已经保存在本地，地址为：`/root/redis/`，修复漏洞的commit-hash为0fe67435935cc5724ff6eb9c4ca4120c58a15765，请生成patch文件"""
-
+        text ="""
+        syscare工具已经安装
+        在'/root/build-rpm/'目录下有以下文件：
+        1. 0001-Retry-accept-even-if-accepted-connection-reports-an-.patch;这是一个修复修复CVE-2025-48367漏洞的patch文件
+        2. redis6-6.2.18-3.src.rpm 这是一个redis的一个源码rpm包
+        3. redis6-debuginfo-6.2.18-3.x86_64.rpm 这是一个redis的调试信息rpm包
+        利用syscare工具生成一个补丁文件，用于修复CVE-2025-48367
+        """
+        # text = """
+        # 在`/root/build-rpm/`目录下`有一个redis的补丁文件，文件名为：`patch-redis6-6.2.18-3-fix-cve-2025-48367-1-1.x86_64.rpm`，请安装补丁
+        # """
 
         files_path = os.path.join("agents", "files")
         comtext_tree = os.path.join(files_path, "context_tree.json")

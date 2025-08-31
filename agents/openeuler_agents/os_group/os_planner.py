@@ -8,7 +8,7 @@ _description = """
 负责远程访问控制能力群的步骤规划
 """
 
-_group_name = "远程控制访问能力群"
+_group_name = "控制访问能力群"
 
 _input_format = """
 {
