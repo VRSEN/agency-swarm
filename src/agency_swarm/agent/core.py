@@ -167,7 +167,7 @@ class Agent(BaseAgent[MasterContext]):
                     current_instructions = kwargs.get("instructions", "")
                     kwargs["instructions"] = current_instructions + examples_str
                 except Exception:
-                    pass
+                    logger.exception("Failed to append examples to instructions")
 
         # Separate kwargs into base agent params and agency swarm params
         base_agent_params, current_agent_params = separate_kwargs(kwargs)
