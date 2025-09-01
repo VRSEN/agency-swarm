@@ -177,7 +177,7 @@ class User(BaseTool):
 
 ### LLM Validator
 
-The `llm_validator` is a powerful way to validate outputs against specified natural language rules.
+The `llm_validator` validates outputs against specified natural language rules.
 
 **Example:**
 
@@ -202,5 +202,5 @@ In this example, the `llm_validator` will throw an error if the message is not r
 Since `llm_validator` uses LLMs for validation, it may incur additional costs and latency due to extra API calls. Use it for fields that require complex validation beyond simple checks.
 </Note>
 
-By combining all the validators described above, you can create robust validation logic to ensure your agents and tools perform reliably.
+By combining all the validators described above, you can create validation logic to ensure your agents and tools perform reliably.
 

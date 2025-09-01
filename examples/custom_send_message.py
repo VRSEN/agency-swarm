@@ -77,7 +77,7 @@ def analyze_performance() -> str:
     return "Performance analysis complete. 23% efficiency gain possible."
 
 
-# Coordinator with enhanced SendMessage
+# Coordinator with custom SendMessage
 coordinator = Agent(
     name="Coordinator",
     description="Project coordinator who delegates analysis tasks",
@@ -89,7 +89,7 @@ coordinator = Agent(
         "complete, word-for-word response text in your final output. Do not summarize, "
         "paraphrase, or omit any details from their responses."
     ),
-    send_message_tool_class=SendMessageWithContext,  # Enhanced communication for this agent only
+    send_message_tool_class=SendMessageWithContext,  # Custom communication for this agent only
     model_settings=ModelSettings(temperature=0.0),
 )
 
@@ -153,7 +153,7 @@ def print_send_message_args(agency, agent_name: str) -> None:
 
 
 async def main():
-    """Demonstrate key decisions being passed via enhanced SendMessage."""
+    """Demonstrate key decisions being passed via custom SendMessage."""
     print("\n=== SendMessageWithContext Key Decisions Demo ===")
 
     # Turn 1: Initial discussion

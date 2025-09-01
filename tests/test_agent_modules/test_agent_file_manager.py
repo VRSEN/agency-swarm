@@ -2,7 +2,7 @@
 Tests for agency_swarm.agent.file_manager module.
 
 Focuses on testing the AgentFileManager class functionality
-to achieve comprehensive coverage of error handling and edge cases.
+to cover error handling and edge cases.
 """
 
 import os

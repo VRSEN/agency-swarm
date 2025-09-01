@@ -13,7 +13,7 @@ Agency Swarm enhances the underlying SDK by introducing:
 - A specialized `send_message` tool automatically configured for agents, enabling them to communicate based on the defined communication flows.
 - `agency_swarm.Agent` which extends the base SDK `Agent` with built-in file handling and sub-agent registration capabilities.
 
-This framework continues the original vision of Arsenii Shatokhin (aka VRSEN) to simplify the creation of sophisticated AI agencies by thinking about automation in terms of real-world organizational structures, making it intuitive for both agents and users.
+This framework continues the original vision of Arsenii Shatokhin (aka VRSEN) to simplify the creation of AI agencies by thinking about automation in terms of real-world organizational structures, making it intuitive for both agents and users.
 
 **Migrating from v0.x?** Please see our [Migration Guide](./docs/migration/guide.mdx) for details on adapting your project to this new SDK-based version.
 
@@ -28,10 +28,10 @@ This framework continues the original vision of Arsenii Shatokhin (aka VRSEN) to
 
 - **Customizable Agent Roles**: Define distinct agent roles (e.g., CEO, Virtual Assistant, Developer) with tailored instructions, tools, and capabilities within the Agency Swarm framework, leveraging the underlying OpenAI Agents SDK.
 - **Full Control Over Agent Instructions**: Maintain complete control over each agent's guiding prompts (instructions) for precise behavior customization.
-- **Type-Safe Tools**: Develop robust tools using Pydantic models for automatic argument validation, compatible with the OpenAI Agents SDK's `FunctionTool` format.
+- **Type-Safe Tools**: Develop tools using Pydantic models for automatic argument validation, compatible with the OpenAI Agents SDK's `FunctionTool` format.
 - **Orchestrated Agent Communication**: Agents communicate via a dedicated `send_message` tool, with interactions governed by explicit `communication_flows` (directional) defined on the `Agency`.
 - **Flexible State Persistence**: Manage conversation history by providing `load_threads_callback` and `save_threads_callback` functions to the `Agency`. This allows for loading and saving conversation threads to external storage, enabling persistence across sessions.
-- **Robust Multi-Agent Orchestration**: Build complex and reliable agent workflows by leveraging the OpenAI Agents SDK foundation, enhanced by Agency Swarm's structured orchestration layer.
+- **Multi-Agent Orchestration**: Build agent workflows by leveraging the OpenAI Agents SDK foundation, enhanced by Agency Swarm's structured orchestration layer.
 - **Production-Ready Focus**: Built for reliability and designed for easy deployment in real-world environments.
 
 ## Installation
