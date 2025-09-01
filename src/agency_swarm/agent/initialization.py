@@ -5,12 +5,14 @@ This module handles the complex initialization process for agents,
 including handling deprecated parameters and setting up file management.
 """
 
+import dataclasses
 import inspect
 import logging
 import warnings
 from typing import TYPE_CHECKING, Any
 
 from agents import Agent as BaseAgent, ModelSettings
+from openai.types.shared import Reasoning
 
 from agency_swarm.agent.attachment_manager import AttachmentManager
 from agency_swarm.agent.file_manager import AgentFileManager
@@ -59,7 +61,23 @@ def handle_deprecated_parameters(kwargs: dict[str, Any]) -> dict[str, Any]:
                 stacklevel=3,
             )
             deprecated_args_used[param] = param_value
-            deprecated_model_settings[param] = param_value
+
+            # Map deprecated fields to ModelSettings-compatible keys
+            if param == "reasoning_effort":
+                # v0.x accepted Literal["low", "medium", "high"]. Map into Reasoning(effort=...).
+                try:
+                    deprecated_model_settings["reasoning"] = Reasoning(effort=param_value)
+                except Exception:
+                    warnings.warn(
+                        f"Invalid 'reasoning_effort' value: {param_value!r}. Skipping mapping to 'reasoning'.",
+                        DeprecationWarning,
+                        stacklevel=3,
+                    )
+            elif param == "truncation_strategy":
+                # v1.x uses 'truncation' ("auto" | "disabled"). Pass through value as-is.
+                deprecated_model_settings["truncation"] = param_value
+            else:
+                deprecated_model_settings[param] = param_value
 
     if "validation_attempts" in kwargs:
         val_attempts = kwargs.pop("validation_attempts")
@@ -125,13 +143,16 @@ def handle_deprecated_parameters(kwargs: dict[str, Any]) -> dict[str, Any]:
     # Handle response_format parameter mapping to output_type
     if "response_format" in kwargs:
         response_format = kwargs.pop("response_format")
-        if "output_type" not in kwargs or kwargs["output_type"] is None:
+        # Only set output_type if it's a proper Python type (e.g., dataclass, pydantic model class)
+        if ("output_type" not in kwargs or kwargs["output_type"] is None) and isinstance(response_format, type):
             kwargs["output_type"] = response_format
-        warnings.warn(
-            "'response_format' parameter is deprecated. Use 'output_type' instead.",
-            DeprecationWarning,
-            stacklevel=3,
-        )
+        else:
+            warnings.warn(
+                "'response_format' is deprecated and not compatible with v1.x. "
+                "Provide a Python type via 'output_type' instead.",
+                DeprecationWarning,
+                stacklevel=3,
+            )
         deprecated_args_used["response_format"] = response_format
 
     # Handle deprecated tools
@@ -165,6 +186,16 @@ def handle_deprecated_parameters(kwargs: dict[str, Any]) -> dict[str, Any]:
             merged_model_settings.pop(key)
 
         resolve_token_settings(merged_model_settings, kwargs.get("name", "unknown"))
+
+        # Filter to only valid ModelSettings fields to avoid TypeErrors from unknown keys
+        valid_fields = {f.name for f in dataclasses.fields(ModelSettings)}
+        unknown_keys = [k for k in list(merged_model_settings.keys()) if k not in valid_fields]
+        for k in unknown_keys:
+            merged_model_settings.pop(k, None)
+        if unknown_keys:
+            logger.warning(
+                f"Ignoring deprecated/unknown model settings for agent '{kwargs.get('name', 'unknown')}': {unknown_keys}"
+            )
 
         # Create new ModelSettings instance from merged dict
         kwargs["model_settings"] = ModelSettings(**merged_model_settings)
@@ -202,6 +233,7 @@ def separate_kwargs(kwargs: dict[str, Any]) -> tuple[dict[str, Any], dict[str, A
             "instructions",
             "handoff_description",
             "handoffs",
+            "prompt",
             "model",
             "model_settings",
             "tools",

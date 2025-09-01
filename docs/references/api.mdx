@@ -60,7 +60,7 @@ class Agency:
 
 ```python get_response
 async def get_response(self,
-        message: str | list[dict[str, Any]],
+        message: str | list[TResponseInputItem],
         recipient_agent: str | Agent | None = None,
         context_override: dict[str, Any] | None = None,
         hooks_override: RunHooks | None = None,
@@ -90,7 +90,7 @@ async def get_response(self,
 ```
 
 ```python get_response_sync
-async def get_response_sync(self,
+def get_response_sync(self,
         message: str | list[TResponseInputItem],
         recipient_agent: str | Agent | None = None,
         context_override: dict[str, Any] | None = None,
@@ -122,7 +122,7 @@ async def get_response_sync(self,
 
 ```python get_response_stream
 async def get_response_stream(self,
-        message: str | list[dict[str, Any]],
+        message: str | list[TResponseInputItem],
         recipient_agent: str | Agent | None = None,
         context_override: dict[str, Any] | None = None,
         hooks_override: RunHooks | None = None,
@@ -174,14 +174,12 @@ def run_fastapi(self,
 ```python get_agency_structure
 def get_agency_structure(self,
         include_tools: bool = True,
-        layout_algorithm: str = "hierarchical"
     ) -> dict[str, Any]:
     """
     Returns a ReactFlow-compatible JSON structure representing the agency's organization.
 
     Parameters:
         include_tools: Whether to include agent tools as separate nodes
-        layout_algorithm: Layout algorithm hint ("hierarchical", "force-directed")
 
     Returns:
         dict: ReactFlow-compatible structure with nodes and edges
@@ -191,7 +189,6 @@ def get_agency_structure(self,
 ```python visualize
 def visualize(self,
         output_file: str = "agency_visualization.html",
-        layout_algorithm: str = "force_directed",
         include_tools: bool = True,
         open_browser: bool = True
     ) -> str:
@@ -200,7 +197,6 @@ def visualize(self,
 
     Parameters:
         output_file: Path to save the HTML file
-        layout_algorithm: Layout algorithm ("hierarchical", "force_directed")
         include_tools: Whether to include agent tools in visualization
         open_browser: Whether to automatically open in browser
 
@@ -299,11 +295,11 @@ class Agent(BaseAgent[MasterContext]):
 
 ```python get_response
 async def get_response(self,
-                      message: str | list[dict[str, Any]],
+                      message: str | list[TResponseInputItem],
                       sender_name: str | None = None,
                       context_override: dict[str, Any] | None = None,
                       hooks_override: RunHooks | None = None,
-                      run_config: RunConfig | None = None,
+                      run_config_override: RunConfig | None = None,
                       message_files: list[str] | None = None,
                       file_ids: list[str] | None = None,
                       additional_instructions: str | None = None,
@@ -329,7 +325,7 @@ async def get_response(self,
 
 ```python get_response_stream
 async def get_response_stream(self,
-                             message: str | list[dict[str, Any]],
+                             message: str | list[TResponseInputItem],
                              sender_name: str | None = None,
                              context_override: dict[str, Any] | None = None,
                              hooks_override: RunHooks | None = None,

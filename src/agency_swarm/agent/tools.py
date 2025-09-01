@@ -149,63 +149,59 @@ def load_tools_from_folder(agent: "Agent") -> None:
 
 
 def parse_schemas(agent: "Agent") -> None:
-    """Parse OpenAPI schemas from the schemas folder and create tools.
+    """Parse OpenAPI schemas from a schemas folder and create tools.
 
     Args:
         agent: The agent to parse schemas for
     """
-    schemas_folders = agent.schemas_folder if isinstance(agent.schemas_folder, list) else [agent.schemas_folder]
+    schemas_folder = agent.schemas_folder
+    if not schemas_folder:
+        return
 
-    for schemas_folder in schemas_folders:
-        if isinstance(schemas_folder, str):
-            f_path = schemas_folder
+    # Accept str or Path; normalize to string
+    f_path = str(schemas_folder)
 
-            if not os.path.isdir(f_path):
-                f_path = os.path.join(agent.get_class_folder_path(), schemas_folder)
-                f_path = os.path.normpath(f_path)
+    if not os.path.isdir(f_path):
+        f_path = os.path.join(agent.get_class_folder_path(), f_path)
+        f_path = os.path.normpath(f_path)
 
-            if os.path.isdir(f_path):
-                f_paths = os.listdir(f_path)
+    if os.path.isdir(f_path):
+        entries = os.listdir(f_path)
+        entries = [e for e in entries if not e.startswith(".")]
+        schema_paths = [os.path.join(f_path, e) for e in entries]
 
-                f_paths = [f for f in f_paths if not f.startswith(".")]
-
-                f_paths = [os.path.join(f_path, f) for f in f_paths]
-
-                for f_path in f_paths:
-                    with open(f_path) as f:
-                        openapi_spec = f.read()
-                        f.close()  # fix permission error on windows
-                    try:
-                        validate_openapi_spec(openapi_spec)
-                    except Exception as e:
-                        logger.error("Invalid OpenAPI schema: " + os.path.basename(f_path))
-                        raise e
-                    try:
-                        headers = None
-                        params = None
-                        if os.path.basename(f_path) in agent.api_headers:
-                            headers = agent.api_headers[os.path.basename(f_path)]
-                        if os.path.basename(f_path) in agent.api_params:
-                            params = agent.api_params[os.path.basename(f_path)]
-                        tools = ToolFactory.from_openapi_schema(openapi_spec, headers=headers, params=params)
-                    except Exception as e:
-                        logger.error(
-                            "Error parsing OpenAPI schema: " + os.path.basename(f_path),
-                            exc_info=True,
-                        )
-                        raise e
-
-                    for tool in tools:
-                        add_tool(agent, tool)
-
-            else:
-                logger.warning(
-                    f"Schemas folder path is not a directory. Skipping... {f_path}. "
-                    f"Make sure to create a 'schemas' folder inside the agent folder, or "
-                    f"add it in schemas_folder argument."
+        for schema_file_path in schema_paths:
+            with open(schema_file_path) as f:
+                openapi_spec = f.read()
+            try:
+                validate_openapi_spec(openapi_spec)
+            except Exception as e:
+                logger.error("Invalid OpenAPI schema: " + os.path.basename(schema_file_path))
+                raise e
+            try:
+                headers = None
+                params = None
+                base = os.path.basename(schema_file_path)
+                if base in agent.api_headers:
+                    headers = agent.api_headers[base]
+                if base in agent.api_params:
+                    params = agent.api_params[base]
+                tools = ToolFactory.from_openapi_schema(openapi_spec, headers=headers, params=params)
+            except Exception:
+                logger.error(
+                    "Error parsing OpenAPI schema: " + os.path.basename(schema_file_path),
+                    exc_info=True,
                 )
-        else:
-            logger.warning(f"Schemas folders must be strings. Skipping '{schemas_folder}' for agent '{agent.name}'.")
+                raise
+
+            for tool in tools:
+                add_tool(agent, tool)
+    else:
+        logger.warning(
+            f"Schemas folder path is not a directory. Skipping... {f_path}. "
+            f"Make sure to create a 'schemas' folder inside the agent folder, or "
+            f"set a valid path in the schemas_folder argument."
+        )
 
 
 def validate_hosted_tools(tools: list) -> None:
