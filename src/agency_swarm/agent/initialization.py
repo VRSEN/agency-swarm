@@ -193,9 +193,8 @@ def handle_deprecated_parameters(kwargs: dict[str, Any]) -> dict[str, Any]:
         for k in unknown_keys:
             merged_model_settings.pop(k, None)
         if unknown_keys:
-            logger.warning(
-                f"Ignoring deprecated/unknown model settings for agent '{kwargs.get('name', 'unknown')}': {unknown_keys}"
-            )
+            agent_name = kwargs.get("name", "unknown")
+            logger.warning(f"Ignoring deprecated/unknown model settings for agent '{agent_name}': {unknown_keys}")
 
         # Create new ModelSettings instance from merged dict
         kwargs["model_settings"] = ModelSettings(**merged_model_settings)
