@@ -16,10 +16,7 @@ import sys
 # Path setup for standalone examples
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "src")))
 
-from agents import function_tool
-
-from agency_swarm import Agency, Agent
-from agency_swarm.integrations.fastapi import run_fastapi
+from agency_swarm import Agency, Agent, function_tool, run_fastapi
 
 # --- Simple Tools --- #
 
@@ -51,7 +48,10 @@ def create_agency(load_threads_callback=None):
     # Second agent - performs tasks
     agent2 = Agent(
         name="ExampleAgent2",
-        description="A helpful and knowledgeable assistant that provides comprehensive support and guidance across various domains.",
+        description=(
+            "A helpful and knowledgeable assistant that provides "
+            "comprehensive support and guidance across various domains."
+        ),
         instructions="You are a helpful assistant. Use the ExampleTool when asked to greet someone.",
         tools=[ExampleTool],
     )
@@ -60,7 +60,7 @@ def create_agency(load_threads_callback=None):
     agency = Agency(
         agent,
         agent2,
-        communication_flows=[(agent, agent2)],
+        communication_flows=[agent > agent2],
         shared_instructions="Be helpful and demonstrate inter-agent communication.",
         load_threads_callback=load_threads_callback,
     )

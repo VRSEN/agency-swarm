@@ -29,7 +29,70 @@ Utilizing an Agency consisting of multiple agents offers several benefits:
   Introducing too many agents initially can make debugging and understanding interactions challenging.
 </Tip>
 
+<Tabs defaultValue="v1.x">
+<Tab title="v1.x">
 
+In the latest version, the Agency class orchestrates a collection of `Agent` instances based on a defined structure. It provides enhanced thread management, persistence hooks, and improved communication patterns between agents.
+
+## Agency Parameters
+
+Overview of parameters in the new `Agency` class:
+
+| Name | Parameter | Description |
+|------|-----------|-------------|
+| Entry Points | `*entry_points_args` | Positional arguments representing Agent instances that serve as entry points for external interaction. These agents can be directly messaged by users. |
+| Communication Flows *(optional)* | `communication_flows` | List of (sender, receiver) tuples defining allowed agent-to-agent message paths. Example: `[(ceo, dev), (ceo, va)]`. Default: `None` |
+| Name *(optional)* | `name` | A name for the agency instance. Default: `None` |
+| Shared Instructions *(optional)* | `shared_instructions` | Instructions prepended to all agents' system prompts. Default: `None` |
+| Send Message Tool Class *(optional)* | `send_message_tool_class` | Custom SendMessage tool class to use for all agents that don't have their own send_message_tool_class set. Enables enhanced inter-agent communication patterns. Default: `None` |
+| Load Threads Callback *(optional)* | `load_threads_callback` | A callable to load conversation threads for persistence. Default: `None` |
+| Save Threads Callback *(optional)* | `save_threads_callback` | A callable to save conversation threads for persistence. Default: `None` |
+| User Context *(optional)* | `user_context` | Initial shared context accessible to all agents during runs. Default: `None` |
+
+### Deprecated Parameters
+
+The following parameters are deprecated and will issue warnings:
+
+- `agency_chart` - Use positional entry points and `communication_flows` instead
+- `shared_files` - Shared file handling is not currently implemented
+- `async_mode` - Asynchronous execution is handled by the underlying SDK
+- `settings_path` & `settings_callbacks` - Responses SDK is now stateless, so agency settings are no longer needed.
+- `threads_callbacks` - Use `load_threads_callback` and `save_threads_callback` directly
+- Agent-level parameters (`temperature`, `top_p`, etc.) - Set these on individual Agent instances
+
+## Example
+
+Quick example of how to create an agency with 3 agents using the new structure:
+
+```python
+from agency_swarm import Agency
+from .ceo import CEO
+from .developer import Developer
+from .virtual_assistant import VirtualAssistant
+
+ceo = CEO()
+dev = Developer()
+va = VirtualAssistant()
+
+# New structure: entry points as positional args, communication flows as keyword arg
+agency = Agency(
+    ceo, dev,  # Entry points - these agents can interact with users
+    communication_flows=[
+        (ceo, dev),  # CEO can initiate communication with Developer
+        (ceo, va),   # CEO can initiate communication with Virtual Assistant
+        (dev, va)    # Developer can initiate communication with Virtual Assistant
+    ],
+    shared_instructions="You are part of a collaborative agency focused on software development.",
+    user_context={"project_type": "web_application"}
+)
+```
+
+</Tab>
+<Tab title="v0.x">
+
+<Info>
+v0.x is the **previous production version**. Install with: `pip install "agency-swarm<1.0.0"`
+</Info>
 
 ## Agency Parameters
 
@@ -71,6 +134,9 @@ agency = Agency([
     [dev, va]    # Developer can initiate communication with Virtual Assistant
 ])
 ```
+
+</Tab>
+</Tabs>
 
 ## Next Steps
 

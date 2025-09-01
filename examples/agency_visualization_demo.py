@@ -14,9 +14,7 @@ from pathlib import Path
 # Add the src directory to the path so we can import agency_swarm
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from agents import RunContextWrapper, function_tool
-
-from agency_swarm import Agency, Agent
+from agency_swarm import Agency, Agent, RunContextWrapper, function_tool
 
 
 @function_tool()
@@ -61,10 +59,10 @@ def create_demo_agency():
     agency = Agency(
         ceo,  # Entry point agent (positional argument)
         communication_flows=[
-            (ceo, pm),  # CEO can communicate with PM
-            (pm, dev),  # PM can communicate with Developer
-            (pm, qa),  # PM can communicate with QA
-            (dev, qa),  # Developer can communicate with QA
+            (ceo > pm),  # CEO can communicate with PM
+            (pm > dev),  # PM can communicate with Developer
+            (pm > qa),  # PM can communicate with QA
+            (dev > qa),  # Developer can communicate with QA
         ],
         name="Software Development Agency",
         shared_instructions="This is a software development agency with clear hierarchy and communication flows.",

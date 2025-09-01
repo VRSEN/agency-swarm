@@ -28,7 +28,6 @@ jobs:
         run: make lint
 
   typecheck:
-    if: false  # Temporarily disabled: mypy failing locally
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

@@ -209,10 +209,10 @@ if __name__ == "__main__":
 
 ### Using `function_tool` Decorator
 
-Alternatively, tools can be implemented as simple functions using the `@function_tool` decorator from the `agents` package.
+Alternatively, tools can be implemented as simple functions using the `@function_tool` decorator.
 
 ```python
-from agents import function_tool
+from agency_swarm import function_tool
 import os
 from dotenv import load_dotenv
 
@@ -228,18 +228,17 @@ if __name__ == "__main__":
     print(my_custom_tool("example value"))
 ```
 
-Remember, each tool code snippet you create must be IMMIDIATELY ready to use by the user. It must not contain any mocks, placeholders or hypothetical examples.
+Remember, each tool code snippet you create must be IMMEDIATELY ready to use by the user. It must not contain any mocks, placeholders or hypothetical examples.
 
 ### Agency Context (Shared State)
 
 Agency context lets your tools and agents share data without passing it in conversation messages.
 
 ```python
-from agents import function_tool, RunContextWrapper
-from agency_swarm.context import MasterContext
+from agency_swarm import function_tool
 
 @function_tool
-async def my_tool(ctx: RunContextWrapper[MasterContext], arg1: str) -> str:
+async def my_tool(ctx, arg1: str) -> str:
     ctx.context.set("my_key", arg1)            # Store data
     data = ctx.context.get("my_key", "default")  # Retrieve data
     return data
@@ -285,8 +284,7 @@ To create an agent:
    In v1.x you instantiate `Agent` directly rather than subclassing. Create a Python file (e.g., `ceo.py`) and instantiate the agent as follows:
 
    ```python
-   from agents import ModelSettings
-   from agency_swarm import Agent
+   from agency_swarm import Agent, ModelSettings
 
    ceo = Agent(
        name="CEO",

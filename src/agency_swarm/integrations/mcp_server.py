@@ -16,8 +16,7 @@ from fastmcp.server.server import Transport
 from fastmcp.tools.tool import Tool, ToolResult
 from mcp.types import ErrorData
 
-from agency_swarm import BaseTool
-from agency_swarm.tools import ToolFactory
+from agency_swarm.tools import BaseTool, ToolFactory
 
 logger = logging.getLogger(__name__)
 
@@ -153,8 +152,15 @@ def run_mcp(
 
                     # Create a minimal ToolContext for the FunctionTool
                     # Since we're in MCP environment, create a dummy context
+                    # SDK v0.2.x requires passing a tool_call with the tool name
+                    from openai.types.responses.response_function_tool_call import ResponseFunctionToolCall
+
+                    tool_call = ResponseFunctionToolCall(
+                        call_id=f"mcp_call_{self.name}", name=self.name, type="function_call", arguments=args_json
+                    )
+
                     tool_context = ToolContext.from_agent_context(
-                        RunContextWrapper(context={}), tool_call_id=f"mcp_call_{self.name}"
+                        RunContextWrapper(context={}), tool_call_id=f"mcp_call_{self.name}", tool_call=tool_call
                     )
 
                     # Call the original tool function

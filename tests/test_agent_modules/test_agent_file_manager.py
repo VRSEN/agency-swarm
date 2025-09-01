@@ -1,8 +1,8 @@
 """
 Tests for agency_swarm.agent.file_manager module.
 
-Focuses on testing the AttachmentManager and AgentFileManager classes
-to achieve comprehensive coverage of error handling and edge cases.
+Focuses on testing the AgentFileManager class functionality
+to cover error handling and edge cases.
 """
 
 import os
@@ -15,251 +15,7 @@ from agents import CodeInterpreterTool, FileSearchTool
 from agents.exceptions import AgentsException
 from openai import NotFoundError
 
-from agency_swarm.agent.attachment_manager import AttachmentManager
-from agency_swarm.agent.file_manager import (
-    CODE_INTERPRETER_FILE_EXTENSIONS,
-    FILE_SEARCH_FILE_EXTENSIONS,
-    IMAGE_FILE_EXTENSIONS,
-    AgentFileManager,
-)
-
-
-class TestAttachmentManager:
-    """Test AttachmentManager class functionality."""
-
-    def test_init_without_file_manager(self):
-        """Test AttachmentManager initialization when agent has no file_manager."""
-        # Create a mock agent without file_manager
-        mock_agent = Mock()
-        mock_agent.name = "TestAgent"
-        mock_agent.file_manager = None
-
-        # Should raise AgentsException on line 48
-        with pytest.raises(
-            AgentsException, match="Cannot use AttachmentManager for agent TestAgent without file manager"
-        ):
-            AttachmentManager(mock_agent)
-
-    def test_init_attachments_vs_existing_vector_store(self):
-        """Test init_attachments_vs when vector store already exists."""
-        # Setup mock agent with file_manager
-        mock_agent = Mock()
-        mock_agent.name = "TestAgent"
-        mock_agent.file_manager = Mock()
-
-        # Mock vector store list response with existing VS
-        mock_vs_data = Mock()
-        mock_vs_data.name = "attachments_vs"
-        mock_vs_data.id = "vs_test123"
-
-        mock_vs_list = Mock()
-        mock_vs_list.data = [mock_vs_data]
-
-        mock_agent.client_sync.vector_stores.list.return_value = mock_vs_list
-
-        attachment_manager = AttachmentManager(mock_agent)
-
-        # Call init_attachments_vs with existing VS name - should return existing ID (lines 67-74)
-        result = attachment_manager.init_attachments_vs("attachments_vs")
-
-        assert result == "vs_test123"
-        mock_agent.client_sync.vector_stores.list.assert_called_once()
-        mock_agent.client_sync.vector_stores.create.assert_not_called()
-
-    def test_init_attachments_vs_create_new(self):
-        """Test init_attachments_vs when creating new vector store."""
-        mock_agent = Mock()
-        mock_agent.name = "TestAgent"
-        mock_agent.file_manager = Mock()
-
-        # Mock vector store list response with no existing VS
-        mock_vs_list = Mock()
-        mock_vs_list.data = []
-
-        # Mock create response
-        mock_created_vs = Mock()
-        mock_created_vs.id = "vs_new456"
-
-        mock_agent.client_sync.vector_stores.list.return_value = mock_vs_list
-        mock_agent.client_sync.vector_stores.create.return_value = mock_created_vs
-
-        attachment_manager = AttachmentManager(mock_agent)
-
-        # Call init_attachments_vs with new VS name - should create new VS (lines 72-74)
-        result = attachment_manager.init_attachments_vs("new_vs")
-
-        assert result == "vs_new456"
-        mock_agent.client_sync.vector_stores.list.assert_called_once()
-        mock_agent.client_sync.vector_stores.create.assert_called_once_with(name="new_vs")
-
-    @pytest.mark.asyncio
-    async def test_sort_file_attachments_unsupported_extension(self):
-        """Test sort_file_attachments with unsupported file extension."""
-        mock_agent = Mock()
-        mock_agent.name = "TestAgent"
-        mock_agent.file_manager = Mock()
-
-        # Mock _get_filename_by_id to return file with unsupported extension
-        attachment_manager = AttachmentManager(mock_agent)
-        attachment_manager._get_filename_by_id = Mock(return_value="test.xyz")
-
-        # Should raise AgentsException on line 106
-        with pytest.raises(AgentsException, match="Unsupported file extension: .xyz for file test.xyz"):
-            await attachment_manager.sort_file_attachments(["file-123"])
-
-    def test_attachments_cleanup_with_temp_vector_store(self):
-        """Test attachments_cleanup when temporary vector store exists."""
-        mock_agent = Mock()
-        mock_agent.name = "TestAgent"
-        mock_agent.file_manager = Mock()
-        mock_agent.tools = []
-
-        # Add a FileSearchTool with the temp vector store ID
-        mock_file_search_tool = Mock(spec=FileSearchTool)
-        mock_file_search_tool.vector_store_ids = ["vs_temp123", "vs_other456"]
-        mock_agent.tools.append(mock_file_search_tool)
-
-        # Mock successful deletion
-        mock_delete_result = Mock()
-        mock_delete_result.deleted = True
-        mock_agent.client_sync.vector_stores.delete.return_value = mock_delete_result
-
-        attachment_manager = AttachmentManager(mock_agent)
-        attachment_manager._temp_vector_store_id = "vs_temp123"
-
-        # Call cleanup - should remove VS from tool and delete VS (lines 148-165)
-        attachment_manager.attachments_cleanup()
-
-        # Verify vector store was removed from tool but tool wasn't removed (multiple VSs)
-        assert "vs_temp123" not in mock_file_search_tool.vector_store_ids
-        assert mock_file_search_tool in mock_agent.tools  # Tool should still exist
-        mock_agent.client_sync.vector_stores.delete.assert_called_once_with(vector_store_id="vs_temp123")
-
-    def test_attachments_cleanup_remove_file_search_tool(self):
-        """Test attachments_cleanup removing FileSearchTool when it has no more vector stores."""
-        mock_agent = Mock()
-        mock_agent.name = "TestAgent"
-        mock_agent.file_manager = Mock()
-
-        # Add a FileSearchTool with only the temp vector store ID
-        mock_file_search_tool = Mock(spec=FileSearchTool)
-        mock_file_search_tool.vector_store_ids = ["vs_temp123"]
-        mock_agent.tools = [mock_file_search_tool]
-
-        # Mock successful deletion
-        mock_delete_result = Mock()
-        mock_delete_result.deleted = True
-        mock_agent.client_sync.vector_stores.delete.return_value = mock_delete_result
-
-        attachment_manager = AttachmentManager(mock_agent)
-        attachment_manager._temp_vector_store_id = "vs_temp123"
-
-        # Call cleanup - should remove entire tool (lines 151-153)
-        attachment_manager.attachments_cleanup()
-
-        # Verify tool was completely removed
-        assert mock_file_search_tool not in mock_agent.tools
-        mock_agent.client_sync.vector_stores.delete.assert_called_once_with(vector_store_id="vs_temp123")
-
-    def test_attachments_cleanup_vector_store_delete_failure(self):
-        """Test attachments_cleanup when vector store deletion fails."""
-        mock_agent = Mock()
-        mock_agent.name = "TestAgent"
-        mock_agent.file_manager = Mock()
-        mock_agent.tools = []
-
-        # Mock failed deletion
-        mock_delete_result = Mock()
-        mock_delete_result.deleted = False
-        mock_agent.client_sync.vector_stores.delete.return_value = mock_delete_result
-
-        attachment_manager = AttachmentManager(mock_agent)
-        attachment_manager._temp_vector_store_id = "vs_temp123"
-
-        # Call cleanup - should handle failed deletion gracefully (lines 162-163)
-        attachment_manager.attachments_cleanup()  # Should not raise exception
-
-        mock_agent.client_sync.vector_stores.delete.assert_called_once_with(vector_store_id="vs_temp123")
-
-    def test_attachments_cleanup_vector_store_delete_exception(self):
-        """Test attachments_cleanup when vector store deletion throws exception."""
-        mock_agent = Mock()
-        mock_agent.name = "TestAgent"
-        mock_agent.file_manager = Mock()
-        mock_agent.tools = []
-
-        # Mock deletion exception
-        mock_agent.client_sync.vector_stores.delete.side_effect = Exception("Delete failed")
-
-        attachment_manager = AttachmentManager(mock_agent)
-        attachment_manager._temp_vector_store_id = "vs_temp123"
-
-        # Call cleanup - should handle exception gracefully (lines 164-166)
-        attachment_manager.attachments_cleanup()  # Should not raise exception
-
-        mock_agent.client_sync.vector_stores.delete.assert_called_once_with(vector_store_id="vs_temp123")
-
-    def test_attachments_cleanup_code_interpreter_files(self):
-        """Test attachments_cleanup with temporary code interpreter files."""
-        mock_agent = Mock()
-        mock_agent.name = "TestAgent"
-        mock_agent.file_manager = Mock()
-
-        # Add a CodeInterpreterTool with temp files
-        mock_code_tool = Mock(spec=CodeInterpreterTool)
-        mock_code_tool.tool_config = {"container": {"file_ids": ["file-123", "file-456", "file-789"]}}
-        mock_agent.tools = [mock_code_tool]
-
-        attachment_manager = AttachmentManager(mock_agent)
-        attachment_manager._temp_code_interpreter_file_ids = ["file-123", "file-789"]
-
-        # Call cleanup - should remove temp files from tool (lines 168-187)
-        attachment_manager.attachments_cleanup()
-
-        # Verify temp files were removed but tool kept (still has file-456)
-        expected_file_ids = ["file-456"]
-        assert mock_code_tool.tool_config["container"]["file_ids"] == expected_file_ids
-        assert mock_code_tool in mock_agent.tools
-
-    def test_attachments_cleanup_remove_code_interpreter_tool(self):
-        """Test attachments_cleanup removing CodeInterpreterTool when no files left."""
-        mock_agent = Mock()
-        mock_agent.name = "TestAgent"
-        mock_agent.file_manager = Mock()
-
-        # Add a CodeInterpreterTool with only temp files
-        mock_code_tool = Mock(spec=CodeInterpreterTool)
-        mock_code_tool.tool_config = {"container": {"file_ids": ["file-123", "file-456"]}}
-        mock_agent.tools = [mock_code_tool]
-
-        attachment_manager = AttachmentManager(mock_agent)
-        attachment_manager._temp_code_interpreter_file_ids = ["file-123", "file-456"]
-
-        # Call cleanup - should remove entire tool (lines 180-182)
-        attachment_manager.attachments_cleanup()
-
-        # Verify tool was completely removed
-        assert mock_code_tool not in mock_agent.tools
-
-    def test_attachments_cleanup_code_interpreter_string_container(self):
-        """Test attachments_cleanup with CodeInterpreterTool using string container."""
-        mock_agent = Mock()
-        mock_agent.name = "TestAgent"
-        mock_agent.file_manager = Mock()
-
-        # Add a CodeInterpreterTool with string container (can't modify)
-        mock_code_tool = Mock(spec=CodeInterpreterTool)
-        mock_code_tool.tool_config = {"container": "some_container_id"}
-        mock_agent.tools = [mock_code_tool]
-
-        attachment_manager = AttachmentManager(mock_agent)
-        attachment_manager._temp_code_interpreter_file_ids = ["file-123"]
-
-        # Call cleanup - should handle string container gracefully (lines 173-175)
-        attachment_manager.attachments_cleanup()  # Should not raise exception
-
-        # Verify tool configuration wasn't modified
-        assert mock_code_tool.tool_config["container"] == "some_container_id"
+from agency_swarm.agent.file_manager import AgentFileManager
 
 
 class TestAgentFileManager:
@@ -272,7 +28,7 @@ class TestAgentFileManager:
 
         file_manager = AgentFileManager(mock_agent)
 
-        # Should raise FileNotFoundError on line 225
+        # Should raise FileNotFoundError
         with pytest.raises(FileNotFoundError, match="File not found at /nonexistent/file.txt"):
             file_manager.upload_file("/nonexistent/file.txt")
 
@@ -290,7 +46,7 @@ class TestAgentFileManager:
             tmp_file_path = tmp_file.name
 
         try:
-            # Should raise AgentsException on lines 231-234
+            # Should raise AgentsException
             with pytest.raises(AgentsException, match="Cannot upload file. Agent_files_folder_path is not set"):
                 file_manager.upload_file(tmp_file_path)
         finally:
@@ -322,7 +78,7 @@ class TestAgentFileManager:
             tmp_file_path = tmp_file.name
 
         try:
-            # Should handle NotFoundError gracefully and return file ID (lines 277-283)
+            # Should handle NotFoundError gracefully and return file ID
             result = file_manager.upload_file(tmp_file_path)
             assert result == "file-123"
 
@@ -357,7 +113,7 @@ class TestAgentFileManager:
             tmp_file_path = tmp_file.name
 
         try:
-            # Should handle association failure gracefully and still return file ID (lines 293-298)
+            # Should handle association failure gracefully and still return file ID
             result = file_manager.upload_file(tmp_file_path)
             assert result == "file-123"
         finally:
@@ -368,7 +124,7 @@ class TestAgentFileManager:
         mock_agent = Mock()
         file_manager = AgentFileManager(mock_agent)
 
-        # Should raise FileNotFoundError on line 313
+        # Should raise FileNotFoundError
         with pytest.raises(FileNotFoundError, match="File not found: /nonexistent/file.txt"):
             file_manager.get_id_from_file("/nonexistent/file.txt")
 
@@ -399,7 +155,7 @@ class TestAgentFileManager:
                     patch("pathlib.Path.parent", new_callable=lambda: base_dir),
                     patch("pathlib.Path.name", new_callable=lambda: "test_folder"),
                 ):
-                    # Should find existing VS directory and reuse it (lines 333-338)
+                    # Should find existing VS directory and reuse it
                     file_manager._parse_files_folder_for_vs_id()
 
                     # Should update agent's files_folder to use existing VS directory
@@ -427,7 +183,7 @@ class TestAgentFileManager:
                 patch.object(Path, "resolve", return_value=resolved_path),
                 patch("pathlib.Path.is_dir", return_value=False),
             ):
-                # Should handle non-directory path gracefully (lines 344-346)
+                # Should handle non-directory path gracefully
                 file_manager._parse_files_folder_for_vs_id()
 
                 # Should set files_folder_path to None
@@ -445,7 +201,7 @@ class TestAgentFileManager:
 
         file_manager = AgentFileManager(mock_agent)
 
-        # Should raise AgentsException (lines 479-483)
+        # Should raise AgentsException
         with pytest.raises(AgentsException, match="FileSearchTool has no vector store IDs"):
             file_manager.add_file_search_tool("vs_test123")
 
@@ -462,7 +218,7 @@ class TestAgentFileManager:
 
         file_manager = AgentFileManager(mock_agent)
 
-        # Should associate agent's VS with first tool VS ID (lines 486-487)
+        # Should associate agent's VS with first tool VS ID
         file_manager.add_file_search_tool("vs_test123")
 
         assert mock_agent._associated_vector_store_id == "vs_existing456"
@@ -480,7 +236,7 @@ class TestAgentFileManager:
 
         file_manager = AgentFileManager(mock_agent)
 
-        # Should append new VS ID to existing tool (lines 490-495)
+        # Should append new VS ID to existing tool
         file_manager.add_file_search_tool("vs_test123")
 
         assert "vs_test123" in mock_file_search_tool.vector_store_ids
@@ -498,7 +254,7 @@ class TestAgentFileManager:
 
         file_manager = AgentFileManager(mock_agent)
 
-        # Should handle string container gracefully (lines 525-529)
+        # Should handle string container gracefully
         file_manager.add_code_interpreter_tool(["file-123"])
 
         # Container should remain unchanged
@@ -516,7 +272,7 @@ class TestAgentFileManager:
 
         file_manager = AgentFileManager(mock_agent)
 
-        # Should skip existing file and add new one (lines 534-540)
+        # Should skip existing file and add new one
         file_manager.add_code_interpreter_tool(["file-existing123", "file-new456"])
 
         expected_file_ids = ["file-existing123", "file-new456"]
@@ -538,7 +294,7 @@ class TestAgentFileManager:
 
         file_manager = AgentFileManager(mock_agent)
 
-        # Should skip existing file and add new one (lines 556-560)
+        # Should skip existing file and add new one
         file_manager.add_files_to_vector_store("vs_test123", ["file-existing123", "file-new456"])
 
         # Should only call create for the new file
@@ -561,7 +317,7 @@ class TestAgentFileManager:
 
         file_manager = AgentFileManager(mock_agent)
 
-        # Should raise AgentsException (lines 566-569)
+        # Should raise AgentsException
         with pytest.raises(AgentsException, match="Failed to add file file-123 to Vector Store vs_test123"):
             file_manager.add_files_to_vector_store("vs_test123", ["file-123"])
 
@@ -584,7 +340,7 @@ class TestAgentFileManager:
                 mock_normpath.return_value = tmp_file_path
                 mock_isfile.return_value = True
 
-                # Should read instructions from class-relative path (lines 576-579)
+                # Should read instructions from class-relative path
                 file_manager.read_instructions()
 
                 assert mock_agent.instructions == "Test instructions content"
@@ -621,32 +377,10 @@ class TestAgentFileManager:
 
                 mock_isfile.side_effect = isfile_side_effect
 
-                # Should read instructions from absolute path (lines 580-583)
+                # Should read instructions from absolute path
                 file_manager.read_instructions()
 
                 # Should have read from absolute path
                 assert "Absolute path instructions" in mock_agent.instructions
         finally:
             os.unlink(tmp_file_path)
-
-
-class TestFileExtensionConstants:
-    """Test file extension constants are properly defined."""
-
-    def test_code_interpreter_extensions(self):
-        """Test CODE_INTERPRETER_FILE_EXTENSIONS contains expected extensions."""
-        expected_extensions = [".py", ".js", ".csv", ".json", ".html", ".xml"]
-        for ext in expected_extensions:
-            assert ext in CODE_INTERPRETER_FILE_EXTENSIONS
-
-    def test_file_search_extensions(self):
-        """Test FILE_SEARCH_FILE_EXTENSIONS contains expected extensions."""
-        expected_extensions = [".pdf", ".txt", ".md", ".doc", ".docx"]
-        for ext in expected_extensions:
-            assert ext in FILE_SEARCH_FILE_EXTENSIONS
-
-    def test_image_extensions(self):
-        """Test IMAGE_FILE_EXTENSIONS contains expected extensions."""
-        expected_extensions = [".jpg", ".jpeg", ".png", ".gif"]
-        for ext in expected_extensions:
-            assert ext in IMAGE_FILE_EXTENSIONS

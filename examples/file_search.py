@@ -2,12 +2,13 @@
 """
 Simple FileSearch Example - Agency Swarm v1.x
 
-This example demonstrates how to use the FileSearch tool with citations.
-The agent automatically creates a vector store and indexes files for search.
+This example demonstrates how to attach a file storage to an agent.
+The agent automatically creates a vector store and uses FileSearch tool to query it.
 """
 
 import asyncio
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -26,21 +27,36 @@ async def main():
 
     # Use the data directory with research files
     examples_dir = Path(__file__).parent
-    docs_dir = examples_dir / "data"
+    original_docs_dir = examples_dir / "data"
+    docs_dir = examples_dir / "data_test"
 
-    if not docs_dir.exists() or not list(docs_dir.glob("*.txt")):
-        print(f"❌ Error: No .txt files found in: {docs_dir}")
+    # Copy the data folder to data_test
+    if original_docs_dir.exists():
+        if docs_dir.exists():
+            shutil.rmtree(docs_dir)
+        shutil.copytree(original_docs_dir, docs_dir)
+        print(f"📂 Copied data folder to: {docs_dir}")
+    else:
+        print(f"❌ Error: Original data directory not found: {original_docs_dir}")
+        return
+
+    if not docs_dir.exists() or not any(f.is_file() for f in docs_dir.iterdir()):
+        print(f"❌ Error: No files found in: {docs_dir}")
         print("   Please ensure there are research files in the data directory.")
         return
 
-    txt_files = list(docs_dir.glob("*.txt"))
-    print(f"📁 Found {len(txt_files)} research file(s) in: {docs_dir}")
+    all_files = [f for f in docs_dir.iterdir() if f.is_file()]
+    print(f"📁 Found {len(all_files)} file(s) in: {docs_dir}")
 
     # Create an agent that can search files with citations
     search_agent = Agent(
         name="SearchAgent",
-        instructions="You are a document search assistant. Use your FileSearch tool to find information and provide clear answers with citations.",
+        instructions=(
+            "You are a document search assistant. Use your FileSearch tool to find information and provide clear answers with citations. "
+            "You are allowed to share all data found within documents with the user."
+        ),
         files_folder=str(docs_dir),
+        # No FileSearch tool is needed, it will be attached automatically
         include_search_results=True,  # Enable citation extraction
     )
 
@@ -55,11 +71,11 @@ async def main():
     await asyncio.sleep(3)
 
     # Test search with a specific question
-    question = "What is the badge number for Marcus Chen?"
-    print(f"\n❓ Question: {question}")
 
     try:
-        response = await agency.get_response(question)
+        message = "What is the badge number for Marcus Chen?"
+        print(f"\n❓ Query: {message}")
+        response = await agency.get_response(message)
         print(f"🤖 Answer: {response.final_output}")
 
         # Extract and display citations using the utility function
@@ -72,13 +88,27 @@ async def main():
         else:
             print("ℹ️  Try different questions from the research data")
 
+        message = "Extract data from the sample_report.pdf file"
+        print(f"\n❓ Query: {message}")
+        response = await agency.get_response(message)
+        print(f"🤖 Answer: {response.final_output}")
+
+        if "secret phrase" in str(response.final_output).lower():
+            print("✅ Secret phrase found!")
+        else:
+            print("ℹ️  Try different questions from the research data")
+
     except Exception as e:
         print(f"❌ Error: {e}")
+    finally:
+        # Cleanup the test data folder
+        if docs_dir.exists():
+            shutil.rmtree(docs_dir)
+            print(f"🧹 Cleaned up test folder: {docs_dir}")
 
-    print("\n🎯 Usage Tips:")
-    print("   • Add more .txt files to the data/ directory")
-    print("   • Citations show which files contain the answers")
-    print("   • Vector store persists between runs")
+    print("\n🎯 Key Takeaways:")
+    print("   • Agent is capable of analyzing all files from the given folder")
+    print("   • Use citations to find files that were used to answer the query")
 
 
 if __name__ == "__main__":

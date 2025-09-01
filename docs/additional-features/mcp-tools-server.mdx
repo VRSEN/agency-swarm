@@ -1,0 +1,245 @@
+---
+title: "MCP Tools Server"
+description: "Serving your tools as MCP (Model Context Protocol) endpoints."
+icon: "server"
+---
+
+Agency Swarm supports serving your tools as production-ready MCP (Model Context Protocol) endpoints.
+This enables AI models to interact with your tools remotely over HTTP, making them accessible to any MCP-compatible client or AI system.
+
+<Tabs defaultValue="v1.x">
+<Tab title="v1.x">
+
+## Setting Up MCP Server
+
+To expose tools as a standalone MCP endpoint, use the `run_mcp()` function from the integrations module.
+This will create an MCP server that will serve provided tools over the streamable HTTP protocol.
+
+### Example: Serving Individual Tools
+
+```python
+from agency_swarm import function_tool, run_mcp
+from pydantic import BaseModel, Field
+
+class InputArgs(BaseModel):
+    input_field: str = Field(..., description="Test input for the tool")
+
+@function_tool
+async def echo_function(args: InputArgs) -> str:
+    """Returns a unique id"""
+    return f"Tool called with input: {args.input_field}"
+
+# Start MCP server with individual tools.
+# This will setup a streamable-http server by default on port 8000
+run_mcp(tools=[echo_function])
+```
+
+### Configuration Options
+
+The `run_mcp()` function accepts several configuration parameters:
+
+```python
+run_mcp(
+    tools=[ExampleTool, TestTool],  # List of Function tools or BaseTools
+    host="0.0.0.0",                 # Host to bind server to
+    port=8000,                      # Port to bind server to
+    app_token_env="APP_TOKEN",      # Environment variable for auth token
+    server_name="mcp-tools-server", # MCP server identifier
+    return_app=False,               # Return app instead of running server
+    transport="streamable-http"     # Preferred mcp protocol to use
+)
+```
+
+### Authentication
+
+Authentication is controlled via environment variables:
+
+```python
+import os
+os.environ["APP_TOKEN"] = "your-secret-token"  # Or set in .env file
+```
+
+If no `APP_TOKEN` is set, **authentication will be disabled** and the server will accept all requests.
+
+---
+
+## MCP Client Usage
+
+<Tabs>
+<Tab title="Local MCP Server">
+
+This example shows how to use a local MCP server with stdio transport:
+
+```python
+import asyncio
+from agents.mcp.server import MCPServerStdio, MCPServerStdioParams
+from agency_swarm import Agency, Agent
+
+# Set up local MCP server using stdio transport
+stdio_server = MCPServerStdio(
+    MCPServerStdioParams(
+        command="python", # or "npx" if available
+        # Path to your MCP server script or npx arguments
+        args=["./path/to/your/mcp_server.py"]
+    ),
+    cache_tools_list=True
+)
+
+# Create agent with local MCP server
+mcp_agent = Agent(
+    name="LocalMCPAgent",
+    mcp_servers=[stdio_server],
+)
+
+agency = Agency(mcp_agent)
+
+async def run_local_example():
+    await stdio_server.connect()
+    response = await agency.get_response("List all mcp tools")
+    print(response.final_output)
+    await stdio_server.cleanup()
+
+if __name__ == "__main__":
+    asyncio.run(run_local_example())
+```
+
+</Tab>
+<Tab title="Hosted MCP Server">
+
+This example shows how to connect to a hosted MCP server over HTTP:
+
+```python
+import os
+import asyncio
+from agency_swarm import Agency, Agent, HostedMCPTool
+
+# Create agent with hosted MCP server
+mcp_agent = Agent(
+    name="HostedMCPAgent",
+    tools=[
+        HostedMCPTool(
+            tool_config={
+                "type": "mcp",
+                "server_label": "mcp-tools-server",
+                # Update with your hosted MCP server URL
+                "server_url": "https://your-server.com/mcp/",
+                "require_approval": "never",
+                "headers": {
+                    "Authorization": (
+                        f"Bearer {os.getenv('APP_TOKEN', 'your-token')}"
+                    )
+                }
+            }
+        ),
+    ],
+)
+
+agency = Agency(mcp_agent)
+
+async def run_hosted_example():
+    # HostedMCPTools do not require manual connection
+    response = await agency.get_response("List all mcp tools")
+    print(response.final_output)
+
+if __name__ == "__main__":
+    asyncio.run(run_hosted_example())
+```
+
+<Note>
+For hosted MCP servers, ensure your server is accessible from the internet.
+You can use tools like ngrok for local development.
+</Note>
+
+</Tab>
+</Tabs>
+
+</Tab>
+<Tab title="v0.x">
+
+<Info>
+v0.x is the **previous production version**. Install with: `pip install "agency-swarm<1.0.0"`
+</Info>
+
+## Setting Up MCP Server
+
+To expose tools as a standalone MCP endpoint, use the `run_mcp()` function from the integrations module.
+This will create an MCP server that will serve provided tools over the streamable HTTP protocol.
+
+### Example: Serving Individual Tools
+
+```python
+from pydantic import Field
+from agency_swarm import BaseTool, run_mcp
+
+
+class TestTool(BaseTool):
+    input: str = Field(..., description="The input to the tool")
+
+    def run(self):
+        return "Test tool called with input: " + self.input
+
+# Start MCP server with individual tools
+run_mcp(tools=[TestTool])
+
+# Or provide tools folder instead
+run_mcp(tools="path/to/tools/directory")
+```
+
+### Configuration Options
+
+The `run_mcp()` function accepts several configuration parameters:
+
+```python
+run_mcp(
+    tools=[ExampleTool, TestTool],  # List of tools or directory path
+    host="0.0.0.0",                 # Host to bind server to
+    port=8000,                      # Port to bind server to
+    app_token_env="APP_TOKEN",      # Environment variable for auth token
+    server_name="mcp-tools-server", # MCP server identifier
+    cors_origins=["*"],             # CORS allowed origins
+    return_app=False,               # Return app instead of running server
+)
+```
+
+### Authentication
+
+Authentication is controlled via environment variables:
+
+```python
+import os
+os.environ["APP_TOKEN"] = "your-secret-token"  # Or set in .env file
+```
+
+If no `APP_TOKEN` is set, **authentication will be disabled** and the server will accept all requests.
+
+---
+
+## MCP Client Usage
+
+You can interact with your tools using any MCP-compatible client. Do not try to make direct http calls to the server, all requests should be managed by a respective client:
+
+```python
+from agency_swarm import Agency, Agent
+from agency_swarm.tools.mcp import MCPServerStreamableHttp
+
+# Create MCP client (make sure tool server is already running)
+client = MCPServerStreamableHttp(
+    name="ToolsClient",
+    params={
+        "url": "http://localhost:8000/mcp",
+        "headers": {"Authorization": "Bearer your-secret-token"}
+    },
+)
+
+# Call TestTool
+response = client.call_tool("TestTool", {"input": "Hello MCP!"})
+print(f"TestTool response: {response.content[0].text}")
+
+# Or provide this client to an Agent
+agent = Agent(name="test", mcp_servers=[client])
+agency = Agency([agent], name="test1")
+agency.run_demo()
+```
+
+</Tab>
+</Tabs>

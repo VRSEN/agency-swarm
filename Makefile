@@ -26,16 +26,16 @@ prime:
 
 .PHONY: format
 format:
-	uv run ruff format
-	uv run ruff check --fix
+	uv run ruff format --exclude docs
+	uv run ruff check --fix --exclude docs
 
 .PHONY: lint
 lint:
-	uv run ruff check
+	uv run ruff check --exclude docs
 
 .PHONY: lint-unsafe
 lint-unsafe:
-	uv run ruff check --fix --unsafe-fixes
+	uv run ruff check --fix --unsafe-fixes --exclude docs
 
 .PHONY: mypy
 mypy:
@@ -57,7 +57,7 @@ tests-verbose:
 coverage:
 	uv run coverage run -m pytest
 	uv run coverage xml -o coverage.xml
-	uv run coverage report -m --fail-under=85
+	uv run coverage report -m --fail-under=86
 
 .PHONY: coverage-html
 coverage-html:

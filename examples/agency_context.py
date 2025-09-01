@@ -13,13 +13,11 @@ import sys
 # Path setup for standalone examples
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
-from agents import RunContextWrapper, function_tool
-
-from agency_swarm import Agency, Agent, MasterContext
+from agency_swarm import Agency, Agent, MasterContext, RunContextWrapper, function_tool
 
 # Minimal logging setup
 logging.basicConfig(level=logging.WARNING)
-logging.getLogger("agency_swarm").setLevel(logging.INFO)
+logging.getLogger("agency_swarm").setLevel(logging.WARNING)
 
 # --- Data Storage Tools --- #
 
@@ -106,7 +104,7 @@ analyst_agent = Agent(
 
 agency = Agency(
     data_agent,
-    communication_flows=[(data_agent, analyst_agent)],
+    communication_flows=[data_agent > analyst_agent],
     user_context={"session_id": "demo_session", "system": "agency_context_demo"},
 )
 

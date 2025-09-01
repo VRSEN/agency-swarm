@@ -40,7 +40,7 @@ async def test_terminal_demo_like_flow():
 
     agency = Agency(
         ceo,
-        communication_flows=[(ceo, worker)],
+        communication_flows=[ceo > worker],
         name="TerminalDemoAgencyTest",
     )
 

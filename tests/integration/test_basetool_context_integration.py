@@ -27,7 +27,7 @@ async def test_basetool_context_integration():
         name="ContextAgent",
         instructions="You read data from context using the ContextReaderTool.",
         tools=[ContextReaderTool],
-        model="gpt-4o-mini",
+        model="gpt-5-mini",
     )
 
     # Create agency with initial context
@@ -64,7 +64,7 @@ async def test_basetool_async_context():
         name="AsyncAgent",
         instructions="You process data asynchronously.",
         tools=[AsyncContextTool],
-        model="gpt-4o-mini",
+        model="gpt-5-mini",
     )
 
     agency = Agency(

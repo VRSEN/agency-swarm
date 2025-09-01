@@ -10,7 +10,6 @@ This example demonstrates how to properly integrate Agency Swarm with FastAPI, i
 
 - `server.py` - FastAPI server that exposes an agency with two communicating agents
 - `client.py` - Python client showing how to interact with the API endpoints
-- `debug_streaming.py` - Debugging tool to inspect streaming events and field propagation
 
 ## Setup
 
@@ -52,19 +51,6 @@ This will test all endpoints and show how to:
 - Make requests with conversation history
 - Handle streaming events
 - Extract agent metadata from responses
-
-### Debug Streaming
-
-To debug the streaming events and verify field propagation:
-
-```bash
-python debug_streaming.py
-```
-
-This will show:
-- Raw event structure
-- Which events contain `agent`, `callerAgent`, `call_id`, and `item_id` fields
-- Statistics on field occurrence rates
 
 ## Important Notes
 

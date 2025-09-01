@@ -4,7 +4,7 @@ import os
 import re
 import sys
 
-from agents import (
+from agency_swarm import (
     GuardrailFunctionOutput,
     InputGuardrailTripwireTriggered,
     OutputGuardrailTripwireTriggered,
@@ -55,6 +55,7 @@ async def forbid_email_output(context: RunContextWrapper, agent: Agent, response
     """Trip if output contains an email address."""
     text = response_text.strip()
     if EMAIL_RE.search(text):
+        print(f"<- Agent: {text}")
         return GuardrailFunctionOutput(
             output_info="You are not allowed to include your email address in your response. "
             "Redirect the user to the contact page: https://www.example.com/contact",
@@ -72,7 +73,7 @@ agent = Agent(
         "Your support email is alice@example.com."
     ),
     description="Customer support assistant",
-    model="gpt-5",
+    model="gpt-4.1",
     output_guardrails=[forbid_email_output],
     input_guardrails=[require_task_prefix],
 )

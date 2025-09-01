@@ -11,9 +11,7 @@ from pathlib import Path
 # Add the src directory to the path so we can import agency_swarm
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from agents import RunContextWrapper, function_tool
-
-from agency_swarm import Agency, Agent
+from agency_swarm import Agency, Agent, RunContextWrapper, function_tool
 from agency_swarm.ui.demos.launcher import CopilotDemoLauncher
 
 
@@ -44,9 +42,7 @@ def create_demo_agency():
     # Create agency with communication flows (v1.x pattern)
     agency = Agency(
         ceo,  # Entry point agent (positional argument)
-        communication_flows=[
-            (ceo, worker),
-        ],
+        communication_flows=[ceo > worker],
         name="CopilotDemoAgency",
     )
 

@@ -15,6 +15,9 @@ import time
 
 import requests
 
+# Set to False to print raw SSE stream
+PARSE_STREAM = True
+
 
 def test_regular_endpoint():
     """Test the regular (non-streaming) endpoint."""
@@ -26,7 +29,10 @@ def test_regular_endpoint():
 
     # Initial request
     chat_history = []
-    payload = {"message": "What's up, bro? Call the second agent to call ExampleTool", "chat_history": chat_history}
+    payload = {
+        "message": "Hi, I'm John, can you ask the second agent to call ExampleTool?",
+        "chat_history": chat_history,
+    }
 
     print(f"\n📤 Request: {payload['message']}")
     response = requests.post(url, json=payload)
@@ -71,7 +77,10 @@ def test_streaming_endpoint():
     url = "http://localhost:8080/my-agency/get_response_stream"
 
     chat_history = []
-    payload = {"message": "What's up, bro? Call the second agent to call ExampleTool", "chat_history": chat_history}
+    payload = {
+        "message": "Hi, I'm John, can you ask the second agent to call ExampleTool?",
+        "chat_history": chat_history,
+    }
 
     print(f"\n📤 Request: {payload['message']}")
     print("\n🔄 Streaming events:")
@@ -80,83 +89,47 @@ def test_streaming_endpoint():
     response = requests.post(url, json=payload, stream=True)
 
     if response.status_code == 200:
-        event_count = 0
-        agent_events = {}  # Track events by agent
-
+        print("🎯 Streaming response:")
+        accumulated_text = ""
+        add_newline = False
         for line in response.iter_lines():
             if line:
                 line_str = line.decode("utf-8")
+                if not PARSE_STREAM:
+                    print(line_str)
+                else:
+                    # Parse SSE format
+                    if line_str.startswith("data: "):
+                        data_str = line_str[6:]  # Remove "data: " prefix
 
-                # Parse SSE format
-                if line_str.startswith("data: "):
-                    data_str = line_str[6:]  # Remove "data: " prefix
+                        if data_str == "[DONE]":
+                            print("\n\n✅ Stream complete")
+                            break
 
-                    if data_str == "[DONE]":
-                        print("\n✅ Stream complete")
-                        break
+                        try:
+                            data = json.loads(data_str)
 
-                    try:
-                        data = json.loads(data_str)
-                        event_count += 1
+                            # Extract delta text from nested structure
+                            if "data" in data and isinstance(data["data"], dict):
+                                nested_data = data["data"]
+                                if "data" in nested_data and isinstance(nested_data["data"], dict):
+                                    inner_data = nested_data["data"]
+                                    if "type" in inner_data and ".done" in inner_data["type"]:
+                                        add_newline = True
+                                    elif "delta" in inner_data:
+                                        delta_text = inner_data["delta"]
+                                        if isinstance(delta_text, str):
+                                            if add_newline:
+                                                print("\n")
+                                            print(delta_text, end="", flush=True)
+                                            accumulated_text += delta_text
+                                            add_newline = False
 
-                        # Check if this is the final messages event
-                        if "new_messages" in data:
-                            new_messages = data["new_messages"]
-                            print(f"\n📋 Final: Received {len(new_messages)} new messages")
-                            for msg in new_messages[:3]:  # Show first 3 messages
-                                print(
-                                    f"  - Agent: {msg.get('agent', 'N/A')}, "
-                                    f"CallerAgent: {msg.get('callerAgent', 'N/A')}, "
-                                    f"Type: {msg.get('type', msg.get('role', 'unknown'))}"
-                                )
-                        else:
-                            # Regular streaming event
-                            event_data = data.get("data", data)
+                        except json.JSONDecodeError:
+                            # Skip malformed JSON
+                            pass
 
-                            # Extract metadata fields
-                            agent = event_data.get("agent", "N/A")
-                            caller_agent = event_data.get("callerAgent", "N/A")
-                            call_id = event_data.get("call_id", "")
-                            item_id = event_data.get("item_id", "")
-
-                            # Track events by agent
-                            if agent != "N/A":
-                                if agent not in agent_events:
-                                    agent_events[agent] = 0
-                                agent_events[agent] += 1
-
-                            # Show first few events and important ones
-                            if event_count <= 10 or call_id or item_id:
-                                print(f"\n  Event #{event_count}:")
-                                print(f"    Agent: {agent}")
-                                print(f"    CallerAgent: {caller_agent}")
-                                if call_id:
-                                    print(f"    call_id: {call_id[:20]}...")
-                                if item_id:
-                                    print(f"    item_id: {item_id[:20]}...")
-
-                                # Show event type if available
-                                if "type" in event_data:
-                                    print(f"    Type: {event_data['type']}")
-                                elif "data" in event_data and isinstance(event_data["data"], dict):
-                                    if "type" in event_data["data"]:
-                                        print(f"    Type: {event_data['data']['type']}")
-
-                            elif event_count == 11:
-                                print("\n  ... (showing only events with IDs from now on) ...")
-
-                    except json.JSONDecodeError as e:
-                        print(f"⚠️ Failed to parse JSON: {e}")
-                        print(f"   Raw: {data_str[:100]}...")
-
-                elif line_str.startswith("event: "):
-                    event_type = line_str[7:]  # Remove "event: " prefix
-                    if event_type != "end":
-                        print(f"\n🎯 Event type: {event_type}")
-
-        print("\n📊 Summary:")
-        print(f"  Total events: {event_count}")
-        print(f"  Events by agent: {agent_events}")
+        print(f"\n📊 Summary: Received {len(accumulated_text)} characters")
     else:
         print(f"❌ Error: {response.status_code}")
         print(response.text)
@@ -193,11 +166,11 @@ def main():
 
     try:
         # Test all endpoints
-        test_metadata_endpoint()
         test_regular_endpoint()
         test_streaming_endpoint()
+        test_metadata_endpoint()
 
-        print("\n✅ All tests completed!")
+        print("\nDemo completed!")
 
     except requests.exceptions.ConnectionError:
         print("\n❌ Could not connect to server. Make sure it's running:")

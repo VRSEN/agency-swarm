@@ -2,7 +2,7 @@
 This module provides the BaseTool class for creating Pydantic-based tools in Agency Swarm.
 
 BaseTool is an alternative to @function_tool decorators, offering explicit field definitions,
-model validators, and Pydantic's powerful validation capabilities. Both BaseTool and @function_tool
+model validators, and Pydantic's validation features. Both BaseTool and @function_tool
 are fully supported approaches for tool creation.
 """
 

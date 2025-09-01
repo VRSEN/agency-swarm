@@ -9,26 +9,24 @@ in Agency Swarm. It creates a financial analysis workflow where:
 2. RiskAnalyst (specialist) - Analyzes investment risks using specialized tools
 3. ReportGenerator (specialist) - Formats professional investment reports
 
-The validation system confirms:
-✅ All required tools are called by the appropriate agents
-✅ Information flows between agents (each agent's expertise appears in final output)
-✅ Multiple conversation steps occur (indicating agent-to-agent communication)
-✅ Final output is comprehensive and includes contributions from all agents
+The example also utilizes the output_type parameter to improve the structure of agents responses.
 
 Run with: python examples/multi_agent_workflow.py
 """
 
 import asyncio
+import json
 import logging
 import os
 import sys
 from typing import Any
 
-from agents import RunContextWrapper, function_tool
 from pydantic import BaseModel, Field
 
+from agency_swarm import RunContextWrapper, function_tool
+
 # Configure basic logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(level=logging.WARNING, format="%(asctime)s - %(levelname)s - %(message)s")
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
@@ -36,14 +34,6 @@ from agency_swarm import Agency, Agent  # noqa: E402
 
 
 # --- Structured Output Types ---
-class MarketData(BaseModel):
-    symbol: str = Field(..., description="Stock symbol")
-    current_price: float = Field(..., description="Current stock price")
-    market_cap: str = Field(..., description="Market capitalization")
-    pe_ratio: float = Field(..., description="Price-to-earnings ratio")
-    analyst_rating: str = Field(..., description="Overall analyst rating")
-
-
 class RiskAssessment(BaseModel):
     risk_level: str = Field(..., description="Overall risk level (Low/Moderate/High)")
     risk_score: str = Field(..., description="Risk score out of 10")
@@ -134,118 +124,28 @@ report_generator = Agent(
 agency = Agency(
     portfolio_manager,  # Entry point and orchestrator
     communication_flows=[
-        (portfolio_manager, risk_analyst),
-        (portfolio_manager, report_generator),
+        portfolio_manager > risk_analyst,
+        portfolio_manager > report_generator,
     ],
     shared_instructions="Provide accurate, professional financial analysis.",
 )
 
 
-def validate_multi_agent_collaboration(response, stock_symbol: str) -> bool:
-    """Validate that multi-agent collaboration actually occurred."""
-    print("\n" + "=" * 60)
-    print("VALIDATING MULTI-AGENT COLLABORATION")
-    print("=" * 60)
-
-    success_criteria = []
-
-    # 1. Check that all expected tools were called
-    expected_tools = [
-        f"fetch_market_data:{stock_symbol}",
-        f"analyze_risk_factors:{stock_symbol}",
-        "format_professional_report",
-    ]
-
-    tools_success = True
-    for expected_tool in expected_tools:
-        if expected_tool in tool_calls_made:
-            print(f"✅ Tool called: {expected_tool}")
-        else:
-            print(f"❌ Missing tool call: {expected_tool}")
-            tools_success = False
-    success_criteria.append(("All required tools called", tools_success))
-
-    # 2. Check that response contains data from each agent's domain
-    final_output = response.final_output.lower() if response and response.final_output else ""
-
-    # Market data indicators (from PortfolioManager's fetch_market_data)
-    market_data_present = any(
-        indicator in final_output for indicator in ["175.43", "$175", "2.85t", "28.5", "p/e", "market cap"]
-    )
-    print(
-        f"✅ Market data present: {market_data_present}"
-        if market_data_present
-        else f"❌ Market data missing: {market_data_present}"
-    )
-    success_criteria.append(("Market data in final output", market_data_present))
-
-    # Risk analysis indicators (from RiskAnalyst)
-    risk_analysis_present = any(
-        indicator in final_output for indicator in ["risk", "volatility", "beta", "overvaluation", "moderate", "6"]
-    )
-    print(
-        f"✅ Risk analysis present: {risk_analysis_present}"
-        if risk_analysis_present
-        else f"❌ Risk analysis missing: {risk_analysis_present}"
-    )
-    success_criteria.append(("Risk analysis in final output", risk_analysis_present))
-
-    # Professional report structure (from ReportGenerator)
-    report_structure_present = any(
-        indicator in final_output
-        for indicator in ["executive summary", "market position", "final recommendation", "investment"]
-    )
-    print(
-        f"✅ Professional report structure present: {report_structure_present}"
-        if report_structure_present
-        else f"❌ Report structure missing: {report_structure_present}"
-    )
-    success_criteria.append(("Professional report structure", report_structure_present))
-
-    # 3. Check that we have multiple conversation steps (indicating agent-to-agent communication)
-    steps_count = len(response.new_items) if response and response.new_items else 0
-    multiple_steps = steps_count >= 5  # Should have multiple back-and-forth communications
-    print(
-        f"✅ Multiple conversation steps ({steps_count}): {multiple_steps}"
-        if multiple_steps
-        else f"❌ Insufficient conversation steps ({steps_count}): {multiple_steps}"
-    )
-    success_criteria.append(("Multiple conversation steps", multiple_steps))
-
-    # 4. Check that final output is comprehensive (not just from one agent)
-    output_length = len(final_output) if final_output else 0
-    comprehensive_output = output_length > 500  # Should be substantial if all agents contributed
-    print(
-        f"✅ Comprehensive output ({output_length} chars): {comprehensive_output}"
-        if comprehensive_output
-        else f"❌ Output too brief ({output_length} chars): {comprehensive_output}"
-    )
-    success_criteria.append(("Comprehensive output", comprehensive_output))
-
-    # Calculate overall success
-    passed_criteria = sum(1 for _, success in success_criteria if success)
-    total_criteria = len(success_criteria)
-
-    print(f"\nCRITERIA SUMMARY: {passed_criteria}/{total_criteria} passed")
-    for criterion_name, success in success_criteria:
-        status = "✅ PASS" if success else "❌ FAIL"
-        print(f"  {status}: {criterion_name}")
-
-    overall_success = passed_criteria == total_criteria
-
-    print("\n" + "=" * 60)
-    if overall_success:
-        print("🎉 SUCCESS: Multi-agent collaboration is working correctly!")
-        print("   - All agents participated in the workflow")
-        print("   - Information flowed between agents successfully")
-        print("   - Each agent contributed unique expertise to the final result")
-    else:
-        print("💥 FAILURE: Multi-agent collaboration has issues!")
-        print(f"   - Only {passed_criteria}/{total_criteria} validation criteria passed")
-        print("   - Agents may not be communicating properly")
-    print("=" * 60)
-
-    return overall_success
+# Helper function to visualize send message arguments
+def print_send_message_history(agency, agent_name: str) -> None:
+    agent_messages = agency._agent_contexts[agent_name].thread_manager._store.messages
+    call_ids = []
+    print("Message history for inter-agent communications:")
+    i = 1
+    for message in agent_messages:
+        if message["type"] == "function_call" and message["name"].startswith("send_message"):
+            args = json.loads(message["arguments"])
+            call_ids.append(message["call_id"])
+            print(f"{i}. {agent_name} -> {args['recipient_agent']} message: {args['message']}\n")
+            i += 1
+        if message["type"] == "function_call_output" and message["call_id"] in call_ids:
+            print(f"{i}. {message['agent']} -> {agent_name} response: {message['output']}\n")
+            i += 1
 
 
 async def run_workflow():
@@ -260,31 +160,16 @@ async def run_workflow():
     stock_symbol = "AAPL"
     print(f"Client Request: Analyze investment opportunity for {stock_symbol}")
 
-    try:
-        response = await agency.get_response(
-            message=f"Provide comprehensive investment analysis for {stock_symbol}. Get market data, risk assessment, and professional report."
-        )
+    response = await agency.get_response(
+        message=f"Provide comprehensive investment analysis for {stock_symbol}. Get market data, risk assessment, and professional report."
+    )
 
-        if response:
-            print("\nFinal Investment Analysis:")
-            print(f"{response.final_output}")
-            print(f"\nCompleted with {len(response.new_items)} research steps.")
+    print_send_message_history(agency, "PortfolioManager")
 
-            # Validate the collaboration
-            validation_success = validate_multi_agent_collaboration(response, stock_symbol)
-
-            return validation_success
-        else:
-            print("\n💥 FAILURE: Analysis failed to produce a response.")
-            return False
-
-    except Exception as e:
-        logging.error(f"💥 FAILURE: Error during analysis: {e}", exc_info=True)
-        return False
+    print("\nFinal Investment Analysis:")
+    print(f"{response.final_output}")
+    print(f"\nCompleted in {len(response.new_items)} agent actions.")
 
 
 if __name__ == "__main__":
     success = asyncio.run(run_workflow())
-    exit_code = 0 if success else 1
-    print(f"\nExiting with code: {exit_code}")
-    sys.exit(exit_code)

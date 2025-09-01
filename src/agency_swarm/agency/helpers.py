@@ -2,6 +2,7 @@
 import inspect
 import logging
 import os
+from copy import deepcopy
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -182,14 +183,28 @@ def run_fastapi(
         Optional list of allowed CORS origins passed through to
         :func:`run_fastapi`.
     """
+    from agency_swarm import Agency
     from agency_swarm.integrations.fastapi import run_fastapi
 
+    def agency_factory(*, load_threads_callback=None, save_threads_callback=None, **_: Any) -> Agency:
+        flows: list[Any] = []
+        for sender, receiver in agency._derived_communication_flows:
+            tool_cls = agency._communication_tool_classes.get((sender.name, receiver.name))
+            flows.append((sender, receiver, tool_cls) if tool_cls else (sender, receiver))
+
+        return Agency(
+            *agency.entry_points,
+            communication_flows=flows,
+            name=agency.name,
+            shared_instructions=agency.shared_instructions,
+            send_message_tool_class=agency.send_message_tool_class,
+            load_threads_callback=load_threads_callback,
+            save_threads_callback=save_threads_callback,
+            user_context=deepcopy(agency.user_context),
+        )
+
     run_fastapi(
-        # TODO: agency_factory should create a new Agency instance each call
-        # to properly load conversation history via the callback.
-        # Returning `self` preserves old behaviour but may skip persistence
-        # loading. Consider refactoring.
-        agencies={agency.name or "agency": lambda **kwargs: agency},
+        agencies={agency.name or "agency": agency_factory},
         host=host,
         port=port,
         app_token_env=app_token_env,
@@ -220,7 +235,7 @@ def resolve_agent(agency: "Agency", agent_ref: str | Agent) -> Agent:
             raise ValueError(f"Agent instance {agent_ref.name} is not part of this agency.")
     elif isinstance(agent_ref, str):
         if agent_ref not in agency.agents:
-            raise ValueError(f"AgAgent with name '{agent_ref}' not found.")
+            raise ValueError(f"Agent with name '{agent_ref}' not found.")
         return agency.agents[agent_ref]
     else:
         raise TypeError(f"Invalid agent reference: {agent_ref}. Must be Agent instance or str.")
