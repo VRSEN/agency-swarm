@@ -18,11 +18,10 @@ import os
 import subprocess
 import time
 
-from agents import HostedMCPTool
 from agents.mcp.server import MCPServerStdio, MCPServerStdioParams
 from dotenv import load_dotenv
 
-from agency_swarm import Agency, Agent
+from agency_swarm import Agency, Agent, HostedMCPTool
 
 load_dotenv()
 

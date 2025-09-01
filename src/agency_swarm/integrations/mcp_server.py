@@ -16,8 +16,7 @@ from fastmcp.server.server import Transport
 from fastmcp.tools.tool import Tool, ToolResult
 from mcp.types import ErrorData
 
-from agency_swarm import BaseTool
-from agency_swarm.tools import ToolFactory
+from agency_swarm.tools import BaseTool, ToolFactory
 
 logger = logging.getLogger(__name__)
 

@@ -14,11 +14,68 @@ There are 4 different validators in Agency Swarm:
   - `field_validator`: Validate individual fields independently.
   - `model_validator`: Perform complex checks involving multiple fields.
 - Agent validators:
-  - `response_validator`: Validate the response before sending it to the user or other agents.
+  - `guardrails`(for v1.x and higher) or `response_validator` (for v0.x): Validate the response before sending it to the user or other agents.
 - Universal validators:
   - `llm_validator`: Validate outputs against specified natural language rules.
 
 ### Agent Response Validator
+
+<Tabs>
+<Tab title="v1.x">
+
+In v1.x, validation is handled through **guardrails** using the agents SDK. Guardrails provide more flexible validation for both input and output.
+
+**Example:**
+
+```python
+from agency_swarm import (
+    Agency,
+    Agent,
+    RunContextWrapper,
+    GuardrailFunctionOutput,
+    InputGuardrailTripwireTriggered,
+    OutputGuardrailTripwireTriggered,
+    output_guardrail,
+)
+
+@output_guardrail
+async def response_content_guardrail(
+    context: RunContextWrapper, agent: Agent, response_text: str
+) -> GuardrailFunctionOutput:
+    tripwire_triggered = False
+    output_info = ""
+
+    if "bad word" in response_text.lower():
+        tripwire_triggered = True
+        output_info = "Please avoid using inappropriate language."
+
+    return GuardrailFunctionOutput(
+        output_info=output_info,
+        tripwire_triggered=tripwire_triggered,
+    )
+
+agent = Agent(
+    name="CustomerSupportAgent",
+    instructions="You are a helpful customer support agent.",
+    output_guardrails=[response_content_guardrail],
+)
+```
+
+**Handling guardrail exceptions:**
+
+```python
+try:
+    response = await agency.get_response("Hello!")
+except OutputGuardrailTripwireTriggered as e:
+    print(f"Validation failed: {e.guardrail_result.output_info}")
+```
+
+</Tab>
+<Tab title="v0.x">
+
+<Info>
+This is the previous production version. Install with: `pip install agency-swarm<1.0.0`
+</Info>
 
 You can define a `response_validator` method inside your Agent class to validate responses before sending them to the user or other agents. This method should raise an error if the response is invalid, allowing the agent to handle the error and generate a corrected response.
 
@@ -36,6 +93,37 @@ class CustomerSupportAgent(Agent):
 ```
 
 In this example, `CustomerSupportAgent` checks the response for the presence of "bad word" and raises a `ValueError` if it is found. The error is passed to the Agent to generate a corrected response.
+
+#### Validation Attempts
+
+The `validation_attempts` parameter controls how many times an agent can retry when validation fails. **Default is 1** (one retry). Set `validation_attempts=0` for immediate fail-fast behavior.
+
+```python
+from agency_swarm import Agent
+
+class JSONAgent(Agent):
+    def __init__(self, **kwargs):
+        super().__init__(
+            validation_attempts=3,  # Allow 2 retries for learning
+            **kwargs
+        )
+
+    def response_validator(self, message: str) -> str:
+        """Validate JSON format."""
+        try:
+            json.loads(message)
+            return message
+        except json.JSONDecodeError:
+            raise ValueError("Response must be valid JSON format.")
+```
+
+**When to adjust `validation_attempts`:**
+- **Format validation** (JSON, structured output): Use `validation_attempts=2-3`
+- **Content requirements** that agents can learn: Use `validation_attempts=2`
+- **Critical/security validation**: Use `validation_attempts=0` to disable retries
+
+</Tab>
+</Tabs>
 
 ### Tool Validators
 
@@ -115,3 +203,4 @@ Since `llm_validator` uses LLMs for validation, it may incur additional costs an
 </Note>
 
 By combining all the validators described above, you can create robust validation logic to ensure your agents and tools perform reliably.
+

@@ -4,9 +4,57 @@ description: "Implementing streaming in Agency Swarm."
 icon: "ellipsis"
 ---
 
-Streaming enables agents to return outputs immidiately, significantly improving user experience. Instead of waiting for the entire response to be generated, the user can see the response being generated in real-time.
+Streaming enables agents to return outputs immediately, significantly improving user experience. Instead of waiting for the entire response to be generated, the user can see the response being generated in real-time.
 
 ## Streaming Responses
+
+<Tabs>
+<Tab title="v1.x">
+
+In v1.x, streaming is handled through the `get_response_stream` method. The framework returns [StreamEvent](https://openai.github.io/openai-agents-python/ref/stream_events/#agents.stream_events.StreamEvent) objects as they are returned by OpenAI, providing direct access to the underlying streaming events.
+
+```python
+async def stream_response(message: str):
+    """Stream a response and handle events properly."""
+    full_text = ""
+
+    async for event in agency.get_response_stream(message):
+        # Handle streaming events with data
+        if hasattr(event, "data"):
+            data = event.data
+
+            # Only capture actual response text, not tool call arguments
+            if hasattr(data, "delta") and hasattr(data, "type"):
+                if data.type == "response.output_text.delta":
+                    # Stream the actual response text in real-time
+                    delta_text = data.delta
+                    if delta_text:
+                        print(delta_text, end="", flush=True)
+                        full_text += delta_text
+                # Skip tool call deltas (we don't want to show those to users)
+                elif data.type == "response.function_call_arguments.delta":
+                    continue
+
+        # Handle validation errors
+        elif isinstance(event, dict):
+            event_type = event.get("event", event.get("type"))
+            if event_type == "error":
+                print(f"\n❌ Error: {event.get('content', event.get('data', 'Unknown error'))}")
+                break
+
+    print("\n✅ Stream complete")
+    return full_text
+
+# Usage
+await stream_response("I want you to build me a website")
+```
+
+</Tab>
+<Tab title="v0.x">
+
+<Info>
+This is the previous production version. Install with: `pip install agency-swarm<1.0.0`
+</Info>
 
 To stream the conversation between agents, you can use the `get_completion_stream` method with your own event handler. The process follows a similar pattern to the [official OpenAI documentation](https://platform.openai.com/docs/api-reference/assistants-streaming).
 
@@ -51,3 +99,6 @@ response = agency.get_completion_stream("I want you to build me a website", even
   event handler might be called multiple times and possibly by multiple agents, unlike in the official OpenAI
   documentation.
 </Note>
+
+</Tab>
+</Tabs>

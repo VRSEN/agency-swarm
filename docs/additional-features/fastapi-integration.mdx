@@ -4,108 +4,168 @@ description: "Serving your agencies and tools as APIs with FastAPI."
 icon: "server"
 ---
 
-Agency Swarm supports serving your agencies and tools as production-ready HTTP APIs using [FastAPI](https://fastapi.tiangolo.com/). This enables you to integrate your agents with other services or connect them to web frontends.
+Agency Swarm supports serving your agencies and tools as production-ready HTTP APIs using [FastAPI](https://fastapi.tiangolo.com/). This enables you to interact with your agents and tools over HTTP, integrate with other services, or connect it to web frontends.
 
 ## Installation
 
 FastAPI integration is an **optional installation**. To install all required dependencies, run:
 
-```bash
-pip install agency-swarm[fastapi]
+<CodeGroup>
+
+```bash v1.x
+pip install "agency-swarm[fastapi]"
 ```
+
+```bash v0.x
+pip install agency-swarm[fastapi]<1.0.0
+```
+
+</CodeGroup>
 
 ## Setting Up FastAPI Endpoints
 
 You can expose your agencies and tools as API endpoints using the `run_fastapi()` function.
 
-### Function Signature
+### Example: Create an API endpoint for a single agency
 
-```python
+<CodeGroup>
+
+```python v1.x
+from agency_swarm import Agency, Agent
+
+agent = Agent(
+    name="Assistant",
+    instructions="You are a helpful assistant."
+)
+
+agency = Agency(agent, name="test_agency")
+
+agency.run_fastapi()
+```
+
+```python v0.x
+from agency_swarm.agency import Agency
+
+agency = Agency([ceo], name="test_agency")
+
+agency.run_fastapi()
+```
+
+</CodeGroup>
+
+Optionally, you can specify following parameters:
+- host (default: `"0.0.0.0"`)
+- port (default: `8000`)
+- app_token_env (default: `"APP_TOKEN"`) - Name of the env variable storing app token.
+- return_app (default: False) - If True, will return the FastAPI instead of running the server
+- cors_origins: (default: ["*"])
+
+This will create 2 endpoints for the agency:
+- `/test_agency/get_response`
+- `/test_agency/get_response_stream`
+
+Both of these endpoints will accept following input parameters:
+
+<CodeGroup>
+
+```python v1.x
+message: str
+# Entire chat history containing previous messages across all threads in a form of {'thread_1': ConversationThread, 'thread_2': ConversationThread, ...}
+chat_history: dict[str, ConversationThread] = None
+recipient_agent: str = None
+file_ids: list[str] = None
+# Files to download and attach to the agent. Should be provided in a form of a mapping: {"filename_1":"url", "filename_2":"url", ...}
+file_urls: dict[str, str] = None
+additional_instructions: str = None
+```
+
+```python v0.x
+message: str
+message_files: List[str] = None
+# Name of the agent, as defined within it's name attribute
+recipient_agent: str = None
+additional_instructions: str = None
+attachments: List[Attachment] = []
+tool_choice: dict = None
+response_format: dict = None
+# Only for the get_completion endpoint, will be ignored in the streaming endpoint
+verbose: bool = False
+```
+
+</CodeGroup>
+
+Additionally, you will need to provide a bearer token in the authorization if you have `"APP_TOKEN"` specified (or a differently named variable if you provided app_token_env). If the token is **not specified** in the env variables, **authentication will be disabled**.
+
+### Example: Serving Multiple Agencies and Tools
+
+<CodeGroup>
+
+```python v1.x
+from agency_swarm import Agency, Agent, function_tool, run_fastapi
+
+# Example tools using agents SDK
+@function_tool
+def example_tool(example_field: str) -> str:
+    """Example tool with input field."""
+    return f"Result of ExampleTool operation with {example_field}"
+
+@function_tool
+def test_tool(example_field: str) -> str:
+    """Test tool with input field."""
+    return f"Result of TestTool operation with {example_field}"
+
+# Create agents
+agent1 = Agent(name="Assistant1", instructions="You are assistant 1.")
+agent2 = Agent(name="Assistant2", instructions="You are assistant 2.")
+
+# Create agencies
+agency1 = Agency(agent1, name="test_agency_1")
+agency2 = Agency(agent2, name="test_agency_2")
+
 run_fastapi(
-    agencies: Mapping[str, Callable[..., Agency]] | None = None,
-    tools: list[type[FunctionTool]] | None = None,
-    host: str = "0.0.0.0",
-    port: int = 8000,
-    app_token_env: str = "APP_TOKEN",
-    return_app: bool = False,
-    cors_origins: list[str] | None = None,
+    agencies=[agency1, agency2],
+    tools=[example_tool, test_tool],
 )
 ```
 
-- **agencies**: Mapping of endpoint name to a factory that returns an `Agency`. The factory receives a `load_threads_callback` argument and is invoked on each request to provide a fresh agency instance with the conversation history preloaded.
-- **tools**: Optional list of tool classes (subclasses of `FunctionTool`) to expose under `/tool` routes.
-- **host**: Host address to bind the FastAPI server (default: `"0.0.0.0"`).
-- **port**: Port to run the FastAPI server on (default: `8000`).
-- **app_token_env**: Name of the environment variable for the bearer token (default: `"APP_TOKEN"`). If set, a bearer token is required for all requests.
-- **return_app**: If `True`, returns the FastAPI app instance instead of running the server (default: `False`).
-- **cors_origins**: List of allowed CORS origins. If omitted, all origins are allowed (`["*"]`).
+```python v0.x
+from pydantic import Field
 
-Agency endpoints accept parameters such as `message`, `recipient_agent`, `additional_instructions` and `message_files`. You should also pass the previous `chat_history` dictionary (see hooks documentation for the exact format).
-Responses include a `response` field with the agent reply and a `chat_history` field containing the serialized conversation threads. The streaming endpoint sends `new_messages` as the final event once generation is complete.
-To maintain chat persistence, append those new messages to the previously passed chat_history before sending a new request.
+from agency_swarm import Agency, BaseTool, run_fastapi
 
-If the environment variable specified by `app_token_env` is set, a bearer token is required for all requests. Otherwise, authentication is disabled.
 
-### Example: Serving Multiple Agencies and Tools with Factory Functions
+# Example tools
+class ExampleTool(BaseTool):
+  example_field: str = Field(..., description="Example input.")
+  def run(self):
+      return "Result of ExampleTool operation"
 
-A **factory function** is a callable that returns a fresh `Agency` instance for each request. This is important for stateless HTTP APIs, so each request gets a new, isolated agency with the correct conversation history loaded. The factory should accept a `load_threads_callback` argument, which is used by the FastAPI integration to restore chat history for each request.
+class TestTool(BaseTool):
+  example_field: str = Field(..., description="Example input.")
+  def run(self):
+      return "Result of TestTool operation"
 
-#### Step-by-step Example
+# Create agencies
+agency1 = Agency([agent], name="test_agency_1")
+agency2 = Agency([agent], name="test_agency_2")
 
-```python
-# agency.py
-from agency_swarm import Agent, Agency
-
-def create_agency(load_threads_callback=None) -> Agency:
-    ceo = Agent(name="CEO", instructions="Lead the team")
-    dev = Agent(name="Developer", instructions="Write code")
-    return Agency(
-        ceo,
-        dev,
-        communication_flows=[(ceo, dev)],
-        load_threads_callback=load_threads_callback,  # restores chat history per request
-    )
-
-def create_other_agency(load_threads_callback=None) -> Agency:
-    pm = Agent(name="Project Manager", instructions="Coordinate tasks")
-    qa = Agent(name="QA", instructions="Test the code")
-    return Agency(
-        pm,
-        qa,
-        communication_flows=[(pm, qa)],
-        load_threads_callback=load_threads_callback,
-    )
+run_fastapi(
+    agencies=[agency_test_1, agency_test_2],
+    tools=[ExampleTool, TestTool],
+)
 ```
 
-```python
-# main.py
-from agency_swarm.integrations.fastapi import run_fastapi
-from agency import create_agency, create_other_agency
+</CodeGroup>
 
-if __name__ == "__main__":
-    run_fastapi({
-        "agency_name": create_agency,           # Exposed at /agency_name/get_response(_stream)
-        "other_agency": create_other_agency,    # Exposed at /other_agency/get_response(_stream)
-    })
-```
+This will create 6 following endpoints:
+- `/test_agency_1/get_response`
+- `/test_agency_1/get_response_stream`
+- `/test_agency_2/get_response`
+- `/test_agency_2/get_response_stream`
+- `/tool/ExampleTool` (for BaseTools) or `/tool/example_tool` (for function tools)
+- `/tool/TestTool` (for BaseTools) or `/tool/test_tool` (for function tools)
 
-- The mapping key (here, `"agency_name"`) becomes the endpoint path: `/agency_name/get_response` and `/agency_name/get_response_stream`.
-- Each request initializes a fresh agency using your factory.
-- Always pass the `load_threads_callback` argument through to the `Agency` constructor so chat history is restored per request.
-
-#### Including Tools
-You can also expose tools as endpoints:
-
-```python
-from mytools import MyTool
-run_fastapi({"agency_name": create_agency}, tools=[MyTool])
-```
-
-#### Tips & Gotchas
-- **Always accept and pass `load_threads_callback`** in your factory, or chat history will not be restored.
-- The mapping key must be URL-friendly (no spaces or special characters).
-- Each request gets a new agency instance - do not store state in the agency object itself.
-- Add the returned `new_messages` to chat_history in your client to maintain chat persistence.
+Inputs for the tool endpoints will follow their respective schemas.
 
 ---
 
@@ -113,61 +173,87 @@ run_fastapi({"agency_name": create_agency}, tools=[MyTool])
 
 You can interact with your agents and tools using HTTP requests. Here's an example using Python's `requests` library:
 
-```python
+<CodeGroup>
+
+```python v1.x
 import requests
 
-history = []
-payload = {"message": "Hello", "chat_history": history}
-resp = requests.post("http://127.0.0.1:8000/agency_name/get_response", json=payload)
-new_messages = resp.json()["new_messages"]
-history.extend(new_messages)
+agency_url = "http://127.0.0.1:8000/test_agency_1/get_response"
+payload = {
+    "message": "Hello",
+}
+
+headers = {
+    "Authorization": "Bearer 123"  # Replace with your actual token if needed
+}
+
+agency_response = requests.post(agency_url, json=payload, headers=headers)
+print("Status code:", agency_response.status_code)
+print("Response:", agency_response.json())
+
+tool_url = "http://127.0.0.1:8000/tool/example_tool"
+payload = {
+    "example_field": "test",
+}
+
+tool_response = requests.post(tool_url, json=payload, headers=headers)
+print("Status code:", tool_response.status_code)
+print("Response:", tool_response.json())
 ```
+
+```python v0.x
+import requests
+
+agency_url = "http://127.0.0.1:8000/test_agency_1/get_completion"
+payload = {
+    "message": "Hello",
+}
+
+headers = {
+    "Authorization": "Bearer 123"  # Replace 'test-token' with your actual token if needed
+}
+
+agency_response = requests.post(url, json=payload, headers=headers)
+print("Status code:", agency_response.status_code)
+print("Response:", agency_response.json())
+
+tool_url = "http://127.0.0.1:8000/tool/ExampleTool"
+payload = {
+    "example_field": "test",
+}
+
+tool_response = requests.post(agency_url, json=payload, headers=headers)
+print("Status code:", tool_response.status_code)
+print("Response:", tool_response.json())
+```
+
+</CodeGroup>
 
 ---
 
 ## Endpoint Structure
 
 - **Agency Endpoints:**
+  Each agency is served at:
   - `/your_agency_name/get_response` (POST)
   - `/your_agency_name/get_response_stream` (POST, streaming responses)
+
 - **Tool Endpoints:**
-  - `/tool/ToolClassName` (POST)
+  Each tool is served at:
+  - `/tool/ToolClassName` (POST) - v0.x
+  - `/tool/function_name` (POST) - v1.x
 
-## Streaming Event Structure
+---
 
-When using the streaming endpoint (`/your_agency_name/get_response_stream`), the API returns Server-Sent Events (SSE) with the following structure:
+## File Attachments (v1.x)
 
-### Event Fields
+When using the agency endpoints (`/{your_agency}/get_response` and `/{your_agency}/get_response_stream`), you can attach files in two ways:
 
-All streaming events include these standard fields:
+- Direct inline: `.pdf`, `.jpeg`, `.jpg`, `.gif`, `.png`
+- Via `file_ids` / `file_urls` (processed, not inline): `.c`, `.cs`, `.cpp`, `.csv`, `.html`, `.java`, `.json`, `.php`, `.py`, `.rb`, `.css`, `.js`, `.sh`, `.ts`, `.pkl`, `.tar`, `.xlsx`, `.xml`, `.zip`, `.doc`, `.docx`, `.md`, `.pptx`, `.tex`, `.txt`
+- Rejected: `.go` and any extension not listed above
+- Payload fields: `file_ids: string[]` OR `file_urls: { filename: url }`
 
-- **`agent`**: The name of the agent that generated this event
-- **`callerAgent`**: The name of the agent that called this agent (null for user-initiated requests)
-
-### Function/Tool/MCP Call Events
-
-For events related to function calls, tool calls, or MCP calls, the following additional field is included where applicable:
-
-- **`call_id`**: The unique identifier for this call, useful for correlating all events related to the same function/tool/MCP invocation
-  - Present in: `response.output_item.added`, `response.output_item.done`, `tool_call_item`, `function_call` events
-  - Note: For `response.function_call_arguments.delta` and similar delta events, the `call_id` will be added when the item_id to call_id mapping is available
-
-### Example Event Structure
-
-```json
-{
-  "type": "tool_call_item",
-  "agent": "Developer",
-  "callerAgent": "CEO",
-  "call_id": "call_abc123...",
-  "item": {
-    "type": "tool_call_item",
-    "raw_item": {
-      "name": "write_code",
-      "arguments": "{\"language\": \"python\"}"
-    }
-  }
-}
-```
-
-This consistent structure makes it easy to track which agent is performing actions and maintain proper context in multi-agent conversations, especially when agents call sub-agents simultaneously.
+Behavior with `file_urls`:
+- The server downloads each URL, uploads it to OpenAI, waits until processed, and uses the resulting File IDs.
+- `file_ids_map` (shape: `{ filename: file_id }`) is returned in the non‑streaming JSON response of `POST /get_response` and in the final `event: messages` SSE payload of `POST /get_response_stream`.

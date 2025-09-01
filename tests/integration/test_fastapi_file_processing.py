@@ -99,7 +99,7 @@ class TestFastAPIFileProcessing:
         """Start FastAPI server on port 8080."""
         import threading
 
-        from agency_swarm.integrations.fastapi import run_fastapi
+        from agency_swarm import run_fastapi
 
         # Ensure no authentication is required by using a non-existent env var
         # This will make app_token None and disable authentication

@@ -1,11 +1,9 @@
 import os
 
-from agents import function_tool
 from dotenv import load_dotenv
 from pydantic import Field
 
-from agency_swarm import BaseTool
-from agency_swarm.integrations.mcp_server import run_mcp
+from agency_swarm import BaseTool, function_tool, run_mcp
 
 load_dotenv()
 

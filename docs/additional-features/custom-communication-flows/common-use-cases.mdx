@@ -4,7 +4,96 @@ description: "Explore common use cases for custom communication flows in Agency 
 icon: "code"
 ---
 
-In the following sections, we'll look at some common use cases for extending the `SendMessageBase` tool and how to implement them, so you can learn how to create your own SendMessage tools and use them in your own applications.
+In the following sections, we'll look at some common use cases for creating custom communication flows and how to implement them in Agency Swarm.
+
+<Tabs>
+<Tab title="v1.x">
+
+#### 1. Adjusting Parameters and Descriptions
+
+You can customize the communication parameters by extending the base `SendMessage` class and modifying the JSON schema:
+
+```python
+from agency_swarm.tools.send_message import SendMessage
+
+class SendMessageTask(SendMessage):
+    """Use this tool to send tasks to other agents within your agency."""
+
+    def __init__(self, sender_agent, recipient_agent, tool_name):
+        super().__init__(sender_agent, recipient_agent, tool_name)
+
+        # Replace the existing schema with custom parameters
+        self.params_json_schema = {
+            "type": "object",
+            "properties": {
+                "chain_of_thought": {
+                    "type": "string",
+                    "description": "Think step-by-step about how to solve your current task, then break it down into smaller steps for the recipient agent."
+                },
+                "task": {
+                    "type": "string",
+                    "description": "Specify the task required for the recipient agent to complete. Focus on clarifying what the task entails rather than providing exact instructions."
+                }
+            },
+            "required": ["chain_of_thought", "task"]
+        }
+```
+
+#### 2. Adding Additional Fields
+
+You can add extra fields to capture more context, like key moments and decisions:
+
+```python
+class SendMessageWithContext(SendMessage):
+    """SendMessage with key moments and decisions tracking."""
+
+    def __init__(self, sender_agent, recipient_agent, tool_name):
+        super().__init__(sender_agent, recipient_agent, tool_name)
+
+        # Add additional fields to the existing schema
+        self.params_json_schema["properties"]["key_moments"] = {
+            "type": "string",
+            "description": (
+                "Document critical moments and decision points from the current conversation "
+                "that the recipient agent needs to understand. Include context about what "
+                "has been decided or prioritized that will guide the recipient's tool selection "
+                "and task execution. For example: 'User decided to prioritize performance over cost', "
+                "'Analysis focus shifted to Q4 optimization', etc."
+            ),
+        }
+        self.params_json_schema["properties"]["decisions"] = {
+            "type": "string",
+            "description": (
+                "Summarize the specific decisions made that will directly impact which tools "
+                "or approaches the recipient agent should use. Be explicit about choices that "
+                "narrow down the scope of work. For example: 'Prioritized performance analysis "
+                "over cost reduction', 'Selected React over Vue for frontend', etc. This helps "
+                "the recipient agent choose the most appropriate tools and approach."
+            ),
+        }
+        self.params_json_schema["required"].extend(["key_moments", "decisions"])
+```
+
+**Usage:**
+
+```python
+from agency_swarm import Agency, Agent
+
+agent = Agent(
+    name="MyAgent",
+    instructions="You are a helpful assistant.",
+    send_message_tool_class=SendMessageWithContext,  # Use your custom class
+)
+
+agency = Agency(agent, communication_flows=[(agent, other_agent)]))
+```
+
+</Tab>
+<Tab title="v0.x">
+
+<Info>
+This is the previous production version. Install with: `pip install agency-swarm<1.0.0`
+</Info>
 
 #### 1. Adjusting parameters and descriptions
 
@@ -119,11 +208,6 @@ class SendMessageAPI(SendMessage):
 
 This is very powerful, as you can even allow your agents to collaborate with agents outside your system. More on this is coming soon!
 
-<Tip title="Contributing">
-  If you have any ideas for new communication flows, please either adjust this page in docs, or add your new send
-  message tool in the `agency_swarm/tools/send_message` folder and open a PR!
-</Tip>
-
 **After implementing your own `SendMessage` tool**, simply pass it into the `send_message_tool_class` parameter when initializing the `Agency` class:
 
 ```python
@@ -134,3 +218,11 @@ agency = Agency(
 ```
 
 That's it! Now, your agents will use your own custom `SendMessageAPI` class for communication!
+
+</Tab>
+</Tabs>
+
+<Tip title="Contributing">
+  If you have any ideas for new communication flows, please either adjust this page in docs, or add your new send
+  message tool in the `agency_swarm/tools/send_message` folder and open a PR!
+</Tip>

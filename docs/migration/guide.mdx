@@ -1,0 +1,460 @@
+---
+title: "Migration Guide: v0.x to v1.x"
+description: "Guide for migrating from Agency Swarm v0.x to v1.x (OpenAI Agents SDK based)"
+icon: "book"
+---
+
+Agency Swarm v1.x is a complete rewrite built on the OpenAI Agents SDK, bringing significant improvements and new capabilities.
+
+## Installation
+
+<Tabs defaultValue="v1.x (New)">
+<Tab title="v0.x (Previous)">
+```bash
+pip install "agency-swarm<1.0.0"
+```
+
+<Note>
+v0.x documentation remains available at the current site until v1.0 reaches general availability.
+</Note>
+</Tab>
+
+<Tab title="v1.x (New)">
+```bash
+pip install agency-swarm
+```
+
+<Info>
+If you encounter issues, please create a GitHub issue with the **v1.x** label.
+</Info>
+</Tab>
+</Tabs>
+
+## What's New in v1.x
+
+<CardGroup cols={2}>
+<Card title="Latest AI Models" icon="robot">
+Full support for reasoning models
+
+Web Search and Computer Use capabilities
+</Card>
+
+<Card title="Better Performance" icon="bolt">
+Async-first architecture with direct conversation control
+</Card>
+
+<Card title="Enhanced Tools" icon="wrench">
+Simple `@function_tool` decorator replaces complex BaseTool classes
+</Card>
+
+<Card title="Direct Control" icon="gear">
+No more black-box Assistants API - full control over threads and runs
+</Card>
+</CardGroup>
+
+<Accordion title="📋 Complete Feature Comparison">
+### New Capabilities
+- **Web Search & Computer Use**: Native OpenAI Responses API integration
+- **Latest Models**: Full support for o3, o4-mini, and future OpenAI models via Responses API
+- **Third-Party Models**: Use any Chat Completions API-compatible provider
+- **Direct Thread Control**: No more black-box Assistants API limitations
+- **Full Conversation Persistence**: Complete history management (not just thread IDs)
+- **Enhanced Validation**: `output_guardrails` and `input_guardrails` system
+
+### Architectural Improvements
+- **Orchestrator Pattern on New Foundation**: Agency Swarm's proven orchestrator-workers pattern now runs on the OpenAI Agents SDK foundation
+- **Async-first**: Native async execution for better performance
+- **Enhanced Communication**: Defined `communication_flows` for coordinated multi-agent execution
+- **Better State Management**: Complete conversation history persistence
+
+### Enhanced Developer Experience
+- **Structured Outputs**: Native Pydantic model support for agent outputs via `output_type`
+- **Modern Tool System**: `@function_tool` decorator replaces `BaseTool` classes for cleaner tool definitions
+- **Better Validation**: `output_guardrails` and `input_guardrails` replace the old `response_validator` system
+- **Real-time Streaming**: Improved streaming capabilities with async response handling
+</Accordion>
+
+<Accordion title="🏗️ Understanding the Migration">
+The migration from v0.x to v1.x represents a fundamental shift in how Agency Swarm operates:
+
+### Execution Core
+- **v0.x**: Used OpenAI Assistants API runs directly
+- **v1.x**: Uses `agents.Runner` from OpenAI Agents SDK for more control
+
+### State Management
+- **v0.x**: Relied on Assistant/Thread objects managed by OpenAI
+- **v1.x**: Uses `ThreadManager` and `MessageStore` managed via `RunHooks` and shared `MasterContext`
+
+### Agent Definition
+- **v0.x**: Custom `Agent` class with Assistants API integration
+- **v1.x**: `agency_swarm.Agent` extends `agents.Agent`, incorporating tools, subagent registration, and file handling
+
+### Conversation History Persistence
+
+This is an important architectural difference between versions:
+
+- **v0.x (Assistants API)**: Required thread callbacks for production to persist OpenAI Assistant/Thread IDs. OpenAI managed conversation history server-side.
+- **v1.x (Agents SDK)**: Required thread callbacks for production to persist complete conversation histories locally. You manage the full conversation state.
+
+**Key Changes:**
+- **Callback Structure**: `threads_callbacks` dict → separate `load_threads_callback` and `save_threads_callback` parameters
+- **Data Format**: Thread IDs only → Complete conversation histories
+- **Callback Signatures**: Unchanged (both use no-parameter callbacks with closure)
+
+</Accordion>
+
+## Step-by-Step Migration
+
+<Accordion title="🔧 Agency & Agent Updates" defaultOpen>
+### Agency Constructor
+
+<CodeGroup>
+```python v0.x
+def load_threads(chat_id):
+    return load_threads_from_db(chat_id)  # Returns thread IDs
+
+def save_threads(new_threads):
+    save_threads_to_db(new_threads)  # Saves thread IDs
+
+agency = Agency(
+    agency_chart=[agent1, [agent1, agent2]],  # Will show warning
+    threads_callbacks={
+        'load': lambda: load_threads(chat_id),
+        'save': lambda new_threads: save_threads(new_threads)
+    }
+)
+```
+
+```python v1.x
+def load_threads(chat_id):
+    # Load the complete conversation history instead of just thread IDs
+    return load_conversation_history(chat_id)
+
+def save_threads(thread_dict):
+    # Persist the full conversation histories
+    save_conversation_history(thread_dict)
+
+agency = Agency(
+    entry_point_agent,  # Positional argument
+    communication_flows=[(agent1, agent2)],
+    load_threads_callback=lambda: load_threads(chat_id),
+    save_threads_callback=lambda new_threads: save_threads(new_threads)
+)
+```
+</CodeGroup>
+
+<Warning>
+**Data Format Change:** Your callbacks now need to store complete conversation histories instead of just thread IDs. Refer to [examples/custom_persistence.py](https://github.com/VRSEN/agency-swarm/blob/main/examples/custom_persistence.py) to see the example implementation.
+</Warning>
+
+### Agent Configuration
+
+<CodeGroup>
+```python v0.x
+agent = Agent(
+    name="MyAgent",
+    temperature=0.7,
+    max_completion_tokens=1000,
+    response_validator=my_validator
+)
+```
+
+```python v1.x
+agent = Agent(
+    name="MyAgent",
+    model_settings=ModelSettings(
+        temperature=0.7,
+        max_completion_tokens=1000,
+        model="gpt-4o"
+    ),
+    output_guardrails=[my_guardrail]
+)
+```
+</CodeGroup>
+</Accordion>
+
+<Accordion title="🛠️ Tool Migration" defaultOpen>
+### Simple Tool Conversion
+<Note>
+This step is optional. Agency Swarm will keep maintaining the BaseTool approach for tool definition as well.
+</Note>
+
+<CodeGroup>
+```python v0.x
+class ProcessData(BaseTool):
+    """Processes input data."""
+    input_data: str = Field(..., description="Data to process")
+
+    def run(self):
+        return f"Processed: {self.input_data}"
+```
+
+```python v1.x
+@function_tool
+def process_data(input_data: str) -> str:
+    """Processes input data."""
+    return f"Processed: {input_data}"
+```
+</CodeGroup>
+
+### Tool with Context Access
+
+<CodeGroup>
+```python v0.x
+class AdvancedTool(BaseTool):
+    data: str = Field(..., description="Input data")
+
+    def run(self):
+        # Access shared state
+        shared_data = self._shared_state.get("key", "default")
+        return f"Result: {self.data} + {shared_data}"
+```
+
+```python v1.x
+@function_tool
+async def advanced_tool(ctx: RunContextWrapper[Any], data: str) -> str:
+    """Advanced tool with context access."""
+    # Access shared state and other context
+    shared_data = ctx.context.get("key", "default")
+    return f"Result: {data} + {shared_data}"
+```
+</CodeGroup>
+</Accordion>
+
+<Accordion title="🔒 Validation & Outputs" defaultOpen>
+### Response Validation
+
+<CodeGroup>
+```python v0.x
+class TestAgent(Agent):
+    def __init__(self):
+        super().__init__(
+            name="TestAgent",
+            description="..."
+        )
+
+    @override
+    def response_validator(self, message):
+        # User-defined validation function
+        if self.check_errors(message):
+            raise ValueError("Error processing message")
+
+        # Returns original message if no errors are raised
+        return message
+```
+
+```python v1.x
+@output_guardrail
+async def validate_response(
+    ctx: RunContextWrapper, agent: Agent, agent_response: str
+) -> GuardrailFunctionOutput:
+    # User-defined validation logic
+    error_msg, tripwire_triggered = check_errors(agent_response)
+
+    return GuardrailFunctionOutput(
+        output_info=error_msg,
+        tripwire_triggered=tripwire_triggered,
+    )
+
+agent = Agent(output_guardrails=[validate_response])
+```
+</CodeGroup>
+
+### Structured Outputs
+
+<CodeGroup>
+```python v0.x
+result = agency.get_completion(
+    "Analyze this data",
+    response_format={"type": "json_schema", "json_schema": {...}}
+)
+```
+
+```python v1.x
+class AnalysisResult(BaseModel):
+    status: str
+    findings: str
+
+agent = Agent(output_type=AnalysisResult)
+result = await agency.get_response("Analyze this data")
+# result.final_output is now a typed AnalysisResult object
+```
+</CodeGroup>
+</Accordion>
+
+<Accordion title="🔄 Interaction Updates" defaultOpen>
+### Getting Agency Response
+
+<CodeGroup>
+```python v0.x
+# Synchronous (still works but deprecated)
+result = agency.get_completion("Hello")
+
+# Streaming (removed)
+stream = agency.get_completion_stream("Hello")
+```
+
+```python v1.x
+# Async (recommended)
+import asyncio
+
+async def main():
+    result = await agency.get_response("Hello")
+    print(result.final_output)
+
+# Streaming (async only)
+async def stream_example():
+    async for chunk in agency.get_response_stream("Hello"):
+        print(chunk)
+
+asyncio.run(main())
+```
+</CodeGroup>
+</Accordion>
+
+## Complete Migration Example
+
+<Tabs defaultValue="After (v1.x)">
+<Tab title="Before (v0.x)">
+```python
+from agency_swarm import Agency, Agent, BaseTool
+from pydantic import Field
+
+class DataProcessor(BaseTool):
+    """Processes data."""
+    data: str = Field(..., description="Input data")
+
+    def run(self):
+        return f"Processed: {self.data}"
+
+class Analyst(Agent):
+    def __init__(self):
+        super().__init__(
+            name="Analyst",
+            description="Analyzes data",
+            tools=[DataProcessor],
+            temperature=0.7
+        )
+
+    def response_validator(self, message):
+        if "error" in message.lower():
+            raise ValueError("Invalid response")
+        return message
+
+agency = Agency(
+    agency_chart=[Analyst()],
+    shared_instructions="Be helpful and accurate."
+)
+
+result = agency.get_completion("Analyze sample data")
+```
+</Tab>
+
+<Tab title="After (v1.x)">
+```python
+from agency_swarm import (
+    Agency,
+    Agent,
+    function_tool,
+    ModelSettings,
+    output_guardrail,
+    GuardrailFunctionOutput,
+)
+from pydantic import BaseModel, Field
+import asyncio
+
+# Modern tool definition
+@function_tool
+def data_processor(data: str) -> str:
+    """Processes data."""
+    return f"Processed: {data}"
+
+# Structured output
+class AnalysisResult(BaseModel):
+    status: str
+    findings: str
+
+# Validation guardrail
+@output_guardrail
+async def validate_analysis(ctx, agent, response):
+    if "error" in response.lower():
+        return GuardrailFunctionOutput(
+            output_info="Invalid response detected",
+            tripwire_triggered=True
+        )
+    return GuardrailFunctionOutput(output_info="Valid response")
+
+# Agent with modern configuration
+analyst = Agent(
+    name="Analyst",
+    description="Analyzes data",
+    tools=[data_processor],
+    output_type=AnalysisResult,
+    output_guardrails=[validate_analysis],
+    model_settings=ModelSettings(temperature=0.7, model="gpt-4o")
+)
+
+agency = Agency(
+    analyst,
+    shared_instructions="Be helpful and accurate."
+)
+
+# Modern async usage
+async def main():
+    result = await agency.get_response("Analyze sample data")
+    print(result.final_output)  # Typed AnalysisResult object
+
+asyncio.run(main())
+```
+</Tab>
+</Tabs>
+
+## Reference Tables
+
+<Accordion title="📚 API changes overview">
+### Agency Methods
+
+| v0.x | Status | v1.x alternative |
+|:----:|:------:|:----------------:|
+| `get_completion()` | ✅ Backward compatible | `get_response()` (async) |
+| `get_completion_stream()` | ❌ Removed | `get_response_stream()` (async) |
+| `agency_chart` | ⚠️ Deprecated | Positional args + `communication_flows` |
+| `threads_callbacks` | ❌ Breaking change | `load_threads_callback` + `save_threads_callback` |
+
+### Agent Parameters
+
+| v0.x | Status | v1.x alternative |
+|:----:|:------:|:----------------:|
+| `temperature`, `top_p`, etc. | ⚠️ Individual params deprecated | `model_settings=ModelSettings(...)` |
+| `response_validator` | ❌ Removed | `output_guardrails`, `input_guardrails` |
+| `response_format` | ❌ Removed | `output_type` |
+| `examples` | ⚠️ Deprecated | Auto-prepended to `instructions` |
+
+### Tools
+
+| v0.x | Status | v1.x alternative |
+|:----:|:------:|:----------------:|
+| `BaseTool` classes | ⚠️ BaseTool still works | `@function_tool` decorator (recommended) |
+| `run()` method | ✅ Simplified | Direct function body implementation |
+| `_shared_state` | ✅ Enhanced | `ctx.context` |
+</Accordion>
+
+## Getting Help
+
+<CardGroup cols={2}>
+<Card title="Examples" icon="code" href="https://github.com/VRSEN/agency-swarm/tree/main/examples">
+Working v1.x examples with detailed comments
+</Card>
+
+<Card title="Issues" icon="bug" href="https://github.com/VRSEN/agency-swarm/issues">
+Report v1.x issues with the **v1.x** label
+</Card>
+
+<Card title="OpenAI Agents SDK" icon="link" href="https://openai.github.io/openai-agents-python/">
+Official OpenAI Agents SDK documentation
+</Card>
+
+<Card title="v0.x Docs" icon="book" href="https://agency-swarm.ai">
+Current production documentation
+</Card>
+</CardGroup>

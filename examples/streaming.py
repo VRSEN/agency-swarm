@@ -13,9 +13,7 @@ import sys
 # Path setup for standalone examples
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
-from agents import function_tool
-
-from agency_swarm import Agency, Agent
+from agency_swarm import Agency, Agent, function_tool
 
 # ===== DEBUG CONFIGURATION =====
 # Set to True to see ALL raw events for frontend integration

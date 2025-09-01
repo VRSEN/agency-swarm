@@ -4,8 +4,197 @@ description: "Utilize open-source models with Agency Swarm."
 icon: "code-fork"
 ---
 
-While OpenAI is generally recommended, there are situations where you might prefer open-source models. The following projects offer alternatives by mimicking the Assistants API:
+While OpenAI is generally recommended, there are situations where you might prefer open-source models. Agency Swarm supports various open-source model integrations as alternatives to OpenAI:
 
+<Tabs>
+<Tab title="v1.x">
+## LiteLLM Integration
+
+Since Agents SDK no longer uses assistants, most of the previously available frameworks became incompatible with it. One of the few frameworks that has been ported for the new SDK is [LiteLLM](https://docs.litellm.ai/docs/response_api), which you can use to connect your agent to various providers, such as: Anthropic, Vertex AI, AWS Bedrock, Azure, and others.
+
+
+<Tabs>
+<Tab title="Using OpenAI's LiteLLM model">
+<Steps>
+
+<Step title="Install LiteLLM">
+Install LiteLLM to get started with open-source model support:
+
+```bash
+pip install "openai-agents[litellm]"
+```
+</Step>
+
+<Step title="Configure Agency Swarm Agent">
+Create an agent that connects to your LiteLLM proxy:
+
+```python
+import os
+from agency_swarm import Agent
+from agents.extensions.models.litellm_model import LitellmModel
+
+gemini_agent = Agent(
+    name="GeminiAgent",
+    instructions="You are a helpful assistant",
+    model=LitellmModel(
+      model="gemini/gemini-2.0-flash",
+      api_key=os.getenv("GEMINI_API_KEY")
+    )
+)
+```
+</Step>
+
+<Step title="Create and Run Agency">
+Set up your agency and start using open-source models:
+
+```python
+import asyncio
+from agency_swarm import Agency
+
+agency = Agency(gemini_agent)
+
+agency.terminal_demo()
+```
+</Step>
+
+</Steps>
+</Tab>
+
+<Tab title="Using proxy server">
+<Steps>
+
+<Step title="Install LiteLLM">
+Install LiteLLM to get started with open-source model support:
+
+```bash
+pip install "litellm[proxy]"
+```
+</Step>
+
+<Step title="Create LiteLLM Configuration">
+Create a `config.yaml` file to configure your models and providers:
+
+```yaml
+model_list:
+  - model_name: gemini-flash
+    litellm_params:
+      model: gemini/gemini-2.0-flash
+      api_key: os.environ/GEMINI_API_KEY # or paste your key directly here
+  - model_name: claude-sonnet
+    litellm_params:
+      model: anthropic/claude-3-5-sonnet-20240620
+      api_key: os.environ/ANTHROPIC_API_KEY
+  - model_name: llama-groq
+    litellm_params:
+      model: groq/llama-3.1-70b-versatile
+      api_key: os.environ/GROQ_API_KEY
+
+general_settings:
+  store_prompts_in_spend_logs: true  # Enable session management
+```
+</Step>
+
+<Step title="Set Environment Variables">
+Add your API keys to your environment variables:
+
+```bash
+export GEMINI_API_KEY="your-gemini-api-key"
+export ANTHROPIC_API_KEY="your-anthropic-api-key"
+export GROQ_API_KEY="your-groq-api-key"
+```
+</Step>
+
+<Step title="Start LiteLLM Proxy Server">
+Launch the LiteLLM proxy server with your configuration:
+
+```bash
+litellm --config /path/to/config.yaml
+
+# Server will start on http://localhost:4000
+```
+</Step>
+
+<Step title="Configure Agency Swarm Agent">
+Create an agent that connects to your LiteLLM proxy:
+
+```python
+import os
+from openai import AsyncOpenAI
+from agency_swarm import Agent, OpenAIChatCompletionsModel
+
+custom_client = AsyncOpenAI(
+    api_key="xxx",  # Any if proxy key wasn't set
+    base_url="http://localhost:4000",
+)
+
+gemini_agent = Agent(
+    name="GeminiAgent",
+    instructions="You are a helpful assistant",
+    model=OpenAIChatCompletionsModel(
+        model="gemini/gemini-2.0-flash",
+        openai_client=custom_client
+    )
+)
+```
+</Step>
+
+<Step title="Create and Run Agency">
+Set up your agency and start using open-source models:
+
+```python
+import asyncio
+from agency_swarm import Agency
+
+agency = Agency(gemini_agent)
+
+agency.terminal_demo()
+```
+</Step>
+
+</Steps>
+
+</Tab>
+</Tabs>
+
+## Using model-specific tools
+
+Some models, like gemini or claude have their internal tools, which can be attached to an agent by utilizing `extra_body` parameter in agent's `model_settings`:
+
+```python
+import os
+from agency_swarm import Agent
+from agents.extensions.models.litellm_model import LitellmModel
+
+gemini_agent = Agent(
+    name="GeminiAgent",
+    instructions="You are a helpful assistant",
+    model=LitellmModel(
+      model="gemini/gemini-2.0-flash",
+      api_key=os.getenv("GEMINI_API_KEY"),
+      extra_body={"web_search_options": {"search_context_size": "medium"}}
+    )
+)
+
+claude_agent = Agent(
+    name="ClaudeAgent",
+    instructions="You are a helpful assistant",
+    model=LitellmModel(
+      model="anthropic/claude-sonnet-4-20250514",
+      api_key=os.getenv("ANTHROPIC_API_KEY"),
+      extra_body={
+        "search_parameters": {
+          "mode": "on", "returnCitations": True
+        }
+      }
+    )
+)
+```
+
+Here both claude and gemini agents will be able to use their native search tools, which are similar to openai's WebSearch() tool. Consider checking out [LiteLLM's documentation](https://docs.litellm.ai/docs) to find a full list of supported tools.
+
+</Tab>
+
+<Tab title="v0.x">
 ## Supported Projects
 
 <CardGroup>
@@ -74,6 +263,9 @@ pip install astra-assistants-api gradio
 from openai import OpenAI
 from astra_assistants import patch
 from agency_swarm import set_openai_client
+from dotenv import load_dotenv
+
+load_dotenv()
 
 client = patch(OpenAI())
 
@@ -187,6 +379,8 @@ agency.get_completion("I am the CEO")
 </Step>
 
 </Steps>
+</Tab>
+</Tabs>
 
 ## Limitations
 
@@ -194,9 +388,11 @@ agency.get_completion("I am the CEO")
 Be aware of the limitations when using open-source models.
 </Warning>
 
-- **Function calling is not supported by most open-source models**: This limitation prevents the agent from communicating with other agents in the agency. Therefore, it must be positioned at the end of the agency chart and cannot utilize any tools.
-- **RAG is typically limited**: Most open-source assistants API implementations have restricted Retrieval-Augmented Generation capabilities. It is recommended to develop a custom tool with your own vector database.
-- **Code Interpreter is not supported**: The Code Interpreter feature is still under development for all open-source assistants API implementations.
+- **Hosted tools are not supported**: Patched agents are not able to utilize hosted tools, such as WebSearch, FileSearch, CodeInterpreter and others.
+- **Patched and unpatched models should not use handoffs to communicate**: You may use standard OpenAI client and patched agents in a single agency, however using handoff to transfer chat from patched model to unpatched or vice-versa will lead to an error.
+- **Function calling may not be supported by some open-source models**: This limitation prevents the agent from communicating with other agents in the agency. Therefore, it must be positioned at the end of the agency chart and cannot utilize any tools.
+- **RAG is typically limited**: Most open-source implementations have restricted Retrieval-Augmented Generation capabilities. It is recommended to develop a custom tool with your own vector database.
+- **Potential library conflicts**: the Agents SDK is still a fairly new framework which is being actively developed and improved. Due to that, there might be potential conflicts between litellm and openai-agents packages on recent releases.
 
 ## Future Plans
 

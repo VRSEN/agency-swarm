@@ -165,3 +165,96 @@ def test_agent_instruction_string_not_file():
 
     # Should keep the text as-is since it's not a file
     assert agent.instructions == instruction_text
+
+
+def test_agent_initialization_with_reasoning_effort():
+    """Legacy reasoning_effort maps to ModelSettings.reasoning.effort."""
+    agent = Agent(name="Reasoner", instructions="Test", reasoning_effort="medium")
+    assert agent.model_settings.reasoning is not None
+    assert agent.model_settings.reasoning.effort == "medium"
+
+
+def test_agent_initialization_with_truncation_strategy():
+    """Legacy truncation_strategy maps to ModelSettings.truncation."""
+    agent = Agent(name="Trunc", instructions="Test", truncation_strategy="auto")
+    assert agent.model_settings.truncation == "auto"
+
+
+def test_agent_initialization_response_format_guard():
+    """Non-type response_format should be ignored and not set output_type."""
+    import warnings
+
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        agent = Agent(
+            name="RF",
+            instructions="Test",
+            response_format={"type": "json_schema", "json_schema": {"name": "X", "schema": {}}},
+        )
+    # Ensure a deprecation warning mentioning response_format was raised
+    assert any("response_format" in str(item.message) for item in w)
+    # And output_type was not set from a dict
+    assert agent.output_type is None
+
+
+def test_agent_initialization_with_both_token_settings_prefers_completion():
+    """When both legacy prompt and completion tokens are provided, prefer completion tokens."""
+    agent = Agent(
+        name="TokenAgent",
+        instructions="Test",
+        max_prompt_tokens=100,
+        max_completion_tokens=150,
+    )
+    assert agent.model_settings.max_tokens == 150
+
+
+def test_agent_initialization_response_format_type_sets_output_type():
+    """If response_format is a type, it should set output_type."""
+    agent = Agent(name="RFType", instructions="Test", response_format=SimpleOutput)
+    assert agent.output_type == SimpleOutput
+
+
+def test_agent_initialization_misc_deprecations_warn_only():
+    """Deprecated params should warn and not break initialization."""
+    import warnings
+
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        agent = Agent(
+            name="Misc",
+            instructions="Test",
+            validation_attempts=2,
+            id="abc123",
+            tool_resources={"vs": 1},
+            file_ids=["f1"],
+            file_search=True,
+            refresh_from_id="old",
+        )
+    assert agent.name == "Misc"
+    msgs = ",".join(str(item.message) for item in w)
+    assert "validation_attempts" in msgs
+    assert "id' parameter" in msgs
+    assert "tool_resources" in msgs
+    assert "file_ids" in msgs
+    assert "file_search" in msgs
+    assert "refresh_from_id" in msgs
+
+
+def test_agent_initialization_adapts_basetool_type():
+    """Passing a BaseTool subclass should be adapted to a FunctionTool."""
+    from pydantic import Field
+
+    from agency_swarm.tools import BaseTool
+
+    class _T(BaseTool):
+        x: str = Field(..., description="x")
+
+        def run(self):
+            return self.x
+
+    agent = Agent(name="ToolsAdapt", instructions="Test", tools=[_T])
+    # tools should be adapted to FunctionTool instances
+    from agents import FunctionTool
+
+    assert len(agent.tools) == 1
+    assert isinstance(agent.tools[0], FunctionTool)

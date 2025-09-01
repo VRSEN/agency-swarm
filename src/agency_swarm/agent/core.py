@@ -117,7 +117,7 @@ class Agent(BaseAgent[MasterContext]):
             files_folder (str | Path | None): Path to agent's file directory. If named `*_vs_<vector_store_id>`,
                 files are automatically added to the specified OpenAI Vector Store and FileSearchTool is added.
             tools_folder (str | Path | None): Directory for automatic tool discovery and loading.
-            schemas_folder (str | Path | list[str | Path] | None): Directories containing OpenAPI schema files
+            schemas_folder (str | Path | None): Directory containing OpenAPI schema files
                 for automatic tool generation.
             api_headers (dict[str, dict[str, str]] | None): Per-schema headers for OpenAPI tools. Format:
                 {"schema_filename.json": {"header_name": "header_value"}}.
@@ -156,6 +156,19 @@ class Agent(BaseAgent[MasterContext]):
         # Handle deprecated parameters
         handle_deprecated_parameters(kwargs)
 
+        # examples are appended to instructions
+        if "examples" in kwargs:
+            examples = kwargs.pop("examples")
+            if examples and isinstance(examples, list):
+                try:
+                    import json as _json
+
+                    examples_str = "\n\nExamples:\n" + "\n".join(f"- {_json.dumps(ex)}" for ex in examples)
+                    current_instructions = kwargs.get("instructions", "")
+                    kwargs["instructions"] = current_instructions + examples_str
+                except Exception:
+                    logger.exception("Failed to append examples to instructions")
+
         # Separate kwargs into base agent params and agency swarm params
         base_agent_params, current_agent_params = separate_kwargs(kwargs)
 
@@ -181,7 +194,7 @@ class Agent(BaseAgent[MasterContext]):
         # Initialize Agency Swarm specific attributes
         self.files_folder = current_agent_params.get("files_folder")
         self.tools_folder = current_agent_params.get("tools_folder")
-        self.schemas_folder = current_agent_params.get("schemas_folder", [])
+        self.schemas_folder = current_agent_params.get("schemas_folder")
         self.api_headers = current_agent_params.get("api_headers", {})
         self.api_params = current_agent_params.get("api_params", {})
         self.description = current_agent_params.get("description")

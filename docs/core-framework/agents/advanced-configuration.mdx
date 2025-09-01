@@ -4,82 +4,70 @@ description: "Learn advanced configuration options for your agents in Agency Swa
 icon: "gears"
 ---
 
-All parameters inside the `Agent` class, follow the same structure as [OpenAI's Assistants API](https://platform.openai.com/docs/api-reference/assistants). However, there are a few advanced parameters that require more explanation.
+
+All parameters inside the `Agent` class follow the same structure as the OpenAI Agents SDK [`Agent`](https://openai.github.io/openai-agents-python/ref/agent/#agents.agent.Agent). However, there are a few advanced parameters that require more explanation.
 
 ### Parallel Tool Calls
 
-Whether to run tools in parallel or sequentially. By default, this parameter is set to `True`.
+Controls whether tools execute in parallel or sequentially for a given agent.
 
+<Tabs>
+  <Tab title="v1.x">
 ```python
-from agency_swarm import Agent
+from agency_swarm import Agent, ModelSettings
 
-agent = Agent(name='MyAgent', parallel_tool_calls=False)
+agent = Agent(
+    name="MyAgent",
+    instructions="...",
+    model_settings=ModelSettings(parallel_tool_calls=False),
+)
 ```
-
-### File Search Configuration
-
-File search configuration for the agent, as described in the [OpenAI documentation](https://platform.openai.com/docs/api-reference/assistants/createAssistant#assistants-createassistant-tools).
-
+  </Tab>
+  <Tab title="v0.x">
 ```python
 from agency_swarm import Agent
 
 agent = Agent(
-    name='MyAgent',
-    file_search={
-        'max_num_results': 25,
-        'ranking_options': {
-            "score_threshold": 0.5,
-            "ranker": "auto"
-        }
-    }
+    name="MyAgent",
+    parallel_tool_calls=False,
 )
 ```
+  </Tab>
+</Tabs>
+
+To force sequential execution for a specific tool regardless of that setting, set `one_call_at_a_time = True` in the tool’s `ToolConfig`. See [Advanced Tool Configuration](/core-framework/tools/custom-tools/configuration).
+
+### File Search
+
+If your `files_folder` ends with `_vs_<vector_store_id>`, Agency Swarm automatically associates files with that Vector Store and adds `FileSearchTool` to the Agent. The `include_search_results` behavior can be toggled via the Agent’s `include_search_results` flag.
+
+Note: in v0.x you could configure `file_search` directly on the Agent (Assistants API). In v1.x prefer the `files_folder` + Vector Store convention.
+
+#### File Search Configuration (v0.x)
 
 Parameters:
 - `max_num_results`: The maximum number of results the file search tool should output. The default is 20 for `gpt-4*` models and 5 for `gpt-3.5-turbo`. This number should be between 1 and 50 inclusive. Note that the file search tool may output fewer than `max_num_results` results.
 - `ranking_options`: The ranking options for the file search. If not specified, the file search tool will use the `auto` ranker and a score_threshold of 0. See the [file search tool documentation](https://platform.openai.com/docs/assistants/tools/file-search#customizing-file-search-settings) for more information.
 
-### Response Validator
+### Output Validation
 
-This is a special function that allows you to validate the response before sending it to the user or another agent. This function should raise an error if the response is invalid. The agent will then see this error as the user message and try correct itself accordingly.
+v1.x (Agents SDK): Use `output_guardrails` on the `Agent` to validate outputs. See the detailed guide: [Output Validation](/additional-features/output-validation). For a complete working example, see: [examples/response_validation.py](https://github.com/VRSEN/agency-swarm/blob/main/examples/response_validation.py).
 
-```python
+v0.x (Response Validator): You can validate responses before sending them to the user or other agents by defining a `response_validator` method on the Agent. This method should raise an error if the response is invalid, allowing the agent to correct itself.
 
-from agency_swarm import Agent
+### Few‑Shot Examples
 
-class MyAgent(Agent):
-    def response_validator(self, message: str) -> str:
-        """This function is used to validate the response before sending it to the user or another agent."""
-        if "bad word" in message:
-            raise ValueError("Please don't use bad words.")
-
-        return message
-```
-
-### Few-Shot Examples
-
-Few-show examples help the agent to understand how to respond. The format for examples follows [message object format on OpenAI](https://platform.openai.com/docs/api-reference/messages/createMessage):
+Few‑shot examples are supported and appended to `instructions` at initialization. The format follows the [message object format](https://platform.openai.com/docs/api-reference/messages/createMessage).
 
 ```python
 from agency_swarm import Agent
 
-examples=[
-    {
-        "role": "user",
-        "content": "Hi!",
-        "attachments": [],
-        "metadata": {},
-    },
-    {
-        "role": "assistant",
-        "content": "Hi! I am the CEO. I am here to help you with your tasks. Please tell me what you need help with.",
-        "attachments": [],
-        "metadata": {},
-    }
+examples = [
+    {"role": "user", "content": "Hi!"},
+    {"role": "assistant", "content": "Hello!"},
 ]
 
-agent = Agent(
-    name='MyAgent',
-    examples=examples
-)
+agent = Agent(name="MyAgent", examples=examples)
 ```
+
+See also: [Few‑Shot Examples](/additional-features/few-shot-examples).

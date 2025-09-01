@@ -4,6 +4,7 @@ description: "Guide agent responses using few-shot prompting."
 icon: "clone"
 ---
 
+
 **Few-shot prompting** is a powerful technique where you provide a small number of sample interactions (typically 2 to 5) to guide your agent's behavior. This method helps the agent understand the desired output format and task requirements by learning from the given examples, thereby improving performance without writing extensive instructions.
 
 ## Crafting Effective Examples
@@ -43,7 +44,7 @@ The optional fields `attachments` and `metadata` can be included if needed but a
 
 ## Using Few-Shot Examples
 
-You can add few-shot examples to your agent either during initialization or afterward:
+You can add few-shot examples to your agent during initialization:
 
 <Tabs>
     <Tab title="During Initialization">
@@ -56,14 +57,6 @@ You can add few-shot examples to your agent either during initialization or afte
         description="Assists customers with inquiries and provides detailed information.",
         examples=examples
     )
-    ```
-
-    </Tab>
-    <Tab title="After Initialization">
-
-    ```python
-    agent = Agent(name="CustomerSupportAgent")
-    agent.examples = examples
     ```
 
     </Tab>

@@ -18,10 +18,9 @@ from pathlib import Path
 # Path setup for standalone examples
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
-from agents import ModelSettings
 from openai import AsyncOpenAI
 
-from agency_swarm import Agency, Agent
+from agency_swarm import Agency, Agent, ModelSettings
 
 client = AsyncOpenAI()
 

@@ -26,10 +26,16 @@ from typing import Any
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
 import agentops  # noqa: E402
-from agents import ModelSettings, RunContextWrapper, function_tool, trace  # noqa: E402
 from langfuse import observe  # noqa: E402
 
-from agency_swarm import Agency, Agent  # noqa: E402
+from agency_swarm import (  # noqa: E402
+    Agency,
+    Agent,
+    ModelSettings,
+    RunContextWrapper,
+    function_tool,
+    trace,
+)
 
 logging.basicConfig(level=logging.INFO)
 
