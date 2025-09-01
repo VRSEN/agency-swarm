@@ -22,7 +22,7 @@ Agency context is particularly useful when your agents interact with multiple to
 
 ![Without Agency Context](/images/shared-state-without.png)
 
-- **With Agency Context**: `Tool A` can store the required data in the agency context, and `Tool B` can retrieve it without needing direct parameter passing. This approach reduces complexity, saves tokens, and enables more sophisticated workflows.
+- **With Agency Context**: `Tool A` can store the required data in the agency context, and `Tool B` can retrieve it without needing direct parameter passing. This approach reduces complexity, saves tokens, and enables additional workflows.
 
 ![With Agency Context](/images/shared-state-with.png)
 
@@ -131,7 +131,7 @@ Agency context can store any Python object, making it perfect for complex workfl
 ```python
 @function_tool
 async def analyze_market_data(ctx: RunContextWrapper[MasterContext], symbols: str) -> str:
-    """Analyzes multiple stocks and stores comprehensive data."""
+    """Analyzes multiple stocks and stores data."""
     symbol_list = symbols.split(',')
 
     market_analysis = {
@@ -302,7 +302,7 @@ async def my_tool(ctx: RunContextWrapper[MasterContext], param: str) -> str:
 
 ## Example: Complete Workflow
 
-For a comprehensive example showing agency context in action, see the [Agency Context Workflow Example](/examples/agency_context_workflow.py) which demonstrates:
+For a full example showing agency context in action, see the [Agency Context Workflow Example](/examples/agency_context_workflow.py) which demonstrates:
 
 - Multi-step data collection and analysis
 - Cross-agent data sharing
@@ -310,4 +310,4 @@ For a comprehensive example showing agency context in action, see the [Agency Co
 - Workflow coordination
 - Context monitoring and debugging
 
-Agency context eliminates the need for complex parameter passing and enables sophisticated multi-agent workflows while maintaining clean separation of concerns.
+Agency context eliminates the need for complex parameter passing and enables multi-agent workflows while maintaining clean separation of concerns.

@@ -36,11 +36,11 @@ def run_fastapi(
     host, port, app_token_env, return_app, cors_origins :
         Standard FastAPI configuration options.
     enable_logging : bool
-        Enable enhanced logging with request tracking and file logging.
+        Enable request tracking and file logging.
         When enabled, adds middleware to track requests and allows conditional
         file logging based on 'x-agency-log-id' header.
     logs_dir : str
-        Directory to store log files when enhanced logging is enabled.
+        Directory to store log files when logging is enabled.
         Defaults to 'activity-logs'.
     """
     if (agencies is None or len(agencies) == 0) and (tools is None or len(tools) == 0):
@@ -78,7 +78,7 @@ def run_fastapi(
 
     app = FastAPI()
 
-    # Setup enhanced logging if enabled
+    # Setup logging if enabled
     if enable_logging:
         setup_enhanced_logging(logs_dir)
         app.add_middleware(RequestTracker)
@@ -152,7 +152,7 @@ def run_fastapi(
 
     app.add_exception_handler(Exception, exception_handler)
 
-    # Add get_logs endpoint if enhanced logging is enabled
+    # Add get_logs endpoint if logging is enabled
     if enable_logging:
         app.add_api_route("/get_logs", make_logs_endpoint(LogRequest, logs_dir, verify_token), methods=["POST"])
         endpoints.append("/get_logs")
