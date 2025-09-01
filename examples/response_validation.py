@@ -21,10 +21,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 
 from agency_swarm import Agency, Agent
 
-# Silence library logs and stack traces for a clean demo output
 logging.basicConfig(level=logging.ERROR)
-
-# --- Guardrails --- #
 
 
 # Require user requests to be explicitly scoped as a Task
@@ -78,10 +75,10 @@ agent = Agent(
     input_guardrails=[require_task_prefix],
 )
 
+# --- Demo --- #
 agency = Agency(agent)
 
 
-# --- Helper: minimal send+log wrapper --- #
 async def ask(message: str):
     print(f"-> User: {message}")
     response = await agency.get_response(message=message)
@@ -89,21 +86,16 @@ async def ask(message: str):
     return response
 
 
-# No retry helper to keep things simple. If a guardrail trips, we show the message and
-# then send a corrected follow-up like a normal chat user would.
-
-
-# --- Demo --- #
 async def run_conversation():
     print("\n--- Guardrails demo ---\n")
-    # Input guardrail: send invalid message (no Task:) to trigger
+    # Input guardrail: send invalid message to trigger
     try:
         await ask("How can I contact support?")
     except InputGuardrailTripwireTriggered as e:
         info = e.guardrail_result.output.output_info
         print(f"[Input Tripwire] {info}")
 
-    # Output guardrail: realistic role-play; then retry once by passing tripwire back
+    # Output guardrail: retry once by passing tripwire back
     try:
         await ask("Task: How can I contact support?")
     except OutputGuardrailTripwireTriggered as e:
