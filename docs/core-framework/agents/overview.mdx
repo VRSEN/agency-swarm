@@ -60,8 +60,8 @@ The new `Agent` class extends the base `agents.Agent` with Agency Swarm-specific
 | Tools *(optional)* | `tools` | A list of tools that the agent can use. Default: `[]` |
 | MCP Servers *(optional)* | `mcp_servers` | A list of Model Context Protocol servers that the agent can use. Every time the agent runs, it will include tools from these servers in the list of available tools. Default: `[]` |
 | MCP Config *(optional)* | `mcp_config` | Configuration for MCP servers. Default: `MCPConfig()` |
-| Input Guardrails *(optional)* | `input_guardrails` | A list of checks that run in parallel to the agent's execution, before generating a response. Runs only if the agent is the first agent in the chain. Default: `[]` |
-| Output Guardrails *(optional)* | `output_guardrails` | A list of checks that run on the final output of the agent, after generating a response. Runs only if the agent produces a final output. Default: `[]` |
+| Input Guardrails *(optional)* | `input_guardrails` | A list of checks that run in parallel to the agent's execution, before generating a response. Default: `[]` |
+| Output Guardrails *(optional)* | `output_guardrails` | A list of checks that run on the final output of the agent, after generating a response. Default: `[]` |
 | Output Type *(optional)* | `output_type` | The type of the output object. If not provided, the output will be `str`. In most cases, you should pass a regular Python type (e.g. a dataclass, Pydantic model, TypedDict, etc). Default: `None` |
 
 <Note>

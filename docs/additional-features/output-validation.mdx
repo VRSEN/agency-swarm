@@ -14,7 +14,7 @@ There are 4 different validators in Agency Swarm:
   - `field_validator`: Validate individual fields independently.
   - `model_validator`: Perform complex checks involving multiple fields.
 - Agent validators:
-  - `guardrails`(for v1.x and higher) or `response_validator` (for v0.x): Validate the response before sending it to the user or other agents.
+  - `guardrails` (for v1.x and higher) or `response_validator` (for v0.x): Validate the response before sending it to the user or other agents.
 - Universal validators:
   - `llm_validator`: Validate outputs against specified natural language rules.
 
@@ -24,6 +24,14 @@ There are 4 different validators in Agency Swarm:
 <Tab title="v1.x">
 
 In v1.x, validation is handled through **guardrails** using the agents SDK. Guardrails provide more flexible validation for both input and output.
+
+#### Output Guardrails
+
+Output guardrails validate agent responses before they are sent to users or other agents. Each output guardrail function receives three parameters: `context`, `agent`, and `response_text`.
+
+In most cases, you'll only need the `response_text` parameter, which contains the agent's latest response as a simple text string. This allows you to check the response against specific criteria.
+
+For more complex validation scenarios, you can utilize the `context` and `agent` parameters to account for run state and agent configuration during validation.
 
 **Example:**
 
@@ -61,7 +69,21 @@ agent = Agent(
 )
 ```
 
-**Handling guardrail exceptions:**
+#### Validation Attempts
+
+The `validation_attempts` parameter controls how many times an agent can retry when output validation fails. **Default is 1** (one retry). Set `validation_attempts=0` for immediate fail-fast behavior.
+```python
+agent = Agent(
+    name="CustomerSupportAgent",
+    instructions="You are a helpful customer support agent.",
+    output_guardrails=[response_content_guardrail],
+    validation_attempts=2,
+)
+```
+After the guardrail error is triggered, the agent will receive the error message provided in the `output_info` in the form of a system message and will adjust its output accordingly.
+
+#### Output Guardrail Exceptions
+After all validation attempts fail, the `OutputGuardrailTripwireTriggered` error will be raised to allow for additional processing, if needed.
 
 ```python
 try:
@@ -69,6 +91,150 @@ try:
 except OutputGuardrailTripwireTriggered as e:
     print(f"Validation failed: {e.guardrail_result.output_info}")
 ```
+
+#### Input Guardrails
+
+Input guardrails validate incoming messages before they reach the agent. They can check both user input and inter-agent communication.
+
+**Simplified Input Processing**
+
+Agency Swarm simplifies guardrail implementation by automatically extracting text content from messages. While the Agents SDK originally passes the entire chat history to guardrails, Agency Swarm wraps your guardrail functions to provide only the relevant text content, eliminating the need for manual extraction logic.
+
+**Parameters and Input Types**
+
+Each input guardrail receives three parameters: `context`, `agent`, and `user_input`. The `user_input` parameter format depends on the message structure:
+
+- **Single message**: A string containing the message content
+- **Multiple consecutive messages**: A list of strings, one for each message
+
+For example, when a user sends multiple messages:
+```json
+[
+  {"role": "user", "content": "Hi"},
+  {"role": "user", "content": "How are you?"}
+]
+```
+
+Your guardrail receives:
+```python
+["Hi", "How are you?"]
+```
+
+This allows you to process each new input message individually or validate them as a group.
+
+<Note>
+Note that file and image inputs inside of a user message will not be passed to the guardrail.
+</Note>
+
+**Example:**
+
+```python
+from agency_swarm import (
+    Agency,
+    Agent,
+    RunContextWrapper,
+    GuardrailFunctionOutput,
+    InputGuardrailTripwireTriggered,
+    input_guardrail,
+)
+
+@input_guardrail
+async def require_task_prefix(
+    context: RunContextWrapper, agent: Agent, user_input: str | list[str]
+) -> GuardrailFunctionOutput:
+    """Require user requests to begin with 'Request:'"""
+    
+    # Handle single string input
+    condition = not user_input.startswith("Request:")
+    
+    return GuardrailFunctionOutput(
+        output_info="Prefix your request with 'Request:' describing what you need." if condition else "",
+        tripwire_triggered=condition,
+    )
+
+agent = Agent(
+    name="CustomerSupportAgent",
+    instructions="You are a helpful customer support agent.",
+    input_guardrails=[require_task_prefix],
+)
+```
+
+#### Input Guardrail Exceptions
+Unlike output guardrails, if an input guardrail is triggered, the error will be immediately returned back to the user/caller agent.     
+For user messages, the error processing is similar to output guardrails.
+
+```python
+try:
+    response = await agency.get_response("Hello!")
+except InputGuardrailTripwireTriggered as e:
+    print(f"Validation failed: {e.guardrail_result.output_info}")
+```
+
+Each triggered guardrail will also leave a corresponding system message containing error message inside of a chat history.
+
+<Note>
+The validation_attempts parameter currently does not apply to input guardrails.
+</Note>
+
+#### Agent-to-agent message validation
+You can use guardrails to control how agents send messages and responses to one another.
+When adding communication flows between agents, the guardrails of the recipient agent will define the format of input and output messages, for example:
+
+```python
+@input_guardrail(name="RequireTaskPrefix")
+async def require_task_prefix(
+    context: RunContextWrapper, agent: Agent, agent_input: str | list[str]
+) -> GuardrailFunctionOutput:
+    condition = not agent_input.startswith("Task:")
+    return GuardrailFunctionOutput(
+        output_info="ERROR: Requests to this agent must begin with 'Task:'" if condition else "",
+        tripwire_triggered=condition,
+    )
+
+
+@output_guardrail(name="RequireResponsePrefix")
+async def require_response_prefix(
+    context: RunContextWrapper, agent: Agent, response_text: str
+) -> GuardrailFunctionOutput:
+    condition = not response_text.startswith("Response:")
+    return GuardrailFunctionOutput(
+        output_info="ERROR: Your response must start with 'Response:'" if condition else "",
+        tripwire_triggered=condition,
+    )
+
+ceo = Agent(
+    name="CEO",
+    instructions="You are the CEO agent.",
+)
+
+worker = Agent(
+    name="Worker",
+    instructions="You are the worker agent.",
+    input_guardrails=[require_task_prefix],
+    output_guardrails=[require_response_prefix],
+)
+
+agency = Agency(
+    ceo,
+    communication_flows=[(ceo, worker)],
+)
+```
+In this example, if the CEO agent sends a message to the worker that does not start with the word "Task:", the input guardrail will be triggered and
+the CEO will be notified with an error message saying `"ERROR: Requests to this agent must begin with 'Task:'"`. Then it will either adjust the input
+and try again or notify the user, as per its instructions.
+
+<Note>
+Agent-to-agent messages are always single strings, so if you are using a guardrail exclusively to check inter-agent communication, input guardrail will always receive a string.
+</Note>
+
+Similarly, the response of the worker to the CEO agent will be checked against the output guardrail and within
+the specified number of `validation_attempts` it will need to generate a correct response. In this case, the requirement is that the worker's response should start with
+the word "Response:", otherwise it will receive the error message `"ERROR: Your response must start with 'Response:'"`
+
+<Warning>
+Due to the nature of Handoffs, using SendMessageHandoff for agent-to-agent communication will bypass the input guardrails set between agents.
+</Warning>
+
 
 </Tab>
 <Tab title="v0.x">
@@ -157,7 +323,7 @@ class User(BaseTool):
 </Tab>
 
 <Tab title="Model Validators">
-This example, a model validator checks that `password` and `confirm_password` match, which requires access to multiple fields:
+In this example, a model validator checks that `password` and `confirm_password` match, which requires access to multiple fields:
 ```python
 from pydantic import model_validator
 from agency_swarm import BaseTool

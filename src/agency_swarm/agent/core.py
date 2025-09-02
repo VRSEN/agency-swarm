@@ -18,6 +18,7 @@ from agency_swarm.agent import (
     separate_kwargs,
     setup_file_manager,
     validate_hosted_tools,
+    wrap_input_guardrails,
 )
 from agency_swarm.agent.agent_flow import AgentFlow
 from agency_swarm.agent.attachment_manager import AttachmentManager
@@ -227,6 +228,9 @@ class Agent(BaseAgent[MasterContext]):
         self.file_manager._parse_files_folder_for_vs_id()
         parse_schemas(self)
         load_tools_from_folder(self)
+
+        # Wrap input guardrails
+        wrap_input_guardrails(self)
 
         # Wrap any FunctionTool instances that were provided directly via constructor
         for tool in self.tools:

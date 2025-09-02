@@ -48,7 +48,7 @@ async def test_output_guardrail_retries_update_history(mock_runner_run):
     # Expect at least 3 messages; find the last three
     assert ("user", "What is openai?") in trio
     assert ("assistant", "BAD OUTPUT") in trio
-    assert ("user", "ERROR: fix format") in trio
+    assert ("system", "ERROR: fix format") in trio
 
 
 class _DummyStream:
@@ -90,4 +90,4 @@ async def test_output_guardrail_retries_streaming(mock_run_streamed):
     # The guidance user message should be in history
     msgs = ctx.thread_manager.get_all_messages()
     roles_contents = [(m.get("role"), m.get("content")) for m in msgs]
-    assert ("user", "ERROR: needs header") in roles_contents
+    assert ("system", "ERROR: needs header") in roles_contents

@@ -121,6 +121,15 @@ async def orchestrate_sync_run(
             )
             continue
         except InputGuardrailTripwireTriggered as e:
+            history_for_runner = append_guardrail_feedback(
+                agent=agent,
+                agency_context=agency_context,
+                sender_name=sender_name,
+                parent_run_id=parent_run_id,
+                current_agent_run_id=current_agent_run_id,
+                exception=e,
+                include_assistant=False,
+            )
             raise e
         except Exception as e:
             raise AgentsException(f"Runner execution failed for agent {agent.name}") from e
@@ -353,7 +362,7 @@ def append_guardrail_feedback(
             )
 
         guidance_msg: TResponseInputItem = {  # type: ignore[typeddict-item]
-            "role": "user",
+            "role": "system",
             "content": guidance_text,
         }
         to_persist.append(
@@ -477,6 +486,15 @@ async def run_streamed_with_output_guardrail_retries(
                 # For input guardrails, do not retry in streaming mode. Surface an error event with guidance.
                 try:
                     _, guidance_text = _extract_guardrail_texts(e)
+                    history_for_runner = append_guardrail_feedback(
+                        agent=agent,
+                        agency_context=agency_context,
+                        sender_name=sender_name,
+                        parent_run_id=parent_run_id,
+                        current_agent_run_id=current_agent_run_id,
+                        exception=e,
+                        include_assistant=False,
+                    )
                 except Exception:
                     guidance_text = str(e)
                 await event_queue.put({"type": "error", "content": guidance_text})

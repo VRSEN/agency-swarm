@@ -342,6 +342,12 @@ class SendMessage(FunctionTool):
                                     if text_content:
                                         final_output_text = text_content
 
+                    # Send error message to the caller if it occurs
+                    if isinstance(event, dict) and event.get("type") == "error":
+                        final_output_text = (
+                            f"Error getting response from the agent: {event.get('content', 'Unknown error')}"
+                        )
+
                 if tool_calls_seen:
                     logger.info(f"Sub-agent '{recipient_name_for_call}' executed tools: {tool_calls_seen}")
 
@@ -378,6 +384,7 @@ class SendMessage(FunctionTool):
                 f"Received response via tool '{self.name}' from '{recipient_name_for_call}': "
                 f'"{final_output_text[:50]}..."'
             )
+            print(f"final_output_text: {final_output_text}")
             return final_output_text
 
         except Exception as e:
