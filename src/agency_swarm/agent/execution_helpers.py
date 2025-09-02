@@ -1,13 +1,27 @@
+import asyncio
 import inspect
 import logging
-from collections.abc import Callable
-from typing import TYPE_CHECKING, Any
+from collections.abc import AsyncGenerator, Callable
+from contextlib import AsyncExitStack, suppress
+from typing import TYPE_CHECKING, Any, cast
 
-from agents.items import RunItem, ToolCallItem, TResponseInputItem
+from agents import (
+    InputGuardrailTripwireTriggered,
+    OutputGuardrailTripwireTriggered,
+    RunConfig,
+    Runner,
+    RunResult,
+    TResponseInputItem,
+)
+from agents.exceptions import AgentsException
+from agents.items import MessageOutputItem, RunItem, ToolCallItem
+from agents.stream_events import RunItemStreamEvent
 from openai.types.responses import ResponseFileSearchToolCall, ResponseFunctionWebSearch
 
 from agency_swarm.context import MasterContext
-from agency_swarm.messages import MessageFormatter
+from agency_swarm.messages import MessageFilter, MessageFormatter
+from agency_swarm.streaming.utils import add_agent_name_to_event
+from agency_swarm.utils.citation_extractor import extract_direct_file_annotations
 
 if TYPE_CHECKING:
     from agency_swarm.agent.core import AgencyContext, Agent
@@ -180,3 +194,363 @@ def cleanup_execution(
 
     # Always restore original instructions
     agent.instructions = original_instructions
+
+
+def _extract_guardrail_texts(e: BaseException) -> tuple[Any, str]:
+    """Return (assistant_output, guidance_text) from a guardrail exception."""
+    assistant_output: Any = None
+    guidance_text: str = ""
+    try:
+        guardrail_result = getattr(e, "guardrail_result", None)
+        if guardrail_result is not None:
+            assistant_output = getattr(guardrail_result, "agent_output", None)
+            output_obj = getattr(guardrail_result, "output", None)
+            if output_obj is not None:
+                guidance_text = str(getattr(output_obj, "output_info", ""))
+    except Exception:
+        pass
+    if assistant_output is None:
+        assistant_output = str(e)
+    if not guidance_text:
+        guidance_text = str(e)
+    return assistant_output, guidance_text
+
+
+def append_guardrail_feedback(
+    *,
+    agent: "Agent",
+    agency_context: "AgencyContext | None",
+    sender_name: str | None,
+    parent_run_id: str | None,
+    current_agent_run_id: str,
+    exception: BaseException,
+    include_assistant: bool,
+) -> list[TResponseInputItem]:
+    """Persist guardrail feedback messages and rebuild history for retry.
+
+    For non-streaming retries, persist both assistant output and guidance (user) messages.
+    For streaming retries, include_assistant=False persists only the guidance user message.
+    Returns sanitized history for Runner built from persisted store.
+    """
+    assistant_output, guidance_text = _extract_guardrail_texts(exception)
+
+    if agency_context and agency_context.thread_manager:
+        to_persist: list[TResponseInputItem] = []
+        if include_assistant:
+            assistant_msg: TResponseInputItem = {  # type: ignore[typeddict-item]
+                "role": "assistant",
+                "content": assistant_output,
+            }
+            to_persist.append(
+                MessageFormatter.add_agency_metadata(
+                    assistant_msg,
+                    agent=agent.name,
+                    caller_agent=sender_name,
+                    agent_run_id=current_agent_run_id,
+                    parent_run_id=parent_run_id,
+                )
+            )
+
+        guidance_msg: TResponseInputItem = {  # type: ignore[typeddict-item]
+            "role": "user",
+            "content": guidance_text,
+        }
+        to_persist.append(
+            MessageFormatter.add_agency_metadata(
+                guidance_msg,
+                agent=agent.name,
+                caller_agent=sender_name,
+                agent_run_id=current_agent_run_id,
+                parent_run_id=parent_run_id,
+            )
+        )
+
+        agency_context.thread_manager.add_messages(to_persist)  # type: ignore[arg-type]
+
+    # Rebuild full history for retry using persisted messages
+    return MessageFormatter.prepare_history_for_runner(
+        [],
+        agent,
+        sender_name,
+        agency_context,
+        agent_run_id=current_agent_run_id,
+        parent_run_id=parent_run_id,
+    )
+
+
+async def run_with_output_guardrail_retries(
+    *,
+    agent: "Agent",
+    history_for_runner: list[TResponseInputItem],
+    master_context_for_run: MasterContext,
+    sender_name: str | None,
+    agency_context: "AgencyContext | None",
+    hooks_override: Any,
+    run_config_override: RunConfig | None,
+    kwargs: dict[str, Any],
+    current_agent_run_id: str,
+    parent_run_id: str | None,
+    validation_attempts: int,
+) -> tuple[RunResult, MasterContext]:
+    """Execute Runner.run with output-guardrail retries and persisted feedback."""
+    attempts_remaining = int(validation_attempts or 0)
+    while True:
+        try:
+            # Ensure MCP servers connect/cleanup within the same task using a context stack
+            async with AsyncExitStack() as mcp_stack:
+                for server in agent.mcp_servers:
+                    await mcp_stack.enter_async_context(server)  # type: ignore[arg-type]
+
+                run_result: RunResult = await Runner.run(
+                    starting_agent=agent,
+                    input=history_for_runner,
+                    context=master_context_for_run,
+                    hooks=hooks_override or agent.hooks,  # type: ignore[arg-type]
+                    run_config=run_config_override or RunConfig(),
+                    max_turns=kwargs.get("max_turns", 1000000),
+                )
+            return run_result, master_context_for_run
+
+        except OutputGuardrailTripwireTriggered as e:
+            if attempts_remaining <= 0:
+                raise e
+            attempts_remaining -= 1
+            history_for_runner = append_guardrail_feedback(
+                agent=agent,
+                agency_context=agency_context,
+                sender_name=sender_name,
+                parent_run_id=parent_run_id,
+                current_agent_run_id=current_agent_run_id,
+                exception=e,
+                include_assistant=True,
+            )
+            continue
+
+        except InputGuardrailTripwireTriggered as e:
+            raise e
+        except Exception as e:
+            raise AgentsException(f"Runner execution failed for agent {agent.name}") from e
+        finally:
+            if agent.attachment_manager is None:
+                raise RuntimeError(f"attachment_manager not initialized for agent {agent.name}")
+            agent.attachment_manager.attachments_cleanup()
+
+
+async def run_streamed_with_output_guardrail_retries(
+    *,
+    agent: "Agent",
+    initial_history_for_runner: list[TResponseInputItem],
+    master_context_for_run: MasterContext,
+    sender_name: str | None,
+    agency_context: "AgencyContext | None",
+    hooks_override: Any,
+    run_config_override: RunConfig | None,
+    kwargs: dict[str, Any],
+    current_agent_run_id: str,
+    parent_run_id: str | None,
+    validation_attempts: int,
+) -> AsyncGenerator[RunItemStreamEvent]:
+    """Stream Runner events with output-guardrail retries, persisting guidance between attempts."""
+    attempts_remaining = int(validation_attempts or 0)
+    history_for_runner = initial_history_for_runner
+
+    while True:
+        # Prepare streaming context
+        master_context_for_run._is_streaming = True
+        try:
+            master_context_for_run._current_agent_run_id = current_agent_run_id
+            master_context_for_run._parent_run_id = parent_run_id
+        except Exception:
+            pass
+
+        from agency_swarm.streaming import StreamingContext
+
+        streaming_context = StreamingContext()
+        master_context_for_run._streaming_context = streaming_context
+
+        event_queue: asyncio.Queue[Any] = asyncio.Queue(maxsize=10)
+        guardrail_exception: BaseException | None = None
+        collected_items: list[RunItem] = []
+
+        async def _streaming_worker(
+            history_for_runner=history_for_runner,
+            master_context_for_run=master_context_for_run,
+            event_queue=event_queue,
+        ) -> None:
+            nonlocal guardrail_exception
+            local_result = None
+            try:
+                async with AsyncExitStack() as mcp_stack:
+                    for server in agent.mcp_servers:
+                        await mcp_stack.enter_async_context(server)  # type: ignore[arg-type]
+
+                    local_result = Runner.run_streamed(
+                        starting_agent=agent,
+                        input=history_for_runner,
+                        context=master_context_for_run,
+                        hooks=hooks_override or agent.hooks,  # type: ignore[arg-type]
+                        run_config=run_config_override or RunConfig(),
+                        max_turns=kwargs.get("max_turns", 1000000),
+                    )
+
+                    async for ev in local_result.stream_events():
+                        await event_queue.put(ev)
+            except OutputGuardrailTripwireTriggered as e:
+                guardrail_exception = e
+            except InputGuardrailTripwireTriggered as e:
+                # For input guardrails, do not retry in streaming mode.
+                # Surface an error event with guidance and end the stream.
+                try:
+                    _, guidance_text = _extract_guardrail_texts(e)
+                except Exception:
+                    guidance_text = str(e)
+                await event_queue.put({"type": "error", "content": guidance_text})
+            except Exception as e:
+                await event_queue.put({"type": "error", "content": str(e)})
+            finally:
+                try:
+                    if local_result is not None:
+                        local_result.cancel()
+                except Exception:
+                    pass
+                await event_queue.put(None)
+
+        worker_task = asyncio.create_task(_streaming_worker())
+
+        async def _forward_subagent_events(
+            streaming_context=streaming_context,
+            event_queue=event_queue,
+        ):
+            while True:
+                try:
+                    sub_event = await streaming_context.get_event()
+                    if sub_event is None:
+                        break
+                    if hasattr(sub_event, "__dict__"):
+                        sub_event._forwarded = True
+                    await event_queue.put(sub_event)
+                except Exception:
+                    break
+
+        forward_task = asyncio.create_task(_forward_subagent_events())
+
+        try:
+            current_stream_agent_name = agent.name
+            while True:
+                if worker_task.done() and event_queue.empty():
+                    break
+                try:
+                    event = await asyncio.wait_for(event_queue.get(), timeout=0.25)
+                except asyncio.TimeoutError:  # noqa: UP041
+                    continue
+                if event is None:
+                    break
+                if isinstance(event, dict) and event.get("type") == "error":
+                    yield event  # type: ignore[misc]
+                    continue
+
+                if hasattr(event, "item") and event.item:
+                    collected_items.append(event.item)
+
+                if not getattr(event, "_forwarded", False):
+                    try:
+                        if (
+                            getattr(event, "type", None) == "run_item_stream_event"
+                            and getattr(event, "name", None) == "handoff_occured"
+                        ):
+                            item = getattr(event, "item", None)
+                            target = MessageFormatter.extract_handoff_target_name(item) if item is not None else None
+                            if target:
+                                current_stream_agent_name = target
+                                current_agent_run_id = f"agent_run_{__import__('uuid').uuid4().hex}"
+                        elif getattr(event, "type", None) == "agent_updated_stream_event":
+                            new_agent = getattr(event, "new_agent", None)
+                            if new_agent is not None and hasattr(new_agent, "name") and new_agent.name:
+                                current_stream_agent_name = new_agent.name
+                                event_id = getattr(event, "id", None)
+                                if isinstance(event_id, str) and event_id:
+                                    current_agent_run_id = event_id
+                                else:
+                                    current_agent_run_id = f"agent_run_{__import__('uuid').uuid4().hex}"
+                                master_context_for_run._current_agent_run_id = current_agent_run_id
+                    except Exception:
+                        pass
+
+                if not getattr(event, "_forwarded", False):
+                    event = add_agent_name_to_event(
+                        event,
+                        current_stream_agent_name,
+                        sender_name,
+                        agent_run_id=current_agent_run_id,
+                        parent_run_id=parent_run_id,
+                    )
+
+                if (
+                    hasattr(event, "item")
+                    and event.item
+                    and agency_context
+                    and agency_context.thread_manager
+                    and not getattr(event, "_forwarded", False)
+                ):
+                    run_item_obj = event.item
+                    item_dict = cast(
+                        TResponseInputItem,
+                        MessageFormatter.strip_agency_metadata([run_item_obj.to_input_item()])[0],
+                    )
+                    if item_dict:
+                        if isinstance(run_item_obj, MessageOutputItem):
+                            single_citation_map = extract_direct_file_annotations([run_item_obj], agent_name=agent.name)
+                            MessageFormatter.add_citations_to_message(
+                                run_item_obj, item_dict, single_citation_map, is_streaming=True
+                            )
+
+                        formatted_item = MessageFormatter.add_agency_metadata(
+                            item_dict,  # type: ignore[arg-type]
+                            agent=current_stream_agent_name,
+                            caller_agent=sender_name,
+                            agent_run_id=current_agent_run_id,
+                            parent_run_id=parent_run_id,
+                        )
+                        if not MessageFilter.should_filter(formatted_item):
+                            agency_context.thread_manager.add_messages([formatted_item])  # type: ignore[arg-type]
+
+                yield event
+
+            # After loop, if no guardrail exception, save hosted tool outputs (if any)
+            if guardrail_exception is None:
+                if agency_context and agency_context.thread_manager and collected_items:
+                    hosted_tool_outputs = MessageFormatter.extract_hosted_tool_results(agent, collected_items)
+                    if hosted_tool_outputs:
+                        filtered_items = MessageFilter.filter_messages(hosted_tool_outputs)  # type: ignore[arg-type]
+                        if filtered_items:
+                            agency_context.thread_manager.add_messages(filtered_items)  # type: ignore[arg-type]
+                break
+
+            # Guardrail tripped: persist guidance-only user message, rebuild history, and retry
+            if attempts_remaining <= 0:
+                raise guardrail_exception
+            attempts_remaining -= 1
+
+            history_for_runner = append_guardrail_feedback(
+                agent=agent,
+                agency_context=agency_context,
+                sender_name=sender_name,
+                parent_run_id=parent_run_id,
+                current_agent_run_id=current_agent_run_id,
+                exception=guardrail_exception,
+                include_assistant=False,
+            )
+            continue
+
+        finally:
+            try:
+                if not worker_task.done():
+                    worker_task.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await worker_task
+                if not forward_task.done():
+                    forward_task.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await forward_task
+            except Exception:
+                pass

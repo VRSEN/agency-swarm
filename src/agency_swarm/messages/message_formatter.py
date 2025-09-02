@@ -50,8 +50,8 @@ class MessageFormatter:
         if parent_run_id is not None:
             modified_message["parent_run_id"] = parent_run_id  # type: ignore[typeddict-unknown-key]
         # Use microsecond precision to reduce timestamp collisions
-        # time.time() always returns UTC seconds since epoch (timezone-independent)
-        modified_message["timestamp"] = int(time.time() * 1000000) // 1000  # type: ignore[typeddict-unknown-key] # microseconds -> milliseconds, sortable
+        # time.time() returns seconds since epoch; multiply to get microseconds
+        modified_message["timestamp"] = int(time.time() * 1_000_000)  # type: ignore[typeddict-unknown-key]
         # Add type field if not present (for easier parsing/navigation)
         if "type" not in modified_message:
             modified_message["type"] = "message"  # type: ignore[arg-type]

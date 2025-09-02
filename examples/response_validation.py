@@ -7,7 +7,6 @@ import sys
 from agency_swarm import (
     GuardrailFunctionOutput,
     InputGuardrailTripwireTriggered,
-    OutputGuardrailTripwireTriggered,
     RunContextWrapper,
     input_guardrail,
     output_guardrail,
@@ -35,12 +34,11 @@ async def require_task_prefix(
     and the exception can be caught by the caller to implement a takeover/fallback.
     """
     user_message = input_text[-1]["content"].strip()
-    if not user_message.startswith("Task:"):
-        return GuardrailFunctionOutput(
-            output_info="Prefix your request with 'Task:' describing what you need.",
-            tripwire_triggered=True,
-        )
-    return GuardrailFunctionOutput(output_info="", tripwire_triggered=False)
+    condition = not user_message.startswith("Task:")
+    return GuardrailFunctionOutput(
+        output_info="Prefix your request with 'Task:' describing what you need." if condition else "",
+        tripwire_triggered=condition,
+    )
 
 
 # Forbid email addresses in output
@@ -95,15 +93,8 @@ async def run_conversation():
         info = e.guardrail_result.output.output_info
         print(f"[Input Tripwire] {info}")
 
-    # Output guardrail: retry once by passing tripwire back
-    try:
-        await ask("Task: How can I contact support?")
-    except OutputGuardrailTripwireTriggered as e:
-        print(f"[Output Tripwire] {e.guardrail_result.output.output_info}")
-        retry = (
-            f"Task: Please answer without including any email address. Context: {e.guardrail_result.output.output_info}"
-        )
-        await ask(retry)
+    # Output guardrail: automatically retried by framework when triggered
+    await ask("Task: How can I contact support?")
 
 
 # --- Main Execution --- #

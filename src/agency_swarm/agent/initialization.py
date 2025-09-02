@@ -79,15 +79,6 @@ def handle_deprecated_parameters(kwargs: dict[str, Any]) -> dict[str, Any]:
             else:
                 deprecated_model_settings[param] = param_value
 
-    if "validation_attempts" in kwargs:
-        val_attempts = kwargs.pop("validation_attempts")
-        warnings.warn(
-            "'validation_attempts' is deprecated.",
-            DeprecationWarning,
-            stacklevel=3,
-        )
-        deprecated_args_used["validation_attempts"] = val_attempts
-
     if "id" in kwargs:
         warnings.warn(
             "'id' parameter (OpenAI Assistant ID) is deprecated and no longer used for loading. "

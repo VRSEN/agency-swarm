@@ -232,7 +232,6 @@ def test_agent_initialization_misc_deprecations_warn_only():
         )
     assert agent.name == "Misc"
     msgs = ",".join(str(item.message) for item in w)
-    assert "validation_attempts" in msgs
     assert "id' parameter" in msgs
     assert "tool_resources" in msgs
     assert "file_ids" in msgs

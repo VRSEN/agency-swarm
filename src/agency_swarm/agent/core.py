@@ -39,14 +39,13 @@ AGENT_PARAMS = {
     "api_headers",
     "api_params",
     "description",
-    "response_validator",
     "include_search_results",
+    "validation_attempts",
     # Old/Deprecated (to check in kwargs)
     "id",
     "tool_resources",
     "file_ids",
     "reasoning_effort",
-    "validation_attempts",
     "examples",
     "file_search",
     "refresh_from_id",
@@ -92,6 +91,7 @@ class Agent(BaseAgent[MasterContext]):
     output_type: type[Any] | None
     send_message_tool_class: type | None  # Custom SendMessage tool class for inter-agent communication
     include_search_results: bool = False
+    validation_attempts: int = 1
 
     # --- Internal State ---
     _associated_vector_store_id: str | None = None
@@ -127,6 +127,7 @@ class Agent(BaseAgent[MasterContext]):
                 Note: This parameter can be used to define handoffs by using SendMessageHandoff here.
             include_search_results (bool): Include search results in FileSearchTool output for citation extraction.
                 Defaults to False.
+            validation_attempts (int): Number of retries when an output guardrail trips. Defaults to 1.
 
         ## OpenAI Agents SDK Parameters:
             prompt (Prompt | DynamicPromptFunction | None): Dynamic prompt configuration.
@@ -200,6 +201,7 @@ class Agent(BaseAgent[MasterContext]):
         self.description = current_agent_params.get("description")
         self.send_message_tool_class = current_agent_params.get("send_message_tool_class")
         self.include_search_results = current_agent_params.get("include_search_results", False)
+        self.validation_attempts = int(current_agent_params.get("validation_attempts", 1))
 
         # Internal state
         self._openai_client = None
