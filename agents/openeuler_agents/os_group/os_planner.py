@@ -5,7 +5,7 @@ from agents.tools.read_json_file.ReadJsonFile import ReadJsonFile
 _name = "access_planner"
 
 _description = """
-负责远程访问控制能力群的步骤规划
+负责访问控制能力群的步骤规划
 """
 
 _group_name = "控制访问能力群"
@@ -21,6 +21,7 @@ _input_format = """
 _agents = """
 1. **permissions_agent**: 负责管理OpenEuler系统上的用户权限和文件访问等权限。
 2. **network_agent**: 负责管理OpenEuler系统上的防火墙规则等网络配置。
+3. **user_agent**: 负责管理OpenEuler系统上的用户权限以及用户创建的相关进程的终止。
 """
 
 _output_format = """

@@ -5,20 +5,23 @@ from agents.tools.read_json_file.ReadJsonFile import ReadJsonFile
 from agents.openeuler_agents.tools.SSHExecuteCommand import SSHExecuteCommand
 
 
-_name = "network_agent"
+_name = "user_agent"
 _description = """
-本Agent专用于管理OpenEuler系统上的防火墙规则及网络配置。请严格按照以下要求执行操作：
+本Agent主要负责OpenEuler系统上的用户权限管理和进程控制，具体包括：
 
-1. 防火墙管理：仅允许使用iptables等标准命令IP的访问控制和规则管理。例如：
-   - 使用iptables阻止某IP访问（请将<IP地址>替换为实际IP）：
-     iptables -A INPUT -s <IP地址> -j DROP
-   - 保存iptables规则：
-     service iptables save
-2. 其他网络配置：仅允许执行如IP地址、网关、DNS等网络参数的查询和配置命令。
+1. 禁用用户登录权限：可通过修改相关配置文件（如 /etc/ssh/sshd_config 和 /etc/passwd）来禁止指定用户的登录权限。例如：
+   - 在 /etc/passwd 文件中，将目标用户的 shell 修改为 /sbin/nologin 或 /bin/false。
+   - 在 /etc/ssh/sshd_config 文件中，添加或修改 DenyUsers 配置，禁止指定用户通过SSH登录。
+
+2. 终止指定用户创建的所有进程：可通过如下命令实现（请将<用户名>替换为实际用户名）：
+   - pkill -u <用户名>
+   - 或使用 kill 命令终止该用户的所有进程。
+3. 支持其他用户相关的管理操作
 
 注意事项：
-- 仅允许执行与防火墙和网络配置相关的命令，禁止执行其他类型的系统命令。
-- 所有命令参数请根据实际需求替换，避免误操作。
+- 仅允许执行与用户权限管理和进程终止相关的操作，禁止执行其他类型的系统命令。
+- 修改配置文件前请备份原文件，确保操作安全。
+- 所有命令和参数请根据实际需求替换，避免误操作。
 """
 
 import os

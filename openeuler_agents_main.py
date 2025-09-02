@@ -1,5 +1,6 @@
 from agency_swarm import Agent, Agency
 
+from agents.openeuler_agents.os_group.user_agent import user_agent
 from agents.openeuler_agents.task_planner import (
     task_planner, task_scheduler, task_inspector
 )
@@ -99,6 +100,7 @@ def main():
         os_step_scheduler_instance = os_step_scheduler.create_agent()
         permissions_agent_instance = permissions_agent.create_agent()
         network_agent_instance = network_agent.create_agent()
+        user_agent_instance = user_agent.create_agent()
 
         check_log_agent_instance = check_log_agent.create_agent()
 
@@ -132,6 +134,8 @@ def main():
             # 远程控制访问能力 agent
             permissions_agent_instance,
             network_agent_instance,
+            user_agent_instance
+
         ]
 
         thread_strategy = {
@@ -158,21 +162,16 @@ def main():
         cap_group_agents = {
             "软件能力群": [software_planner_instance, software_step_scheduler_instance],
             "安全能力群": [security_planner_instance, security_step_scheduler_instance],
-            "远程控制访问能力群": [os_planner_instance, os_step_scheduler_instance],
+            "控制访问能力群": [os_planner_instance, os_step_scheduler_instance,user_agent_instance],
         }
 
         cap_agents = {
             "软件能力群": [package_agent_instance, repository_agent_instance, atune_agent_instance,],
             "安全能力群": [secscanner_agent_instance, syscare_agent_instance,],
-            "远程控制访问能力群": [permissions_agent_instance, network_agent_instance,],
+            "控制访问能力群": [permissions_agent_instance, network_agent_instance,user_agent_instance],
         }
         text ="""
-        syscare工具已经安装
-        在'/root/build-rpm/'目录下有以下文件：
-        1. 0001-Retry-accept-even-if-accepted-connection-reports-an-.patch;这是一个修复修复CVE-2025-48367漏洞的patch文件
-        2. redis6-6.2.18-3.src.rpm 这是一个redis的一个源码rpm包
-        3. redis6-debuginfo-6.2.18-3.x86_64.rpm 这是一个redis的调试信息rpm包
-        利用syscare工具生成一个补丁文件，用于修复CVE-2025-48367
+        下列 IP 地址存在可疑请求，请阻止访问：192.168.78.130,192.168.78.131。
         """
         # text = """
         # 在`/root/build-rpm/`目录下`有一个redis的补丁文件，文件名为：`patch-redis6-6.2.18-3-fix-cve-2025-48367-1-1.x86_64.rpm`，请安装补丁

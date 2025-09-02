@@ -4,12 +4,12 @@ import json
 
 from agents.openeuler_agents.tools.ssh_executor import SSHCommandExecutor
 
-# HOST = "127.0.0.1"
-HOST = "121.36.210.47"
-PORT = 22
+HOST = "127.0.0.1"
+# HOST = "121.36.210.47"
+PORT = 7001
 USERNAME = "root"
-# PASSWORD = "mimacuowu,1"
-PASSWORD = "Test123456!"
+PASSWORD = "mimacuowu,1"
+# PASSWORD = "Test123456!"
 
 SSH_CONNECTION_ERROR = -1
 

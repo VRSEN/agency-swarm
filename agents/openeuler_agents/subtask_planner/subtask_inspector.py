@@ -43,7 +43,7 @@ _instruction = f"""作为审查者，你将从subtask_planner那里收到一个 
 5. 确保<task_graph>中每个子任务的执行能力群"capability_group"名称正确且合理，所有能力群名称和介绍如下：
     a. "软件能力群": 负责软件包管理、代码仓库管理、软件配置优化（A-Tune工具）；
     b. "安全能力群": 负责漏洞扫描（secScanner工具）、漏洞修复（SysCare工具）；
-    c. "远程控制访问能力群": 负责用户和文件等权限管理、网络及防火墙管理。
+    c. "控制访问能力群": 负责用户和文件等权限管理、网络及防火墙管理。
 
 你应该按照以下json格式评估<task_graph>: 
 {_output_format}
