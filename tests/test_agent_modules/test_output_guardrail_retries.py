@@ -1,13 +1,9 @@
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 
 from agency_swarm import Agent, GuardrailFunctionOutput, OutputGuardrailTripwireTriggered, ThreadManager
 from agency_swarm.agent.core import AgencyContext
-
-
-class _DummyRunResult:
-    def __init__(self, output: str = "OK"):
-        self.new_items = []
-        self.final_output = output
 
 
 def _make_tripwire(agent_output: str, guidance: str) -> OutputGuardrailTripwireTriggered:
@@ -28,21 +24,18 @@ def _make_tripwire(agent_output: str, guidance: str) -> OutputGuardrailTripwireT
 
 
 @pytest.mark.asyncio
-async def test_output_guardrail_retries_update_history(monkeypatch):
+@patch("agency_swarm.agent.execution_helpers.Runner.run", new_callable=AsyncMock)
+async def test_output_guardrail_retries_update_history(mock_runner_run):
     agent = Agent(name="RetryAgent", instructions="Test", validation_attempts=1)
 
     # Prepare minimal agency context to capture messages
     ctx = AgencyContext(agency_instance=None, thread_manager=ThreadManager(), subagents={})
 
-    calls = {"n": 0}
-
-    async def fake_run(**kwargs):
-        if calls["n"] == 0:
-            calls["n"] += 1
-            raise _make_tripwire(agent_output="BAD OUTPUT", guidance="ERROR: fix format")
-        return _DummyRunResult("GOOD")
-
-    monkeypatch.setattr("agency_swarm.agent.execution_helpers.Runner.run", staticmethod(fake_run))
+    # First attempt trips, second returns a minimal RunResult-like object
+    mock_runner_run.side_effect = [
+        _make_tripwire(agent_output="BAD OUTPUT", guidance="ERROR: fix format"),
+        MagicMock(new_items=[], final_output="GOOD"),
+    ]
 
     # Execute
     res = await agent.get_response(message="What is openai?", agency_context=ctx)
@@ -76,20 +69,16 @@ class _SimpleEvent:
 
 
 @pytest.mark.asyncio
-async def test_output_guardrail_retries_streaming(monkeypatch):
+@patch("agency_swarm.agent.execution_helpers.Runner.run_streamed")
+async def test_output_guardrail_retries_streaming(mock_run_streamed):
     agent = Agent(name="RetryStreamAgent", instructions="Test", validation_attempts=1)
     ctx = AgencyContext(agency_instance=None, thread_manager=ThreadManager(), subagents={})
 
-    calls = {"n": 0}
-
-    def fake_run_streamed(**kwargs):
-        if calls["n"] == 0:
-            calls["n"] += 1
-            raise _make_tripwire(agent_output="STREAM BAD", guidance="ERROR: needs header")
-        # Second attempt returns one simple event
-        return _DummyStream([_SimpleEvent("run_item_stream_event")])
-
-    monkeypatch.setattr("agency_swarm.agent.execution_helpers.Runner.run_streamed", staticmethod(fake_run_streamed))
+    # First call raises; second returns a dummy stream with one event
+    mock_run_streamed.side_effect = [
+        _make_tripwire(agent_output="STREAM BAD", guidance="ERROR: needs header"),
+        _DummyStream([_SimpleEvent("run_item_stream_event")]),
+    ]
 
     # Collect streamed events
     received = []

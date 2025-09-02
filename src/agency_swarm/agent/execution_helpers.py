@@ -29,6 +29,107 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+async def perform_single_run(
+    *,
+    agent: "Agent",
+    history_for_runner: list[TResponseInputItem],
+    master_context_for_run: MasterContext,
+    hooks_override: Any,
+    run_config_override: RunConfig | None,
+    kwargs: dict[str, Any],
+) -> RunResult:
+    """Execute a single Runner.run with MCP stack setup.
+
+    This is the core execution primitive intentionally separated from guardrail orchestration
+    so that tests and future features can reuse the bare run without coupling to retries.
+    """
+    result: RunResult
+    async with AsyncExitStack() as mcp_stack:
+        for server in agent.mcp_servers:
+            await mcp_stack.enter_async_context(server)  # type: ignore[arg-type]
+
+        result = await Runner.run(
+            starting_agent=agent,
+            input=history_for_runner,
+            context=master_context_for_run,
+            hooks=hooks_override or agent.hooks,  # type: ignore[arg-type]
+            run_config=run_config_override or RunConfig(),
+            max_turns=kwargs.get("max_turns", 1000000),
+        )
+    return result
+
+
+def perform_streamed_run(
+    *,
+    agent: "Agent",
+    history_for_runner: list[TResponseInputItem],
+    master_context_for_run: MasterContext,
+    hooks_override: Any,
+    run_config_override: RunConfig | None,
+    kwargs: dict[str, Any],
+):
+    """Return the streaming run object from Runner without guardrail logic."""
+    return Runner.run_streamed(
+        starting_agent=agent,
+        input=history_for_runner,
+        context=master_context_for_run,
+        hooks=hooks_override or agent.hooks,  # type: ignore[arg-type]
+        run_config=run_config_override or RunConfig(),
+        max_turns=kwargs.get("max_turns", 1000000),
+    )
+
+
+async def orchestrate_sync_run(
+    *,
+    agent: "Agent",
+    history_for_runner: list[TResponseInputItem],
+    master_context_for_run: MasterContext,
+    sender_name: str | None,
+    agency_context: "AgencyContext | None",
+    hooks_override: Any,
+    run_config_override: RunConfig | None,
+    kwargs: dict[str, Any],
+    current_agent_run_id: str,
+    parent_run_id: str | None,
+    validation_attempts: int,
+) -> tuple[RunResult, MasterContext]:
+    """Guardrail-aware orchestration around a single-run primitive."""
+    attempts_remaining = int(validation_attempts or 0)
+    while True:
+        try:
+            run_result = await perform_single_run(
+                agent=agent,
+                history_for_runner=history_for_runner,
+                master_context_for_run=master_context_for_run,
+                hooks_override=hooks_override,
+                run_config_override=run_config_override,
+                kwargs=kwargs,
+            )
+            return run_result, master_context_for_run
+        except OutputGuardrailTripwireTriggered as e:
+            if attempts_remaining <= 0:
+                raise e
+            attempts_remaining -= 1
+            history_for_runner = append_guardrail_feedback(
+                agent=agent,
+                agency_context=agency_context,
+                sender_name=sender_name,
+                parent_run_id=parent_run_id,
+                current_agent_run_id=current_agent_run_id,
+                exception=e,
+                include_assistant=True,
+            )
+            continue
+        except InputGuardrailTripwireTriggered as e:
+            raise e
+        except Exception as e:
+            raise AgentsException(f"Runner execution failed for agent {agent.name}") from e
+        finally:
+            if agent.attachment_manager is None:
+                raise RuntimeError(f"attachment_manager not initialized for agent {agent.name}")
+            agent.attachment_manager.attachments_cleanup()
+
+
 def run_item_to_tresponse_input_item(item: RunItem) -> TResponseInputItem | None:
     """
     Converts a RunItem from a RunResult into TResponseInputItem dictionary format for history.
@@ -292,48 +393,19 @@ async def run_with_output_guardrail_retries(
     parent_run_id: str | None,
     validation_attempts: int,
 ) -> tuple[RunResult, MasterContext]:
-    """Execute Runner.run with output-guardrail retries and persisted feedback."""
-    attempts_remaining = int(validation_attempts or 0)
-    while True:
-        try:
-            # Ensure MCP servers connect/cleanup within the same task using a context stack
-            async with AsyncExitStack() as mcp_stack:
-                for server in agent.mcp_servers:
-                    await mcp_stack.enter_async_context(server)  # type: ignore[arg-type]
-
-                run_result: RunResult = await Runner.run(
-                    starting_agent=agent,
-                    input=history_for_runner,
-                    context=master_context_for_run,
-                    hooks=hooks_override or agent.hooks,  # type: ignore[arg-type]
-                    run_config=run_config_override or RunConfig(),
-                    max_turns=kwargs.get("max_turns", 1000000),
-                )
-            return run_result, master_context_for_run
-
-        except OutputGuardrailTripwireTriggered as e:
-            if attempts_remaining <= 0:
-                raise e
-            attempts_remaining -= 1
-            history_for_runner = append_guardrail_feedback(
-                agent=agent,
-                agency_context=agency_context,
-                sender_name=sender_name,
-                parent_run_id=parent_run_id,
-                current_agent_run_id=current_agent_run_id,
-                exception=e,
-                include_assistant=True,
-            )
-            continue
-
-        except InputGuardrailTripwireTriggered as e:
-            raise e
-        except Exception as e:
-            raise AgentsException(f"Runner execution failed for agent {agent.name}") from e
-        finally:
-            if agent.attachment_manager is None:
-                raise RuntimeError(f"attachment_manager not initialized for agent {agent.name}")
-            agent.attachment_manager.attachments_cleanup()
+    return await orchestrate_sync_run(
+        agent=agent,
+        history_for_runner=history_for_runner,
+        master_context_for_run=master_context_for_run,
+        sender_name=sender_name,
+        agency_context=agency_context,
+        hooks_override=hooks_override,
+        run_config_override=run_config_override,
+        kwargs=kwargs,
+        current_agent_run_id=current_agent_run_id,
+        parent_run_id=parent_run_id,
+        validation_attempts=validation_attempts,
+    )
 
 
 async def run_streamed_with_output_guardrail_retries(
@@ -376,6 +448,10 @@ async def run_streamed_with_output_guardrail_retries(
             history_for_runner=history_for_runner,
             master_context_for_run=master_context_for_run,
             event_queue=event_queue,
+            current_agent_run_id=current_agent_run_id,
+            parent_run_id=parent_run_id,
+            agency_context=agency_context,
+            sender_name=sender_name,
         ) -> None:
             nonlocal guardrail_exception
             local_result = None
@@ -384,13 +460,13 @@ async def run_streamed_with_output_guardrail_retries(
                     for server in agent.mcp_servers:
                         await mcp_stack.enter_async_context(server)  # type: ignore[arg-type]
 
-                    local_result = Runner.run_streamed(
-                        starting_agent=agent,
-                        input=history_for_runner,
-                        context=master_context_for_run,
-                        hooks=hooks_override or agent.hooks,  # type: ignore[arg-type]
-                        run_config=run_config_override or RunConfig(),
-                        max_turns=kwargs.get("max_turns", 1000000),
+                    local_result = perform_streamed_run(
+                        agent=agent,
+                        history_for_runner=history_for_runner,
+                        master_context_for_run=master_context_for_run,
+                        hooks_override=hooks_override,
+                        run_config_override=run_config_override,
+                        kwargs=kwargs,
                     )
 
                     async for ev in local_result.stream_events():
@@ -398,8 +474,7 @@ async def run_streamed_with_output_guardrail_retries(
             except OutputGuardrailTripwireTriggered as e:
                 guardrail_exception = e
             except InputGuardrailTripwireTriggered as e:
-                # For input guardrails, do not retry in streaming mode.
-                # Surface an error event with guidance and end the stream.
+                # For input guardrails, do not retry in streaming mode. Surface an error event with guidance.
                 try:
                     _, guidance_text = _extract_guardrail_texts(e)
                 except Exception:
