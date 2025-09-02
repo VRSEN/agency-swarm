@@ -3,7 +3,7 @@ import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from agents import CodeInterpreterTool, FileSearchTool, TResponseInputItem
+from agents import CodeInterpreterTool, TResponseInputItem
 from agents.exceptions import AgentsException
 from agents.items import ItemHelpers
 
@@ -28,7 +28,6 @@ class AttachmentManager:
             )
 
         # Temp variables used to hold attachment data to be used in cleanup
-        self._temp_vector_store_id = None
         self._temp_code_interpreter_file_ids: list[str] = []
 
     def init_attachments_vs(self, vs_name: str = "attachments_vs"):
@@ -120,28 +119,6 @@ class AttachmentManager:
         """
         Clean up temporary attachments and reset agent to initial state.
         """
-        if self._temp_vector_store_id:
-            # Remove temporary vector store from FileSearchTool
-            for tool in self.agent.tools:
-                if isinstance(tool, FileSearchTool) and self._temp_vector_store_id in tool.vector_store_ids:
-                    tool.vector_store_ids.remove(self._temp_vector_store_id)
-                    if len(tool.vector_store_ids) == 0:
-                        self.agent.tools.remove(tool)
-                        logger.debug(f"Removed temp FileSearchTool from {self.agent.name}")
-                    else:
-                        logger.debug(f"Removed temp vector store {self._temp_vector_store_id} from FileSearchTool")
-
-            # Delete the temporary vector store
-            try:
-                result = self.agent.client_sync.vector_stores.delete(vector_store_id=self._temp_vector_store_id)
-                if result.deleted:
-                    logger.debug(f"Successfully deleted temp vector store: {self._temp_vector_store_id}")
-                else:
-                    logger.error(f"Failed to delete temp vector store {self._temp_vector_store_id}: {result}")
-            except Exception as e:
-                logger.error(f"Failed to delete temp vector store {self._temp_vector_store_id}: {e}")
-                # Don't raise - cleanup should be best-effort
-
         if self._temp_code_interpreter_file_ids:
             # Remove temporary files from CodeInterpreterTool
             for tool in self.agent.tools:
@@ -163,7 +140,6 @@ class AttachmentManager:
                     tool.tool_config["container"] = code_interpreter_container
 
         # Reset temp variables
-        self._temp_vector_store_id = None
         self._temp_code_interpreter_file_ids = []
 
     def _get_filename_by_id(self, file_id: str) -> str:
