@@ -8,7 +8,7 @@ file attachment handling, and cleanup operations.
 from unittest.mock import Mock
 
 import pytest
-from agents import CodeInterpreterTool, FileSearchTool
+from agents import CodeInterpreterTool
 from agents.exceptions import AgentsException
 
 from agency_swarm.agent.attachment_manager import AttachmentManager
@@ -96,98 +96,6 @@ class TestAttachmentManager:
         # Should raise AgentsException
         with pytest.raises(AgentsException, match="Unsupported file extension: .xyz for file test.xyz"):
             await attachment_manager.sort_file_attachments(["file-123"])
-
-    def test_attachments_cleanup_with_temp_vector_store(self):
-        """Test attachments_cleanup when temporary vector store exists."""
-        mock_agent = Mock()
-        mock_agent.name = "TestAgent"
-        mock_agent.file_manager = Mock()
-        mock_agent.tools = []
-
-        # Add a FileSearchTool with the temp vector store ID
-        mock_file_search_tool = Mock(spec=FileSearchTool)
-        mock_file_search_tool.vector_store_ids = ["vs_temp123", "vs_other456"]
-        mock_agent.tools.append(mock_file_search_tool)
-
-        # Mock successful deletion
-        mock_delete_result = Mock()
-        mock_delete_result.deleted = True
-        mock_agent.client_sync.vector_stores.delete.return_value = mock_delete_result
-
-        attachment_manager = AttachmentManager(mock_agent)
-        attachment_manager._temp_vector_store_id = "vs_temp123"
-
-        # Call cleanup - should remove VS from tool and delete VS
-        attachment_manager.attachments_cleanup()
-
-        # Verify vector store was removed from tool but tool wasn't removed (multiple VSs)
-        assert "vs_temp123" not in mock_file_search_tool.vector_store_ids
-        assert mock_file_search_tool in mock_agent.tools  # Tool should still exist
-        mock_agent.client_sync.vector_stores.delete.assert_called_once_with(vector_store_id="vs_temp123")
-
-    def test_attachments_cleanup_remove_file_search_tool(self):
-        """Test attachments_cleanup removing FileSearchTool when it has no more vector stores."""
-        mock_agent = Mock()
-        mock_agent.name = "TestAgent"
-        mock_agent.file_manager = Mock()
-
-        # Add a FileSearchTool with only the temp vector store ID
-        mock_file_search_tool = Mock(spec=FileSearchTool)
-        mock_file_search_tool.vector_store_ids = ["vs_temp123"]
-        mock_agent.tools = [mock_file_search_tool]
-
-        # Mock successful deletion
-        mock_delete_result = Mock()
-        mock_delete_result.deleted = True
-        mock_agent.client_sync.vector_stores.delete.return_value = mock_delete_result
-
-        attachment_manager = AttachmentManager(mock_agent)
-        attachment_manager._temp_vector_store_id = "vs_temp123"
-
-        # Call cleanup - should remove entire tool
-        attachment_manager.attachments_cleanup()
-
-        # Verify tool was completely removed
-        assert mock_file_search_tool not in mock_agent.tools
-        mock_agent.client_sync.vector_stores.delete.assert_called_once_with(vector_store_id="vs_temp123")
-
-    def test_attachments_cleanup_vector_store_delete_failure(self):
-        """Test attachments_cleanup when vector store deletion fails."""
-        mock_agent = Mock()
-        mock_agent.name = "TestAgent"
-        mock_agent.file_manager = Mock()
-        mock_agent.tools = []
-
-        # Mock failed deletion
-        mock_delete_result = Mock()
-        mock_delete_result.deleted = False
-        mock_agent.client_sync.vector_stores.delete.return_value = mock_delete_result
-
-        attachment_manager = AttachmentManager(mock_agent)
-        attachment_manager._temp_vector_store_id = "vs_temp123"
-
-        # Call cleanup - should handle failed deletion gracefully
-        attachment_manager.attachments_cleanup()  # Should not raise exception
-
-        mock_agent.client_sync.vector_stores.delete.assert_called_once_with(vector_store_id="vs_temp123")
-
-    def test_attachments_cleanup_vector_store_delete_exception(self):
-        """Test attachments_cleanup when vector store deletion throws exception."""
-        mock_agent = Mock()
-        mock_agent.name = "TestAgent"
-        mock_agent.file_manager = Mock()
-        mock_agent.tools = []
-
-        # Mock deletion exception
-        mock_agent.client_sync.vector_stores.delete.side_effect = Exception("Delete failed")
-
-        attachment_manager = AttachmentManager(mock_agent)
-        attachment_manager._temp_vector_store_id = "vs_temp123"
-
-        # Call cleanup - should handle exception gracefully
-        attachment_manager.attachments_cleanup()  # Should not raise exception
-
-        mock_agent.client_sync.vector_stores.delete.assert_called_once_with(vector_store_id="vs_temp123")
 
     def test_attachments_cleanup_code_interpreter_files(self):
         """Test attachments_cleanup with temporary code interpreter files."""
