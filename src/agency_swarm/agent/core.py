@@ -131,6 +131,8 @@ class Agent(BaseAgent[MasterContext]):
             include_search_results (bool): Include search results in FileSearchTool output for citation extraction.
                 Defaults to False.
             validation_attempts (int): Number of retries when an output guardrail trips. Defaults to 1.
+            return_input_guardrail_errors (bool): Whether to return input guardrail errors as an agent response.
+                Defaults to True.
 
         ## OpenAI Agents SDK Parameters:
             prompt (Prompt | DynamicPromptFunction | None): Dynamic prompt configuration.

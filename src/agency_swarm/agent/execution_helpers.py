@@ -16,7 +16,12 @@ from agents import (
 from agents.exceptions import AgentsException
 from agents.items import MessageOutputItem, RunItem, ToolCallItem
 from agents.stream_events import RunItemStreamEvent
-from openai.types.responses import ResponseFileSearchToolCall, ResponseFunctionWebSearch
+from openai.types.responses import (
+    ResponseFileSearchToolCall,
+    ResponseFunctionWebSearch,
+    ResponseOutputMessage,
+    ResponseOutputText,
+)
 
 from agency_swarm.context import MasterContext
 from agency_swarm.messages import MessageFilter, MessageFormatter
@@ -501,7 +506,6 @@ async def run_stream_with_guardrails(
                 except Exception:
                     guidance_text = str(e)
                 if return_input_guardrail_errors:
-                    # Mirror non-stream return mode by surfacing guidance as a dedicated event
                     await event_queue.put({"type": "input_guardrail_guidance", "content": guidance_text})
                 else:
                     await event_queue.put({"type": "error", "content": guidance_text})
@@ -547,6 +551,30 @@ async def run_stream_with_guardrails(
                     break
                 if isinstance(event, dict) and event.get("type") == "error":
                     yield event  # type: ignore[misc]
+                    continue
+                if isinstance(event, dict) and event.get("type") == "input_guardrail_guidance":
+                    # Create an artificial event and present it as agent's response
+                    guardrail_message = MessageOutputItem(
+                        raw_item=ResponseOutputMessage(
+                            id="msg_input_guardrail_guidance",
+                            content=[ResponseOutputText(
+                                annotations=[],
+                                text=event.get("content"),
+                                type="output_text",
+                        )],
+                            role="assistant",
+                            status="completed",
+                            type="message",
+                        ),
+                        type="message_output_item",
+                        agent=agent,
+                    )
+                    guardrail_event = RunItemStreamEvent(
+                        name="message_output_created",
+                        item=guardrail_message,
+                        type="run_item_stream_event",
+                    )
+                    yield guardrail_event
                     continue
 
                 if hasattr(event, "item") and event.item:

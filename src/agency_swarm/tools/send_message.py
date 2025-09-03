@@ -397,8 +397,10 @@ class SendMessage(FunctionTool):
                 f"Input guardrail triggered during sub-call via tool '{self.name}' from "
                 f"'{sender_name_for_call}' to '{recipient_name_for_call}': {message}"
             )
-            # Mirror Agent.get_response return mode by returning plain guidance
-            return message
+            if self.recipient_agent.return_input_guardrail_errors:
+                return message
+            else:
+                return f"Error getting response from the agent: {message}"
 
         except Exception as e:
             logger.error(

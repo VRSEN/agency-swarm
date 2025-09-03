@@ -115,7 +115,7 @@ For example, when a user sends multiple messages:
 ]
 ```
 
-Your guardrail receives:
+Your guardrail will receive:
 ```python
 ["Hi", "How are you?"]
 ```
@@ -159,8 +159,63 @@ agent = Agent(
 )
 ```
 
+#### Input Guardrail Return Format
+
+Agent's configuration includes an optional parameter called `return_input_guardrail_errors`, which defines how the guardrail error will be processed and presented to the caller:
+```python
+agent = Agent(
+    name="CustomerSupportAgent",
+    instructions="You are a helpful customer support agent.",
+    input_guardrails=[require_task_prefix],
+    return_input_guardrail_errors=True,
+)
+```
+If set to `False`, triggering a guardrail will raise a corresponding exception, as described in the next section.        
+If set to `True` (its default value), the guardrail error will be returned to the user/caller agent as if it were a genuine response from the recipient. For example, using the agent above:
+```python
+response = await agency.get_response("Hello!")
+print(response.final_output)
+```
+This will not raise an exception; however, the `response.final_output` will contain the guardrail's error message. In this case, it will be:    
+`"Prefix your request with 'Request:' describing what you need."`     
+
+For streaming responses, it will emit an extra event at the end of the stream in the following format:
+```text
+RunItemStreamEvent(
+    name='message_output_created', 
+    item=MessageOutputItem(
+        agent=<Agent name='CustomerSupportAgent' desc='' model='unknown'>, 
+        raw_item=ResponseOutputMessage(
+            id='msg_input_guardrail_guidance', 
+            content=[
+                ResponseOutputText(
+                    annotations=[], 
+                    text="Prefix your request with 'Request:' describing what you need.", 
+                    type='output_text', 
+                    logprobs=None
+                )
+            ],
+            role='assistant', 
+            status='completed', 
+            type='message'
+        ), 
+        type='message_output_item'
+    ), 
+    type='run_item_stream_event'
+)
+```
+This event will always have an id set to `msg_input_guardrail_guidance`, so you can further differentiate it, if needed.
+
+**When to use:** This feature's primary focus is to simplify building user-facing applications and make the user experience more fluid. 
+When using this feature, you won't have to add any exception handlers for the input guardrails. Instead, users will receive the response as if it were coming from the agent, so they can adjust their input accordingly.
+
+<Note>
+While having this feature turned on produces an agent's response, that response is purely artificial and will not be registered in the thread history.   
+Instead, an appropriate system message will be added in order to log a guardrail error.
+</Note>
+
 #### Input Guardrail Exceptions
-Unlike output guardrails, if an input guardrail is triggered, the error will be immediately returned back to the user/caller agent.     
+Unlike output guardrails, if an input guardrail exception is raised (`return_input_guardrail_errors` should be set to `False` for that to happen), the error will be immediately returned back to the user/caller agent.     
 For user messages, the error processing is similar to output guardrails.
 
 ```python
@@ -170,7 +225,7 @@ except InputGuardrailTripwireTriggered as e:
     print(f"Validation failed: {e.guardrail_result.output_info}")
 ```
 
-Each triggered guardrail will also leave a corresponding system message containing error message inside of a chat history.
+Each triggered guardrail will also leave a corresponding system message containing error message inside of a chat history. Regardless of the `return_input_guardrail_errors` parameter value.
 
 <Note>
 The validation_attempts parameter currently does not apply to input guardrails.
@@ -212,6 +267,7 @@ worker = Agent(
     instructions="You are the worker agent.",
     input_guardrails=[require_task_prefix],
     output_guardrails=[require_response_prefix],
+    return_input_guardrail_errors=False,
 )
 
 agency = Agency(
@@ -231,8 +287,11 @@ Similarly, the response of the worker to the CEO agent will be checked against t
 the specified number of `validation_attempts` it will need to generate a correct response. In this case, the requirement is that the worker's response should start with
 the word "Response:", otherwise it will receive the error message `"ERROR: Your response must start with 'Response:'"`
 
+It is recommended to set `return_input_guardrail_errors=False` for the agency's internal agents. While `True` value is also supported, setting it to `False` will add an
+extra error prefix to the recipient's response to indicate the issue and avoid potential confusion.
+
 <Warning>
-Due to the nature of Handoffs, using SendMessageHandoff for agent-to-agent communication will bypass the input guardrails set between agents.
+Due to the nature of Handoffs, using SendMessageHandoff for agent-to-agent communication will bypass input guardrails set between agents.
 </Warning>
 
 
