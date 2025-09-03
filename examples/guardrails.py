@@ -23,8 +23,8 @@ logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s")
 
 
 # Require user requests to be explicitly scoped as a Support request
-@input_guardrail(name="RequireTaskPrefix")
-async def require_task_prefix(
+@input_guardrail(name="RequireSupportPrefix")
+async def require_support_prefix(
     context: RunContextWrapper, agent: Agent, user_input: str | list[str]
 ) -> GuardrailFunctionOutput:
     """Trip if the latest user message(s) do not begin with "Support:".
@@ -76,7 +76,7 @@ agent = Agent(
     description="Customer support assistant",
     model="gpt-4.1",
     output_guardrails=[forbid_email_output],
-    input_guardrails=[require_task_prefix],
+    input_guardrails=[require_support_prefix],
     validation_attempts=1,  # set to 0 for immediate fail-fast behavior
     return_input_guardrail_errors=True,  # set to False to return an exception when the input guardrail is triggered
 )

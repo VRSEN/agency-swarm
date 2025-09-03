@@ -151,7 +151,9 @@ async def run_sync_with_guardrails(
                         new_items=[],
                         raw_responses=[],
                         final_output=guidance_text,
-                        input_guardrail_results=[],
+                        input_guardrail_results=(
+                            [e.guardrail_result] if getattr(e, "guardrail_result", None) is not None else []
+                        ),
                         output_guardrail_results=[],
                         context_wrapper=wrapper,
                         _last_agent=agent,
@@ -429,6 +431,7 @@ async def run_stream_with_guardrails(
     current_agent_run_id: str,
     parent_run_id: str | None,
     validation_attempts: int,
+    return_input_guardrail_errors: bool,
 ) -> AsyncGenerator[RunItemStreamEvent]:
     """Stream events with output-guardrail retries and guidance persistence."""
     attempts_remaining = int(validation_attempts or 0)
@@ -482,10 +485,11 @@ async def run_stream_with_guardrails(
             except OutputGuardrailTripwireTriggered as e:
                 guardrail_exception = e
             except InputGuardrailTripwireTriggered as e:
-                # For input guardrails, do not retry in streaming mode. Surface an error event with guidance.
+                # For input guardrails, do not retry in streaming mode.
                 try:
                     _, guidance_text = _extract_guardrail_texts(e)
-                    history_for_runner = append_guardrail_feedback(
+                    # Persist guidance so it appears in history for observability
+                    append_guardrail_feedback(
                         agent=agent,
                         agency_context=agency_context,
                         sender_name=sender_name,
@@ -496,7 +500,11 @@ async def run_stream_with_guardrails(
                     )
                 except Exception:
                     guidance_text = str(e)
-                await event_queue.put({"type": "error", "content": guidance_text})
+                if return_input_guardrail_errors:
+                    # Mirror non-stream return mode by surfacing guidance as a dedicated event
+                    await event_queue.put({"type": "input_guardrail_guidance", "content": guidance_text})
+                else:
+                    await event_queue.put({"type": "error", "content": guidance_text})
             except Exception as e:
                 await event_queue.put({"type": "error", "content": str(e)})
             finally:
