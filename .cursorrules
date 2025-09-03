@@ -360,7 +360,7 @@ Agencies are collections of agents that work together to achieve a common goal. 
    )
 
    if __name__ == "__main__":
-       agency.run_demo()
+       agency.terminal_demo()
    ```
 
    **A Note on Communication Flows**:
