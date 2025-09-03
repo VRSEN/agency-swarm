@@ -333,6 +333,7 @@ def wrap_input_guardrails(agent: "Agent"):
         agent: The agent instance
     """
     for guardrail in agent.input_guardrails:
+
         def create_guardrail_wrapper(guardrail_func):
             def guardrail_wrapper(context: RunContextWrapper, agent: "Agent", chat_history: str | list[dict]):
                 if isinstance(chat_history, str):
@@ -375,6 +376,7 @@ def wrap_input_guardrails(agent: "Agent"):
                         return guardrail_func(context, agent, user_messages[0])
                     else:
                         return guardrail_func(context, agent, user_messages)
+
             return guardrail_wrapper
 
         original_function = guardrail.guardrail_function

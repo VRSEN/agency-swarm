@@ -12,7 +12,6 @@ from typing import Any
 
 from agents import RunContextWrapper
 from docstring_parser import parse
-from openai.types.beta.threads.runs.tool_call import ToolCall
 from pydantic import BaseModel
 
 from ..context import MasterContext
@@ -31,7 +30,6 @@ class BaseTool(BaseModel, ABC):
 
     _caller_agent: Any = None
     _event_handler: Any = None
-    _tool_call: ToolCall | None = None
     _context: Any = None  # Will hold RunContextWrapper when available
 
     def __init__(self, **kwargs):
