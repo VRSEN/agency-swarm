@@ -3,12 +3,15 @@ title: "Asynchronous Execution"
 description: "Run your agents or tools asynchronously."
 icon: "bolt"
 ---
+<Warning>
+This page applies only to older versions of the framework (v0.x). In v1.x and higher, both agents and tools are asynchronous by default, and tool-level parallelism is configured via `ModelSettings.parallel_tool_calls` and/or per-tool `one_call_at_a_time`.
+</Warning>
 
 Asynchronous execution allows you to run your agents or tools asynchronously in separate threads. This can be useful for shortening response times for certain I/O-bound tasks.
 
 ## Async Agents
 
-To run each agent in a separate thread, you need to use a special `SendMessageAsyncThreading` tool class. See [Custom Communicaiton Flows](/additional-features/custom-communication-flows) for more information.
+To run each agent in a separate thread, you need to use a special `SendMessageAsyncThreading` tool class. See [Custom Communication Flows](/additional-features/custom-communication-flows) for more information.
 
 ```python
 from agency_swarm import SendMessageAsyncThreading

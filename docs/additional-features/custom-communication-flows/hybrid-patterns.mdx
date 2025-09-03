@@ -1,0 +1,163 @@
+---
+title: "Hybrid Patterns: Combining SendMessage and Handoffs"
+description: "Learn how to effectively combine Agency Swarm's SendMessage tools with OpenAI SDK Handoffs for multi-agent coordination."
+icon: "arrows-split-up-and-left"
+---
+<Warning>
+This page only applies to newer versions of the framework (v1.x and higher)
+</Warning>
+
+Agency Swarm supports two paradigms for inter-agent communication that can work together seamlessly: **SendMessage tools** (orchestrator pattern) and **OpenAI SDK Handoffs** (sequential pattern). This guide explains how these patterns interact and provides practical examples for building multi-agent systems.
+
+<CardGroup cols={2}>
+  <Card title="SendMessage Tools" icon="arrow-right-arrow-left">
+    Control returns to the caller, ideal for coordination with oversight. Implemented via `SendMessage` tool variants.
+  </Card>
+  <Card title="Handoffs" icon="right-left">
+    Control transfers to the target, ideal for full task delegation and specialization. Powered by `SendMessageHandoff` + OpenAI SDK.
+  </Card>
+  
+</CardGroup>
+
+## Understanding the Two Paradigms
+
+### SendMessage Tools (Orchestrator Pattern)
+- **Control Flow**: Control **returns** to the calling agent
+- **Use Case**: Delegation with oversight and coordination
+- **Implementation**: Via `SendMessage` tool variants
+- **Example**: `Orchestrator -> Worker -> Response to Orchestrator`
+
+### Handoffs (Sequential Pattern)
+- **Control Flow**: Control **transfers** to the handoff target
+- **Use Case**: Complete task delegation and specialization
+- **Implementation**: Via `SendMessageHandoff` tool class + OpenAI SDK
+- **Example**: `Worker -> Specialist` (control stays with Specialist)
+
+## The Hybrid Resolution
+
+When both patterns are used together, you can use Agency Swarm to implement a **hybrid approach** that allows both to coexist without conflicts:
+
+### How It Works
+
+The hybrid approach works by layering the two communication patterns strategically:
+
+<Steps>
+  <Step title="Primary Communication Uses Orchestrator Pattern">
+    When Agent A sends a message to Agent B using `SendMessage`, Agent B will **always** send its response back to Agent A. This ensures predictable communication flow—you always know where responses will go.
+  </Step>
+  <Step title="Internal Processing Can Use Handoffs">
+    While Agent B is working on Agent A's request, Agent B can consult with specialist agents using handoffs. The specialist receives the full context as provided to Agent B, and Agent B aggregates insights before formulating its final response.
+  </Step>
+  <Step title="Best of Both Worlds">
+    - Agent A gets the coordination benefits of the orchestrator pattern (responses come back)
+    - Agent B gets the specialization benefits of handoffs (can consult experts)
+    - The final response to Agent A includes a summary of the specialist knowledge, without needing to manage multiple conversations
+  </Step>
+</Steps>
+
+## Setting Up Handoffs
+
+In this framework, handoffs are configured via the `SendMessageHandoff` tool.
+
+```python agency_setup.py
+from agency_swarm import Agency, Agent
+from agency_swarm.tools import SendMessageHandoff
+
+# Create specialized agents
+orchestrator = Agent(
+    name="ProjectManager",
+    instructions="Coordinate project tasks and oversee completion",
+    # ... other config
+)
+
+worker = Agent(
+    name="Developer",
+    instructions="Handle development tasks, consult specialists when needed",
+    send_message_tool_class=SendMessageHandoff,
+    # ... other config
+)
+
+specialist = Agent(
+    name="SecurityExpert",
+    instructions="Provide security expertise and recommendations",
+    # Agent description will be added to the handoff tool instructions
+    description="Provides security expertise and recommendations",
+    # ... other config
+)
+
+# Create agency with communication flows
+agency = Agency(
+    orchestrator,
+    communication_flows=[
+        (orchestrator, worker),      # Creates send_message_to_Developer tool
+        (orchestrator, specialist),  # Creates send_message_to_SecurityExpert tool
+        (worker, specialist),        # Creates a handoff from worker to specialist (since worker has a special send message class)
+    ]
+)
+```
+
+### Execution Flow
+
+<Steps>
+  <Step title="ProjectManager delegates to Developer">
+    ProjectManager uses `send_message_to_Developer`: "Implement user authentication with security best practices".
+  </Step>
+  <Step title="Developer consults a specialist">
+    Developer decides to consult SecurityExpert and performs an internal handoff.
+  </Step>
+  <Step title="SecurityExpert advises">
+    SecurityExpert provides security recommendations.
+  </Step>
+  <Step title="Developer finalizes and responds">
+    Developer incorporates the advice and responds to ProjectManager.
+  </Step>
+  <Step title="ProjectManager receives a comprehensive answer">
+    The response includes the necessary security considerations.
+  </Step>
+</Steps>
+
+## When to Use Hybrid Patterns
+
+### Ideal Use Cases
+
+- **Hierarchical task delegation with oversight**: Manager needs visibility but workers need specialist consultation
+- **Expert consultation workflows**: Agents can consult specialists while maintaining orchestrator control
+- **Complex approval processes**: Multiple specialists review work before returning to orchestrator
+- **Quality assurance pipelines**: Work flows through specialists but orchestrator tracks progress
+
+### Design Guidelines
+
+<Tabs>
+  <Tab title="SendMessage (Orchestrator)">
+    **Use when you need:**
+    
+    - Control and visibility
+    - Coordination between multiple agents
+    - Task-focused agent boundaries
+  </Tab>
+  <Tab title="Sequential Handoffs">
+    **Use when you need:**
+    
+    - Internal agent decision-making
+    - Agents to have entire context
+    - Fewer agent-to-agent passes
+  </Tab>
+</Tabs>
+
+**⚠️ Important**: In this framework, handoffs must be configured using `SendMessageHandoff` tools only. The `agent.handoffs` parameter is not supported.
+
+## Benefits of the Hybrid Approach
+
+- **Internal Delegation**: Agents can independently use handoffs to access necessary context and tools without additional agent-to-agent passes. 
+- **Maintained Control**: Some agents can receive a short summary of the response to avoid hallucinations while other can receive full context to increase response accuracy and coverage. 
+- **Clean Separation of Concerns**: High-level coordination remains simple while detailed specialist work happens independently within appropriate agents. 
+
+## Conclusion
+
+Agency Swarm's hybrid paradigm resolution enables multi-agent architectures that would be difficult to achieve with either pattern alone.
+By understanding how SendMessage tools and Sequential Handoffs work together, you can build systems that combine the best of both orchestration
+and sequential delegation patterns, giving you the flexibility to design complex multi-agent workflows.
+
+<Note>
+For more details on individual patterns, see the [Overview](./overview) page. For implementation examples, check the [Common Use Cases](./common-use-cases) page.
+</Note>

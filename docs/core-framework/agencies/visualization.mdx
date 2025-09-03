@@ -1,0 +1,152 @@
+---
+title: "Agency Visualization"
+description: "Create interactive HTML visualizations and get ReactFlow-compatible data"
+icon: "chart-network"
+---
+<Warning>
+This page only applies to newer versions of the framework (v1.x and higher)
+</Warning>
+
+Agency Swarm provides two visualization methods:
+
+1. **`visualize()`** - Creates interactive HTML files
+2. **`get_agency_structure()`** - Returns ReactFlow-compatible JSON
+
+<Tabs>
+<Tab title="HTML Visualization">
+
+## `visualize()`
+
+Creates a self-contained HTML file with interactive agency visualization.
+
+```python
+def visualize(
+    self,
+    output_file: str = "agency_visualization.html",
+    include_tools: bool = True,
+    open_browser: bool = True
+) -> str
+```
+
+### Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `output_file` | `str` | `"agency_visualization.html"` | Path to save HTML file |
+| `include_tools` | `bool` | `True` | Whether to include agent tools |
+| `open_browser` | `bool` | `True` | Whether to open in browser |
+
+### Example
+
+```python
+from agency_swarm import Agency, Agent, function_tool
+
+@function_tool
+def analyze_data(data: str) -> str:
+    """Analyze data"""
+    return f"Analysis: {data}"
+
+analyst = Agent(
+    name="Analyst",
+    instructions="You analyze data.",
+    tools=[analyze_data]
+)
+
+manager = Agent(
+    name="Manager",
+    instructions="You coordinate work."
+)
+
+agency = Agency(
+    manager,
+    communication_flows=[(manager, analyst)],
+    name="Analysis Agency"
+)
+
+# Create visualization
+html_file = agency.visualize()
+print(f"Saved to: {html_file}")
+```
+
+</Tab>
+<Tab title="ReactFlow Integration">
+
+## `get_agency_structure()`
+
+Returns ReactFlow-compatible JSON data for custom frontend integration.
+
+```python
+def get_agency_structure(
+    self,
+    include_tools: bool = True
+) -> dict[str, Any]
+```
+
+### Returns
+
+```python
+{
+    "nodes": [
+        {
+            "id": "Manager",
+            "type": "agent",
+            "position": {"x": 100, "y": 50},
+            "data": {
+                "label": "Manager",
+                "description": "Agent description",
+                "isEntryPoint": True,
+                "toolCount": 0
+            }
+        }
+    ],
+    "edges": [
+        {
+            "id": "Manager->Analyst",
+            "source": "Manager",
+            "target": "Analyst",
+            "type": "communication"
+        }
+    ],
+    "metadata": {
+        "agencyName": "Analysis Agency",
+        "totalAgents": 2,
+        "totalTools": 1,
+        "entryPoints": ["Manager"]
+    }
+}
+```
+
+### Node Types
+
+- **Agent nodes**: `type: "agent"` with agent metadata
+- **Tool nodes**: `type: "tool"` with parent agent reference
+
+### Edge Types
+
+- **Communication**: `type: "communication"` between agents
+- **Ownership**: `type: "owns"` from agent to tool
+
+## Frontend Integration
+
+Use the JSON directly in React:
+
+```tsx
+import ReactFlow from 'reactflow';
+
+const agencyData = await fetch('/api/agency-structure').then(r => r.json());
+
+function AgencyVisualization() {
+  return (
+    <div style={{ height: '600px' }}>
+      <ReactFlow
+        nodes={agencyData.nodes}
+        edges={agencyData.edges}
+        fitView
+      />
+    </div>
+  );
+}
+```
+
+</Tab>
+</Tabs>

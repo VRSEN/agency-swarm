@@ -4,6 +4,158 @@ description: "Track and analyze your agent performance and behavior by connectin
 icon: "eyes"
 ---
 
+Agency Swarm supports multiple observability approaches to help you track and analyze your agent's behavior and performance.
+
+<Tabs defaultValue="v1.x">
+<Tab title="v1.x">
+
+## Supported Observability Platforms
+
+Agency Swarm supports three main observability approaches:
+
+<CardGroup cols={3}>
+  <Card title="OpenAI Tracing" icon="chart-line" href="#openai-tracing">
+    Built-in tracing using OpenAI's native tools
+  </Card>
+  <Card title="Langfuse" icon="gauge-high" href="#langfuse-tracing">
+    Advanced tracing and debugging platform
+  </Card>
+  <Card title="AgentOps" icon="database" href="#agentops-tracing">
+    Specialized agent monitoring and analytics
+  </Card>
+</CardGroup>
+
+## Getting Started
+
+Let's walk through setting up each tracing solution. You can use them individually or combine them for monitoring.
+
+<Tabs>
+  <Tab title="OpenAI Tracing">
+    <Steps>
+      <Step title="Basic Setup">
+        OpenAI tracing is built into Agency Swarm and requires no additional packages.
+      </Step>
+      <Step title="Implementation">
+        ```python
+        from agency_swarm import trace
+
+        async def openai_tracing(input_message: str) -> str:
+            agency_instance = create_agency()
+            with trace("OpenAI tracing"):
+                response = await agency_instance.get_response(message=input_message)
+            return response.final_output
+        ```
+      </Step>
+      <Step title="View Traces">
+        After running your code, view your traces at [platform.openai.com/traces](https://platform.openai.com/traces)
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="Langfuse">
+    <Steps>
+      <Step title="Install Package">
+        ```bash
+        pip install langfuse
+        ```
+      </Step>
+      <Step title="Set Environment Variables">
+        ```bash
+        export LANGFUSE_SECRET_KEY=<your-secret-key>
+        export LANGFUSE_PUBLIC_KEY=<your-public-key>
+        export LANGFUSE_HOST=<your-host>
+        ```
+      </Step>
+      <Step title="Implementation">
+        ```python
+        from langfuse import observe
+
+        @observe()
+        async def langfuse_tracing(input_message: str) -> str:
+            agency_instance = create_agency()
+
+            @observe()
+            async def get_response_wrapper(message: str):
+                return await agency_instance.get_response(message=message)
+
+            response = await get_response_wrapper(input_message)
+            return response.final_output
+        ```
+      </Step>
+      <Step title="View Traces">
+        Access your traces at [cloud.langfuse.com](https://cloud.langfuse.com) and select your project.
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="AgentOps">
+    <Steps>
+      <Step title="Install Package">
+        ```bash
+        pip install agentops
+        ```
+      </Step>
+      <Step title="Set Environment Variables">
+        ```bash
+        export AGENTOPS_API_KEY=<your-api-key>
+        ```
+      </Step>
+      <Step title="Implementation">
+        ```python
+        import agentops
+
+        async def agentops_tracing(input_message: str) -> str:
+            agentops.init(
+                auto_start_session=True,
+                trace_name="Agentops tracing",
+                tags=["openai", "agentops-example"]
+            )
+            tracer = agentops.start_trace(
+                trace_name="Agentops tracing",
+                tags=["openai", "agentops-example"]
+            )
+
+            agency_instance = create_agency()
+            response = await agency_instance.get_response(message=input_message)
+
+            agentops.end_trace(tracer, end_state="Success")
+            return response.final_output
+        ```
+      </Step>
+      <Step title="View Traces">
+        When you run your code, AgentOps will print a session replay URL in the console that looks like: `https://app.agentops.ai/sessions?trace_id=<your-trace-id>`
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
+
+## Implementation Example
+
+For a complete working example that demonstrates all three tracing methods with a multi-agent agency, see [observability_demo.py](https://github.com/VRSEN/agency-swarm/blob/main/examples/observability_demo.py) in the examples directory.
+
+The example shows:
+- How to set up a basic agency with CEO, Developer, and Data Analyst roles
+- Implementation of all three tracing methods (OpenAI, Langfuse, AgentOps)
+- A sample tool for data analysis
+- Error handling and proper tracing setup
+
+You can run the example with:
+```bash
+python examples/observability_demo.py
+```
+
+For more information about each platform's capabilities and configuration options, refer to their respective documentation:
+- [OpenAI Documentation](https://platform.openai.com/docs)
+- [Langfuse Documentation](https://langfuse.com/docs)
+- [AgentOps Documentation](https://docs.agentops.ai)
+
+</Tab>
+<Tab title="v0.x">
+
+<Info>
+v0.x is the **previous production version**. Install with: `pip install "agency-swarm<1.0.0"`
+</Info>
+
 Agency Swarm uses Langchain callbacks to connect with third party observability tools.
 
 <Info>
@@ -20,7 +172,7 @@ Agency Swarm uses Langchain callbacks to connect with third party observability 
 
 ## Supported Observability Platforms
 
-When it comes to choosing your observability platform, there are a few options. You can use one or multiple trackers simultaneously for comprehensive monitoring:
+When it comes to choosing your observability platform, there are a few options. You can use one or multiple trackers simultaneously for monitoring:
 
 <CardGroup cols={2}>
   <Card title="Langfuse" icon="chart-line" href="#getting-started">
@@ -39,7 +191,7 @@ When it comes to choosing your observability platform, there are a few options. 
 
 ## Getting Started
 
-We currently recommend [**Langfuse**](https://langfuse.com/) because it is fully open source, easy to use, and offers the most comprehensive set of features and support. You can also combine it with other trackers for enhanced observability.
+We currently recommend [**Langfuse**](https://langfuse.com/) because it is fully open source, easy to use, and offers a wide set of features and support. You can also combine it with other trackers for additional observability.
 
 ![Langfuse dashboard](/images/observability-langfuse.png)
 
@@ -55,6 +207,7 @@ We currently recommend [**Langfuse**](https://langfuse.com/) because it is fully
         ```bash
         export LANGFUSE_SECRET_KEY=<your-secret-key>
         export LANGFUSE_PUBLIC_KEY=<your-public-key>
+        export LANGFUSE_HOST=<your-host>
         ```
         <Tooltip tip="You can find these keys on the Langfuse dashboard">Keys are available on the Langfuse dashboard</Tooltip>
       </Step>
@@ -143,7 +296,7 @@ We currently recommend [**Langfuse**](https://langfuse.com/) because it is fully
 
 ## How It Works
 
-Agency Swarm uses a simple but powerful tracking system that captures every interaction in your agent's lifecycle:
+Agency Swarm uses a simple tracking system that captures every interaction in your agent's lifecycle:
 
 1. **Event Tracking**: Every message, tool call, and error is automatically tracked with unique IDs and timestamps.
 2. **Hierarchical Structure**: Events are organized in a tree structure, showing how different parts of your agent interact.
@@ -235,3 +388,6 @@ This data helps you understand your agent's behavior, debug issues, and optimize
     Detailed error information when failures occur
   </ResponseField>
 </Accordion>
+
+</Tab>
+</Tabs>

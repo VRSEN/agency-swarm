@@ -4,16 +4,11 @@ from agency_swarm.tools import BaseTool
 
 
 class ExampleTool1(BaseTool):
-    """Enter your tool description here. It should be informative for the Agent."""
+    """Simple echo tool used by tests."""
 
-    content: str = Field(
-        ...,
-        description="Enter parameter descriptions using pydantic for the model here.",
-    )
+    content: str = Field(..., description="Text that will be returned by the tool.")
 
-    def run(self):
-        # Enter your tool code here. It should return a string.
+    def run(self) -> str:
+        """Return the provided content unchanged."""
 
-        # do_something(self.content)
-
-        return "Tool output"
+        return self.content
