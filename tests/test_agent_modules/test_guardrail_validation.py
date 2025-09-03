@@ -39,6 +39,7 @@ async def test_input_guardrail_no_retry_streaming(monkeypatch, minimal_agent):
     agent = minimal_agent
     # Ensure multiple attempts available to prove no retry happens
     agent.validation_attempts = 2
+    agent.return_input_guardrail_errors = False
 
     ctx = AgencyContext(agency_instance=None, thread_manager=ThreadManager(), subagents={})
 

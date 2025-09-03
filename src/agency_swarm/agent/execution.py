@@ -79,6 +79,7 @@ class Execution:
             self.agent, sender_name, agency_context, additional_instructions, "get_response"
         )
 
+        master_context_for_run = None
         try:
             # Process message and file attachments
             # attachment_manager is always initialized in Agent.__init__ via setup_file_manager()
@@ -195,9 +196,13 @@ class Execution:
 
         finally:
             # Cleanup execution state
-            cleanup_execution(
-                self.agent, original_instructions, context_override, agency_context, master_context_for_run
-            )
+            if "master_context_for_run" in locals() and master_context_for_run is not None:  # type: ignore[used-before-def]
+                cleanup_execution(
+                    self.agent, original_instructions, context_override, agency_context, master_context_for_run
+                )
+            else:
+                # Ensure instructions are restored even if context was not prepared
+                self.agent.instructions = original_instructions
 
     async def get_response_stream(
         self,
@@ -252,6 +257,7 @@ class Execution:
             self.agent, sender_name, agency_context, additional_instructions, "get_response_stream"
         )
 
+        master_context_for_run = None
         try:
             # Process message and file attachments
             # attachment_manager is always initialized in Agent.__init__ via setup_file_manager()
@@ -291,14 +297,19 @@ class Execution:
                 current_agent_run_id=current_agent_run_id,
                 parent_run_id=parent_run_id,
                 validation_attempts=int(getattr(self.agent, "validation_attempts", 1) or 0),
+                return_input_guardrail_errors=getattr(self.agent, "return_input_guardrail_errors", True),
             ):
                 yield event
 
         finally:
             # Cleanup execution state
-            cleanup_execution(
-                self.agent, original_instructions, context_override, agency_context, master_context_for_run
-            )
+            if master_context_for_run is not None:
+                cleanup_execution(
+                    self.agent, original_instructions, context_override, agency_context, master_context_for_run
+                )
+            else:
+                # Ensure instructions are restored even if context was not prepared
+                self.agent.instructions = original_instructions
             if self.agent.attachment_manager is None:
                 raise RuntimeError(f"attachment_manager not initialized for agent {self.agent.name}")
             self.agent.attachment_manager.attachments_cleanup()

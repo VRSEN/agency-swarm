@@ -33,7 +33,7 @@ class ConsoleEventAdapter:
             self.message_output = None
             self.response_buffer = ""
 
-    def _update_console(self, msg_type: str, sender: str, receiver: str, content: str):
+    def _update_console(self, msg_type: str, sender: str, receiver: str, content: str, add_separator: bool = True):
         # Print a separator only for function, function_output, and agent-to-agent messages
         emoji = "👤" if sender.lower() == "user" else "🤖"
         if msg_type == "function":
@@ -43,7 +43,8 @@ class ConsoleEventAdapter:
         else:
             header = f"{emoji} {sender} 🗣️ @{receiver}"
         self.console.print(f"[bold]{header}[/bold]\n{content}")
-        self.console.rule()
+        if add_separator:
+            self.console.rule()
 
     def openai_to_message_output(self, event: Any, recipient_agent: str):
         try:
@@ -145,6 +146,14 @@ class ConsoleEventAdapter:
                             # Don't display it again - it's already been shown
                         else:
                             self._update_console("function_output", agent_name, "user", str(item.output))
+                    # Usually final output is not used, but in case of guardrail guidance, it will be returned
+                    # before any delta events, so we can display it immediately
+                    elif item.type == "message_output_item":
+                        raw_item = item.raw_item
+                        if raw_item.id == "msg_input_guardrail_guidance":
+                            self._update_console(
+                                "text", agent_name, speaking_to, str(raw_item.content[0].text), add_separator=False
+                            )
 
             # Handle error events (dict format from agent streaming)
             elif isinstance(event, dict) and event.get("type") == "error":
