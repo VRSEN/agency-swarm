@@ -15,13 +15,13 @@ Agency Swarm enhances the underlying SDK by introducing:
 
 This framework continues the original vision of Arsenii Shatokhin (aka VRSEN) to simplify the creation of AI agencies by thinking about automation in terms of real-world organizational structures, making it intuitive for both agents and users.
 
-**Migrating from v0.x?** Please see our [Migration Guide](./docs/migration/guide.mdx) for details on adapting your project to this new SDK-based version.
+**Migrating from v0.x?** Please see our [Migration Guide](https://agency-swarm.ai/migration/guide) for details on adapting your project to this new SDK-based version.
 
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1qGVyK-vIoxZD0dMrMVqCxCsgL1euMLKj)
 [![Docs](https://img.shields.io/website?label=Docs&up_message=available&url=https://agency-swarm.ai/)](https://agency-swarm.ai)
 [![Subscribe on YouTube](https://img.shields.io/youtube/channel/subscribers/UCSv4qL8vmoSH7GaPjuqRiCQ)](https://youtube.com/@vrsen/)
-[![Follow on Twitter](https://img.shields.io/twitter/follow/__vrsen__.svg?style=social&label=Follow%20%40__vrsen__)](https://twitter.com/__vrsen__)
-[![Join our Discord!](https://img.shields.io/discord/1200037936352202802?label=Discord)](https://discord.gg/cw2xBaWfFM)
+[![Follow on Twitter](://img.shields.io/twitter/follow/__vrsen__.svg?style=social&label=Follow%20%40__vrsen__)](://twitter.com/__vrsen__)
+[![Join our Discord!](://img.shields.io/discord/1200037936352202802?label=Discord)](https://discord.gg/cw2xBaWfFM)
 [![Agents-as-a-Service](https://img.shields.io/website?label=Agents-as-a-Service&up_message=For%20Business&url=https%3A%2F%2Fvrsen.ai)](https://agents.vrsen.ai)
 
 ### Key Features
@@ -219,7 +219,7 @@ This structure ensures that each agent has its dedicated space with all necessar
 - Agencies overview: https://agency-swarm.ai/core-framework/agencies/overview
 - Communication flows: https://agency-swarm.ai/core-framework/agencies/communication-flows
 - Running an agency: https://agency-swarm.ai/core-framework/agencies/running-agency
- - Observability: https://agency-swarm.ai/additional-features/observability
+- Observability: https://agency-swarm.ai/additional-features/observability
 
 ## Future Enhancements
 
@@ -239,4 +239,4 @@ Agency Swarm is open-source and licensed under [MIT](https://opensource.org/lice
 
 ## Need Help?
 
-If you need help creating custom agent swarms for your business, check out our [Agents-as-a-Service](https://agents.vrsen.ai/) subscription, or schedule a consultation with me at https://calendly.com/vrsen/ai-project-consultation
+If you need help creating custom agent swarms for your business, check out our [Agents-as-a-Service](https://agents.vrsen.ai/) subscription, or schedule a consultation with me at https://calendly.com/vrsen/ai-readiness-call
