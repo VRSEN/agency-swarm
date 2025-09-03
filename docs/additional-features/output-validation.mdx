@@ -16,7 +16,7 @@ There are 4 different validators in Agency Swarm:
 - Agent validators:
   - `guardrails` (for v1.x and higher) or `response_validator` (for v0.x): Validate the response before sending it to the user or other agents.
 - Universal validators:
-  - `llm_validator`: Validate outputs against specified natural language rules.
+  - `llm_validator` (v0.x): Validate outputs against specified natural language rules.
 
 ### Agent Response Validator
 
@@ -341,9 +341,9 @@ class User(BaseTool):
 </Tab>
 </Tabs>
 
-### LLM Validator
+### LLM Validator (v0.x)
 
-The `llm_validator` validates outputs against specified natural language rules.
+The `llm_validator` validates outputs against specified natural language rules. (v0.x)
 
 **Example:**
 

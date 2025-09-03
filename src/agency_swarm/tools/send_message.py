@@ -12,7 +12,7 @@ import json
 import logging
 from typing import TYPE_CHECKING
 
-from agents import FunctionTool, RunContextWrapper, handoff
+from agents import FunctionTool, InputGuardrailTripwireTriggered, RunContextWrapper, handoff
 
 from ..context import MasterContext
 from ..streaming.utils import add_agent_name_to_event
@@ -384,8 +384,16 @@ class SendMessage(FunctionTool):
                 f"Received response via tool '{self.name}' from '{recipient_name_for_call}': "
                 f'"{final_output_text[:50]}..."'
             )
-            print(f"final_output_text: {final_output_text}")
             return final_output_text
+
+        except InputGuardrailTripwireTriggered as e:
+            guidance = getattr(getattr(e, "guardrail_result", None), "output", None)
+            message = getattr(guidance, "output_info", str(e)) if guidance else str(e)
+            logger.warning(
+                f"Input guardrail triggered during sub-call via tool '{self.name}' from "
+                f"'{sender_name_for_call}' to '{recipient_name_for_call}': {message}"
+            )
+            return f"Error getting response from the agent: {message}"
 
         except Exception as e:
             logger.error(

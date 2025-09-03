@@ -340,10 +340,8 @@ def wrap_input_guardrails(agent: "Agent"):
                     return guardrail_func(context, agent, chat_history)
 
                 user_messages = []
-                print(f"chat_history: {chat_history}")
                 # Extract concurrent user messages
                 for message in reversed(chat_history):
-                    print(f"message: {message}")
                     if message["role"] == "user":
                         user_messages.append(message["content"])
                     else:

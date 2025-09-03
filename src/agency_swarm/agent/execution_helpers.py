@@ -79,7 +79,7 @@ def perform_streamed_run(
     )
 
 
-async def orchestrate_sync_run(
+async def run_sync_with_guardrails(
     *,
     agent: "Agent",
     history_for_runner: list[TResponseInputItem],
@@ -92,8 +92,9 @@ async def orchestrate_sync_run(
     current_agent_run_id: str,
     parent_run_id: str | None,
     validation_attempts: int,
+    return_input_guardrail_errors: bool,
 ) -> tuple[RunResult, MasterContext]:
-    """Guardrail-aware orchestration around a single-run primitive."""
+    """Run a single turn with guardrail handling and optional retries."""
     attempts_remaining = int(validation_attempts or 0)
     while True:
         try:
@@ -109,6 +110,15 @@ async def orchestrate_sync_run(
         except OutputGuardrailTripwireTriggered as e:
             if attempts_remaining <= 0:
                 raise e
+            try:
+                _assistant_output, _guidance_text = _extract_guardrail_texts(e)
+                logger.info(
+                    "Output guardrail tripped. attempts_left=%s guidance=%s",
+                    attempts_remaining,
+                    _guidance_text,
+                )
+            except Exception:
+                logger.info("Output guardrail tripped. attempts_left=%s", attempts_remaining)
             attempts_remaining -= 1
             history_for_runner = append_guardrail_feedback(
                 agent=agent,
@@ -130,6 +140,24 @@ async def orchestrate_sync_run(
                 exception=e,
                 include_assistant=False,
             )
+            if return_input_guardrail_errors:
+                from agents import RunContextWrapper  # local import to avoid cycle
+
+                _, guidance_text = _extract_guardrail_texts(e)
+                wrapper = RunContextWrapper(master_context_for_run)
+                return (
+                    RunResult(
+                        input=history_for_runner,
+                        new_items=[],
+                        raw_responses=[],
+                        final_output=guidance_text,
+                        input_guardrail_results=[],
+                        output_guardrail_results=[],
+                        context_wrapper=wrapper,
+                        _last_agent=agent,
+                    ),
+                    master_context_for_run,
+                )
             raise e
         except Exception as e:
             raise AgentsException(f"Runner execution failed for agent {agent.name}") from e
@@ -248,7 +276,7 @@ def setup_execution(
 
                 # Append additional instructions
                 if base_instructions:
-                    return base_instructions + "\n\n" + additional_instructions
+                    return str(base_instructions) + "\n\n" + additional_instructions
                 else:
                     return additional_instructions
 
@@ -388,36 +416,7 @@ def append_guardrail_feedback(
     )
 
 
-async def run_with_output_guardrail_retries(
-    *,
-    agent: "Agent",
-    history_for_runner: list[TResponseInputItem],
-    master_context_for_run: MasterContext,
-    sender_name: str | None,
-    agency_context: "AgencyContext | None",
-    hooks_override: Any,
-    run_config_override: RunConfig | None,
-    kwargs: dict[str, Any],
-    current_agent_run_id: str,
-    parent_run_id: str | None,
-    validation_attempts: int,
-) -> tuple[RunResult, MasterContext]:
-    return await orchestrate_sync_run(
-        agent=agent,
-        history_for_runner=history_for_runner,
-        master_context_for_run=master_context_for_run,
-        sender_name=sender_name,
-        agency_context=agency_context,
-        hooks_override=hooks_override,
-        run_config_override=run_config_override,
-        kwargs=kwargs,
-        current_agent_run_id=current_agent_run_id,
-        parent_run_id=parent_run_id,
-        validation_attempts=validation_attempts,
-    )
-
-
-async def run_streamed_with_output_guardrail_retries(
+async def run_stream_with_guardrails(
     *,
     agent: "Agent",
     initial_history_for_runner: list[TResponseInputItem],
@@ -431,7 +430,7 @@ async def run_streamed_with_output_guardrail_retries(
     parent_run_id: str | None,
     validation_attempts: int,
 ) -> AsyncGenerator[RunItemStreamEvent]:
-    """Stream Runner events with output-guardrail retries, persisting guidance between attempts."""
+    """Stream events with output-guardrail retries and guidance persistence."""
     attempts_remaining = int(validation_attempts or 0)
     history_for_runner = initial_history_for_runner
 

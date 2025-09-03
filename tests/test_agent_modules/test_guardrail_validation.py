@@ -14,16 +14,15 @@ from agency_swarm.agent.core import AgencyContext
 @pytest.mark.asyncio
 @patch("agents.Runner.run", new_callable=AsyncMock)
 async def test_output_guardrail_auto_retry(mock_runner_run, minimal_agent, mock_thread_manager):
-    guardrail_result = type(
-        "_OutputGuardrailResult",
-        (),
-        {
-            "output": type("_Output", (), {"output_info": "fix it"})(),
-            "guardrail": object(),
-        },
-    )()
+    class _Out:
+        output_info = "fix it"
+
+    class _OutputGuardrailResult:
+        output = _Out()
+        guardrail = object()
+
     mock_runner_run.side_effect = [
-        OutputGuardrailTripwireTriggered(guardrail_result),
+        OutputGuardrailTripwireTriggered(_OutputGuardrailResult()),
         MagicMock(new_items=[], final_output="ok"),
     ]
 
@@ -47,18 +46,15 @@ async def test_input_guardrail_no_retry_streaming(monkeypatch, minimal_agent):
 
     def fake_run_streamed(**kwargs):
         calls["n"] += 1
-        guardrail_result = type(
-            "_InputGuardrailResult",
-            (),
-            {
-                "output": GuardrailFunctionOutput(
-                    output_info="Prefix your request with 'Task:'",
-                    tripwire_triggered=True,
-                ),
-                "guardrail": object(),
-            },
-        )()
-        raise InputGuardrailTripwireTriggered(guardrail_result)
+
+        class _InRes:
+            output = GuardrailFunctionOutput(
+                output_info="Prefix your request with 'Task:'",
+                tripwire_triggered=True,
+            )
+            guardrail = object()
+
+        raise InputGuardrailTripwireTriggered(_InRes())
 
     monkeypatch.setattr(
         "agency_swarm.agent.execution_helpers.Runner.run_streamed",
@@ -74,3 +70,28 @@ async def test_input_guardrail_no_retry_streaming(monkeypatch, minimal_agent):
     err = next(ev for ev in received if isinstance(ev, dict) and ev.get("type") == "error")
     assert "Task:" in err.get("content", "")
     assert calls["n"] == 1
+
+
+@pytest.mark.asyncio
+@patch("agents.Runner.run", new_callable=AsyncMock)
+async def test_input_guardrail_returns_error_non_stream(mock_runner_run, minimal_agent, mock_thread_manager):
+    agent = minimal_agent
+    agent.return_input_guardrail_errors = True
+
+    class _InRes:
+        output = GuardrailFunctionOutput(
+            output_info="Prefix your request with 'Task:'",
+            tripwire_triggered=True,
+        )
+        guardrail = object()
+
+    mock_runner_run.side_effect = InputGuardrailTripwireTriggered(_InRes())
+
+    ctx = AgencyContext(agency_instance=None, thread_manager=mock_thread_manager, subagents={})
+
+    res = await agent.get_response(message="Hello", agency_context=ctx)
+
+    assert res.final_output == "Prefix your request with 'Task:'"
+    msgs = ctx.thread_manager.get_all_messages()
+    roles_contents = [(m.get("role"), m.get("content")) for m in msgs]
+    assert ("system", "Prefix your request with 'Task:'") in roles_contents

@@ -42,6 +42,7 @@ AGENT_PARAMS = {
     "description",
     "include_search_results",
     "validation_attempts",
+    "return_input_guardrail_errors",
     # Old/Deprecated (to check in kwargs)
     "id",
     "tool_resources",
@@ -93,6 +94,7 @@ class Agent(BaseAgent[MasterContext]):
     send_message_tool_class: type | None  # Custom SendMessage tool class for inter-agent communication
     include_search_results: bool = False
     validation_attempts: int = 1
+    return_input_guardrail_errors: bool = True
 
     # --- Internal State ---
     _associated_vector_store_id: str | None = None
@@ -203,6 +205,7 @@ class Agent(BaseAgent[MasterContext]):
         self.send_message_tool_class = current_agent_params.get("send_message_tool_class")
         self.include_search_results = current_agent_params.get("include_search_results", False)
         self.validation_attempts = int(current_agent_params.get("validation_attempts", 1))
+        self.return_input_guardrail_errors = bool(current_agent_params.get("return_input_guardrail_errors", True))
 
         # Internal state
         self._openai_client = None

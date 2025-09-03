@@ -17,8 +17,8 @@ from agency_swarm.agent.execution_helpers import (
     extract_hosted_tool_results_if_needed,
     prepare_master_context,
     run_item_to_tresponse_input_item,
-    run_streamed_with_output_guardrail_retries,
-    run_with_output_guardrail_retries,
+    run_stream_with_guardrails,
+    run_sync_with_guardrails,
     setup_execution,
 )
 from agency_swarm.messages import (
@@ -109,7 +109,7 @@ class Execution:
             except Exception:
                 pass
 
-            run_result, master_context_for_run = await run_with_output_guardrail_retries(
+            run_result, master_context_for_run = await run_sync_with_guardrails(
                 agent=self.agent,
                 history_for_runner=history_for_runner,
                 master_context_for_run=master_context_for_run,
@@ -121,6 +121,7 @@ class Execution:
                 current_agent_run_id=current_agent_run_id,
                 parent_run_id=parent_run_id,
                 validation_attempts=int(getattr(self.agent, "validation_attempts", 1) or 0),
+                return_input_guardrail_errors=getattr(self.agent, "return_input_guardrail_errors", False),
             )
             completion_info = (
                 f"Output Type: {type(run_result.final_output).__name__}"
@@ -278,7 +279,7 @@ class Execution:
 
             # Prepare context for streaming and delegate to helper generator
             master_context_for_run = prepare_master_context(self.agent, context_override, agency_context)
-            async for event in run_streamed_with_output_guardrail_retries(
+            async for event in run_stream_with_guardrails(
                 agent=self.agent,
                 initial_history_for_runner=history_for_runner,
                 master_context_for_run=master_context_for_run,
