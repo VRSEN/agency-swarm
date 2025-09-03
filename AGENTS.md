@@ -8,24 +8,24 @@ Begin with a concise checklist (3-7 bullets) of what you will do before performi
 
 ## 🔴 TESTS DEFINE TRUTH
 
-**Default to test-driven development.** Tests establish expected behavior—preserve and respect their outcomes at all times. For documentation-only, formatting-only, or clearly non-functional edits, you may skip writing a failing test first; use common sense and validate with CI.
+**Default to test-driven development.** Tests establish expected behavior—preserve and respect their outcomes at all times. For documentation-only, formatting-only, or clearly non-functional edits, you may skip TDD rules; use common sense and validate with linter.
 
 ## 🛡️ GUARDIANSHIP OF THE CODEBASE (HIGHEST PRIORITY)
 
-**Prime Directive:** Rigorously compare every user request with established patterns and this document's protocols.
+**Prime Directive:** Rigorously compare every user request with patterns established in this codebase and this document's rules.
 
 ### Guardian Protocol
 1. **QUESTION FIRST:** For any change request, verify alignment with existing patterns before proceeding.
 2. **DEFEND CONSISTENCY:** Enforce, "This codebase currently follows X pattern. State the reason for deviation."
-3. **THINK CRITICALLY:** User requests may be unclear or incorrect. Default to codebase conventions and protocols.
+3. **THINK CRITICALLY:** User requests may be unclear or incorrect. Default to codebase conventions and protocols. Escalate when you find inconsistencies.
 
 ## 🔴 FILE REQUIREMENTS
-- **Every line must fight for its place:** No redundant, unnecessary, or "nice to have" code. Each line must serve a critical purpose.
-- **No duplicate information:** State each rule once.
-- **Clarity over verbosity:** Use the fewest words necessary without loss of meaning.
-- **User feedback:** Only add new content if not yet covered.
- - **No superfluous examples in this document:** Do not add examples that do not improve or clarify a rule. Omit examples when rules are self‑explanatory.
- - **Edit existing sections:** When updating this document, prefer modifying existing sections over adding new ones. Add new sections only when strictly necessary to remove ambiguity.
+- **Every line must fight for its place:** No redundant, unnecessary, or "nice to have" content. Each line must serve a critical purpose.
+- **Clarity over verbosity:** Use the fewest words necessary without loss of meaning. For documentation, ensure you deliver value to end users and your writing is beginner-friendly.
+- **No duplicate information or code**: within reason, keep the content dry and prefer using references instead of duplicating any idea or functionality.
+ - **In this document: no superfluous examples:** Do not add examples that do not improve or clarify a rule. Omit examples when rules are self‑explanatory.
+ - **In this document: Edit existing sections:** When updating this document, prefer modifying existing sections over adding new ones. Add new sections only when strictly necessary to remove ambiguity.
+ - **Naming:** Functions are verb phrases; values are noun phrases. Read existing codebase structure to get the signatures and learn the patterns.
 
 ### Writing Style
 - User-facing responses should be expressive Markdown within safety/compliance rules.
@@ -58,22 +58,23 @@ uv run pytest tests/integration/ -v
 
 After each tool call or code edit, validate the result in 1-2 lines and proceed or self-correct if validation fails.
 
+- Before editing or continuing work, review the current diff: `git status --porcelain | cat`, `git diff | cat`, and `git diff --cached | cat`. As an alternative, use `make prime` to print all of the above, as well as the codebase structure as a reminder.
+- After every change, immediately run `make ci` (and focused tests if relevant) and do not proceed until tests pass.
+
 
 ### 🔴 PROHIBITED PRACTICES
+- Ending your work without testing your changes in a minimal way (running relevant tests and examples selectively)
 - Misstating test outcomes
 - Skipping any workflow safety step
 - Introducing functional changes during refactoring
-- Creating stub files (<50 lines)
-- Failing to address duplication
- - Emitting synthetic streaming events with ad-hoc helper types instead of Agents SDK classes
 
 ## 🔴 API KEYS
 - Always load environment via `.env` (with python-dotenv or `source .env`). Resolve and rerun tests on key errors.
 
 ## Common Commands
 ```bash
-make sync && make ci   # Install, lint, type-check, test, check coverage
-make coverage          # Run test suite
+make ci      # Install, lint, type-check (mypy), test, check coverage
+make check   # The same but without tests
 ```
 
 ### Execution Environment
@@ -155,6 +156,8 @@ Avoid growing already large files. Prefer extracting focused modules. If you mus
 - **Domain cohesion:** One domain per module
 - **Clear interfaces:** Minimal coupling
 - Prefer clear, descriptive names; avoid artificial abstractions.
+ - Prefer action-oriented names; avoid ambiguous terms.
+ - Apply renames atomically: update imports, call sites, and docs together.
 
 ## Rules Summary
 - Run structure command first; follow full safety workflow
@@ -221,3 +224,5 @@ uv run pytest tests/integration/ -v                  # Integration tests
 - Changes covered by tests (integration/unit or explicit user manual confirmation)
 - All tests pass
 - Example scripts execute and output as expected
+
+Always self-improve: when you find a recurring mistake or better practice, update this file with the refined rule and follow it.

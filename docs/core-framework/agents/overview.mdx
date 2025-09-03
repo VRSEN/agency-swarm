@@ -46,8 +46,13 @@ The new `Agent` class extends the base `agents.Agent` with Agency Swarm-specific
 |------|-----------|-------------|
 | Files Folder *(optional)* | `files_folder` | Path to a local folder for managing files associated with this agent. If the folder name follows the pattern `*_vs_<vector_store_id>`, files uploaded via `upload_file` will also be added to the specified OpenAI Vector Store, and a `FileSearchTool` will be automatically added. Default: `None` |
 | Tools Folder *(optional)* | `tools_folder` | Path to a directory containing tool definitions. Tools are automatically discovered and loaded from this directory. Supports both BaseTool subclasses and modern FunctionTool instances. Default: `None` |
+| Schemas Folder *(optional)* | `schemas_folder` | Path to a directory containing openapi schema files in .json format. Schemas are automatically converted into FunctionTools. Default: `None` |
+| API headers *(optional)*<br/>API params *(optional)*| `api_headers`<br/><br/>`api_params` | Additional parameters to include into tools converted from OpenAPI schemas. Default: `None` |
 | Description *(optional)* | `description` | A description of the agent's role or purpose, used to convey agent's role to other agents. Default: `None` |
 | Send Message Tool Class *(optional)* | `send_message_tool_class` | Custom SendMessage tool class to use for inter-agent communication. If None, uses the default SendMessage class. Default: `None` |
+| Include Search Results *(optional)* | `include_search_results` | Include search results in FileSearchTool output for citation extraction. Default: `False` |
+| Validation Attempts *(optional)* | `validation_attempts` | Number of retries when an output guardrail trips. Default: `1` |
+| Return Input Guardrail Errors *(optional)* | `return_input_guardrail_errors` | If set to `True`, input guardrail errors will be returned as agent's response. If set to `False`, will return a corresponding error. Default: `None` |
 
 ### Core Agent Parameters
 
@@ -60,8 +65,8 @@ The new `Agent` class extends the base `agents.Agent` with Agency Swarm-specific
 | Tools *(optional)* | `tools` | A list of tools that the agent can use. Default: `[]` |
 | MCP Servers *(optional)* | `mcp_servers` | A list of Model Context Protocol servers that the agent can use. Every time the agent runs, it will include tools from these servers in the list of available tools. Default: `[]` |
 | MCP Config *(optional)* | `mcp_config` | Configuration for MCP servers. Default: `MCPConfig()` |
-| Input Guardrails *(optional)* | `input_guardrails` | A list of checks that run in parallel to the agent's execution, before generating a response. Runs only if the agent is the first agent in the chain. Default: `[]` |
-| Output Guardrails *(optional)* | `output_guardrails` | A list of checks that run on the final output of the agent, after generating a response. Runs only if the agent produces a final output. Default: `[]` |
+| Input Guardrails *(optional)* | `input_guardrails` | A list of checks that run in parallel to the agent's execution, before generating a response. Default: `[]` |
+| Output Guardrails *(optional)* | `output_guardrails` | A list of checks that run on the final output of the agent, after generating a response. Default: `[]` |
 | Output Type *(optional)* | `output_type` | The type of the output object. If not provided, the output will be `str`. In most cases, you should pass a regular Python type (e.g. a dataclass, Pydantic model, TypedDict, etc). Default: `None` |
 
 <Note>

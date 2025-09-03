@@ -12,7 +12,7 @@ import json
 import logging
 from typing import TYPE_CHECKING
 
-from agents import FunctionTool, RunContextWrapper, handoff
+from agents import FunctionTool, InputGuardrailTripwireTriggered, RunContextWrapper, handoff
 
 from ..context import MasterContext
 from ..streaming.utils import add_agent_name_to_event
@@ -342,10 +342,20 @@ class SendMessage(FunctionTool):
                                     if text_content:
                                         final_output_text = text_content
 
+                    # Send error message to the caller if it occurs
+                    if isinstance(event, dict) and event.get("type") == "error":
+                        final_output_text = (
+                            f"Error getting response from the agent: {event.get('content', 'Unknown error')}"
+                        )
+
                 if tool_calls_seen:
                     logger.info(f"Sub-agent '{recipient_name_for_call}' executed tools: {tool_calls_seen}")
 
-                response = type("StreamedResponse", (), {"final_output": final_output_text})()
+                logger.info(
+                    f"Received response via tool '{self.name}' from '{recipient_name_for_call}': "
+                    f'"{final_output_text[:50]}..."'
+                )
+                return final_output_text
             else:
                 logger.debug(f"Calling target agent '{recipient_name_for_call}'.get_response...")
 
@@ -379,6 +389,18 @@ class SendMessage(FunctionTool):
                 f'"{final_output_text[:50]}..."'
             )
             return final_output_text
+
+        except InputGuardrailTripwireTriggered as e:
+            guidance = getattr(getattr(e, "guardrail_result", None), "output", None)
+            message = getattr(guidance, "output_info", str(e)) if guidance else str(e)
+            logger.warning(
+                f"Input guardrail triggered during sub-call via tool '{self.name}' from "
+                f"'{sender_name_for_call}' to '{recipient_name_for_call}': {message}"
+            )
+            if self.recipient_agent.return_input_guardrail_errors:
+                return message
+            else:
+                return f"Error getting response from the agent: {message}"
 
         except Exception as e:
             logger.error(

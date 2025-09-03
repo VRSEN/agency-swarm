@@ -53,6 +53,6 @@ def test_run_fastapi_preserves_custom_tool_mappings(mocker):
     new_agency = factory()
 
     pair = ("A", "B")
-    assert (
-        new_agency._communication_tool_classes.get(pair) is CustomSendMessage
-    ), "Custom tool mapping was not preserved"
+    assert new_agency._communication_tool_classes.get(pair) is CustomSendMessage, (
+        "Custom tool mapping was not preserved"
+    )

@@ -72,7 +72,7 @@ clean:
 	find . -type f -name "*.pyc" -delete
 
 .PHONY: check
-check: lint mypy tests
+check: lint mypy
 
 .PHONY: ci
 ci: sync check coverage
@@ -99,7 +99,7 @@ help:
 	@echo "  coverage     - Run tests with coverage reporting"
 	@echo "  coverage-html- Generate HTML coverage report"
 	@echo "  clean        - Clean cache files and artifacts"
-	@echo "  check        - Run lint, mypy, and tests"
+	@echo "  check        - Run lint and mypy"
 	@echo "  ci           - Run full CI pipeline (sync, check, coverage)"
 	@echo "  serve-docs   - Serve documentation locally"
 	@echo "  build        - Build the package"

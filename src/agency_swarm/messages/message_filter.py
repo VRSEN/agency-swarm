@@ -37,7 +37,7 @@ class MessageFilter:
             messages: List of message dictionaries to filter
 
         Returns:
-            list[dict[str, Any]]: Filtered list of messages
+            list[TResponseInputItem]: Filtered list of messages
         """
         original_count = len(messages)
         filtered = [msg for msg in messages if not MessageFilter.should_filter(msg)]

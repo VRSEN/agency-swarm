@@ -6,7 +6,7 @@ import pytest
 from agents import RunContextWrapper
 from pydantic import Field
 
-from agency_swarm import Agent, BaseTool
+from agency_swarm import Agent, BaseTool, GuardrailFunctionOutput, InputGuardrailTripwireTriggered
 from agency_swarm.context import MasterContext
 from agency_swarm.tools.send_message import SendMessage
 from agency_swarm.utils.thread import ThreadManager
@@ -214,6 +214,40 @@ async def test_send_message_target_agent_error(specific_send_message_tool, mock_
 
     assert result == expected_error_message
     mock_module_logger.error.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_send_message_input_guardrail_returns_error(mock_sender_agent, mock_wrapper):
+    recipient = MagicMock(spec=Agent)
+    recipient.name = "RecipientAgent"
+
+    class _InRes:
+        output = GuardrailFunctionOutput(
+            output_info="Prefix your request with 'Task:'",
+            tripwire_triggered=True,
+        )
+        guardrail = object()
+
+    async def mock_get_response(*args, **kwargs):
+        raise InputGuardrailTripwireTriggered(_InRes())
+
+    recipient.get_response = AsyncMock(side_effect=mock_get_response)
+
+    mock_wrapper.context.agents = {"SenderAgent": mock_sender_agent, "RecipientAgent": recipient}
+    mock_wrapper.context._is_streaming = False
+
+    tool = SendMessage(sender_agent=mock_sender_agent, recipients={recipient.name.lower(): recipient})
+
+    args = {
+        "recipient_agent": recipient.name,
+        "my_primary_instructions": "inst",
+        "message": "Hello",
+        "additional_instructions": "",
+    }
+
+    result = await tool.on_invoke_tool(wrapper=mock_wrapper, arguments_json_string=json.dumps(args))
+
+    assert "Prefix your request with 'Task:'" in result
 
 
 @pytest.mark.asyncio
