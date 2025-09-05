@@ -22,7 +22,14 @@ _instuction = f"""
 
 ### step 1. 读取日志信息
 
-你收到用户发输入请求后，需要先调用工具`ReadJsonFile`从context_tree.json中读取完整的上下文信息，并判断此次任务文本是否是写入k8s环境的任务
+你收到用户发输入请求后，需要先调用工具`ReadJsonFile`从context_tree.json中读取完整的上下文信息,
+若任务要求是输出测试报告，请分析上下文中是否有测试数据，若上下文中不存在目标数据，请直接返回：
+
+{{
+    "tool": "...",
+    "execution_result": "FAIL",
+    "reason": "..."
+}}
 
 获取以上信息后继续执行下列流程。
 

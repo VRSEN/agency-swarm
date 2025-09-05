@@ -37,7 +37,11 @@ _output_format = """
 """
 
 __instruction = f""" 
-# 注意，类似于“收集和分析测试结果”的任务请分为读取结果和分析结果等多个步骤进行。"""
+# 注意，类似于“收集和分析测试结果”的任务请分为读取结果和分析结果等多个步骤进行。
+# 注意， 规划前请分清输出文本的位置，所有要输出到k8s环境中的文本都应用**file_io_agent**输出
+# 注意，类似于创建测试文件的任务请直接交由**file_io_agent**进行
+
+#"""
 
 _instruction = planner_instruction(_group_name, _input_format, _agents, _output_format)+ __instruction
 

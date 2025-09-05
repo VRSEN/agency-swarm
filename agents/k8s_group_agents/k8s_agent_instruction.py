@@ -17,15 +17,21 @@ def k8s_agent_instruction(_name, _description):
 
 根据以上信息，结合你自己负责的能力，严谨专业地一步步思考，生成可执行的命令行。尽可能使用kubectl命令。如果需要使用配置文件，尽量**不要写文件名**，而是将完整的配置文件内容以`<<EOF`方式附在命令最后。
 
+如果指令需要指定pod名称，请根据上下文推测出目标pod名，若从上下文无法推测出目标pod名称，你需要直接输出:
+{{
+    "execution_result": "FAIL",
+    "reason": "(填写原因，原因中应写入“应用命令查出集群中所有pod名称”)"
+}}
+ 
 若该请求能够通过上下文信息**严格**判断出之前已经完成过，你可以直接输出:
 {{
-    "result": "SUCCESS",
+    "execution_result": "SUCCESS",
     "reason": "(填写原因)"
 }}
 
 若该请求无法使用命令行完成，你需要直接输出:
 {{
-    "result": "FAIL",
+    "execution_result": "FAIL",
     "reason": "(填写原因)"
 }}
 
