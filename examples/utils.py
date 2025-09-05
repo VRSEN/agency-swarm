@@ -25,19 +25,16 @@ def print_history(thread_manager, roles: Iterable[str] = ("assistant", "system")
     - Shows only role and content for roles in `roles` (default: assistant/system)
     """
     messages = thread_manager.get_all_messages()
-    last_user_idx = -1
-    for i in range(len(messages) - 1, -1, -1):
-        m = messages[i]
-        if isinstance(m, dict) and m.get("role") == "user":
-            last_user_idx = i
-            break
-
-    for m in messages[last_user_idx + 1 :]:
+    for m in messages:
         if not isinstance(m, dict):
             continue
         role_obj = m.get("role") or m.get("type")
         role = str(role_obj) if role_obj is not None else ""
         if role and role not in roles:
             continue
+        if role == "assistant":
+            role = f"{m.get('agent')}:"
+        elif (role == "user" and m.get("callerAgent") is not None):
+            role = f"{m.get('callerAgent')}:"
         content = _extract_text(m.get("content"))
         print(f"   [{role}] {content}")

@@ -13,7 +13,7 @@ Agency Swarm supports two paradigms for inter-agent communication that can work 
   <Card title="SendMessage Tools" icon="arrow-right-arrow-left">
     Control returns to the caller, ideal for coordination with oversight. Implemented via `SendMessage` tool variants.
   </Card>
-  <Card title="Handoffs" icon="right-left">
+  <Card title="Handoffs" icon="arrow-turn-right">
     Control transfers to the target, ideal for full task delegation and specialization. Powered by `SendMessageHandoff` + OpenAI SDK.
   </Card>
   
@@ -126,23 +126,19 @@ agency = Agency(
 - **Quality assurance pipelines**: Work flows through specialists but orchestrator tracks progress
 
 ### Design Guidelines
-
-<Tabs>
-  <Tab title="SendMessage (Orchestrator)">
-    **Use when you need:**
-    
-    - Control and visibility
-    - Coordination between multiple agents
-    - Task-focused agent boundaries
-  </Tab>
-  <Tab title="Sequential Handoffs">
-    **Use when you need:**
-    
-    - Internal agent decision-making
-    - Agents to have entire context
-    - Fewer agent-to-agent passes
-  </Tab>
-</Tabs>
+**When to use:**
+<CardGroup cols={2}>
+  <Card title="SendMessage (Orchestrator)" icon="arrow-right-arrow-left">
+    • Control and visibility    
+    • Coordination between multiple agents    
+    • Task-focused agent boundaries
+  </Card>
+  <Card title="Sequential Handoffs" icon="arrow-turn-right">
+    • Internal agent decision-making    
+    • Agents to have entire context     
+    • Fewer agent-to-agent passes
+  </Card>
+</CardGroup>
 
 **⚠️ Important**: In this framework, handoffs must be configured using `SendMessageHandoff` tools only. The `agent.handoffs` parameter is not supported.
 

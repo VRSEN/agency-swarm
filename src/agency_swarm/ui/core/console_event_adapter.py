@@ -22,6 +22,7 @@ class ConsoleEventAdapter:
         self.message_output = None
         self.console = Console()
         self.last_live_display = None
+        self.handoff_agent = None
 
     def _cleanup_live_display(self):
         """Clean up any active Live display safely."""
@@ -49,7 +50,7 @@ class ConsoleEventAdapter:
     def openai_to_message_output(self, event: Any, recipient_agent: str):
         try:
             # Use agent from event if available, otherwise fall back to recipient_agent
-            agent_name = getattr(event, "agent", None) or recipient_agent
+            agent_name = self.handoff_agent or getattr(event, "agent", None) or recipient_agent
             caller_agent = getattr(event, "callerAgent", None)
             # Determine who the agent is speaking to (if caller_agent exists, respond to them, else to user)
             speaking_to = caller_agent if caller_agent else "user"
@@ -125,12 +126,15 @@ class ConsoleEventAdapter:
                                     "receiver": called_agent,
                                     "message": message,
                                 }
+                                self.handoff_agent = None
                             else:
                                 if item.type == "mcp_call":
                                     self._update_console("function_output", agent_name, "user", item.output)
                                 else:
                                     content = f"Calling {item.name} tool with: {item.arguments}"
                                     self._update_console("function", agent_name, "user", content)
+                                    if "transfer_to_" in item.name:
+                                        self.handoff_agent = item.name.replace("transfer_to_", "")
 
             # Tool outputs (except mcp calls)
             elif hasattr(event, "item"):

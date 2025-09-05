@@ -11,6 +11,11 @@ ngrok http http://localhost:8000
 
 Then update the server_url in the tool_config to the ngrok url.
 Additionally, you can set up custom APP_TOKEN in .env file for auth, otherwise the token will be set to "test_token_123".
+
+Run the example with: python examples/mcp_server_example.py
+It will ask the agent to use tools from both mcp servers and present the results.
+
+IF you do not want to run the public mcp server, you can comment out the public_mcp_server_example() call in the main function below.
 """
 
 import asyncio

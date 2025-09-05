@@ -1,11 +1,24 @@
-#!/usr/bin/env python3
 """
-Simple FileSearch Example - Agency Swarm v1.x
+File Search Example - Agency Swarm v1.x
 
-This example demonstrates how to attach a file storage to an agent.
-The agent automatically creates a vector store and uses FileSearch tool to query it.
+This example demonstrates how to enable file search capabilities for an agent by attaching
+a file storage with automatic vector store processing.
+
+Key Features:
+- Automatic file processing and vector store creation from a files_folder directory
+- Smart tool assignment based on file types:
+  * CodeInterpreterTool for code and data files
+  * FileSearchTool for text documents and PDFs
+- Incremental file processing on agent reinitialization
+
+How it works:
+1. Files from the specified directory are processed and added to a vector store
+2. The files folder is automatically renamed to include the vector store ID
+3. On subsequent runs, the system scans for new files and adds them to the existing store
+4. The agent can search across all files and provide citations for its answers
+
+Note: You don't need to update the agent's files_folder parameter when the folder is renamed.
 """
-
 import asyncio
 import os
 import shutil
@@ -85,18 +98,11 @@ async def main():
         # Check if we got the expected answer
         if "7401" in response.final_output:
             print("✅ Correct answer found!")
-        else:
-            print("ℹ️  Try different questions from the research data")
 
         message = "Extract data from the sample_report.pdf file"
         print(f"\n❓ Query: {message}")
         response = await agency.get_response(message)
         print(f"🤖 Answer: {response.final_output}")
-
-        if "secret phrase" in str(response.final_output).lower():
-            print("✅ Secret phrase found!")
-        else:
-            print("ℹ️  Try different questions from the research data")
 
     except Exception as e:
         print(f"❌ Error: {e}")
@@ -107,6 +113,7 @@ async def main():
             print(f"🧹 Cleaned up test folder: {docs_dir}")
 
     print("\n🎯 Key Takeaways:")
+    print("   • Files from the given folder are processed and added to a vector store")
     print("   • Agent is capable of analyzing all files from the given folder")
     print("   • Use citations to find files that were used to answer the query")
 
