@@ -15,6 +15,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from agency_swarm import Agency, Agent, RunContextWrapper, function_tool
+from agency_swarm.tools import SendMessageHandoff
 
 
 @function_tool()
@@ -59,10 +60,9 @@ def create_demo_agency():
     agency = Agency(
         ceo,  # Entry point agent (positional argument)
         communication_flows=[
-            (ceo > pm),  # CEO can communicate with PM
-            (pm > dev),  # PM can communicate with Developer
-            (pm > qa),  # PM can communicate with QA
-            (dev > qa),  # Developer can communicate with QA
+            (dev < ceo > pm > dev),  # Multi-agent communication flow example
+            (dev > qa, SendMessageHandoff),  # Developer can communicate with QA using handoff
+
         ],
         name="Software Development Agency",
         shared_instructions="This is a software development agency with clear hierarchy and communication flows.",

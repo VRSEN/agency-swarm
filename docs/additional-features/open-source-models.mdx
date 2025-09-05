@@ -175,12 +175,12 @@ gemini_agent = Agent(
     )
 )
 
-claude_agent = Agent(
-    name="ClaudeAgent",
+grok_agent = Agent(
+    name="GrokAgent",
     instructions="You are a helpful assistant",
     model=LitellmModel(
-      model="anthropic/claude-sonnet-4-20250514",
-      api_key=os.getenv("ANTHROPIC_API_KEY"),
+      model="xai/grok-4-0709",
+      api_key=os.getenv("XAI_API_KEY"),
       extra_body={
         "search_parameters": {
           "mode": "on", "returnCitations": True
@@ -190,7 +190,7 @@ claude_agent = Agent(
 )
 ```
 
-Here both claude and gemini agents will be able to use their native search tools, which are similar to openai's WebSearch() tool. Consider checking out [LiteLLM's documentation](https://docs.litellm.ai/docs) to find a full list of supported tools.
+Here both grok and gemini agents will be able to use their native search tools, which are similar to openai's WebSearch() tool. Consider checking out [LiteLLM's documentation](https://docs.litellm.ai/docs) to find a full list of supported tools.
 
 </Tab>
 
