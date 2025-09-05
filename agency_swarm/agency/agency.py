@@ -1582,10 +1582,9 @@ class Agency:
                     subtask_input = {
                         "title": next_task['title'],
                         "description": next_task['description'],
-                        "total_task_graph": task_graph_json,
                     }
-
-                    # self.update_context("subtask_plan_input", {"task_id": next_task_id, "title": next_task.get("title"), "description": next_task.get("description")})
+                        # "total_task_graph": task_graph_json,
+                    
                     self.update_context_tree(
                         request_id = request_id,
                         task_id = next_task_id,
@@ -1643,10 +1642,9 @@ class Agency:
                                 steps_input = {
                                     "title": next_subtask['title'],
                                     "description": next_subtask['description'],
-                                    "total_subtask_graph": subtask_graph_json,
                                 }
-
-                                # self.update_context("step_plan_input", {"subtask_id": next_subtask_id, "title": next_subtask.get("title"), "description": next_subtask.get("description")})
+                                    # "total_subtask_graph": subtask_graph_json,
+                                
                                 self.update_context_tree (
                                     request_id = request_id,
                                     task_id = next_task_id,

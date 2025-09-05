@@ -4,12 +4,12 @@ def planner_instruction(_group_name, _input_format, _agents, _output_format):
 输入格式如下: 
 {_input_format}
 
-其中，"title"和"description"字段描述了本次需要规划的subtask，"total_subtask_graph"将描述所有subtask的规划图，包括subtask信息和依赖关系。你接下来对本次subtask进行各个step的规划，**且不要与其它的subtask冲突或重复**。
+其中，"title"和"description"字段描述了本次需要规划的subtask，你接下来对本次subtask进行各个step的规划。
 
 # 规划开始之前，你需要判断本次subtask是否与文字输出有关（例如：输出复盘报告、输出预案、输出自动化脚本等），如果有关，你需要将相关信息传递给监控能力群中的文本输出agent来进行输出（只有这一个step），不需要规划其他任何多余的step。
 
 同时，你需要先调用工具`ReadJsonFile`从context_tree.json中读取上下文信息（直接调用工具，不要把它规划为一个step）。其中，"status"为"completed"的表示已经完成，"status"为"executing"的表示当前正在执行，"status"为"pending"的表示还未执行。
-获取以上信息后，你需要判断本次subtask是否与之前**已完成的过程**有关，如果有关，从上下文信息中提取有用信息，并结合该信息进行后续的规划。
+获取以上信息后，你需要判断本次subtask是否与**"status"为"completed"的过程**有关，如果有关，从上下文信息中提取有用信息，并结合该信息进行后续的规划。
 
 请严谨专业地一步步思考: 完成该subtask需要哪些step，每个step分别需要哪个能力Agent来操作，你必须确保规划的step**不能与其他任何任务（task）或者子任务（subtask）的内容有重复**。
 
