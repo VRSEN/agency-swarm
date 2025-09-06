@@ -1,10 +1,10 @@
 """
-An example of running an agency with a local and a public mcp server.
+An example of running an agency with a local and a public MCP server.
 
-This example connects to the pre-made mcp servers with custom tools
+This example connects to the pre-made MCP servers with custom tools
 that can be found at examples/utils/stdio_mcp_server.py and examples/utils/sse_mcp_server.py
 
-The public mcp server is running on port 8000 and can be accessed at http://localhost:8000/sse/
+The public MCP server is running on port 8000 and can be accessed at http://localhost:8000/sse/
 You'll need to use ngrok to expose the server to the internet prior to running this example.
 Use the following command to start ngrok:
 ngrok http http://localhost:8000
@@ -13,9 +13,9 @@ Then update the server_url in the tool_config to the ngrok url.
 Additionally, you can set up custom APP_TOKEN in .env file for auth, otherwise the token will be set to "test_token_123".
 
 Run the example with: python examples/mcp_server_example.py
-It will ask the agent to use tools from both mcp servers and present the results.
+It will ask the agent to use tools from both MCP servers and present the results.
 
-IF you do not want to run the public mcp server, you can comment out the public_mcp_server_example() call in the main function below.
+IF you do not want to run the public MCP server, you can comment out the public_mcp_server_example() call in the main function below.
 """
 
 import asyncio
@@ -92,9 +92,9 @@ async def local_mcp_server_example():
     print("Running local MCP server example")
     print("-" * 25)
     message = "Get unique id and then current time in Europe/Amsterdam"
-    print(f"💬 Sending message: {message}")
+    print(f"Sending message: {message}")
     response = await agency_local.get_response(message)
-    print(f"🤖 Answer: {response.final_output}")
+    print(f"Answer: {response.final_output}")
     print("\nIf you see the time and id in the answer, that means agent used the local MCP server successfully")
     print("Local MCP server example completed\n")
     print("-" * 25 + "\n")
@@ -126,7 +126,7 @@ async def public_mcp_server_example():
 
 
 if __name__ == "__main__":
-    print("🚀 MCP Server Example")
+    print("MCP Server Example")
     print("=" * 50)
     asyncio.run(local_mcp_server_example())
     asyncio.run(public_mcp_server_example())  # <- comment this out if you want to run local example only

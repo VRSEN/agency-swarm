@@ -1,5 +1,5 @@
 """
-File Search Example - Agency Swarm v1.x
+File Search Example
 
 This example demonstrates how to enable file search capabilities for an agent by attaching
 a file storage with automatic vector store processing.
@@ -19,6 +19,7 @@ How it works:
 
 Note: You don't need to update the agent's files_folder parameter when the folder is renamed.
 """
+
 import asyncio
 import os
 import shutil
@@ -35,7 +36,7 @@ from agency_swarm.utils.citation_extractor import display_citations, extract_vec
 async def main():
     """Demonstrate FileSearch functionality with citations."""
 
-    print("🚀 Simple FileSearch Example")
+    print("Simple FileSearch Example")
     print("=" * 30)
 
     # Use the data directory with research files
@@ -48,7 +49,7 @@ async def main():
         if docs_dir.exists():
             shutil.rmtree(docs_dir)
         shutil.copytree(original_docs_dir, docs_dir)
-        print(f"📂 Copied data folder to: {docs_dir}")
+        print(f"Copied data folder to: {docs_dir}")
     else:
         print(f"❌ Error: Original data directory not found: {original_docs_dir}")
         return
@@ -59,7 +60,7 @@ async def main():
         return
 
     all_files = [f for f in docs_dir.iterdir() if f.is_file()]
-    print(f"📁 Found {len(all_files)} file(s) in: {docs_dir}")
+    print(f"Found {len(all_files)} file(s) in: {docs_dir}")
 
     # Create an agent that can search files with citations
     search_agent = Agent(
@@ -80,7 +81,7 @@ async def main():
     )
 
     # Wait for file processing
-    print("⏳ Processing files...")
+    print("Processing files...")
     await asyncio.sleep(3)
 
     # Test search with a specific question
@@ -89,7 +90,7 @@ async def main():
         message = "What is the badge number for Marcus Chen?"
         print(f"\n❓ Query: {message}")
         response = await agency.get_response(message)
-        print(f"🤖 Answer: {response.final_output}")
+        print(f"Answer: {response.final_output}")
 
         # Extract and display citations using the utility function
         citations = extract_vector_store_citations(response)
@@ -110,9 +111,9 @@ async def main():
         # Cleanup the test data folder
         if docs_dir.exists():
             shutil.rmtree(docs_dir)
-            print(f"🧹 Cleaned up test folder: {docs_dir}")
+            print(f"Cleaned up test folder: {docs_dir}")
 
-    print("\n🎯 Key Takeaways:")
+    print("\nKey Points:")
     print("   • Files from the given folder are processed and added to a vector store")
     print("   • Agent is capable of analyzing all files from the given folder")
     print("   • Use citations to find files that were used to answer the query")

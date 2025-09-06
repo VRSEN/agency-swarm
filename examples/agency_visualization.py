@@ -3,8 +3,7 @@
 Agency Swarm Visualization Demo
 
 This example demonstrates the interactive HTML visualization capabilities of Agency Swarm v1.x.
-Creates a beautiful, interactive HTML file showing your agency structure with drag & drop,
-zoom, and professional styling.
+It generates an interactive HTML file showing your agency structure with drag & drop and zoom.
 """
 
 import os
@@ -62,7 +61,6 @@ def create_demo_agency():
         communication_flows=[
             (dev < ceo > pm > dev),  # Multi-agent communication flow example
             (dev > qa, SendMessageHandoff),  # Developer can communicate with QA using handoff
-
         ],
         name="Software Development Agency",
         shared_instructions="This is a software development agency with clear hierarchy and communication flows.",
@@ -73,7 +71,7 @@ def create_demo_agency():
 
 def main():
     """Generate interactive HTML visualization demo"""
-    print("🚀 Agency Swarm Interactive Visualization Demo")
+    print("Agency Swarm Visualization Demo")
     print("=" * 50)
     print()
 
@@ -95,13 +93,13 @@ def main():
 
         file_size = os.path.getsize(html_file)
         print(f"  ✅ Generated: {html_file} ({file_size:,} bytes)")
-        print("  📱 Features: Interactive drag & drop, zoom, professional styling")
-        print("  📊 Includes: Agency statistics, communication flows, tool information")
+        print("  Features: Interactive drag & drop, zoom")
+        print("  Includes: Agency statistics, communication flows, tool information")
         print()
 
-        print("🎉 Demo completed successfully!")
-        print(f"📁 Output file saved in: {os.getcwd()}")
-        print("🌐 The HTML file should have opened in your browser automatically.")
+        print("Demo completed successfully.")
+        print(f"Output file saved in: {os.getcwd()}")
+        print("If open_browser=True, the HTML should open in your browser.")
 
     except Exception as e:
         print(f"❌ Demo failed with error: {e}")

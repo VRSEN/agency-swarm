@@ -71,10 +71,10 @@ def create_agency(load_threads_callback=None):
 # --- Main --- #
 
 if __name__ == "__main__":
-    print("🚀 Starting FastAPI server for Agency Swarm")
+    print("Starting FastAPI server for Agency Swarm")
     print("=" * 50)
     print("📍 Server will run at: http://localhost:8080")
-    print("📝 Available endpoints:")
+    print("Available endpoints:")
     print("  - POST /my-agency/get_response")
     print("  - POST /my-agency/get_response_stream (SSE)")
     print("  - GET /my-agency/get_metadata")

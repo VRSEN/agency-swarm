@@ -154,15 +154,15 @@ def print_send_message_args(agency, agent_name: str) -> None:
 
 async def main():
     """Demonstrate key decisions being passed via custom SendMessage."""
-    print("\n=== SendMessageWithContext Key Decisions Demo ===")
+    print("\nSendMessageWithContext Key Decisions Demo")
 
     # Turn 1: Initial discussion
     print("\n--- Turn 1: Send Message tool usage ---")
     initial_message = "Our Q4 operations need optimization. I want to focus on cost reduction."
 
-    print(f"💬 User: {initial_message}")
+    print(f"User: {initial_message}")
     response1 = await agency.get_response(message=initial_message)
-    print(f"🎯 Coordinator: {response1.final_output}")
+    print(f"Coordinator: {response1.final_output}")
     print("\nSend Message arguments:")
     print_send_message_args(agency, "Coordinator")
 
@@ -170,15 +170,15 @@ async def main():
     print("\n--- Turn 2: Handoff usage ---")
     delegate_message = "I've decided to prioritize performance analysis for Q4. Use the corresponding tool and transfer chat to the coordinator."
 
-    print(f"💬 Sending message to \033[32m{specialist.name}\033[0m: {delegate_message}")
+    print(f"Sending message to \033[32m{specialist.name}\033[0m: {delegate_message}")
     response2 = await agency.get_response(message=delegate_message, recipient_agent=specialist)
-    print(f"🎯 \033[32m{response2.last_agent.name}\033[0m responded with: {response2.final_output}")
+    print(f"\033[32m{response2.last_agent.name}\033[0m responded with: {response2.final_output}")
 
-    print("""\n --- Key Takeaways: ---
-Inspecting the prints you can notice 2 main things, which are hinted with the green text:
-1. Coordinator agent's send message arguments contain custom-defined fields, which means it was using SendMessageWithContext tool
-2. User message in 2nd turn was passed to Specialist agent, but response came from Coordinator agent, which means Specialist agent used handoff to pass the message to Coordinator agent
-    """)
+    print(
+        "\n --- Key Takeaways: ---\n"
+        "1. Coordinator agent's send message arguments include custom fields (SendMessageWithContext).\n"
+        "2. The 2nd turn message is addressed to Specialist, but the final response is from Coordinator (handoff).\n"
+    )
 
 
 if __name__ == "__main__":
