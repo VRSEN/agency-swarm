@@ -103,71 +103,26 @@ Agency Swarm supports two primary paradigms for inter-agent communication: direc
 
 To create your own communication flow, you will first need to extend the `FunctionTool` class from the agents SDK. In v1.x, the `SendMessage` class is built on top of `FunctionTool`, providing a flexible foundation for creating custom communication patterns tailored to your specific needs.
 
-### Default `SendMessage` Class
+### Custom SendMessage Class
 
-By default, Agency Swarm uses the following `FunctionTool`-based implementation for communication:
+To customize SendMessage parameters, extend the `SendMessage` class and declare additional fields using a Pydantic model:
 
 ```python
-from agency_swarm import FunctionTool
-import json
+from pydantic import BaseModel, Field
+from agency_swarm.tools.send_message import SendMessage
 
-class CustomSendMessage(FunctionTool):
+class CustomSendMessage(SendMessage):
     """
     Use this tool to facilitate direct, synchronous communication between specialized agents within your agency.
     """
+    
+    class ExtraParams(BaseModel):
+        key_moments: str = Field(description="Critical context and decision points relevant to the task")
+        decisions: str = Field(description="Specific decisions that guide tool choice and approach")
 
-    def __init__(self, sender_agent: "Agent", recipient_agent: "Agent", tool_name: str):
-        self.sender_agent = sender_agent
-        self.recipient_agent = recipient_agent
-
-        # Define JSON schema for tool parameters
-        params_schema = {
-            "type": "object",
-            "properties": {
-                "my_primary_instructions": {
-                    "type": "string",
-                    "description": (
-                        "Please repeat your primary instructions step-by-step, including both completed "
-                        "and the following next steps that you need to perform. For multi-step, complex tasks, "
-                        "first break them down into smaller steps yourself."
-                    ),
-                },
-                "message": {
-                    "type": "string",
-                    "description": (
-                        "Specify the task required for the recipient agent to complete. Focus on clarifying "
-                        "what the task entails, rather than providing exact instructions."
-                    ),
-                },
-                "additional_instructions": {
-                    "type": "string",
-                    "description": (
-                        "Optional. Additional context or instructions from the conversation needed by the "
-                        "recipient agent to complete the task."
-                    ),
-                },
-            },
-            "required": ["my_primary_instructions", "message", "additional_instructions"],
-        }
-
-        super().__init__(
-            name=tool_name,
-            description=f"{self.__doc__}\n\nRecipient role: {recipient_agent.description}",
-            params_json_schema=params_schema,
-            on_invoke_tool=self.on_invoke_tool,
-        )
-
-    async def on_invoke_tool(self, wrapper, arguments_json_string: str) -> str:
-        kwargs = json.loads(arguments_json_string)
-        message_content = kwargs.get("message")
-        additional_instructions = kwargs.get("additional_instructions", "")
-
-        response = await self.recipient_agent.get_response(
-            message=message_content,
-            sender_name=self.sender_agent.name,
-            additional_instructions=additional_instructions,
-        )
-        return response.final_output
+    def __init__(self, sender_agent, recipients=None):
+        super().__init__(sender_agent, recipients)
+        self.name = "send_message_custom"  # Optional: custom name for this tool
 ```
 
 ### Key Components
@@ -180,6 +135,7 @@ In general, all `SendMessage` tools in v1.x have the following components:
 4. **Async Communication**: Uses `async/await` for non-blocking communication between agents.
 
 When creating your own `SendMessage` tools, extend `FunctionTool` and implement the `on_invoke_tool` method with your custom communication logic.
+
 
 <Warning>
 If you are planning to create an agent that has access to multiple SendMessage tools (using communication flow pattern), each tool **must** have a unique name, which **must** start with `send_message`.

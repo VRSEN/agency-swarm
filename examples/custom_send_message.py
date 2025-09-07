@@ -21,6 +21,8 @@ import sys
 # Path setup so the example can be run standalone
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
+from pydantic import BaseModel, Field
+
 from agency_swarm import Agency, Agent, ModelSettings, function_tool
 from agency_swarm.tools.send_message import SendMessage, SendMessageHandoff
 
@@ -35,33 +37,30 @@ logging.getLogger("agency_swarm").setLevel(
 class SendMessageWithContext(SendMessage):
     """SendMessage with key moments and decisions tracking."""
 
-    def __init__(self, sender_agent: Agent, recipients: dict[str, Agent] | None = None) -> None:
-        super().__init__(sender_agent, recipients)
-        # Optionally set custom name for easier tracking (defaults to send_message)
-        self.name = "send_message_with_context"  # Name must start with send_message
-
-        # Add 2 additional fields to the params schema with rich descriptions
-        self.params_json_schema["properties"]["key_moments"] = {
-            "type": "string",
-            "description": (
+    class ExtraParams(BaseModel):
+        key_moments: str = Field(
+            description=(
                 "Document critical moments and decision points from the current conversation "
                 "that the recipient agent needs to understand. Include context about what "
                 "has been decided or prioritized that will guide the recipient's tool selection "
                 "and task execution. For example: 'User decided to prioritize performance over cost', "
                 "'Analysis focus shifted to Q4 optimization', etc."
-            ),
-        }
-        self.params_json_schema["properties"]["decisions"] = {
-            "type": "string",
-            "description": (
+            )
+        )
+        decisions: str = Field(
+            description=(
                 "Summarize the specific decisions made that will directly impact which tools "
                 "or approaches the recipient agent should use. Be explicit about choices that "
                 "narrow down the scope of work. For example: 'Prioritized performance analysis "
                 "over cost reduction', 'Selected React over Vue for frontend', etc. This helps "
                 "the recipient agent choose the most appropriate tools and approach."
-            ),
-        }
-        self.params_json_schema["required"].extend(["key_moments", "decisions"])
+            )
+        )
+
+    def __init__(self, sender_agent: Agent, recipients: dict[str, Agent] | None = None) -> None:
+        super().__init__(sender_agent, recipients)
+        # Optionally set custom name for easier tracking (defaults to send_message)
+        self.name = "send_message_with_context"  # Name must start with send_message
 
 
 # Define tools for testing
@@ -154,15 +153,15 @@ def print_send_message_args(agency, agent_name: str) -> None:
 
 async def main():
     """Demonstrate key decisions being passed via custom SendMessage."""
-    print("\n=== SendMessageWithContext Key Decisions Demo ===")
+    print("\nSendMessageWithContext Key Decisions Demo")
 
     # Turn 1: Initial discussion
     print("\n--- Turn 1: Send Message tool usage ---")
     initial_message = "Our Q4 operations need optimization. I want to focus on cost reduction."
 
-    print(f"💬 User: {initial_message}")
+    print(f"User: {initial_message}")
     response1 = await agency.get_response(message=initial_message)
-    print(f"🎯 Coordinator: {response1.final_output}")
+    print(f"Coordinator: {response1.final_output}")
     print("\nSend Message arguments:")
     print_send_message_args(agency, "Coordinator")
 
@@ -170,15 +169,15 @@ async def main():
     print("\n--- Turn 2: Handoff usage ---")
     delegate_message = "I've decided to prioritize performance analysis for Q4. Use the corresponding tool and transfer chat to the coordinator."
 
-    print(f"💬 Sending message to \033[32m{specialist.name}\033[0m: {delegate_message}")
+    print(f"Sending message to \033[32m{specialist.name}\033[0m: {delegate_message}")
     response2 = await agency.get_response(message=delegate_message, recipient_agent=specialist)
-    print(f"🎯 \033[32m{response2.last_agent.name}\033[0m responded with: {response2.final_output}")
+    print(f"\033[32m{response2.last_agent.name}\033[0m responded with: {response2.final_output}")
 
-    print("""\n --- Key Takeaways: ---
-Inspecting the prints you can notice 2 main things, which are hinted with the green text:
-1. Coordinator agent's send message arguments contain custom-defined fields, which means it was using SendMessageWithContext tool
-2. User message in 2nd turn was passed to Specialist agent, but response came from Coordinator agent, which means Specialist agent used handoff to pass the message to Coordinator agent
-    """)
+    print(
+        "\n --- Key Takeaways: ---\n"
+        "1. Coordinator agent's send message arguments include custom fields (SendMessageWithContext).\n"
+        "2. The 2nd turn message is addressed to Specialist, but the final response is from Coordinator (handoff).\n"
+    )
 
 
 if __name__ == "__main__":

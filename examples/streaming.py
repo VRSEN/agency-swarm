@@ -101,8 +101,8 @@ agency = create_demo_agency()
 
 async def stream_response(message: str):
     """Stream a response and handle events properly."""
-    print(f"\n🔥 Streaming: {message}")
-    print("📡 Response: ", end="", flush=True)
+    print(f"\nStreaming: {message}")
+    print("Response: ", end="", flush=True)
 
     full_text = ""
     event_count = 0
@@ -139,10 +139,10 @@ async def stream_response(message: str):
                 break
 
     if DEBUG_MODE:
-        print(f"\n📊 Total events received: {event_count}")
+        print(f"\nTotal events received: {event_count}")
 
     print("\n✅ Stream complete")
-    print(f"📋 Total: {len(full_text)} characters streamed")
+    print(f"Total: {len(full_text)} characters streamed")
     return full_text
 
 
@@ -151,13 +151,13 @@ async def stream_response(message: str):
 
 async def main():
     """Run simple streaming demo."""
-    print("🌟 Agency Swarm Streaming Demo")
+    print("Agency Swarm Streaming Demo")
     print("=" * 40)
-    print("🎯 Watch text stream in real-time!")
+    print("Watch text stream in real-time.")
 
     await stream_response("What's the weather in London?")
 
-    print("\n🎉 Demo complete!")
+    print("\nDemo complete!")
 
 
 if __name__ == "__main__":

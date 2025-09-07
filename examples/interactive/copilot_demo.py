@@ -51,7 +51,7 @@ def create_demo_agency():
 
 def main():
     """Launch interactive Copilot demo"""
-    print("🚀 Agency Swarm Copilot Demo")
+    print("Agency Swarm Copilot Demo")
     print("=" * 50)
     print()
 

@@ -43,7 +43,7 @@ def test_regular_endpoint():
 
         # Show new messages with agent metadata
         new_messages = data.get("new_messages", [])
-        print(f"\n📋 New messages added ({len(new_messages)} total):")
+        print(f"\nNew messages added ({len(new_messages)} total):")
         for i, msg in enumerate(new_messages, 1):
             print(f"\n  Message {i}:")
             print(f"    Agent: {msg.get('agent', 'N/A')}")
@@ -83,13 +83,13 @@ def test_streaming_endpoint():
     }
 
     print(f"\n📤 Request: {payload['message']}")
-    print("\n🔄 Streaming events:")
+    print("\nStreaming events:")
 
     # Make streaming request
     response = requests.post(url, json=payload, stream=True)
 
     if response.status_code == 200:
-        print("🎯 Streaming response:")
+        print("Streaming response:")
         accumulated_text = ""
         add_newline = False
         for line in response.iter_lines():
@@ -129,7 +129,7 @@ def test_streaming_endpoint():
                             # Skip malformed JSON
                             pass
 
-        print(f"\n📊 Summary: Received {len(accumulated_text)} characters")
+        print(f"\nSummary: Received {len(accumulated_text)} characters")
     else:
         print(f"❌ Error: {response.status_code}")
         print(response.text)
@@ -147,7 +147,7 @@ def test_metadata_endpoint():
 
     if response.status_code == 200:
         metadata = response.json()
-        print("\n📊 Agency Structure:")
+        print("\nAgency Structure:")
         print(json.dumps(metadata, indent=2))
     else:
         print(f"❌ Error: {response.status_code}")
