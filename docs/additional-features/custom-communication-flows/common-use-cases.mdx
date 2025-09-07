@@ -11,32 +11,30 @@ In the following sections, we'll look at some common use cases for creating cust
 
 #### 1. Adjusting Parameters and Descriptions
 
-You can customize the communication parameters by extending the base `SendMessage` class and modifying the JSON schema:
+Customize parameters by subclassing `SendMessage` and declaring extra fields via a Pydantic model. Avoid mutating JSON schema directly:
 
 ```python
+from pydantic import BaseModel, Field
 from agency_swarm.tools.send_message import SendMessage
 
 class SendMessageTask(SendMessage):
     """Use this tool to send tasks to other agents within your agency."""
 
-    def __init__(self, sender_agent, recipient_agent, tool_name):
-        super().__init__(sender_agent, recipient_agent, tool_name)
+    class ExtraParams(BaseModel):
+        chain_of_thought: str = Field(
+            description=(
+                "Think step-by-step about how to solve your current task, then break it down into smaller steps for the recipient agent."
+            )
+        )
+        task: str = Field(
+            description=(
+                "Specify the task required for the recipient agent to complete. Focus on clarifying what the task entails rather than providing exact instructions."
+            )
+        )
 
-        # Replace the existing schema with custom parameters
-        self.params_json_schema = {
-            "type": "object",
-            "properties": {
-                "chain_of_thought": {
-                    "type": "string",
-                    "description": "Think step-by-step about how to solve your current task, then break it down into smaller steps for the recipient agent."
-                },
-                "task": {
-                    "type": "string",
-                    "description": "Specify the task required for the recipient agent to complete. Focus on clarifying what the task entails rather than providing exact instructions."
-                }
-            },
-            "required": ["chain_of_thought", "task"]
-        }
+    def __init__(self, sender_agent, recipients=None):
+        super().__init__(sender_agent, recipients)
+        self.name = "send_message_task"
 ```
 
 #### 2. Adding Additional Fields
@@ -44,34 +42,35 @@ class SendMessageTask(SendMessage):
 You can add extra fields to capture more context, like key moments and decisions:
 
 ```python
+from pydantic import BaseModel, Field
+from agency_swarm.tools.send_message import SendMessage
+
 class SendMessageWithContext(SendMessage):
     """SendMessage with key moments and decisions tracking."""
 
-    def __init__(self, sender_agent, recipient_agent, tool_name):
-        super().__init__(sender_agent, recipient_agent, tool_name)
-
-        # Add additional fields to the existing schema
-        self.params_json_schema["properties"]["key_moments"] = {
-            "type": "string",
-            "description": (
+    class ExtraParams(BaseModel):
+        key_moments: str = Field(
+            description=(
                 "Document critical moments and decision points from the current conversation "
                 "that the recipient agent needs to understand. Include context about what "
                 "has been decided or prioritized that will guide the recipient's tool selection "
                 "and task execution. For example: 'User decided to prioritize performance over cost', "
                 "'Analysis focus shifted to Q4 optimization', etc."
-            ),
-        }
-        self.params_json_schema["properties"]["decisions"] = {
-            "type": "string",
-            "description": (
+            )
+        )
+        decisions: str = Field(
+            description=(
                 "Summarize the specific decisions made that will directly impact which tools "
                 "or approaches the recipient agent should use. Be explicit about choices that "
                 "narrow down the scope of work. For example: 'Prioritized performance analysis "
                 "over cost reduction', 'Selected React over Vue for frontend', etc. This helps "
                 "the recipient agent choose the most appropriate tools and approach."
-            ),
-        }
-        self.params_json_schema["required"].extend(["key_moments", "decisions"])
+            )
+        )
+
+    def __init__(self, sender_agent, recipients=None):
+        super().__init__(sender_agent, recipients)
+        self.name = "send_message_with_context"
 ```
 In v1.x, use guardrails; `llm_validator` is v0.x (see https://openai.github.io/openai-agents-python/guardrails/).
 

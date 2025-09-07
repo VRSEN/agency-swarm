@@ -39,6 +39,8 @@ import sys
 # Path setup so the example can be run standalone
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
+from pydantic import BaseModel, Field
+
 from agency_swarm import Agency, Agent, ModelSettings, function_tool
 from agency_swarm.tools.send_message import SendMessage, SendMessageHandoff
 
@@ -48,21 +50,25 @@ logging.getLogger("agency_swarm").setLevel(
     logging.DEBUG if os.getenv("DEBUG_LOGS", "False").lower() == "true" else logging.WARNING
 )
 
+
 # Define tools for the agents
 @function_tool
 def review_code_quality(code_snippet: str) -> str:
     """Review code for quality, best practices, and potential improvements."""
     return f"Code quality review complete for {len(code_snippet)} characters. Found 2 minor improvements: variable naming and error handling."
 
+
 @function_tool
 def implement_feature(feature_name: str) -> str:
     """Implement a software feature with basic structure."""
     return f"Feature '{feature_name}' implemented with authentication middleware, input validation, and error handling."
 
+
 @function_tool
 def security_audit(component: str) -> str:
     """Perform comprehensive security audit of a component."""
     return f"Security audit complete for {component}. Found: 1 SQL injection vulnerability, 2 XSS risks, authentication bypass potential. Recommendations provided."
+
 
 @function_tool
 def vulnerability_scan(target: str) -> str:
@@ -74,27 +80,23 @@ def vulnerability_scan(target: str) -> str:
 class SendMessageWithProjectContext(SendMessage):
     """SendMessage with project context tracking."""
 
+    class ExtraParams(BaseModel):
+        project_phase: str = Field(
+            description=(
+                "Current phase of the project (planning, development, testing, security_review, deployment). "
+                "This helps the recipient understand the urgency and focus area for their response."
+            )
+        )
+        priority_level: str = Field(
+            description=(
+                "Priority level of this task. Critical items need immediate attention, "
+                "high priority items should be completed within the day."
+            )
+        )
+
     def __init__(self, sender_agent: Agent, recipients: dict[str, Agent] | None = None) -> None:
         super().__init__(sender_agent, recipients)
         self.name = "send_message_with_context"
-
-        # Add project context fields
-        self.params_json_schema["properties"]["project_phase"] = {
-            "type": "string",
-            "description": (
-                "Current phase of the project (planning, development, testing, security_review, deployment). "
-                "This helps the recipient understand the urgency and focus area for their response."
-            ),
-        }
-        self.params_json_schema["properties"]["priority_level"] = {
-            "type": "string",
-            "enum": ["low", "medium", "high", "critical"],
-            "description": (
-                "Priority level of this task. Critical items need immediate attention, "
-                "high priority items should be completed within the day."
-            ),
-        }
-        self.params_json_schema["required"].extend(["project_phase", "priority_level"])
 
 
 project_manager = Agent(

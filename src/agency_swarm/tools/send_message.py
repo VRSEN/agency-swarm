@@ -10,9 +10,10 @@ recipient details.
 import asyncio
 import json
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from agents import FunctionTool, InputGuardrailTripwireTriggered, RunContextWrapper, handoff
+from pydantic import BaseModel, ValidationError
 
 from ..context import MasterContext
 from ..streaming.utils import add_agent_name_to_event
@@ -63,7 +64,7 @@ class SendMessage(FunctionTool):
         recipient_enum = [agent.name for agent in recipient_names] if recipient_names else []
 
         # Rich parameter schema incorporating all field descriptions
-        params_schema = {
+        params_schema: dict[str, Any] = {
             "type": "object",
             "properties": {
                 "recipient_agent": {
@@ -103,6 +104,37 @@ class SendMessage(FunctionTool):
             "required": ["recipient_agent", "my_primary_instructions", "message", "additional_instructions"],
             "additionalProperties": False,
         }
+
+        # Allow subclasses to define extra params via Pydantic
+        # Two supported patterns:
+        # 1) Nested class `ExtraParams(BaseModel)` on the subclass
+        # 2) Class attribute `extra_params_model = MyModel`
+        self._extra_params_model: type[BaseModel] | None = None
+        extra_model: Any = getattr(self.__class__, "ExtraParams", None) or getattr(
+            self.__class__, "extra_params_model", None
+        )
+        try:
+            if extra_model and isinstance(extra_model, type) and issubclass(extra_model, BaseModel):
+                # Merge model schema into params schema
+                model_schema: dict[str, Any] = extra_model.model_json_schema()  # type: ignore[assignment]
+                # Only use field-level schema content
+                model_properties: dict[str, Any] = model_schema.get("properties", {})
+                model_required: list[str] = list(model_schema.get("required", []))
+
+                # Apply properties and required
+                if isinstance(model_properties, dict) and model_properties:
+                    params_schema["properties"].update(model_properties)
+                if isinstance(model_required, list) and model_required:
+                    # Ensure unique while preserving order
+                    existing_required: list[str] = list(params_schema.get("required", []))
+                    for field_name in model_required:
+                        if field_name not in existing_required:
+                            existing_required.append(field_name)
+                    params_schema["required"] = existing_required
+
+                self._extra_params_model = extra_model
+        except Exception as e:
+            logger.warning(f"Failed to merge ExtraParams model into schema for '{name}': {e}")
 
         # Build description with all recipient roles
         description_parts = [self.__doc__ or "Send a message to another agent."]
@@ -227,6 +259,19 @@ class SendMessage(FunctionTool):
         message_content = kwargs.get("message")
         my_primary_instructions = kwargs.get("my_primary_instructions")
         additional_instructions = kwargs.get("additional_instructions", "")
+
+        # Validate extra params, if a Pydantic model was provided by subclass
+        model_cls = getattr(self, "_extra_params_model", None)
+        if model_cls is not None:
+            try:
+                # Only pass fields known to the model
+                model_fields = set(model_cls.model_fields.keys())
+                model_input = {k: v for k, v in kwargs.items() if k in model_fields}
+                # Instantiate to trigger validation; we don't use the instance further here
+                model_cls(**model_input)
+            except ValidationError as e:
+                logger.error(f"Invalid extra SendMessage parameters: {e}")
+                return f"Error: Invalid extra parameters for tool {self.name}. Details: {e}"
 
         if not recipient_agent_name:
             logger.error(f"Tool '{self.name}' invoked without 'recipient_agent' parameter.")

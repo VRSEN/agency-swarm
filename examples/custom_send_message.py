@@ -21,6 +21,8 @@ import sys
 # Path setup so the example can be run standalone
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
+from pydantic import BaseModel, Field
+
 from agency_swarm import Agency, Agent, ModelSettings, function_tool
 from agency_swarm.tools.send_message import SendMessage, SendMessageHandoff
 
@@ -35,33 +37,30 @@ logging.getLogger("agency_swarm").setLevel(
 class SendMessageWithContext(SendMessage):
     """SendMessage with key moments and decisions tracking."""
 
-    def __init__(self, sender_agent: Agent, recipients: dict[str, Agent] | None = None) -> None:
-        super().__init__(sender_agent, recipients)
-        # Optionally set custom name for easier tracking (defaults to send_message)
-        self.name = "send_message_with_context"  # Name must start with send_message
-
-        # Add 2 additional fields to the params schema with rich descriptions
-        self.params_json_schema["properties"]["key_moments"] = {
-            "type": "string",
-            "description": (
+    class ExtraParams(BaseModel):
+        key_moments: str = Field(
+            description=(
                 "Document critical moments and decision points from the current conversation "
                 "that the recipient agent needs to understand. Include context about what "
                 "has been decided or prioritized that will guide the recipient's tool selection "
                 "and task execution. For example: 'User decided to prioritize performance over cost', "
                 "'Analysis focus shifted to Q4 optimization', etc."
-            ),
-        }
-        self.params_json_schema["properties"]["decisions"] = {
-            "type": "string",
-            "description": (
+            )
+        )
+        decisions: str = Field(
+            description=(
                 "Summarize the specific decisions made that will directly impact which tools "
                 "or approaches the recipient agent should use. Be explicit about choices that "
                 "narrow down the scope of work. For example: 'Prioritized performance analysis "
                 "over cost reduction', 'Selected React over Vue for frontend', etc. This helps "
                 "the recipient agent choose the most appropriate tools and approach."
-            ),
-        }
-        self.params_json_schema["required"].extend(["key_moments", "decisions"])
+            )
+        )
+
+    def __init__(self, sender_agent: Agent, recipients: dict[str, Agent] | None = None) -> None:
+        super().__init__(sender_agent, recipients)
+        # Optionally set custom name for easier tracking (defaults to send_message)
+        self.name = "send_message_with_context"  # Name must start with send_message
 
 
 # Define tools for testing
