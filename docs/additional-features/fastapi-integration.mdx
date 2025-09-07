@@ -59,10 +59,16 @@ Optionally, you can specify following parameters:
 - app_token_env (default: `"APP_TOKEN"`) - Name of the env variable storing app token.
 - return_app (default: False) - If True, will return the FastAPI instead of running the server
 - cors_origins: (default: ["*"])
+- enable_agui (default: `False`) - Enable AG-UI protocol compatibility for streaming endpoints
+- enable_logging (default: `False`) - Enable request tracking and expose `/get_logs` endpoint
+- logs_dir (default: `"activity-logs"`) - Directory for log files when logging is enabled
 
-This will create 2 endpoints for the agency:
+This will create 3 endpoints for the agency:
 - `/test_agency/get_response`
 - `/test_agency/get_response_stream`
+- `/test_agency/get_metadata`
+
+If `enable_logging=True`, a `/get_logs` endpoint is also added.
 
 Both of these endpoints will accept following input parameters:
 
@@ -70,8 +76,8 @@ Both of these endpoints will accept following input parameters:
 
 ```python v1.x
 message: str
-# Entire chat history containing previous messages across all threads in a form of {'thread_1': ConversationThread, 'thread_2': ConversationThread, ...}
-chat_history: dict[str, ConversationThread] = None
+# Entire chat history as a flat list of messages with metadata like 'agent', 'callerAgent' and 'timestamp'
+chat_history: list[dict[str, Any]] = None
 recipient_agent: str = None
 file_ids: list[str] = None
 # Files to download and attach to the agent. Should be provided in a form of a mapping: {"filename_1":"url", "filename_2":"url", ...}
@@ -118,12 +124,28 @@ def test_tool(example_field: str) -> str:
 agent1 = Agent(name="Assistant1", instructions="You are assistant 1.")
 agent2 = Agent(name="Assistant2", instructions="You are assistant 2.")
 
-# Create agencies
-agency1 = Agency(agent1, name="test_agency_1")
-agency2 = Agency(agent2, name="test_agency_2")
+# Create agency factory functions for proper thread management
+def create_agency_1(load_threads_callback=None, save_threads_callback=None):
+    return Agency(
+        agent1, 
+        name="test_agency_1",
+        load_threads_callback=load_threads_callback,
+        save_threads_callback=save_threads_callback,
+    )
+
+def create_agency_2(load_threads_callback=None, save_threads_callback=None):
+    return Agency(
+        agent2, 
+        name="test_agency_2",
+        load_threads_callback=load_threads_callback,
+        save_threads_callback=save_threads_callback,
+    )
 
 run_fastapi(
-    agencies=[agency1, agency2],
+    agencies={
+        "test_agency_1": create_agency_1,
+        "test_agency_2": create_agency_2,
+    },
     tools=[example_tool, test_tool],
 )
 ```
@@ -145,25 +167,45 @@ class TestTool(BaseTool):
   def run(self):
       return "Result of TestTool operation"
 
-# Create agencies
-agency1 = Agency([agent], name="test_agency_1")
-agency2 = Agency([agent], name="test_agency_2")
+# Create agency factory functions for proper thread management
+def create_agency_1(load_threads_callback=None, save_threads_callback=None):
+    return Agency(
+        [agent], 
+        name="test_agency_1",
+        load_threads_callback=load_threads_callback,
+        save_threads_callback=save_threads_callback,
+    )
+
+def create_agency_2(load_threads_callback=None, save_threads_callback=None):
+    return Agency(
+        [agent], 
+        name="test_agency_2",
+        load_threads_callback=load_threads_callback,
+        save_threads_callback=save_threads_callback,
+    )
 
 run_fastapi(
-    agencies=[agency_test_1, agency_test_2],
+    agencies={
+        "test_agency_1": create_agency_1,
+        "test_agency_2": create_agency_2,
+    },
     tools=[ExampleTool, TestTool],
 )
 ```
 
 </CodeGroup>
 
-This will create 6 following endpoints:
+This will create the following endpoints:
 - `/test_agency_1/get_response`
 - `/test_agency_1/get_response_stream`
+- `/test_agency_1/get_metadata`
 - `/test_agency_2/get_response`
 - `/test_agency_2/get_response_stream`
+- `/test_agency_2/get_metadata`
 - `/tool/ExampleTool` (for BaseTools) or `/tool/example_tool` (for function tools)
 - `/tool/TestTool` (for BaseTools) or `/tool/test_tool` (for function tools)
+
+If `enable_logging=True`, a `/get_logs` endpoint is also added.
 
 Inputs for the tool endpoints will follow their respective schemas.
 
@@ -237,11 +279,19 @@ print("Response:", tool_response.json())
   Each agency is served at:
   - `/your_agency_name/get_response` (POST)
   - `/your_agency_name/get_response_stream` (POST, streaming responses)
+  - `/your_agency_name/get_metadata` (GET)
 
 - **Tool Endpoints:**
   Each tool is served at:
   - `/tool/ToolClassName` (POST) - v0.x
   - `/tool/function_name` (POST) - v1.x
+
+- **Logging Endpoint:**
+  When `enable_logging=True`:
+  - `/get_logs` (POST)
+
+- **AG-UI Protocol:**
+  When `enable_agui=True`, only the streaming endpoint is exposed and follows the AG-UI protocol for enhanced frontend integration.
 
 ---
 

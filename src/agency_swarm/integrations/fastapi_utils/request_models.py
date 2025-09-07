@@ -23,6 +23,7 @@ class RunAgentInputCustom(RunAgentInput):
             "Each message should contain 'agent', 'callerAgent', 'timestamp' and other OpenAI fields."
         ),
     )
+    additional_instructions: str | None = None
 
 
 class BaseRequest(BaseModel):

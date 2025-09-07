@@ -239,6 +239,7 @@ def make_agui_chat_endpoint(request_model, agency_factory: Callable[..., Agency]
                 snapshot_messages = [message.model_dump() for message in request.messages]
                 async for event in agency.get_response_stream(
                     message=request.messages[-1].content,
+                    additional_instructions=request.additional_instructions,
                 ):
                     agui_event = agui_adapter.openai_to_agui_events(
                         event,
