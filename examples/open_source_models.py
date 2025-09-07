@@ -65,7 +65,7 @@ strategy_agent = Agent(
 
     Be decisive, practical, and always tie recommendations back to market data.
     """,
-    model="openai/gpt-4.1", # gpt-5 provides better results, but the example will take too long to run
+    model="openai/gpt-4.1",  # gpt-5 provides better results, but the example will take too long to run
 )
 
 market_research_agent = Agent(
@@ -125,7 +125,7 @@ agency = Agency(
     strategy_agent,  # Strategy agent acts as the coordinator
     communication_flows=[
         (strategy_agent > market_research_agent),  # Strategy requests market research
-        (strategy_agent > technical_agent),        # Strategy provides requirements to technical agent
+        (strategy_agent > technical_agent),  # Strategy provides requirements to technical agent
     ],
 )
 

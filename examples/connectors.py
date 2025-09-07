@@ -28,15 +28,17 @@ current_date = datetime.datetime.now()
 calendar_assistant = Agent(
     name="CalendarAssistant",
     instructions=f"You are an assistant that can access user's Google Calendar. Current date is {current_date}.",
-    tools=[HostedMCPTool(
-        tool_config={
-            "type": "mcp",
-            "server_label": "google_calendar",
-            "connector_id": "connector_googlecalendar",
-            "authorization": "your-oauth-token",
-            "require_approval": "never",
-        },
-    )],
+    tools=[
+        HostedMCPTool(
+            tool_config={
+                "type": "mcp",
+                "server_label": "google_calendar",
+                "connector_id": "connector_googlecalendar",
+                "authorization": "your-oauth-token",
+                "require_approval": "never",
+            },
+        )
+    ],
 )
 
 agency = Agency(calendar_assistant)

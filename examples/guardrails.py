@@ -69,6 +69,7 @@ async def require_support_prefix(
         tripwire_triggered=condition,
     )
 
+
 # Guardrail for the customer support agent
 @input_guardrail(name="RequireName")
 async def require_name(
@@ -80,13 +81,16 @@ async def require_name(
     # Check that input message contains the name of the customer support agent
     condition = "alice" not in input_message.lower()
     return GuardrailFunctionOutput(
-        output_info="When chatting with this agent, provide your name (which is Alice), for example, 'Hello, I'm Alice.' Adjust your input and try again." if condition else "",
+        output_info="When chatting with this agent, provide your name (which is Alice), for example, 'Hello, I'm Alice.' Adjust your input and try again."
+        if condition
+        else "",
         tripwire_triggered=condition,
     )
 
 
 # Forbid email addresses in output
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+
 
 @output_guardrail(name="ForbidEmailOutput")
 async def forbid_email_output(context: RunContextWrapper, agent: Agent, response_text: str) -> GuardrailFunctionOutput:
@@ -130,7 +134,7 @@ database_agent = Agent(
     model_settings=ModelSettings(temperature=0.0),
     input_guardrails=[require_name],
     output_guardrails=[forbid_email_output],
-    return_input_guardrail_errors=False, # Keep false so the support agent sees message as an error.
+    return_input_guardrail_errors=False,  # Keep false so the support agent sees message as an error.
 )
 
 

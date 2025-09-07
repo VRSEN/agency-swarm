@@ -8,6 +8,7 @@ This directory contains runnable examples demonstrating key features of Agency S
 - **`streaming.py`** – Real-time streaming responses
 - **`guardrails.py`** – Input and output guardrails
 - **`custom_persistence.py`** – Chat history persistence between sessions
+ - **`tools.py`** – Tool patterns: BaseTool and @function_tool with validation
 
 ## File Handling & Search
 - **`agent_file_storage.py`** – Vector store creation and FileSearch tool usage
