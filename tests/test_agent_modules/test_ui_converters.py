@@ -366,6 +366,7 @@ class TestConsoleEventAdapter:
         adapter.response_buffer = ""
         adapter.message_output = None
         adapter.console = MagicMock()
+        adapter.handoff_agent = None  # Initialize handoff_agent properly
 
         # Create real methods by binding them from ConsoleEventAdapter
         with patch("agency_swarm.ui.core.console_event_adapter.ConsoleEventAdapter"):
