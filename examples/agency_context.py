@@ -113,27 +113,27 @@ agency = Agency(
 
 async def run_demo():
     """Demonstrate agency context sharing between agents."""
-    print("🔄 Agency Context Demo")
+    print("Agency Context Demo")
     print("=" * 40)
 
     # Step 1: Store customer data
-    print("\n📝 Step 1: Storing customer data...")
+    print("\nStep 1: Storing customer data...")
     response1 = await agency.get_response(message="Please store customer data: ID 'CUST123', name 'Alice Johnson'")
     print(f"✅ {response1.final_output}")
 
     # Step 2: Delegate analysis to another agent
-    print("\n🔍 Step 2: Asking data agent to delegate analysis...")
+    print("\nStep 2: Asking data agent to delegate analysis...")
     response2 = await agency.get_response(
         message="Please ask the analyst agent to analyze the customer data I just stored."
     )
     print(f"✅ {response2.final_output}")
 
     # Step 3: Show final context state
-    print("\n📊 Step 3: Checking final agency context...")
+    print("\nStep 3: Checking final agency context...")
     response3 = await agency.get_response(message="Show me a summary of what's currently stored in the agency context.")
     print(f"✅ {response3.final_output}")
 
-    print("\n🎉 Demo complete!")
+    print("\nDemo complete!")
 
 
 if __name__ == "__main__":

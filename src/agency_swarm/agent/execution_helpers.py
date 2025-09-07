@@ -557,11 +557,13 @@ async def run_stream_with_guardrails(
                     guardrail_message = MessageOutputItem(
                         raw_item=ResponseOutputMessage(
                             id="msg_input_guardrail_guidance",
-                            content=[ResponseOutputText(
-                                annotations=[],
-                                text=event.get("content", ""),
-                                type="output_text",
-                        )],
+                            content=[
+                                ResponseOutputText(
+                                    annotations=[],
+                                    text=event.get("content", ""),
+                                    type="output_text",
+                                )
+                            ],
                             role="assistant",
                             status="completed",
                             type="message",
