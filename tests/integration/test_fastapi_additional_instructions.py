@@ -109,6 +109,51 @@ def test_agui_additional_instructions(monkeypatch, agency_factory):
     assert captured_params["additional_instructions"] == "Be very brief"
 
 
+def test_agui_chat_history_additional_instructions(monkeypatch, agency_factory):
+    """Test that chat_history works with additional_instructions in AG-UI endpoint."""
+    captured_params = {}
+
+    async def fake_get_response_stream(self, message, additional_instructions=None, **kwargs):
+        captured_params["additional_instructions"] = additional_instructions
+        yield {"type": "text", "data": "Test"}
+
+    monkeypatch.setattr(Agent, "get_response_stream", fake_get_response_stream)
+
+    app = run_fastapi(
+        agencies={"test_agency": agency_factory},
+        return_app=True,
+        app_token_env="",
+        enable_agui=True,
+    )
+    client = TestClient(app)
+
+    agui_payload = {
+        "thread_id": "test_thread",
+        "run_id": "test_run",
+        "state": None,
+        "messages": [{"id": "msg1", "role": "user", "content": "Hello"}],
+        "chat_history": [
+            {
+                "agent": "TestAgent",
+                "callerAgent": None,
+                "timestamp": 0,
+                "role": "user",
+                "content": "Hello",
+            }
+        ],
+        "tools": [],
+        "context": [],
+        "forwardedProps": None,
+        "additional_instructions": "Be very brief",
+    }
+
+    with client.stream("POST", "/test_agency/get_response_stream", json=agui_payload) as response:
+        assert response.status_code == 200
+        list(response.iter_lines())
+
+    assert captured_params["additional_instructions"] == "Be very brief"
+
+
 def test_additional_instructions_none_handling(monkeypatch, agency_factory):
     """Test that None additional_instructions are handled properly."""
     captured_params = {}

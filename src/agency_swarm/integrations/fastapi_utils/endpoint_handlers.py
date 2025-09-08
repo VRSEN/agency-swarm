@@ -43,6 +43,7 @@ def make_response_endpoint(request_model, agency_factory: Callable[..., Agency],
                 return []
 
         combined_file_ids = request.file_ids
+        file_ids_map = None
         if request.file_urls is not None:
             try:
                 file_ids_map = await upload_from_urls(request.file_urls)
