@@ -1,3 +1,5 @@
+import json
+
 import pytest
 from pydantic import BaseModel, Field
 
@@ -12,6 +14,11 @@ class ExtraParams(BaseModel):
 
 class SendMessageWithContext(SendMessage):
     extra_params_model = ExtraParams
+
+
+class NestedSendMessage(SendMessage):
+    class ExtraParams(BaseModel):
+        summary: str = Field(description="Short summary")
 
 
 @pytest.mark.asyncio
@@ -48,9 +55,6 @@ async def test_validation_of_extra_params_errors():
     # Manually invoke tool to simulate invalid inputs (missing required fields)
     send_tool = next(t for t in a.tools if hasattr(t, "name") and t.name.startswith("send_message"))
 
-    # Craft invalid argument JSON string (no key_moments/decisions)
-    import json
-
     args = {
         "recipient_agent": "B",
         "my_primary_instructions": "",
@@ -64,3 +68,21 @@ async def test_validation_of_extra_params_errors():
 
     out = await send_tool.on_invoke_tool(W(), json.dumps(args))
     assert isinstance(out, str) and out.startswith("Error: Invalid extra parameters")
+
+
+@pytest.mark.asyncio
+async def test_nested_class_schema_included():
+    a = Agent(
+        name="A",
+        instructions="",
+        model_settings=ModelSettings(temperature=0.0),
+        send_message_tool_class=NestedSendMessage,
+    )
+    b = Agent(name="B", instructions="", model_settings=ModelSettings(temperature=0.0))
+    Agency(a, communication_flows=[a > b])
+
+    send_tool = next(t for t in a.tools if hasattr(t, "name") and t.name.startswith("send_message"))
+    props = send_tool.params_json_schema.get("properties", {})
+    assert "summary" in props and props["summary"]["type"] == "string"
+    required = send_tool.params_json_schema.get("required", [])
+    assert "summary" in required

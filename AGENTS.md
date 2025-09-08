@@ -139,6 +139,14 @@ Avoid growing already large files. Prefer extracting focused modules. If you mus
   - No root-level tests (organize by module)
 - Name test files clearly (e.g. `test_thread_isolation.py`), never generic root names
 
+### Testing Protocol (Behavior-Only, Minimal Mocks)
+- Do not test private APIs or patch private attributes/methods. Interact via public interfaces only.
+- Prefer behavior verification over implementation details. Tests should validate externally observable outcomes.
+- Keep mocks/stubs minimal and realistic; avoid over-mocking. Use simple stubs to emulate public behavior only.
+- Follow the testing pyramid: prioritize unit tests for focused logic; add integration tests for real wiring/flows without duplicating unit scopes.
+- Avoid duplicate assertions across unit and integration levels; each test should have a clear, non-overlapping purpose.
+- Use descriptive, stable names (no throwaway labels); optimize for readability and intent.
+
 ## 🚨 ZERO FUNCTIONAL CHANGES DURING REFACTORING
 
 ### Allowed
