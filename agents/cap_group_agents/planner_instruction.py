@@ -12,7 +12,7 @@ def planner_instruction(_group_name, _input_format, _agents, _output_format):
 
     # 注意：你不允许调用`multi_tool_use.parallel`
     
-    同时，你需要通过`ReadJsonFile`从context_index.json中读取已有环境中的上下文信息
+    同时，你需要通过`ReadJsonFile`从context_tree.json中读取已有环境中的上下文信息
 
     # 注意: 你每次接收到输入都需要读取一遍context_index.json
     # 注意: 初始环境中资源都是充足的，你不需要对可用区资源是否足以执行任务进行查询；
