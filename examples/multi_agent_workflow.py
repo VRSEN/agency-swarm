@@ -15,7 +15,6 @@ Run with: python examples/multi_agent_workflow.py
 """
 
 import asyncio
-import json
 import logging
 import os
 import sys
@@ -23,14 +22,12 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from agency_swarm import RunContextWrapper, function_tool
-
 # Configure basic logging
 logging.basicConfig(level=logging.WARNING, format="%(asctime)s - %(levelname)s - %(message)s")
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
-from agency_swarm import Agency, Agent  # noqa: E402
+from agency_swarm import Agency, Agent, RunContextWrapper, function_tool  # noqa: E402
 
 
 # --- Structured Output Types ---
@@ -138,13 +135,14 @@ def print_send_message_history(agency, agent_name: str) -> None:
     print("Message history for inter-agent communications:")
     i = 1
     for message in agent_messages:
-        if message["type"] == "function_call" and message["name"].startswith("send_message"):
-            args = json.loads(message["arguments"])
-            call_ids.append(message["call_id"])
-            print(f"{i}. {agent_name} -> {args['recipient_agent']} message: {args['message']}\n")
+        if "parent_run_id" not in message or "role" not in message:
+            continue
+        if message["role"] == "user" and message["agent"] is not None and message["callerAgent"] is not None:
+            call_ids.append(message["parent_run_id"])
+            print(f"{i}. {message['callerAgent']} -> {message['agent']} message: {message['content']}\n")
             i += 1
-        if message["type"] == "function_call_output" and message["call_id"] in call_ids:
-            print(f"{i}. {message['agent']} -> {agent_name} response: {message['output']}\n")
+        elif message["role"] == "assistant" and message["parent_run_id"] in call_ids:
+            print(f"{i}. {message['agent']} -> {message['callerAgent']} response: {message['content'][0]['text']}\n")
             i += 1
 
 
