@@ -97,7 +97,7 @@ async def run_sync_with_guardrails(
     current_agent_run_id: str,
     parent_run_id: str | None,
     validation_attempts: int,
-    return_input_guardrail_errors: bool,
+    throw_input_guardrail_error: bool,
 ) -> tuple[RunResult, MasterContext]:
     """Run a single turn with guardrail handling and optional retries."""
     attempts_remaining = int(validation_attempts or 0)
@@ -145,7 +145,7 @@ async def run_sync_with_guardrails(
                 exception=e,
                 include_assistant=False,
             )
-            if return_input_guardrail_errors:
+            if not throw_input_guardrail_error:
                 from agents import RunContextWrapper  # local import to avoid cycle
 
                 _, guidance_text = _extract_guardrail_texts(e)
@@ -436,7 +436,7 @@ async def run_stream_with_guardrails(
     current_agent_run_id: str,
     parent_run_id: str | None,
     validation_attempts: int,
-    return_input_guardrail_errors: bool,
+    throw_input_guardrail_error: bool,
 ) -> AsyncGenerator[RunItemStreamEvent]:
     """Stream events with output-guardrail retries and guidance persistence."""
     attempts_remaining = int(validation_attempts or 0)
@@ -505,10 +505,10 @@ async def run_stream_with_guardrails(
                     )
                 except Exception:
                     guidance_text = str(e)
-                if return_input_guardrail_errors:
-                    await event_queue.put({"type": "input_guardrail_guidance", "content": guidance_text})
-                else:
+                if throw_input_guardrail_error:
                     await event_queue.put({"type": "error", "content": guidance_text})
+                else:
+                    await event_queue.put({"type": "input_guardrail_guidance", "content": guidance_text})
             except Exception as e:
                 await event_queue.put({"type": "error", "content": str(e)})
             finally:

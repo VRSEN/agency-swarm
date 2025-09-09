@@ -1,6 +1,7 @@
 import inspect
 import logging
 import os
+import warnings
 from collections.abc import AsyncGenerator, Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -42,7 +43,7 @@ AGENT_PARAMS = {
     "description",
     "include_search_results",
     "validation_attempts",
-    "return_input_guardrail_errors",
+    "throw_input_guardrail_error",
     # Old/Deprecated (to check in kwargs)
     "id",
     "tool_resources",
@@ -94,7 +95,7 @@ class Agent(BaseAgent[MasterContext]):
     send_message_tool_class: type | None  # Custom SendMessage tool class for inter-agent communication
     include_search_results: bool = False
     validation_attempts: int = 1
-    return_input_guardrail_errors: bool = True
+    throw_input_guardrail_error: bool = False
 
     # --- Internal State ---
     _associated_vector_store_id: str | None = None
@@ -131,8 +132,8 @@ class Agent(BaseAgent[MasterContext]):
             include_search_results (bool): Include search results in FileSearchTool output for citation extraction.
                 Defaults to False.
             validation_attempts (int): Number of retries when an output guardrail trips. Defaults to 1.
-            return_input_guardrail_errors (bool): Whether to return input guardrail errors as an agent response.
-                Defaults to True.
+            throw_input_guardrail_error (bool): Whether to raise input guardrail errors as exceptions.
+                Defaults to False.
 
         ## OpenAI Agents SDK Parameters:
             prompt (Prompt | DynamicPromptFunction | None): Dynamic prompt configuration.
@@ -207,7 +208,7 @@ class Agent(BaseAgent[MasterContext]):
         self.send_message_tool_class = current_agent_params.get("send_message_tool_class")
         self.include_search_results = current_agent_params.get("include_search_results", False)
         self.validation_attempts = int(current_agent_params.get("validation_attempts", 1))
-        self.return_input_guardrail_errors = bool(current_agent_params.get("return_input_guardrail_errors", True))
+        self.throw_input_guardrail_error = bool(current_agent_params.get("throw_input_guardrail_error", False))
 
         # Internal state
         self._openai_client = None
@@ -240,6 +241,25 @@ class Agent(BaseAgent[MasterContext]):
         # Wrap any FunctionTool instances that were provided directly via constructor
         for tool in self.tools:
             _attach_one_call_guard(tool, self)
+
+    # --- Deprecated Compatibility ---
+    @property
+    def return_input_guardrail_errors(self) -> bool:  # pragma: no cover - deprecated
+        warnings.warn(
+            "'return_input_guardrail_errors' is deprecated; use 'throw_input_guardrail_error'",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return not self.throw_input_guardrail_error
+
+    @return_input_guardrail_errors.setter
+    def return_input_guardrail_errors(self, value: bool) -> None:  # pragma: no cover - deprecated
+        warnings.warn(
+            "'return_input_guardrail_errors' is deprecated; use 'throw_input_guardrail_error'",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        self.throw_input_guardrail_error = not value
 
     # --- Properties ---
     def __repr__(self) -> str:
