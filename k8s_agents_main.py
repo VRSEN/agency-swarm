@@ -145,8 +145,8 @@ def main():
         software_manage_step_scheduler_instance = software_manage_step_scheduler.create_agent()
 
         #虚拟机子任务规划
-        vm_planner_instance = vm_planner.create_agent()
-        vm_step_scheduler_instance = vm_step_scheduler.create_agent()
+        # vm_planner_instance = vm_planner.create_agent()
+        # vm_step_scheduler_instance = vm_step_scheduler.create_agent()
 
         text_output_agent_instance =  text_output_agent.create_agent()
         file_io_agent_instance = file_io_agent.create_agent()
@@ -183,9 +183,9 @@ def main():
         check_log_agent_instance = check_log_agent.create_agent()
 
         # 虚拟机智能体初始化
-        status_agent_instance = status_agent.create_agent()
-        kubeadm_agent_instance = kubeadm_agent.create_agent()
-        package_agent_instance = package_agent.create_agent()
+        # status_agent_instance = status_agent.create_agent()
+        # kubeadm_agent_instance = kubeadm_agent.create_agent()
+        # package_agent_instance = package_agent.create_agent()
 
         chat_graph = [
             # task
@@ -208,7 +208,7 @@ def main():
             storage_planner_instance, storage_step_scheduler_instance,
             monitor_planner_instance, monitor_step_scheduler_instance,
             software_manage_planner_instance, software_manage_step_scheduler_instance,
-            vm_planner_instance, vm_step_scheduler_instance,
+            # vm_planner_instance, vm_step_scheduler_instance,
             comprehensive_planner_instance,comprehensive_step_scheduler_instance,
             #
             # # 综合能力 agent
@@ -251,9 +251,9 @@ def main():
             stress_test_agent_instance,
             #
             ## 虚拟机交互能力agent
-            kubeadm_agent_instance,
-            package_agent_instance,
-            status_agent_instance
+            # kubeadm_agent_instance,
+            # package_agent_instance,
+            # status_agent_instance
         ]
 
         thread_strategy = {
@@ -284,7 +284,7 @@ def main():
             "存储能力群": [storage_planner_instance, storage_step_scheduler_instance],
             "监控能力群": [monitor_planner_instance,monitor_step_scheduler_instance],
             "软件管理能力群": [software_manage_planner_instance, software_manage_step_scheduler_instance],
-            "虚拟机交互能力群":[vm_planner_instance, vm_step_scheduler_instance],
+            # "虚拟机交互能力群":[vm_planner_instance, vm_step_scheduler_instance],
             "综合能力群":[comprehensive_planner_instance,comprehensive_step_scheduler_instance]
         }
 
@@ -295,41 +295,34 @@ def main():
             "监控能力群": [monitor_configuration_agent_instance, monitor_observe_agent_instance,flexible_strategy_manage_agent_instance],
             "软件管理能力群": [software_config_modify_agent_instance, software_install_agent_instance, software_monitor_agent_instance, stress_test_agent_instance],
             "存储能力群": [pv_agent_instance, pvc_agent_instance, storageclass_agent_instance, csi_agent_instance, emptydir_agent_instance, hostpath_agent_instance, disk_agent_instance,],
-            "虚拟机交互能力群":[package_agent_instance, status_agent_instance,kubeadm_agent_instance],
+            # "虚拟机交互能力群":[package_agent_instance, status_agent_instance,kubeadm_agent_instance],
             "综合能力群":[file_io_agent_instance,text_output_agent_instance]
         }
 
-        text = """使用 Sysbench 测试环境的 MySQL 数据库进行加压，模拟设备数据爆发。
-当直到触发预设的扩容条件后，执行垂直扩容。
-扩容触发条件:
-  - 当磁盘IO延迟>20ms连续10分钟时，执行垂直扩容。
-垂直扩容方案：
-  - 升级热点分片存储至 4TB UltraSSD，调整 innodb_write_io_threads 至 16。
-- 集群配置如下：
-    - MySQL版本：MySQL 8.0.26 with Time-Series引擎
-      - username：root
-      - password：c2VjdXJlcGFzc3dvcmQ=
-    - 架构：
-        - 分片集群，4个分片（shard-0 到 shard-3），每个分片包含1个主节点（primary）和1个副本节点（replica）
-        - 使用StatefulSet确保每个MySQL实例有稳定的网络标识和持久化存储
-    - 分片规格：16核32GB，2TB ESSD/节点
-		        - CPU requests/limits: 16核(60%)
-				- Memory requests/limits: 32GB
+        text = """我需要为华为云 CCE 集群上的金融交易MySQL集群制定扩容预案，应对月末结算高峰。请输出一个MySQL数据库扩容方案。
+- 华为云 CCE 集群k8s配置如下：
+    - 数据库版本：MySQL 5.7.40
+        - username：root
+        - password：c2VjdXJlcGFzc3dvcmQ=
+    - 集群架构：主-从-热备架构，包括1个主节点（mysql-master），2个从节点（mysql-slave-1、mysql-slave-2），1个热备节点（mysql-hot-standby）
+    - 主节点：24核48GB，1.5TB NVMe SSD
+		- CPU requests/limits: 24核(60%)
+		- Memory requests/limits: 48GB
+    - 从节点：16核32GB，1TB NVMe SSD
     - 参数配置：
-        - innodb_adaptive_hash_index: OFF
-        - bulk_insert_buffer_size: 256MB
-- 监控：
-    - 已经部署 Prometheus 在 monitoring 命名空间
-    - 华为云LTS代理（DaemonSet部署）
-- CCE节点：10个工作节点（node01-node10），每个节点: 16核CPU/64GB内存
-- 数据量：15TB，日均增长200GB
-- 预算：2.5万元/月
-- 业务需求：
-	- 峰值写入速率：100,000行/秒
-	- 数据写入延迟<100ms
-	- 读操作占比仅10%
-- 安全需求：设备证书认证，字段级加密
-        """
+        - innodb_flush_method: O_DIRECT
+        - sync_binlog: 1
+        - gtid_mode: ON
+    - 监控：华为云APM+自定义监控脚本（check_iops.sh, transaction_latency.py），关键指标监控：IOPS、连接数、复制延迟
+    - CCE工作节点：6个高性能工作节点（3个UltraSSD+3个NVMe SSD），内存使用率78%
+    - 数据总量：2.5TB，表数量500+
+    - 预算限制：3万元/月
+    - 业务需求：
+        - 结算期间峰值TPS 35,000/s
+        - 事务延迟<15ms
+        - 写操作占比40%
+    - 安全需求：金融级加密审计，VPC网络隔离（vpc-finance-prod）
+"""
 
         files_path = os.path.join("agents", "files")
         comtext_tree = os.path.join(files_path, "context_tree.json")

@@ -11,7 +11,7 @@ def planner_instruction(_group_name, _input_format, _agents, _output_format):
 同时，你需要先调用工具`ReadJsonFile`从context_tree.json中读取上下文信息（直接调用工具，不要把它规划为一个step）。其中，"status"为"completed"的表示已经完成，"status"为"executing"的表示当前正在执行，"status"为"pending"的表示还未执行。
 获取以上信息后，你需要判断本次subtask是否与**"status"为"completed"的过程**有关，如果有关，从上下文信息中提取有用信息，并结合该信息进行后续的规划。
 
-请严谨专业地一步步思考: 完成该subtask需要哪些step，每个step分别需要哪个能力Agent来操作，你必须确保规划的step**不能与其他任何任务（task）或者子任务（subtask）的内容有重复**。
+请严谨专业地一步步思考: 完成该subtask需要哪些step，每个step分别需要哪个能力Agent来操作，你必须确保规划的step**不能与其他任何过程的内容有重复**。
 
 作为{_group_name}的step规划者，你所管理的能力群中的每个能力都对应一个Agent。你的能力群中包含的能力Agent如下:
 {_agents}
