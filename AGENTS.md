@@ -98,12 +98,11 @@ Run non-interactive examples from /examples directory. Never run examples/intera
 2. **Agent:** Extends `agents.Agent`; file handling, sub-agent registration, tool management, uses `send_message`, supports structured outputs
 3. **Thread Management (`thread.py`):** Thread isolation per conversation, persistence, history tracking
 4. **Context Sharing (`context.py`):** Shared state via `MasterContext`, passed through execution hooks
-5. **Tool System (`tools/`):** Recommended: `@function_tool` decorator; legacy: `BaseTool`; `SendMessage` for inter-agent comms
+5. **Tool System (`tools/`):** Recommended: `@function_tool` decorator; second option: `BaseTool`; `SendMessage` for inter-agent comms
 
 ### Architectural Patterns
 - Communication: Sender/receiver pairs on `Agency` (see `examples/`)
 - Persistence: Load/save callbacks (see `examples/`)
-- Prefer modern tool creation (`@function_tool`); legacy supported
 
 ## Version and Documentation
 - **v1.x:** Latest released version (OpenAI Agents SDK / Responses API)
@@ -113,6 +112,7 @@ Run non-interactive examples from /examples directory. Never run examples/intera
 
 ### Documentation Rules (Mandatory)
 - All documentation writing and updates MUST follow `docs/mintlify.cursorrules` for formatting, components, links, and page metadata. Treat it as a mandatory rules file alongside this document.
+- Reference the exact code files relevant to the documented behavior so maintainers know where to look.
 
 ## Python Requirements
 - **Python >= 3.12 (development on 3.13)** — project developed and primarily tested on 3.13; CI ensures 3.12 compatibility.
@@ -138,6 +138,14 @@ Avoid growing already large files. Prefer extracting focused modules. If you mus
   - `tests/test_*_modules/` – Module-based unit tests
   - No root-level tests (organize by module)
 - Name test files clearly (e.g. `test_thread_isolation.py`), never generic root names
+
+### Testing Protocol (Behavior-Only, Minimal Mocks)
+- Do not test private APIs or patch private attributes/methods. Interact via public interfaces only.
+- Prefer behavior verification over implementation details. Tests should validate externally observable outcomes.
+- Keep mocks/stubs minimal and realistic; avoid over-mocking. Use simple stubs to emulate public behavior only.
+- Follow the testing pyramid: prioritize unit tests for focused logic; add integration tests for real wiring/flows without duplicating unit scopes.
+- Avoid duplicate assertions across unit and integration levels; each test should have a clear, non-overlapping purpose.
+- Use descriptive, stable names (no throwaway labels); optimize for readability and intent.
 
 ## 🚨 ZERO FUNCTIONAL CHANGES DURING REFACTORING
 
