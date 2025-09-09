@@ -143,10 +143,10 @@ async def require_task_prefix(
     context: RunContextWrapper, agent: Agent, user_input: str | list[str]
 ) -> GuardrailFunctionOutput:
     """Require user requests to begin with 'Request:'"""
-    
+
     # Handle single string input
     condition = not user_input.startswith("Request:")
-    
+
     return GuardrailFunctionOutput(
         output_info="Prefix your request with 'Request:' describing what you need." if condition else "",
         tripwire_triggered=condition,
@@ -161,17 +161,17 @@ agent = Agent(
 
 #### Input Guardrail Return Format
 
-Agent's configuration includes an optional parameter called `return_input_guardrail_errors`, which defines how the guardrail error will be processed and presented to the caller:
+Agent's configuration includes an optional parameter called `throw_input_guardrail_error`, which defines how the guardrail error will be processed and presented to the caller:
 ```python
 agent = Agent(
     name="CustomerSupportAgent",
     instructions="You are a helpful customer support agent.",
     input_guardrails=[require_task_prefix],
-    return_input_guardrail_errors=True,
+    throw_input_guardrail_error=False,
 )
 ```
-If set to `False`, triggering a guardrail will raise a corresponding exception, as described in the next section.        
-If set to `True` (its default value), the guardrail error will be returned to the user/caller agent as if it were a genuine response from the recipient. For example, using the agent above:
+If set to `True`, triggering a guardrail will raise a corresponding exception, as described in the next section.
+If set to `False` (its default value), the guardrail error will be returned to the user/caller agent as if it were a genuine response from the recipient. For example, using the agent above:
 ```python
 response = await agency.get_response("Hello!")
 print(response.final_output)
@@ -215,7 +215,7 @@ Instead, an appropriate system message will be added in order to log a guardrail
 </Note>
 
 #### Input Guardrail Exceptions
-Unlike output guardrails, if an input guardrail exception is raised (`return_input_guardrail_errors` should be set to `False` for that to happen), the error will be immediately returned back to the user/caller agent.     
+Unlike output guardrails, if an input guardrail exception is raised (`throw_input_guardrail_error` should be set to `True` for that to happen), the error will be immediately returned back to the user/caller agent.    
 For user messages, the error processing is similar to output guardrails.
 
 ```python
@@ -225,7 +225,7 @@ except InputGuardrailTripwireTriggered as e:
     print(f"Validation failed: {e.guardrail_result.output_info}")
 ```
 
-Each triggered guardrail will also leave a corresponding system message containing error message inside of a chat history. Regardless of the `return_input_guardrail_errors` parameter value.
+Each triggered guardrail will also leave a corresponding system message containing error message inside of a chat history. Regardless of the `throw_input_guardrail_error` parameter value.
 
 <Note>
 The validation_attempts parameter currently does not apply to input guardrails.
@@ -267,7 +267,7 @@ worker = Agent(
     instructions="You are the worker agent.",
     input_guardrails=[require_task_prefix],
     output_guardrails=[require_response_prefix],
-    return_input_guardrail_errors=False,
+    throw_input_guardrail_error=True,
 )
 
 agency = Agency(
@@ -287,7 +287,7 @@ Similarly, the response of the worker to the CEO agent will be checked against t
 the specified number of `validation_attempts` it will need to generate a correct response. In this case, the requirement is that the worker's response should start with
 the word "Response:", otherwise it will receive the error message `"ERROR: Your response must start with 'Response:'"`
 
-It is recommended to set `return_input_guardrail_errors=False` for the agency's internal agents. While `True` value is also supported, setting it to `False` will add an
+It is recommended to set `throw_input_guardrail_error=True` for the agency's internal agents. While `False` value is also supported, setting it to `True` will add an
 extra error prefix to the recipient's response to indicate the issue and avoid potential confusion.
 
 <Warning>

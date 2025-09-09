@@ -122,7 +122,7 @@ class Execution:
                 current_agent_run_id=current_agent_run_id,
                 parent_run_id=parent_run_id,
                 validation_attempts=int(getattr(self.agent, "validation_attempts", 1) or 0),
-                return_input_guardrail_errors=getattr(self.agent, "return_input_guardrail_errors", False),
+                throw_input_guardrail_error=getattr(self.agent, "throw_input_guardrail_error", False),
             )
             completion_info = (
                 f"Output Type: {type(run_result.final_output).__name__}"
@@ -297,7 +297,7 @@ class Execution:
                 current_agent_run_id=current_agent_run_id,
                 parent_run_id=parent_run_id,
                 validation_attempts=int(getattr(self.agent, "validation_attempts", 1) or 0),
-                return_input_guardrail_errors=getattr(self.agent, "return_input_guardrail_errors", True),
+                throw_input_guardrail_error=getattr(self.agent, "throw_input_guardrail_error", False),
             ):
                 yield event
 

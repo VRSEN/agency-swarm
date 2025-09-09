@@ -11,7 +11,7 @@ class StubAgent:
     def __init__(self, name: str):
         self.name = name
         self.description = ""
-        self.return_input_guardrail_errors = False
+        self.throw_input_guardrail_error = True
 
     async def get_response(
         self,
@@ -172,7 +172,7 @@ class SenderStub:
     def __init__(self, name: str, description: str = "") -> None:
         self.name = name
         self.description = description
-        self.return_input_guardrail_errors = True
+        self.throw_input_guardrail_error = False
 
     async def get_response(self, **kwargs):  # pragma: no cover - simple stub
         class Resp:

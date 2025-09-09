@@ -131,6 +131,17 @@ def handle_deprecated_parameters(kwargs: dict[str, Any]) -> dict[str, Any]:
         )
         deprecated_args_used["refresh_from_id"] = kwargs.pop("refresh_from_id")
 
+    if "return_input_guardrail_errors" in kwargs:
+        val = kwargs.pop("return_input_guardrail_errors")
+        warnings.warn(
+            "'return_input_guardrail_errors' has been renamed to 'throw_input_guardrail_error'.",
+            DeprecationWarning,
+            stacklevel=3,
+        )
+        # Inverse semantics: return_input_guardrail_errors=True means do NOT throw
+        kwargs["throw_input_guardrail_error"] = not bool(val)
+        deprecated_args_used["return_input_guardrail_errors"] = val
+
     # Handle response_format parameter mapping to output_type
     if "response_format" in kwargs:
         response_format = kwargs.pop("response_format")

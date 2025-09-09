@@ -39,7 +39,7 @@ async def test_input_guardrail_no_retry_streaming(monkeypatch, minimal_agent):
     agent = minimal_agent
     # Ensure multiple attempts available to prove no retry happens
     agent.validation_attempts = 2
-    agent.return_input_guardrail_errors = False
+    agent.throw_input_guardrail_error = True
 
     ctx = AgencyContext(agency_instance=None, thread_manager=ThreadManager(), subagents={})
 
@@ -77,7 +77,7 @@ async def test_input_guardrail_no_retry_streaming(monkeypatch, minimal_agent):
 @patch("agents.Runner.run", new_callable=AsyncMock)
 async def test_input_guardrail_returns_error_non_stream(mock_runner_run, minimal_agent, mock_thread_manager):
     agent = minimal_agent
-    agent.return_input_guardrail_errors = True
+    agent.throw_input_guardrail_error = False
 
     class _InRes:
         output = GuardrailFunctionOutput(

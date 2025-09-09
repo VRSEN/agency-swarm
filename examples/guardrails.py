@@ -119,7 +119,7 @@ customer_support_agent = Agent(
     model_settings=ModelSettings(temperature=0.0),
     input_guardrails=[require_support_prefix],
     validation_attempts=1,  # set to 0 for immediate fail-fast behavior
-    return_input_guardrail_errors=True,  # set to False to return an exception when the input guardrail is triggered
+    throw_input_guardrail_error=False,  # set to True to raise an exception when the input guardrail is triggered
 )
 
 database_agent = Agent(
@@ -134,7 +134,7 @@ database_agent = Agent(
     model_settings=ModelSettings(temperature=0.0),
     input_guardrails=[require_name],
     output_guardrails=[forbid_email_output],
-    return_input_guardrail_errors=False,  # Keep false so the support agent sees message as an error.
+    throw_input_guardrail_error=True,  # Keep true so the support agent sees message as an error.
 )
 
 
