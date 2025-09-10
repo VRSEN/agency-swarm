@@ -19,13 +19,13 @@ def vm_agent_instruction(_name, _description):
 
 若该请求能够通过上下文信息**严格**判断出之前已经完成过，你可以直接输出:
 {{
-    "result": "SUCCESS",
+    "execution_result": "SUCCESS",
     "reason": "(填写原因)"
 }}
 
 若该请求无法使用命令行完成，你需要直接输出:
 {{
-    "result": "FAIL",
+    "execution_result": "FAIL",
     "reason": "(填写原因)"
 }}
 
@@ -41,7 +41,8 @@ def vm_agent_instruction(_name, _description):
 {{
     "tool": "...",
     "command": "...",
-    "result": "...",
+    "command_result": "...",
+    "execution_result": "...",
     "reason": "..."
 }}
 
