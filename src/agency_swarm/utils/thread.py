@@ -229,3 +229,13 @@ class ThreadManager:
 
             except Exception as e:
                 logger.error(f"Error loading messages from callback: {e}", exc_info=True)
+
+    def clear(self) -> None:
+        """Clear all conversation messages.
+
+        Exposes a public API to reset the conversation.
+        """
+        try:
+            self._store.clear()
+        except Exception as e:
+            logger.error(f"Error clearing messages: {e}", exc_info=True)

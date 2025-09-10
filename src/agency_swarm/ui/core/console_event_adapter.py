@@ -23,6 +23,8 @@ class ConsoleEventAdapter:
         self.console = Console()
         self.last_live_display = None
         self.handoff_agent = None
+        # Track whether final content has already been rendered for current live region
+        self._final_rendered = False
 
     def _cleanup_live_display(self):
         """Clean up any active Live display safely."""
@@ -33,6 +35,7 @@ class ConsoleEventAdapter:
                 pass  # Ignore cleanup errors
             self.message_output = None
             self.response_buffer = ""
+            self._final_rendered = False
 
     def _update_console(self, msg_type: str, sender: str, receiver: str, content: str, add_separator: bool = True):
         # Print a separator only for function, function_output, and agent-to-agent messages
@@ -71,6 +74,7 @@ class ConsoleEventAdapter:
                         # Use Live as a context manager for the live region only when we have non-empty text
                         if self.message_output is None:
                             self.response_buffer = ""
+                            self._final_rendered = False
                             self.message_output = Live("", console=self.console, refresh_per_second=10)
                             self.message_output.__enter__()
                         self.response_buffer += str(delta_text)
@@ -85,6 +89,7 @@ class ConsoleEventAdapter:
                                 header_text = f"🤖 {agent_name} 🗣️ @{speaking_to}"
                                 md_content = Markdown(self.response_buffer)
                                 self.message_output.update(Group(header_text, md_content))
+                                self._final_rendered = True
                             try:
                                 self.message_output.__exit__(None, None, None)
                             except Exception:
@@ -102,9 +107,10 @@ class ConsoleEventAdapter:
                         self.mcp_calls.pop(data.item_id)
 
                     elif data_type == "response.output_item.done":
+                        # Finalize live region. If final wasn't already rendered, render once before closing.
                         if self.message_output is not None:
                             try:
-                                if self.response_buffer.strip():
+                                if (not self._final_rendered) and self.response_buffer.strip():
                                     header_text = f"🤖 {agent_name} 🗣️ @{speaking_to}"
                                     md_content = Markdown(self.response_buffer)
                                     self.message_output.update(Group(header_text, md_content))
@@ -112,6 +118,8 @@ class ConsoleEventAdapter:
                             except Exception:
                                 pass
                         self.message_output = None
+                        self.response_buffer = ""
+                        self._final_rendered = False
                         item = data.item
                         if hasattr(item, "arguments"):
                             # Handle agent to agent communication
