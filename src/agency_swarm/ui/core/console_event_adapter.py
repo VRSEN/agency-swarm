@@ -155,6 +155,7 @@ class ConsoleEventAdapter:
                         if call_id in self.agent_to_agent_communication:
                             # The response has already been shown via streaming, so just clean up
                             self.agent_to_agent_communication.pop(call_id)
+                            self.handoff_agent = None
                             # Don't display it again - it's already been shown
                         else:
                             self._update_console("function_output", agent_name, "user", str(item.output))
