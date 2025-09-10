@@ -10,11 +10,9 @@ except ModuleNotFoundError as exc:
     ) from exc
 
 
-# Extended version of the ag-ui RunAgentInput with added chat_history field
+# Extended version of the ag-ui RunAgentInput with added chat_history and additional_instructions fields
 class RunAgentInputCustom(RunAgentInput):
-    """
-    Input for running an agent.
-    """
+    """Input for running an agent."""
 
     chat_history: list[dict[str, Any]] | None = Field(
         default=None,
