@@ -453,7 +453,7 @@ class ToolFactory:
             logger.warning(f"Warning: Tool {name} has no docstring.")
         # Use the Pydantic model schema for parameters
         params_json_schema = base_tool.model_json_schema()
-        if base_tool.ToolConfig.strict:
+        if getattr(base_tool.ToolConfig, "strict", False):
             params_json_schema = ensure_strict_json_schema(params_json_schema)
         # Remove title/description at the top level, keep only in properties
         params_json_schema = {k: v for k, v in params_json_schema.items() if k not in ("title", "description")}
@@ -488,7 +488,7 @@ class ToolFactory:
             description=description.strip(),
             params_json_schema=params_json_schema,
             on_invoke_tool=on_invoke_tool,
-            strict_json_schema=base_tool.ToolConfig.strict,
+            strict_json_schema=getattr(base_tool.ToolConfig, "strict", False),
         )
         # Propagate one_call_at_a_time from BaseTool.ToolConfig to the FunctionTool instance
         # Store as a private attribute since FunctionTool doesn't have this field
