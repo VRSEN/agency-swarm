@@ -12,5 +12,5 @@ class RiskAnalyst(Agent):
             ),
             instructions="./instructions.md",
             tools_folder="./tools",
-            model="gpt-5-mini",
+            model="gpt-4.1",
         )
