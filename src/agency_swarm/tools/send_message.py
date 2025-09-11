@@ -358,7 +358,8 @@ class SendMessage(FunctionTool):
                     parent_run_id=tool_call_id,  # Use tool_call_id as parent_run_id
                 ):
                     # Add agent name and caller to the event before forwarding
-                    event = add_agent_name_to_event(event, self.recipient_agent.name, self.sender_agent.name)
+                    if not hasattr(event, "agent") and not hasattr(event, "callerAgent"):
+                        event = add_agent_name_to_event(event, self.recipient_agent.name, self.sender_agent.name)
 
                     # Forward event to streaming context if available
                     if streaming_context:
