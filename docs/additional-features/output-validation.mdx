@@ -29,7 +29,7 @@ In v1.x, validation is handled through **guardrails** using the agents SDK. Guar
 
 Output guardrails validate agent responses before they are sent to users or other agents. Each output guardrail function receives three parameters: `context`, `agent`, and `response_text`.
 
-In most cases, you'll only need the `response_text` parameter, which contains the agent's latest response as a simple text string if `output_type` is not set or a BaseModel subclass, if you have set a custom `output_type`. This allows you to check the response against specific criteria.
+In most cases, you'll only need the `response_text` parameter, which contains the agent's latest response as a simple text string if agent does not have `output_type` specified or it will follow a pydantic schema provided in the `output_type` parameter. This allows you to check the response against specific criteria.
 
 For more complex validation scenarios, you can utilize the `context` and `agent` parameters to account for run state and agent configuration during validation.
 
