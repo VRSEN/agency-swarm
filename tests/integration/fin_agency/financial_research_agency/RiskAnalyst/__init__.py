@@ -1,3 +1,3 @@
-from .RiskAnalyst import RiskAnalyst
+from .RiskAnalyst import risk_analyst
 
-__all__ = ["RiskAnalyst"]
+__all__ = ["risk_analyst"]
