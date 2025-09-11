@@ -3,10 +3,10 @@ from typing import Any
 
 from dotenv import load_dotenv
 
-# Import the Search Agency agents
-from financial_research_agency.PortfolioManager.PortfolioManager import PortfolioManager
-from financial_research_agency.ReportGenerator.ReportGenerator import ReportGenerator
-from financial_research_agency.RiskAnalyst.RiskAnalyst import RiskAnalyst
+# Import the Financial Research Agency agents
+from financial_research_agency.PortfolioManager.PortfolioManager import portfolio_manager
+from financial_research_agency.ReportGenerator.ReportGenerator import report_generator
+from financial_research_agency.RiskAnalyst.RiskAnalyst import risk_analyst
 
 from agency_swarm import Agency
 
@@ -17,19 +17,14 @@ def create_agency(
     load_threads_callback: Callable[[], list[dict[str, Any]]] | None = None,
     save_threads_callback: Callable[[list[dict[str, Any]]], None] | None = None,
 ) -> Agency:
-    portfolio_manager = PortfolioManager()
-    report_generator = ReportGenerator()
-    risk_analyst = RiskAnalyst()
-
     agency = Agency(
         portfolio_manager,
         report_generator,
         risk_analyst,
         communication_flows=[
-            portfolio_manager > risk_analyst,
-            risk_analyst > report_generator,
+            (portfolio_manager, risk_analyst),
+            (risk_analyst, report_generator),
         ],
-        # ],
         shared_instructions="financial_research_agency/agency_manifesto.md",
         load_threads_callback=load_threads_callback,
         save_threads_callback=save_threads_callback,

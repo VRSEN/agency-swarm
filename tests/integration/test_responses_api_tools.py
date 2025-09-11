@@ -271,7 +271,7 @@ async def test_hosted_tool_output_preservation_multi_turn():
     solving the bug where they were previously lost between conversations.
     """
 
-    # Create test data with specific content
+    # Create test data with specific content for numeric validation
     with tempfile.TemporaryDirectory(prefix="hosted_tool_test_") as temp_dir_str:
         temp_dir = Path(temp_dir_str)
         test_file = temp_dir / "company_data.txt"
@@ -303,7 +303,7 @@ Product Sales:
                 "Always search files before answering. Be concise in your initial responses."
             ),
             model="gpt-4.1",
-            model_settings=ModelSettings(temperature=0.0),
+            model_settings=ModelSettings(temperature=0.0, tool_choice="file_search"),
             files_folder=str(temp_dir),
             include_search_results=True,
         )
@@ -311,18 +311,32 @@ Product Sales:
         # Create an agency with the agent
         agency = Agency(agent)
 
-        # Wait for file processing and vector store indexing
-        # FileSearch requires time to process and index uploaded files
-        await asyncio.sleep(15)
+        # Wait for file processing and vector store indexing (active polling for stability)
+        client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+        vs_id = getattr(agent, "_associated_vector_store_id", None)
+        if vs_id:
+            for _ in range(60):  # up to 60 seconds
+                vs = await client.vector_stores.retrieve(vs_id)
+                if getattr(vs, "status", "") == "completed":
+                    break
+                if getattr(vs, "status", "") == "failed":
+                    raise RuntimeError(f"Vector store processing failed: {vs}")
+                await asyncio.sleep(1)
+        else:
+            # fallback to a short delay if no id is exposed
+            await asyncio.sleep(5)
 
         # TURN 1: Agent searches but gives summary only
         logger.info("=== TURN 1: Agent searches with FileSearch ===")
+
+        from agents import RunConfig
 
         result1 = await agency.get_response(
             message=(
                 "Use FileSearch to search the company data for financial information and employee data. "
                 "Just confirm you found it, don't give me the specific numbers yet."
-            )
+            ),
+            run_config=RunConfig(model_settings=ModelSettings(tool_choice="file_search")),
         )
 
         assert result1 is not None
