@@ -488,7 +488,7 @@ class ToolFactory:
             description=description.strip(),
             params_json_schema=params_json_schema,
             on_invoke_tool=on_invoke_tool,
-            strict_json_schema=getattr(base_tool.ToolConfig, "strict", False),
+            strict_json_schema=getattr(base_tool.ToolConfig, "strict", False) or False,
         )
         # Propagate one_call_at_a_time from BaseTool.ToolConfig to the FunctionTool instance
         # Store as a private attribute since FunctionTool doesn't have this field
