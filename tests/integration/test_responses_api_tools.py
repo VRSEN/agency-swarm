@@ -354,7 +354,7 @@ Product Sales:
             logger.info(f"Item {i + 1}: {item_type}")
 
             # Look for hosted tool search results messages
-            if item.get("role") == "user" and "[SEARCH_RESULTS]" in str(item.get("content", "")):
+            if item.get("role") == "system" and "[SEARCH_RESULTS]" in str(item.get("content", "")):
                 hosted_tool_outputs_found += 1
                 preservation_items.append(item)
                 logger.info(f"  Found search results message: {str(item.get('content', ''))}...")
