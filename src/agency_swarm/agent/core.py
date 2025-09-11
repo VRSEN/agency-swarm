@@ -220,7 +220,11 @@ class Agent(BaseAgent[MasterContext]):
 
         # Set files_folder_path
         if self.files_folder:
-            self.files_folder_path = Path(self.files_folder).resolve()
+            files_folder_path = Path(self.files_folder)
+            if files_folder_path.is_absolute():
+                self.files_folder_path = files_folder_path.resolve()
+            else:
+                self.files_folder_path = (Path(self.get_class_folder_path()) / files_folder_path).resolve()
         else:
             self.files_folder_path = None
 
