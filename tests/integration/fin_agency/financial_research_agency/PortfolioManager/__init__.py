@@ -1,3 +1,3 @@
-from .PortfolioManager import PortfolioManager
+from .PortfolioManager import portfolio_manager
 
-__all__ = ["PortfolioManager"]
+__all__ = ["portfolio_manager"]
