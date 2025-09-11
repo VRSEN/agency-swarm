@@ -233,7 +233,7 @@ class TerminalDemoLauncher:
                         )
                         final_prompt = (custom_instructions or base_prompt) + "\n\nConversation:\n" + transcript
 
-                        rc = RunConfig(model_settings=ModelSettings(model="gpt-5-nano", temperature=0.0))
+                        rc = RunConfig(model="gpt-5-nano", model_settings=ModelSettings(temperature=0.0))
                         result = await agency_instance.get_response(message=final_prompt, run_config=rc)
                         summary_text = str(getattr(result, "final_output", "")).strip()
 
@@ -337,33 +337,41 @@ class TerminalDemoLauncher:
                     """Insert '/' and immediately open the completion menu."""
                     buf = event.app.current_buffer
                     buf.insert_text("/")
-                    try:
-                        buf.start_completion(select_first=True)
-                    except Exception:
-                        pass
+                    # Force completion menu to open for slash commands
+                    buf.start_completion(select_first=True)
 
-                session = PromptSession(
-                    history=history,
-                    key_bindings=bindings,
-                    enable_history_search=True,
-                    mouse_support=True,
-                )
+                try:
+                    session = PromptSession(
+                        history=history,
+                        key_bindings=bindings,
+                        enable_history_search=True,
+                        mouse_support=False,  # Disable mouse to avoid terminal issues
+                    )
+                except Exception:
+                    # Fall back to basic input mode if PromptSession fails
+                    PromptSession = None
+                    session = None
 
-                while True:
-                    try:
-                        message = await session.prompt_async(
-                            "👤 USER: ",
-                            completer=completer,
-                            complete_while_typing=True,
-                            reserve_space_for_menu=8,
-                        )
-                    except (KeyboardInterrupt, EOFError):
-                        return
-                    event_converter.console.rule()
+                if PromptSession is not None and session is not None:
+                    while True:
+                        try:
+                            message = await session.prompt_async(
+                                "👤 USER: ",
+                                completer=completer,
+                                complete_while_typing=True,
+                                reserve_space_for_menu=8,
+                            )
+                        except (KeyboardInterrupt, EOFError):
+                            return
+                        except Exception:
+                            # Handle termios errors and similar issues - fall back to basic input
+                            PromptSession = None
+                            break
 
-                    should_exit = await handle_message(message)
-                    if should_exit:
-                        return
+                        event_converter.console.rule()
+                        should_exit = await handle_message(message)
+                        if should_exit:
+                            return
             else:
                 while True:
                     message = input("👤 USER: ")
