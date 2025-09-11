@@ -27,8 +27,8 @@ _instuction = f"""
 
 {{
     "tool": "...",
-    "execution_result": "FAIL",
-    "reason": "..."
+    "result": "FAIL",
+    "context": "(填写原因)"
 }}
 
 获取以上信息后继续执行下列流程。
@@ -47,12 +47,12 @@ _instuction = f"""
 
 {{
     "tool": "...",
-    "execution_result": "...",
-    "reason": "..."
+    "result": "...",
+    "context": "(填写原因)"
 }}
 
-其中"execution_result"和"reason"需要填入工具的返回结果中相同字段的内容。
-若你多次执行工具，只输出最终的总的execution_result和reason。
+其中"result"和"context"需要填入工具的返回结果中相同字段的内容。
+若你多次执行工具，只输出最终的总的result和context。
 
 """
 

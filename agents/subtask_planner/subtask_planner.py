@@ -40,6 +40,7 @@ _instruction = f"""
 同时，你需要从context_tree.json中读取并更新你记忆中的已有环境中的上下文信息
 
 注意: 你每次接收到输入都需要读取一遍context_tree.json
+注意：你不允许调用`multi_tool_use.parallel`
 
 你需要一步步思考，根据任务描述对该任务进行拆分，你需要确保:
 

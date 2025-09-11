@@ -29,5 +29,5 @@ class WriteFile(BaseTool):
         check_result = self.send_message_to_agent(recipient_agent_name="check_log_agent", message=output)
 
         if "该任务执行失败" in check_result:
-            return {"tool": "WriteFile", "execution_result": "FAIL", "reason": check_result}
-        return {"tool": "WriteFile",  "execution_result": "SUCCESS", "reason": check_result}
+            return {"tool": "WriteFile", "result": "FAIL", "context": check_result}
+        return {"tool": "WriteFile",  "result": "SUCCESS", "context": check_result}

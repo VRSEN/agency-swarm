@@ -19,20 +19,20 @@ def k8s_agent_instruction(_name, _description):
 
 如果指令需要指定pod名称，请根据上下文推测出目标pod名，若从上下文无法推测出目标pod名称，你需要直接输出:
 {{
-    "execution_result": "FAIL",
-    "reason": "(填写原因，原因中应写入“应用命令查出集群中所有pod名称”)"
+    "result": "FAIL",
+    "context": "(填写原因)"
 }}
  
 若该请求能够通过上下文信息**严格**判断出之前已经完成过，你可以直接输出:
 {{
-    "execution_result": "SUCCESS",
-    "reason": "(填写原因)"
+    "result": "SUCCESS",
+    "context": "(填写原因)"
 }}
 
 若该请求无法使用命令行完成，你需要直接输出:
 {{
-    "execution_result": "FAIL",
-    "reason": "(填写原因)"
+    "result": "FAIL",
+    "context": "(填写原因)"
 }}
 
 ### step 3. 调用工具并获取结果
@@ -48,11 +48,11 @@ def k8s_agent_instruction(_name, _description):
     "tool": "...",
     "command": "...",
     "command_result": "...",
-    "execution_result": "...",
-    "reason": "..."
+    "result": "...",
+    "context": "(填写原因)"
 }}
 
-其中"execution_result"和"reason"需要填入工具的返回结果中相同字段的内容。
-若你多次执行工具，只输出最终的总的execution_result和reason。"""
+其中"result"和"context"需要填入工具的返回结果中相同字段的内容。
+若你多次执行工具，只输出最终的总的result和context。"""
 
     return _instruction
