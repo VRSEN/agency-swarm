@@ -111,6 +111,46 @@ def add_agent_name_to_event(
     return event
 
 
+def ensure_event_agent_metadata(event: Any, agent_name: str, caller_agent: str | None) -> Any:
+    """Ensure minimal agent metadata is present on an event without overwriting existing values.
+
+    This helper only sets missing `agent` and `callerAgent` fields/attributes and leaves
+    existing values untouched to preserve accurate agent attribution during handoffs.
+
+    Args:
+        event: The streaming event (dict-like or object with attributes)
+        agent_name: Default agent name to set if missing
+        caller_agent: Default caller name to set if missing (None for user)
+
+    Returns:
+        The same event with missing metadata filled in (if applicable).
+    """
+    try:
+        if isinstance(event, dict):
+            if "agent" not in event:
+                event["agent"] = agent_name
+            if "callerAgent" not in event:
+                event["callerAgent"] = caller_agent
+        else:
+            has_agent_attr = hasattr(event, "agent")
+            has_caller_attr = hasattr(event, "callerAgent")
+            if not has_agent_attr:
+                try:
+                    event.agent = agent_name
+                except Exception:
+                    pass
+            if not has_caller_attr:
+                try:
+                    event.callerAgent = caller_agent
+                except Exception:
+                    pass
+    except Exception:
+        # Be conservative: do not raise from utility; leave event unchanged
+        pass
+
+    return event
+
+
 @dataclass
 class StreamingContext:
     """Context for managing event streaming across nested agent calls."""

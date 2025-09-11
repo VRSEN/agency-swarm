@@ -1,7 +1,9 @@
-"""Integration test for parent_run_id tracking in multi-level agent orchestration.
+"""Integration test for run lineage metadata in multi-level orchestration.
 
-Tests that parent_run_id is correctly propagated through nested agent calls,
-enabling full traversal of the delegation chain (e.g., CEO → Manager → Worker).
+Validates agent_run_id/parent_run_id propagation across nested agent calls so
+the delegation chain (CEO → Manager → Worker) can be reconstructed. This proves
+the necessity of enriching streaming events and saved messages with run IDs as
+documented (observability, streaming docs).
 """
 
 import asyncio
