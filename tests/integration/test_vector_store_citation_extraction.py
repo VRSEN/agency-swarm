@@ -16,6 +16,7 @@ import pytest
 from agents import ModelSettings
 
 from agency_swarm import Agency, Agent
+from agency_swarm.utils.citation_extractor import extract_vector_store_citations
 
 
 @pytest.mark.asyncio
@@ -105,6 +106,25 @@ async def test_vector_store_citation_extraction():
         print(f"   Queries: {getattr(file_search_call.raw_item, 'queries', [])}")
         print(f"   Status: {getattr(file_search_call.raw_item, 'status', 'unknown')}")
 
-        # Note: Due to current API behavior, results field may be empty even with include_search_results=True
-        # The test verifies that the FileSearch tool is properly configured and called
-        # Future API updates may populate the results field as expected
+        # Extract citations with a short retry loop to ensure stability
+        from agents import RunConfig
+
+        citations = []
+        for _ in range(3):
+            citations = extract_vector_store_citations(response)
+            if citations:
+                break
+            # Retry by re-asking the original question
+            response = await agency.get_response(
+                test_question,
+                run_config=RunConfig(model_settings=ModelSettings(tool_choice="file_search")),
+            )
+
+        assert len(citations) > 0, "Expected FileSearch citations but none were returned"
+
+        citation = citations[0]
+        assert "file_id" in citation, "Citation missing file_id"
+        assert "text" in citation, "Citation missing text"
+        assert "tool_call_id" in citation, "Citation missing tool_call_id"
+        assert citation["file_id"].startswith("file-"), f"Invalid file_id format: {citation['file_id']}"
+        assert len(citation["text"]) > 0, "Citation text is empty"

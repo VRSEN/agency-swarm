@@ -271,24 +271,13 @@ async def test_file_search_tool(real_openai_client: AsyncOpenAI, tmp_path: Path)
         # Initialize agency and run test
         agency = Agency(file_search_agent, user_context=None)
         question = (
-            "Use FileSearch with the query 'hobbit' (or 'the hobbit') to find the answer: "
-            "What is the title of the 4th book in the list?"
+            "Use FileSearch with the query 'hobbit' to find the answer: What is the title of the 4th book in the list?"
         )
 
         try:
             from agents import RunConfig
 
-            # TURN 1: Force a hosted FileSearch call to populate preserved results
-            priming_msg = (
-                "You MUST call the FileSearch tool now to search the uploaded documents for the 'favorite books' "
-                "list and retrieve the items. Do not reveal any details yet; just collect results."
-            )
-            await agency.get_response(
-                priming_msg,
-                run_config=RunConfig(model_settings=ModelSettings(tool_choice="file_search")),
-            )
-
-            # TURN 2: Ask the specific question, enforcing tool usage again for determinism
+            # Single-turn: enforce FileSearch tool usage deterministically
             response_result = await agency.get_response(
                 question,
                 run_config=RunConfig(model_settings=ModelSettings(tool_choice="file_search")),
@@ -311,8 +300,6 @@ async def test_file_search_tool(real_openai_client: AsyncOpenAI, tmp_path: Path)
                 )
                 if not file_search_used:
                     print("FileSearch tool was not used, this may explain why the answer wasn't found")
-
-            # No further fallbacks allowed in final code
 
             assert hobbit_found, f"Expected 'hobbit' or related terms not found in: {response_result.final_output}"
 
