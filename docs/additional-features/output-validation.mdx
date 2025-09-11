@@ -29,7 +29,7 @@ In v1.x, validation is handled through **guardrails** using the agents SDK. Guar
 
 Output guardrails validate agent responses before they are sent to users or other agents. Each output guardrail function receives three parameters: `context`, `agent`, and `response_text`.
 
-In most cases, you'll only need the `response_text` parameter, which contains the agent's latest response as a simple text string. This allows you to check the response against specific criteria.
+In most cases, you'll only need the `response_text` parameter, which contains the agent's latest response as a simple text string if `output_type` is not set or a BaseModel subclass, if you have set a custom `output_type`. This allows you to check the response against specific criteria.
 
 For more complex validation scenarios, you can utilize the `context` and `agent` parameters to account for run state and agent configuration during validation.
 
@@ -45,10 +45,11 @@ from agency_swarm import (
     OutputGuardrailTripwireTriggered,
     output_guardrail,
 )
+from pydantic import BaseModel
 
 @output_guardrail
 async def response_content_guardrail(
-    context: RunContextWrapper, agent: Agent, response_text: str
+    context: RunContextWrapper, agent: Agent, response_text: str | Type[BaseModel]
 ) -> GuardrailFunctionOutput:
     tripwire_triggered = False
     output_info = ""
