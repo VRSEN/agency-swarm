@@ -99,6 +99,6 @@ def test_agent_flow_with_handoff_tool():
 
     # Check that handoffs are created for the agents
     print(f"agent1.tools: {agent1.handoffs}")
-    assert agent1.handoffs[0].tool_name == "transfer_to_agent2"
-    assert agent2.handoffs[0].tool_name == "transfer_to_agent3"
+    assert agent1.handoffs[0].tool_name == "transfer_to_Agent2"
+    assert agent2.handoffs[0].tool_name == "transfer_to_Agent3"
     assert len(agent3.handoffs) == 0
