@@ -2,7 +2,8 @@
 Agency Swarm Terminal Demo
 
 This example demonstrates the Terminal UI capabilities of Agency Swarm v1.x.
-Sets up a frontend and backend server for the Terminal UI chat demo.
+To better demonstrate features of the demo, ask ceo agent to get weather in NY.
+You should see agent-to-agent communication, reasoning and tool outputs in the terminal.
 """
 
 import sys
@@ -15,8 +16,6 @@ from openai.types.shared import Reasoning
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from agency_swarm import Agency, Agent, function_tool
-
-# from agency_swarm.tools import SendMessageHandoff
 
 
 @function_tool
@@ -46,13 +45,11 @@ def create_demo_agency():
         model_settings=ModelSettings(reasoning=Reasoning(effort="low", summary="auto")),
     )
 
-    # Create agency with mutual handoffs using SendMessageHandoff
+    # Create a simple agency one-directional communication flow
     agency = Agency(
         ceo,  # Entry point agent (positional argument)
         communication_flows=[
             (ceo > worker),
-            # (ceo > worker, SendMessageHandoff),  # CEO can hand off to Worker
-            # (worker > ceo, SendMessageHandoff),  # Worker can hand off back to CEO
         ],
         name="TerminalDemoAgency",
     )
