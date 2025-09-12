@@ -730,6 +730,12 @@ class Thread:
                 ),
                 None,
             )
+            # 添加空值检查
+            if tool is None:
+                # 记录警告或错误，然后将此工具调用视为同步调用
+                print(f"Warning: Tool '{tool_call.function.name}' not found in agent '{recipient_agent.name}'")
+                sync_tool_calls.append(tool_call)
+                continue
 
             if (
                 hasattr(tool.ToolConfig, "async_mode") and tool.ToolConfig.async_mode

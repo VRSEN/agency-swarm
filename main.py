@@ -423,7 +423,7 @@ def main():
             "step": step_json
         }
         
-        text = "请在华为云北京cn-north-4a可用区创建一台鲲鹏服务器，名为'mytest'，已有vpc和子网，VPC id为1de3a2b5-a49d-437b-96ab-d5d50013b442，子网id为e634a7b1-1893-428b-960c-9b28563c1f76，规格为8核16GB内存，操作系统为EulerOS 2.0。"
+        text = """请在华为云北京cn-north-4a可用区创建一台8核16GB的服务器，名为'mytest'，已有vpc和子网，VPC id为1de3a2b5-a49d-437b-96ab-d5d50013b442，子网id为e634a7b1-1893-428b-960c-9b28563c1f76，操作系统为 Huawei Cloud EulerOS 2.0，镜像ID为7d940784-ac0a-425f-b3fa-8478f1a1df70。"""
         # text = "在cn-north-4a可用区中，名为ccetest的CCE集群中加入一个节点，节点名字为node-1，集群id为eeb8f029-1c4b-11f0-a423-0255ac100260，节点规格为c6.large.2，系统盘和数据盘大小分别为50GB和100GB，磁盘类型都为SSD"
         # text = "在cn-north-4a可用区创建一个名为ccetest的CCE集群，最小规格；未创建vpc和子网，需要创建名为vpc111的vpc和名为subnet111的子网，vpc的cidr为192.168.0.0/24，网关ip为192.168.0.1; 之后你需要在该CCE集群中加入三个节点"
         # text = "在北京cn-north-4a可用区创建一个最低规格的CCE，名为'ccetest'，已有vpc和子网，VPC id为8bf558f4-2f96-4248-9cb0-fee7a2a6cebb，子网id为0519a325-6fa3-4f68-83ec-6f13263167d2"
