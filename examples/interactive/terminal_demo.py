@@ -8,6 +8,9 @@ Sets up a frontend and backend server for the Terminal UI chat demo.
 import sys
 from pathlib import Path
 
+from agents import ModelSettings
+from openai.types.shared import Reasoning
+
 # Add the src directory to the path so we can import agency_swarm
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
@@ -28,6 +31,8 @@ def create_demo_agency():
         name="CEO",
         description="Chief Executive Officer - oversees all operations",
         instructions="You are the CEO. When asked about weather, delegate to Worker with a specific location (use London if not specified).",
+        model="gpt-5-mini",
+        model_settings=ModelSettings(reasoning=Reasoning(effort="high", summary="auto")),
     )
 
     worker = Agent(
@@ -35,6 +40,8 @@ def create_demo_agency():
         description="Worker - performs weather-related tasks",
         instructions="You are a worker. You handle weather tasks. Use the get_weather tool with the location provided.",
         tools=[get_weather],
+        model="gpt-5-mini",
+        model_settings=ModelSettings(reasoning=Reasoning(effort="low", summary="auto")),
     )
 
     # Create agency with communication flows (v1.x pattern)
