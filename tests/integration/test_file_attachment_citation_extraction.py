@@ -212,7 +212,7 @@ async def test_file_attachment_vs_vector_store_citation_distinction():
         vector_search_results = [
             item
             for item in vector_history
-            if item.get("role") == "assistant" and "[SEARCH_RESULTS]" in str(item.get("content", ""))
+            if item.get("role") == "system" and "[SEARCH_RESULTS]" in str(item.get("content", ""))
         ]
 
         # Test direct file attachment approach using the separate file

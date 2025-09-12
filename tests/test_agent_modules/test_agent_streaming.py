@@ -10,6 +10,13 @@ from agency_swarm import Agent
 
 @pytest.mark.asyncio
 async def test_get_response_stream_basic():
+    """Validate that streamed dict events are enriched with agent/callerAgent metadata.
+
+    Why this matters: The UI and persistence layers consume these fields to attribute
+    output to the correct agent (see docs/additional-features/streaming.mdx and
+    docs/additional-features/observability.mdx). This test proves the need for
+    metadata enrichment in the streaming path.
+    """
     agent = Agent(name="TestAgent", instructions="Test instructions")
     message_content = "Stream this"
 
@@ -35,6 +42,11 @@ async def test_get_response_stream_basic():
 
 @pytest.mark.asyncio
 async def test_get_response_stream_final_result_processing():
+    """Validate metadata presence for final_result events in streaming.
+
+    Ensures downstream consumers can attribute final output to the right agent,
+    per the documented metadata contract.
+    """
     agent = Agent(name="TestAgent", instructions="Test instructions")
     final_content = {"final_key": "final_value"}
 
@@ -63,7 +75,11 @@ async def test_get_response_stream_final_result_processing():
 async def test_get_response_stream_generates_thread_id(
     mock_runner_run_streamed_patch, minimal_agent, mock_thread_manager
 ):
-    """Test that get_response_stream generates a consistent thread ID for user interactions."""
+    """Validate consistent thread grouping for user interactions.
+
+    The grouping relies on metadata added during streaming; this test ensures
+    we persist correctly attributed messages, which depends on enrichment paths.
+    """
 
     async def mock_stream_wrapper():
         yield {"event": "text", "data": "Hello"}
@@ -95,7 +111,11 @@ async def test_get_response_stream_generates_thread_id(
 async def test_get_response_stream_agent_to_agent_communication(
     mock_runner_run_streamed_patch, minimal_agent, mock_thread_manager
 ):
-    """Test that get_response_stream works correctly for agent-to-agent communication."""
+    """Validate metadata for agent-to-agent streaming.
+
+    Proves that sender/receiver attribution via agent/callerAgent is present,
+    enabling downstream flows and UI to render correct attribution.
+    """
     from agency_swarm.agent.core import AgencyContext
 
     async def mock_stream_wrapper():

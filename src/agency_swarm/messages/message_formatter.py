@@ -239,7 +239,7 @@ class MessageFormatter:
                 if file_count > 0:
                     synthetic_outputs.append(
                         MessageFormatter.add_agency_metadata(
-                            {"role": "user", "content": search_results_content},
+                            {"role": "system", "content": search_results_content},
                             agent=agent.name,
                             caller_agent=None,
                         )
@@ -269,7 +269,7 @@ class MessageFormatter:
                 if found_content:
                     synthetic_outputs.append(
                         MessageFormatter.add_agency_metadata(
-                            {"role": "user", "content": search_results_content},
+                            {"role": "system", "content": search_results_content},
                             agent=agent.name,
                             caller_agent=None,
                         )

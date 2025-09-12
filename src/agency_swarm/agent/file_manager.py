@@ -164,7 +164,7 @@ class AgentFileManager:
         if not self.agent.files_folder:
             return
 
-        folder_path = Path(self.agent.files_folder)
+        folder_path = Path(self.agent.get_class_folder_path()) / Path(self.agent.files_folder)
         original_folder_path = folder_path  # Keep reference to original directory
 
         # ALWAYS check for existing vector store directories first, regardless of original directory existence
@@ -189,7 +189,7 @@ class AgentFileManager:
                 logger.error(f"Files folder '{folder_path}' is not a directory. Skipping...")
                 return
 
-        folder_str = str(self.agent.files_folder)
+        folder_str = str(folder_path)
         base_path_str = folder_str
         # Regex to capture base path and a VS ID that itself starts with 'vs_'
         vs_id_match = re.search(r"(.+)_(vs_[a-zA-Z0-9_]+)$", folder_str)

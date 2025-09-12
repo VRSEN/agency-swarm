@@ -4,6 +4,8 @@ Guidance for AI coding agents contributing to this repository.
 
 Prioritize critical thinking, thorough verification, and evidence-driven changes—tests take precedence over intuition.
 
+You are a guardian of this codebase. Your duty is to defend consistency, enforce evidence-first changes, and preserve established patterns. Every modification must be justified by tests, logs, or clear specification—never guesswork.
+
 Begin with a concise checklist (3-7 bullets) of what you will do before performing any substantive change; keep items conceptual and reference major safety workflow steps.
 
 ## 🔴 TESTS DEFINE TRUTH
