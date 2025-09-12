@@ -106,42 +106,17 @@ class ConsoleEventAdapter:
                             md_content = Markdown(self.reasoning_buffer)
                             self.reasoning_output.update(Group(header_text, md_content))
                         return
-                    elif data_type == "response.reasoning_summary_part.added":
-                        if not self.show_reasoning:
-                            return
-                        # Open reasoning region early if the model announces a reasoning part
-                        if self.reasoning_output is None:
-                            self.reasoning_buffer = ""
-                            self._reasoning_final_rendered = False
-                            self.reasoning_output = Live("", console=self.console, refresh_per_second=10)
-                            self.reasoning_output.__enter__()
-                            header_text = f"🧠 {agent_name} Reasoning"
-                            self.reasoning_output.update(Group(header_text, Markdown(self.reasoning_buffer)))
-                        return
+                    # Do not add any messages here - they were rendered via deltas
                     elif data_type == "response.reasoning_summary_part.done":
                         if not self.show_reasoning:
                             return
-                        # Final text for the reasoning summary is provided in part.text
-                        try:
-                            part = getattr(data, "part", None)
-                            final_text = getattr(part, "text", "") if part else ""
-                        except Exception:
-                            final_text = ""
-                        if self.reasoning_output is None:
-                            self.reasoning_output = Live("", console=self.console, refresh_per_second=10)
-                            self.reasoning_output.__enter__()
-                        self.reasoning_buffer = str(final_text)
-                        header_text = f"🧠 {agent_name} Reasoning"
-                        md_content = Markdown(self.reasoning_buffer)
-                        self.reasoning_output.update(Group(header_text, md_content))
-                        self._reasoning_final_rendered = True
                         try:
                             self.reasoning_output.__exit__(None, None, None)
                         except Exception:
                             pass
                         self.reasoning_output = None
                         self.reasoning_buffer = ""
-                        self._reasoning_final_rendered = False
+                        self._reasoning_final_rendered = True
                         return
                     if data_type == "response.output_text.delta":
                         # If reasoning region is still open, finalize and close it before normal output
@@ -194,7 +169,7 @@ class ConsoleEventAdapter:
                         # Also finalize and close any active reasoning region
                         if self.reasoning_output is not None:
                             try:
-                                if self.reasoning_buffer.strip():
+                                if (not self._reasoning_final_rendered) and self.reasoning_buffer.strip():
                                     header_text_r = f"🧠 {agent_name} Reasoning"
                                     md_content_r = Markdown(self.reasoning_buffer)
                                     self.reasoning_output.update(Group(header_text_r, md_content_r))
@@ -204,7 +179,6 @@ class ConsoleEventAdapter:
                                 pass
                             self.reasoning_output = None
                             self.reasoning_buffer = ""
-                            self._reasoning_final_rendered = False
 
                     elif data_type == "response.output_item.added":
                         item = data.item
@@ -212,11 +186,6 @@ class ConsoleEventAdapter:
                         if getattr(item, "type", "") == "reasoning":
                             if not self.show_reasoning:
                                 return
-                            if self.reasoning_output is None:
-                                self.reasoning_buffer = ""
-                                self._reasoning_final_rendered = False
-                                self.reasoning_output = Live("", console=self.console, refresh_per_second=10)
-                                self.reasoning_output.__enter__()
                             # Seed with any current summary text
                             try:
                                 summaries = getattr(item, "summary", []) or []
@@ -225,8 +194,17 @@ class ConsoleEventAdapter:
                                 current_text = ""
                             if current_text:
                                 self.reasoning_buffer = str(current_text)
+                                # Only create Live display if we have content to show
+                                if self.reasoning_output is None:
+                                    self.reasoning_output = Live("", console=self.console, refresh_per_second=10)
+                                    self.reasoning_output.__enter__()
+                                    self._reasoning_final_rendered = False
                                 header_text = f"🧠 {agent_name} Reasoning"
                                 self.reasoning_output.update(Group(header_text, Markdown(self.reasoning_buffer)))
+                            elif self.reasoning_output is None:
+                                # Initialize buffer but don't create Live display yet
+                                self.reasoning_buffer = ""
+                                self._reasoning_final_rendered = False
                         elif getattr(item, "type", "") == "mcp_call":
                             self.mcp_calls[item.id] = item.name
 
@@ -258,22 +236,24 @@ class ConsoleEventAdapter:
                                 final_text = getattr(summaries[0], "text", "") if summaries else ""
                             except Exception:
                                 final_text = ""
-                            if self.reasoning_output is None:
-                                self.reasoning_output = Live("", console=self.console, refresh_per_second=10)
-                                self.reasoning_output.__enter__()
                             if final_text:
                                 self.reasoning_buffer = str(final_text)
-                            header_text_r = f"🧠 {agent_name} Reasoning"
-                            md_content_r = Markdown(self.reasoning_buffer)
-                            try:
-                                self.reasoning_output.update(Group(header_text_r, md_content_r))
-                                self._reasoning_final_rendered = True
-                                self.reasoning_output.__exit__(None, None, None)
-                            except Exception:
-                                pass
-                            self.reasoning_output = None
-                            self.reasoning_buffer = ""
-                            self._reasoning_final_rendered = False
+                            # Only create and show reasoning display if there's actual content
+                            if self.reasoning_buffer:
+                                if self.reasoning_output is None:
+                                    self.reasoning_output = Live("", console=self.console, refresh_per_second=10)
+                                    self.reasoning_output.__enter__()
+                                header_text_r = f"🧠 {agent_name} Reasoning"
+                                try:
+                                    if not self._reasoning_final_rendered:
+                                        md_content_r = Markdown(self.reasoning_buffer)
+                                        self.reasoning_output.update(Group(header_text_r, md_content_r))
+                                        self._reasoning_final_rendered = True
+                                    self.reasoning_output.__exit__(None, None, None)
+                                except Exception:
+                                    pass
+                                self.reasoning_output = None
+                                self.reasoning_buffer = ""
                         item = data.item
                         if hasattr(item, "arguments"):
                             # Handle agent to agent communication
