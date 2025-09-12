@@ -1,9 +1,12 @@
 from agency_swarm import Agent
 from agents.cap_group_agents.VPC_network.cap_agents.VPC_subnet_agent.tools import (
-    ReadAPI, GetEndPointAndProjectID
+    ReadAPI
 )
 from agents.cap_group_agents.cap_agent_instruction import cap_agent_instruction
 from agents.basic_agents.job_agent.tools.CallAPI import CallAPI
+from agents.cap_group_agents.VPC_network.tools import (
+    GetEndPointAndProjectID, AskManagerParams
+)
 
 _name = "VPC_subnet_agent"
 _manager_name = "VPC_manager"
@@ -16,7 +19,7 @@ import os
 current_path = os.path.abspath(os.path.dirname(__file__))
 _instruction = cap_agent_instruction(_name, _description, _manager_name)
 
-_tools = [ReadAPI.ReadAPI, CallAPI, GetEndPointAndProjectID.GetEndPointAndProjectID]
+_tools = [ReadAPI.ReadAPI, CallAPI, GetEndPointAndProjectID.GetEndPointAndProjectID, AskManagerParams.AskManagerParams]
 
 _file_folder = ""
 
