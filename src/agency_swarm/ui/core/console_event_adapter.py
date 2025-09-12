@@ -111,7 +111,8 @@ class ConsoleEventAdapter:
                         if not self.show_reasoning:
                             return
                         try:
-                            self.reasoning_output.__exit__(None, None, None)
+                            if self.reasoning_output is not None:
+                                self.reasoning_output.__exit__(None, None, None)
                         except Exception:
                             pass
                         self.reasoning_output = None
