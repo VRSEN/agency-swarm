@@ -12,11 +12,11 @@ def planner_instruction(_group_name, _input_format, _agents, _output_format):
 
     # 注意：你不允许调用`multi_tool_use.parallel`
     
-    同时，你需要通过`ReadJsonFile`从context_index.json中读取已有环境中的上下文信息
+    同时，你需要通过`ReadJsonFile`从context_tree.json中读取已有环境中的上下文信息
 
-    # 注意: 你每次接收到输入都需要读取一遍context_index.json
+    # 注意: 你每次接收到输入都需要读取一遍context_tree.json
     # 注意: 初始环境中资源都是充足的，你不需要对可用区资源是否足以执行任务进行查询；
-    # 注意: 用户输入和context_index.json的所有信息都是默认无误的，你不需要规划出有确认信息是否正确的步骤；
+    # 注意: 用户输入和从context_tree.json的所有信息都是默认无误的，你不需要规划出有确认信息是否正确的步骤；
     # 注意: 除非用户请求中或context的上下文信息中有提供环境条件的描述，初始环境中没有创建**任何资源**；确保你的规划有你步骤中**所需资源的创建**或**所需信息的获取**，否则请先完成它们；
     # 注意，你只能考虑**你的能力群内**包含的Agent；
     # 注意，Agent只能通过调用api或ssh远程命令行连接或编写、运行脚本的方式进行操作

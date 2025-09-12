@@ -1504,7 +1504,6 @@ class Agency:
 
         print("Initialization Successful.\n")
 
-        # self.update_context("user_input", {"request_id": request_id, "original_request": original_request})
         # 初始化任务树
         self.init_context_tree(request_id=request_id, content=original_request)
 
@@ -1549,8 +1548,6 @@ class Agency:
             )
         # cap_agent_threads[能力群名称][能力agent名称] = 该能力agent的Thread
 
-        # task_id = 0
-        # context_id = self.get_next_context_id()
         original_request_error_flag = False
         original_request_error_message = ""
         error_id = 0
@@ -1588,7 +1585,6 @@ class Agency:
                     description=task["description"],
                 )
             completed_task_ids = []
-            # self.update_context("task_plan", task_graph_json)
 
             # 任务调度循环
             while True:
@@ -1621,14 +1617,17 @@ class Agency:
 
                     # 传递给subtask规划的信息
                     subtask_input = {
-                        "title": next_task["title"],
-                        "description": next_task["description"],
-                        "total_task_graph": task_graph_json,
+                        "title": next_task['title'],
+                        "description": next_task['description'],
                     }
-
-                    # self.update_context("planning_task", {"task_id": next_task_id, "title": next_task.get("title"), "description": next_task.get("description")})
+                        # "total_task_graph": task_graph_json,
+                    
                     self.update_context_tree(
-                        request_id=request_id, task_id=next_task_id, status="executing"
+                        request_id = request_id,
+                        task_id = next_task_id,
+                        status = "executing",
+                        title = next_task['title'],
+                        description = next_task['description']
                     )
 
                     console.rule()
@@ -1666,8 +1665,6 @@ class Agency:
                             )
                         completed_subtask_ids = []
 
-                        # self.update_context("subtask_plan", subtask_graph_json)
-
                         # 子任务调度循环
                         while True:
                             # 4. 子任务调度层，确定可执行的subtask列表
@@ -1699,17 +1696,18 @@ class Agency:
 
                                 next_subtask = id2subtask[next_subtask_id]
                                 steps_input = {
-                                    "title": next_subtask["title"],
-                                    "description": next_subtask["description"],
-                                    "total_subtask_graph": subtask_graph_json,
+                                    "title": next_subtask['title'],
+                                    "description": next_subtask['description'],
                                 }
-
-                                # self.update_context("planning_subtask", {"subtask_id": next_subtask_id, "title": next_subtask.get("title"), "description": next_subtask.get("description")})
-                                self.update_context_tree(
-                                    request_id=request_id,
-                                    task_id=next_task_id,
-                                    subtask_id=next_subtask_id,
-                                    status="executing",
+                                    # "total_subtask_graph": subtask_graph_json,
+                                
+                                self.update_context_tree (
+                                    request_id = request_id,
+                                    task_id = next_task_id,
+                                    subtask_id = next_subtask_id,
+                                    status = "executing",
+                                    title = next_subtask['title'], 
+                                    description = next_subtask['description']
                                 )
 
                                 console.rule()
@@ -1766,8 +1764,6 @@ class Agency:
                                         )
                                     completed_step_ids = []
 
-                                    # self.update_context("step_plan", steps_graph_json)
-
                                     # 步骤调度循环
                                     while True:
                                         if code_scheduling:
@@ -1799,13 +1795,15 @@ class Agency:
                                             step_error_message = ""
 
                                             next_step = id2step[next_step_id]
-                                            # self.update_context("agent_executing_step", {"step_id": next_step_id, "title": next_step.get("title"), "description": next_step.get("description")})
+
                                             self.update_context_tree(
-                                                request_id=request_id,
-                                                task_id=next_task_id,
-                                                subtask_id=next_subtask_id,
-                                                step_id=next_step_id,
-                                                status="executing",
+                                                request_id = request_id,
+                                                task_id = next_task_id,
+                                                subtask_id = next_subtask_id,
+                                                step_id = next_step_id,
+                                                status = "executing",
+                                                title = next_step['title'],
+                                                description = next_step['description']
                                             )
 
                                             console.rule()
@@ -1831,35 +1829,17 @@ class Agency:
                                             while True:
                                                 try:
                                                     # 7. 能力agent执行单个step
-                                                    tool, command, result, reason = (
-                                                        self.capability_agents_processor(
-                                                            step=next_step,
-                                                            cap_group=next_subtask_cap_group,
-                                                            cap_agent_threads=cap_agent_threads,
-                                                        )
-                                                    )
-                                                    assert (
-                                                        result == "SUCCESS"
-                                                        or result == "FAIL"
-                                                    ), f"Unknown result: {result}"
-
-                                                    # self.update_context("agent_execution_result", {
-                                                    #         "step_id": next_step_id,
-                                                    #         "step_title": next_step['title'],
-                                                    #         "result": result,
-                                                    #         "context": reason
-                                                    #     })
+                                                    aciton = self.capability_agents_processor(step=next_step, cap_group=next_subtask_cap_group, cap_agent_threads=cap_agent_threads)
+                                                    result = aciton.get('result', "FAIL")
+                                                    context = aciton.get('context', "No context provided.")
+                                                    assert result == 'SUCCESS' or result == 'FAIL', f"Unknown result: {result}" 
+                                                    
                                                     self.update_context_tree(
-                                                        request_id=request_id,
-                                                        task_id=next_task_id,
-                                                        subtask_id=next_subtask_id,
-                                                        step_id=next_step_id,
-                                                        action={
-                                                            "tool": tool,
-                                                            "command": command,
-                                                            "result": result,
-                                                            "reason": reason,
-                                                        },
+                                                        request_id = request_id,
+                                                        task_id = next_task_id,
+                                                        subtask_id = next_subtask_id,
+                                                        step_id = next_step_id,
+                                                        action = aciton
                                                     )
 
                                                     if result == "SUCCESS":
@@ -1868,29 +1848,15 @@ class Agency:
                                                         # 如果失败，记录并更新error
                                                         error_id = error_id + 1
                                                         step_error_flag = True
-                                                        step_error_message = reason
-                                                        self.update_error(
-                                                            error_id=error_id,
-                                                            error=reason,
-                                                            step=next_step,
-                                                        )
-                                                        # self.update_context("error", {
-                                                        #     "stage": "step_execution",
-                                                        #     "error_message": step_error_message,
-                                                        #     "step_id": next_step_id,
-                                                        #     "request_id": request_id,
-                                                        # })
+                                                        step_error_message = context
+
+                                                        self.update_error(error_id = error_id, error = context, step = next_step)
+
                                                 except Exception as e:
                                                     # 更新error
                                                     error_id = error_id + 1
                                                     step_error_flag = True
                                                     step_error_message = str(e)
-                                                    # self.update_context("error", {
-                                                    #     "stage": "step_execution",
-                                                    #     "error_message": step_error_message,
-                                                    #     "step_id": next_step_id,
-                                                    #     "request_id": request_id,
-                                                    # })
 
                                                 # 如果没有错误则退出该step循环，否则进入下一级错误处理
                                                 if not step_error_flag:
@@ -1923,11 +1889,7 @@ class Agency:
                                                 break
                                             # 本次step完成，加入已完成列表
                                             completed_step_ids.append(next_step_id)
-                                            # self.update_context("step_complete", {
-                                            #     "step_id": next_step_id,
-                                            #     "title": next_step['title'],
-                                            #     "result": "completed"
-                                            # })
+
                                             self.update_context_tree(
                                                 request_id=request_id,
                                                 task_id=next_task_id,
@@ -1941,14 +1903,12 @@ class Agency:
                                         # 本次step调度结束
 
                                     # 本subtask的所有step结束
-                                    # self._init_file(self.completed_step_path)
                                     if not subtask_error_flag:
                                         # 如果step全都正常完成，更新已完成subtask
                                         console.rule()
                                         print(
                                             f"  {next_subtask_id} ({next_subtask['title']}) complete"
                                         )
-                                        # self.update_completed_sub_task(next_subtask_id, next_subtask)
                                         break
                                     else:
                                         console.rule()
@@ -1971,11 +1931,7 @@ class Agency:
                                     break
                                 # 本次subtask完成，加入已完成列表
                                 completed_subtask_ids.append(next_subtask_id)
-                                # self.update_context("subtask_complete", {
-                                #     "subtask_id": next_subtask_id,
-                                #     "tltle": next_subtask['title'],
-                                #     "result": "completed"
-                                # })
+
                                 self.update_context_tree(
                                     request_id=request_id,
                                     task_id=next_task_id,
@@ -1988,12 +1944,10 @@ class Agency:
                             # 本次subtask调度结束
 
                         # 本次task的所有subtask结束
-                        # self._init_file(self.completed_subtask_path)
                         if not task_error_flag:
                             # 如果subtask全都正常完成，更新已完成task
                             console.rule()
                             print(f"{next_task_id} ({next_task['title']}) complete")
-                            # self.update_completed_task(next_task_id, next_task)
                             break
                         else:
                             console.rule()
@@ -2008,11 +1962,7 @@ class Agency:
 
                     # 本次task完成，加入已完成列表
                     completed_task_ids.append(next_task_id)
-                    # self.update_context("task_complete", {
-                    #     "task_id": next_task_id,
-                    #     "title": next_task['title'],
-                    #     "result": "completed"
-                    # })
+
                     self.update_context_tree(
                         request_id=request_id,
                         task_id=next_task_id,
@@ -2027,11 +1977,7 @@ class Agency:
             if not original_request_error_flag:
                 console.rule()
                 print(f"original request complete")
-                # self.update_request(request_id=request_id, content=original_request)
-                # self.update_context("original_request_complete", {
-                #     "request_id": request_id,
-                #     "result": "completed"
-                # })
+
                 self.update_context_tree(
                     request_id=request_id,
                     status="completed",
@@ -2066,7 +2012,6 @@ class Agency:
 
         print("Initialization Successful.\n")
 
-        # self.update_context("user_input", {"request_id": "request_" + str(request_id), "original_request": original_request})
         # 初始化任务树
         self.init_context_tree(request_id=request_id, content=original_request)
 
@@ -2143,7 +2088,6 @@ class Agency:
                     description=task["description"],
                 )
             completed_task_ids = []
-            # self.update_context("task_plan_result", task_graph_json)
 
             # 任务调度循环
             while True:
@@ -2178,7 +2122,6 @@ class Agency:
                         "last_error": "",
                     }
 
-                    # self.update_context("optimizer_agent_input", {"task_id": next_task_id, "title": next_task.get("title"), "description": next_task.get("description")})
                     self.update_context_tree(
                         request_id=request_id, task_id=next_task_id, status="executing"
                     )
@@ -2212,32 +2155,21 @@ class Agency:
                     while True:
                         try:
                             # 能力agent执行单个task
-                            tool, command, result, reason = (
-                                self.capability_agents_processor(
+                            action = self.capability_agents_processor(
                                     step=next_task,
                                     cap_group=next_task_cap_group,
                                     cap_agent_threads=cap_agent_threads,
                                 )
-                            )
+                            result = action.get('result', "FAIL")
+                            context = action.get('context', "No context provided.")
                             assert (
                                 result == "SUCCESS" or result == "FAIL"
                             ), f"Unknown result: {result}"
 
-                            # self.update_context("agent_completion_result", {
-                            #         "task_id": next_task_id,
-                            #         "task_title": next_task['title'],
-                            #         "result": result,
-                            #         "context": reason
-                            #     })
                             self.update_context_tree(
                                 request_id=request_id,
                                 task_id=next_task_id,
-                                rag_action={
-                                    "tool": tool,
-                                    "command": command,
-                                    "result": result,
-                                    "reason": reason,
-                                },
+                                rag_action=action,
                             )
 
                             if result == "SUCCESS":
@@ -2247,33 +2179,21 @@ class Agency:
                                 # 如果失败，记录并更新error
                                 error_id = error_id + 1
                                 task_error_flag = True
-                                task_error_message = reason
+                                task_error_message = context
                                 self.update_error(
-                                    error_id=error_id, error=reason, step=next_task
+                                    error_id=error_id, error=context, step=next_task
                                 )
-                                # self.update_context("error", {
-                                #     "stage": "task_execution",
-                                #     "error_message": task_error_message,
-                                #     "task_id": next_task_id,
-                                #     "request_id": "request_" + str(request_id),
-                                # })
+
                         except Exception as e:
                             # 更新error
                             error_id = error_id + 1
                             task_error_flag = True
                             task_error_message = str(e)
-                            # self.update_context("error", {
-                            #     "stage": "task_execution",
-                            #     "error_message": task_error_message,
-                            #     "step_id": next_task_id,
-                            #     "request_id": "request_" + str(request_id),
-                            # })
 
                         # 如果没有错误则退出该task，更新已完成task
                         if not task_error_flag:
                             console.rule()
                             print(f"{next_task_id} ({next_task['title']}) complete")
-                            # self.update_completed_task(next_task_id, next_task)
                             break
                         else:
                             console.rule()
@@ -2317,11 +2237,7 @@ class Agency:
 
                     # 本次task完成，加入已完成列表
                     completed_task_ids.append(next_task_id)
-                    # self.update_context("task_complete", {
-                    #     "task_id": next_task_id,
-                    #     "title": next_task['title'],
-                    #     "result": "completed"
-                    # })
+
                     self.update_context_tree(
                         request_id=request_id,
                         task_id=next_task_id,
@@ -2336,10 +2252,7 @@ class Agency:
             if not original_request_error_flag:
                 console.rule()
                 print(f"original request complete")
-                # self.update_context("original_request_complete", {
-                #     "request_id": "request_" + str(request_id),
-                #     "result": "completed"
-                # })
+
                 self.update_context_tree(
                     request_id=request_id,
                     status="completed",
@@ -2371,107 +2284,6 @@ class Agency:
         }
         with open(self.error_path, "w", encoding="utf-8") as file:
             json.dump(data, file, indent=4, ensure_ascii=False)
-
-    def update_request(self, request_id: int, content: str):
-        try:
-            with open(self.request_path, "r", encoding="utf-8") as file:
-                try:
-                    data = json.load(file)
-                except json.JSONDecodeError:
-                    data = {}
-        except FileNotFoundError:
-            data = {}
-        data[request_id] = {"request_id": request_id, "content": content}
-        with open(self.request_path, "w", encoding="utf-8") as file:
-            json.dump(data, file, indent=4, ensure_ascii=False)
-
-    def get_next_context_id(self):
-        # 获取 context_index.json 里最新的 context_id
-        try:
-            with open(self.context_index_path, "r", encoding="utf-8") as file:
-                try:
-                    data = json.load(file)
-                except json.JSONDecodeError:
-                    data = {}
-        except FileNotFoundError:
-            data = {}
-        if not data:
-            return 0
-        max_id = max([int(k.replace("index_", "")) for k in data.keys()])
-        return max_id
-
-    def update_context_index(
-        self,
-        context_id: int,
-        context: str,
-        step: dict,
-        request_id: int,
-        task_id: str,
-        subtask_id: str,
-    ):
-        with open(self.context_index_path, "r", encoding="utf-8") as file:
-            try:  # 尝试读取 JSON 数据
-                data = json.load(file)
-            except json.JSONDecodeError:  # 如果文件为空或格式错误，则创建一个空字典
-                data = {}
-        data["index_" + str(context_id)] = {
-            "request_id": request_id,
-            "task_id": task_id,
-            "subtask_id": subtask_id,
-            "task_information": step,
-            "context": context,
-        }
-        with open(self.context_index_path, "w", encoding="utf-8") as file:
-            json.dump(data, file, indent=4, ensure_ascii=False)
-
-    def update_completed_step(self, step_id: str, step: dict):
-        with open(self.completed_step_path, "r", encoding="utf-8") as file:
-            try:  # 尝试读取 JSON 数据
-                data = json.load(file)
-            except json.JSONDecodeError:  # 如果文件为空或格式错误，则创建一个空字典
-                data = {}
-        data["step_id"] = {"step": step}
-        with open(self.completed_step_path, "w", encoding="utf-8") as file:
-            json.dump(data, file, indent=4, ensure_ascii=False)
-
-    def update_completed_sub_task(self, subtask_id: str, subtask: dict):
-        with open(self.completed_subtask_path, "r", encoding="utf-8") as file:
-            try:  # 尝试读取 JSON 数据
-                data = json.load(file)
-            except json.JSONDecodeError:  # 如果文件为空或格式错误，则创建一个空字典
-                data = {}
-        data[subtask_id] = {"subtask": subtask}
-        with open(self.completed_subtask_path, "w", encoding="utf-8") as file:
-            json.dump(data, file, indent=4, ensure_ascii=False)
-
-    def update_completed_task(self, task_id: str, task: dict):
-        with open(self.completed_task_path, "r", encoding="utf-8") as file:
-            try:  # 尝试读取 JSON 数据
-                data = json.load(file)
-            except json.JSONDecodeError:  # 如果文件为空或格式错误，则创建一个空字典
-                data = {}
-        data[task_id] = {"task": task}
-        with open(self.completed_task_path, "w", encoding="utf-8") as file:
-            json.dump(data, file, indent=4, ensure_ascii=False)
-
-    def update_context(self, event: str, data: dict):
-        context_entry = {
-            "timestamp": datetime.now().isoformat() + "Z",
-            "event": event,
-            "data": data,
-        }
-        # 读取旧的，追加新的
-        try:
-            with open(self.context_path, "r", encoding="utf-8") as f:
-                try:
-                    contexts = json.load(f)
-                except json.JSONDecodeError:
-                    contexts = []
-        except FileNotFoundError:
-            contexts = []
-        contexts.append(context_entry)
-        with open(self.context_path, "w", encoding="utf-8") as f:
-            json.dump(contexts, f, indent=2, ensure_ascii=False)
 
     def init_context_tree(self, request_id, content):
         """
@@ -2530,46 +2342,23 @@ class Agency:
                         rag_action_entry = {
                             "tool": rag_action["tool"],
                             "result": rag_action["result"],
-                            "reason": rag_action["reason"],
+                            "context": rag_action["context"],
                         }
                     else:
-                        rag_action_entry = command
+                        rag_action_entry = rag_action
                     task["rag_actions"].append(rag_action_entry)
                 else:
                     if subtask_id:
                         # 查找子任务
-                        subtask = next(
-                            (
-                                subtask
-                                for subtask in task["subtasks"]
-                                if subtask["id"] == subtask_id
-                            ),
-                            None,
-                        )
+                        subtask = next((subtask for subtask in task["subtasks"] if subtask["id"] == subtask_id), None)
                         if subtask:
                             if step_id:
                                 # 查找步骤
-                                step = next(
-                                    (
-                                        step
-                                        for step in subtask["steps"]
-                                        if step["id"] == step_id
-                                    ),
-                                    None,
-                                )
+                                step = next((step for step in subtask["steps"] if step["id"] == step_id), None)
                                 if step:
                                     # 更新现有步骤
-                                    if action:
-                                        command = action.get("command")
-                                        if not command:
-                                            action_entry = {
-                                                "tool": action["tool"],
-                                                "result": action["result"],
-                                                "reason": action["reason"],
-                                            }
-                                        else:
-                                            action_entry = action
-                                        step["actions"].append(action_entry)
+                                    if action:                                       
+                                        step["actions"].append(action)
                                     else:
                                         step["status"] = status
                                 else:
@@ -2579,7 +2368,7 @@ class Agency:
                                         "status": status,
                                         "title": title,
                                         "description": description,
-                                        "actions": [],
+                                        "actions": []
                                     }
                                     subtask["steps"].append(step)
                             else:
@@ -2592,7 +2381,7 @@ class Agency:
                                 "status": status,
                                 "title": title,
                                 "description": description,
-                                "steps": [],
+                                "steps": []
                             }
                             task["subtasks"].append(subtask)
                     else:
@@ -2704,22 +2493,15 @@ class Agency:
             )
             # 解析agent返回的结果（json字符串）
             cap_agent_result_json = json.loads(cap_agent_result)
-        # 取出工具tool、命令command、执行结果result和原因reason
-        tool = cap_agent_result_json.get("tool")
-        command = cap_agent_result_json.get("command")
-        result = cap_agent_result_json["result"]
-        reason = cap_agent_result_json["reason"]
+        # 执行结果result和返回内容context
+        result = cap_agent_result_json['result']
+        context = cap_agent_result_json['context']
 
-        output_data = {"result": result, "reason": reason}
+        output_data = {"result": result, "context": context}
         output_str = json.dumps(output_data, indent=4, ensure_ascii=False)
         print(f"THREAD output:\n{output_str}")
-
-        return (
-            tool,
-            command,
-            result,
-            reason,
-        )  # 返回工具tool、命令command、执行结果result和原因reason
+        
+        return  cap_agent_result_json # 返回结果
 
     def scheduling_layer(self, message: str, scheduler_thread: Thread):
         console.rule()
