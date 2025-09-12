@@ -54,14 +54,17 @@ make prime
 
 #### Step 2: Comprehensive Validation
 ```bash
-make ci
+# Run only the relevant tests first (specific file/test)
 uv run pytest tests/integration/ -v
+
+# Run the full suite (make ci) before PR/merge or when verifying repo-wide health
+make ci
 ```
 
 After each tool call or code edit, validate the result in 1-2 lines and proceed or self-correct if validation fails.
 
 - Before editing or continuing work, review the current diff: `git status --porcelain | cat`, `git diff | cat`, and `git diff --cached | cat`. As an alternative, use `make prime` to print all of the above, as well as the codebase structure as a reminder.
-- After every change, immediately run `make ci` (and focused tests if relevant) and do not proceed until tests pass.
+- After each change, run only the relevant tests. Use `make ci` for final verification (pre-PR/merge) or when a change is cross-cutting.
 
 
 ### 🔴 PROHIBITED PRACTICES
@@ -174,7 +177,7 @@ Avoid growing already large files. Prefer extracting focused modules. If you mus
 - Absolutely no functional changes in refactors
 - Remove duplication globally
 - All tests must pass
-- Clean tree; no stubs left
+
 - Prefer domain-focused, descriptive names
 
 ## Git Practices
