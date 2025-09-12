@@ -482,7 +482,7 @@ class SendMessageHandoff:
 
         # Add a `recipient_agent` field to the input JSON schema to unify send message and handoff tool calls
         class InputArgs(BaseModel):
-            recipient_agent: Literal[recipient_agent_name]
+            recipient_agent: Literal[recipient_agent_name]  # type: ignore[valid-type]
         schema = strict_schema.ensure_strict_json_schema(InputArgs.model_json_schema())
         handoff_object.input_json_schema = schema
         return handoff_object
