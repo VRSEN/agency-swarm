@@ -22,38 +22,42 @@ def add_agent_name_to_event(
     agent_run_id: str | None = None,
     parent_run_id: str | None = None,
 ) -> Any:
-    """Add agent name and caller to a streaming event.
+    """Non-destructively add agent/caller and attach run/call IDs to an event.
 
-    Args:
-        event: The streaming event (dict or object)
-        agent_name: Name of the agent to add to the event
-        caller_agent: Name of the calling agent (None for user)
-        agent_run_id: The current agent's execution ID
-        parent_run_id: The calling agent's execution ID
-
-    Returns:
-        The event with agent, callerAgent, agent_run_id, and parent_run_id added
+    - Does NOT overwrite existing `agent`/`callerAgent` (preserves SDK attribution e.g. handoffs)
+    - Adds `agent_run_id`/`parent_run_id` when applicable
+    - Extracts and sets `call_id`/`item_id` for downstream correlation
     """
-    # Add agent metadata
     if isinstance(event, dict):
-        event["agent"] = agent_name
-        event["callerAgent"] = caller_agent
-        # Only attach agent_run_id and parent_run_id for structured SDK events (they have a 'type' key)
+        event.setdefault("agent", agent_name)
+        event.setdefault("callerAgent", caller_agent)
         if "type" in event:
-            if agent_run_id:
+            if agent_run_id and "agent_run_id" not in event:
                 event["agent_run_id"] = agent_run_id
-            if parent_run_id:
+            if parent_run_id and "parent_run_id" not in event:
                 event["parent_run_id"] = parent_run_id
     elif hasattr(event, "__dict__"):
-        # For object-like events, add as attributes
-        event.agent = agent_name
-        event.callerAgent = caller_agent
-        # Only attach agent_run_id and parent_run_id for objects that expose a 'type' attribute (SDK events)
+        if not hasattr(event, "agent"):
+            try:
+                event.agent = agent_name
+            except Exception:
+                pass
+        if not hasattr(event, "callerAgent"):
+            try:
+                event.callerAgent = caller_agent
+            except Exception:
+                pass
         if hasattr(event, "type"):
-            if agent_run_id:
-                event.agent_run_id = agent_run_id
-            if parent_run_id:
-                event.parent_run_id = parent_run_id
+            if agent_run_id and not hasattr(event, "agent_run_id"):
+                try:
+                    event.agent_run_id = agent_run_id
+                except Exception:
+                    pass
+            if parent_run_id and not hasattr(event, "parent_run_id"):
+                try:
+                    event.parent_run_id = parent_run_id
+                except Exception:
+                    pass
 
     # Extract and propagate call_id if present in the event structure
     call_id = None
@@ -107,46 +111,6 @@ def add_agent_name_to_event(
             event["item_id"] = item_id
         elif hasattr(event, "__dict__"):
             event.item_id = item_id
-
-    return event
-
-
-def ensure_event_agent_metadata(event: Any, agent_name: str, caller_agent: str | None) -> Any:
-    """Ensure minimal agent metadata is present on an event without overwriting existing values.
-
-    This helper only sets missing `agent` and `callerAgent` fields/attributes and leaves
-    existing values untouched to preserve accurate agent attribution during handoffs.
-
-    Args:
-        event: The streaming event (dict-like or object with attributes)
-        agent_name: Default agent name to set if missing
-        caller_agent: Default caller name to set if missing (None for user)
-
-    Returns:
-        The same event with missing metadata filled in (if applicable).
-    """
-    try:
-        if isinstance(event, dict):
-            if "agent" not in event:
-                event["agent"] = agent_name
-            if "callerAgent" not in event:
-                event["callerAgent"] = caller_agent
-        else:
-            has_agent_attr = hasattr(event, "agent")
-            has_caller_attr = hasattr(event, "callerAgent")
-            if not has_agent_attr:
-                try:
-                    event.agent = agent_name
-                except Exception:
-                    pass
-            if not has_caller_attr:
-                try:
-                    event.callerAgent = caller_agent
-                except Exception:
-                    pass
-    except Exception:
-        # Be conservative: do not raise from utility; leave event unchanged
-        pass
 
     return event
 

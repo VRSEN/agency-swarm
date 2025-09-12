@@ -16,6 +16,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from agency_swarm import Agency, Agent, function_tool
 
+# from agency_swarm.tools import SendMessageHandoff
+
 
 @function_tool
 def get_weather(location: str) -> str:
@@ -32,7 +34,7 @@ def create_demo_agency():
         description="Chief Executive Officer - oversees all operations",
         instructions="You are the CEO. When asked about weather, delegate to Worker with a specific location (use London if not specified).",
         model="gpt-5-mini",
-        model_settings=ModelSettings(reasoning=Reasoning(effort="high", summary="auto")),
+        model_settings=ModelSettings(reasoning=Reasoning(effort="low", summary="auto")),
     )
 
     worker = Agent(
@@ -44,10 +46,14 @@ def create_demo_agency():
         model_settings=ModelSettings(reasoning=Reasoning(effort="low", summary="auto")),
     )
 
-    # Create agency with communication flows (v1.x pattern)
+    # Create agency with mutual handoffs using SendMessageHandoff
     agency = Agency(
         ceo,  # Entry point agent (positional argument)
-        communication_flows=[ceo > worker],
+        communication_flows=[
+            (ceo > worker),
+            # (ceo > worker, SendMessageHandoff),  # CEO can hand off to Worker
+            # (worker > ceo, SendMessageHandoff),  # Worker can hand off back to CEO
+        ],
         name="TerminalDemoAgency",
     )
 

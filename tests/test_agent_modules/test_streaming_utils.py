@@ -1,6 +1,4 @@
-from unittest.mock import MagicMock
-
-from agency_swarm.streaming.utils import add_agent_name_to_event, ensure_event_agent_metadata
+from agency_swarm.streaming.utils import add_agent_name_to_event
 
 
 def test_add_agent_name_to_event_dict_basic():
@@ -21,17 +19,25 @@ def test_add_agent_name_to_event_dict_structured_with_type_and_run_ids():
 
 
 def test_add_agent_name_to_event_object_basic_attrs():
-    evt = MagicMock()
+    # Create a simple object without pre-existing attributes
+    class SimpleEvent:
+        pass
+
+    evt = SimpleEvent()
     # no type attr: run ids should not be attached
     out = add_agent_name_to_event(evt, "AgentB", None)
-    assert getattr(out, "agent", None) == "AgentB"
-    assert getattr(out, "callerAgent", "SENTINEL") is None
+    assert out.agent == "AgentB"
+    assert out.callerAgent is None
     assert not hasattr(out, "agent_run_id") and not hasattr(out, "parent_run_id")
 
 
 def test_add_agent_name_to_event_object_structured_with_type_and_run_ids():
-    evt = MagicMock()
-    type(evt).type = "run_item_stream_event"
+    # Create a simple object with type attribute
+    class StructuredEvent:
+        def __init__(self):
+            self.type = "run_item_stream_event"
+
+    evt = StructuredEvent()
     out = add_agent_name_to_event(evt, "AgentB", "CallerY", agent_run_id="AR2", parent_run_id="PR2")
     assert out.agent == "AgentB"
     assert out.callerAgent == "CallerY"
@@ -43,22 +49,56 @@ def test_add_agent_name_to_event_object_structured_with_type_and_run_ids():
 # We intentionally do not test these paths here to keep tests aligned with documented behavior.
 
 
-def test_ensure_event_agent_metadata_dict_fill_missing_not_overwrite():
-    evt = {"agent": "Existing", "event": "text"}
-    out = ensure_event_agent_metadata(evt, "NewAgent", "CallerZ")
-    # agent preserved, caller added
-    assert out["agent"] == "Existing"
-    assert out["callerAgent"] == "CallerZ"
+def test_add_agent_name_to_event_dict_non_destructive_preserves_existing():
+    """Test that add_agent_name_to_event preserves existing agent/callerAgent values (non-destructive)."""
+    evt = {"agent": "ExistingAgent", "event": "text"}
+    out = add_agent_name_to_event(evt, "NewAgent", "NewCaller")
+    # Existing agent should be preserved
+    assert out["agent"] == "ExistingAgent"
+    # callerAgent should be added since it wasn't present
+    assert out["callerAgent"] == "NewCaller"
 
 
-def test_ensure_event_agent_metadata_object_fill_missing_and_preserve():
-    evt = MagicMock()
-    out = ensure_event_agent_metadata(evt, "AgentF", None)
-    assert getattr(out, "agent", None) == "AgentF"
-    assert getattr(out, "callerAgent", "SENTINEL") is None
-    # Preserve existing
-    evt2 = MagicMock()
-    type(evt2).agent = "KeepMe"
-    out2 = ensure_event_agent_metadata(evt2, "WillNotOverwrite", "CallerK")
-    assert out2.agent == "KeepMe"
-    assert out2.callerAgent == "CallerK"
+def test_add_agent_name_to_event_dict_fills_missing_fields():
+    """Test that add_agent_name_to_event fills missing agent/callerAgent fields."""
+    evt = {"event": "text"}
+    out = add_agent_name_to_event(evt, "AgentX", "CallerY")
+    assert out["agent"] == "AgentX"
+    assert out["callerAgent"] == "CallerY"
+
+
+def test_add_agent_name_to_event_object_non_destructive_preserves_existing():
+    """Test that add_agent_name_to_event preserves existing attributes on objects."""
+
+    class EventWithAgent:
+        def __init__(self):
+            self.agent = "ExistingAgent"
+
+    evt = EventWithAgent()
+    out = add_agent_name_to_event(evt, "NewAgent", "NewCaller")
+    # Existing agent should be preserved
+    assert out.agent == "ExistingAgent"
+    # callerAgent should be set since it wasn't present
+    assert out.callerAgent == "NewCaller"
+
+
+def test_add_agent_name_to_event_object_fills_missing_attributes():
+    """Test that add_agent_name_to_event adds missing attributes on objects."""
+
+    class EmptyEvent:
+        pass
+
+    evt = EmptyEvent()
+    out = add_agent_name_to_event(evt, "AgentZ", None)
+    assert out.agent == "AgentZ"
+    assert out.callerAgent is None
+
+
+def test_add_agent_name_to_event_preserves_run_ids():
+    """Test that add_agent_name_to_event preserves existing run_id fields on structured events."""
+    evt = {"type": "run_item_stream_event", "agent_run_id": "ExistingRunId", "event": "text"}
+    out = add_agent_name_to_event(evt, "AgentA", "CallerB", agent_run_id="NewRunId", parent_run_id="NewParentId")
+    # Existing run_id should be preserved
+    assert out["agent_run_id"] == "ExistingRunId"
+    # parent_run_id should be added since it wasn't present
+    assert out["parent_run_id"] == "NewParentId"

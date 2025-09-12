@@ -16,7 +16,7 @@ from agents import FunctionTool, InputGuardrailTripwireTriggered, RunContextWrap
 from pydantic import BaseModel, ValidationError
 
 from ..context import MasterContext
-from ..streaming.utils import ensure_event_agent_metadata
+from ..streaming.utils import add_agent_name_to_event
 
 if TYPE_CHECKING:
     from ..agent.core import AgencyContext, Agent
@@ -357,8 +357,14 @@ class SendMessage(FunctionTool):
                     agency_context=recipient_agency_context,
                     parent_run_id=tool_call_id,  # Use tool_call_id as parent_run_id
                 ):
-                    # Ensure agent metadata without overwriting existing attribution
-                    event = ensure_event_agent_metadata(event, self.recipient_agent.name, self.sender_agent.name)
+                    # Non-destructively add agent/caller and attach IDs
+                    event = add_agent_name_to_event(
+                        event,
+                        self.recipient_agent.name,
+                        self.sender_agent.name,
+                        agent_run_id=None,
+                        parent_run_id=tool_call_id,
+                    )
 
                     # Forward event to streaming context if available
                     if streaming_context:

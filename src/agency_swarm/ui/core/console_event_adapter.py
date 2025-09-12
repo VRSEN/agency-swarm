@@ -68,6 +68,11 @@ class ConsoleEventAdapter:
 
     def openai_to_message_output(self, event: Any, recipient_agent: str):
         try:
+            # Reset any stale handoff state at the start of a new response lifecycle
+            if getattr(event, "type", None) == "raw_response_event" and hasattr(event, "data"):
+                data_type = getattr(event.data, "type", None)
+                if data_type == "response.created":
+                    self.handoff_agent = None
             # Use agent from event if available, otherwise fall back to recipient_agent
             agent_name = self.handoff_agent or getattr(event, "agent", None) or recipient_agent
             caller_agent = getattr(event, "callerAgent", None)
@@ -184,6 +189,8 @@ class ConsoleEventAdapter:
                                 pass
                         self.message_output = None
                         self.response_buffer = ""
+                        # Clear any pending handoff agent after finalizing the text/content part
+                        self.handoff_agent = None
                         # Also finalize and close any active reasoning region
                         if self.reasoning_output is not None:
                             try:
@@ -302,6 +309,7 @@ class ConsoleEventAdapter:
                         if call_id in self.agent_to_agent_communication:
                             # The response has already been shown via streaming, so just clean up
                             self.agent_to_agent_communication.pop(call_id)
+                            # Clear any pending handoff agent after tool output is processed
                             self.handoff_agent = None
                             # Don't display it again - it's already been shown
                         else:
