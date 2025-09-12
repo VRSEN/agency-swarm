@@ -74,6 +74,67 @@ class CopilotDemoLauncher:
 
 class TerminalDemoLauncher:
     @staticmethod
+    async def _compact_conversation(agency_instance, event_converter, args: list[str]) -> str:
+        """Summarize conversation and reset thread.
+
+        Returns new chat_id after compaction.
+        """
+        import uuid
+
+        from agents import RunConfig
+
+        all_messages = agency_instance.thread_manager.get_all_messages()
+
+        def _extract_text(content: object) -> str:
+            if isinstance(content, list):
+                parts: list[str] = []
+                for part in content:
+                    if isinstance(part, dict) and "text" in part:
+                        parts.append(str(part.get("text")))
+                if parts:
+                    return " ".join(parts)
+            return str(content)
+
+        transcript_lines: list[str] = []
+        for m in all_messages:
+            if not isinstance(m, dict):
+                continue
+            role_obj = m.get("role") or m.get("type")
+            role = str(role_obj) if role_obj is not None else ""
+            if role not in ("assistant", "system", "user"):
+                continue
+            if role == "assistant":
+                who = m.get("agent") or "assistant"
+            elif role == "user":
+                who = "user"
+            else:
+                who = "system"
+            content = _extract_text(m.get("content"))
+            if content:
+                transcript_lines.append(f"[{who}] {content}")
+        transcript = "\n".join(transcript_lines)
+
+        custom_instructions = " ".join(args) if args else ""
+        base_prompt = (
+            "Summarize the following conversation into a concise brief capturing goals, "
+            "decisions, facts, and actionable follow-ups. Use bullet points when helpful. "
+            "Keep it under 300 words."
+        )
+        final_prompt = (custom_instructions or base_prompt) + "\n\nConversation:\n" + transcript
+
+        rc = RunConfig(model="gpt-5-nano")
+        result = await agency_instance.get_response(message=final_prompt, run_config=rc)
+        summary_text = str(getattr(result, "final_output", "")).strip()
+
+        agency_instance.thread_manager.clear()
+        chat_id = f"run_demo_chat_{uuid.uuid4()}"
+        agency_instance.thread_manager.add_message({"role": "system", "content": summary_text})
+
+        event_converter.console.print("Conversation compacted. A system summary has been added.")
+        event_converter.console.rule()
+        return chat_id
+
+    @staticmethod
     def start(agency_instance):
         """
         Executes agency in the terminal with autocomplete for recipient agent names.
@@ -191,64 +252,9 @@ class TerminalDemoLauncher:
                         event_converter.console.rule()
                         return False
                     if cmd == "compact":
-                        # Summarize using the current agent; no fallbacks, let errors surface
-                        from agents import ModelSettings, RunConfig
-
-                        all_messages = agency_instance.thread_manager.get_all_messages()
-
-                        def _extract_text(content: object) -> str:
-                            if isinstance(content, list):
-                                parts: list[str] = []
-                                for part in content:
-                                    if isinstance(part, dict) and "text" in part:
-                                        parts.append(str(part.get("text")))
-                                if parts:
-                                    return " ".join(parts)
-                            return str(content)
-
-                        transcript_lines: list[str] = []
-                        for m in all_messages:
-                            if not isinstance(m, dict):
-                                continue
-                            role_obj = m.get("role") or m.get("type")
-                            role = str(role_obj) if role_obj is not None else ""
-                            if role not in ("assistant", "system", "user"):
-                                continue
-                            if role == "assistant":
-                                who = m.get("agent") or "assistant"
-                            elif role == "user":
-                                who = "user"
-                            else:
-                                who = "system"
-                            content = _extract_text(m.get("content"))
-                            if content:
-                                transcript_lines.append(f"[{who}] {content}")
-                        transcript = "\n".join(transcript_lines)
-
-                        custom_instructions = " ".join(args) if args else ""
-                        base_prompt = (
-                            "Summarize the following conversation into a concise brief capturing goals, "
-                            "decisions, facts, and actionable follow-ups. Use bullet points when helpful. "
-                            "Keep it under 300 words."
+                        chat_id = await TerminalDemoLauncher._compact_conversation(
+                            agency_instance, event_converter, args
                         )
-                        final_prompt = (custom_instructions or base_prompt) + "\n\nConversation:\n" + transcript
-
-                        rc = RunConfig(model="gpt-5-nano", model_settings=ModelSettings(temperature=0.0))
-                        result = await agency_instance.get_response(message=final_prompt, run_config=rc)
-                        summary_text = str(getattr(result, "final_output", "")).strip()
-
-                        # Reset thread and seed summary as the only system message
-                        agency_instance.thread_manager.clear()
-                        chat_id = f"run_demo_chat_{uuid.uuid4()}"
-                        agency_instance.thread_manager.add_message(
-                            {
-                                "role": "system",
-                                "content": summary_text,
-                            }
-                        )
-
-                        event_converter.console.print("Conversation compacted. A system summary has been added.")
-                        event_converter.console.rule()
                         return False
                     if cmd == "exit":
                         return True
