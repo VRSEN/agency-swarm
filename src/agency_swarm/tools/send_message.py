@@ -10,9 +10,9 @@ recipient details.
 import asyncio
 import json
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
-from agents import FunctionTool, InputGuardrailTripwireTriggered, RunContextWrapper, handoff
+from agents import FunctionTool, InputGuardrailTripwireTriggered, RunContextWrapper, handoff, strict_schema
 from pydantic import BaseModel, ValidationError
 
 from ..context import MasterContext
@@ -473,7 +473,16 @@ class SendMessageHandoff:
 
     def create_handoff(self, recipient_agent: "Agent"):
         """Create and return the handoff object."""
-        return handoff(
+        recipient_agent_name = recipient_agent.name
+        handoff_object = handoff(
             agent=recipient_agent,
             tool_description_override=recipient_agent.description,
+            tool_name_override=f"transfer_to_{recipient_agent_name.replace(' ', '_')}",
         )
+
+        # Add a `recipient_agent` field to the input JSON schema to unify send message and handoff tool calls
+        class InputArgs(BaseModel):
+            recipient_agent: Literal[recipient_agent_name]
+        schema = strict_schema.ensure_strict_json_schema(InputArgs.model_json_schema())
+        handoff_object.input_json_schema = schema
+        return handoff_object
