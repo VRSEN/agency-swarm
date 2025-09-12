@@ -12,6 +12,7 @@ import warnings
 from typing import TYPE_CHECKING, Any
 
 from agents import Agent as BaseAgent, GuardrailFunctionOutput, ModelSettings, RunContextWrapper
+from agents.models import get_default_model
 from openai.types.shared import Reasoning
 
 from agency_swarm.agent.attachment_manager import AttachmentManager
@@ -273,6 +274,9 @@ def separate_kwargs(kwargs: dict[str, Any]) -> tuple[dict[str, Any], dict[str, A
             "Using 'description' instead of 'handoff_description'."
         )
         base_agent_params.pop("handoff_description")
+
+    if "model" not in base_agent_params:
+        base_agent_params["model"] = get_default_model()
 
     return base_agent_params, current_agent_params
 
