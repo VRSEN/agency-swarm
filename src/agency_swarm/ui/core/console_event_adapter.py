@@ -29,6 +29,9 @@ class ConsoleEventAdapter:
         self.reasoning_output: Live | None = None
         self.reasoning_buffer: str = ""
         self._reasoning_final_rendered = False
+        self._reasoning_displayed = False
+        self._message_started = False
+        self._reasoning_needs_separator = False
         self.show_reasoning = bool(show_reasoning)
 
     def set_show_reasoning(self, enabled: bool) -> None:
@@ -55,24 +58,49 @@ class ConsoleEventAdapter:
 
     def _update_console(self, msg_type: str, sender: str, receiver: str, content: str, add_separator: bool = True):
         # Print a separator only for function, function_output, and agent-to-agent messages
-        emoji = "👤" if sender.lower() == "user" else "🤖"
+        sender_emoji = "👤" if sender.lower() == "user" else "🤖"
+        receiver_emoji = "👤" if receiver.lower() == "user" else "🤖"
         if msg_type == "function":
-            header = f"{emoji} {sender} 🛠️ Executing Function"
+            header = f"{sender_emoji} {sender} 🛠️ Executing Function"
         elif msg_type == "function_output":
             header = f"{sender} ⚙️ Function Output"
         else:
-            header = f"{emoji} {sender} 🗣️ @{receiver}"
+            header = f"{sender_emoji} {sender} → {receiver_emoji} {receiver}"
         self.console.print(f"[bold]{header}[/bold]\n{content}")
         if add_separator:
             self.console.rule()
 
     def openai_to_message_output(self, event: Any, recipient_agent: str):
         try:
+            # Ensure essential attributes exist when bound to a MagicMock in tests
+            # (MagicMock returns new mocks for missing attributes which can break type checks)
+            self_dict = getattr(self, "__dict__", {})
+            if "reasoning_output" not in self_dict:
+                self.reasoning_output = None
+            if "reasoning_buffer" not in self_dict:
+                self.reasoning_buffer = ""
+            if "_reasoning_final_rendered" not in self_dict:
+                self._reasoning_final_rendered = False
+            if "_reasoning_displayed" not in self_dict:
+                self._reasoning_displayed = False
+            if "_message_started" not in self_dict:
+                self._message_started = False
+            if "_reasoning_needs_separator" not in self_dict:
+                self._reasoning_needs_separator = False
+            if "message_output" not in self_dict:
+                self.message_output = None
+            if "response_buffer" not in self_dict:
+                self.response_buffer = ""
+
             # Reset any stale handoff state at the start of a new response lifecycle
             if getattr(event, "type", None) == "raw_response_event" and hasattr(event, "data"):
                 data_type = getattr(event.data, "type", None)
                 if data_type == "response.created":
                     self.handoff_agent = None
+                    # Reset display flags for new response lifecycle
+                    self._reasoning_displayed = False
+                    self._message_started = False
+                    self._reasoning_needs_separator = False
             # Use agent from event if available, otherwise fall back to recipient_agent
             agent_name = self.handoff_agent or getattr(event, "agent", None) or recipient_agent
             caller_agent = getattr(event, "callerAgent", None)
@@ -100,39 +128,39 @@ class ConsoleEventAdapter:
                             self._reasoning_final_rendered = False
                             self.reasoning_output = Live("", console=self.console, refresh_per_second=10)
                             self.reasoning_output.__enter__()
+                        # Insert a blank-line separator when starting a new reasoning part
+                        if self._reasoning_needs_separator and self.reasoning_buffer:
+                            self.reasoning_buffer += "\n\n"
+                            self._reasoning_needs_separator = False
                         self.reasoning_buffer += str(delta_text)
                         if self.reasoning_output is not None:
-                            header_text = f"🧠 {agent_name} Reasoning"
-                            md_content = Markdown(self.reasoning_buffer)
+                            md_content = Markdown(self.reasoning_buffer, style="italic dim")
+                            header_text = f"[italic dim]🧠 {agent_name} Reasoning[/]\n"
+                            # Always render header + content so header stays visible across updates
                             self.reasoning_output.update(Group(header_text, md_content))
+                            self._reasoning_displayed = True
                         return
                     # Do not add any messages here - they were rendered via deltas
                     elif data_type == "response.reasoning_summary_part.done":
                         if not self.show_reasoning:
                             return
-                        try:
-                            if self.reasoning_output is not None:
-                                self.reasoning_output.__exit__(None, None, None)
-                        except Exception:
-                            pass
-                        self.reasoning_output = None
-                        self.reasoning_buffer = ""
+                        # Mark the current reasoning part as finalized but keep the Live region open
+                        # so subsequent reasoning parts can continue under the same header.
                         self._reasoning_final_rendered = True
+                        self._reasoning_needs_separator = True
                         return
                     if data_type == "response.output_text.delta":
                         # If reasoning region is still open, finalize and close it before normal output
                         if self.reasoning_output is not None:
                             try:
-                                if (not self._reasoning_final_rendered) and self.reasoning_buffer.strip():
-                                    header_text_r = f"🧠 {agent_name} Reasoning"
-                                    md_content_r = Markdown(self.reasoning_buffer)
-                                    self.reasoning_output.update(Group(header_text_r, md_content_r))
+                                # Close the reasoning region before normal output begins
                                 self.reasoning_output.__exit__(None, None, None)
                             except Exception:
                                 pass
                             self.reasoning_output = None
+                            # Keep buffer cleared for next turn
                             self.reasoning_buffer = ""
-                            self._reasoning_final_rendered = False
+                            self._reasoning_final_rendered = True
                         # Skip empty deltas entirely to avoid rendering blank messages
                         try:
                             delta_text = getattr(data, "delta", "") or ""
@@ -146,16 +174,27 @@ class ConsoleEventAdapter:
                             self._final_rendered = False
                             self.message_output = Live("", console=self.console, refresh_per_second=10)
                             self.message_output.__enter__()
+                            # Visually separate from any preceding reasoning block
+                            if self._reasoning_displayed and not self._message_started:
+                                try:
+                                    self.console.print("")
+                                except Exception:
+                                    pass
                         self.response_buffer += str(delta_text)
                         if self.message_output is not None:
-                            header_text = f"🤖 {agent_name} 🗣️ @{speaking_to}"
+                            sender_emoji = "👤" if str(agent_name).lower() == "user" else "🤖"
+                            receiver_emoji = "👤" if str(speaking_to).lower() == "user" else "🤖"
+                            header_text = f"{sender_emoji} {agent_name} → {receiver_emoji} {speaking_to}"
                             md_content = Markdown(self.response_buffer)
                             self.message_output.update(Group(header_text, md_content))
+                            self._message_started = True
                     elif data_type in ["response.output_text.done", "response.content_part.done"]:
                         # Only render final content if there's actually something to show
                         if self.message_output is not None:
                             if self.response_buffer.strip():
-                                header_text = f"🤖 {agent_name} 🗣️ @{speaking_to}"
+                                sender_emoji = "👤" if str(agent_name).lower() == "user" else "🤖"
+                                receiver_emoji = "👤" if str(speaking_to).lower() == "user" else "🤖"
+                                header_text = f"{sender_emoji} {agent_name} → {receiver_emoji} {speaking_to}"
                                 md_content = Markdown(self.response_buffer)
                                 self.message_output.update(Group(header_text, md_content))
                                 self._final_rendered = True
@@ -170,11 +209,8 @@ class ConsoleEventAdapter:
                         # Also finalize and close any active reasoning region
                         if self.reasoning_output is not None:
                             try:
-                                if (not self._reasoning_final_rendered) and self.reasoning_buffer.strip():
-                                    header_text_r = f"🧠 {agent_name} Reasoning"
-                                    md_content_r = Markdown(self.reasoning_buffer)
-                                    self.reasoning_output.update(Group(header_text_r, md_content_r))
-                                    self._reasoning_final_rendered = True
+                                # Avoid repeating the reasoning header/content at finalization
+                                self._reasoning_final_rendered = True
                                 self.reasoning_output.__exit__(None, None, None)
                             except Exception:
                                 pass
@@ -194,14 +230,30 @@ class ConsoleEventAdapter:
                             except Exception:
                                 current_text = ""
                             if current_text:
-                                self.reasoning_buffer = str(current_text)
-                                # Only create Live display if we have content to show
+                                # Append to existing buffer with a blank line separator if needed
+                                self.reasoning_buffer = (
+                                    f"{self.reasoning_buffer}\n\n{current_text}"
+                                    if self.reasoning_buffer
+                                    else str(current_text)
+                                )
+                                # Ensure Live display exists
                                 if self.reasoning_output is None:
                                     self.reasoning_output = Live("", console=self.console, refresh_per_second=10)
                                     self.reasoning_output.__enter__()
                                     self._reasoning_final_rendered = False
-                                header_text = f"🧠 {agent_name} Reasoning"
-                                self.reasoning_output.update(Group(header_text, Markdown(self.reasoning_buffer)))
+                                # Always render header + content so header remains visible
+                                header_text = f"[italic dim]🧠 {agent_name} Reasoning[/]\n"
+                                self.reasoning_output.update(
+                                    Group(
+                                        header_text,
+                                        Markdown(
+                                            self.reasoning_buffer,
+                                            style="italic dim",
+                                        ),
+                                    )
+                                )
+                                self._reasoning_displayed = True
+                                self._reasoning_needs_separator = False
                             elif self.reasoning_output is None:
                                 # Initialize buffer but don't create Live display yet
                                 self.reasoning_buffer = ""
@@ -219,7 +271,9 @@ class ConsoleEventAdapter:
                         if self.message_output is not None:
                             try:
                                 if (not self._final_rendered) and self.response_buffer.strip():
-                                    header_text = f"🤖 {agent_name} 🗣️ @{speaking_to}"
+                                    sender_emoji = "👤" if str(agent_name).lower() == "user" else "🤖"
+                                    receiver_emoji = "👤" if str(speaking_to).lower() == "user" else "🤖"
+                                    header_text = f"{sender_emoji} {agent_name} → {receiver_emoji} {speaking_to}"
                                     md_content = Markdown(self.response_buffer)
                                     self.message_output.update(Group(header_text, md_content))
                                 self.message_output.__exit__(None, None, None)
@@ -244,11 +298,13 @@ class ConsoleEventAdapter:
                                 if self.reasoning_output is None:
                                     self.reasoning_output = Live("", console=self.console, refresh_per_second=10)
                                     self.reasoning_output.__enter__()
-                                header_text_r = f"🧠 {agent_name} Reasoning"
+                                header_text_r = f"[italic dim]🧠 {agent_name} Reasoning[/]\n"
                                 try:
                                     if not self._reasoning_final_rendered:
-                                        md_content_r = Markdown(self.reasoning_buffer)
+                                        md_content_r = Markdown(self.reasoning_buffer, style="italic dim")
+                                        # Always render header + content to preserve header visibility
                                         self.reasoning_output.update(Group(header_text_r, md_content_r))
+                                        self._reasoning_displayed = True
                                         self._reasoning_final_rendered = True
                                     self.reasoning_output.__exit__(None, None, None)
                                 except Exception:

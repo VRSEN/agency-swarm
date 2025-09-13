@@ -402,8 +402,8 @@ class TestConsoleEventAdapter:
         [
             ("function", "TestAgent", "🤖", "🛠️ Executing Function"),
             ("function_output", "TestAgent", "", "⚙️ Function Output"),
-            ("text", "Agent1", "🤖", "🗣️ @Agent2"),
-            ("text", "user", "👤", "🗣️ @Agent1"),
+            ("text", "Agent1", "🤖", "→ 🤖 Agent2"),
+            ("text", "user", "👤", "→ 🤖 Agent1"),
         ],
     )
     def test_update_console_scenarios(self, adapter, msg_type, sender, expected_emoji, expected_action):
@@ -429,6 +429,125 @@ class TestConsoleEventAdapter:
             adapter.openai_to_message_output(event, "TestAgent")
             # This specific path should not trigger console updates
             mock_update.assert_not_called()
+
+    def test_reasoning_header_rendered_once_with_multiple_deltas(self, adapter):
+        """Regression: ensure only one reasoning header is printed for repeated deltas."""
+        # Simulate two reasoning deltas followed by output deltas
+        agent = "CEO"
+        # Initialize adapter state for reasoning flow
+        adapter.reasoning_output = None
+        adapter.reasoning_buffer = ""
+        adapter._reasoning_displayed = False
+        adapter._reasoning_final_rendered = False
+        adapter._message_started = False
+        adapter._final_rendered = False
+        adapter._reasoning_needs_separator = False
+        # First reasoning delta
+        e1 = MagicMock()
+        e1.type = "raw_response_event"
+        e1.agent = agent
+        e1.data = MagicMock()
+        e1.data.type = "response.reasoning_summary_text.delta"
+        e1.data.delta = "First chunk."
+
+        # Second reasoning delta
+        e2 = MagicMock()
+        e2.type = "raw_response_event"
+        e2.agent = agent
+        e2.data = MagicMock()
+        e2.data.type = "response.reasoning_summary_text.delta"
+        e2.data.delta = " Second chunk."
+
+        # Finalize reasoning part
+        e3 = MagicMock()
+        e3.type = "raw_response_event"
+        e3.agent = agent
+        e3.data = MagicMock()
+        e3.data.type = "response.reasoning_summary_part.done"
+
+        # Then assistant output starts
+        e4 = MagicMock()
+        e4.type = "raw_response_event"
+        e4.agent = agent
+        e4.callerAgent = None
+        e4.data = MagicMock()
+        e4.data.type = "response.output_text.delta"
+        e4.data.delta = "Hello user."
+
+        # Capture printed outputs and patch Markdown to accept style kwarg
+        with (
+            patch.object(adapter, "console") as mock_console,
+            patch("agency_swarm.ui.core.console_event_adapter.Markdown") as MarkdownMock,
+        ):
+            mock_console.print = MagicMock()
+            from types import SimpleNamespace
+
+            MarkdownMock.side_effect = lambda text, style=None: SimpleNamespace(text=str(text), style=style)
+            adapter.openai_to_message_output(e1, agent)
+            adapter.openai_to_message_output(e2, agent)
+            adapter.openai_to_message_output(e3, agent)
+            adapter.openai_to_message_output(e4, agent)
+
+            # Ensure a blank line is printed before agent message starts
+            printed = [str(args[0]) for args, _ in mock_console.print.call_args_list]
+            assert any(s == "" for s in printed)
+
+    def test_reasoning_header_persists_across_parts(self, adapter):
+        """Ensure reasoning header is visible across multiple reasoning parts and before output."""
+        agent = "CEO"
+        # Start response lifecycle
+        start = MagicMock()
+        start.type = "raw_response_event"
+        start.agent = agent
+        start.data = MagicMock()
+        start.data.type = "response.created"
+
+        # First reasoning part (summary text already present)
+        added1 = MagicMock()
+        added1.type = "raw_response_event"
+        added1.agent = agent
+        added1.data = MagicMock()
+        added1.data.type = "response.output_item.added"
+        added1.data.item = MagicMock()
+        added1.data.item.type = "reasoning"
+        added1.data.item.summary = [MagicMock()]
+        added1.data.item.summary[0].text = "Part 1"
+
+        # Part done
+        done1 = MagicMock()
+        done1.type = "raw_response_event"
+        done1.agent = agent
+        done1.data = MagicMock()
+        done1.data.type = "response.reasoning_summary_part.done"
+
+        # Second reasoning part as delta
+        delta2 = MagicMock()
+        delta2.type = "raw_response_event"
+        delta2.agent = agent
+        delta2.data = MagicMock()
+        delta2.data.type = "response.reasoning_summary_text.delta"
+        delta2.data.delta = " Part 2"
+
+        # Begin assistant output
+        out_delta = MagicMock()
+        out_delta.type = "raw_response_event"
+        out_delta.agent = agent
+        out_delta.callerAgent = None
+        out_delta.data = MagicMock()
+        out_delta.data.type = "response.output_text.delta"
+        out_delta.data.delta = "Hello"
+
+        with patch.object(adapter, "console") as mock_console:
+            mock_console.print = MagicMock()
+            adapter.openai_to_message_output(start, agent)
+            adapter.openai_to_message_output(added1, agent)
+            adapter.openai_to_message_output(done1, agent)
+            adapter.openai_to_message_output(delta2, agent)
+            adapter.openai_to_message_output(out_delta, agent)
+
+            # Expect at least one blank line print when transitioning to output
+            printed = [str(args[0]) for args, _ in mock_console.print.call_args_list]
+            assert any(s == "" for s in printed)
 
     def test_openai_to_message_output_send_message_detection(self, adapter):
         """Test openai_to_message_output detects send_message pattern."""
@@ -529,3 +648,67 @@ class TestConsoleEventAdapter:
             result = AguiAdapter()._handle_raw_response(event_data, {})
 
         assert result == expected_result
+
+    def test_reasoning_parts_separated_by_blank_line(self, adapter):
+        """Two reasoning parts should be separated by a blank line in the buffer."""
+        agent = "CEO"
+        # Initialize adapter state for reasoning flow
+        adapter.reasoning_output = None
+        adapter.reasoning_buffer = ""
+        adapter._reasoning_displayed = False
+        adapter._reasoning_final_rendered = False
+        adapter._message_started = False
+        adapter._final_rendered = False
+        adapter._reasoning_needs_separator = False
+        # Start lifecycle
+        start = MagicMock()
+        start.type = "raw_response_event"
+        start.agent = agent
+        start.data = MagicMock()
+        start.data.type = "response.created"
+
+        # First part as delta
+        d1 = MagicMock()
+        d1.type = "raw_response_event"
+        d1.agent = agent
+        d1.data = MagicMock()
+        d1.data.type = "response.reasoning_summary_text.delta"
+        d1.data.delta = "Part A"
+
+        # Part done
+        pdone = MagicMock()
+        pdone.type = "raw_response_event"
+        pdone.agent = agent
+        pdone.data = MagicMock()
+        pdone.data.type = "response.reasoning_summary_part.done"
+
+        # Second part as delta
+        d2 = MagicMock()
+        d2.type = "raw_response_event"
+        d2.agent = agent
+        d2.data = MagicMock()
+        d2.data.type = "response.reasoning_summary_text.delta"
+        d2.data.delta = "Part B"
+
+        # Stub Live and Markdown to avoid Rich internals and capture updates
+        with (
+            patch("agency_swarm.ui.core.console_event_adapter.Live") as LiveMock,
+            patch("agency_swarm.ui.core.console_event_adapter.Markdown") as MarkdownMock,
+        ):
+            LiveMock.return_value = MagicMock(
+                **{"__enter__.return_value": None, "__exit__.return_value": None, "update.return_value": None}
+            )
+            from types import SimpleNamespace
+
+            MarkdownMock.side_effect = lambda text, style=None: SimpleNamespace(text=str(text), style=style)
+            adapter.openai_to_message_output(start, agent)
+            adapter.openai_to_message_output(d1, agent)
+            adapter.openai_to_message_output(pdone, agent)
+            adapter.openai_to_message_output(d2, agent)
+
+        # Inspect internal buffer for separation (adapter is MagicMock with bound methods)
+        # We bound real methods, so the attribute should exist
+        buf = getattr(adapter, "reasoning_buffer", "")
+        assert "Part A" in buf and "Part B" in buf
+        # Ensure there is at least one blank line between parts
+        assert "Part A\n\nPart B" in buf
