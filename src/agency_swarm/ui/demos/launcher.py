@@ -117,6 +117,7 @@ class TerminalDemoLauncher:
 
     @staticmethod
     async def compact_thread(agency_instance: Agency, args: list[str]) -> str:
+        """Summarize current thread into a single system message and start a new chat id."""
         all_messages = agency_instance.thread_manager.get_all_messages()
 
         # Remove internal identifiers that add noise to summaries
@@ -161,7 +162,13 @@ class TerminalDemoLauncher:
         except Exception:
             model_name = None
         model_name = model_name or "gpt-5-mini"
-        client = OpenAI()
+        # Reuse the same sync client that the entry agent uses so provider routing
+        # (e.g., LiteLLM proxy, Azure) stays consistent with the agency.
+        try:
+            entry_agent = (getattr(agency_instance, "entry_points", []) or [None])[0]
+            client = getattr(entry_agent, "client_sync", OpenAI())  # falls back to default OpenAI client
+        except Exception:
+            client = OpenAI()
         # If OpenAI model (detected solely by presence of 'gpt' in the name), prefer minimal reasoning
         is_openai_model = isinstance(model_name, str) and ("gpt" in model_name.lower())
         if is_openai_model:
