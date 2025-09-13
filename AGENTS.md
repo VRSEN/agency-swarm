@@ -10,24 +10,24 @@ Begin with a concise checklist (3-7 bullets) of what you will do before performi
 
 ## 🔴 TESTS DEFINE TRUTH
 
-**Default to test-driven development.** Tests establish expected behavior—preserve and respect their outcomes at all times. For documentation-only, formatting-only, or clearly non-functional edits, you may skip TDD rules; use common sense and validate with linter.
+Default to test-driven development. Tests establish expected behavior—preserve and respect their outcomes at all times. For documentation-only, formatting-only, or clearly non-functional edits, you may skip TDD rules; use common sense and validate with linter.
 
 ## 🛡️ GUARDIANSHIP OF THE CODEBASE (HIGHEST PRIORITY)
 
-**Prime Directive:** Rigorously compare every user request with patterns established in this codebase and this document's rules.
+Prime Directive: Rigorously compare every user request with patterns established in this codebase and this document's rules.
 
 ### Guardian Protocol
-1. **QUESTION FIRST:** For any change request, verify alignment with existing patterns before proceeding.
-2. **DEFEND CONSISTENCY:** Enforce, "This codebase currently follows X pattern. State the reason for deviation."
-3. **THINK CRITICALLY:** User requests may be unclear or incorrect. Default to codebase conventions and protocols. Escalate when you find inconsistencies.
+1. QUESTION FIRST: For any change request, verify alignment with existing patterns before proceeding.
+2. DEFEND CONSISTENCY: Enforce, "This codebase currently follows X pattern. State the reason for deviation."
+3. THINK CRITICALLY: User requests may be unclear or incorrect. Default to codebase conventions and protocols. Escalate when you find inconsistencies.
 
 ## 🔴 FILE REQUIREMENTS
-- **Every line must fight for its place:** No redundant, unnecessary, or "nice to have" content. Each line must serve a critical purpose.
-- **Clarity over verbosity:** Use the fewest words necessary without loss of meaning. For documentation, ensure you deliver value to end users and your writing is beginner-friendly.
-- **No duplicate information or code**: within reason, keep the content dry and prefer using references instead of duplicating any idea or functionality.
- - **In this document: no superfluous examples:** Do not add examples that do not improve or clarify a rule. Omit examples when rules are self‑explanatory.
- - **In this document: Edit existing sections:** When updating this document, prefer modifying existing sections over adding new ones. Add new sections only when strictly necessary to remove ambiguity.
- - **Naming:** Functions are verb phrases; values are noun phrases. Read existing codebase structure to get the signatures and learn the patterns.
+- Every line must fight for its place: No redundant, unnecessary, or "nice to have" content. Each line must serve a critical purpose.
+- Clarity over verbosity: Use the fewest words necessary without loss of meaning. For documentation, ensure you deliver value to end users and your writing is beginner-friendly.
+- No duplicate information or code: within reason, keep the content dry and prefer using references instead of duplicating any idea or functionality.
+ - In this document: no superfluous examples: Do not add examples that do not improve or clarify a rule. Omit examples when rules are self‑explanatory.
+ - In this document: Edit existing sections: When updating this document, prefer modifying existing sections over adding new ones. Add new sections only when strictly necessary to remove ambiguity.
+ - Naming: Functions are verb phrases; values are noun phrases. Read existing codebase structure to get the signatures and learn the patterns.
 
 ### Writing Style
 - User-facing responses should be expressive Markdown within safety/compliance rules.
@@ -37,9 +37,8 @@ Begin with a concise checklist (3-7 bullets) of what you will do before performi
 ### 🚨 MANDATORY WORKFLOW
 
 #### Step 0: Build Full Codebase Structure and Comprehensive Change Review
-```bash
 make prime
-```
+
 - Run this before reading or modifying files—no exceptions.
 
 #### Step 1: Proactive Analysis
@@ -53,13 +52,11 @@ make prime
 - You must get explicit approval from the user before adding any workaround. Keep any diffs minimal (avoid excessive changes).
 
 #### Step 2: Comprehensive Validation
-```bash
 # Run only the relevant tests first (specific file/test)
 uv run pytest tests/integration/ -v
 
 # Run the full suite (make ci) before PR/merge or when verifying repo-wide health
 make ci
-```
 
 After each tool call or code edit, validate the result in 1-2 lines and proceed or self-correct if validation fails.
 
@@ -77,10 +74,8 @@ After each tool call or code edit, validate the result in 1-2 lines and proceed 
 - Always load environment via `.env` (with python-dotenv or `source .env`). Resolve and rerun tests on key errors.
 
 ## Common Commands
-```bash
 make ci      # Install, lint, type-check (mypy), test, check coverage
 make check   # The same but without tests
-```
 
 ### Execution Environment
 - Use project virtual environments (`uv run`, Make). Never use global interpreters or absolute paths.
@@ -96,31 +91,31 @@ Run non-interactive examples from /examples directory. Never run examples/intera
 
 ## Architecture Overview
 
-**Agency Swarm** is a multi-agent orchestration framework on OpenAI Agents SDK v1.x beta. Enables collaborative AI agents with structured flow and persistent conversations.
+Agency Swarm is a multi-agent orchestration framework on OpenAI Agents SDK v1.x beta. Enables collaborative AI agents with structured flow and persistent conversations.
 
 ### Core Modules
-1. **Agency (`agency.py`):** Multi-agent orchestration, agent communication, persistence hooks, entry points: `get_response()`, `get_response_stream()`
-2. **Agent:** Extends `agents.Agent`; file handling, sub-agent registration, tool management, uses `send_message`, supports structured outputs
-3. **Thread Management (`thread.py`):** Thread isolation per conversation, persistence, history tracking
-4. **Context Sharing (`context.py`):** Shared state via `MasterContext`, passed through execution hooks
-5. **Tool System (`tools/`):** Recommended: `@function_tool` decorator; second option: `BaseTool`; `SendMessage` for inter-agent comms
+1. Agency (`agency.py`): Multi-agent orchestration, agent communication, persistence hooks, entry points: `get_response()`, `get_response_stream()`
+2. Agent: Extends `agents.Agent`; file handling, sub-agent registration, tool management, uses `send_message`, supports structured outputs
+3. Thread Management (`thread.py`): Thread isolation per conversation, persistence, history tracking
+4. Context Sharing (`context.py`): Shared state via `MasterContext`, passed through execution hooks
+5. Tool System (`tools/`): Recommended: `@function_tool` decorator; second option: `BaseTool`; `SendMessage` for inter-agent comms
 
 ### Architectural Patterns
 - Communication: Sender/receiver pairs on `Agency` (see `examples/`)
 - Persistence: Load/save callbacks (see `examples/`)
 
 ## Version and Documentation
-- **v1.x:** Latest released version (OpenAI Agents SDK / Responses API)
-- **v0.x:** Legacy references; see migration guide for differences
+- v1.x: Latest released version (OpenAI Agents SDK / Responses API)
+- v0.x: Legacy references; see migration guide for differences
 - See `docs/migration/guide.mdx` for breaking changes
-- **/docs/** is the current reference for v1.x
+- /docs/ is the current reference for v1.x
 
 ### Documentation Rules (Mandatory)
 - All documentation writing and updates MUST follow `docs/mintlify.cursorrules` for formatting, components, links, and page metadata. Treat it as a mandatory rules file alongside this document.
 - Reference the exact code files relevant to the documented behavior so maintainers know where to look.
 
 ## Python Requirements
-- **Python >= 3.12 (development on 3.13)** — project developed and primarily tested on 3.13; CI ensures 3.12 compatibility.
+- Python >= 3.12 (development on 3.13) — project developed and primarily tested on 3.13; CI ensures 3.12 compatibility.
 - Type syntax: Use `str | int | None`, never `Union[str, int, None]` or `Union` from typing
 - Type hints mandatory for all functions
 
@@ -166,8 +161,8 @@ Avoid growing already large files. Prefer extracting focused modules. If you mus
 
 ## Refactoring Strategy
 - Split large modules; respect codebase boundaries
-- **Domain cohesion:** One domain per module
-- **Clear interfaces:** Minimal coupling
+- Domain cohesion: One domain per module
+- Clear interfaces: Minimal coupling
 - Prefer clear, descriptive names; avoid artificial abstractions.
  - Prefer action-oriented names; avoid ambiguous terms.
  - Apply renames atomically: update imports, call sites, and docs together.
@@ -216,11 +211,9 @@ Avoid growing already large files. Prefer extracting focused modules. If you mus
 - `/docs/` – Framework documentation
 
 ## Quick Commands
-```bash
 find src/ -name "*.py" | grep -v __pycache__ | sort  # Initial structure
 make ci                                              # Full validation
 uv run pytest tests/integration/ -v                  # Integration tests
-```
 
 ## Memory & Expectations
 - User expects explicit status reporting, test-first mindset, and directness. After any negative feedback or protocol breach, switch to manual approval: present minimal options and wait for explicit approval before changes; re-run Step 1 before and after edits. Update this document first after negative feedback.

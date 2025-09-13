@@ -2,8 +2,8 @@
 Agency Swarm Terminal Demo
 
 This example demonstrates the Terminal UI capabilities of Agency Swarm v1.x.
-To better demonstrate features of the demo, ask ceo agent to get weather in NY.
-You should see agent-to-agent communication, reasoning and tool outputs in the terminal.
+To better demonstrate the features of the demo, ask the CEO agent to get weather in London.
+You should see agent-to-agent communication, reasoning, and tool outputs in the terminal.
 """
 
 import sys
@@ -25,13 +25,13 @@ def get_weather(location: str) -> str:
 
 
 def create_demo_agency():
-    """Create a demo agency for terminal demo"""
+    """Create a demo agency for terminal demo."""
 
     # Create agents using v1.x pattern (direct instantiation)
     ceo = Agent(
         name="CEO",
         description="Chief Executive Officer - oversees all operations",
-        instructions="You are the CEO. When asked about weather, delegate to Worker with a specific location (use London if not specified).",
+        instructions="You are the CEO.",
         model="gpt-5-mini",
         model_settings=ModelSettings(reasoning=Reasoning(effort="low", summary="auto")),
     )
@@ -45,7 +45,7 @@ def create_demo_agency():
         model_settings=ModelSettings(reasoning=Reasoning(effort="low", summary="auto")),
     )
 
-    # Create a simple agency one-directional communication flow
+    # Create a simple agency with one-directional communication flow
     agency = Agency(
         ceo,  # Entry point agent (positional argument)
         communication_flows=[

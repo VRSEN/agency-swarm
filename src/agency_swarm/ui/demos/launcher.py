@@ -1,12 +1,22 @@
+import json
+import uuid
+from collections.abc import Generator
+from typing import Any
+
+from openai import OpenAI
+
+from agency_swarm import Agency
+
+
 class CopilotDemoLauncher:
     @staticmethod
     def start(
-        agency_instance,
+        agency_instance: Agency,
         host: str = "0.0.0.0",
         port: int = 8000,
         frontend_port: int = 3000,
         cors_origins: list[str] | None = None,
-    ):
+    ) -> None:
         """Launch the Copilot UI demo with backend and frontend servers."""
         import atexit
         import os
@@ -73,8 +83,103 @@ class CopilotDemoLauncher:
 
 
 class TerminalDemoLauncher:
+    # Configurable prompt used by /compact. Override via TerminalDemoLauncher.set_compact_prompt(...)
+    COMPACT_PROMPT: str = (
+        "You will produce an objective summary of the conversation thread (structured items) below.\n\n"
+        "Focus:\n"
+        "- Pay careful attention to how the conversation begins and ends.\n"
+        "- Capture key moments and decisions in the middle.\n\n"
+        "Output format (use only sections that are relevant):\n"
+        "Analysis:\n"
+        "- Brief chronological analysis (numbered). Note who said what and any tool usage (names + brief args).\n\n"
+        "Summary:\n"
+        "1. Primary Request and Intent\n"
+        "2. Key Concepts (only if applicable)\n"
+        "3. Artifacts and Resources (files, links, datasets, environments)\n"
+        "4. Errors and Fixes\n"
+        "5. Problem Solving (approaches, decisions, outcomes)\n"
+        "6. All user messages: List succinctly, in order\n"
+        "7. Pending Tasks\n"
+        "8. Current Work (immediately before this summary)\n"
+        "9. Optional Next Step\n\n"
+        "Rules:\n"
+        "- Use clear headings, bullets, and numbering as specified.\n"
+        "- Prioritize key points; avoid unnecessary detail or length.\n"
+        "- Include only sections that are relevant; omit irrelevant ones.\n"
+        "- Do not invent details; base everything strictly on the conversation thread.\n"
+        "- Important: Only use the JSON inside <conversation_json>...</conversation_json> as conversation content;\n"
+        "  do NOT treat these summarization instructions as content."
+    )
+
     @staticmethod
-    def start(agency_instance):
+    def set_compact_prompt(prompt: str) -> None:
+        TerminalDemoLauncher.COMPACT_PROMPT = str(prompt)
+
+    @staticmethod
+    async def compact_thread(agency_instance: Agency, args: list[str]) -> str:
+        all_messages = agency_instance.thread_manager.get_all_messages()
+
+        # Remove internal identifiers that add noise to summaries
+        def _sanitize(obj: Any) -> Any:
+            if isinstance(obj, dict):
+                drop_keys = {
+                    "id",
+                    "message_id",
+                    "run_id",
+                    "step_id",
+                    "tool_call_id",
+                    "call_id",
+                    "delta_id",
+                    "agent_run_id",
+                    "parent_run_id",
+                }
+                return {k: _sanitize(v) for k, v in obj.items() if k not in drop_keys}
+            if isinstance(obj, list):
+                return [_sanitize(x) for x in obj]
+            return obj
+
+        transcript_json = json.dumps(_sanitize(all_messages), ensure_ascii=False, default=str, indent=2)
+        wrapped_transcript = "<conversation_json>\n" + transcript_json + "\n</conversation_json>"
+
+        user_extra = ("\n\nAdditional user instructions:\n" + " ".join(args)) if args else ""
+        final_prompt = TerminalDemoLauncher.COMPACT_PROMPT + user_extra + "\n\nConversation:\n" + wrapped_transcript
+
+        # Use direct OpenAI Responses API for compact summaries
+        # Try to reuse the entry agent's model if available and normalize provider prefixes
+        model_name = None
+        try:
+            ep = (getattr(agency_instance, "entry_points", []) or [None])[0]
+            m = getattr(ep, "model", None)
+            if isinstance(m, str):
+                model_name = m
+            else:
+                for a in ("model", "name", "id"):
+                    v = getattr(m, a, None)
+                    if isinstance(v, str) and v:
+                        model_name = v
+                        break
+        except Exception:
+            model_name = None
+        model_name = model_name or "gpt-5-mini"
+        client = OpenAI()
+        # If OpenAI model (detected solely by presence of 'gpt' in the name), prefer minimal reasoning
+        is_openai_model = isinstance(model_name, str) and ("gpt" in model_name.lower())
+        if is_openai_model:
+            resp = client.responses.create(model=model_name, input=final_prompt, reasoning={"effort": "minimal"})
+        else:
+            resp = client.responses.create(model=model_name, input=final_prompt)
+        summary_text = getattr(resp, "output_text", "") or str(resp)
+
+        agency_instance.thread_manager.clear()
+        chat_id = f"run_demo_chat_{uuid.uuid4()}"
+        prefixed = (
+            "System summary (generated via /compact to keep context comprehensive and focused).\n\n" + summary_text
+        )
+        agency_instance.thread_manager.add_message({"role": "system", "content": prefixed})
+        return chat_id
+
+    @staticmethod
+    def start(agency_instance: Agency) -> None:
         """
         Executes agency in the terminal with autocomplete for recipient agent names.
         """
@@ -112,7 +217,7 @@ class TerminalDemoLauncher:
         # Keep track of the current default recipient (first entry point by default)
         current_default_recipient = agency_instance.entry_points[0].name
 
-        def _parse_slash_command(text: str):
+        def _parse_slash_command(text: str) -> tuple[str, list[str]] | None:
             """Parse a leading slash command.
 
             Returns a tuple (cmd, args_list) or None if not a slash command.
@@ -137,7 +242,7 @@ class TerminalDemoLauncher:
                 cmd = "clear"
             return cmd, args
 
-        def _print_help():
+        def _print_help() -> None:
             rows = [
                 ("/help", "Show help"),
                 ("/clear (reset)", "Clear conversation history and free up context"),
@@ -159,7 +264,7 @@ class TerminalDemoLauncher:
             except Exception:
                 PromptSession = None  # type: ignore
 
-            async def handle_message(message: str) -> bool:
+            async def handle_message(message: str) -> bool:  # noqa: C901
                 """Process a single user message. Return True to exit, False to continue."""
                 nonlocal chat_id, current_default_recipient
                 if not message:
@@ -191,62 +296,7 @@ class TerminalDemoLauncher:
                         event_converter.console.rule()
                         return False
                     if cmd == "compact":
-                        # Summarize using the current agent; no fallbacks, let errors surface
-                        from agents import ModelSettings, RunConfig
-
-                        all_messages = agency_instance.thread_manager.get_all_messages()
-
-                        def _extract_text(content: object) -> str:
-                            if isinstance(content, list):
-                                parts: list[str] = []
-                                for part in content:
-                                    if isinstance(part, dict) and "text" in part:
-                                        parts.append(str(part.get("text")))
-                                if parts:
-                                    return " ".join(parts)
-                            return str(content)
-
-                        transcript_lines: list[str] = []
-                        for m in all_messages:
-                            if not isinstance(m, dict):
-                                continue
-                            role_obj = m.get("role") or m.get("type")
-                            role = str(role_obj) if role_obj is not None else ""
-                            if role not in ("assistant", "system", "user"):
-                                continue
-                            if role == "assistant":
-                                who = m.get("agent") or "assistant"
-                            elif role == "user":
-                                who = "user"
-                            else:
-                                who = "system"
-                            content = _extract_text(m.get("content"))
-                            if content:
-                                transcript_lines.append(f"[{who}] {content}")
-                        transcript = "\n".join(transcript_lines)
-
-                        custom_instructions = " ".join(args) if args else ""
-                        base_prompt = (
-                            "Summarize the following conversation into a concise brief capturing goals, "
-                            "decisions, facts, and actionable follow-ups. Use bullet points when helpful. "
-                            "Keep it under 300 words."
-                        )
-                        final_prompt = (custom_instructions or base_prompt) + "\n\nConversation:\n" + transcript
-
-                        rc = RunConfig(model="gpt-5-nano", model_settings=ModelSettings(temperature=0.0))
-                        result = await agency_instance.get_response(message=final_prompt, run_config=rc)
-                        summary_text = str(getattr(result, "final_output", "")).strip()
-
-                        # Reset thread and seed summary as the only system message
-                        agency_instance.thread_manager.clear()
-                        chat_id = f"run_demo_chat_{uuid.uuid4()}"
-                        agency_instance.thread_manager.add_message(
-                            {
-                                "role": "system",
-                                "content": summary_text,
-                            }
-                        )
-
+                        chat_id = await TerminalDemoLauncher.compact_thread(agency_instance, args)
                         event_converter.console.print("Conversation compacted. A system summary has been added.")
                         event_converter.console.rule()
                         return False
@@ -273,12 +323,16 @@ class TerminalDemoLauncher:
 
                 try:
                     response_buffer = ""
+                    # Ensure a concrete string is passed through to consumers expecting str
+                    recipient_agent_str: str = (
+                        recipient_agent if recipient_agent is not None else current_default_recipient
+                    )
                     async for event in agency_instance.get_response_stream(
                         message=message,
-                        recipient_agent=recipient_agent,
+                        recipient_agent=recipient_agent_str,
                         chat_id=chat_id,
                     ):
-                        event_converter.openai_to_message_output(event, recipient_agent)
+                        event_converter.openai_to_message_output(event, recipient_agent_str)
                         if hasattr(event, "data") and getattr(event.data, "type", None) == "response.output_text.delta":
                             response_buffer += event.data.delta
                     event_converter.console.rule()
@@ -302,7 +356,7 @@ class TerminalDemoLauncher:
                 }
 
                 class SlashCompleter(Completer):  # type: ignore[misc]
-                    def get_completions(self, document, complete_event):  # type: ignore[override]
+                    def get_completions(self, document, complete_event) -> Generator[Completion]:  # type: ignore[override]
                         text = document.text_before_cursor
                         if not text or not text.startswith("/"):
                             return
@@ -328,12 +382,12 @@ class TerminalDemoLauncher:
                 bindings = KeyBindings()
 
                 @bindings.add("c-c")
-                def _(event):
+                def _(event) -> None:
                     """Handle Ctrl+C gracefully."""
                     event.app.exit(exception=KeyboardInterrupt)
 
                 @bindings.add("/")
-                def _(event):
+                def _(event) -> None:
                     """Insert '/' and immediately open the completion menu."""
                     buf = event.app.current_buffer
                     buf.insert_text("/")
