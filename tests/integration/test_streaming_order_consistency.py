@@ -137,16 +137,16 @@ async def test_full_streaming_flow_hardcoded_sequence() -> None:
 
 # Expected flow for multiple sequential sub-agent calls
 EXPECTED_FLOW_MULTIPLE_CALLS: list[tuple[str, str, str | None]] = [
-    # SDK v0.2.x: Agent may not output ACK message first when tool calls are immediate
+    # Agent calls tool immediately without ACK message
     ("tool_call_item", "Coordinator", "get_market_data"),  # First data fetch
     ("tool_call_output_item", "Coordinator", None),
-    # First sub-agent call - SDK v0.2.x emits send_message immediately
+    # First sub-agent call - SDK emits send_message immediately
     ("tool_call_item", "Coordinator", "send_message"),  # SDK emits send_message immediately
     ("tool_call_item", "Worker", "process_data"),  # Worker processes
     ("tool_call_output_item", "Worker", None),
     ("message_output_item", "Worker", None),  # Worker responds
     ("tool_call_output_item", "Coordinator", None),  # send_message completes
-    # Second sub-agent call - SDK v0.2.x emits send_message immediately
+    # Second sub-agent call - SDK emits send_message immediately
     ("tool_call_item", "Coordinator", "send_message"),  # SDK emits send_message immediately
     ("tool_call_item", "Worker", "validate_result"),  # Worker validates
     ("tool_call_output_item", "Worker", None),
@@ -319,11 +319,11 @@ async def test_nested_delegation_streaming() -> None:
             if isinstance(evt_type, str) and isinstance(agent_name, str):
                 stream_items.append((evt_type, agent_name, tool_name))
 
-    # Verify stream contains the required sequence in order and AgentB performs its internal tool
+    # Verify stream contains the required sequence in order and AgentC performs analyze_risk
     required_seq = [
         ("tool_call_item", "AgentA", "send_message"),
         ("tool_call_item", "AgentB", "send_message"),
-        ("tool_call_item", "AgentB", "analyze_risk"),
+        ("tool_call_item", "AgentC", "analyze_risk"),
         ("tool_call_output_item", "AgentA", None),
         ("message_output_item", "AgentA", None),
     ]
@@ -368,7 +368,7 @@ async def test_nested_delegation_streaming() -> None:
             norm = "message_output_item" if role == "assistant" else (t or "unknown")
         saved_normalized.append((norm, agent, tool_name))
 
-    # Verify stream contains the required sequence in order
+    # Verify stream contains the required sequence in order (for saved messages verification)
     required_seq = [
         ("tool_call_item", "AgentA", "send_message"),
         ("tool_call_item", "AgentB", "send_message"),
