@@ -80,3 +80,94 @@ async def test_compact_uses_entry_agent_client_sync_and_model_passthrough():
     assert last["reasoning"] is None
     # Ensure the conversation payload wrapper is present
     assert "<conversation_json>" in last["input"] and "</conversation_json>" in last["input"]
+
+
+def test_resume_interactive_list_and_select(tmp_path, monkeypatch):
+    # Prepare fake chats dir
+    TerminalDemoLauncher.set_chats_dir(str(tmp_path))
+
+    # Build a minimal agency shim compatible with resume/save
+    class _T:
+        def __init__(self):
+            self._msgs = []
+
+        def get_all_messages(self):
+            return list(self._msgs)
+
+        def clear(self):
+            self._msgs.clear()
+
+        def add_message(self, m):
+            self._msgs.append(m)
+
+        def add_messages(self, ms):
+            self._msgs.extend(ms)
+
+    class _A:
+        def __init__(self):
+            self.thread_manager = _T()
+
+    agency = _A()
+
+    # Chat A
+    agency.thread_manager.clear()
+    agency.thread_manager.add_message({"role": "user", "content": "hey bro"})
+    cid_a = "chat_a"
+    TerminalDemoLauncher.save_current_chat(agency, cid_a)
+
+    # Chat B
+    agency.thread_manager.clear()
+    agency.thread_manager.add_message({"role": "user", "content": "poem request"})
+    cid_b = "chat_b"
+    TerminalDemoLauncher.save_current_chat(agency, cid_b)
+
+    # Intercept input to choose the second entry (B)
+    inputs = iter(["2"])  # select index 2
+
+    def fake_input(prompt: str = "") -> str:
+        try:
+            return next(inputs)
+        except StopIteration:
+            return ""
+
+    printed: list[str] = []
+
+    def fake_print(*args, **kwargs):
+        line = " ".join(str(a) for a in args)
+        printed.append(line)
+
+    # Force fallback mode by mocking prompt_toolkit import failure
+    import builtins
+
+    original_import = builtins.__import__
+
+    def mock_import(name, *args, **kwargs):
+        if name == "prompt_toolkit.shortcuts":
+            raise ImportError("Mocked for test")
+        return original_import(name, *args, **kwargs)
+
+    builtins.__import__ = mock_import
+    try:
+        chosen = TerminalDemoLauncher.resume_interactive(agency, input_func=fake_input, print_func=fake_print)
+    finally:
+        builtins.__import__ = original_import
+
+    assert chosen in {cid_a, cid_b}
+    # After resume, agency should have loaded selected chat (either A or B)
+    msgs = agency.thread_manager.get_all_messages()
+    assert isinstance(msgs, list) and len(msgs) >= 1
+    # Printed list should include header and at least two rows
+    assert any("Modified" in ln and "Created" in ln for ln in printed)
+    assert sum(1 for ln in printed if ln.strip().startswith("1.")) >= 1
+    assert sum(1 for ln in printed if ln.strip().startswith("2.")) >= 1
+
+    # Index file should exist and include both chats with summaries
+    import json
+    import os
+
+    index_path = TerminalDemoLauncher._index_file_path()
+    assert os.path.exists(index_path)
+    with open(index_path) as f:
+        idx = json.load(f)
+    assert "chat_a" in idx and "chat_b" in idx
+    assert idx["chat_a"].get("summary") == "hey bro"

@@ -12,7 +12,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from agency_swarm import Agency, Agent, RunContextWrapper, function_tool
-from agency_swarm.ui.demos.launcher import CopilotDemoLauncher
+from agency_swarm.ui.demos.copilot import CopilotDemoLauncher
 
 
 @function_tool()

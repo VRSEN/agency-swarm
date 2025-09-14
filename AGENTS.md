@@ -31,14 +31,16 @@ Prime Directive: Rigorously compare every user request with patterns established
 
 ### Writing Style
 - User-facing responses should be expressive Markdown within safety/compliance rules.
+- Avoid unclear or unexplainable phrases. If you cannot plainly explain a sentence, either remove it or ask for clarification.
 
 ## 🔴 SAFETY PROTOCOLS
 
 ### 🚨 MANDATORY WORKFLOW
 
 #### Step 0: Build Full Codebase Structure and Comprehensive Change Review
-make prime
+`make prime`
 
+- This is a meta-command composed of sub-commands: structure discovery, git status/diffs. Avoid duplicating command listings elsewhere to save space in the context window.
 - Run this before reading or modifying files—no exceptions.
 
 #### Step 1: Proactive Analysis
@@ -53,10 +55,10 @@ make prime
 
 #### Step 2: Comprehensive Validation
 # Run only the relevant tests first (specific file/test)
-uv run pytest tests/integration/ -v
+`uv run pytest tests/integration/ -v`
 
-# Run the full suite (make ci) before PR/merge or when verifying repo-wide health
-make ci
+# Run the full suite (`make ci`) before PR/merge or when verifying repo-wide health
+`make ci`
 
 After each tool call or code edit, validate the result in 1-2 lines and proceed or self-correct if validation fails.
 
@@ -74,15 +76,15 @@ After each tool call or code edit, validate the result in 1-2 lines and proceed 
 - Always load environment via `.env` (with python-dotenv or `source .env`). Resolve and rerun tests on key errors.
 
 ## Common Commands
-make ci      # Install, lint, type-check (mypy), test, check coverage
-make check   # The same but without tests
+`make ci`      # Install, lint, type-check (mypy), test, check coverage
+`make check`   # The same but without tests
 
 ### Execution Environment
 - Use project virtual environments (`uv run`, Make). Never use global interpreters or absolute paths.
 - For long-running commands (ci, coverage), use Bash tool with timeout=600000 (10 minutes)
 
 ### Example Runs
-Run non-interactive examples from /examples directory. Never run examples/interactive/* as they require user input.
+- Run non-interactive examples from /examples directory. Never run examples/interactive/* as they require user input.
 
 ### Test Guidelines
 - Keep tests deterministic and minimal. Avoid model dependency when practical.
@@ -216,12 +218,13 @@ Avoid growing already large files. Prefer extracting focused modules. If you mus
 - `/docs/` – Framework documentation
 
 ## Quick Commands
-find src/ -name "*.py" | grep -v __pycache__ | sort  # Initial structure
-make ci                                              # Full validation
-uv run pytest tests/integration/ -v                  # Integration tests
+`find src/ -name "*.py" | grep -v __pycache__ | sort`  # Initial structure
+`make ci`                                              # Full validation
+`uv run pytest tests/integration/ -v`                  # Integration tests
 
 ## Memory & Expectations
 - User expects explicit status reporting, test-first mindset, and directness. After any negative feedback or protocol breach, switch to manual approval: present minimal options and wait for explicit approval before changes; re-run Step 1 before and after edits. Update this document first after negative feedback.
+- Always include the distilled gist of any new insight directly in this file when relevant, but prefer improving existing lines and sections.
 
 ## Mandatory Search Discipline
 - After changes, aggressively search for and clean up related patterns throughout the codebase.
