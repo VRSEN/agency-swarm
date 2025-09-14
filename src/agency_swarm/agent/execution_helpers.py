@@ -584,16 +584,7 @@ async def run_stream_with_guardrails(
 
                 if not getattr(event, "_forwarded", False):
                     try:
-                        if (
-                            getattr(event, "type", None) == "run_item_stream_event"
-                            and getattr(event, "name", None) == "handoff_occured"
-                        ):
-                            item = getattr(event, "item", None)
-                            target = MessageFormatter.extract_handoff_target_name(item) if item is not None else None
-                            if target:
-                                current_stream_agent_name = target
-                                current_agent_run_id = f"agent_run_{__import__('uuid').uuid4().hex}"
-                        elif getattr(event, "type", None) == "agent_updated_stream_event":
+                        if getattr(event, "type", None) == "agent_updated_stream_event":
                             new_agent = getattr(event, "new_agent", None)
                             if new_agent is not None and hasattr(new_agent, "name") and new_agent.name:
                                 current_stream_agent_name = new_agent.name

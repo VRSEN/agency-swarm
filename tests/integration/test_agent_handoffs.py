@@ -349,3 +349,31 @@ class TestComplexHandoffScenarios:
         handoff_targets = [h.agent_name for h in agent_b_final.handoffs]
         assert "AgentA" in handoff_targets, f"AgentB should have handoff to AgentA, got: {handoff_targets}"
         assert "AgentC" in handoff_targets, f"AgentB should have handoff to AgentC, got: {handoff_targets}"
+
+    @pytest.mark.asyncio
+    async def test_handoff_follow_up(self, mixed_communication_agency):
+        """Test that there are no errors on follow up messages."""
+
+        # First handoff
+        async for _ in mixed_communication_agency.get_response_stream(
+            "Ask Agent B to use transfer_to_AgentC tool."
+        ):
+            pass
+
+        # Verify handoff occurred
+        messages = mixed_communication_agency.thread_manager.get_all_messages()
+        tool_names = [msg.get("name") for msg in messages if msg.get("type") == "function_call"]
+        assert "transfer_to_AgentC" in tool_names, "Should have used transfer_to_AgentC tool"
+
+        # Second handoff (follow-up)
+        async for _ in mixed_communication_agency.get_response_stream(
+            "Do the exact same thing again."
+        ):
+            pass
+
+        # Verify no errors in tool outputs
+        messages = mixed_communication_agency.thread_manager.get_all_messages()
+        tool_outputs = [msg.get("output", "") for msg in messages if msg.get("type") == "function_call_output"]
+
+        for output in tool_outputs:
+            assert "error" not in output.lower(), f"Found error in tool output: {output}"
