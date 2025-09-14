@@ -28,8 +28,8 @@ def combine_results(results: str) -> str:
 
 # Hardcoded expected flow (normalized stream type, agent, tool_name)
 EXPECTED_FLOW: list[tuple[str, str, str | None]] = [
-    ("tool_call_item", "MainAgent", "get_market_data"),
     ("message_output_item", "MainAgent", None),
+    ("tool_call_item", "MainAgent", "get_market_data"),
     ("tool_call_output_item", "MainAgent", None),
     ("tool_call_item", "MainAgent", "send_message"),
     ("tool_call_item", "SubAgent", "analyze_risk"),
@@ -382,8 +382,8 @@ async def test_nested_delegation_streaming() -> None:
 
 # Expected flow for parallel sub-agent calls (to different agents)
 EXPECTED_FLOW_PARALLEL: list[tuple[str, str, str | None]] = [
-    ("tool_call_item", "Orchestrator", "get_market_data"),  # Get initial data
     ("message_output_item", "Orchestrator", None),  # ACK
+    ("tool_call_item", "Orchestrator", "get_market_data"),  # Get initial data
     ("tool_call_output_item", "Orchestrator", None),
     ("tool_call_item", "Orchestrator", "send_message"),
     ("tool_call_item", "ProcessorA", "process_data"),  # ProcessorA works

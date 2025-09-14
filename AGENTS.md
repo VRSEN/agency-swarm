@@ -190,6 +190,7 @@ Avoid growing already large files. Prefer extracting focused modules. If you mus
 - Commit messages must explain WHY, not just WHAT
 - Before composing a commit message, run `git diff --cached | cat` and base the message on that diff only.
 - Keep subject concise (<72 chars), imperative, and scoped (e.g., `examples: response_validation`).
+ - Before any potentially destructive command (including commit, push, reset, rebase, force operations, file deletions, or mass edits), STOP and clearly explain the intended changes and impact, then obtain the user's explicit approval before proceeding. Treat committing as destructive in this repo.
 
 ### Repository Enforcement (must-follow)
 - Stage only the specific files relevant to the change. There may be other changes, check `git status`
