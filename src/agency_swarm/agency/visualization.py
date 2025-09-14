@@ -167,6 +167,6 @@ def copilot_demo(
     Run a copilot demo of the agency.
     """
     # Copilot demo implementation
-    from agency_swarm.ui.demos.launcher import CopilotDemoLauncher
+    from agency_swarm.ui.demos.copilot import CopilotDemoLauncher
 
     CopilotDemoLauncher.start(agency, host=host, port=port, frontend_port=frontend_port, cors_origins=cors_origins)

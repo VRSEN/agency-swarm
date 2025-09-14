@@ -186,3 +186,4 @@ agency_*.json
 debug_agency_data.json
 
 .taskmaster/
+.agency_swarm_chats/
