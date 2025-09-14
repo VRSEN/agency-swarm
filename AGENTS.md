@@ -60,8 +60,8 @@ make ci
 
 After each tool call or code edit, validate the result in 1-2 lines and proceed or self-correct if validation fails.
 
-- Before editing or continuing work, review the current diff: `git status --porcelain | cat`, `git diff | cat`, and `git diff --cached | cat`. As an alternative, use `make prime` to print all of the above, as well as the codebase structure as a reminder.
-- After each change, run only the relevant tests. Use `make ci` for final verification (pre-PR/merge) or when a change is cross-cutting.
+- Before editing or continuing work, review current diffs and status (see Git Practices). You can also use `make prime` to print these and the codebase structure.
+- After each change, run only the relevant tests; use the full suite for final verification (see Common Commands).
 
 
 ### 🔴 PROHIBITED PRACTICES
@@ -88,6 +88,7 @@ Run non-interactive examples from /examples directory. Never run examples/intera
 - Keep tests deterministic and minimal. Avoid model dependency when practical.
 - Update existing tests before adding new ones, unless absolutely necessary.
 - Tests should be under 100 lines—split long ones. Use focused runs when debugging.
+- No OR/alternatives in assertions.
 
 ## Architecture Overview
 
@@ -138,6 +139,10 @@ Avoid growing already large files. Prefer extracting focused modules. If you mus
   - `tests/test_*_modules/` – Module-based unit tests
   - No root-level tests (organize by module)
 - Name test files clearly (e.g. `test_thread_isolation.py`), never generic root names
+
+- Each test verifies one behavior; describe the behavior in the docstring.
+- Keep assertions minimal but high-signal; enforce a single canonical order (no alternates, no randomness).
+- Prefer proving the core behavior over incidental details; remove dead code and unused branches immediately.
 
 ### Testing Protocol (Behavior-Only, Minimal Mocks)
 - Do not test private APIs or patch private attributes/methods. Interact via public interfaces only.
@@ -232,3 +237,8 @@ uv run pytest tests/integration/ -v                  # Integration tests
 - Example scripts execute and output as expected
 
 Always self-improve: when you find a recurring mistake or better practice, update this file with the refined rule and follow it.
+
+## Iterative Polishing (Encouraged)
+- Refine current changes with small, focused edits—up to 100 passes when beneficial.
+- Keep diffs minimal and scoped; validate after each pass (relevant tests/lint/type checks).
+- Stop iterating when no further measurable improvement is possible.
