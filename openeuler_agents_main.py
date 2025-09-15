@@ -170,12 +170,9 @@ def main():
             "安全能力群": [secscanner_agent_instance, syscare_agent_instance,],
             "控制访问能力群": [permissions_agent_instance, network_agent_instance,user_agent_instance],
         }
-        text ="""
-        下列 IP 地址存在可疑请求，请阻止访问：192.168.78.130,192.168.78.131。
+        text = """
+       使用`secScanner`扫描本机的CVE漏洞，并报告漏洞的情况
         """
-        # text = """
-        # 在`/root/build-rpm/`目录下`有一个redis的补丁文件，文件名为：`patch-redis6-6.2.18-3-fix-cve-2025-48367-1-1.x86_64.rpm`，请安装补丁
-        # """
 
         files_path = os.path.join("agents", "files")
         comtext_tree = os.path.join(files_path, "context_tree.json")

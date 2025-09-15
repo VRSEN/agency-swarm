@@ -4,12 +4,12 @@ import json
 
 from agents.openeuler_agents.tools.ssh_executor import SSHCommandExecutor
 
-HOST = "127.0.0.1"
-# HOST = "121.36.210.47"
-PORT = 7001
+# HOST = "127.0.0.1"
+HOST = "121.36.210.47"
+PORT = 22
 USERNAME = "root"
-PASSWORD = "mimacuowu,1"
-# PASSWORD = "Test123456!"
+# PASSWORD = "mimacuowu,1"
+PASSWORD = "Test123456!"
 
 SSH_CONNECTION_ERROR = -1
 
@@ -40,6 +40,6 @@ class SSHExecuteCommand(BaseTool):
 
         return  {"tool":"SSHExecuteCommand","command":self.command,"result": "SUCCESS", "reason":check_result}
 
-# if __name__=="__main__":
-#     tool = SSHExecuteCommand(command="for i in $(seq 1 3); do echo 'Line $i (yield)'; sleep 1; done")
-#     print(tool.run())
+if __name__=="__main__":
+    tool = SSHExecuteCommand(command="for i in $(seq 1 3); do echo 'Line $i (yield)'; sleep 1; done")
+    print(tool.run())

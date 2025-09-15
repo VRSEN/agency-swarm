@@ -10,7 +10,7 @@ _description = """
 负责使用git管理代码仓库的更改等操作，支持以下的操作命令：
 支持的命令：
 - `git clone <仓库地址>`：克隆指定的git仓库。例如：git clone https://github.com/redis/redis.git
-- `git format-patch -1 <commit-hash>`：根据指定的commit哈希生成补丁文件。执行后会在当前目录生成类似 0001-commit-message.patch 的补丁文件，文件名包含序号和提交信息。
+- `git format-patch -1 <commit-hash>`：根据指定的commit哈希生成patch文件。执行后会在当前目录生成类似 0001-commit-message.patch 的补丁文件，文件名包含序号和提交信息。
 - `git checkout <commit-hash>`：检测出特定commit是否存在
 注意：
 1. cd命令和git命令一起执行，使用`&&`连接，例如：`cd repo && git format-patch -1 <commit-hash>`。
