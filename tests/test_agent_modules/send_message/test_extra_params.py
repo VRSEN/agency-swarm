@@ -117,7 +117,8 @@ class SendMessageBad(SendMessage):
     ExtraParams = BadExtra
 
 
-def test_bad_extra_params_model_gracefully_handled():
+@pytest.mark.asyncio
+async def test_bad_extra_params_model_gracefully_handled():
     """If ExtraParams schema generation fails, the tool should still operate without extra validation."""
     sender = StubAgent("Sender")
     recipient = StubAgent("Recipient")
@@ -155,10 +156,8 @@ def test_bad_extra_params_model_gracefully_handled():
         }
     )
     # Both calls should return a non-error string
-    import asyncio
-
-    out1 = asyncio.get_event_loop().run_until_complete(tool.on_invoke_tool(Wrapper(), ok_args))
-    out2 = asyncio.get_event_loop().run_until_complete(tool.on_invoke_tool(Wrapper(), extra_args))
+    out1 = await tool.on_invoke_tool(Wrapper(), ok_args)
+    out2 = await tool.on_invoke_tool(Wrapper(), extra_args)
     assert isinstance(out1, str)
     assert isinstance(out2, str)
     assert not out1.startswith("Error: Invalid extra parameters")
