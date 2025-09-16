@@ -36,8 +36,9 @@ async def forbid_email_output(context: RunContextWrapper, agent: Agent, response
     return GuardrailFunctionOutput(output_info="", tripwire_triggered=False)
 
 
-def _make_agency_for_input_guardrail() -> Agency:
-    agent = Agent(
+@pytest.fixture
+def input_guardrail_agent() -> Agent:
+    return Agent(
         name="InputGuardrailAgent",
         instructions="You are a helpful assistant.",
         model="gpt-4o",
@@ -45,26 +46,49 @@ def _make_agency_for_input_guardrail() -> Agency:
         model_settings=ModelSettings(temperature=0.0),
         throw_input_guardrail_error=False,
     )
-    return Agency(agent)
 
 
-def _make_agency_for_output_guardrail() -> Agency:
-    agent = Agent(
+@pytest.fixture
+def input_guardrail_agency(input_guardrail_agent: Agent) -> Agency:
+    return Agency(input_guardrail_agent)
+
+
+@pytest.fixture
+def input_guardrail_agency_factory():
+    def factory() -> Agency:
+        agent = Agent(
+            name="InputGuardrailAgent",
+            instructions="You are a helpful assistant.",
+            model="gpt-4o",
+            input_guardrails=[require_support_prefix],
+            model_settings=ModelSettings(temperature=0.0),
+            throw_input_guardrail_error=False,
+        )
+        return Agency(agent)
+
+    return factory
+
+
+@pytest.fixture
+def output_guardrail_agent() -> Agent:
+    return Agent(
         name="OutputGuardrailAgent",
-        # Instruct model to output an email to trip the guardrail on first attempt
         instructions=("You are a helpful assistant. Respond with exactly 'foo@example.com' and nothing else."),
         model="gpt-4o",
         output_guardrails=[forbid_email_output],
         model_settings=ModelSettings(temperature=0.0),
-        validation_attempts=1,  # allow one retry without email
+        validation_attempts=1,
     )
-    return Agency(agent)
 
 
-@pytest.mark.asyncio
-async def test_input_guardrail_guidance_and_persistence():
-    agency = _make_agency_for_input_guardrail()
-    resp = await agency.get_response(message="Hello there")
+@pytest.fixture
+def output_guardrail_agency(output_guardrail_agent: Agent) -> Agency:
+    return Agency(output_guardrail_agent)
+
+
+def test_input_guardrail_guidance_and_persistence(input_guardrail_agency: Agency):
+    agency = input_guardrail_agency
+    resp = agency.get_response_sync(message="Hello there")
 
     # Should return guidance as final_output without calling the model
     assert isinstance(resp.final_output, str)
@@ -77,10 +101,9 @@ async def test_input_guardrail_guidance_and_persistence():
     assert "prefix your request with 'Support:'" in system_msgs[0].get("content", "")
 
 
-@pytest.mark.asyncio
-async def test_output_guardrail_logs_guidance():
-    agency = _make_agency_for_output_guardrail()
-    await agency.get_response(message="Hi")
+def test_output_guardrail_logs_guidance(output_guardrail_agency: Agency):
+    agency = output_guardrail_agency
+    agency.get_response_sync(message="Hi")
 
     # History should contain a system guidance message from the guardrail
     all_msgs = agency.thread_manager.get_all_messages()
@@ -88,28 +111,12 @@ async def test_output_guardrail_logs_guidance():
     assert any("Email addresses are not allowed" in (m.get("content", "")) for m in system_msgs)
 
 
-@pytest.mark.asyncio
-async def test_input_guardrail_multiple_agent_inits_no_double_wrap():
-    # Initialize Agents multiple times BEFORE sending any query to simulate
-    # environments that construct agents repeatedly (shared guardrail instances).
-
-    # Now create the agent/agency we actually use for the request
-    def create_agency():
-        final_agent = Agent(
-            name="FinalInputGuardrailAgent",
-            instructions="You are a helpful assistant.",
-            model="gpt-4o",
-            input_guardrails=[require_support_prefix],
-            model_settings=ModelSettings(temperature=0.0),
-            throw_input_guardrail_error=False,
-        )
-        agency = Agency(final_agent)
-        return agency
-
+def test_input_guardrail_multiple_agent_inits_no_double_wrap(input_guardrail_agency_factory):
+    # Initialize Agents multiple times BEFORE sending any query to simulate repeated setup
     for _ in range(3):
-        agency = create_agency()
+        agency = input_guardrail_agency_factory()
 
-    resp = await agency.get_response(
+    resp = agency.get_response_sync(
         message=[{"role": "user", "content": "Hi"}, {"role": "user", "content": "How are you?"}]
     )
 
