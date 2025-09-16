@@ -9,6 +9,7 @@ import dataclasses
 import inspect
 import logging
 import warnings
+from functools import wraps
 from typing import TYPE_CHECKING, Any
 
 from agents import Agent as BaseAgent, GuardrailFunctionOutput, ModelSettings, RunContextWrapper
@@ -23,6 +24,8 @@ if TYPE_CHECKING:
     from agency_swarm.agent.core import Agent
 
 logger = logging.getLogger(__name__)
+
+_INPUT_GUARDRAIL_WRAPPED_ATTR = "_agency_swarm_input_guardrail_wrapped"
 
 
 def handle_deprecated_parameters(kwargs: dict[str, Any]) -> dict[str, Any]:
@@ -348,9 +351,12 @@ def wrap_input_guardrails(agent: "Agent"):
         agent: The agent instance
     """
     for guardrail in agent.input_guardrails:
-        if guardrail.guardrail_function.__name__ == "guardrail_wrapper":
+        guardrail_func = guardrail.guardrail_function
+        if getattr(guardrail_func, _INPUT_GUARDRAIL_WRAPPED_ATTR, False):
             continue
+
         def create_guardrail_wrapper(guardrail_func):
+            @wraps(guardrail_func)
             def guardrail_wrapper(context: RunContextWrapper, agent: "Agent", chat_history: str | list[dict]):
                 if isinstance(chat_history, str):
                     return guardrail_func(context, agent, chat_history)
@@ -391,7 +397,7 @@ def wrap_input_guardrails(agent: "Agent"):
                     else:
                         return guardrail_func(context, agent, user_messages)
 
+            setattr(guardrail_wrapper, _INPUT_GUARDRAIL_WRAPPED_ATTR, True)
             return guardrail_wrapper
 
-        original_function = guardrail.guardrail_function
-        guardrail.guardrail_function = create_guardrail_wrapper(original_function)
+        guardrail.guardrail_function = create_guardrail_wrapper(guardrail_func)

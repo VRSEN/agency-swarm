@@ -11,10 +11,7 @@ from agency_swarm import (
 )
 
 
-@input_guardrail(name="RequireSupportPrefix")
-async def require_support_prefix(
-    context: RunContextWrapper, agent: Agent, input_message: str | list[str]
-) -> GuardrailFunctionOutput:
+def _evaluate_support_prefix_guardrail(input_message: str | list[str]) -> GuardrailFunctionOutput:
     if isinstance(input_message, str):
         bad = not input_message.startswith("Support:")
     else:
@@ -23,6 +20,20 @@ async def require_support_prefix(
         output_info=("Please, prefix your request with 'Support:' describing what you need." if bad else ""),
         tripwire_triggered=bad,
     )
+
+
+@input_guardrail(name="RequireSupportPrefix")
+async def require_support_prefix(
+    context: RunContextWrapper, agent: Agent, input_message: str | list[str]
+) -> GuardrailFunctionOutput:
+    return _evaluate_support_prefix_guardrail(input_message)
+
+
+@input_guardrail(name="RequireSupportPrefixAlias")
+async def guardrail_wrapper(
+    context: RunContextWrapper, agent: Agent, input_message: str | list[str]
+) -> GuardrailFunctionOutput:
+    return _evaluate_support_prefix_guardrail(input_message)
 
 
 @output_guardrail(name="ForbidEmailOutput")
@@ -55,12 +66,12 @@ def input_guardrail_agency(input_guardrail_agent: Agent) -> Agency:
 
 @pytest.fixture
 def input_guardrail_agency_factory():
-    def factory() -> Agency:
+    def factory(selected_guardrail=require_support_prefix) -> Agency:
         agent = Agent(
             name="InputGuardrailAgent",
             instructions="You are a helpful assistant.",
             model="gpt-4o",
-            input_guardrails=[require_support_prefix],
+            input_guardrails=[selected_guardrail],
             model_settings=ModelSettings(temperature=0.0),
             throw_input_guardrail_error=False,
         )
@@ -114,7 +125,8 @@ def test_output_guardrail_logs_guidance(output_guardrail_agency: Agency):
 def test_input_guardrail_multiple_agent_inits_no_double_wrap(input_guardrail_agency_factory):
     # Initialize Agents multiple times BEFORE sending any query to simulate repeated setup
     for _ in range(3):
-        agency = input_guardrail_agency_factory()
+        # guardrail_wrapper intentionally shares the wrapper name; this guards against name-based checks.
+        agency = input_guardrail_agency_factory(guardrail_wrapper)
 
     resp = agency.get_response_sync(
         message=[{"role": "user", "content": "Hi"}, {"role": "user", "content": "How are you?"}]
