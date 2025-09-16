@@ -113,6 +113,15 @@ async def run_sync_with_guardrails(
             )
             return run_result, master_context_for_run
         except OutputGuardrailTripwireTriggered as e:
+            history_for_runner = append_guardrail_feedback(
+                agent=agent,
+                agency_context=agency_context,
+                sender_name=sender_name,
+                parent_run_id=parent_run_id,
+                current_agent_run_id=current_agent_run_id,
+                exception=e,
+                include_assistant=True,
+            )
             if attempts_remaining <= 0:
                 raise e
             try:
@@ -125,15 +134,6 @@ async def run_sync_with_guardrails(
             except Exception:
                 logger.info("Output guardrail tripped. attempts_left=%s", attempts_remaining)
             attempts_remaining -= 1
-            history_for_runner = append_guardrail_feedback(
-                agent=agent,
-                agency_context=agency_context,
-                sender_name=sender_name,
-                parent_run_id=parent_run_id,
-                current_agent_run_id=current_agent_run_id,
-                exception=e,
-                include_assistant=True,
-            )
             continue
         except InputGuardrailTripwireTriggered as e:
             history_for_runner = append_guardrail_feedback(
@@ -648,10 +648,6 @@ async def run_stream_with_guardrails(
                 break
 
             # Guardrail tripped: persist guidance-only user message, rebuild history, and retry
-            if attempts_remaining <= 0:
-                raise guardrail_exception
-            attempts_remaining -= 1
-
             history_for_runner = append_guardrail_feedback(
                 agent=agent,
                 agency_context=agency_context,
@@ -661,6 +657,9 @@ async def run_stream_with_guardrails(
                 exception=guardrail_exception,
                 include_assistant=False,
             )
+            if attempts_remaining <= 0:
+                raise guardrail_exception
+            attempts_remaining -= 1
             continue
 
         finally:

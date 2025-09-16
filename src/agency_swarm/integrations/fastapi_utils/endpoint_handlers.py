@@ -5,6 +5,7 @@ from collections.abc import AsyncGenerator, Callable
 
 from ag_ui.core import EventType, MessagesSnapshotEvent, RunErrorEvent, RunFinishedEvent, RunStartedEvent
 from ag_ui.encoder import EventEncoder
+from agents.exceptions import OutputGuardrailTripwireTriggered
 from fastapi import Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -132,7 +133,19 @@ def make_stream_endpoint(request_model, agency_factory: Callable[..., Agency], v
                     except Exception as e:
                         yield "data: " + json.dumps({"error": f"Failed to serialize event: {e}"}) + "\n\n"
             except Exception as exc:
-                yield "data: " + json.dumps({"error": str(exc)}) + "\n\n"
+                if isinstance(exc, OutputGuardrailTripwireTriggered):
+                    yield (
+                        "data: "
+                        + json.dumps(
+                            {
+                                "error": "Guardrail OutputGuardrail triggered tripwire: "
+                                + str(exc.guardrail_result.output.output_info)
+                            }
+                        )
+                        + "\n\n"
+                    )
+                else:
+                    yield "data: " + json.dumps({"error": str(exc)}) + "\n\n"
 
             # Get only new messages added during this request
             all_messages = agency_instance.thread_manager.get_all_messages()
