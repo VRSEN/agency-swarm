@@ -6,6 +6,7 @@ including handling deprecated parameters and setting up file management.
 """
 
 import dataclasses
+import functools
 import inspect
 import logging
 import warnings
@@ -338,6 +339,9 @@ def resolve_token_settings(model_settings_dict: dict[str, Any], agent_name: str 
     return model_settings_dict
 
 
+_INPUT_GUARDRAIL_WRAPPED_FLAG = "_agency_swarm_input_guardrail_wrapped"
+
+
 def wrap_input_guardrails(agent: "Agent"):
     """
     Wraps the input guardrails functions to check if the last message is a user message.
@@ -348,50 +352,60 @@ def wrap_input_guardrails(agent: "Agent"):
         agent: The agent instance
     """
     for guardrail in agent.input_guardrails:
-        if guardrail.guardrail_function.__name__ == "guardrail_wrapper":
+        if getattr(guardrail, _INPUT_GUARDRAIL_WRAPPED_FLAG, False):
             continue
-        def create_guardrail_wrapper(guardrail_func):
-            def guardrail_wrapper(context: RunContextWrapper, agent: "Agent", chat_history: str | list[dict]):
-                if isinstance(chat_history, str):
-                    return guardrail_func(context, agent, chat_history)
-
-                user_messages = []
-                # Extract concurrent user messages
-                for message in reversed(chat_history):
-                    if message["role"] == "user":
-                        user_messages.append(message["content"])
-                    else:
-                        break
-                if not user_messages:
-                    return GuardrailFunctionOutput(
-                        output_info="No user input found, skipping guardrail check",
-                        tripwire_triggered=False,
-                    )
-                # If there's only a single user message that is not a list, extract the content
-                if len(user_messages) == 1 and isinstance(user_messages[0], str):
-                    return guardrail_func(context, agent, user_messages[0])
-                else:
-                    # Content can be a list, extract text messages out of it and flatten the list
-                    user_messages = [
-                        item if isinstance(item, str) else item["text"]
-                        for subitem in reversed(user_messages)
-                        for item in (subitem if isinstance(subitem, list) else [subitem])
-                        if isinstance(item, str)
-                        or (isinstance(item, dict) and item.get("type") == "input_text" and "text" in item)
-                    ]
-                    # It might be that user only sends a file/image input without text messages
-                    if not user_messages:
-                        return GuardrailFunctionOutput(
-                            output_info="No user input found, skipping guardrail check",
-                            tripwire_triggered=False,
-                        )
-                    # During filtering, only a single text message might be extracted
-                    if len(user_messages) == 1 and isinstance(user_messages[0], str):
-                        return guardrail_func(context, agent, user_messages[0])
-                    else:
-                        return guardrail_func(context, agent, user_messages)
-
-            return guardrail_wrapper
 
         original_function = guardrail.guardrail_function
-        guardrail.guardrail_function = create_guardrail_wrapper(original_function)
+
+        @functools.wraps(original_function)
+        async def guardrail_wrapper(
+            context: RunContextWrapper,
+            agent: "Agent",
+            chat_history: str | list[dict],
+            _original_function=original_function,
+        ):
+            if isinstance(chat_history, str):
+                result = _original_function(context, agent, chat_history)
+                return await result if inspect.isawaitable(result) else result
+
+            user_messages = []
+            # Extract concurrent user messages
+            for message in reversed(chat_history):
+                if message["role"] == "user":
+                    user_messages.append(message["content"])
+                else:
+                    break
+            if not user_messages:
+                return GuardrailFunctionOutput(
+                    output_info="No user input found, skipping guardrail check",
+                    tripwire_triggered=False,
+                )
+            # If there's only a single user message that is not a list, extract the content
+            if len(user_messages) == 1 and isinstance(user_messages[0], str):
+                result = _original_function(context, agent, user_messages[0])
+                return await result if inspect.isawaitable(result) else result
+
+            # Content can be a list, extract text messages out of it and flatten the list
+            user_messages = [
+                item if isinstance(item, str) else item["text"]
+                for subitem in reversed(user_messages)
+                for item in (subitem if isinstance(subitem, list) else [subitem])
+                if isinstance(item, str)
+                or (isinstance(item, dict) and item.get("type") == "input_text" and "text" in item)
+            ]
+            # It might be that user only sends a file/image input without text messages
+            if not user_messages:
+                return GuardrailFunctionOutput(
+                    output_info="No user input found, skipping guardrail check",
+                    tripwire_triggered=False,
+                )
+            # During filtering, only a single text message might be extracted
+            if len(user_messages) == 1 and isinstance(user_messages[0], str):
+                result = _original_function(context, agent, user_messages[0])
+                return await result if inspect.isawaitable(result) else result
+
+            result = _original_function(context, agent, user_messages)
+            return await result if inspect.isawaitable(result) else result
+
+        guardrail.guardrail_function = guardrail_wrapper
+        setattr(guardrail, _INPUT_GUARDRAIL_WRAPPED_FLAG, True)
