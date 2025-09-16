@@ -454,13 +454,13 @@ class Agency:
 
         return visualize(self, output_file, include_tools, open_browser)
 
-    def terminal_demo(self) -> None:
+    def terminal_demo(self, show_reasoning: bool = False) -> None:
         """
         Run a terminal demo of the agency.
         """
         from .visualization import terminal_demo
 
-        return terminal_demo(self)
+        return terminal_demo(self, show_reasoning=show_reasoning)
 
     def copilot_demo(
         self,

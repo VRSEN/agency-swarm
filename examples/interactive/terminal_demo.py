@@ -61,4 +61,4 @@ agency = create_demo_agency()
 
 
 if __name__ == "__main__":
-    agency.terminal_demo()
+    agency.terminal_demo(show_reasoning=True)

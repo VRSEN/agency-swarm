@@ -146,14 +146,14 @@ def visualize(
     )
 
 
-def terminal_demo(agency: "Agency") -> None:
+def terminal_demo(agency: "Agency", show_reasoning: bool = False) -> None:
     """
     Run a terminal demo of the agency.
     """
     # Import and run the terminal demo
     from agency_swarm.ui.demos.launcher import TerminalDemoLauncher
 
-    TerminalDemoLauncher.start(agency)
+    TerminalDemoLauncher.start(agency, show_reasoning=show_reasoning)
 
 
 def copilot_demo(
