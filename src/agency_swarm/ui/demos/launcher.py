@@ -210,7 +210,7 @@ class TerminalDemoLauncher:
         return await _compact(agency_instance, args)
 
     @staticmethod
-    def start(agency_instance: Agency) -> None:
+    def start(agency_instance: Agency, show_reasoning: bool = False) -> None:
         from .terminal import start_terminal  # defer import to keep file light
 
-        start_terminal(agency_instance)
+        start_terminal(agency_instance, show_reasoning=show_reasoning)

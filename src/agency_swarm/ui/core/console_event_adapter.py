@@ -115,6 +115,11 @@ class ConsoleEventAdapter:
                     # --- Reasoning summary streaming (o-series models) ---
                     if data_type == "response.reasoning_summary_text.delta":
                         if not self.show_reasoning:
+                            # Show only header when reasoning is disabled
+                            if not self._reasoning_displayed:
+                                header_text = f"[italic dim]🧠 {agent_name} Reasoning[/]"
+                                self.console.print(header_text)
+                                self._reasoning_displayed = True
                             return
                         try:
                             delta_text = getattr(data, "delta", "") or ""
@@ -222,6 +227,11 @@ class ConsoleEventAdapter:
                         # If a reasoning item is added, open the reasoning region and seed content if present
                         if getattr(item, "type", "") == "reasoning":
                             if not self.show_reasoning:
+                                # Show only header when reasoning is disabled
+                                if not self._reasoning_displayed:
+                                    header_text = f"[italic dim]🧠 {agent_name} Reasoning[/]"
+                                    self.console.print(header_text)
+                                    self._reasoning_displayed = True
                                 return
                             # Seed with any current summary text
                             try:
@@ -285,6 +295,13 @@ class ConsoleEventAdapter:
                         # Ensure reasoning region is finalized on item completion
                         item = data.item
                         if getattr(item, "type", "") == "reasoning":
+                            if not self.show_reasoning:
+                                # Show only header when reasoning is disabled
+                                if not self._reasoning_displayed:
+                                    header_text = f"[italic dim]🧠 {agent_name} Reasoning[/]"
+                                    self.console.print(header_text)
+                                    self._reasoning_displayed = True
+                                return
                             # If we didn't receive deltas, use the item's final summary text
                             try:
                                 summaries = getattr(item, "summary", []) or []

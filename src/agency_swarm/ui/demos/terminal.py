@@ -1,7 +1,7 @@
 from collections.abc import Generator
 
 
-def start_terminal(agency_instance) -> None:
+def start_terminal(agency_instance, show_reasoning: bool = False) -> None:
     """Run the terminal demo: input loop, slash commands, and streaming output."""
     import asyncio
     import logging
@@ -24,7 +24,7 @@ def start_terminal(agency_instance) -> None:
 
     chat_id = f"run_demo_chat_{uuid.uuid4()}"
 
-    event_converter = ConsoleEventAdapter()
+    event_converter = ConsoleEventAdapter(show_reasoning=show_reasoning)
     event_converter.console.rule()
     try:
         cwd = os.getcwd()
