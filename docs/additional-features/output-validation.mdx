@@ -232,6 +232,59 @@ Each triggered guardrail will also leave a corresponding system message containi
 The validation_attempts parameter currently does not apply to input guardrails.
 </Note>
 
+#### Guardrails in message history
+Each guardrail trigger will be represented as a system message in the chat history. 
+Additionally, every message will have a `message_origin` field added to help you differentiate which trigger created the message.   
+There are 3 types: `output_guardrail_error`, `input_guardrail_error`, and `input_guardrail_message`. 
+The latter indicates that the agent had `throw_input_guardrail_error` set to `False` and the system message was displayed to the user as an agent response.
+
+<Accordion title="Example system messages for guardrail errors">
+Taken from [examples/guardrail.py](https://github.com/VRSEN/agency-swarm/blob/main/examples/guardrails.py)
+```json
+[
+    // Input guardrail triggered by user input that was presented as assistant message
+    {
+        "role": "system",
+        "content": "Please, prefix your request with 'Support:' describing what you need.",
+        "message_origin": "input_guardrail_message",
+        "agent": "CustomerSupportAgent",
+        "callerAgent": None,
+        "agent_run_id": "agent_run_id",
+        "timestamp": 1758103764049935,
+        "type": "message",
+    }
+
+    // Input guardrail triggered by an agent that was returned to it as an error 
+    {
+        "role": "system",
+        "content": "When chatting with this agent, provide your name (which is Alice), for example, 'Hello, I'm Alice.' Adjust your input and try again.",
+        "message_origin": "input_guardrail_error",
+        "agent": "DatabaseAgent",
+        "callerAgent": "CustomerSupportAgent",
+        "agent_run_id": "agent_run_id",
+        "parent_run_id": "call_id",
+        "timestamp": 1758103766899061,
+        "type": "message",
+    },
+
+    // Output guardrail triggered by an assistant response
+    {
+        "role": "system",
+        "content": "You are not allowed to include your email address in your response. Ask agent to redirect user to the contact page: https://www.example.com/contact",
+        "message_origin": "output_guardrail_error",
+        "agent": "DatabaseAgent",
+        "callerAgent": "CustomerSupportAgent",
+        "agent_run_id": "agent_run_id",
+        "parent_run_id": "call_id",
+        "timestamp": 1758103770629217,
+        "type": "message",
+    },
+]
+```
+</Accordion>
+
+
+
 #### Agent-to-agent message validation
 You can use guardrails to control how agents send messages and responses to one another.
 When adding communication flows between agents, the guardrails of the recipient agent will define the format of input and output messages, for example:
