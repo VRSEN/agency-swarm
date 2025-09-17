@@ -2,8 +2,7 @@ import inspect
 import logging
 import os
 import warnings
-from collections.abc import AsyncGenerator, Callable
-from dataclasses import dataclass
+from collections.abc import AsyncGenerator
 from pathlib import Path
 from typing import Any, TypeVar
 
@@ -27,49 +26,17 @@ from agency_swarm.agent.file_manager import AgentFileManager
 from agency_swarm.agent.tools import _attach_one_call_guard
 from agency_swarm.context import MasterContext
 from agency_swarm.tools.concurrency import ToolConcurrencyManager
-from agency_swarm.utils.thread import ThreadManager
+
+from .context_types import AgencyContext as AgencyContext
 
 logger = logging.getLogger(__name__)
 
-# --- Constants / Types ---
-# Combine old and new params for easier checking later
-AGENT_PARAMS = {
-    # New/Current
-    "files_folder",
-    "tools_folder",
-    "schemas_folder",
-    "api_headers",
-    "api_params",
-    "description",
-    "include_search_results",
-    "validation_attempts",
-    "throw_input_guardrail_error",
-    # Old/Deprecated (to check in kwargs)
-    "id",
-    "tool_resources",
-    "file_ids",
-    "reasoning_effort",
-    "examples",
-    "file_search",
-    "refresh_from_id",
-}
-
-# --- Constants for dynamic tool creation ---
-MESSAGE_PARAM = "message"
+"""Constants moved to agency_swarm.agent.constants (no behavior change)."""
 
 T = TypeVar("T", bound="Agent")
 
 
-@dataclass
-class AgencyContext:
-    """Agency-specific context for an agent to enable multi-agency support."""
-
-    agency_instance: Any
-    thread_manager: "ThreadManager"
-    subagents: dict[str, "Agent"]
-    load_threads_callback: Callable[[], dict[str, Any]] | None = None
-    save_threads_callback: Callable[[dict[str, Any]], None] | None = None
-    shared_instructions: str | None = None
+"""AgencyContext moved to agency_swarm.agent.context_types (no behavior change)."""
 
 
 class Agent(BaseAgent[MasterContext]):

@@ -91,6 +91,7 @@ After each tool call or code edit, validate the result in 1-2 lines and proceed 
 - Update existing tests before adding new ones, unless absolutely necessary.
 - Tests should be under 100 lines—split long ones. Use focused runs when debugging.
 - No OR/alternatives in assertions.
+- Prefer precise, restrictive assertions that fully specify expected outcomes and forbid unintended ones.
 
 ## Architecture Overview
 
