@@ -240,7 +240,7 @@ class MessageFormatter:
                 if file_count > 0:
                     synthetic_outputs.append(
                         MessageFormatter.add_agency_metadata(
-                            {
+                            {  # type: ignore[arg-type]
                                 "role": "system",
                                 "content": search_results_content,
                                 "message_origin": "file_search_preservation",
@@ -274,7 +274,7 @@ class MessageFormatter:
                 if found_content:
                     synthetic_outputs.append(
                         MessageFormatter.add_agency_metadata(
-                            {
+                            {  # type: ignore[arg-type]
                                 "role": "system",
                                 "content": search_results_content,
                                 "message_origin": "web_search_preservation",

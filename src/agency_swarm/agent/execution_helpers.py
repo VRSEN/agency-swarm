@@ -396,7 +396,7 @@ def append_guardrail_feedback(
                 )
             )
 
-        guidance_msg: TResponseInputItem = {  # type: ignore[typeddict-item]
+        guidance_msg: TResponseInputItem = {  # type: ignore[assignment, typeddict-item]
             "role": "system",
             "content": guidance_text,
             "message_origin": "output_guardrail_error"
