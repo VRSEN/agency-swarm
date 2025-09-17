@@ -96,6 +96,11 @@ async def test_vector_store_citation_extraction():
             if hasattr(item, "raw_item") and hasattr(item.raw_item, "type") and item.raw_item.type == "file_search_call"
         ]
 
+        all_msgs = agency.thread_manager.get_all_messages()
+        system_msgs = [m for m in all_msgs if m.get("role") == "system"]
+        assert len(system_msgs) == 1
+        assert "file_search_preservation" in system_msgs[-1].get("message_origin", "")
+
         assert len(file_search_calls) > 0, "FileSearch tool was not called despite tool_choice='file_search'"
 
         file_search_call = file_search_calls[0]

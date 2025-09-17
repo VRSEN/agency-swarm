@@ -4,6 +4,7 @@ from agency_swarm import (
     Agency,
     Agent,
     GuardrailFunctionOutput,
+    InputGuardrailTripwireTriggered,
     ModelSettings,
     RunContextWrapper,
     input_guardrail,
@@ -98,7 +99,22 @@ def test_input_guardrail_guidance_and_persistence(input_guardrail_agency: Agency
     all_msgs = agency.thread_manager.get_all_messages()
     system_msgs = [m for m in all_msgs if m.get("role") == "system"]
     assert len(system_msgs) == 1
-    assert "prefix your request with 'Support:'" in system_msgs[0].get("content", "")
+    assert "prefix your request with 'Support:'" in system_msgs[-1].get("content", "")
+    assert system_msgs[-1].get("message_origin") == "input_guardrail_message"
+
+def test_input_guardrail_error(input_guardrail_agency: Agency):
+    agency = input_guardrail_agency
+    agency.agents["InputGuardrailAgent"].throw_input_guardrail_error = True
+
+    # Should raise InputGuardrailTripwireTriggered exception when throw_input_guardrail_error is True
+    with pytest.raises(InputGuardrailTripwireTriggered):
+        agency.get_response_sync(message="Hello there")
+
+    all_msgs = agency.thread_manager.get_all_messages()
+    system_msgs = [m for m in all_msgs if m.get("role") == "system"]
+    assert len(system_msgs) == 1
+    assert "prefix your request with 'Support:'" in system_msgs[-1].get("content", "")
+    assert system_msgs[-1].get("message_origin") == "input_guardrail_error"
 
 
 def test_output_guardrail_logs_guidance(output_guardrail_agency: Agency):
@@ -109,6 +125,7 @@ def test_output_guardrail_logs_guidance(output_guardrail_agency: Agency):
     all_msgs = agency.thread_manager.get_all_messages()
     system_msgs = [m for m in all_msgs if m.get("role") == "system"]
     assert any("Email addresses are not allowed" in (m.get("content", "")) for m in system_msgs)
+    assert system_msgs[-1].get("message_origin") == "output_guardrail_error"
 
 
 def test_input_guardrail_multiple_agent_inits_no_double_wrap(input_guardrail_agency_factory):
@@ -128,4 +145,5 @@ def test_input_guardrail_multiple_agent_inits_no_double_wrap(input_guardrail_age
     all_msgs = agency.thread_manager.get_all_messages()
     system_msgs = [m for m in all_msgs if m.get("role") == "system"]
     assert len(system_msgs) == 1
-    assert "prefix your request with 'Support:'" in system_msgs[0].get("content", "")
+    assert "prefix your request with 'Support:'" in system_msgs[-1].get("content", "")
+    assert system_msgs[-1].get("message_origin") == "input_guardrail_message"
