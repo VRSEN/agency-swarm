@@ -396,9 +396,14 @@ def append_guardrail_feedback(
                 )
             )
 
-        guidance_msg: TResponseInputItem = {  # type: ignore[typeddict-item]
+        guidance_msg: TResponseInputItem = {  # type: ignore[assignment, typeddict-item]
             "role": "system",
             "content": guidance_text,
+            "message_origin": "output_guardrail_error"
+            if isinstance(exception, OutputGuardrailTripwireTriggered)
+            else "input_guardrail_error"
+            if isinstance(exception, InputGuardrailTripwireTriggered) and agent.throw_input_guardrail_error
+            else "input_guardrail_message",
         }
         to_persist.append(
             MessageFormatter.add_agency_metadata(

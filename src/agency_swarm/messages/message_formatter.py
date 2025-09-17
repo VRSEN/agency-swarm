@@ -123,6 +123,7 @@ class MessageFormatter:
                     "citations",
                     "agent_run_id",
                     "parent_run_id",
+                    "message_origin",
                 ]
             }
             cleaned.append(clean_msg)
@@ -239,7 +240,11 @@ class MessageFormatter:
                 if file_count > 0:
                     synthetic_outputs.append(
                         MessageFormatter.add_agency_metadata(
-                            {"role": "system", "content": search_results_content},
+                            {  # type: ignore[arg-type]
+                                "role": "system",
+                                "content": search_results_content,
+                                "message_origin": "file_search_preservation",
+                            },
                             agent=agent.name,
                             caller_agent=None,
                         )
@@ -269,7 +274,11 @@ class MessageFormatter:
                 if found_content:
                     synthetic_outputs.append(
                         MessageFormatter.add_agency_metadata(
-                            {"role": "system", "content": search_results_content},
+                            {  # type: ignore[arg-type]
+                                "role": "system",
+                                "content": search_results_content,
+                                "message_origin": "web_search_preservation",
+                            },
                             agent=agent.name,
                             caller_agent=None,
                         )
