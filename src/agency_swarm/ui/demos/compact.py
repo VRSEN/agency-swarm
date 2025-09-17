@@ -75,7 +75,9 @@ async def compact_thread(agency_instance: Agency, args: list[str]) -> str:
     agency_instance.thread_manager.clear()
     chat_id = f"run_demo_chat_{uuid.uuid4()}"
     prefixed = "System summary (generated via /compact to keep context comprehensive and focused).\n\n" + summary_text
-    agency_instance.thread_manager.add_message({"role": "system", "content": prefixed})
+    agency_instance.thread_manager.add_message(
+        {"role": "system", "content": prefixed, "message_origin": "thread_summary"}
+    )
 
     # Persist
     TerminalDemoLauncherRef = __import__(
