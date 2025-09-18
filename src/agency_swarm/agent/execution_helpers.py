@@ -174,6 +174,29 @@ def run_item_to_tresponse_input_item(item: RunItem) -> TResponseInputItem | None
         return None
 
 
+def _resolve_latest_shared_instructions(agency_context: "AgencyContext | None") -> str | None:
+    """Return the freshest shared instructions and keep the context in sync."""
+    if not agency_context:
+        return None
+
+    agency_instance = getattr(agency_context, "agency_instance", None)
+    if agency_instance and hasattr(agency_instance, "shared_instructions"):
+        latest = getattr(agency_instance, "shared_instructions", None)
+        normalized = latest if isinstance(latest, str) else None
+        normalized = normalized or None
+        agency_context.shared_instructions = normalized
+        return normalized
+
+    existing = agency_context.shared_instructions
+    if isinstance(existing, str):
+        normalized = existing or None
+        agency_context.shared_instructions = normalized
+        return normalized
+
+    agency_context.shared_instructions = None
+    return None
+
+
 def prepare_master_context(
     agent: "Agent", context_override: dict[str, Any] | None, agency_context: "AgencyContext | None" = None
 ) -> MasterContext:
@@ -183,6 +206,7 @@ def prepare_master_context(
 
     thread_manager = agency_context.thread_manager
     agency_instance = agency_context.agency_instance
+    shared_instructions_for_run = _resolve_latest_shared_instructions(agency_context)
 
     # For standalone agent usage (no agency), create minimal context
     if not agency_instance or not hasattr(agency_instance, "agents"):
@@ -191,7 +215,7 @@ def prepare_master_context(
             agents={agent.name: agent},  # Only include self
             user_context=context_override or {},
             current_agent_name=agent.name,
-            shared_instructions=agency_context.shared_instructions,
+            shared_instructions=shared_instructions_for_run,
         )
 
     # Use reference for persistence, or create merged copy if override provided
@@ -203,7 +227,7 @@ def prepare_master_context(
         agents=agency_instance.agents,
         user_context=user_context,
         current_agent_name=agent.name,
-        shared_instructions=agency_context.shared_instructions,
+        shared_instructions=shared_instructions_for_run,
     )
 
 
@@ -247,16 +271,46 @@ def setup_execution(
     # Store original instructions for restoration
     original_instructions = agent.instructions
 
-    # Temporarily modify instructions if additional_instructions provided
-    if additional_instructions:
-        if not isinstance(additional_instructions, str):
-            raise ValueError("additional_instructions must be a string")
-        logger.debug(f"Appending additional instructions to agent '{agent.name}': {additional_instructions[:100]}...")
+    # Temporarily modify instructions if shared or additional instructions provided
+    shared_instructions_text = _resolve_latest_shared_instructions(agency_context)
+
+    if additional_instructions and not isinstance(additional_instructions, str):
+        raise ValueError("additional_instructions must be a string")
+
+    additional_for_run: str | None = additional_instructions or None
+
+    def build_combined_instructions(base_text: str | None) -> str | None:
+        """Compose the runtime instructions in the order: shared -> base -> additional."""
+        core_parts: list[str] = []
+        if shared_instructions_text:
+            core_parts.append(shared_instructions_text)
+        if base_text:
+            core_parts.append(base_text)
+
+        core_instructions = "\n\n".join(core_parts) if core_parts else None
+        if not additional_for_run:
+            return core_instructions
+
+        separator = "\n\n---\n\n" if shared_instructions_text else "\n\n"
+        if core_instructions:
+            return f"{core_instructions}{separator}{additional_for_run}"
+        return additional_for_run
+
+    # Skip modification if nothing to add
+    if shared_instructions_text or additional_for_run:
+        logger.debug(
+            "Preparing combined instructions for agent '%s' (shared: %s, additional: %s)",
+            agent.name,
+            bool(shared_instructions_text),
+            bool(additional_for_run),
+        )
+
         if isinstance(agent.instructions, str) and agent.instructions:
-            # Only append if it's a non-empty string
-            agent.instructions = agent.instructions + "\n\n" + additional_instructions
+            combined = build_combined_instructions(agent.instructions)
+            if combined is not None:
+                agent.instructions = combined
         elif callable(agent.instructions):
-            # Create a wrapper function that calls original callable and appends additional instructions
+            # Create a wrapper function that calls original callable and joins shared/additional instructions
             original_callable = agent.instructions
 
             async def combined_instructions(run_context, agent_instance):
@@ -266,16 +320,20 @@ def setup_execution(
                 else:
                     base_instructions = original_callable(run_context, agent_instance)
 
-                # Append additional instructions
+                base_text = None
                 if base_instructions:
-                    return str(base_instructions) + "\n\n" + additional_instructions
-                else:
-                    return additional_instructions
+                    base_text = str(base_instructions)
+
+                combined = build_combined_instructions(base_text)
+                # Fall back to original result if nothing was combined (should be rare)
+                return combined if combined is not None else base_instructions
 
             agent.instructions = combined_instructions
         else:
-            # Replace if it's None or empty string
-            agent.instructions = additional_instructions
+            # Replace if it's None or unsupported type with the composed shared/additional instructions
+            combined = build_combined_instructions(None)
+            if combined is not None:
+                agent.instructions = combined
 
     # Log the conversation context
     logger.info(f"Agent '{agent.name}' handling {method_name} from sender: {sender_name}")

@@ -151,20 +151,6 @@ def get_agent_context(agency: "Agency", agent_name: str) -> AgencyContext:
     return agency._agent_contexts[agent_name]
 
 
-def combine_instructions(agency: "Agency", additional_instructions: str | None = None) -> str | None:
-    """Combine shared instructions with additional instructions."""
-    if not agency.shared_instructions and not additional_instructions:
-        return None
-
-    parts = []
-    if agency.shared_instructions:
-        parts.append(agency.shared_instructions)
-    if additional_instructions:
-        parts.append(additional_instructions)
-
-    return "\n\n---\n\n".join(parts) if parts else None
-
-
 def run_fastapi(
     agency: "Agency",
     host: str = "0.0.0.0",
