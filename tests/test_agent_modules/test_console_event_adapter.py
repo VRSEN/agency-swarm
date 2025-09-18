@@ -156,3 +156,13 @@ def test_output_text_delta_does_not_trigger_console_update():
         adapter.openai_to_message_output(event, recipient_agent="Agent")
 
     mock_update.assert_not_called()
+
+
+def test_raw_response_event_delegates_to_patched_handler():
+    adapter = ConsoleEventAdapter()
+    event = raw_event("response.output_text.delta", delta="Hi")
+
+    with patch.object(ConsoleEventAdapter, "_handle_raw_response_event") as mock_handler:
+        adapter.openai_to_message_output(event, recipient_agent="Agent")
+
+    mock_handler.assert_called_once_with(event.data, "Agent", "user")

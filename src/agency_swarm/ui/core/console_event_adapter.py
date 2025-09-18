@@ -72,7 +72,7 @@ class ConsoleEventAdapter:
 
     def openai_to_message_output(self, event: Any, recipient_agent: str):
         try:
-            # Ensure essential attributes exist when bound to a MagicMock in tests
+            # Ensure live-rendering attributes exist before processing events
             self_dict = getattr(self, "__dict__", {})
             if "reasoning_output" not in self_dict:
                 self.reasoning_output = None
@@ -100,54 +100,9 @@ class ConsoleEventAdapter:
             caller_agent = getattr(event, "callerAgent", None)
             speaking_to = caller_agent if caller_agent else "user"
 
-            # Keep production code independent from test adapter internals (no dynamic rebinding)
-
             if hasattr(event, "data"):
                 if event.type == "raw_response_event":
-                    handler = getattr(self, "_handle_raw_response_event", None)
-                    if callable(handler) and getattr(handler.__class__, "__module__", "") != "unittest.mock":
-                        handler(event.data, agent_name, speaking_to)
-                    else:
-                        # Minimal fallback to preserve test-observed behavior
-                        data = event.data
-                        data_type = getattr(data, "type", None)
-                        if data_type == "response.reasoning_summary_text.delta":
-                            try:
-                                delta_text = getattr(data, "delta", "") or ""
-                            except Exception:
-                                delta_text = ""
-                            if len(str(delta_text)) > 0:
-                                if self._reasoning_needs_separator and self.reasoning_buffer:
-                                    self.reasoning_buffer += "\n\n"
-                                    self._reasoning_needs_separator = False
-                                self.reasoning_buffer += str(delta_text)
-                                self._reasoning_displayed = True
-                        elif data_type == "response.reasoning_summary_part.done":
-                            self._reasoning_needs_separator = True
-                        elif data_type == "response.output_text.delta":
-                            if self._reasoning_displayed and not self._message_started:
-                                try:
-                                    self.console.print("")
-                                except Exception:
-                                    pass
-                            self._message_started = True
-                        elif data_type == "response.output_item.done":
-                            item = getattr(data, "item", None)
-                            if item is not None and hasattr(item, "arguments"):
-                                if getattr(item, "name", "").startswith("send_message"):
-                                    try:
-                                        args = json.loads(item.arguments)
-                                    except Exception:
-                                        args = {}
-                                    called_agent = args.get("recipient_agent", "Unknown")
-                                    message = args.get("message", "")
-                                    self._update_console("text", agent_name, called_agent, message)
-                                    self.agent_to_agent_communication[item.call_id] = {
-                                        "sender": agent_name,
-                                        "receiver": called_agent,
-                                        "message": message,
-                                    }
-                                    self.handoff_agent = None
+                    self._handle_raw_response_event(event.data, agent_name, speaking_to)
             # Tool outputs (except mcp calls)
             elif hasattr(event, "item"):
                 if event.type == "run_item_stream_event":
