@@ -5,10 +5,10 @@ from agents.tools.read_json_file.ReadJsonFile import ReadJsonFile
 _name = "os_step_scheduler"
 
 _description = """
-职责是调度远程控制访问能力群的step，选出下一步可以执行的step
+职责是调度控制访问能力群的step，选出下一步可以执行的step
 """
 
-_group_name = "远程控制访问能力群"
+_group_name = "控制访问能力群"
 
 _input_format = """
 {

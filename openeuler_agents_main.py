@@ -1,5 +1,6 @@
 from agency_swarm import Agent, Agency
 
+from agents.openeuler_agents.os_group.basic_agent import basic_agent
 from agents.openeuler_agents.os_group.user_agent import user_agent
 from agents.openeuler_agents.task_planner import (
     task_planner, task_scheduler, task_inspector
@@ -101,6 +102,7 @@ def main():
         permissions_agent_instance = permissions_agent.create_agent()
         network_agent_instance = network_agent.create_agent()
         user_agent_instance = user_agent.create_agent()
+        basic_agent_instance = basic_agent.create_agent()
 
         check_log_agent_instance = check_log_agent.create_agent()
 
@@ -131,10 +133,11 @@ def main():
             secscanner_agent_instance,
             syscare_agent_instance,
             
-            # 远程控制访问能力 agent
+            # 控制访问能力 agent
             permissions_agent_instance,
             network_agent_instance,
-            user_agent_instance
+            user_agent_instance,
+            basic_agent_instance
 
         ]
 
@@ -162,16 +165,16 @@ def main():
         cap_group_agents = {
             "软件能力群": [software_planner_instance, software_step_scheduler_instance],
             "安全能力群": [security_planner_instance, security_step_scheduler_instance],
-            "控制访问能力群": [os_planner_instance, os_step_scheduler_instance,user_agent_instance],
+            "控制访问能力群": [os_planner_instance, os_step_scheduler_instance,user_agent_instance,basic_agent_instance],
         }
 
         cap_agents = {
             "软件能力群": [package_agent_instance, repository_agent_instance, atune_agent_instance,],
             "安全能力群": [secscanner_agent_instance, syscare_agent_instance,],
-            "控制访问能力群": [permissions_agent_instance, network_agent_instance,user_agent_instance],
+            "控制访问能力群": [permissions_agent_instance, network_agent_instance,user_agent_instance,basic_agent_instance],
         }
         text = """
-       使用`secScanner`扫描本机的CVE漏洞，并报告漏洞的情况
+       本机已经安装`secScanner`工具，请利用该工具扫描本机的CVE漏洞
         """
 
         files_path = os.path.join("agents", "files")

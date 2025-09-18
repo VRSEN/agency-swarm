@@ -22,6 +22,7 @@ _agents = """
 1. **permissions_agent**: 负责管理OpenEuler系统上的用户权限和文件访问等权限。
 2. **network_agent**: 负责管理OpenEuler系统上的防火墙规则等网络配置。
 3. **user_agent**: 负责管理OpenEuler系统上的用户权限以及用户创建的相关进程的终止。
+4. **basic_agent**: 负责执行OpenEuler系统上的基本命令操作，如文件操作、系统信息查询等。
 """
 
 _output_format = """
