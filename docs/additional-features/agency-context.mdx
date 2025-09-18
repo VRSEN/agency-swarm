@@ -277,11 +277,11 @@ async def show_context_status(ctx: RunContextWrapper[MasterContext]) -> str:
     return status
 ```
 
-## Legacy Shared State (v0.x)
+## Migrating tools
 
-If you're migrating from Agency Swarm v0.x, here's how to update your shared state usage:
+If you're migrating from Agency Swarm v0.x, and want to use new FunctionTool instead of BaseTool, here's how you can do that:
 
-**Old Pattern (v0.x):**
+**BaseTool Pattern (v0.x):**
 ```python
 class MyTool(BaseTool):
     def run(self):
@@ -290,7 +290,7 @@ class MyTool(BaseTool):
         return "Done"
 ```
 
-**New Pattern (v1.x):**
+**FunctionTool Pattern (v1.x):**
 ```python
 @function_tool
 async def my_tool(ctx: RunContextWrapper[MasterContext], param: str) -> str:
