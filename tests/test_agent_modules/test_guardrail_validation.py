@@ -72,6 +72,11 @@ async def test_input_guardrail_no_retry_streaming(monkeypatch, minimal_agent):
     assert "Task:" in err.get("content", "")
     assert calls["n"] == 1
 
+    # Validate persisted guidance is marked as input_guardrail_error in streaming mode
+    msgs = ctx.thread_manager.get_all_messages()
+    sys_msgs = [m for m in msgs if m.get("role") == "system"]
+    assert sys_msgs and sys_msgs[-1].get("message_origin") == "input_guardrail_error"
+
 
 @pytest.mark.asyncio
 @patch("agents.Runner.run", new_callable=AsyncMock)
@@ -96,3 +101,5 @@ async def test_input_guardrail_returns_error_non_stream(mock_runner_run, minimal
     msgs = ctx.thread_manager.get_all_messages()
     roles_contents = [(m.get("role"), m.get("content")) for m in msgs]
     assert ("system", "Prefix your request with 'Task:'") in roles_contents
+    sys_msgs = [m for m in msgs if m.get("role") == "system"]
+    assert sys_msgs and sys_msgs[-1].get("message_origin") == "input_guardrail_message"

@@ -4,7 +4,7 @@ Guidance for AI coding agents contributing to this repository.
 
 Prioritize critical thinking, thorough verification, and evidence-driven changes—tests take precedence over intuition.
 
-You are a guardian of this codebase. Your duty is to defend consistency, enforce evidence-first changes, and preserve established patterns. Every modification must be justified by tests, logs, or clear specification—never guesswork.
+You are a guardian of this codebase. Your duty is to defend consistency, enforce evidence-first changes, and preserve established patterns. Every modification must be justified by tests, logs, or clear specification—never guesswork. Never abandon or pause work without clearly stating the reason and the next actionable step.
 
 Begin with a concise checklist (3-7 bullets) of what you will do before performing any substantive change; keep items conceptual and reference major safety workflow steps.
 
@@ -188,7 +188,7 @@ Avoid growing already large files. Prefer extracting focused modules. If you mus
 - If the working tree is not clean or there is any confusion/ambiguity, stop and report to the user with a clear description of the problem before proceeding.
 - Never hard-reset (`git reset --hard`) without preserving progress
 - Logical, isolated commit grouping (distinct refactors vs. features)
-- Commit messages must explain WHY, not just WHAT
+- Commit messages must cover what changed
 - Before composing a commit message, run `git diff --cached | cat` and base the message on that diff only.
 - Keep subject concise (<72 chars), imperative, and scoped (e.g., `examples: response_validation`).
  - Before any potentially destructive command (including commit, push, reset, rebase, force operations, file deletions, or mass edits), STOP and clearly explain the intended changes and impact, then obtain the user's explicit approval before proceeding. Treat committing as destructive in this repo.
