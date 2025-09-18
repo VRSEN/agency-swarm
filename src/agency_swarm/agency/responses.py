@@ -11,7 +11,7 @@ from agents import RunConfig, RunHooks, RunResult, TResponseInputItem
 
 from agency_swarm.agent.core import Agent
 
-from .helpers import combine_instructions, get_agent_context, resolve_agent
+from .helpers import get_agent_context, resolve_agent
 
 logger = logging.getLogger(__name__)
 
@@ -79,9 +79,6 @@ async def get_response(
     # Get agency context for the target agent (stateless context passing)
     agency_context = get_agent_context(agency, target_agent.name)
 
-    # Combine shared instructions with any additional instructions
-    combined_additional_instructions = combine_instructions(agency, additional_instructions)
-
     return await target_agent.get_response(
         message=message,
         sender_name=None,
@@ -90,7 +87,7 @@ async def get_response(
         run_config_override=run_config,
         message_files=message_files,
         file_ids=file_ids,
-        additional_instructions=combined_additional_instructions,
+        additional_instructions=additional_instructions,
         agency_context=agency_context,  # Pass stateless context
         **kwargs,
     )
@@ -191,9 +188,6 @@ async def get_response_stream(
         # Get agency context for the target agent (stateless context passing)
         agency_context = get_agent_context(agency, target_agent.name)
 
-        # Combine shared instructions with any additional instructions
-        combined_additional_instructions = combine_instructions(agency, additional_instructions)
-
         # Get the primary stream
         primary_stream = target_agent.get_response_stream(
             message=message,
@@ -203,7 +197,7 @@ async def get_response_stream(
             run_config_override=run_config_override,
             message_files=message_files,
             file_ids=file_ids,
-            additional_instructions=combined_additional_instructions,
+            additional_instructions=additional_instructions,
             agency_context=agency_context,  # Pass stateless context
             **kwargs,
         )

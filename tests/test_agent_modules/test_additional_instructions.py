@@ -58,6 +58,7 @@ async def test_agent_get_response_modifies_instructions_temporarily(sample_agent
     modified_instructions = instruction_history[0]
     assert additional_text in modified_instructions
     assert original_instructions in modified_instructions
+    assert "---" not in modified_instructions
 
     # Verify original instructions are restored
     assert sample_agent.instructions == original_instructions
@@ -178,6 +179,107 @@ async def test_agent_get_response_without_additional_instructions(sample_agent, 
         await sample_agent.get_response(message="Test message")
 
     # Verify instructions were not modified
+    assert sample_agent.instructions == original_instructions
+
+
+@pytest.mark.asyncio
+async def test_agency_shared_instructions_prepend(sample_agent, mock_run_result):
+    """Shared instructions should precede agent instructions when running via Agency."""
+    shared_text = "Agency shared instructions"
+    additional_text = "Agency additional instructions"
+    agency = Agency(sample_agent, shared_instructions=shared_text)
+    original_instructions = sample_agent.instructions
+
+    instruction_history = []
+
+    async def mock_runner_run(*args, **kwargs):
+        instruction_history.append(sample_agent.instructions)
+        return mock_run_result
+
+    with patch("agents.Runner.run", side_effect=mock_runner_run):
+        await agency.get_response(message="Test message", additional_instructions=additional_text)
+
+    assert len(instruction_history) == 1
+    expected = f"{shared_text}\n\n{original_instructions}\n\n---\n\n{additional_text}"
+    assert instruction_history[0] == expected
+    assert sample_agent.instructions == original_instructions
+
+
+@pytest.mark.asyncio
+async def test_agency_shared_instructions_without_additional(sample_agent, mock_run_result):
+    """Shared instructions without additional text should still precede agent instructions."""
+    shared_text = "Agency shared instructions"
+    agency = Agency(sample_agent, shared_instructions=shared_text)
+    original_instructions = sample_agent.instructions
+
+    instruction_history = []
+
+    async def mock_runner_run(*args, **kwargs):
+        instruction_history.append(sample_agent.instructions)
+        return mock_run_result
+
+    with patch("agents.Runner.run", side_effect=mock_runner_run):
+        await agency.get_response(message="Test message")
+
+    assert len(instruction_history) == 1
+    expected = f"{shared_text}\n\n{original_instructions}"
+    assert instruction_history[0] == expected
+    assert sample_agent.instructions == original_instructions
+
+
+@pytest.mark.asyncio
+async def test_agency_shared_instructions_update_between_runs(sample_agent, mock_run_result):
+    """Agency should use the latest shared instructions value on each run."""
+    original_shared = "Initial shared instructions"
+    updated_shared = "Updated shared instructions"
+    additional_text = "Agency additional instructions"
+    agency = Agency(sample_agent, shared_instructions=original_shared)
+    original_instructions = sample_agent.instructions
+
+    instruction_history = []
+
+    async def mock_runner_run(*args, **kwargs):
+        instruction_history.append(sample_agent.instructions)
+        return mock_run_result
+
+    agency.shared_instructions = updated_shared
+
+    with patch("agents.Runner.run", side_effect=mock_runner_run):
+        await agency.get_response(message="Test message", additional_instructions=additional_text)
+
+    assert len(instruction_history) == 1
+    expected = f"{updated_shared}\n\n{original_instructions}\n\n---\n\n{additional_text}"
+    assert instruction_history[0] == expected
+    assert sample_agent.instructions == original_instructions
+
+
+@pytest.mark.asyncio
+async def test_agency_shared_instructions_update_between_runs_stream(sample_agent):
+    """Streaming runs should also respect the latest shared instructions."""
+    original_shared = "Initial shared instructions"
+    updated_shared = "Updated shared instructions"
+    additional_text = "Streaming additional instructions"
+    agency = Agency(sample_agent, shared_instructions=original_shared)
+    original_instructions = sample_agent.instructions
+
+    instruction_history = []
+
+    async def mock_stream_events():
+        instruction_history.append(sample_agent.instructions)
+        yield {"event": "text", "data": "test"}
+
+    mock_streamed_result = MagicMock()
+    mock_streamed_result.stream_events = mock_stream_events
+
+    agency.shared_instructions = updated_shared
+
+    with patch("agents.Runner.run_streamed", return_value=mock_streamed_result):
+        async for _event in agency.get_response_stream(message="Test message", additional_instructions=additional_text):
+            pass
+
+    assert len(instruction_history) == 1
+    expected = f"{updated_shared}\n\n{original_instructions}\n\n---\n\n{additional_text}"
+    assert instruction_history[0] == expected
     assert sample_agent.instructions == original_instructions
 
 

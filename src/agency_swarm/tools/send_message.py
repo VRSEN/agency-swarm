@@ -191,19 +191,6 @@ class SendMessage(FunctionTool):
                 description_parts.append(f"\n- {agent.name}: {agent_desc}")
         self.description = "".join(description_parts)
 
-    def _combine_instructions(self, shared_instructions: str | None, additional_instructions: str | None) -> str | None:
-        """Combine shared instructions with additional instructions."""
-        if not shared_instructions and not additional_instructions:
-            return None
-
-        parts = []
-        if shared_instructions:
-            parts.append(shared_instructions)
-        if additional_instructions:
-            parts.append(additional_instructions)
-
-        return "\n\n---\n\n".join(parts) if parts else None
-
     def _create_recipient_agency_context(self, wrapper: RunContextWrapper[MasterContext]) -> "AgencyContext":
         """Create agency context for the recipient agent."""
         # Avoid circular import
@@ -345,15 +332,10 @@ class SendMessage(FunctionTool):
                 # Create agency context for the recipient agent
                 recipient_agency_context = self._create_recipient_agency_context(wrapper)
 
-                # Combine shared instructions with any additional instructions for agent-to-agent communication
-                combined_instructions = self._combine_instructions(
-                    recipient_agency_context.shared_instructions, additional_instructions
-                )
-
                 async for event in self.recipient_agent.get_response_stream(
                     message=message_content,
                     sender_name=self.sender_agent.name,
-                    additional_instructions=combined_instructions,
+                    additional_instructions=additional_instructions or None,
                     agency_context=recipient_agency_context,
                     parent_run_id=tool_call_id,  # Use tool_call_id as parent_run_id
                 ):
@@ -413,15 +395,10 @@ class SendMessage(FunctionTool):
                 # Create agency context for the recipient agent
                 recipient_agency_context = self._create_recipient_agency_context(wrapper)
 
-                # Combine shared instructions with any additional instructions for agent-to-agent communication
-                combined_instructions = self._combine_instructions(
-                    recipient_agency_context.shared_instructions, additional_instructions
-                )
-
                 response = await self.recipient_agent.get_response(
                     message=message_content,
                     sender_name=self.sender_agent.name,
-                    additional_instructions=combined_instructions,
+                    additional_instructions=additional_instructions or None,
                     agency_context=recipient_agency_context,
                     parent_run_id=tool_call_id,  # Use tool_call_id as parent_run_id
                 )
