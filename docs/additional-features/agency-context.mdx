@@ -28,53 +28,12 @@ Agency context is particularly useful when your agents interact with multiple to
 
 ## Using Agency Context in v1.x
 
-The agency context is accessed through the `MasterContext` object in function tools. The two basic operations are:
-- **Setting** a value: `ctx.context.set('key', value)`
-- **Getting** a value: `ctx.context.get('key', default_value)`
+The agency context is accessible in both FunctionTools and BaseTools using `.get` and `.set`, which let you access and modify the MasterContext passed during execution.
 
-You can use agency context in your function tools and access it in agents. Here's how:
+Below is an example of how it can be used across tools.
+In this example, calling the Query Database tool stores database context, which is later retrieved by the Answer Question tool.
 
 <Tabs>
-
-<Tab title="Function Tool: Setting a value">
-  To set a value in the agency context within a function tool, use `ctx.context.set`. For example, you can store retrieved database context:
-    ```python
-    from agency_swarm import MasterContext, RunContextWrapper, function_tool
-
-    @function_tool
-    async def query_database(ctx: RunContextWrapper[MasterContext], question: str) -> str:
-        """
-        Retrieves data from the database and stores it in agency context.
-        """
-        # Fetch data based on the question
-        context = query_database_api(question)
-
-        # Store the context in agency context
-        ctx.context.set('database_context', context)
-        ctx.context.set('last_query', question)
-
-        return "Database context has been retrieved and stored successfully."
-    ```
-</Tab>
-
-<Tab title="Function Tool: Using the value">
-  To get a value from agency context within a function tool, use `ctx.context.get`. Continuing the previous example, you can ensure that the database was queried before proceeding:
-    ```python
-    @function_tool
-    async def answer_question(ctx: RunContextWrapper[MasterContext]) -> str:
-        """
-        Provides answers based on the context stored in agency context.
-        """
-        # Access the stored context
-        context = ctx.context.get('database_context')
-        if not context:
-            return "Database context is missing. Please call query_database tool first."
-
-        # Generate an answer using the context
-        answer = f"Answer derived from context: {context}"
-        return answer
-    ```
-</Tab>
 
 <Tab title="BaseTool">
 
@@ -91,16 +50,75 @@ You can use agency context in your function tools and access it in agents. Here'
 
     class QueryDatabase(BaseTool):
         """
-        Retrieves data from the database and stores it in agency context.
+        Retrieves data from the database and stores it in the agency context.
         """
         question: str = Field(..., description="The query to execute.")
 
         def run(self):
             # Fetch data based on the question
-            context = query_database_api(self.question)
-            # Store the context in agency context
+            context = query_database_api(question)
+
+            # Store the context in the agency context
             self._shared_state.set('database_context', context)
-            return "Context has been retrieved and stored successfully."
+            # Same as
+            # self.context.set('database_context', context)
+            self._shared_state.set('last_query', question)
+
+            return "Database context has been retrieved and stored successfully."
+
+    class AnswerQuestion(BaseTool):
+        """
+        Provides answers based on the context stored in the agency context.
+        """
+        def run(self):
+            # Access the stored context
+            context = self._shared_state.get('database_context')
+            # Same as
+            # context = self.context.get('database_context')
+
+            if not context:
+                return "Database context is missing. Please call the query_database tool first."
+
+            # Generate an answer using the context
+            answer = f"Answer derived from context: {context}"
+            return answer
+    ```
+</Tab>
+
+<Tab title="Function Tool">
+    For FunctionTools, access the context using the following methods:
+    - **Setting** a value: `ctx.context.set('key', value)`
+    - **Getting** a value: `ctx.context.get('key', default_value)`
+    ```python
+    from agency_swarm import MasterContext, RunContextWrapper, function_tool
+
+    @function_tool
+    async def query_database(ctx: RunContextWrapper[MasterContext], question: str) -> str:
+        """
+        Retrieves data from the database and stores it in the agency context.
+        """
+        # Fetch data based on the question
+        context = query_database_api(question)
+
+        # Store the context in the agency context
+        ctx.context.set('database_context', context)
+        ctx.context.set('last_query', question)
+
+        return "Database context has been retrieved and stored successfully."
+
+    @function_tool
+    async def answer_question(ctx: RunContextWrapper[MasterContext]) -> str:
+        """
+        Provides answers based on the context stored in the agency context.
+        """
+        # Access the stored context
+        context = ctx.context.get('database_context')
+        if not context:
+            return "Database context is missing. Please call the query_database tool first."
+
+        # Generate an answer using the context
+        answer = f"Answer derived from context: {context}"
+        return answer
     ```
 </Tab>
 </Tabs>
