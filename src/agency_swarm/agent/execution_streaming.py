@@ -8,6 +8,7 @@ from agents import (
     InputGuardrailTripwireTriggered,
     OutputGuardrailTripwireTriggered,
     RunConfig,
+    RunHooks,
     Runner,
     TResponseInputItem,
 )
@@ -111,7 +112,7 @@ def perform_streamed_run(
     agent: "Agent",
     history_for_runner: list[TResponseInputItem],
     master_context_for_run: MasterContext,
-    hooks_override: Any,
+    hooks_override: RunHooks | None,
     run_config_override: RunConfig | None,
     kwargs: dict[str, Any],
 ):
@@ -120,7 +121,7 @@ def perform_streamed_run(
         starting_agent=agent,
         input=history_for_runner,
         context=master_context_for_run,
-        hooks=hooks_override or agent.hooks,  # type: ignore[arg-type]
+        hooks=hooks_override,
         run_config=run_config_override or RunConfig(),
         max_turns=kwargs.get("max_turns", 1000000),
     )
@@ -133,7 +134,7 @@ async def run_stream_with_guardrails(
     master_context_for_run: MasterContext,
     sender_name: str | None,
     agency_context: "AgencyContext | None",
-    hooks_override: Any,
+    hooks_override: RunHooks | None,
     run_config_override: RunConfig | None,
     kwargs: dict[str, Any],
     current_agent_run_id: str,
