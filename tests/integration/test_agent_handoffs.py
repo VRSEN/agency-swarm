@@ -355,9 +355,7 @@ class TestComplexHandoffScenarios:
         """Test that there are no errors on follow up messages."""
 
         # First handoff
-        async for _ in mixed_communication_agency.get_response_stream(
-            "Ask Agent B to use transfer_to_AgentC tool."
-        ):
+        async for _ in mixed_communication_agency.get_response_stream("Ask Agent B to use transfer_to_AgentC tool."):
             pass
 
         # Verify handoff occurred
@@ -366,9 +364,7 @@ class TestComplexHandoffScenarios:
         assert "transfer_to_AgentC" in tool_names, "Should have used transfer_to_AgentC tool"
 
         # Second handoff (follow-up)
-        async for _ in mixed_communication_agency.get_response_stream(
-            "Do the exact same thing again."
-        ):
+        async for _ in mixed_communication_agency.get_response_stream("Do the exact same thing again."):
             pass
 
         # Verify no errors in tool outputs

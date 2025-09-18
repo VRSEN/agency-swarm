@@ -17,10 +17,10 @@ from agency_swarm.agent.execution_helpers import (
     extract_hosted_tool_results_if_needed,
     prepare_master_context,
     run_item_to_tresponse_input_item,
-    run_stream_with_guardrails,
     run_sync_with_guardrails,
     setup_execution,
 )
+from agency_swarm.agent.execution_streaming import run_stream_with_guardrails
 from agency_swarm.messages import (
     MessageFilter,
     MessageFormatter,

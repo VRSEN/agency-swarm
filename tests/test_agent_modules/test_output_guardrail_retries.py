@@ -50,6 +50,10 @@ async def test_output_guardrail_retries_update_history(mock_runner_run):
     assert ("assistant", "BAD OUTPUT") in trio
     assert ("system", "ERROR: fix format") in trio
 
+    # The guidance system message should be classified as an output guardrail error
+    sys_msgs = [m for m in all_msgs if m.get("role") == "system"]
+    assert sys_msgs and sys_msgs[-1].get("message_origin") == "output_guardrail_error"
+
 
 class _DummyStream:
     def __init__(self, events):
