@@ -28,62 +28,21 @@ Agency context is particularly useful when your agents interact with multiple to
 
 ## Using Agency Context in v1.x
 
-The agency context is accessed through the `MasterContext` object in function tools. The two basic operations are:
-- **Setting** a value: `ctx.context.set('key', value)`
-- **Getting** a value: `ctx.context.get('key', default_value)`
+The agency context is accessible in both FunctionTools and BaseTools using `.get` and `.set`, which let you access and modify the MasterContext passed during execution.
 
-You can use agency context in your function tools and access it in agents. Here's how:
+Below is an example of how it can be used across tools.
+In this example, calling the Query Database tool stores database context, which is later retrieved by the Answer Question tool.
 
 <Tabs>
 
-<Tab title="Function Tool: Setting a value">
-  To set a value in the agency context within a function tool, use `ctx.context.set`. For example, you can store retrieved database context:
-    ```python
-    from agency_swarm import MasterContext, RunContextWrapper, function_tool
-
-    @function_tool
-    async def query_database(ctx: RunContextWrapper[MasterContext], question: str) -> str:
-        """
-        Retrieves data from the database and stores it in agency context.
-        """
-        # Fetch data based on the question
-        context = query_database_api(question)
-
-        # Store the context in agency context
-        ctx.context.set('database_context', context)
-        ctx.context.set('last_query', question)
-
-        return "Database context has been retrieved and stored successfully."
-    ```
-</Tab>
-
-<Tab title="Function Tool: Using the value">
-  To get a value from agency context within a function tool, use `ctx.context.get`. Continuing the previous example, you can ensure that the database was queried before proceeding:
-    ```python
-    @function_tool
-    async def answer_question(ctx: RunContextWrapper[MasterContext]) -> str:
-        """
-        Provides answers based on the context stored in agency context.
-        """
-        # Access the stored context
-        context = ctx.context.get('database_context')
-        if not context:
-            return "Database context is missing. Please call query_database tool first."
-
-        # Generate an answer using the context
-        answer = f"Answer derived from context: {context}"
-        return answer
-    ```
-</Tab>
-
 <Tab title="BaseTool">
-  <Warning>
-  This section applies only to version 0.x of the framework. For v1.x, use the agency context patterns shown in the other tabs.
-  </Warning>
 
-  In version 0.x, shared state was a centralized Python dictionary accessible by all tools and agents. The two basic operations were:
-  - **Setting** a value in the shared state: `shared_state.set('key', value)`
-  - **Getting** a value from the shared state: `shared_state.get('key')`
+  Originally, in v0.x, shared data was stored in the special `_shared_state` variable, which was carried over into v1.x. You can access it using the following methods:
+  - **Setting** a value in the shared state: `_shared_state.set('key', value)`
+  - **Getting** a value from the shared state: `_shared_state.get('key')`
+
+  Starting with v1.x, `_shared_state` simply holds a pointer to the agency context, allowing you to share data between FunctionTools and BaseTools.     
+  You can also access the same context within the BaseTool by using `self.context` variable same way it's done in FunctionTools.
 
     ```python
     from agency_swarm.tools import BaseTool
@@ -91,34 +50,75 @@ You can use agency context in your function tools and access it in agents. Here'
 
     class QueryDatabase(BaseTool):
         """
-        Retrieves data from the database and stores it in agency context.
+        Retrieves data from the database and stores it in the agency context.
         """
         question: str = Field(..., description="The query to execute.")
 
         def run(self):
             # Fetch data based on the question
-            context = query_database_api(self.question)
-            # Store the context in agency context
-            self.shared_state.set('database_context', context)
-            return "Context has been retrieved and stored successfully."
+            context = query_database_api(question)
+
+            # Store the context in the agency context
+            self._shared_state.set('database_context', context)
+            # Same as
+            # self.context.set('database_context', context)
+            self._shared_state.set('last_query', question)
+
+            return "Database context has been retrieved and stored successfully."
+
+    class AnswerQuestion(BaseTool):
+        """
+        Provides answers based on the context stored in the agency context.
+        """
+        def run(self):
+            # Access the stored context
+            context = self._shared_state.get('database_context')
+            # Same as
+            # context = self.context.get('database_context')
+
+            if not context:
+                return "Database context is missing. Please call the query_database tool first."
+
+            # Generate an answer using the context
+            answer = f"Answer derived from context: {context}"
+            return answer
     ```
+</Tab>
 
-    You can access agency context within your agent's response validation or other methods:
+<Tab title="Function Tool">
+    For FunctionTools, access the context using the following methods:
+    - **Setting** a value: `ctx.context.set('key', value)`
+    - **Getting** a value: `ctx.context.get('key', default_value)`
     ```python
-    from agency_swarm import Agent
+    from agency_swarm import MasterContext, RunContextWrapper, function_tool
 
-    class MyAgent(Agent):
+    @function_tool
+    async def query_database(ctx: RunContextWrapper[MasterContext], question: str) -> str:
         """
-        An agent that utilizes agency context for validation.
+        Retrieves data from the database and stores it in the agency context.
         """
-        def response_validator(self, message: str) -> str:
-            """Validate the response before returning it."""
-            # Access agency context through the master context
-            # Note: This requires the agent to have access to the current context
-            context = self.shared_state.get('database_context')
-            if message not in context:
-                raise ValueError(f"Invalid response: {message} is not in context: {context}")
-            return message
+        # Fetch data based on the question
+        context = query_database_api(question)
+
+        # Store the context in the agency context
+        ctx.context.set('database_context', context)
+        ctx.context.set('last_query', question)
+
+        return "Database context has been retrieved and stored successfully."
+
+    @function_tool
+    async def answer_question(ctx: RunContextWrapper[MasterContext]) -> str:
+        """
+        Provides answers based on the context stored in the agency context.
+        """
+        # Access the stored context
+        context = ctx.context.get('database_context')
+        if not context:
+            return "Database context is missing. Please call the query_database tool first."
+
+        # Generate an answer using the context
+        answer = f"Answer derived from context: {context}"
+        return answer
     ```
 </Tab>
 </Tabs>
@@ -277,11 +277,11 @@ async def show_context_status(ctx: RunContextWrapper[MasterContext]) -> str:
     return status
 ```
 
-## Legacy Shared State (v0.x)
+## Migrating tools
 
-If you're migrating from Agency Swarm v0.x, here's how to update your shared state usage:
+If you're migrating from Agency Swarm v0.x, and want to use new FunctionTool instead of BaseTool, here's how you can do that:
 
-**Old Pattern (v0.x):**
+**BaseTool Pattern (v0.x):**
 ```python
 class MyTool(BaseTool):
     def run(self):
@@ -290,7 +290,7 @@ class MyTool(BaseTool):
         return "Done"
 ```
 
-**New Pattern (v1.x):**
+**FunctionTool Pattern (v1.x):**
 ```python
 @function_tool
 async def my_tool(ctx: RunContextWrapper[MasterContext], param: str) -> str:

@@ -75,6 +75,10 @@ To see a full list of agent parameters, refer to [OpenAI documentation]( https:/
 Please note that agent handoff parameters are not supported. To enable handoffs, add the SendMessageHandoff tool class to the agent as [shown here](/additional-features/custom-communication-flows/hybrid-patterns)
 </Note>
 
+<Warning>
+To start receiving reasoning events for reasoning models, you need to explicitly specify `reasoning` parameter inside `ModelSettings`
+</Warning>
+
 ## Agent Template
 
 Create a new agent by instantiating the Agent class:
