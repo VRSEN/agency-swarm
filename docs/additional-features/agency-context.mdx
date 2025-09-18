@@ -77,13 +77,13 @@ You can use agency context in your function tools and access it in agents. Here'
 </Tab>
 
 <Tab title="BaseTool">
-  <Warning>
-  This section applies only to version 0.x of the framework. For v1.x, use the agency context patterns shown in the other tabs.
-  </Warning>
 
-  In version 0.x, shared state was a centralized Python dictionary accessible by all tools and agents. The two basic operations were:
-  - **Setting** a value in the shared state: `shared_state.set('key', value)`
-  - **Getting** a value from the shared state: `shared_state.get('key')`
+  Originally, in v0.x, shared data was stored in the special `_shared_state` variable, which was carried over into v1.x. You can access it using the following methods:
+  - **Setting** a value in the shared state: `_shared_state.set('key', value)`
+  - **Getting** a value from the shared state: `_shared_state.get('key')`
+
+  Starting with v1.x, `_shared_state` simply holds a pointer to the agency context, allowing you to share data between FunctionTools and BaseTools.     
+  You can also access the same context within the BaseTool by using `self.context` variable same way it's done in FunctionTools.
 
     ```python
     from agency_swarm.tools import BaseTool
@@ -99,26 +99,8 @@ You can use agency context in your function tools and access it in agents. Here'
             # Fetch data based on the question
             context = query_database_api(self.question)
             # Store the context in agency context
-            self.shared_state.set('database_context', context)
+            self._shared_state.set('database_context', context)
             return "Context has been retrieved and stored successfully."
-    ```
-
-    You can access agency context within your agent's response validation or other methods:
-    ```python
-    from agency_swarm import Agent
-
-    class MyAgent(Agent):
-        """
-        An agent that utilizes agency context for validation.
-        """
-        def response_validator(self, message: str) -> str:
-            """Validate the response before returning it."""
-            # Access agency context through the master context
-            # Note: This requires the agent to have access to the current context
-            context = self.shared_state.get('database_context')
-            if message not in context:
-                raise ValueError(f"Invalid response: {message} is not in context: {context}")
-            return message
     ```
 </Tab>
 </Tabs>
