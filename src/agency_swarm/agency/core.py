@@ -1,4 +1,6 @@
 # --- Core Agency class definition ---
+import asyncio
+import atexit
 import logging
 import os
 import warnings
@@ -11,6 +13,7 @@ from agency_swarm.agent.agent_flow import AgentFlow
 from agency_swarm.agent.core import AgencyContext, Agent
 from agency_swarm.hooks import PersistenceHooks
 from agency_swarm.streaming.utils import EventStreamMerger
+from agency_swarm.tools.mcp_manager import default_mcp_manager
 from agency_swarm.utils.thread import ThreadLoadCallback, ThreadManager, ThreadSaveCallback
 
 # Import split module functions
@@ -226,6 +229,9 @@ class Agency:
         update_agent_contexts_with_communication_flows(self, _derived_communication_flows)
 
         logger.info("Agency initialization complete.")
+
+        # Register MCP shutdown at process exit so persistent servers are cleaned in scripts
+        atexit.register(lambda: asyncio.run(default_mcp_manager.shutdown()))
 
     # Private helper methods that were missed during split
     def _get_agent_context(self, agent_name: str) -> AgencyContext:

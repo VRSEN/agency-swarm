@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from agency_swarm.agency import Agency
+from agency_swarm.tools.mcp_manager import attach_persistent_mcp_servers
 from agency_swarm.integrations.fastapi_utils.file_handler import upload_from_urls
 from agency_swarm.integrations.fastapi_utils.logging_middleware import get_logs_endpoint_impl
 from agency_swarm.messages import MessageFilter
@@ -53,6 +54,8 @@ def make_response_endpoint(request_model, agency_factory: Callable[..., Agency],
                 return {"error": f"Error downloading file from provided urls: {e}"}
 
         agency_instance = agency_factory(load_threads_callback=load_callback)
+        # Attach persistent MCP servers and ensure connections before handling the request
+        await attach_persistent_mcp_servers(agency_instance)
 
         # Capture initial message count to identify new messages
         initial_message_count = len(agency_instance.thread_manager.get_all_messages())
@@ -115,6 +118,7 @@ def make_stream_endpoint(request_model, agency_factory: Callable[..., Agency], v
                 )
 
         agency_instance = agency_factory(load_threads_callback=load_callback)
+        await attach_persistent_mcp_servers(agency_instance)
 
         async def event_generator():
             # Capture initial message count to identify new messages
@@ -234,6 +238,7 @@ def make_agui_chat_endpoint(request_model, agency_factory: Callable[..., Agency]
 
         # Choose / build an agent – here we just create a demo agent each time.
         agency = agency_factory(load_threads_callback=load_callback)
+        await attach_persistent_mcp_servers(agency)
 
         async def event_generator() -> AsyncGenerator[str]:
             # Emit RUN_STARTED first.

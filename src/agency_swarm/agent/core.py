@@ -26,6 +26,7 @@ from agency_swarm.agent.file_manager import AgentFileManager
 from agency_swarm.agent.tools import _attach_one_call_guard
 from agency_swarm.context import MasterContext
 from agency_swarm.tools.concurrency import ToolConcurrencyManager
+from agency_swarm.tools.mcp_manager import register_and_connect_agent_servers
 
 from .context_types import AgencyContext as AgencyContext
 
@@ -213,6 +214,9 @@ class Agent(BaseAgent[MasterContext]):
         # Wrap any FunctionTool instances that were provided directly via constructor
         for tool in self.tools:
             _attach_one_call_guard(tool, self)
+
+        # Register and connect MCP servers by default (persistent across runs)
+        register_and_connect_agent_servers(self)
 
     # --- Deprecated Compatibility ---
     @property

@@ -19,9 +19,9 @@ from openai.types.responses import ResponseOutputMessage, ResponseOutputText
 from agency_swarm.context import MasterContext
 from agency_swarm.messages import MessageFilter, MessageFormatter
 from agency_swarm.streaming.utils import add_agent_name_to_event
+from agency_swarm.tools.mcp_manager import default_mcp_manager
 from agency_swarm.utils.citation_extractor import extract_direct_file_annotations
 
-# Import guardrail helpers from execution_helpers to avoid duplication
 from .execution_guardrails import _extract_guardrail_texts, append_guardrail_feedback
 
 if TYPE_CHECKING:
@@ -178,7 +178,11 @@ async def run_stream_with_guardrails(
             try:
                 async with AsyncExitStack() as mcp_stack:
                     for server in agent.mcp_servers:
-                        await mcp_stack.enter_async_context(server)  # type: ignore[arg-type]
+                        if getattr(server, "session", None) is None:
+                            await default_mcp_manager.ensure_connected(server)
+                        if getattr(server, "session", None) is None:
+                            logger.warning(f"Entering async context for server {server.name}")
+                            await mcp_stack.enter_async_context(server)  # type: ignore[arg-type]
 
                     local_result = perform_streamed_run(
                         agent=agent,
