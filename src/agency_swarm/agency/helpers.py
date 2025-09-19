@@ -32,6 +32,15 @@ def handle_deprecated_agency_args(
     final_save_threads_callback = save_threads_callback
 
     # --- Handle Deprecated Thread Callbacks ---
+    if "model" in kwargs:
+        warnings.warn(
+            "'model' parameter is deprecated. Set models directly on each Agent instance.",
+            DeprecationWarning,
+            stacklevel=3,
+        )
+        logger.error("Agency constructor received unsupported global 'model' parameter.")
+        raise TypeError("Agency no longer accepts a global 'model'. Set models on individual Agent instances.")
+
     if "threads_callbacks" in kwargs:
         warnings.warn(
             "'threads_callbacks' is deprecated. Pass 'load_threads_callback' and 'save_threads_callback' directly.",

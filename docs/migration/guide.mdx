@@ -419,6 +419,7 @@ asyncio.run(main())
 | `get_completion()` | ✅ Backward compatible | `get_response()` (async) |
 | `get_completion_stream()` | ❌ Removed | `get_response_stream()` (async) |
 | `agency_chart` | ⚠️ Deprecated | Positional args + `communication_flows` |
+| `model` (global default) | ❌ Removed | Configure each `Agent` via `model_settings` |
 | `threads_callbacks` | ❌ Breaking change | `load_threads_callback` + `save_threads_callback` |
 
 ### Agent Parameters
