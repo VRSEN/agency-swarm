@@ -130,3 +130,10 @@ def test_agency_shared_instructions_none():
     )
 
     assert agency.shared_instructions == ""
+
+
+def test_agency_rejects_global_model(mock_agent):
+    """Global model parameter is deprecated and must raise an error."""
+    with pytest.raises(TypeError, match="Agency no longer accepts a global 'model'"):
+        with pytest.warns(DeprecationWarning, match="'model' parameter is deprecated"):
+            Agency(mock_agent, model="gpt-4o")
