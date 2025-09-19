@@ -34,14 +34,14 @@ class PersistentMCPServerManager:
 
     def _ensure_driver(self, server: Any) -> None:
         # Create a per-server driver task with a command queue if missing
-        if server in self._drivers:
+        real_server = getattr(server, "_server", server)
+        if real_server in self._drivers:
             return
         loop = self._ensure_bg_loop()
         queue: asyncio.Queue = asyncio.Queue()
         # Readiness event
         ready_evt = threading.Event()
         # Unwrap proxy to operate on the real server inside the driver (same task)
-        real_server = getattr(server, "_server", server)
 
         async def _driver():
             # Connect once in this driver task to bind cancel scope and session
@@ -85,7 +85,7 @@ class PersistentMCPServerManager:
             raise TimeoutError(f"Server {getattr(server, "name", "<unnamed>")} failed to connect within timeout")
         # Track whether this driver created the session to decide who cleans up
         created_by_driver = getattr(real_server, "session", None) is not None
-        self._drivers[server] = {"queue": queue, "real": real_server, "created_by_driver": created_by_driver}
+        self._drivers[real_server] = {"queue": queue, "real": real_server, "created_by_driver": created_by_driver}
 
     async def ensure_connected(self, server: Any) -> None:
         # Ensure the per-server driver is running and connected
