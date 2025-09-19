@@ -48,7 +48,7 @@ class SSHExecuteCommand(BaseTool):
 
         if "该任务执行失败" in check_result:
             return {"result": "FAIL", "context": check_result}
-        return {"result": "SUCCESS", "context": check_result}
+        return {"command_result": res,"result": "SUCCESS", "context": check_result}
 
 
 # if __name__=="__main__":
