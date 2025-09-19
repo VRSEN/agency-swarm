@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, cast
 
 from agency_swarm import Agency
 
@@ -26,6 +26,8 @@ This module focuses on terminal interaction only. Copilot demo is in _copilot.py
 class TerminalDemoLauncher:
     # Directory for local chat persistence; override via set_chats_dir or env
     CHATS_DIR: str | None = None
+    # Tracks the currently active chat id
+    CURRENT_CHAT_ID: str | None = None
     # Configurable prompt used by /compact. Override via TerminalDemoLauncher.set_compact_prompt(...)
     COMPACT_PROMPT: str = (
         "You will produce an objective summary of the conversation thread (structured items) below.\n\n"
@@ -65,6 +67,24 @@ class TerminalDemoLauncher:
         _set_chats_dir(TerminalDemoLauncher.CHATS_DIR)
 
     @staticmethod
+    def get_current_chat_id() -> str | None:
+        """Return the most recently active chat id, if any."""
+        return TerminalDemoLauncher.CURRENT_CHAT_ID
+
+    @staticmethod
+    def set_current_chat_id(agency_instance: Agency | None, chat_id: str | None) -> None:
+        """Synchronize the active chat id between the launcher and the agency instance."""
+        TerminalDemoLauncher.CURRENT_CHAT_ID = chat_id
+        if agency_instance is None:
+            return
+        target = cast(Any, agency_instance)
+        if chat_id is None:
+            if hasattr(target, "current_chat_id"):
+                del target.current_chat_id
+        else:
+            target.current_chat_id = chat_id
+
+    @staticmethod
     def _get_chats_dir() -> str:
         if TerminalDemoLauncher.CHATS_DIR:
             _set_chats_dir(TerminalDemoLauncher.CHATS_DIR)
@@ -93,12 +113,18 @@ class TerminalDemoLauncher:
     @staticmethod
     def save_current_chat(agency_instance: Agency, chat_id: str) -> None:
         """Persist current flat messages to disk for the given chat_id."""
+        TerminalDemoLauncher.set_current_chat_id(agency_instance, chat_id)
         _save_current_chat(agency_instance, chat_id)
 
     @staticmethod
     def load_chat(agency_instance: Agency, chat_id: str) -> bool:
         """Load messages for chat_id into agency thread manager. Returns True if loaded."""
-        return _load_chat(agency_instance, chat_id)
+        previous_chat_id = getattr(agency_instance, "current_chat_id", None)
+        TerminalDemoLauncher.set_current_chat_id(agency_instance, chat_id)
+        loaded = _load_chat(agency_instance, chat_id)
+        if not loaded:
+            TerminalDemoLauncher.set_current_chat_id(agency_instance, previous_chat_id)
+        return loaded
 
     @staticmethod
     def _summarize_messages(messages: list[dict[str, Any]]) -> str:

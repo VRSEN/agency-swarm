@@ -172,6 +172,10 @@ class ThreadManager:
         self._store.add_messages(messages)
         self._save_messages()
 
+    def persist(self) -> None:
+        """Manually trigger the save callback with current messages, if configured."""
+        self._save_messages()
+
     def get_conversation_history(self, agent: str, caller_agent: str | None = None) -> list[TResponseInputItem]:
         """Get conversation history for a specific interaction pair.
 

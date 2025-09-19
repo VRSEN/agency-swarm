@@ -1,7 +1,9 @@
 from collections.abc import Generator
 
+from agency_swarm.agency.core import Agency
 
-def start_terminal(agency_instance, show_reasoning: bool = False) -> None:
+
+def start_terminal(agency_instance: Agency, show_reasoning: bool = False) -> None:
     """Run the terminal demo: input loop, slash commands, and streaming output."""
     import asyncio
     import logging
@@ -22,7 +24,11 @@ def start_terminal(agency_instance, show_reasoning: bool = False) -> None:
     if not recipient_agents:
         raise ValueError("Cannot start terminal demo without entry points. Please specify at least one entry point.")
 
-    chat_id = f"run_demo_chat_{uuid.uuid4()}"
+    def _new_chat_id() -> str:
+        return f"run_demo_chat_{uuid.uuid4()}"
+
+    chat_id = _new_chat_id()
+    TerminalDemoLauncher.set_current_chat_id(agency_instance, chat_id)
 
     event_converter = ConsoleEventAdapter(show_reasoning=show_reasoning)
     event_converter.console.rule()
@@ -70,6 +76,61 @@ def start_terminal(agency_instance, show_reasoning: bool = False) -> None:
             event_converter.console.print(f"[cyan]{cmd}[/cyan]  {desc}")
         event_converter.console.rule()
 
+    def _persist_thread_state() -> None:
+        """Fire thread persistence callbacks when available."""
+        callback = getattr(agency_instance.thread_manager, "persist", None)
+        if callable(callback):
+            callback()
+
+    def _clear_chat() -> None:
+        """Persist current thread and start an empty chat session."""
+        nonlocal chat_id
+        TerminalDemoLauncher.save_current_chat(agency_instance, chat_id)
+        _persist_thread_state()
+        agency_instance.thread_manager.clear()
+        chat_id = _new_chat_id()
+        TerminalDemoLauncher.set_current_chat_id(agency_instance, chat_id)
+        _persist_thread_state()
+        event_converter.console.print("Started a new chat session.")
+        event_converter.console.rule()
+
+    def _resume_chat() -> None:
+        """Save active chat, then load a previously saved chat into context."""
+        nonlocal chat_id
+        TerminalDemoLauncher.save_current_chat(agency_instance, chat_id)
+        _persist_thread_state()
+        chosen = TerminalDemoLauncher.resume_interactive(
+            agency_instance, input_func=input, print_func=event_converter.console.print
+        )
+        if chosen:
+            chat_id = chosen
+            TerminalDemoLauncher.set_current_chat_id(agency_instance, chat_id)
+            _persist_thread_state()
+            event_converter.console.print(f"Resumed chat: {chat_id}")
+        event_converter.console.rule()
+
+    def _print_status() -> None:
+        """Display current agency metadata and defaults."""
+        _cwd = os.getcwd()
+        meta = {
+            "Agency": getattr(agency_instance, "name", None) or "Unnamed Agency",
+            "Entry Points": ", ".join([a.name for a in agency_instance.entry_points]) or "None",
+            "Default Recipient": current_default_recipient or "None",
+            "cwd": _cwd,
+        }
+        for k, v in meta.items():
+            event_converter.console.print(f"[bold]{k}[/bold]: {v}")
+        event_converter.console.rule()
+
+    async def _compact_chat(args: list[str]) -> None:
+        """Summarize the current conversation and continue with a fresh chat id."""
+        nonlocal chat_id
+        chat_id = await TerminalDemoLauncher.compact_thread(agency_instance, args)
+        TerminalDemoLauncher.set_current_chat_id(agency_instance, chat_id)
+        _persist_thread_state()
+        event_converter.console.print("Conversation compacted. A system summary has been added.")
+        event_converter.console.rule()
+
     async def handle_message(message: str) -> bool:  # noqa: C901
         nonlocal chat_id, current_default_recipient
         if not message:
@@ -82,37 +143,16 @@ def start_terminal(agency_instance, show_reasoning: bool = False) -> None:
                 _print_help()
                 return False
             if cmd in {"clear"}:
-                TerminalDemoLauncher.save_current_chat(agency_instance, chat_id)
-                agency_instance.thread_manager.clear()
-                chat_id = f"run_demo_chat_{uuid.uuid4()}"
-                event_converter.console.print("Started a new chat session.")
-                event_converter.console.rule()
+                _clear_chat()
                 return False
             if cmd == "resume":
-                chosen = TerminalDemoLauncher.resume_interactive(
-                    agency_instance, input_func=input, print_func=event_converter.console.print
-                )
-                if chosen:
-                    chat_id = chosen
-                    event_converter.console.print(f"Resumed chat: {chat_id}")
-                event_converter.console.rule()
+                _resume_chat()
                 return False
             if cmd == "status":
-                _cwd = os.getcwd()
-                meta = {
-                    "Agency": getattr(agency_instance, "name", None) or "Unnamed Agency",
-                    "Entry Points": ", ".join([a.name for a in agency_instance.entry_points]) or "None",
-                    "Default Recipient": current_default_recipient or "None",
-                    "cwd": _cwd,
-                }
-                for k, v in meta.items():
-                    event_converter.console.print(f"[bold]{k}[/bold]: {v}")
-                event_converter.console.rule()
+                _print_status()
                 return False
             if cmd == "compact":
-                chat_id = await TerminalDemoLauncher.compact_thread(agency_instance, args)
-                event_converter.console.print("Conversation compacted. A system summary has been added.")
-                event_converter.console.rule()
+                await _compact_chat(args)
                 return False
             if cmd == "exit":
                 return True

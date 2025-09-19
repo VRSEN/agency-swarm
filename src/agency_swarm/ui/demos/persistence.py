@@ -208,6 +208,9 @@ def save_current_chat(agency_instance: Any, chat_id: str) -> None:
 
 
 def load_chat(agency_instance: Any, chat_id: str) -> bool:
+    target = cast(Any, agency_instance)
+    previous_chat_id = getattr(target, "current_chat_id", None)
+    target.current_chat_id = chat_id
     try:
         with open(chat_file_path(chat_id)) as f:
             payload = json.load(f)
@@ -216,14 +219,31 @@ def load_chat(agency_instance: Any, chat_id: str) -> bool:
         else:
             messages = payload if isinstance(payload, list) else None
         if not isinstance(messages, list):
-            return False
-        agency_instance.thread_manager.clear()
-        add_many = getattr(agency_instance.thread_manager, "add_messages", None)
+            raise ValueError("Chat payload must be a list of messages.")
+
+        thread_manager = agency_instance.thread_manager
+        clear = getattr(thread_manager, "clear", None)
+        add_many = getattr(thread_manager, "add_messages", None)
+        add_one = getattr(thread_manager, "add_message", None)
+
+        if callable(clear):
+            clear()
         if callable(add_many):
             add_many(messages)
+        elif callable(add_one):
+            for message in messages:
+                add_one(message)
         else:
-            for m in messages:
-                agency_instance.thread_manager.add_message(m)
+            raise AttributeError("ThreadManager must provide a way to load messages.")
+
+        persist = getattr(thread_manager, "persist", None)
+        if callable(persist):
+            persist()
         return True
     except Exception:
+        if previous_chat_id is None:
+            if hasattr(target, "current_chat_id"):
+                del target.current_chat_id
+        else:
+            target.current_chat_id = previous_chat_id
         return False

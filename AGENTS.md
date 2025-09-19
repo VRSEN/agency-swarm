@@ -151,6 +151,7 @@ Avoid growing already large files. Prefer extracting focused modules. If you mus
 - Do not test private APIs or patch private attributes/methods. Interact via public interfaces only.
 - Prefer behavior verification over implementation details. Tests should validate externally observable outcomes.
 - Keep mocks/stubs minimal and realistic; avoid over-mocking. Use simple stubs to emulate public behavior only.
+- When possible, exercise actual framework components instead of crafting bespoke stand-ins.
 - Follow the testing pyramid: prioritize unit tests for focused logic; add integration tests for real wiring/flows without duplicating unit scopes.
 - Avoid duplicate assertions across unit and integration levels; each test should have a clear, non-overlapping purpose.
 - Use descriptive, stable names (no throwaway labels); optimize for readability and intent.

@@ -1,6 +1,16 @@
+import json
+
 import pytest
 
 from agency_swarm.ui.demos.launcher import TerminalDemoLauncher
+from agency_swarm.utils.thread import ThreadManager
+
+
+@pytest.fixture(autouse=True)
+def _reset_launcher_state():
+    TerminalDemoLauncher.set_current_chat_id(None, None)
+    yield
+    TerminalDemoLauncher.set_current_chat_id(None, None)
 
 
 class _FakeResponses:
@@ -171,3 +181,95 @@ def test_resume_interactive_list_and_select(tmp_path, monkeypatch):
         idx = json.load(f)
     assert "chat_a" in idx and "chat_b" in idx
     assert idx["chat_a"].get("summary") == "hey bro"
+
+
+def test_resume_does_not_create_shadow_chat(tmp_path):
+    """Ensure resuming a chat does not write messages to a new chat id."""
+
+    TerminalDemoLauncher.set_chats_dir(str(tmp_path))
+    TerminalDemoLauncher.set_current_chat_id(None, None)
+
+    class _SeedAgency:
+        def __init__(self):
+            self.thread_manager = ThreadManager()
+
+    original_chat_id = "chat_original"
+
+    seed_agency = _SeedAgency()
+    seed_agency.thread_manager.add_message({"role": "user", "content": "hello"})
+    seed_agency.thread_manager.add_message({"role": "assistant", "content": "hi"})
+    TerminalDemoLauncher.save_current_chat(seed_agency, original_chat_id)
+
+    existing_files = {path.name for path in tmp_path.iterdir()}
+
+    class _PersistentAgency:
+        def __init__(self, chat_id: str):
+            self.current_chat_id = chat_id
+
+            def _save(messages):
+                outfile = tmp_path / f"messages_{self.current_chat_id}.json"
+                with open(outfile, "w") as fp:  # noqa: PTH123
+                    json.dump({"items": messages}, fp, indent=2)
+
+            self.thread_manager = ThreadManager(save_threads_callback=_save)
+
+    new_session_chat_id = "chat_from_new_session"
+    persistent_agency = _PersistentAgency(new_session_chat_id)
+
+    # Resuming should not create a new chat file for the temporary chat id
+    assert TerminalDemoLauncher.load_chat(persistent_agency, original_chat_id)
+
+    files_after_resume = {path.name for path in tmp_path.iterdir()}
+    assert files_after_resume == existing_files
+    assert persistent_agency.current_chat_id == original_chat_id
+    assert TerminalDemoLauncher.get_current_chat_id() == original_chat_id
+
+
+def test_resume_same_chat_twice_preserves_history(tmp_path):
+    """Resuming the same chat twice keeps its messages and index entry stable."""
+
+    TerminalDemoLauncher.set_chats_dir(str(tmp_path))
+    TerminalDemoLauncher.set_current_chat_id(None, None)
+
+    class _SeedAgency:
+        def __init__(self) -> None:
+            self.thread_manager = ThreadManager()
+
+    original_chat_id = "chat_persistent"
+
+    seed_agency = _SeedAgency()
+    seed_agency.thread_manager.add_message({"role": "user", "content": "hello"})
+    seed_agency.thread_manager.add_message({"role": "assistant", "content": "hi"})
+    TerminalDemoLauncher.save_current_chat(seed_agency, original_chat_id)
+
+    class _SessionAgency:
+        def __init__(self) -> None:
+            self.thread_manager = ThreadManager()
+
+    def _load_session() -> _SessionAgency:
+        session = _SessionAgency()
+        assert TerminalDemoLauncher.load_chat(session, original_chat_id)
+        return session
+
+    first_session = _load_session()
+    first_manager = first_session.thread_manager
+    assert len(first_manager.get_all_messages()) == 2
+
+    first_manager.add_message({"role": "assistant", "content": "update"})
+    TerminalDemoLauncher.save_current_chat(first_session, original_chat_id)
+    files_after_first_resume = {p.name for p in tmp_path.iterdir()}
+
+    second_session = _load_session()
+    messages_after_second_resume = second_session.thread_manager.get_all_messages()
+    assert [msg["content"] for msg in messages_after_second_resume] == [
+        "hello",
+        "hi",
+        "update",
+    ]
+    files_after_second_resume = {p.name for p in tmp_path.iterdir()}
+    assert files_after_second_resume == files_after_first_resume
+
+    records = TerminalDemoLauncher.list_chat_records()
+    assert {rec["chat_id"] for rec in records} == {original_chat_id}
+    assert all(rec.get("msgs") == len(messages_after_second_resume) for rec in records)
+    assert TerminalDemoLauncher.get_current_chat_id() == original_chat_id
