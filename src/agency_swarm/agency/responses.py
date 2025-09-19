@@ -10,6 +10,7 @@ if TYPE_CHECKING:
 from agents import RunConfig, RunHooks, RunResult, TResponseInputItem
 
 from agency_swarm.agent.core import Agent
+from agency_swarm.tools.mcp_manager import attach_persistent_mcp_servers
 
 from .helpers import get_agent_context, resolve_agent
 
@@ -78,6 +79,9 @@ async def get_response(
 
     # Get agency context for the target agent (stateless context passing)
     agency_context = get_agent_context(agency, target_agent.name)
+
+    # On handoffs all servers need to be initialized to be used
+    await attach_persistent_mcp_servers(agency)
 
     return await target_agent.get_response(
         message=message,
@@ -187,6 +191,9 @@ async def get_response_stream(
 
         # Get agency context for the target agent (stateless context passing)
         agency_context = get_agent_context(agency, target_agent.name)
+
+        # On handoffs all servers need to be initialized to be used
+        await attach_persistent_mcp_servers(agency)
 
         # Get the primary stream
         primary_stream = target_agent.get_response_stream(

@@ -22,6 +22,7 @@ from openai.types.responses import (
 
 from agency_swarm.context import MasterContext
 from agency_swarm.messages import MessageFormatter
+from agency_swarm.tools.mcp_manager import default_mcp_manager
 
 from .execution_guardrails import _extract_guardrail_texts, append_guardrail_feedback
 
@@ -54,7 +55,12 @@ async def perform_single_run(
     result: RunResult
     async with AsyncExitStack() as mcp_stack:
         for server in agent.mcp_servers:
-            await mcp_stack.enter_async_context(server)  # type: ignore[arg-type]
+            # If server exposes a connected session, skip per-run context management
+            if getattr(server, "session", None) is None:
+                await default_mcp_manager.ensure_connected(server)
+            if getattr(server, "session", None) is None:
+                logger.warning(f"Entering async context for server {server.name}")
+                await mcp_stack.enter_async_context(server)  # type: ignore[arg-type]
 
         result = await Runner.run(
             starting_agent=agent,
