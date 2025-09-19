@@ -82,7 +82,9 @@ class PersistentMCPServerManager:
         # Wait until driver has connected
         if not ready_evt.wait(timeout=self._timeouts.get("connect", 20.0)):
             # Handle timeout explicitly
-            raise TimeoutError(f"Server {getattr(server, "name", "<unnamed>")} failed to connect within timeout")
+            raise TimeoutError(
+                f"Server {getattr(server, 'name', '<unnamed>')} failed to connect within timeout"
+            )
         # Track whether this driver created the session to decide who cleans up
         created_by_driver = getattr(real_server, "session", None) is not None
         self._drivers[real_server] = {"queue": queue, "real": real_server, "created_by_driver": created_by_driver}
