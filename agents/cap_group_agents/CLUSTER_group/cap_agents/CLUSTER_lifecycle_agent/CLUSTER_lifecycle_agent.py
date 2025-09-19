@@ -1,5 +1,5 @@
 from agency_swarm import Agent
-from agents.cap_group_agents.CLUSTER_group.cap_agents.CLUSTER_specification_change_agent.tools import (
+from agents.cap_group_agents.CLUSTER_group.cap_agents.CLUSTER_lifecycle_agent.tools import (
     ReadAPI
 )
 from agents.cap_group_agents.cap_agent_instruction import cap_agent_instruction

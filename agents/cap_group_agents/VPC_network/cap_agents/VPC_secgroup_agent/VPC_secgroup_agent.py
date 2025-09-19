@@ -7,9 +7,10 @@ from agents.basic_agents.job_agent.tools.CallAPI import CallAPI
 from agents.cap_group_agents.VPC_network.tools import (
     GetEndPointAndProjectID, AskManagerParams
 )
+from agents.tools.read_json_file.ReadJsonFile import ReadJsonFile
 
 _name = "VPC_secgroup_agent"
-_manager_name = "VPC_manager"
+_manager_name = "VPC_network_manager"
 _description = """
 负责华为云安全组管理任务，包括创建安全组、查询安全组、删除安全组，创建安全组规则、查询安全组规则、删除安全组规则。
 """
@@ -19,7 +20,7 @@ import os
 current_path = os.path.abspath(os.path.dirname(__file__))
 _instruction = cap_agent_instruction(_name, _description, _manager_name)
 
-_tools = [ReadAPI.ReadAPI, CallAPI, GetEndPointAndProjectID.GetEndPointAndProjectID, AskManagerParams.AskManagerParams]
+_tools = [ReadAPI.ReadAPI, CallAPI, GetEndPointAndProjectID.GetEndPointAndProjectID, AskManagerParams.AskManagerParams, ReadJsonFile]
 
 _file_folder = ""
 

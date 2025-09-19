@@ -16,5 +16,5 @@ class AskManagerParams(BaseTool):
             "user_requirement": self.user_requirement,
             "param_list": self.param_list
         }
-        result = self.send_message_to_agent(recipient_agent_name="VPC_manager", message=json.dumps(message, ensure_ascii=False))
+        result = self.send_message_to_agent(recipient_agent_name="VPC_network_manager", message=json.dumps(message, ensure_ascii=False))
         return result

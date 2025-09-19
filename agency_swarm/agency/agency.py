@@ -1412,12 +1412,12 @@ class Agency:
     completed_subtask_path = os.path.join(files_path, "completed_sub_tasks.json")
     completed_task_path = os.path.join(files_path, "completed_tasks.json")
     context_index_path = os.path.join(files_path, "context_index.json")
-    contexts_path = os.path.join(files_path, "api_results")
     context_path = os.path.join(files_path, "context.json")
     # 使用的文件路径
     error_path = os.path.join(files_path, "error.json")
     text_path = os.path.join(files_path, "text.txt")
     CONTEXT_TREE_PATH = os.path.join(files_path, "context_tree.json")
+    contexts_path = os.path.join(files_path, "api_results")
 
     def init_files(self):
         # self._init_dir(self.files_path)
@@ -1829,9 +1829,9 @@ class Agency:
                                             while True:
                                                 try:
                                                     # 7. 能力agent执行单个step
-                                                    aciton = self.capability_agents_processor(step=next_step, cap_group=next_subtask_cap_group, cap_agent_threads=cap_agent_threads)
-                                                    result = aciton.get('result', "FAIL")
-                                                    context = aciton.get('context', "No context provided.")
+                                                    action = self.capability_agents_processor(step=next_step, cap_group=next_subtask_cap_group, cap_agent_threads=cap_agent_threads)
+                                                    result = action.get('result', "FAIL")
+                                                    context = action.get('context', "No context provided.")
                                                     assert result == 'SUCCESS' or result == 'FAIL', f"Unknown result: {result}" 
                                                     
                                                     self.update_context_tree(
@@ -1839,7 +1839,7 @@ class Agency:
                                                         task_id = next_task_id,
                                                         subtask_id = next_subtask_id,
                                                         step_id = next_step_id,
-                                                        action = aciton
+                                                        action = action,
                                                     )
 
                                                     if result == "SUCCESS":
@@ -1850,7 +1850,7 @@ class Agency:
                                                         step_error_flag = True
                                                         step_error_message = context
 
-                                                        self.update_error(error_id = error_id, error = context, step = next_step)
+                                                        self.update_error(error_id = error_id, error = action, step = next_step)
 
                                                 except Exception as e:
                                                     # 更新error
