@@ -10,7 +10,7 @@ from agents.cap_group_agents.VPC_network.tools import (
 from agents.tools.read_json_file.ReadJsonFile import ReadJsonFile
 
 _name = "VPC_vpc_agent"
-_manager_name = "VPC_manager"
+_manager_name = "VPC_network_manager"
 _description = """
 负责华为云VPC管理任务，包括创建VPC、查询VPC、查询VPC列表、更新VPC、删除VPC。
 """
