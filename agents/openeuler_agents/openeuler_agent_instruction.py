@@ -31,7 +31,7 @@ def openeuler_agent_instruction(_name, _description, _tool_instuction = None):
 
 ### step 3. 调用工具并获取结果
 
-当生成命令行后，你需要将其传递给`SSHExecuteCommand`工具来执行，并获取执行结果。
+当生成命令行后，你需要将命令行以及服务器地址、服务器用户名、服务器密码传递给`SSHExecuteCommand`工具来执行，并获取执行结果。
 请注意，你必须**执行工具`SSHExecuteCommand`**，而不能直接返回结果。
 
 ### step 4. 返回结果
@@ -41,6 +41,7 @@ def openeuler_agent_instruction(_name, _description, _tool_instuction = None):
 {{
     "tool": "...",
     "command": "...",
+    "command_result": "...",
     "result": "...",
     "context": "..."
 }}

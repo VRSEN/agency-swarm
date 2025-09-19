@@ -1,12 +1,9 @@
 from agency_swarm import Agent
-from agents.cap_group_agents.EVS_group.cap_agents.EVS_clouddiskt_agent.tools import (
-    ReadAPI
+from agents.cap_group_agents.OS_group.cap_agents.OS_agent.tools import (
+    ReadAPI, GetEndPointAndProjectID, AskManagerParams
 )
 from agents.cap_group_agents.cap_agent_instruction import cap_agent_instruction
 from agents.basic_agents.job_agent.tools.CallAPI import CallAPI
-from agents.cap_group_agents.EVS_group.tools import (
-    GetEndPointAndProjectID, AskManagerParams
-)
 
 _name = "OS_agent"
 _manager_name = "OS_manager"
