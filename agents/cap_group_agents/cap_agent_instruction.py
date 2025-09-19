@@ -10,7 +10,16 @@ def cap_agent_instruction(_name, _description, _manager_name):
 
     ### step 1. 接收并处理用户需求:
     
-    你会接收到用户发来的请求，请你记忆用户初始请求，如果是与你职责无关的请求，直接按照json格式返回：{{"result":"FAIL","context":"没有可以执行的api"}}。
+    你收到用户发来的请求后，需要先通过`ReadJsonFile`从context_tree.json中读取已经完成的所有过程的上下文信息。
+    获取以上信息后，你还需要判断其中已经完成任务的api调用结果是否与本次任务有关，如果有关，请你用`ReadJsonFile`读取相应的api调用结果文件的内容，
+
+    若该请求能够通过上下文信息**严格**判断出之前已经完成过，你可以直接输出:
+    {{
+        "result": "SUCCESS",
+        "context": "(填写原因)"
+    }}
+
+    获取到这些信息后，请你记忆用户初始请求，如果是与你职责无关的请求，直接按照json格式返回：{{"result":"FAIL","context":"没有可以执行的api"}}。
     
     你需要调用`ReadAPI`，思考是否有符合用户需求的api，如果没有符合用户需求的api，请直接返回：{{"result":"FAIL","context":"没有可以执行的api"}}
     

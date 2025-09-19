@@ -43,7 +43,7 @@ def openeuler_agent_instruction(_name, _description, _tool_instuction = None):
     "command": "...",
     "command_result": "...",
     "result": "...",
-    "context": "..."
+    "context": "(填写原因)""
 }}
 
 其中"result"和"context"需要填入工具的返回结果中相同字段的内容。

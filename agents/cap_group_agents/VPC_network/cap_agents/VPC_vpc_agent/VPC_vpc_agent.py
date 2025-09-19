@@ -7,9 +7,10 @@ from agents.basic_agents.job_agent.tools.CallAPI import CallAPI
 from agents.cap_group_agents.VPC_network.tools import (
     GetEndPointAndProjectID, AskManagerParams
 )
+from agents.tools.read_json_file.ReadJsonFile import ReadJsonFile
 
 _name = "VPC_vpc_agent"
-_manager_name = "VPC_manager"
+_manager_name = "VPC_network_manager"
 _description = """
 负责华为云VPC管理任务，包括创建VPC、查询VPC、查询VPC列表、更新VPC、删除VPC。
 """
@@ -20,7 +21,7 @@ current_path = os.path.abspath(os.path.dirname(__file__))
 _instruction = cap_agent_instruction(_name, _description, _manager_name)
 
 
-_tools = [ReadAPI.ReadAPI, CallAPI, GetEndPointAndProjectID.GetEndPointAndProjectID, AskManagerParams.AskManagerParams]
+_tools = [ReadAPI.ReadAPI, CallAPI, GetEndPointAndProjectID.GetEndPointAndProjectID, AskManagerParams.AskManagerParams, ReadJsonFile]
 
 _file_folder = ""
 

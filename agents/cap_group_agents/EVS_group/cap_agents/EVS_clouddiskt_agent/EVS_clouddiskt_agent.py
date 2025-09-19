@@ -7,6 +7,7 @@ from agents.basic_agents.job_agent.tools.CallAPI import CallAPI
 from agents.cap_group_agents.EVS_group.tools import (
     GetEndPointAndProjectID, AskManagerParams   
 )
+from agents.tools.read_json_file.ReadJsonFile import ReadJsonFile
 
 _name = "EVS_clouddiskt_agent"
 _manager_name = "EVS_manager"
@@ -19,7 +20,7 @@ import os
 current_path = os.path.abspath(os.path.dirname(__file__))
 _instruction = cap_agent_instruction(_name,_description,_manager_name)
 
-_tools = [ReadAPI.ReadAPI, CallAPI, GetEndPointAndProjectID.GetEndPointAndProjectID, AskManagerParams.AskManagerParams]
+_tools = [ReadAPI.ReadAPI, CallAPI, GetEndPointAndProjectID.GetEndPointAndProjectID, AskManagerParams.AskManagerParams,ReadJsonFile]
 
 _file_folder = ""
 
