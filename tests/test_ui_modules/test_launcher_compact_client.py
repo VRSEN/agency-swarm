@@ -1,6 +1,14 @@
 import pytest
 
 from agency_swarm.ui.demos.launcher import TerminalDemoLauncher
+from agency_swarm.utils.thread import ThreadManager
+
+
+@pytest.fixture(autouse=True)
+def _reset_launcher_state():
+    TerminalDemoLauncher.set_current_chat_id(None)
+    yield
+    TerminalDemoLauncher.set_current_chat_id(None)
 
 
 class _FakeResponses:
@@ -20,6 +28,16 @@ class _FakeClient:
     def __init__(self):
         self.calls: list[dict] = []
         self.responses = _FakeResponses(self.calls)
+
+
+class _FailingResponses:
+    def create(self, *_, **__):
+        raise RuntimeError("network down")
+
+
+class _FailingClient:
+    def __init__(self):
+        self.responses = _FailingResponses()
 
 
 class _FakeAgent:
@@ -43,6 +61,9 @@ class _Thread:
     def get_all_messages(self):
         return list(self.messages)
 
+    def replace_messages(self, msgs):
+        self.messages = list(msgs)
+
     def clear(self):
         self.messages.clear()
 
@@ -54,6 +75,11 @@ class _Agency:
     def __init__(self, agent):
         self.entry_points = [agent]
         self.thread_manager = _Thread()
+
+
+class _SessionAgency:
+    def __init__(self) -> None:
+        self.thread_manager = ThreadManager()
 
 
 @pytest.mark.asyncio
@@ -82,6 +108,26 @@ async def test_compact_uses_entry_agent_client_sync_and_model_passthrough():
     assert "<conversation_json>" in last["input"] and "</conversation_json>" in last["input"]
 
 
+@pytest.mark.asyncio
+async def test_compact_failure_surfaces_error_and_preserves_state(monkeypatch):
+    failing_agent = _FakeAgent(name="Coordinator", model="anthropic/model", client=_FailingClient())
+    agency = _Agency(failing_agent)
+
+    original_messages = agency.thread_manager.get_all_messages()
+    TerminalDemoLauncher.set_current_chat_id("chat_existing")
+
+    with pytest.raises(RuntimeError) as ei:
+        await TerminalDemoLauncher.compact_thread(agency, [])
+
+    # Error is surfaced with context and original cause
+    assert "/compact failed:" in str(ei.value)
+    assert "network down" in str(ei.value)
+
+    # State is preserved (no chat switch, no message mutation)
+    assert TerminalDemoLauncher.get_current_chat_id() == "chat_existing"
+    assert agency.thread_manager.get_all_messages() == original_messages
+
+
 def test_resume_interactive_list_and_select(tmp_path, monkeypatch):
     # Prepare fake chats dir
     TerminalDemoLauncher.set_chats_dir(str(tmp_path))
@@ -93,6 +139,9 @@ def test_resume_interactive_list_and_select(tmp_path, monkeypatch):
 
         def get_all_messages(self):
             return list(self._msgs)
+
+        def replace_messages(self, msgs):
+            self._msgs = list(msgs)
 
         def clear(self):
             self._msgs.clear()
@@ -171,3 +220,43 @@ def test_resume_interactive_list_and_select(tmp_path, monkeypatch):
         idx = json.load(f)
     assert "chat_a" in idx and "chat_b" in idx
     assert idx["chat_a"].get("summary") == "hey bro"
+
+
+def test_start_new_chat_switches_context_without_touching_saved_history(tmp_path):
+    TerminalDemoLauncher.set_chats_dir(str(tmp_path))
+
+    agency = _SessionAgency()
+    agency.thread_manager.add_message({"role": "user", "content": "hello"})
+    agency.thread_manager.add_message({"role": "assistant", "content": "hi"})
+
+    original_chat_id = "chat_original"
+    TerminalDemoLauncher.save_current_chat(agency, original_chat_id)
+
+    existing_files = {path.name for path in tmp_path.iterdir()}
+
+    next_chat_id = TerminalDemoLauncher.start_new_chat(agency)
+
+    assert next_chat_id != original_chat_id
+    assert TerminalDemoLauncher.get_current_chat_id() == next_chat_id
+    assert agency.thread_manager.get_all_messages() == []
+    assert {path.name for path in tmp_path.iterdir()} == existing_files
+
+
+def test_load_chat_sets_current_id_without_creating_new_files(tmp_path):
+    TerminalDemoLauncher.set_chats_dir(str(tmp_path))
+
+    seed_agency = _SessionAgency()
+    seed_agency.thread_manager.add_message({"role": "user", "content": "hello"})
+    seed_agency.thread_manager.add_message({"role": "assistant", "content": "hi"})
+
+    chat_id = "chat_existing"
+    TerminalDemoLauncher.save_current_chat(seed_agency, chat_id)
+
+    existing_files = {path.name for path in tmp_path.iterdir()}
+
+    resumed = _SessionAgency()
+    assert TerminalDemoLauncher.load_chat(resumed, chat_id)
+
+    assert [m["content"] for m in resumed.thread_manager.get_all_messages()] == ["hello", "hi"]
+    assert TerminalDemoLauncher.get_current_chat_id() == chat_id
+    assert {path.name for path in tmp_path.iterdir()} == existing_files

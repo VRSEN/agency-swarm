@@ -102,6 +102,7 @@ def test_input_guardrail_guidance_and_persistence(input_guardrail_agency: Agency
     assert "prefix your request with 'Support:'" in system_msgs[-1].get("content", "")
     assert system_msgs[-1].get("message_origin") == "input_guardrail_message"
 
+
 def test_input_guardrail_error(input_guardrail_agency: Agency):
     agency = input_guardrail_agency
     agency.agents["InputGuardrailAgent"].throw_input_guardrail_error = True

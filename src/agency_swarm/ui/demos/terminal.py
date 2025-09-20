@@ -1,13 +1,14 @@
 from collections.abc import Generator
 
+from agency_swarm.agency.core import Agency
 
-def start_terminal(agency_instance, show_reasoning: bool = False) -> None:
+
+def start_terminal(agency_instance: Agency, show_reasoning: bool = False) -> None:
     """Run the terminal demo: input loop, slash commands, and streaming output."""
     import asyncio
     import logging
     import os
     import re
-    import uuid
 
     from ..core.console_event_adapter import ConsoleEventAdapter
 
@@ -22,7 +23,7 @@ def start_terminal(agency_instance, show_reasoning: bool = False) -> None:
     if not recipient_agents:
         raise ValueError("Cannot start terminal demo without entry points. Please specify at least one entry point.")
 
-    chat_id = f"run_demo_chat_{uuid.uuid4()}"
+    chat_id = TerminalDemoLauncher.start_new_chat(agency_instance)
 
     event_converter = ConsoleEventAdapter(show_reasoning=show_reasoning)
     event_converter.console.rule()
@@ -53,21 +54,57 @@ def start_terminal(agency_instance, show_reasoning: bool = False) -> None:
         args = parts[1:]
         if cmd in {"quit", "exit"}:
             cmd = "exit"
-        if cmd == "reset":
-            cmd = "clear"
         return cmd, args
 
     def _print_help() -> None:
         rows = [
             ("/help", "Show help"),
-            ("/clear (reset)", "Clear conversation history and free up context"),
-            ("/compact [instructions]", "Keep a summary in context (optional custom prompt)"),
+            ("/new", "Start a new chat"),
+            ("/compact [instructions]", "Summarize and continue"),
             ("/resume", "Resume a conversation"),
             ("/status", "Show current setup"),
             ("/exit (quit)", "Quit"),
         ]
         for cmd, desc in rows:
             event_converter.console.print(f"[cyan]{cmd}[/cyan]  {desc}")
+        event_converter.console.rule()
+
+    def _start_new_chat() -> None:
+        """Start a chat session with a fresh chat id."""
+        nonlocal chat_id
+        chat_id = TerminalDemoLauncher.start_new_chat(agency_instance)
+        event_converter.console.print("Started a new chat session.")
+        event_converter.console.rule()
+
+    def _resume_chat() -> None:
+        """Load a previously saved chat into context."""
+        nonlocal chat_id
+        chosen = TerminalDemoLauncher.resume_interactive(
+            agency_instance, input_func=input, print_func=event_converter.console.print
+        )
+        if chosen:
+            chat_id = chosen
+            event_converter.console.print(f"Resumed chat: {chat_id}")
+        event_converter.console.rule()
+
+    def _print_status() -> None:
+        """Display current agency metadata and defaults."""
+        _cwd = os.getcwd()
+        meta = {
+            "Agency": getattr(agency_instance, "name", None) or "Unnamed Agency",
+            "Entry Points": ", ".join([a.name for a in agency_instance.entry_points]) or "None",
+            "Default Recipient": current_default_recipient or "None",
+            "cwd": _cwd,
+        }
+        for k, v in meta.items():
+            event_converter.console.print(f"[bold]{k}[/bold]: {v}")
+        event_converter.console.rule()
+
+    async def _compact_chat(args: list[str]) -> None:
+        """Summarize the current conversation and continue with a fresh chat id."""
+        nonlocal chat_id
+        chat_id = await TerminalDemoLauncher.compact_thread(agency_instance, args)
+        event_converter.console.print("Conversation compacted. A system summary has been added.")
         event_converter.console.rule()
 
     async def handle_message(message: str) -> bool:  # noqa: C901
@@ -81,38 +118,17 @@ def start_terminal(agency_instance, show_reasoning: bool = False) -> None:
             if cmd == "help":
                 _print_help()
                 return False
-            if cmd in {"clear"}:
-                TerminalDemoLauncher.save_current_chat(agency_instance, chat_id)
-                agency_instance.thread_manager.clear()
-                chat_id = f"run_demo_chat_{uuid.uuid4()}"
-                event_converter.console.print("Started a new chat session.")
-                event_converter.console.rule()
+            if cmd in {"new"}:
+                _start_new_chat()
                 return False
             if cmd == "resume":
-                chosen = TerminalDemoLauncher.resume_interactive(
-                    agency_instance, input_func=input, print_func=event_converter.console.print
-                )
-                if chosen:
-                    chat_id = chosen
-                    event_converter.console.print(f"Resumed chat: {chat_id}")
-                event_converter.console.rule()
+                _resume_chat()
                 return False
             if cmd == "status":
-                _cwd = os.getcwd()
-                meta = {
-                    "Agency": getattr(agency_instance, "name", None) or "Unnamed Agency",
-                    "Entry Points": ", ".join([a.name for a in agency_instance.entry_points]) or "None",
-                    "Default Recipient": current_default_recipient or "None",
-                    "cwd": _cwd,
-                }
-                for k, v in meta.items():
-                    event_converter.console.print(f"[bold]{k}[/bold]: {v}")
-                event_converter.console.rule()
+                _print_status()
                 return False
             if cmd == "compact":
-                chat_id = await TerminalDemoLauncher.compact_thread(agency_instance, args)
-                event_converter.console.print("Conversation compacted. A system summary has been added.")
-                event_converter.console.rule()
+                await _compact_chat(args)
                 return False
             if cmd == "exit":
                 return True
@@ -134,7 +150,6 @@ def start_terminal(agency_instance, show_reasoning: bool = False) -> None:
             recipient_agent = current_default_recipient
 
         try:
-            response_buffer = ""
             recipient_agent_str: str = recipient_agent if recipient_agent is not None else current_default_recipient
             async for event in agency_instance.get_response_stream(
                 message=message,
@@ -142,8 +157,6 @@ def start_terminal(agency_instance, show_reasoning: bool = False) -> None:
                 chat_id=chat_id,
             ):
                 event_converter.openai_to_message_output(event, recipient_agent_str)
-                if hasattr(event, "data") and getattr(event.data, "type", None) == "response.output_text.delta":
-                    response_buffer += event.data.delta
             event_converter.console.rule()
             TerminalDemoLauncher.save_current_chat(agency_instance, chat_id)
         except Exception as e:
@@ -162,7 +175,7 @@ def start_terminal(agency_instance, show_reasoning: bool = False) -> None:
         if PromptSession is not None:
             command_help: dict[str, str] = {
                 "/help": "Show help",
-                "/clear": "Clear conversation and free context",
+                "/new": "Start a new chat",
                 "/compact": "Keep a summary in context",
                 "/resume": "Resume a conversation",
                 "/status": "Show current setup",
@@ -171,7 +184,7 @@ def start_terminal(agency_instance, show_reasoning: bool = False) -> None:
 
             command_display_overrides: dict[str, str] = {
                 "/exit": "/exit (quit)",
-                "/clear": "/clear (reset)",
+                "/new": "/new",
                 "/compact": "/compact [instructions]",
                 "/resume": "/resume",
             }
