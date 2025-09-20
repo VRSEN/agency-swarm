@@ -1,10 +1,12 @@
 import json
-import uuid
-from typing import Any
+import logging
+from typing import Any, cast
 
-from openai import OpenAI
+from agents import TResponseInputItem
 
 from agency_swarm import Agency
+
+logger = logging.getLogger(__name__)
 
 
 async def compact_thread(agency_instance: Agency, args: list[str]) -> str:
@@ -56,12 +58,11 @@ async def compact_thread(agency_instance: Agency, args: list[str]) -> str:
         model_name = None
     model_name = model_name or "gpt-5-mini"
 
-    # Client reuse
-    try:
-        entry_agent = (getattr(agency_instance, "entry_points", []) or [None])[0]
-        client = getattr(entry_agent, "client_sync", OpenAI())
-    except Exception:
-        client = OpenAI()
+    # Client reuse; require an explicit synchronous client on the entry agent.
+    if not agency_instance.entry_points:
+        raise RuntimeError("Agency has no entry points; configure at least one entry agent.")
+    entry_agent = agency_instance.entry_points[0]
+    client = entry_agent.client_sync
 
     # Minimal reasoning for OpenAI models
     is_openai_model = isinstance(model_name, str) and ("gpt" in model_name.lower())
@@ -69,19 +70,14 @@ async def compact_thread(agency_instance: Agency, args: list[str]) -> str:
         resp = client.responses.create(model=model_name, input=final_prompt, reasoning={"effort": "minimal"})
     else:
         resp = client.responses.create(model=model_name, input=final_prompt)
-    summary_text = getattr(resp, "output_text", "") or str(resp)
+    if not hasattr(resp, "output_text"):
+        raise RuntimeError("Client response missing 'output_text' attribute.")
+    summary_text = resp.output_text  # type: ignore[attr-defined]
 
-    # Replace thread with summary
-    agency_instance.thread_manager.clear()
-    chat_id = f"run_demo_chat_{uuid.uuid4()}"
     prefixed = "System summary (generated via /compact to keep context comprehensive and focused).\n\n" + summary_text
-    agency_instance.thread_manager.add_message(
-        {"role": "system", "content": prefixed, "message_origin": "thread_summary"}  # type: ignore[arg-type]
-    )
+    chat_id = TerminalDemoLauncher.start_new_chat(agency_instance)
 
-    # Persist
-    TerminalDemoLauncherRef = __import__(
-        "agency_swarm.ui.demos.launcher", fromlist=["TerminalDemoLauncher"]
-    ).TerminalDemoLauncher
-    TerminalDemoLauncherRef.save_current_chat(agency_instance, chat_id)
+    summary_message: dict[str, Any] = {"role": "system", "content": prefixed, "message_origin": "thread_summary"}
+    agency_instance.thread_manager.replace_messages(cast(list[TResponseInputItem], [summary_message]))
+
     return chat_id

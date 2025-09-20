@@ -4,44 +4,20 @@ from agency_swarm.ui.demos.launcher import TerminalDemoLauncher
 from examples.interactive.terminal_demo import create_demo_agency
 
 
-class _Thread:
-    def __init__(self):
-        self.cleared = False
-        self.messages = [
-            {"role": "user", "content": "hello"},
-            {"role": "assistant", "agent": "bot", "content": "hi"},
-        ]
-
-    def get_all_messages(self):
-        return self.messages
-
-    def clear(self):
-        self.cleared = True
-        self.messages.clear()
-
-    def add_message(self, m):
-        self.messages.append(m)
-
-
-class _Agency:
-    # Minimal agency shim using the public agency API (no stubs/mocks of model calls)
-    def __init__(self):
-        self.thread_manager = _Thread()
-
-    async def get_response(self, message: str, run_config=None):
-        # Use the agency API shape: return has final_output
-        class _R:
-            final_output = "summary"
-
-        return _R()
-
-
 @pytest.mark.asyncio
 async def test_compact_integration_minimal():
     agency = create_demo_agency()
     # Seed a tiny conversation
     agency.thread_manager.add_message({"role": "user", "content": "hello"})
     agency.thread_manager.add_message({"role": "assistant", "agent": "bot", "content": "hi"})
+
+    TerminalDemoLauncher.set_current_chat_id("chat_integration_original")
+
+    class _Resp:
+        output_text = "integration summary"
+
+    entry_agent = agency.entry_points[0]
+    entry_agent.client_sync.responses.create = lambda **kwargs: _Resp()  # type: ignore[attr-defined]
 
     chat_id = await TerminalDemoLauncher.compact_thread(agency, [])
     assert chat_id.startswith("run_demo_chat_")

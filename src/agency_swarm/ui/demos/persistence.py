@@ -207,43 +207,38 @@ def save_current_chat(agency_instance: Any, chat_id: str) -> None:
     update_index(chat_id, messages, branch)
 
 
+def _read_chat_messages(chat_id: str) -> list[dict[str, Any]]:
+    path = Path(chat_file_path(chat_id))
+    if not path.exists():
+        return []
+
+    with open(path) as f:
+        payload = json.load(f)
+
+    if isinstance(payload, dict):
+        items = payload.get("items")
+        if isinstance(items, list):
+            return items
+    elif isinstance(payload, list):
+        return payload
+
+    raise ValueError("Chat payload must be a list of messages.")
+
+
 def load_chat(agency_instance: Any, chat_id: str) -> bool:
-    target = cast(Any, agency_instance)
-    previous_chat_id = getattr(target, "current_chat_id", None)
-    target.current_chat_id = chat_id
-    try:
-        with open(chat_file_path(chat_id)) as f:
-            payload = json.load(f)
-        if isinstance(payload, dict) and isinstance(payload.get("items"), list):
-            messages = payload["items"]
-        else:
-            messages = payload if isinstance(payload, list) else None
-        if not isinstance(messages, list):
-            raise ValueError("Chat payload must be a list of messages.")
+    """Load messages from disk for a given chat_id.
 
-        thread_manager = agency_instance.thread_manager
-        clear = getattr(thread_manager, "clear", None)
-        add_many = getattr(thread_manager, "add_messages", None)
-        add_one = getattr(thread_manager, "add_message", None)
-
-        if callable(clear):
-            clear()
-        if callable(add_many):
-            add_many(messages)
-        elif callable(add_one):
-            for message in messages:
-                add_one(message)
-        else:
-            raise AttributeError("ThreadManager must provide a way to load messages.")
-
-        persist = getattr(thread_manager, "persist", None)
-        if callable(persist):
-            persist()
-        return True
-    except Exception:
-        if previous_chat_id is None:
-            if hasattr(target, "current_chat_id"):
-                del target.current_chat_id
-        else:
-            target.current_chat_id = previous_chat_id
+    Returns False if the chat file does not exist. Returns True after
+    successfully loading (including the edge case of an existing file with
+    zero messages).
+    """
+    path = Path(chat_file_path(chat_id))
+    if not path.exists():
         return False
+    try:
+        messages = _read_chat_messages(chat_id)
+    except Exception:
+        return False
+
+    agency_instance.thread_manager.replace_messages(messages)
+    return True

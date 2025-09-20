@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 def _stdio_server_path() -> str:
     # Use the test stdio server script bundled in tests/data/scripts
     this_dir = os.path.dirname(os.path.abspath(__file__))
-    return os.path.abspath(os.path.join(this_dir, "..", "data", "scripts", "stdio_server.py"))
+    return os.path.abspath(os.path.join(this_dir, "..", "..", "data", "scripts", "stdio_server.py"))
 
 
 def _agency_factory() -> Agency:

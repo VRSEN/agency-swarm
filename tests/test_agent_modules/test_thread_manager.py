@@ -155,3 +155,16 @@ def test_thread_manager_pickleable():
     # Verify the data is preserved
     assert isinstance(unpickled_manager, ThreadManager)
     assert unpickled_manager._store.messages == messages
+
+
+def test_replace_messages_skips_save_callback():
+    captured: list[list[dict[str, object]]] = []
+    manager = ThreadManager(save_threads_callback=lambda msgs: captured.append(list(msgs)))
+
+    manager.add_message({"role": "user", "content": "seed"})
+    captured.clear()
+
+    manager.replace_messages([{"role": "assistant", "content": "new"}])
+
+    assert captured == []
+    assert [msg["content"] for msg in manager.get_all_messages()] == ["new"]

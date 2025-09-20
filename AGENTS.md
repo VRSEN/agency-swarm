@@ -57,6 +57,9 @@ Prime Directive: Rigorously compare every user request with patterns established
 # Run only the relevant tests first (specific file/test)
 `uv run pytest tests/integration/ -v`
 
+# Format code before running CI (auto-fixes style)
+`make format`
+
 # Run the full suite (`make ci`) before PR/merge or when verifying repo-wide health
 `make ci`
 
@@ -71,13 +74,15 @@ After each tool call or code edit, validate the result in 1-2 lines and proceed 
 - Misstating test outcomes
 - Skipping any workflow safety step
 - Introducing functional changes during refactoring
+- Adding silent fallbacks, legacy shims, or workarounds. Prefer explicit, strict APIs that fail fast and loudly when contracts aren’t met. Do not implement multi-path behavior (e.g., "try A then B").
 
 ## 🔴 API KEYS
 - Always load environment via `.env` (with python-dotenv or `source .env`). Resolve and rerun tests on key errors.
 
 ## Common Commands
-`make ci`      # Install, lint, type-check (mypy), test, check coverage
-`make check`   # The same but without tests
+`make format`  # Auto-format and apply safe lint fixes
+`make check`   # Lint + type-check (no tests)
+`make ci`      # Install deps, lint, type-check, tests, coverage
 
 ### Execution Environment
 - Use project virtual environments (`uv run`, Make). Never use global interpreters or absolute paths.
@@ -192,7 +197,7 @@ Avoid growing already large files. Prefer extracting focused modules. If you mus
 - Commit messages must cover what changed
 - Before composing a commit message, run `git diff --cached | cat` and base the message on that diff only.
 - Keep subject concise (<72 chars), imperative, and scoped (e.g., `examples: response_validation`).
- - Before any potentially destructive command (including commit, push, reset, rebase, force operations, file deletions, or mass edits), STOP and clearly explain the intended changes and impact, then obtain the user's explicit approval before proceeding. Treat committing as destructive in this repo.
+- Before any potentially destructive command (including commit, push, reset, rebase, force operations, file deletions, or mass edits), STOP and clearly explain the intended changes and impact, then obtain the user's explicit approval before proceeding. Treat committing as destructive in this repo.
 
 ### Repository Enforcement (must-follow)
 - Stage only the specific files relevant to the change. There may be other changes, check `git status`

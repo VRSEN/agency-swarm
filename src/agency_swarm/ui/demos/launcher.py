@@ -1,20 +1,15 @@
-from typing import Any, cast
+import uuid
+from typing import Any
 
 from agency_swarm import Agency
 
 from .persistence import (
-    chat_file_path as _chat_file_path,
     format_relative as _format_relative,
-    get_chats_dir as _get_chats_dir,
     index_file_path as _index_file_path,
     list_chat_records as _list_chat_records,
     load_chat as _load_chat,
-    load_index as _load_index,
     save_current_chat as _save_current_chat,
-    save_index as _save_index,
     set_chats_dir as _set_chats_dir,
-    summarize_messages as _summarize_messages,
-    update_index as _update_index,
 )
 
 """Terminal demo launcher.
@@ -24,8 +19,6 @@ This module focuses on terminal interaction only. Copilot demo is in _copilot.py
 
 
 class TerminalDemoLauncher:
-    # Directory for local chat persistence; override via set_chats_dir or env
-    CHATS_DIR: str | None = None
     # Tracks the currently active chat id
     CURRENT_CHAT_ID: str | None = None
     # Configurable prompt used by /compact. Override via TerminalDemoLauncher.set_compact_prompt(...)
@@ -63,8 +56,12 @@ class TerminalDemoLauncher:
     @staticmethod
     def set_chats_dir(path: str) -> None:
         """Set directory where chats are stored as JSON files."""
-        TerminalDemoLauncher.CHATS_DIR = str(path)
-        _set_chats_dir(TerminalDemoLauncher.CHATS_DIR)
+        _set_chats_dir(str(path))
+
+    @staticmethod
+    def generate_chat_id() -> str:
+        """Create a unique chat id for new sessions."""
+        return f"run_demo_chat_{uuid.uuid4()}"
 
     @staticmethod
     def get_current_chat_id() -> str | None:
@@ -72,63 +69,40 @@ class TerminalDemoLauncher:
         return TerminalDemoLauncher.CURRENT_CHAT_ID
 
     @staticmethod
-    def set_current_chat_id(agency_instance: Agency | None, chat_id: str | None) -> None:
-        """Synchronize the active chat id between the launcher and the agency instance."""
+    def set_current_chat_id(chat_id: str | None) -> None:
+        """Set the active chat id for the launcher."""
         TerminalDemoLauncher.CURRENT_CHAT_ID = chat_id
-        if agency_instance is None:
-            return
-        target = cast(Any, agency_instance)
-        if chat_id is None:
-            if hasattr(target, "current_chat_id"):
-                del target.current_chat_id
-        else:
-            target.current_chat_id = chat_id
-
-    @staticmethod
-    def _get_chats_dir() -> str:
-        if TerminalDemoLauncher.CHATS_DIR:
-            _set_chats_dir(TerminalDemoLauncher.CHATS_DIR)
-        return _get_chats_dir()
-
-    @staticmethod
-    def _chat_file_path(chat_id: str) -> str:
-        return _chat_file_path(chat_id)
 
     @staticmethod
     def _index_file_path() -> str:
         return _index_file_path()
 
     @staticmethod
-    def _load_index() -> dict[str, dict[str, Any]]:
-        return _load_index()
-
-    @staticmethod
-    def _save_index(index: dict[str, dict[str, Any]]) -> None:
-        _save_index(index)
-
-    @staticmethod
-    def _update_index(chat_id: str, messages: list[dict[str, Any]], branch: str) -> None:
-        _update_index(chat_id, messages, branch)
-
-    @staticmethod
     def save_current_chat(agency_instance: Agency, chat_id: str) -> None:
         """Persist current flat messages to disk for the given chat_id."""
-        TerminalDemoLauncher.set_current_chat_id(agency_instance, chat_id)
         _save_current_chat(agency_instance, chat_id)
 
     @staticmethod
     def load_chat(agency_instance: Agency, chat_id: str) -> bool:
         """Load messages for chat_id into agency thread manager. Returns True if loaded."""
-        previous_chat_id = getattr(agency_instance, "current_chat_id", None)
-        TerminalDemoLauncher.set_current_chat_id(agency_instance, chat_id)
+        prev = TerminalDemoLauncher.CURRENT_CHAT_ID
         loaded = _load_chat(agency_instance, chat_id)
         if not loaded:
-            TerminalDemoLauncher.set_current_chat_id(agency_instance, previous_chat_id)
-        return loaded
+            TerminalDemoLauncher.set_current_chat_id(prev)
+            return False
+        TerminalDemoLauncher.set_current_chat_id(chat_id)
+        return True
 
     @staticmethod
-    def _summarize_messages(messages: list[dict[str, Any]]) -> str:
-        return _summarize_messages(messages)
+    def start_new_chat(agency_instance: Agency, chat_id: str | None = None) -> str:
+        """Switch the launcher and agency to a fresh chat id with an empty thread."""
+        new_chat_id = chat_id or TerminalDemoLauncher.generate_chat_id()
+        TerminalDemoLauncher.set_current_chat_id(new_chat_id)
+
+        # Reset the thread store
+        agency_instance.thread_manager.replace_messages([])
+
+        return new_chat_id
 
     @staticmethod
     def _format_relative(ts_iso: str | None) -> str:
@@ -233,7 +207,12 @@ class TerminalDemoLauncher:
     async def compact_thread(agency_instance: Agency, args: list[str]) -> str:
         from .compact import compact_thread as _compact
 
-        return await _compact(agency_instance, args)
+        prev = TerminalDemoLauncher.get_current_chat_id()
+        try:
+            return await _compact(agency_instance, args)
+        except Exception as e:
+            TerminalDemoLauncher.set_current_chat_id(prev)
+            raise RuntimeError(f"/compact failed: {e}") from e
 
     @staticmethod
     def start(agency_instance: Agency, show_reasoning: bool = False) -> None:
