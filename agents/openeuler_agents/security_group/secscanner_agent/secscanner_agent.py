@@ -16,9 +16,8 @@ _tool_instruction = """你可以使用secscanner扫描系统漏洞，使用方�
 `secscanner check cve_t`:   对照漏洞数据库，检查系统指定软件包的CVE漏洞
 `secscanner check basic`: 识别当前系统中基础的安全问题
 `secscanner fix basic`: 修复当前系统中基础的安全问题
-`secscanner --version`: 通过查看版本的方式确认secscanner工具已经安装情况
 注意：
-在使用`secscanner check cve_t`时，需要先在`/etc/secScanner/secscanner.cfg`配置文件中保留其他配置，仅修改`rpm_assembly =`后面指定需要扫描的包名，多个包名使用空格分隔，例如：`rpm_assembly =sambai redis`。
+2. 使用`secscanner check all`时，产生的html报告文件在`/var/log/secScanner/html_report/`目录下
 """
 
 import os

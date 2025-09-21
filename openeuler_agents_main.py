@@ -174,7 +174,7 @@ def main():
             "控制访问能力群": [permissions_agent_instance, network_agent_instance,user_agent_instance,basic_agent_instance],
         }
         text = """
-       本机已经安装`secScanner`工具，请利用该工具扫描本机的CVE漏洞
+       直接使用已安装的`secScanner`工具扫描本机的CVE漏洞
         """
 
         files_path = os.path.join("agents", "files")
