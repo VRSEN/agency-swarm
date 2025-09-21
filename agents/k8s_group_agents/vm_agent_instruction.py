@@ -20,13 +20,13 @@ def vm_agent_instruction(_name, _description):
 若该请求能够通过上下文信息**严格**判断出之前已经完成过，你可以直接输出:
 {{
     "result": "SUCCESS",
-    "reason": "(填写原因)"
+    "context": "(填写原因)"
 }}
 
 若该请求无法使用命令行完成，你需要直接输出:
 {{
     "result": "FAIL",
-    "reason": "(填写原因)"
+    "context": "(填写原因)"
 }}
 
 ### step 3. 调用工具并获取结果
@@ -41,11 +41,12 @@ def vm_agent_instruction(_name, _description):
 {{
     "tool": "...",
     "command": "...",
+    "command_result": "...",
     "result": "...",
-    "reason": "..."
+    "context": "(填写原因)"
 }}
 
-其中"result"和"reason"需要填入工具的返回结果中相同字段的内容。
-若你多次执行工具，只输出最终的总的result和reason。"""
+其中"result"和"context"需要填入工具的返回结果中相同字段的内容。
+若你多次执行工具，只输出最终的总的result和context。"""
 
     return _instruction

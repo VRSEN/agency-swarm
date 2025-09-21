@@ -1,9 +1,11 @@
-import paramiko
 import select
 import time
 
+import paramiko
+
+
 class SSHCommandExecutor:
-    def __init__(self,hostname,username,password,port = 22,timeout=1000):
+    def __init__(self, hostname, username, password, port=22, timeout=10):
         self.client = paramiko.SSHClient()
         self.hostname = hostname
         self.port = port
@@ -18,7 +20,13 @@ class SSHCommandExecutor:
             return True
         try:
             print(f"\n[DEBUG]正在连接到{self.hostname}:{self.port}...")
-            self.client.connect(self.hostname, port=self.port, username=self.username, password=self.password, timeout=self.timeout)
+            self.client.connect(
+                self.hostname,
+                port=self.port,
+                username=self.username,
+                password=self.password,
+                timeout=self.timeout,
+            )
             print(f"\n[DEBUG]成功连接到 {self.hostname}:{self.port}.")
             self._is_connected = True
             return True
@@ -35,11 +43,10 @@ class SSHCommandExecutor:
             self.close()
             return False
 
-
     def execute_command_stream(self, command, buffer_size=4096):
         if not self._is_connected:
             if not self.connect():  # Attempt to connect, and check if it was successful
-                yield '__error__', "Failed to connect to SSH server."
+                yield "__error__", "Failed to connect to SSH server."
                 return  # If connection fails, stop execution
         stdout_data_full = []
         stderr_data_full = []
@@ -53,18 +60,22 @@ class SSHCommandExecutor:
                 if channel in rlist:
                     # 读取stdout
                     if channel.recv_ready():
-                        data = channel.recv(buffer_size).decode('utf-8', errors='ignore')
+                        data = channel.recv(buffer_size).decode(
+                            "utf-8", errors="ignore"
+                        )
                         if data:
                             stdout_data_full.append(data)  # 收集所有数据
-                            yield 'stdout', data  # 实时产出
+                            yield "stdout", data  # 实时产出
                             # print(f"STDOUT: {data}", end='')
 
                     # 读取stderr
                     if channel.recv_stderr_ready():
-                        data = channel.recv_stderr(buffer_size).decode('utf-8', errors='ignore')
+                        data = channel.recv_stderr(buffer_size).decode(
+                            "utf-8", errors="ignore"
+                        )
                         if data:
                             stderr_data_full.append(data)  # 收集所有数据
-                            yield 'stderr', data  # 实时产出
+                            yield "stderr", data  # 实时产出
                             # print(f"STDERR: {data}", end='')
 
                 # 检查命令是否完成
@@ -74,18 +85,35 @@ class SSHCommandExecutor:
 
                 # 如果没有数据可读且命令未完成，等待一小段时间
                 # 这个判断可以防止在命令执行过程中CPU空转过快
-                if not stdout_data_full and not stderr_data_full and \
-                        not channel.recv_ready() and not channel.recv_stderr_ready() and \
-                        not channel.exit_status_ready():
+                if (
+                    not stdout_data_full
+                    and not stderr_data_full
+                    and not channel.recv_ready()
+                    and not channel.recv_stderr_ready()
+                    and not channel.exit_status_ready()
+                ):
                     time.sleep(0.05)
 
             print(f"\n[DEBUG]命令 '{command}' 执行完成。")
             # 最后再追加一个结果，包含stdout，stderr和exit_status
-            yield '__final_status__', "".join(stdout_data_full), "".join(stderr_data_full), exit_status
+            yield (
+                "__final_status__",
+                "".join(stdout_data_full),
+                "".join(stderr_data_full),
+                exit_status,
+            )
 
         except Exception as e:
             print(f"发生未知错误：{e}")
-            yield '__error__', f"An unknown error occurred: {e}"
+            yield "__error__", f"An unknown error occurred: {e}"
+
+    def truncate_and_concatenate(self, text):
+        if len(text) <= 20000:  # 如果字符串长度小于或等于20000，则直接返回原字符串
+            return text
+        else:
+            first_part = text[:10000]
+            last_part = text[-10000:]
+            return first_part + "\n...\n" + last_part
 
     def execute_command_common(self, command, buffer_size=4096):
         full_stdout = []
@@ -96,24 +124,33 @@ class SSHCommandExecutor:
         data_generator = self.execute_command_stream(command, buffer_size)
         try:
             for data_type, *data_content in data_generator:
-                if data_type == 'stdout':
+                if data_type == "stdout":
                     full_stdout.append(data_content[0])
-                elif data_type == 'stderr':
+                elif data_type == "stderr":
                     full_stderr.append(data_content[0])
-                elif data_type == '__final_status__':
+                elif data_type == "__final_status__":
                     # 获取最终结果
                     full_stdout_str, full_stderr_str, final_status = data_content
                     # 此时已经获取到最终结果，可以选择跳出循环，或者让生成器自然耗尽
                     break
-                elif data_type == '__error__':
+                elif data_type == "__error__":
                     print(f"操作发生错误: {data_content[0]}")
                     final_status = -1  # 表示一个客户端错误
                     break
         except Exception as e:
             print(f"处理生成器输出时发生异常: {e}")
             final_status = -2  # 表示一个处理错误
-        return {"full_stdout": ' '.join(full_stdout), "full_stderr": ' '.join(full_stderr), "final_status": final_status}
 
+        full_stdout_ret = " ".join(full_stdout)
+        full_stdout_ret = self.truncate_and_concatenate(full_stdout_ret)
+        full_stderr_ret = " ".join(full_stderr)
+        full_stderr_ret = self.truncate_and_concatenate(full_stderr_ret)
+
+        return {
+            "full_stdout": full_stdout_ret,
+            "full_stderr": full_stderr_ret,
+            "final_status": final_status,
+        }
 
     def close(self):
         """
@@ -130,12 +167,12 @@ class SSHCommandExecutor:
 
 if __name__ == "__main__":
     # 请替换为您的SSH服务器信息
-    HOSTNAME = "127.0.0.1"  # 例如: "192.168.1.100"
-    PORT = 8022
-    USERNAME = "tommenx"  # 例如: "user"x
-    PASSWORD = "test"  # 例如: "your_secret_password"
+    HOSTNAME = "XXX"  # 例如: "192.168.1.100"
+    PORT = 22
+    USERNAME = "root"  # 例如: "user"x
+    PASSWORD = "XXX"  # 例如: "your_secret_password"
 
-    exec = SSHCommandExecutor(HOSTNAME, USERNAME, PASSWORD,port=PORT)
+    exec = SSHCommandExecutor(HOSTNAME, USERNAME, PASSWORD, port=PORT)
     exec.connect()
     # # --- 测试用例 ---
     # run_test_command(exec,"echo 'Hello from SSH (yield)!'")
@@ -170,5 +207,7 @@ if __name__ == "__main__":
     # print(res)
     # res = exec.execute_command_common("cat /etc/shadow")
     # print(res)
-    res = exec.execute_command_common("for i in $(seq 1 3); do echo 'Line $i (yield)'; sleep 1; done")
+    res = exec.execute_command_common(
+        "for i in $(seq 1 3); do echo 'Line $i (yield)'; sleep 1; done"
+    )
     print(res)

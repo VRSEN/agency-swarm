@@ -1,9 +1,12 @@
 from agency_swarm import Agent
 from agents.cap_group_agents.NODE_group.cap_agents.NODE_lifecycle_agent.tools import (
-    AskManagerParams, ReadAPI, GetEndPointAndProjectID
+    ReadAPI
 )
 from agents.cap_group_agents.cap_agent_instruction import cap_agent_instruction
 from agents.basic_agents.job_agent.tools.CallAPI import CallAPI
+from agents.cap_group_agents.NODE_group.tools import (
+    GetEndPointAndProjectID, AskManagerParams       
+)
 
 _name = "NODE_lifecycle_agent"
 _manager_name = "NODE_manager"
