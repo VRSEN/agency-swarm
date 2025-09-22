@@ -83,8 +83,8 @@ def run_fastapi(
 
         # Import monitoring components if enabled
         if enable_monitoring:
-            from .fastapi_utils.monitoring_endpoints import create_monitoring_endpoints
             from .fastapi_utils.metrics_middleware import MetricsMiddleware, SecurityHeadersMiddleware
+            from .fastapi_utils.monitoring_endpoints import create_monitoring_endpoints
             from .fastapi_utils.production_logging import setup_production_logging
 
         if enable_rate_limiting:
@@ -98,11 +98,7 @@ def run_fastapi(
         logger.warning("App token is not set. Authentication will be disabled.")
     verify_token = get_verify_token(app_token)
 
-    app = FastAPI(
-        title="Agency Swarm API",
-        description="Multi-agent orchestration framework API",
-        version="1.0.2"
-    )
+    app = FastAPI(title="Agency Swarm API", description="Multi-agent orchestration framework API", version="1.0.2")
 
     # Setup logging if enabled
     if enable_logging:
@@ -113,10 +109,7 @@ def run_fastapi(
     if enable_monitoring:
         # Setup production logging
         setup_production_logging(
-            log_level="INFO",
-            log_dir="logs",
-            enable_file_logging=True,
-            enable_console_logging=True
+            log_level="INFO", log_dir="logs", enable_file_logging=True, enable_console_logging=True
         )
 
         app.add_middleware(MetricsMiddleware)

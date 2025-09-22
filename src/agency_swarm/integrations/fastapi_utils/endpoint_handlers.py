@@ -54,7 +54,9 @@ def make_response_endpoint(
                 file_ids_map = await upload_from_urls(request.file_urls)
                 combined_file_ids = (combined_file_ids or []) + list(file_ids_map.values())
             except Exception as e:
-                return JSONResponse(status_code=400, content={"error": f"Error downloading file from provided urls: {e}"})
+                return JSONResponse(
+                    status_code=400, content={"error": f"Error downloading file from provided urls: {e}"}
+                )
 
         agency_instance = agency_factory(load_threads_callback=load_callback)
         # Attach persistent MCP servers and ensure connections before handling the request
