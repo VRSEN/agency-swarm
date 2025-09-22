@@ -6,6 +6,10 @@ _name = "security_planner"
 
 _description = """
 负责安全能力群的步骤规划
+** 注意**
+1. ssh客户端不保存状态，规划的时候不要单独规划 **进入目录**步骤，应该与具体的执行步骤合并。
+2. 使用`secscanner`时检测特定软件包，需要在`/etc/secScanner/secscanner.cfg`配置文件增加软件包名称配置
+3. 使用`secscanner check all`时，产生的html报告文件在`/var/log/secScanner/html_report/`目录下
 """
 
 _group_name = "安全能力群"

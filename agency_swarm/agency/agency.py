@@ -2665,7 +2665,7 @@ class Agency:
         print(original_request)
 
         use_rag = os.getenv("USE_RAG")
-        if use_rag:
+        if use_rag=="True":
             rag_response, user_input = self.rag_flow(original_request, plan_num)
             message = message + "\n请参考运维手册内容作答：\n" + rag_response
             other_input = other_input + user_input

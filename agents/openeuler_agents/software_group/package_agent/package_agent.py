@@ -7,7 +7,16 @@ from agents.openeuler_agents.tools.SSHExecuteCommand import SSHExecuteCommand
 
 _name = "package_agent"
 _description = """
-负责使用yum等包管理器对软件包进行查询、安装、删除等操作。
+负责使用yum、rpm等包管理器对软件包进行查询、安装、删除等操作。
+具体示例如下
+1. 安装rpm包（请将<包名.rpm>替换为实际文件名）：
+   rpm -ivh <包名.rpm>
+2. 查询已安装的软件包（请将<软件包名>替换为实际名称）：
+   yum list installed | grep <软件包名>
+3. 卸载软件包（请将<软件包名>替换为实际名称）：
+   yum remove <软件包名>
+** 注意 **
+1. cd命令和其他命令一起执行，使用`&&`连接，例如：`cd repo && rpm -ivh`。
 """
 
 import os

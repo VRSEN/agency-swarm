@@ -5,17 +5,14 @@ from agents.tools.read_json_file.ReadJsonFile import ReadJsonFile
 from agents.openeuler_agents.tools.SSHExecuteCommand import SSHExecuteCommand
 
 
-_name = "repository_agent"
+_name = "basic_agent"
 _description = """
-负责使用git管理代码仓库的更改等操作，支持以下的操作命令：
-支持的命令：
-- `git clone <仓库地址>`：克隆指定的git仓库。例如：git clone https://github.com/redis/redis.git
-- `git format-patch -1 <commit-hash>`：根据指定的commit哈希生成patch文件。执行后会在当前目录生成类似 0001-commit-message.patch 的补丁文件，文件名包含序号和提交信息。
-- `git checkout <commit-hash>`：检测出特定commit是否存在
-注意：
-1. cd命令和git命令一起执行，使用`&&`连接，例如：`cd repo && git format-patch -1 <commit-hash>`。
-2. 请确保在执行 `git format-patch` 前已经进入了正确的仓库目录。
-3. 生成的补丁文件会保存在当前目录下。
+本Agent专用于管理OpenEuler系统的基础命令，包含但不限于目录、文件的操作：
+1. 文件和目录操作：查看、复制文件和目录
+
+例如：
+- 查看当前目录内容：ls -l
+- 查看文件的内容：cat <文件名>
 """
 
 import os

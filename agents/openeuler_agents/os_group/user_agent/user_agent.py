@@ -5,17 +5,24 @@ from agents.tools.read_json_file.ReadJsonFile import ReadJsonFile
 from agents.openeuler_agents.tools.SSHExecuteCommand import SSHExecuteCommand
 
 
-_name = "repository_agent"
+_name = "user_agent"
 _description = """
-负责使用git管理代码仓库的更改等操作，支持以下的操作命令：
-支持的命令：
-- `git clone <仓库地址>`：克隆指定的git仓库。例如：git clone https://github.com/redis/redis.git
-- `git format-patch -1 <commit-hash>`：根据指定的commit哈希生成patch文件。执行后会在当前目录生成类似 0001-commit-message.patch 的补丁文件，文件名包含序号和提交信息。
-- `git checkout <commit-hash>`：检测出特定commit是否存在
-注意：
-1. cd命令和git命令一起执行，使用`&&`连接，例如：`cd repo && git format-patch -1 <commit-hash>`。
-2. 请确保在执行 `git format-patch` 前已经进入了正确的仓库目录。
-3. 生成的补丁文件会保存在当前目录下。
+本Agent主要负责OpenEuler系统上的用户权限管理和进程控制，具体包括：
+
+1. 禁用用户登录权限：可通过修改相关配置文件来禁止指定用户的登录权限。例如：
+   - 在 /etc/passwd 文件中，将目标用户的 shell 修改为 /sbin/nologin 或 /bin/false。
+   - 在 /etc/ssh/sshd_config 文件中，添加或修改 DenyUsers 配置，禁止指定用户通过SSH登录。
+
+2. 终止指定用户创建的所有进程：可通过如下命令实现（请将<用户名>替换为实际用户名）：
+   - pkill -u <用户名>
+   - 或使用 kill 命令终止该用户的所有进程。
+
+3. 查询用户的登录状态和活动进程：可使用如下命令:
+   - ps -u <用户名>
+   - 不要使用 ps aux | grep <用户名> 
+      
+4. 支持其他用户相关的管理操作
+
 """
 
 import os

@@ -62,7 +62,6 @@ class SSHExecuteCommand(BaseTool):
             return {"tool":"SSHExecuteCommand", "command": self.command, "command_result":res, "result": "FAIL", "context": check_result}
         return {"tool":"SSHExecuteCommand", "command": self.command, "command_result":res, "result": "SUCCESS", "context": check_result}
 
-
-# if __name__=="__main__":
-#     tool = SSHExecuteCommand(command="for i in $(seq 1 3); do echo 'Line $i (yield)'; sleep 1; done")
-#     print(tool.run())
+if __name__=="__main__":
+    tool = SSHExecuteCommand(command="for i in $(seq 1 3); do echo 'Line $i (yield)'; sleep 1; done")
+    print(tool.run())
