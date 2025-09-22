@@ -12,9 +12,14 @@ from agents.openeuler_agents import (
     software_rag_optimizer,
     step_inspector,
 )
-from agents.openeuler_agents.os_group import os_planner, os_step_scheduler
+from agents.openeuler_agents.os_group import (
+    os_planner, 
+    os_step_scheduler,
+)
 from agents.openeuler_agents.os_group.network_agent import network_agent
 from agents.openeuler_agents.os_group.permissions_agent import permissions_agent
+from agents.openeuler_agents.os_group.basic_agent import basic_agent
+from agents.openeuler_agents.os_group.user_agent import user_agent
 from agents.openeuler_agents.security_group import (
     security_planner,
     security_step_scheduler,
@@ -201,6 +206,8 @@ def main():
         os_step_scheduler_instance = os_step_scheduler.create_agent()
         permissions_agent_instance = permissions_agent.create_agent()
         network_agent_instance = network_agent.create_agent()
+        user_agent_instance = user_agent.create_agent()
+        basic_agent_instance = basic_agent.create_agent()
 
         check_log_agent_instance = check_log_agent.create_agent()
 
@@ -468,6 +475,9 @@ def main():
             # [leader, repeater],
             # [leader, rander],
             # [leader, palindromist]
+            user_agent_instance,
+            basic_agent_instance
+
         ]
 
         thread_strategy = {
@@ -542,6 +552,8 @@ def main():
             "操作系统能力群": [
                 permissions_agent_instance,
                 network_agent_instance,
+                user_agent_instance,
+                basic_agent_instance,
             ],
             #华为云能力群
             "弹性云服务器(ECS)管理能力群": [ECS_harddisk_agent_instance, ECS_instance_agent_instance, ECS_netcard_agent_instance, ECS_recommend_agent_instance, ECS_specification_query_agent_instance],
@@ -579,7 +591,7 @@ def main():
 
         while True:
             request_id = str(int(request_id) + 1)
-            if use_rag:
+            if use_rag == "True":
                 agency.task_planning_rag(
                     original_request=text,
                     plan_agents=plan_agents_rag,

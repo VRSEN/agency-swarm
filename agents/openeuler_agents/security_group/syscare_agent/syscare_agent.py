@@ -39,16 +39,10 @@ OPTIONS:
 
 EXAMPLE:
 syscare build \
---patch-name "HP001" \
---patch-description "CVE-2021-32675 - When parsing an incoming Redis Standard Protocol (RESP) request, Redis allocates memory according to user-specified values which determine the number of elements (in the multi-bulk header) and size of each element (in the bulk header). An attacker delivering specially crafted requests over multiple connections can cause the server to allocate significant amount of memory. Because the same parsing mechanism is used to handle authentication requests, this vulnerability can also be exploited by unauthenticated users." \
---source ./redis-6.2.5-1.src.rpm \
---debuginfo ./redis-debuginfo-6.2.5-1.x86_64.rpm \
---output ./output \
-./0001-Prevent-unauthenticated-client-from-easily-consuming.patch
-
-2. 补丁安装
-
-$ sudo syscare apply redis-6.2.5-1/HP001
+syscare build --source redis6-6.2.18-3.src.rpm \
+--debuginfo redis6-debuginfo-6.2.18-3.x86_64.rpm \
+--patch 0001-Fix-out-of-bounds-write-in-hyperloglog-commands-CVE-.patch \
+--patch-name fix-cve-2025-32023 \
 """
 
 import os

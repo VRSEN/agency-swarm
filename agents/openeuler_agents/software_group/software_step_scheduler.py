@@ -6,6 +6,8 @@ _name = "software_step_scheduler"
 
 _description = """
 职责是调度软件能力群的step，选出下一步可以执行的step
+** 注意**
+1. ssh客户端不保存状态，规划的时候不要单独规划 **进入目录**步骤，应该与具体的执行步骤合并。
 """
 
 _group_name = "软件能力群"
