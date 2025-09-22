@@ -28,14 +28,16 @@ def get_verify_token(app_token: str | None) -> Callable[..., Any]:
             return None
         if not credentials or credentials.credentials != app_token:
             raise HTTPException(status_code=401, detail="Unauthorized")
-        return credentials.credentials  # type: ignore[no-any-return]
+        return credentials.credentials
 
     return verify_token
 
 
 # Non‑streaming response endpoint
-def make_response_endpoint(request_model: Any, agency_factory: Callable[..., Agency], verify_token: Any) -> Callable[..., Any]:
-    async def handler(request: Any, token: str = Depends(verify_token)) -> JSONResponse:
+def make_response_endpoint(
+    request_model: Any, agency_factory: Callable[..., Agency], verify_token: Any
+) -> Callable[..., Any]:
+    async def handler(request: request_model, token: str = Depends(verify_token)) -> JSONResponse:
         if request.chat_history is not None:
             # Chat history is now a flat list
             def load_callback() -> list[Any]:
@@ -52,7 +54,7 @@ def make_response_endpoint(request_model: Any, agency_factory: Callable[..., Age
                 file_ids_map = await upload_from_urls(request.file_urls)
                 combined_file_ids = (combined_file_ids or []) + list(file_ids_map.values())
             except Exception as e:
-                return {"error": f"Error downloading file from provided urls: {e}"}
+                return JSONResponse(status_code=400, content={"error": f"Error downloading file from provided urls: {e}"})
 
         agency_instance = agency_factory(load_threads_callback=load_callback)
         # Attach persistent MCP servers and ensure connections before handling the request
@@ -74,14 +76,16 @@ def make_response_endpoint(request_model: Any, agency_factory: Callable[..., Age
         result = {"response": response.final_output, "new_messages": filtered_messages}
         if request.file_urls is not None and file_ids_map is not None:
             result["file_ids_map"] = file_ids_map
-        return result
+        return JSONResponse(content=result)
 
     return handler
 
 
 # Streaming SSE endpoint
-def make_stream_endpoint(request_model: Any, agency_factory: Callable[..., Agency], verify_token: Any) -> Callable[..., Any]:
-    async def handler(request: Any, token: str = Depends(verify_token)) -> StreamingResponse:
+def make_stream_endpoint(
+    request_model: Any, agency_factory: Callable[..., Agency], verify_token: Any
+) -> Callable[..., Any]:
+    async def handler(request: request_model, token: str = Depends(verify_token)) -> StreamingResponse:
         if request.chat_history is not None:
             # Chat history is now a flat list
             def load_callback() -> list[Any]:
@@ -100,7 +104,7 @@ def make_stream_endpoint(request_model: Any, agency_factory: Callable[..., Agenc
             except Exception as e:
                 error_msg = str(e)
 
-                async def error_generator() -> AsyncGenerator[str, None]:
+                async def error_generator() -> AsyncGenerator[str]:
                     yield (
                         "data: "
                         + json.dumps({"error": f"Error downloading file from provided urls: {error_msg}"})
@@ -121,7 +125,7 @@ def make_stream_endpoint(request_model: Any, agency_factory: Callable[..., Agenc
         agency_instance = agency_factory(load_threads_callback=load_callback)
         await attach_persistent_mcp_servers(agency_instance)
 
-        async def event_generator() -> AsyncGenerator[str, None]:
+        async def event_generator() -> AsyncGenerator[str]:
             # Capture initial message count to identify new messages
             initial_message_count = len(agency_instance.thread_manager.get_all_messages())
 
@@ -196,15 +200,17 @@ def make_tool_endpoint(tool: Any, verify_token: Any, context: Any = None) -> Cal
                 result = tool(**data)
                 if asyncio.iscoroutine(result):
                     result = await result
-            return {"response": result}
+            return JSONResponse(content={"response": result})
         except Exception as e:
             return JSONResponse(status_code=500, content={"Error": str(e)})
 
     return handler
 
 
-def make_agui_chat_endpoint(request_model: Any, agency_factory: Callable[..., Agency], verify_token: Any) -> Callable[..., Any]:
-    async def handler(request: Any, token: str = Depends(verify_token)) -> StreamingResponse:
+def make_agui_chat_endpoint(
+    request_model: Any, agency_factory: Callable[..., Agency], verify_token: Any
+) -> Callable[..., Any]:
+    async def handler(request: request_model, token: str = Depends(verify_token)) -> StreamingResponse:
         """Accepts AG-UI `RunAgentInput`, returns an AG-UI event stream."""
 
         encoder = EventEncoder()
@@ -307,7 +313,7 @@ def make_metadata_endpoint(agency_metadata: dict[str, Any], verify_token: Any) -
 def make_logs_endpoint(request_model: Any, logs_dir: str, verify_token: Any) -> Callable[..., Any]:
     """Create a logs endpoint handler following the same pattern as other endpoints."""
 
-    async def handler(request: Any, token: str = Depends(verify_token)) -> JSONResponse:
+    async def handler(request: request_model, token: str = Depends(verify_token)) -> Any:
         return await get_logs_endpoint_impl(request.log_id, logs_dir)
 
     return handler
