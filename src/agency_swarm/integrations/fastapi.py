@@ -22,6 +22,9 @@ def run_fastapi(
     enable_agui: bool = False,
     enable_logging: bool = False,
     logs_dir: str = "activity-logs",
+    enable_monitoring: bool = True,
+    enable_rate_limiting: bool = True,
+    rate_limit_per_minute: int = 60,
 ) -> Any:
     """Launch a FastAPI server exposing endpoints for multiple agencies and tools.
 
@@ -43,6 +46,15 @@ def run_fastapi(
     logs_dir : str
         Directory to store log files when logging is enabled.
         Defaults to 'activity-logs'.
+    enable_monitoring : bool
+        Enable health check and metrics endpoints (/health, /ready, /metrics).
+        Defaults to True for production readiness.
+    enable_rate_limiting : bool
+        Enable rate limiting middleware to prevent abuse.
+        Defaults to True for production security.
+    rate_limit_per_minute : int
+        Number of requests allowed per minute per client IP.
+        Defaults to 60 requests per minute.
     """
     if (agencies is None or len(agencies) == 0) and (tools is None or len(tools) == 0):
         logger.warning("No endpoints to deploy. Please provide at least one agency or tool.")
@@ -68,6 +80,15 @@ def run_fastapi(
             setup_enhanced_logging,
         )
         from .fastapi_utils.request_models import BaseRequest, LogRequest, RunAgentInputCustom, add_agent_validator
+
+        # Import monitoring components if enabled
+        if enable_monitoring:
+            from .fastapi_utils.monitoring_endpoints import create_monitoring_endpoints
+            from .fastapi_utils.metrics_middleware import MetricsMiddleware, SecurityHeadersMiddleware
+            from .fastapi_utils.production_logging import setup_production_logging
+
+        if enable_rate_limiting:
+            from .fastapi_utils.metrics_middleware import RateLimitMiddleware
     except ImportError as e:
         logger.error(f"FastAPI deployment dependencies are missing: {e}. Please install agency-swarm[fastapi] package")
         return
@@ -77,12 +98,33 @@ def run_fastapi(
         logger.warning("App token is not set. Authentication will be disabled.")
     verify_token = get_verify_token(app_token)
 
-    app = FastAPI()
+    app = FastAPI(
+        title="Agency Swarm API",
+        description="Multi-agent orchestration framework API",
+        version="1.0.2"
+    )
 
     # Setup logging if enabled
     if enable_logging:
         setup_enhanced_logging(logs_dir)
         app.add_middleware(RequestTracker)
+
+    # Add monitoring middleware if enabled
+    if enable_monitoring:
+        # Setup production logging
+        setup_production_logging(
+            log_level="INFO",
+            log_dir="logs",
+            enable_file_logging=True,
+            enable_console_logging=True
+        )
+
+        app.add_middleware(MetricsMiddleware)
+        app.add_middleware(SecurityHeadersMiddleware)
+
+    # Add rate limiting if enabled
+    if enable_rate_limiting:
+        app.add_middleware(RateLimitMiddleware, requests_per_minute=rate_limit_per_minute)
 
     if cors_origins is None:
         cors_origins = ["*"]
@@ -157,6 +199,13 @@ def run_fastapi(
     if enable_logging:
         app.add_api_route("/get_logs", make_logs_endpoint(LogRequest, logs_dir, verify_token), methods=["POST"])
         endpoints.append("/get_logs")
+
+    # Add monitoring endpoints if enabled
+    if enable_monitoring:
+        monitoring_endpoints = create_monitoring_endpoints()
+        for path, handler in monitoring_endpoints.items():
+            app.add_api_route(path, handler, methods=["GET"])
+            endpoints.append(path)
 
     logger.info("Created endpoints:\n" + "\n".join(endpoints))
 
