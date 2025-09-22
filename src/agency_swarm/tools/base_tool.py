@@ -18,10 +18,10 @@ from ..context import MasterContext
 
 
 class classproperty:
-    def __init__(self, fget):
+    def __init__(self, fget: Any) -> None:
         self.fget = fget
 
-    def __get__(self, instance, owner):
+    def __get__(self, instance: Any, owner: Any) -> Any:
         return self.fget(owner)
 
 
@@ -32,7 +32,7 @@ class BaseTool(BaseModel, ABC):
     _event_handler: Any = None
     _context: Any = None  # Will hold RunContextWrapper when available
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
 
         # Ensure all ToolConfig variables are initialized
@@ -45,8 +45,12 @@ class BaseTool(BaseModel, ABC):
                 setattr(self.ToolConfig, key, value)
 
         if self._context is None:
+            # Create a minimal context wrapper for standalone tool usage
+            # In practice, this will be overridden when the tool is used within an agency
+            from ..utils.thread import ThreadManager
+            dummy_thread_manager = ThreadManager()
             self._context = RunContextWrapper(
-                context=MasterContext(thread_manager=None, agents={}, user_context={}, current_agent_name=None)
+                context=MasterContext(thread_manager=dummy_thread_manager, agents={}, user_context={}, current_agent_name=None)
             )
 
     class ToolConfig:
@@ -107,7 +111,7 @@ class BaseTool(BaseModel, ABC):
     def context(self) -> MasterContext | None:
         """Get the MasterContext if available, providing clean access to shared state."""
         if self._context is not None:
-            return self._context.context
+            return self._context.context  # type: ignore[no-any-return]
         return None
 
     @property
@@ -127,5 +131,5 @@ class BaseTool(BaseModel, ABC):
         return self.context
 
     @abstractmethod
-    def run(self):
+    def run(self) -> Any:
         pass

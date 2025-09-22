@@ -1,6 +1,7 @@
 import logging
 import os
 from collections.abc import Callable, Mapping
+from typing import Any
 
 from agents.tool import FunctionTool
 
@@ -21,7 +22,7 @@ def run_fastapi(
     enable_agui: bool = False,
     enable_logging: bool = False,
     logs_dir: str = "activity-logs",
-):
+) -> Any:
     """Launch a FastAPI server exposing endpoints for multiple agencies and tools.
 
     Parameters

@@ -320,7 +320,7 @@ def setup_execution(
             # Create a wrapper function that calls original callable and joins shared/additional instructions
             original_callable = agent.instructions
 
-            async def combined_instructions(run_context, agent_instance):
+            async def combined_instructions(run_context: Any, agent_instance: Any) -> str:
                 # Call the original callable instructions (handle both sync and async)
                 if inspect.iscoroutinefunction(original_callable):
                     base_instructions = await original_callable(run_context, agent_instance)

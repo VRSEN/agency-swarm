@@ -43,7 +43,7 @@ class PersistentMCPServerManager:
         ready_evt = threading.Event()
         # Unwrap proxy to operate on the real server inside the driver (same task)
 
-        async def _driver():
+        async def _driver() -> None:
             # Connect once in this driver task to bind cancel scope and session
             try:
                 if getattr(real_server, "session", None) is None:
@@ -69,12 +69,12 @@ class PersistentMCPServerManager:
                     except Exception as e:  # noqa: BLE001
                         result_fut.set_exception(e)
                 elif typ == "shutdown":
-                    result_fut: Future = cmd["result_fut"]
+                    shutdown_result_fut: Future = cmd["result_fut"]
                     try:
                         await real_server.cleanup()
-                        result_fut.set_result(True)
+                        shutdown_result_fut.set_result(True)
                     except Exception as e:  # noqa: BLE001
-                        result_fut.set_exception(e)
+                        shutdown_result_fut.set_exception(e)
                     break
 
         # Start driver
@@ -106,7 +106,7 @@ class PersistentMCPServerManager:
                 queue: asyncio.Queue = state["queue"]
                 fut: Future = Future()
 
-                def _post(queue=queue, fut=fut):
+                def _post(queue: Any = queue, fut: Any = fut) -> None:
                     queue.put_nowait({"type": "shutdown", "result_fut": fut})
 
                 self._ensure_bg_loop().call_soon_threadsafe(_post)
@@ -162,7 +162,7 @@ class PersistentMCPServerManager:
     async def _await_future(self, fut: Future, timeout: float | None = None) -> Any:  # noqa: ANN401
         loop = asyncio.get_running_loop()
 
-        def _get_result():
+        def _get_result() -> Any:
             return fut.result(timeout=timeout)
 
         return await loop.run_in_executor(None, _get_result)
@@ -179,13 +179,13 @@ class LoopAffineAsyncProxy:
         self._server = server
         self._manager = manager
 
-    def __getattr__(self, name: str):  # noqa: ANN001
+    def __getattr__(self, name: str) -> Any:
         target = getattr(self._server, name)
 
         if inspect.iscoroutinefunction(target):
             timeout = self._manager._timeouts.get(name, 30.0)
 
-            async def _proxy(*args, **kwargs):  # noqa: ANN001
+            async def _proxy(*args: Any, **kwargs: Any) -> Any:
                 fut = self._manager._submit_to_loop(target(*args, **kwargs))
                 return await self._manager._await_future(fut, timeout=timeout)
 

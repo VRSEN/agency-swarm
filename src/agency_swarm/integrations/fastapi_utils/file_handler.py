@@ -18,25 +18,25 @@ def _get_openai_client() -> AsyncOpenAI:
     return AsyncOpenAI()
 
 
-def get_extension_from_name(name):
+def get_extension_from_name(name: str) -> str | None:
     ext = os.path.splitext(name)[1]
     return ext if ext else None
 
 
-def get_extension_from_url(url):
+def get_extension_from_url(url: str) -> str | None:
     path = urlparse(url).path
     ext = os.path.splitext(path)[1]
     return ext if ext else None
 
 
-def get_extension_from_filetype(file_path):
+def get_extension_from_filetype(file_path: str) -> str | None:
     kind = filetype.guess(str(file_path))
     if kind:
         return f".{kind.extension}"
     return None
 
 
-async def download_file(url, name, save_dir):
+async def download_file(url: str, name: str, save_dir: str) -> str:
     """
     Helper function to download file from url to local path.
     Args:
@@ -63,7 +63,7 @@ async def download_file(url, name, save_dir):
                 async for chunk in r.aiter_bytes():
                     await f.write(chunk)
     if not ext:
-        ext = get_extension_from_filetype(temp_path)
+        ext = get_extension_from_filetype(str(temp_path))
     if not ext:
         raise ValueError(f"No extension found for file: {url}")
     filename = f"{base_name}{ext}"
@@ -74,7 +74,7 @@ async def download_file(url, name, save_dir):
     return str(local_path)
 
 
-async def upload_to_openai(file_path):
+async def upload_to_openai(file_path: str) -> str:
     try:
         client = _get_openai_client()
         with open(file_path, "rb") as f:

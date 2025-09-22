@@ -51,10 +51,10 @@ class LogRequest(BaseModel):
     log_id: str = Field(..., description="The log ID to retrieve")
 
 
-def add_agent_validator(model, agent_instances):
+def add_agent_validator(model: Any, agent_instances: Any) -> Any:
     class ModifiedRequest(model):
         @field_validator("recipient_agent")
-        def validate_recipient_agent(cls, v):
+        def validate_recipient_agent(cls: Any, v: Any) -> Any:
             if v is not None:
                 if v not in agent_instances:
                     raise ValueError(f"Invalid agent name. Available agents: {list(agent_instances.keys())}")

@@ -116,7 +116,7 @@ class SendMessage(FunctionTool):
         try:
             if extra_model and isinstance(extra_model, type) and issubclass(extra_model, BaseModel):
                 # Merge model schema into params schema
-                model_schema: dict[str, Any] = extra_model.model_json_schema()  # type: ignore[assignment]
+                model_schema: dict[str, Any] = extra_model.model_json_schema()
                 # Only use field-level schema content
                 model_properties: dict[str, Any] = model_schema.get("properties", {})
                 model_required: list[str] = list(model_schema.get("required", []))
@@ -198,7 +198,7 @@ class SendMessage(FunctionTool):
 
         # Create a minimal agency context for multi-agent communication
         class MinimalAgency:
-            def __init__(self, agents_dict, user_context):
+            def __init__(self, agents_dict: dict[str, Any], user_context: dict[str, Any]) -> None:
                 self.agents = agents_dict
                 self.user_context = user_context
 
@@ -448,7 +448,7 @@ class SendMessageHandoff:
     A handoff configuration class for defining agent handoffs.
     """
 
-    def create_handoff(self, recipient_agent: "Agent"):
+    def create_handoff(self, recipient_agent: "Agent") -> Any:
         """Create and return the handoff object."""
         recipient_agent_name = recipient_agent.name
         handoff_object = handoff(

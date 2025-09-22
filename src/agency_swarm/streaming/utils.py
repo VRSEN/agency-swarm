@@ -139,11 +139,11 @@ class StreamingContext:
 class EventStreamMerger:
     """Merges events from multiple sources during streaming operations."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.streaming_context: StreamingContext | None = None
 
     @asynccontextmanager
-    async def create_streaming_context(self):
+    async def create_streaming_context(self) -> Any:
         """Create a new streaming context for collecting events."""
         self.streaming_context = StreamingContext()
         try:

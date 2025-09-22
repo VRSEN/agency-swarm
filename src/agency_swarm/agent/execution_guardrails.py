@@ -54,7 +54,7 @@ def append_guardrail_feedback(
     if agency_context and agency_context.thread_manager:
         to_persist: list[TResponseInputItem] = []
         if include_assistant:
-            assistant_msg: TResponseInputItem = {  # type: ignore[typeddict-item]
+            assistant_msg: TResponseInputItem = {
                 "role": "assistant",
                 "content": assistant_output,
             }
@@ -78,10 +78,10 @@ def append_guardrail_feedback(
         else:
             origin = "input_guardrail_message"
 
-        guidance_msg: TResponseInputItem = {  # type: ignore[assignment, typeddict-item, typeddict-unknown-key]
+        guidance_msg: TResponseInputItem = {  # type: ignore[assignment]
             "role": "system",
             "content": guidance_text,
-            "message_origin": origin,  # type: ignore[typeddict-unknown-key]
+            "message_origin": origin,
         }
         to_persist.append(
             MessageFormatter.add_agency_metadata(
@@ -93,7 +93,7 @@ def append_guardrail_feedback(
             )
         )
 
-        agency_context.thread_manager.add_messages(to_persist)  # type: ignore[arg-type]
+        agency_context.thread_manager.add_messages(to_persist)
 
     # Rebuild full history for retry using persisted messages
     return MessageFormatter.prepare_history_for_runner(

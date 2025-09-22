@@ -42,7 +42,7 @@ class MessageFormatter:
         Returns:
             dict[str, Any]: Message with added metadata
         """
-        modified_message = message.copy()  # type: ignore[arg-type]
+        modified_message = message.copy()
         modified_message["agent"] = agent  # type: ignore[typeddict-unknown-key]
         modified_message["callerAgent"] = caller_agent  # type: ignore[typeddict-unknown-key]
         if agent_run_id is not None:
@@ -77,13 +77,13 @@ class MessageFormatter:
         messages_to_save: list[TResponseInputItem] = []
         for msg in processed_current_message_items:
             formatted_msg = MessageFormatter.add_agency_metadata(
-                msg,  # type: ignore[arg-type]
+                msg,
                 agent=agent.name,
                 caller_agent=sender_name,
                 agent_run_id=agent_run_id,
                 parent_run_id=parent_run_id,
             )
-            messages_to_save.append(formatted_msg)  # type: ignore[arg-type]
+            messages_to_save.append(formatted_msg)
 
         # Save messages to flat storage
         thread_manager.add_messages(messages_to_save)
@@ -193,7 +193,7 @@ class MessageFormatter:
             and hasattr(run_item_obj.raw_item, "id")
             and run_item_obj.raw_item.id in citations_by_message
         ):
-            item_dict["citations"] = citations_by_message[run_item_obj.raw_item.id]  # type: ignore[typeddict-unknown-key, typeddict-item]
+            item_dict["citations"] = citations_by_message[run_item_obj.raw_item.id]  # type: ignore[typeddict-unknown-key]
             msg_type = "streamed message" if is_streaming else "message"
             logger.debug(f"Added {len(item_dict['citations'])} citations to {msg_type} {run_item_obj.raw_item.id}")  # type: ignore[typeddict-item]
 
@@ -285,7 +285,7 @@ class MessageFormatter:
                     )
                     logger.debug(f"Created web_search results message for call_id: {tool_call.id}")
 
-        return synthetic_outputs  # type: ignore[return-value]
+        return synthetic_outputs
 
     @staticmethod
     def extract_handoff_target_name(run_item_obj: RunItem) -> str | None:
@@ -309,7 +309,7 @@ class MessageFormatter:
             # Fallback if SDK provides target_agent attribute
             target_agent = getattr(run_item_obj, "target_agent", None)
             if target_agent is not None and hasattr(target_agent, "name") and target_agent.name:
-                return target_agent.name
+                return target_agent.name  # type: ignore[no-any-return]
         except Exception:
             return None
         return None

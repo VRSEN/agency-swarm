@@ -37,7 +37,7 @@ class ConsoleEventAdapter:
     def set_show_reasoning(self, enabled: bool) -> None:
         self.show_reasoning = bool(enabled)
 
-    def _cleanup_live_display(self):
+    def _cleanup_live_display(self) -> None:
         """Clean up any active Live display safely."""
         if self.message_output is not None:
             try:
@@ -56,7 +56,7 @@ class ConsoleEventAdapter:
             self.reasoning_buffer = ""
             self._reasoning_final_rendered = False
 
-    def _update_console(self, msg_type: str, sender: str, receiver: str, content: str, add_separator: bool = True):
+    def _update_console(self, msg_type: str, sender: str, receiver: str, content: str, add_separator: bool = True) -> None:
         # Print a separator only for function, function_output, and agent-to-agent messages
         sender_emoji = "👤" if sender.lower() == "user" else "🤖"
         receiver_emoji = "👤" if receiver.lower() == "user" else "🤖"
@@ -70,7 +70,7 @@ class ConsoleEventAdapter:
         if add_separator:
             self.console.rule()
 
-    def openai_to_message_output(self, event: Any, recipient_agent: str):
+    def openai_to_message_output(self, event: Any, recipient_agent: str) -> None:
         try:
             # Ensure live-rendering attributes exist before processing events
             self_dict = getattr(self, "__dict__", {})

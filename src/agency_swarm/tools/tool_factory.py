@@ -41,7 +41,7 @@ class ToolFactory:
         return converted_tools
 
     @staticmethod
-    def from_langchain_tool(tool) -> FunctionTool:
+    def from_langchain_tool(tool: Any) -> FunctionTool:
         """
         Converts a langchain tool into a FunctionTool.
 
@@ -74,7 +74,7 @@ class ToolFactory:
             parameters_schema = {"type": "object", "properties": {}, "required": [], "additionalProperties": False}
 
         # Create the async callback function
-        async def on_invoke_tool(ctx, input_json: str):
+        async def on_invoke_tool(ctx: Any, input_json: str) -> str:
             """Callback function that executes the langchain tool."""
             try:
                 args = json.loads(input_json) if input_json else {}
@@ -237,7 +237,7 @@ class ToolFactory:
         return tools
 
     @staticmethod
-    def _create_invoke_for_path(path, verb, openapi, tool_schema, function_name, headers=None, params=None, timeout=90):
+    def _create_invoke_for_path(path: str, verb: str, openapi: Any, tool_schema: Any, function_name: str, headers: dict[str, str] | None = None, params: dict[str, Any] | None = None, timeout: int = 90) -> Any:
         """
         Creates a callback function for a specific path and method.
         This is a factory function that captures the current values of path and method.
@@ -264,9 +264,9 @@ class ToolFactory:
             *,
             verb_: str = verb,
             path_: str = path,
-            param_model_: type[BaseModel] = param_model,
-            request_body_model_: type[BaseModel] = request_body_model,
-        ):
+            param_model_: type[BaseModel] | None = param_model,
+            request_body_model_: type[BaseModel] | None = request_body_model,
+        ) -> str:
             """Actual HTTP call executed by the agent."""
             payload = json.loads(input) if input else {}
 
@@ -322,7 +322,7 @@ class ToolFactory:
                 )
                 try:
                     logger.info(f"Response from {url}: {resp.json()}")
-                    return resp.json()
+                    return resp.json()  # type: ignore[no-any-return]
                 except Exception:
                     return resp.text
 
@@ -372,8 +372,8 @@ class ToolFactory:
     def get_openapi_schema(
         tools: list[type[BaseTool] | FunctionTool],
         url: str,
-        title="Agent Tools",
-        description="A collection of tools.",
+        title: str = "Agent Tools",
+        description: str = "A collection of tools.",
     ) -> str:
         """
         Generates an OpenAPI schema from a list of BaseTools.
@@ -460,7 +460,7 @@ class ToolFactory:
         params_json_schema["additionalProperties"] = False
 
         # The on_invoke_tool function
-        async def on_invoke_tool(ctx, input_json: str):
+        async def on_invoke_tool(ctx: Any, input_json: str) -> str:
             # Parse input_json to dict
             import json
 

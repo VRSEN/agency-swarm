@@ -15,7 +15,7 @@ ThreadSaveCallback = Callable[[list[dict[str, Any]]], None]
 
 
 # --- Persistence Hooks ---
-class PersistenceHooks(RunHooks[MasterContext]):  # type: ignore[misc]
+class PersistenceHooks(RunHooks[MasterContext]):
     """Custom `RunHooks` implementation for loading and saving `ThreadManager` state.
 
     This class integrates with the `agents.Runner` lifecycle to automatically
@@ -63,7 +63,7 @@ class PersistenceHooks(RunHooks[MasterContext]):  # type: ignore[misc]
         self._save_threads_callback = save_threads_callback
         logger.info("PersistenceHooks initialized with flat message structure.")
 
-    def on_run_start(self, *, context: MasterContext, **kwargs) -> None:
+    def on_run_start(self, *, context: MasterContext, **kwargs: Any) -> None:
         """Loads all messages into the `ThreadManager` at the start of a run.
 
         Calls the `load_threads_callback` provided during initialization to load
@@ -83,7 +83,7 @@ class PersistenceHooks(RunHooks[MasterContext]):  # type: ignore[misc]
             logger.error(f"Error during message loading: {e}", exc_info=True)
             # log and continue with potentially empty messages.
 
-    def on_run_end(self, *, context: MasterContext, result: RunResult, **kwargs) -> None:
+    def on_run_end(self, *, context: MasterContext, result: RunResult, **kwargs: Any) -> None:
         """Saves all messages from the `ThreadManager` at the end of a run.
 
         Calls the `save_threads_callback` provided during initialization, passing

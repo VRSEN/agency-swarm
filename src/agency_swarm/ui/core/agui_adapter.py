@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 
 
 # Universal function to serialize any object to a JSON-compatible format
-def serialize(obj, _visited=None):
+def serialize(obj: Any, _visited: set[int] | None = None) -> Any:
     if _visited is None:
         _visited = set()
 
@@ -82,7 +82,7 @@ class AguiAdapter:
         "response.code_interpreter_call_code.delta",
     }
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize a new AguiAdapter with clean per-instance run state."""
         # Per-instance run state to avoid global mutable state issues
         self._run_state: dict[str, dict[str, Any]] = {}
@@ -96,7 +96,7 @@ class AguiAdapter:
 
     def openai_to_agui_events(
         self,
-        event,
+        event: Any,
         *,
         run_id: str,
     ) -> BaseEvent | list[BaseEvent] | None:
@@ -123,7 +123,7 @@ class AguiAdapter:
             return RunErrorEvent(type=EventType.RUN_ERROR, message=str(exc))
 
     @staticmethod
-    def agui_messages_to_chat_history(message_list: list[Message]):
+    def agui_messages_to_chat_history(message_list: list[Message]) -> list[dict[str, Any]]:
         """
         Convert a list of AG-UI messages to an agency-swarm-compatible message list.
         """
@@ -140,7 +140,7 @@ class AguiAdapter:
                 # If the assistant issued tool calls they are contained in
                 # ``msg.tool_calls``.
                 if getattr(msg, "tool_calls", None):
-                    for tc in msg.tool_calls:  # type: ignore[attr-defined]
+                    for tc in msg.tool_calls:
                         name = tc.function.name or "tool"
                         arguments = tc.function.arguments or "{}"
 
@@ -200,7 +200,7 @@ class AguiAdapter:
 
         return oai_messages
 
-    def _tool_meta(self, raw_item):
+    def _tool_meta(self, raw_item: Any) -> tuple[str | None, str, str | None]:
         """Return (call_id, tool_name, arguments) for a tool *raw_item*."""
         item_type = getattr(raw_item, "type", "")
 
@@ -236,9 +236,9 @@ class AguiAdapter:
                 ),
             )
 
-        return None, None, None
+        return None, "unknown", None
 
-    def _snapshot_event(self, item_id, call_id, tool_name, arguments):
+    def _snapshot_event(self, item_id: str, call_id: str, tool_name: str, arguments: str | None) -> MessagesSnapshotEvent:
         """Helper to build a minimal *MessagesSnapshotEvent* for a tool call."""
         return MessagesSnapshotEvent(
             type=EventType.MESSAGES_SNAPSHOT,

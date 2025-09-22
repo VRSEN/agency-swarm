@@ -180,8 +180,8 @@ class Execution:
                                 current_agent_name = target
 
                 items_to_save.extend(hosted_tool_outputs)
-                filtered_items = MessageFilter.filter_messages(items_to_save)  # type: ignore[arg-type] # Filter out unwanted message types
-                agency_context.thread_manager.add_messages(filtered_items)  # type: ignore[arg-type] # Save filtered items to flat storage
+                filtered_items = MessageFilter.filter_messages(items_to_save)  # Filter out unwanted message types
+                agency_context.thread_manager.add_messages(filtered_items)  # Save filtered items to flat storage
                 logger.debug(f"Saved {len(filtered_items)} items to storage (filtered from {len(items_to_save)}).")
 
             # Sync back context changes if we used a merged context due to override
@@ -196,7 +196,7 @@ class Execution:
 
         finally:
             # Cleanup execution state
-            if "master_context_for_run" in locals() and master_context_for_run is not None:  # type: ignore[used-before-def]
+            if "master_context_for_run" in locals() and master_context_for_run is not None:
                 cleanup_execution(
                     self.agent, original_instructions, context_override, agency_context, master_context_for_run
                 )
@@ -243,7 +243,7 @@ class Execution:
         # Validate input
         if message is None:
             logger.error("message cannot be None")
-            yield {"type": "error", "content": "message cannot be None"}  # type: ignore[misc]
+            yield {"type": "error", "content": "message cannot be None"}
             return
         if isinstance(message, str) and not message.strip():
             logger.error("message cannot be empty")

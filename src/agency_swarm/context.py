@@ -35,7 +35,7 @@ class MasterContext:
     _is_streaming: bool = False  # Flag to indicate if we're in streaming mode
     _streaming_context: Any = None  # Streaming context for passing state
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Basic validation after initialization."""
         # Runtime checks are limited due to forward references.
         # More robust validation occurs in Agency during context creation.

@@ -97,14 +97,14 @@ def _persist_run_item_if_needed(
                 )
 
             formatted_item = MessageFormatter.add_agency_metadata(
-                item_dict,  # type: ignore[arg-type]
+                item_dict,
                 agent=current_stream_agent_name,
                 caller_agent=sender_name,
                 agent_run_id=current_agent_run_id,
                 parent_run_id=parent_run_id,
             )
             if not MessageFilter.should_filter(formatted_item):
-                agency_context.thread_manager.add_messages([formatted_item])  # type: ignore[arg-type]
+                agency_context.thread_manager.add_messages([formatted_item])
 
 
 def perform_streamed_run(
@@ -115,7 +115,7 @@ def perform_streamed_run(
     hooks_override: RunHooks | None,
     run_config_override: RunConfig | None,
     kwargs: dict[str, Any],
-):
+) -> Any:
     """Return the streaming run object from Runner without guardrail logic."""
     return Runner.run_streamed(
         starting_agent=agent,
@@ -165,13 +165,13 @@ async def run_stream_with_guardrails(
         collected_items: list[RunItem] = []
 
         async def _streaming_worker(
-            history_for_runner=history_for_runner,
-            master_context_for_run=master_context_for_run,
-            event_queue=event_queue,
-            current_agent_run_id=current_agent_run_id,
-            parent_run_id=parent_run_id,
-            agency_context=agency_context,
-            sender_name=sender_name,
+            history_for_runner: Any = history_for_runner,
+            master_context_for_run: Any = master_context_for_run,
+            event_queue: Any = event_queue,
+            current_agent_run_id: Any = current_agent_run_id,
+            parent_run_id: Any = parent_run_id,
+            agency_context: Any = agency_context,
+            sender_name: Any = sender_name,
         ) -> None:
             nonlocal guardrail_exception
             local_result = None
@@ -230,9 +230,9 @@ async def run_stream_with_guardrails(
         worker_task = asyncio.create_task(_streaming_worker())
 
         async def _forward_subagent_events(
-            streaming_context=streaming_context,
-            event_queue=event_queue,
-        ):
+            streaming_context: Any = streaming_context,
+            event_queue: Any = event_queue,
+        ) -> None:
             while True:
                 try:
                     sub_event = await streaming_context.get_event()
@@ -326,9 +326,9 @@ async def run_stream_with_guardrails(
                 if agency_context and agency_context.thread_manager and collected_items:
                     hosted_tool_outputs = MessageFormatter.extract_hosted_tool_results(agent, collected_items)
                     if hosted_tool_outputs:
-                        filtered_items = MessageFilter.filter_messages(hosted_tool_outputs)  # type: ignore[arg-type]
+                        filtered_items = MessageFilter.filter_messages(hosted_tool_outputs)
                         if filtered_items:
-                            agency_context.thread_manager.add_messages(filtered_items)  # type: ignore[arg-type]
+                            agency_context.thread_manager.add_messages(filtered_items)
                 break
 
             # Guardrail tripped: persist guidance-only user message, rebuild history, and retry

@@ -30,7 +30,7 @@ class AttachmentManager:
         # Temp variables used to hold attachment data to be used in cleanup
         self._temp_code_interpreter_file_ids: list[str] = []
 
-    def init_attachments_vs(self, vs_name: str = "attachments_vs"):
+    def init_attachments_vs(self, vs_name: str = "attachments_vs") -> str:
         """
         Create or retrieve a temporary vector store for attachments.
 
@@ -115,7 +115,7 @@ class AttachmentManager:
 
         return content_list
 
-    def attachments_cleanup(self):
+    def attachments_cleanup(self) -> None:
         """
         Clean up temporary attachments and reset agent to initial state.
         """
@@ -123,7 +123,7 @@ class AttachmentManager:
             # Remove temporary files from CodeInterpreterTool
             for tool in self.agent.tools:
                 if isinstance(tool, CodeInterpreterTool):
-                    code_interpreter_container = tool.tool_config.get("container", {})
+                    code_interpreter_container: Any = tool.tool_config.get("container", {})
                     if isinstance(code_interpreter_container, str):
                         logger.warning(f"Agent {self.agent.name}: Cannot modify container directly for file removal")
                         break

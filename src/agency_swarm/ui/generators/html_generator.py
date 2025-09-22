@@ -17,7 +17,7 @@ class HTMLVisualizationGenerator:
     Uses templates for HTML generation.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.template_dir = Path(__file__).parents[1] / "templates" / "html"
 
     def generate_interactive_html(
@@ -149,7 +149,7 @@ class HTMLVisualizationGenerator:
 
     @staticmethod
     def create_visualization_from_agency(
-        agency,
+        agency: Any,
         output_file: str = "agency_visualization.html",
         include_tools: bool = True,
         open_browser: bool = True,

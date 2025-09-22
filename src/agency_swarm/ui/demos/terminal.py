@@ -1,7 +1,8 @@
 from collections.abc import Generator
+from typing import Any
 
 
-def start_terminal(agency_instance, show_reasoning: bool = False) -> None:
+def start_terminal(agency_instance: Any, show_reasoning: bool = False) -> None:
     """Run the terminal demo: input loop, slash commands, and streaming output."""
     import asyncio
     import logging
@@ -150,16 +151,17 @@ def start_terminal(agency_instance, show_reasoning: bool = False) -> None:
             logger.error(f"Error during streaming: {e}", exc_info=True)
         return False
 
-    async def main_loop():
+    async def main_loop() -> None:
         try:
             from prompt_toolkit import PromptSession
             from prompt_toolkit.completion import Completer, Completion
             from prompt_toolkit.history import InMemoryHistory
             from prompt_toolkit.key_binding import KeyBindings
+            prompt_session_available = True
         except Exception:
-            PromptSession = None  # type: ignore
+            prompt_session_available = False
 
-        if PromptSession is not None:
+        if prompt_session_available:
             command_help: dict[str, str] = {
                 "/help": "Show help",
                 "/clear": "Clear conversation and free context",
@@ -176,8 +178,8 @@ def start_terminal(agency_instance, show_reasoning: bool = False) -> None:
                 "/resume": "/resume",
             }
 
-            class SlashCompleter(Completer):  # type: ignore[misc]
-                def get_completions(self, document, complete_event) -> Generator[Completion]:  # type: ignore[override]
+            class SlashCompleter(Completer):
+                def get_completions(self, document: Any, complete_event: Any) -> Generator[Completion, None, None]:
                     text = document.text_before_cursor
                     if not text or not text.startswith("/"):
                         return
@@ -199,27 +201,26 @@ def start_terminal(agency_instance, show_reasoning: bool = False) -> None:
             bindings = KeyBindings()
 
             @bindings.add("c-c")
-            def _(event) -> None:
+            def _(event: Any) -> None:
                 event.app.exit(exception=KeyboardInterrupt)
 
             @bindings.add("/")
-            def _(event) -> None:
+            def _(event: Any) -> None:
                 buf = event.app.current_buffer
                 buf.insert_text("/")
                 buf.start_completion(select_first=True)
 
             try:
-                session = PromptSession(
+                session: Any = PromptSession(
                     history=history,
                     key_bindings=bindings,
                     enable_history_search=True,
                     mouse_support=False,
                 )
             except Exception:
-                PromptSession = None
                 session = None
 
-            if PromptSession is not None and session is not None:
+            if session is not None:
                 while True:
                     try:
                         message = await session.prompt_async(
@@ -231,7 +232,6 @@ def start_terminal(agency_instance, show_reasoning: bool = False) -> None:
                     except (KeyboardInterrupt, EOFError):
                         return
                     except Exception:
-                        PromptSession = None
                         break
 
                     event_converter.console.rule()

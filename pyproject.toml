@@ -97,12 +97,16 @@ convention = "google"
 "examples/**/*.py" = ["E501"]
 
 [tool.mypy]
-# Relax strictness to get CI green without functional changes.
-strict = false
+# Gradually increase strictness for better type safety
+strict = false  # Keep false for now, enable specific checks below
 ignore_missing_imports = true
-disallow_incomplete_defs = false
-disallow_untyped_defs = false
-disallow_untyped_calls = false
+# Enable specific strict checks gradually
+disallow_incomplete_defs = true  # Functions must have complete type annotations
+disallow_untyped_defs = true     # All functions must have type annotations
+disallow_untyped_calls = false   # Keep false for now due to external dependencies
+warn_return_any = true           # Warn when returning Any
+warn_unused_ignores = true       # Warn about unused type: ignore comments
+no_implicit_optional = true     # Strict handling of Optional types
 
 [[tool.mypy.overrides]]
 module = "sounddevice.*"
@@ -142,6 +146,14 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
 filterwarnings = [
     "ignore:coroutine 'test_async_input_filter_fails.<locals>.invalid_input_filter' was never awaited:RuntimeWarning",
+    # Ignore Pydantic v2 deprecation warnings from external dependencies
+    "ignore:The `parse_obj` method is deprecated.*:pydantic.warnings.PydanticDeprecatedSince20",
+    "ignore:The `dict` method is deprecated.*:pydantic.warnings.PydanticDeprecatedSince20",
+    "ignore:The `__fields_set__` attribute is deprecated.*:pydantic.warnings.PydanticDeprecatedSince20",
+    # Ignore specific warnings from datamodel-code-generator
+    "ignore:.*parse_obj.*:pydantic.warnings.PydanticDeprecatedSince20",
+    "ignore:.*\\.dict\\(.*:pydantic.warnings.PydanticDeprecatedSince20",
+    "ignore:.*__fields_set__.*:pydantic.warnings.PydanticDeprecatedSince20",
 ]
 
 testpaths = ["tests"]

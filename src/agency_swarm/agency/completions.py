@@ -126,7 +126,7 @@ def get_completion(
     )
 
 
-def get_completion_stream(agency: "Agency", *args: Any, **kwargs: Any):
+def get_completion_stream(agency: "Agency", *args: Any, **kwargs: Any) -> Any:
     """
     [DEPRECATED] Use get_response_stream instead. Yields all events from the modern streaming API.
     """

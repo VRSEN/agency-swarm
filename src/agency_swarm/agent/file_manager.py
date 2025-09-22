@@ -42,7 +42,7 @@ IMAGE_FILE_EXTENSIONS = [".jpeg", ".jpg", ".gif", ".png"]
 class AgentFileManager:
     """Manages permanent file operations for agents, including uploads and vector store management."""
 
-    def __init__(self, agent):
+    def __init__(self, agent: Any) -> None:
         self.agent = agent
 
     def upload_file(self, file_path: str, include_in_vector_store: bool = True) -> str:
@@ -124,7 +124,7 @@ class AgentFileManager:
                         f"not found during file {uploaded_file.id} association. "
                         "It might have been deleted after agent initialization. Skipping association."
                     )
-                    return uploaded_file.id  # File is uploaded, but association is skipped. Early exit.
+                    return uploaded_file.id  # type: ignore[no-any-return]  # File is uploaded, but association is skipped. Early exit.
 
                 # If VS exists, proceed to associate the file
                 self.agent.client_sync.vector_stores.files.create(
@@ -141,9 +141,9 @@ class AgentFileManager:
                 )
                 # Don't raise an exception here if association fails.
 
-        return uploaded_file.id
+        return uploaded_file.id  # type: ignore[no-any-return]
 
-    def get_id_from_file(self, f_path):
+    def get_id_from_file(self, f_path: Any) -> str | None:
         """Get file id from file name"""
         if os.path.isfile(f_path):
             file_name, file_ext = os.path.splitext(f_path)
@@ -292,7 +292,7 @@ class AgentFileManager:
         if code_interpreter_file_ids:
             self.add_code_interpreter_tool(code_interpreter_file_ids)
 
-    def add_file_search_tool(self, vector_store_id: str, file_ids: list[str] | None = None):
+    def add_file_search_tool(self, vector_store_id: str, file_ids: list[str] | None = None) -> None:
         """
         Adds a new vector store to the existing FileSearchTool or creates a new one if it doesn't exist.
         If optional file_ids provided, they will be added to the provided vector store.
@@ -342,7 +342,7 @@ class AgentFileManager:
 
                     break  # Assume only one FileSearchTool
 
-    def add_code_interpreter_tool(self, code_interpreter_file_ids: list[str]):
+    def add_code_interpreter_tool(self, code_interpreter_file_ids: list[str]) -> None:
         """
         Checks that a CodeInterpreterTool is available and configured.
 
@@ -386,14 +386,14 @@ class AgentFileManager:
                                 continue
                             existing_file_ids.append(file_id)
                         code_interpreter_container["file_ids"] = existing_file_ids
-                        tool.tool_config["container"] = code_interpreter_container  # type: ignore[typeddict-item]
+                        tool.tool_config["container"] = code_interpreter_container
                         logger.info(
                             f"Agent {self.agent.name}: Added file IDs "
                             f"{code_interpreter_file_ids} to existing CodeInterpreter."
                         )
                     break  # Assume only one CodeInterpreterTool
 
-    def add_files_to_vector_store(self, vector_store_id: str, file_ids: list[str]):
+    def add_files_to_vector_store(self, vector_store_id: str, file_ids: list[str]) -> None:
         """
         Adds a file to the agent's Vector Store if one is linked to this agent via files_folder
         """
@@ -415,7 +415,7 @@ class AgentFileManager:
                 )
                 raise AgentsException(f"Failed to add file {file_id} to Vector Store {vector_store_id}: {e}") from e
 
-    def read_instructions(self):
+    def read_instructions(self) -> None:
         if not self.agent.instructions:
             return
 
@@ -432,7 +432,7 @@ class AgentFileManager:
             # Keep original instructions if it's not a file path
             return
 
-    def get_class_folder_path(self):
+    def get_class_folder_path(self) -> str:
         """Get the directory where the agent was instantiated for relative path resolution."""
         # Delegate to the agent's path resolution method for consistency
-        return self.agent.get_class_folder_path()
+        return self.agent.get_class_folder_path()  # type: ignore[no-any-return]

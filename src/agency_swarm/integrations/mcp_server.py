@@ -48,7 +48,7 @@ def run_mcp(
     server_name: str = "mcp-tools-server",
     return_app: bool = False,
     transport: Transport = "streamable-http",
-):
+) -> Any:
     """
     Launch a FastMCP server exposing BaseTool and FunctionTool instances.
     Args:
@@ -92,14 +92,14 @@ def run_mcp(
                 def __init__(self, token: str) -> None:
                     self.expected = f"Bearer {token}"
 
-                async def on_request(self, ctx: MiddlewareContext, call_next):
+                async def on_request(self, ctx: MiddlewareContext, call_next: Any) -> Any:
                     hdrs = get_http_headers()
                     if hdrs.get("authorization") != self.expected:
                         error = ErrorData(code=401, message="Unauthorized")
                         raise McpError(error)
                     return await call_next(ctx)
 
-                async def on_read_resource(self, ctx: MiddlewareContext, call_next):
+                async def on_read_resource(self, ctx: MiddlewareContext, call_next: Any) -> Any:
                     hdrs = get_http_headers()
                     if hdrs.get("authorization") != self.expected:
                         error = ErrorData(code=401, message="Unauthorized")
@@ -135,9 +135,8 @@ def run_mcp(
             class CustomTool(Tool):
                 _function_tool: FunctionTool  # Declare the attribute for MyPy
 
-                def __init__(self, function_tool):
+                def __init__(self, function_tool: FunctionTool) -> None:
                     super().__init__(
-                        key=function_tool.name,
                         name=function_tool.name,
                         description=function_tool.description,
                         parameters=function_tool.params_json_schema,  # Use existing JSON schema directly

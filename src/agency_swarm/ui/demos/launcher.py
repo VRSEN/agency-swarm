@@ -164,7 +164,7 @@ class TerminalDemoLauncher:
 
                 if result:
                     if TerminalDemoLauncher.load_chat(agency_instance, result):
-                        return result
+                        return result  # type: ignore[no-any-return]
 
         except ImportError:
             pass
@@ -199,7 +199,7 @@ class TerminalDemoLauncher:
 
         target_id = records[sel_idx - 1]["chat_id"]
         if TerminalDemoLauncher.load_chat(agency_instance, target_id):
-            return target_id
+            return target_id  # type: ignore[no-any-return]
         printer(f"Chat not found: {target_id}")
         return None
 

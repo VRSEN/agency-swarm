@@ -10,7 +10,7 @@ import logging
 import os
 import typing
 from pathlib import Path
-from typing import TYPE_CHECKING, get_args
+from typing import TYPE_CHECKING, Any, get_args
 
 from agents import FunctionTool, Tool
 
@@ -35,7 +35,7 @@ def _attach_one_call_guard(tool: Tool, agent: "Agent") -> None:
             "Do not try to run it in parallel with other tools."
         )
 
-    async def guarded_on_invoke(ctx, input_json: str):
+    async def guarded_on_invoke(ctx: Any, input_json: str) -> Any:
         concurrency_manager = agent.tool_concurrency_manager
 
         # First, block if any one_call tool is currently running for this agent
@@ -69,7 +69,7 @@ def _attach_one_call_guard(tool: Tool, agent: "Agent") -> None:
             # Decrement active tool count
             concurrency_manager.decrement_active_count()
 
-    tool.on_invoke_tool = guarded_on_invoke  # type: ignore[attr-defined]
+    tool.on_invoke_tool = guarded_on_invoke
     tool._one_call_guard_installed = True  # type: ignore[attr-defined]
 
 

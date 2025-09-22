@@ -5,6 +5,7 @@ import traceback
 import uuid
 from contextvars import ContextVar
 from datetime import datetime
+from typing import Any
 
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -17,7 +18,7 @@ log_to_file_context: ContextVar[bool] = ContextVar("log_to_file", default=False)
 class ConsoleFormatter(logging.Formatter):
     """Custom console formatter that includes request ID and enhanced location info."""
 
-    def format(self, record):
+    def format(self, record: logging.LogRecord) -> str:
         request_id = request_id_context.get("")
         if request_id:
             request_id_str = f"[{request_id}] "
@@ -46,7 +47,7 @@ class ConsoleFormatter(logging.Formatter):
 class FileFormatter(logging.Formatter):
     """JSON formatter for file logging with structured data."""
 
-    def format(self, record):
+    def format(self, record: logging.LogRecord) -> str:
         log_entry = {
             "message": record.getMessage(),
             "details": {
@@ -61,15 +62,16 @@ class FileFormatter(logging.Formatter):
         }
 
         if record.exc_info:
-            log_entry["details"]["exception"] = {
-                "type": record.exc_info[0].__name__,
-                "message": str(record.exc_info[1]),
+            exc_type, exc_value, exc_traceback = record.exc_info
+            log_entry["details"]["exception"] = {  # type: ignore[index]
+                "type": exc_type.__name__ if exc_type else "Unknown",
+                "message": str(exc_value) if exc_value else "",
                 "traceback": self.formatException(record.exc_info).split("\n"),
             }
         elif record.levelno >= logging.ERROR:
             current_traceback = traceback.format_stack()
             if len(current_traceback) > 1:
-                log_entry["details"]["call_stack"] = [line.strip() for line in current_traceback[:-1] if line.strip()]
+                log_entry["details"]["call_stack"] = [line.strip() for line in current_traceback[:-1] if line.strip()]  # type: ignore[index]
 
         return json.dumps(log_entry, ensure_ascii=False)
 
@@ -82,7 +84,7 @@ class ConditionalFileHandler(logging.Handler):
         self.logs_dir = logs_dir
         os.makedirs(logs_dir, exist_ok=True)
 
-    def emit(self, record):
+    def emit(self, record: logging.LogRecord) -> None:
         if log_to_file_context.get(False):
             request_id = request_id_context.get("")
             if request_id:
@@ -96,7 +98,7 @@ class ConditionalFileHandler(logging.Handler):
                     pass
 
 
-def setup_enhanced_logging(logs_dir: str = "activity-logs"):
+def setup_enhanced_logging(logs_dir: str = "activity-logs") -> None:
     """Setup custom logging configuration with request tracking."""
 
     # Create logs directory
@@ -122,7 +124,7 @@ def setup_enhanced_logging(logs_dir: str = "activity-logs"):
     logger.setLevel(logging.INFO)
     logger.propagate = False
 
-    return logger
+    # No return statement needed for None return type
 
 
 def get_log_id_from_headers(request: Request) -> tuple[str, bool]:
@@ -138,7 +140,7 @@ def get_log_id_from_headers(request: Request) -> tuple[str, bool]:
 class RequestTracker(BaseHTTPMiddleware):
     """Middleware that tracks requests and enables conditional file logging."""
 
-    async def dispatch(self, request: Request, call_next):
+    async def dispatch(self, request: Request, call_next: Any) -> Any:
         request_id, should_log_to_file = get_log_id_from_headers(request)
         request_id_context.set(request_id)
         log_to_file_context.set(should_log_to_file)
@@ -148,7 +150,7 @@ class RequestTracker(BaseHTTPMiddleware):
         return response
 
 
-async def get_logs_endpoint_impl(log_id: str, logs_dir: str = "activity-logs"):
+async def get_logs_endpoint_impl(log_id: str, logs_dir: str = "activity-logs") -> Any:
     """Implementation to retrieve and delete log files."""
     try:
         if not log_id:

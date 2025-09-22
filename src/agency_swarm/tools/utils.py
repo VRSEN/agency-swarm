@@ -114,7 +114,7 @@ def from_openapi_schema(
                 *,
                 verb_: str = verb,
                 path_: str = path,
-            ):
+            ) -> str:
                 """Actual HTTP call executed by the agent."""
                 payload = json.loads(input_json)
 
@@ -149,7 +149,7 @@ def from_openapi_schema(
                     )
                     try:
                         logger.info(f"Response from {url}: {resp.json()}")
-                        return resp.json()
+                        return resp.json()  # type: ignore[no-any-return]
                     except Exception:
                         return resp.text
 
@@ -168,7 +168,7 @@ def from_openapi_schema(
     return tools
 
 
-def validate_openapi_spec(spec: str):
+def validate_openapi_spec(spec: str) -> None:
     spec_dict = json.loads(spec)
 
     # Validate that 'paths' is present in the spec
@@ -191,7 +191,7 @@ def validate_openapi_spec(spec: str):
             if "description" not in operation:
                 raise ValueError("Each operation must contain a 'description'.")
 
-    return spec_dict
+    return spec_dict  # type: ignore[no-any-return]
 
 
 def generate_model_from_schema(schema: dict, class_name: str, strict: bool) -> type:

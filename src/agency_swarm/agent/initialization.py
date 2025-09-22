@@ -338,7 +338,7 @@ def resolve_token_settings(model_settings_dict: dict[str, Any], agent_name: str 
     return model_settings_dict
 
 
-def wrap_input_guardrails(agent: "Agent"):
+def wrap_input_guardrails(agent: "Agent") -> None:
     """
     Wraps the input guardrails functions to check if the last message is a user message.
     If yes, extract the user message(s) and pass it to the user's guardrail function
@@ -351,8 +351,8 @@ def wrap_input_guardrails(agent: "Agent"):
         if guardrail.guardrail_function.__name__ == "guardrail_wrapper":
             continue
 
-        def create_guardrail_wrapper(guardrail_func):
-            def guardrail_wrapper(context: RunContextWrapper, agent: "Agent", chat_history: str | list[dict]):
+        def create_guardrail_wrapper(guardrail_func: Any) -> Any:
+            def guardrail_wrapper(context: RunContextWrapper, agent: "Agent", chat_history: str | list[dict]) -> Any:
                 if isinstance(chat_history, str):
                     return guardrail_func(context, agent, chat_history)
 

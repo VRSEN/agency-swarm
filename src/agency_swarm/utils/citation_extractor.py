@@ -6,6 +6,7 @@ message content and tool call results.
 """
 
 import logging
+from typing import Any
 
 from agents.items import MessageOutputItem
 
@@ -60,7 +61,7 @@ def extract_direct_file_annotations(
     return citations_by_message
 
 
-def extract_vector_store_citations(run_result):
+def extract_vector_store_citations(run_result: Any) -> list[dict[str, Any]]:
     """Extract FileSearch tool citations from RunResult.new_items"""
     citations = []
 
@@ -81,7 +82,7 @@ def extract_vector_store_citations(run_result):
     return citations
 
 
-def extract_direct_file_citations_from_history(thread_items):
+def extract_direct_file_citations_from_history(thread_items: Any) -> list[dict[str, Any]]:
     """Extract direct file citations from thread conversation history.
 
     This function now supports both legacy format (synthetic user messages)
@@ -120,7 +121,7 @@ def extract_direct_file_citations_from_history(thread_items):
     return citations
 
 
-def display_citations(citations, citation_type=""):
+def display_citations(citations: list[dict[str, Any]], citation_type: str = "") -> bool:
     """Display extracted citations in a readable format"""
     if not citations:
         print(f"❌ No {citation_type} citations found" if citation_type else "❌ No citations found")

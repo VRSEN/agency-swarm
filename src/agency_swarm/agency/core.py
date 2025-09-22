@@ -403,7 +403,7 @@ class Agency:
             **kwargs,
         )
 
-    def get_completion_stream(self, *args: Any, **kwargs: Any):
+    def get_completion_stream(self, *args: Any, **kwargs: Any) -> Any:
         """
         [DEPRECATED] Use get_response_stream instead. Yields all events from the modern streaming API.
         """
@@ -418,7 +418,7 @@ class Agency:
         app_token_env: str = "APP_TOKEN",
         cors_origins: list[str] | None = None,
         enable_agui: bool = False,
-    ):
+    ) -> None:
         """Serve this agency via the FastAPI integration.
 
         Parameters

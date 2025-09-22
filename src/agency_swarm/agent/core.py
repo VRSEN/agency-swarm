@@ -292,7 +292,7 @@ class Agent(BaseAgent[MasterContext]):
         """
         load_tools_from_folder(self)
 
-    def _parse_schemas(self):
+    def _parse_schemas(self) -> None:
         """Parse OpenAPI schemas from the schemas folder and create tools."""
         parse_schemas(self)
 
@@ -369,8 +369,8 @@ class Agent(BaseAgent[MasterContext]):
         file_ids: list[str] | None = None,
         additional_instructions: str | None = None,
         agency_context: AgencyContext | None = None,  # Context from agency, or None for standalone
-        **kwargs,
-    ) -> AsyncGenerator[Any]:
+        **kwargs: Any,
+    ) -> AsyncGenerator[Any, None]:
         """Runs the agent's turn in streaming mode.
 
         Args:

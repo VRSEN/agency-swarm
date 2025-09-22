@@ -181,7 +181,7 @@ def run_fastapi(
     from agency_swarm import Agency
     from agency_swarm.integrations.fastapi import run_fastapi
 
-    def agency_factory(*, load_threads_callback=None, save_threads_callback=None, **_: Any) -> Agency:
+    def agency_factory(*, load_threads_callback: Any = None, save_threads_callback: Any = None, **_: Any) -> Agency:
         flows: list[Any] = []
         for sender, receiver in agency._derived_communication_flows:
             tool_cls = agency._communication_tool_classes.get((sender.name, receiver.name))
