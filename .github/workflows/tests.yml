@@ -1,3 +1,4 @@
+# cSpell:ignore mypy
 name: CI
 
 on:
@@ -64,5 +65,6 @@ jobs:
 
       - name: Run tests with coverage
         env:
+          # OpenAI API key for integration tests (optional - tests will skip if not provided)
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: make coverage
