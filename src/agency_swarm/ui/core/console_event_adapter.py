@@ -13,7 +13,7 @@ class ConsoleEventAdapter:
     Converts OpenAI Agents SDK events int console message outputs.
     """
 
-    def __init__(self, show_reasoning: bool = True, agents: list[str] = []):  # noqa: B006
+    def __init__(self, show_reasoning: bool = True, agents: list[str] | None = None):
         # Dictionary to hold agent-to-agent communication data
         self.agent_to_agent_communication: dict[str, dict[str, Any]] = {}
         # Dictionary to hold MCP call names
@@ -22,7 +22,7 @@ class ConsoleEventAdapter:
         self.message_output: Live | None = None
         self.console = Console()
         self.last_live_display = None
-        self.handoff_agent = None
+        self.handoff_agent: str | None = None
         # Track whether final content has already been rendered for current live region
         self._final_rendered = False
         # Reasoning summary streaming state
@@ -33,8 +33,8 @@ class ConsoleEventAdapter:
         self._message_started = False
         self._reasoning_needs_separator = False
         self.show_reasoning = bool(show_reasoning)
-        # All agents in the agency, used to display correct names when mentioning agents
-        self.agents = agents
+        # Names of all agents in the agency, used to display correct names on handoffs
+        self.agents = agents or []
 
     def set_show_reasoning(self, enabled: bool) -> None:
         self.show_reasoning = bool(enabled)
@@ -117,7 +117,6 @@ class ConsoleEventAdapter:
 
     # --- Private handlers (behavior preserved) ---
     def _reset_lifecycle_state(self) -> None:
-        # self.handoff_agent = None
         self._reasoning_displayed = False
         self._message_started = False
         self._reasoning_needs_separator = False
@@ -203,7 +202,6 @@ class ConsoleEventAdapter:
                     pass
             self.message_output = None
             self.response_buffer = ""
-            # self.handoff_agent = None
             self._finalize_open_reasoning()
         elif data_type == "response.output_item.added":
             self._handle_output_item_added(data.item, agent_name)
@@ -332,11 +330,10 @@ class ConsoleEventAdapter:
                         tool_handoff_name = item.name.replace("transfer_to_", "")
                         self.handoff_agent = tool_handoff_name
                         # Try to restore the correct agent name if it was split by underscores
-                        if self.agents:
-                            for agent in self.agents:
-                                if agent.replace("_", " ") == tool_handoff_name.replace("_", " "):
-                                    self.handoff_agent = agent # type: ignore[assignment]
-                                    break
+                        for agent in self.agents:
+                            if agent.replace("_", " ") == tool_handoff_name.replace("_", " "):
+                                self.handoff_agent = agent
+                                break
 
     def _handle_run_item_stream_event(self, item: Any, agent_name: str, speaking_to: str) -> None:
         if item.type == "tool_call_output_item":
