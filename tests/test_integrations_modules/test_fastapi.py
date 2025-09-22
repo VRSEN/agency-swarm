@@ -15,14 +15,14 @@ class TestRunFastAPI:
     def test_run_fastapi_no_agencies_or_tools_warning(self, caplog):
         """Test that warning is logged when no agencies or tools are provided."""
         result = run_fastapi()
-        
+
         assert result is None
         assert "No endpoints to deploy" in caplog.text
 
     def test_run_fastapi_empty_agencies_and_tools_warning(self, caplog):
         """Test that warning is logged when empty agencies and tools are provided."""
         result = run_fastapi(agencies={}, tools=[])
-        
+
         assert result is None
         assert "No endpoints to deploy" in caplog.text
 

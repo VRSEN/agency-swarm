@@ -48,9 +48,12 @@ class BaseTool(BaseModel, ABC):
             # Create a minimal context wrapper for standalone tool usage
             # In practice, this will be overridden when the tool is used within an agency
             from ..utils.thread import ThreadManager
+
             dummy_thread_manager = ThreadManager()
             self._context = RunContextWrapper(
-                context=MasterContext(thread_manager=dummy_thread_manager, agents={}, user_context={}, current_agent_name=None)
+                context=MasterContext(
+                    thread_manager=dummy_thread_manager, agents={}, user_context={}, current_agent_name=None
+                )
             )
 
     class ToolConfig:

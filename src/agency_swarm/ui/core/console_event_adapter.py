@@ -56,7 +56,9 @@ class ConsoleEventAdapter:
             self.reasoning_buffer = ""
             self._reasoning_final_rendered = False
 
-    def _update_console(self, msg_type: str, sender: str, receiver: str, content: str, add_separator: bool = True) -> None:
+    def _update_console(
+        self, msg_type: str, sender: str, receiver: str, content: str, add_separator: bool = True
+    ) -> None:
         # Print a separator only for function, function_output, and agent-to-agent messages
         sender_emoji = "👤" if sender.lower() == "user" else "🤖"
         receiver_emoji = "👤" if receiver.lower() == "user" else "🤖"

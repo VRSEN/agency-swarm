@@ -238,7 +238,9 @@ class AguiAdapter:
 
         return None, "unknown", None
 
-    def _snapshot_event(self, item_id: str, call_id: str, tool_name: str, arguments: str | None) -> MessagesSnapshotEvent:
+    def _snapshot_event(
+        self, item_id: str, call_id: str, tool_name: str, arguments: str | None
+    ) -> MessagesSnapshotEvent:
         """Helper to build a minimal *MessagesSnapshotEvent* for a tool call."""
         return MessagesSnapshotEvent(
             type=EventType.MESSAGES_SNAPSHOT,

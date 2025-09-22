@@ -5,14 +5,13 @@ This module tests the citation extraction functionality for different types of
 message content and tool call results.
 """
 
-import pytest
-from unittest.mock import Mock, MagicMock
+from unittest.mock import Mock
 
 from agency_swarm.utils.citation_extractor import (
-    extract_direct_file_annotations,
-    extract_vector_store_citations,
-    extract_direct_file_citations_from_history,
     display_citations,
+    extract_direct_file_annotations,
+    extract_direct_file_citations_from_history,
+    extract_vector_store_citations,
 )
 
 
@@ -28,10 +27,10 @@ class TestExtractDirectFileAnnotations:
         """Test extraction with messages that have no content."""
         mock_message = Mock()
         mock_message.content = None
-        
+
         mock_msg_item = Mock()
         mock_msg_item.raw_item = mock_message
-        
+
         result = extract_direct_file_annotations([mock_msg_item])
         assert result == {}
 
@@ -39,14 +38,14 @@ class TestExtractDirectFileAnnotations:
         """Test extraction with messages that have content but no annotations."""
         mock_content_item = Mock()
         mock_content_item.annotations = None
-        
+
         mock_message = Mock()
         mock_message.content = [mock_content_item]
         mock_message.id = "msg_123"
-        
+
         mock_msg_item = Mock()
         mock_msg_item.raw_item = mock_message
-        
+
         result = extract_direct_file_annotations([mock_msg_item])
         assert result == {}
 
@@ -58,25 +57,25 @@ class TestExtractDirectFileAnnotations:
         mock_annotation.file_id = "file_123"
         mock_annotation.filename = "test.pdf"
         mock_annotation.index = 0
-        
+
         # Create mock content item with annotations
         mock_content_item = Mock()
         mock_content_item.annotations = [mock_annotation]
-        
+
         # Create mock message
         mock_message = Mock()
         mock_message.content = [mock_content_item]
         mock_message.id = "msg_123"
-        
+
         # Create mock message item
         mock_msg_item = Mock()
         mock_msg_item.raw_item = mock_message
-        
+
         result = extract_direct_file_annotations([mock_msg_item])
-        
+
         assert "msg_123" in result
         assert len(result["msg_123"]) == 1
-        
+
         citation = result["msg_123"][0]
         assert citation["file_id"] == "file_123"
         assert citation["filename"] == "test.pdf"
@@ -92,36 +91,36 @@ class TestExtractDirectFileAnnotations:
         mock_annotation1.file_id = "file_123"
         mock_annotation1.filename = "test1.pdf"
         mock_annotation1.index = 0
-        
+
         mock_annotation2 = Mock()
         mock_annotation2.type = "file_citation"
         mock_annotation2.file_id = "file_456"
         mock_annotation2.filename = "test2.pdf"
         mock_annotation2.index = 1
-        
+
         # Create mock content item with annotations
         mock_content_item = Mock()
         mock_content_item.annotations = [mock_annotation1, mock_annotation2]
-        
+
         # Create mock message
         mock_message = Mock()
         mock_message.content = [mock_content_item]
         mock_message.id = "msg_123"
-        
+
         # Create mock message item
         mock_msg_item = Mock()
         mock_msg_item.raw_item = mock_message
-        
+
         result = extract_direct_file_annotations([mock_msg_item])
-        
+
         assert "msg_123" in result
         assert len(result["msg_123"]) == 2
-        
+
         # Check first citation
         citation1 = result["msg_123"][0]
         assert citation1["file_id"] == "file_123"
         assert citation1["filename"] == "test1.pdf"
-        
+
         # Check second citation
         citation2 = result["msg_123"][1]
         assert citation2["file_id"] == "file_456"
@@ -132,20 +131,20 @@ class TestExtractDirectFileAnnotations:
         # Create mock annotation with different type
         mock_annotation = Mock()
         mock_annotation.type = "other_type"
-        
+
         # Create mock content item with annotations
         mock_content_item = Mock()
         mock_content_item.annotations = [mock_annotation]
-        
+
         # Create mock message
         mock_message = Mock()
         mock_message.content = [mock_content_item]
         mock_message.id = "msg_123"
-        
+
         # Create mock message item
         mock_msg_item = Mock()
         mock_msg_item.raw_item = mock_message
-        
+
         result = extract_direct_file_annotations([mock_msg_item])
         assert result == {}
 
@@ -185,7 +184,7 @@ class TestExtractVectorStoreCitations:
         """Test extraction with empty new_items list."""
         mock_run_result = Mock()
         mock_run_result.new_items = []
-        
+
         result = extract_vector_store_citations(mock_run_result)
         assert result == []
 
@@ -194,10 +193,10 @@ class TestExtractVectorStoreCitations:
         mock_item = Mock()
         mock_item.raw_item = Mock()
         mock_item.raw_item.type = "other_type"
-        
+
         mock_run_result = Mock()
         mock_run_result.new_items = [mock_item]
-        
+
         result = extract_vector_store_citations(mock_run_result)
         assert result == []
 
@@ -207,22 +206,22 @@ class TestExtractVectorStoreCitations:
         mock_result = Mock()
         mock_result.file_id = "file_123"
         mock_result.text = "Sample text content"
-        
+
         # Create mock tool call
         mock_tool_call = Mock()
         mock_tool_call.type = "file_search_call"
         mock_tool_call.id = "call_123"
         mock_tool_call.results = [mock_result]
-        
+
         # Create mock item
         mock_item = Mock()
         mock_item.raw_item = mock_tool_call
-        
+
         mock_run_result = Mock()
         mock_run_result.new_items = [mock_item]
-        
+
         result = extract_vector_store_citations(mock_run_result)
-        
+
         assert len(result) == 1
         citation = result[0]
         assert citation["method"] == "vector_store"
@@ -236,26 +235,26 @@ class TestExtractVectorStoreCitations:
         mock_result1 = Mock()
         mock_result1.file_id = "file_123"
         mock_result1.text = "First text content"
-        
+
         mock_result2 = Mock()
         mock_result2.file_id = "file_456"
         mock_result2.text = "Second text content"
-        
+
         # Create mock tool call
         mock_tool_call = Mock()
         mock_tool_call.type = "file_search_call"
         mock_tool_call.id = "call_123"
         mock_tool_call.results = [mock_result1, mock_result2]
-        
+
         # Create mock item
         mock_item = Mock()
         mock_item.raw_item = mock_tool_call
-        
+
         mock_run_result = Mock()
         mock_run_result.new_items = [mock_item]
-        
+
         result = extract_vector_store_citations(mock_run_result)
-        
+
         assert len(result) == 2
         assert result[0]["file_id"] == "file_123"
         assert result[1]["file_id"] == "file_456"
@@ -301,18 +300,12 @@ class TestExtractDirectFileCitationsFromHistory:
             {
                 "role": "assistant",
                 "content": "Some response",
-                "citations": [
-                    {
-                        "file_id": "file_123",
-                        "filename": "test.pdf",
-                        "method": "direct_file"
-                    }
-                ]
+                "citations": [{"file_id": "file_123", "filename": "test.pdf", "method": "direct_file"}],
             }
         ]
-        
+
         result = extract_direct_file_citations_from_history(thread_items)
-        
+
         assert len(result) == 1
         assert result[0]["file_id"] == "file_123"
         assert result[0]["filename"] == "test.pdf"
@@ -326,12 +319,12 @@ class TestExtractDirectFileCitationsFromHistory:
 File ID: file_123
 Filename: test.pdf
 Text Index: 0
-Type: file_citation"""
+Type: file_citation""",
             }
         ]
-        
+
         result = extract_direct_file_citations_from_history(thread_items)
-        
+
         assert len(result) == 1
         citation = result[0]
         assert citation["file_id"] == "file_123"
@@ -343,16 +336,10 @@ Type: file_citation"""
     def test_extract_direct_file_citations_from_history_no_citations(self):
         """Test extraction with thread items that have no citations."""
         thread_items = [
-            {
-                "role": "user",
-                "content": "Regular user message"
-            },
-            {
-                "role": "assistant",
-                "content": "Regular assistant response"
-            }
+            {"role": "user", "content": "Regular user message"},
+            {"role": "assistant", "content": "Regular assistant response"},
         ]
-        
+
         result = extract_direct_file_citations_from_history(thread_items)
         assert result == []
 
@@ -364,7 +351,7 @@ class TestDisplayCitations:
         """Test display with empty citations list."""
         result = display_citations([])
         captured = capsys.readouterr()
-        
+
         assert result is False
         assert "❌ No citations found" in captured.out
 
@@ -372,24 +359,17 @@ class TestDisplayCitations:
         """Test display with citation type label."""
         result = display_citations([], citation_type="direct")
         captured = capsys.readouterr()
-        
+
         assert result is False
         assert "❌ No direct citations found" in captured.out
 
     def test_display_citations_single_citation(self, capsys):
         """Test display with single citation."""
-        citations = [
-            {
-                "method": "direct_file",
-                "file_id": "file_123",
-                "filename": "test.pdf",
-                "index": 0
-            }
-        ]
-        
+        citations = [{"method": "direct_file", "file_id": "file_123", "filename": "test.pdf", "index": 0}]
+
         result = display_citations(citations)
         captured = capsys.readouterr()
-        
+
         assert result is True
         assert "✅ Found 1 citation(s)" in captured.out
         assert "Citation 1 [direct_file]" in captured.out
@@ -404,36 +384,34 @@ class TestDisplayCitations:
                 "method": "vector_store",
                 "file_id": "file_123",
                 "tool_call_id": "call_123",
-                "text": "This is a very long text content that should be truncated when displayed as a preview in the citation output"
+                "text": (
+                    "This is a very long text content that should be truncated when displayed "
+                    "as a preview in the citation output"
+                ),
             }
         ]
-        
+
         result = display_citations(citations)
         captured = capsys.readouterr()
-        
+
         assert result is True
         assert "Citation 1 [vector_store]" in captured.out
         assert "Tool Call: call_123" in captured.out
-        assert "Content: This is a very long text content that should be truncated when displayed as a preview in the citatio..." in captured.out
+        assert (
+            "Content: This is a very long text content that should be truncated when displayed "
+            "as a preview in the citatio..." in captured.out
+        )
 
     def test_display_citations_multiple_citations(self, capsys):
         """Test display with multiple citations."""
         citations = [
-            {
-                "method": "direct_file",
-                "file_id": "file_123",
-                "filename": "test1.pdf"
-            },
-            {
-                "method": "vector_store",
-                "file_id": "file_456",
-                "tool_call_id": "call_456"
-            }
+            {"method": "direct_file", "file_id": "file_123", "filename": "test1.pdf"},
+            {"method": "vector_store", "file_id": "file_456", "tool_call_id": "call_456"},
         ]
-        
+
         result = display_citations(citations, citation_type="mixed")
         captured = capsys.readouterr()
-        
+
         assert result is True
         assert "✅ Found 2 citation(s) mixed" in captured.out
         assert "Citation 1 [direct_file]" in captured.out

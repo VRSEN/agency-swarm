@@ -157,6 +157,7 @@ def start_terminal(agency_instance: Any, show_reasoning: bool = False) -> None:
             from prompt_toolkit.completion import Completer, Completion
             from prompt_toolkit.history import InMemoryHistory
             from prompt_toolkit.key_binding import KeyBindings
+
             prompt_session_available = True
         except Exception:
             prompt_session_available = False
@@ -179,7 +180,7 @@ def start_terminal(agency_instance: Any, show_reasoning: bool = False) -> None:
             }
 
             class SlashCompleter(Completer):
-                def get_completions(self, document: Any, complete_event: Any) -> Generator[Completion, None, None]:
+                def get_completions(self, document: Any, complete_event: Any) -> Generator[Completion]:
                     text = document.text_before_cursor
                     if not text or not text.startswith("/"):
                         return

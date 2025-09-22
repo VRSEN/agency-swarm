@@ -237,7 +237,16 @@ class ToolFactory:
         return tools
 
     @staticmethod
-    def _create_invoke_for_path(path: str, verb: str, openapi: Any, tool_schema: Any, function_name: str, headers: dict[str, str] | None = None, params: dict[str, Any] | None = None, timeout: int = 90) -> Any:
+    def _create_invoke_for_path(
+        path: str,
+        verb: str,
+        openapi: Any,
+        tool_schema: Any,
+        function_name: str,
+        headers: dict[str, str] | None = None,
+        params: dict[str, Any] | None = None,
+        timeout: int = 90,
+    ) -> Any:
         """
         Creates a callback function for a specific path and method.
         This is a factory function that captures the current values of path and method.

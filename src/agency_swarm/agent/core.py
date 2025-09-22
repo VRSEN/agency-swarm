@@ -370,7 +370,7 @@ class Agent(BaseAgent[MasterContext]):
         additional_instructions: str | None = None,
         agency_context: AgencyContext | None = None,  # Context from agency, or None for standalone
         **kwargs: Any,
-    ) -> AsyncGenerator[Any, None]:
+    ) -> AsyncGenerator[Any]:
         """Runs the agent's turn in streaming mode.
 
         Args:

@@ -26,7 +26,7 @@ class TestLoadToolsFromDirectory:
             # Create a non-Python file
             with open(os.path.join(temp_dir, "readme.txt"), "w") as f:
                 f.write("This is not a Python file")
-            
+
             tools = _load_tools_from_directory(temp_dir)
             assert tools == []
 
@@ -36,38 +36,39 @@ class TestLoadToolsFromDirectory:
             # Create __init__.py file (should be ignored)
             with open(os.path.join(temp_dir, "__init__.py"), "w") as f:
                 f.write("# Init file")
-            
+
             tools = _load_tools_from_directory(temp_dir)
             assert tools == []
 
-    @patch('agency_swarm.integrations.mcp_server.ToolFactory')
+    @patch("agency_swarm.integrations.mcp_server.ToolFactory")
     def test_load_tools_from_directory_with_python_files(self, mock_tool_factory):
         """Test loading tools from directory with Python files."""
         mock_tool_factory.from_file.return_value = [Mock(), Mock()]
-        
+
         with tempfile.TemporaryDirectory() as temp_dir:
             # Create a Python file
             with open(os.path.join(temp_dir, "test_tool.py"), "w") as f:
                 f.write("# Test tool file")
-            
+
             tools = _load_tools_from_directory(temp_dir)
-            
+
             assert len(tools) == 2
             mock_tool_factory.from_file.assert_called_once()
 
-    @patch('agency_swarm.integrations.mcp_server.ToolFactory')
+    @patch("agency_swarm.integrations.mcp_server.ToolFactory")
     def test_load_tools_from_directory_adds_to_sys_path(self, mock_tool_factory):
         """Test that directory is added to sys.path."""
         mock_tool_factory.from_file.return_value = []
-        
+
         with tempfile.TemporaryDirectory() as temp_dir:
             # Create a Python file
             with open(os.path.join(temp_dir, "test_tool.py"), "w") as f:
                 f.write("# Test tool file")
-            
+
             import sys
+
             original_path = sys.path.copy()
-            
+
             try:
                 _load_tools_from_directory(temp_dir)
                 assert temp_dir in sys.path
@@ -95,7 +96,7 @@ class TestRunMCP:
         except ValueError as e:
             assert "No tools provided" in str(e)
 
-    @patch('agency_swarm.integrations.mcp_server._load_tools_from_directory')
+    @patch("agency_swarm.integrations.mcp_server._load_tools_from_directory")
     def test_run_mcp_empty_directory_error(self, mock_load_tools):
         """Test error when directory contains no tools."""
         mock_load_tools.return_value = []
@@ -110,6 +111,7 @@ class TestRunMCP:
         """Test error when duplicate tool names are provided."""
         # Create mock tools with same name using spec to control behavior
         from typing import ClassVar
+
         from agency_swarm.tools import BaseTool
 
         class MockTool1(BaseTool):
@@ -119,7 +121,7 @@ class TestRunMCP:
             name: ClassVar[str] = "TestTool"
 
         try:
-            with patch('agency_swarm.integrations.mcp_server.FastMCP'):
+            with patch("agency_swarm.integrations.mcp_server.FastMCP"):
                 run_mcp(tools=[MockTool1, MockTool2], return_app=True)
             raise AssertionError("Should have raised ValueError")
         except ValueError as e:
