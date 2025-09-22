@@ -1,0 +1,168 @@
+# AugmentCode Configuration for Agency Swarm
+# This file configures AugmentCode's behavior for the Agency Swarm project
+
+project:
+  name: "agency-swarm"
+  description: "Multi-agent orchestration framework built on OpenAI Agents SDK"
+  version: "1.0.2"
+  language: "python"
+  framework: "agency-swarm"
+
+# AI Assistant Rules and Constraints
+ai_assistant:
+  # Core principles from AGENTS.md
+  principles:
+    - "Tests define truth - preserve and respect test outcomes"
+    - "Evidence-driven changes - justify with tests, logs, or specifications"
+    - "Guardian of codebase - defend consistency and established patterns"
+    - "Critical thinking - question requests and verify alignment"
+    
+  # Mandatory workflow steps
+  workflow:
+    required_steps:
+      - "Run 'make prime' before any substantive changes"
+      - "Search for similar patterns globally"
+      - "Apply fixes to all instances at once"
+      - "Validate with relevant tests after each change"
+      - "Run full CI suite before completion"
+    
+    prohibited_practices:
+      - "Ending work without testing changes"
+      - "Misstating test outcomes"
+      - "Skipping workflow safety steps"
+      - "Introducing functional changes during refactoring"
+
+# Code Quality Standards
+quality:
+  # From pyproject.toml and project standards
+  python:
+    version: ">=3.12"
+    target_version: "3.13"
+    line_length: 120
+    
+  linting:
+    tool: "ruff"
+    config_file: "pyproject.toml"
+    
+  type_checking:
+    tool: "mypy"
+    strict_mode: true  # Target state
+    config_file: "pyproject.toml"
+    
+  testing:
+    framework: "pytest"
+    min_coverage: 87
+    config_file: "pyproject.toml"
+    
+  formatting:
+    tool: "ruff"
+    auto_fix: true
+
+# File and Architecture Constraints
+architecture:
+  # From AGENTS.md file requirements
+  file_constraints:
+    max_lines: 500
+    max_method_lines: 100
+    principle: "Every line must fight for its place"
+    
+  # Core modules structure
+  modules:
+    - name: "agency"
+      path: "src/agency_swarm/agency/"
+      purpose: "Multi-agent orchestration and communication flows"
+      
+    - name: "agent"
+      path: "src/agency_swarm/agent/"
+      purpose: "Base agent functionality and execution"
+      
+    - name: "tools"
+      path: "src/agency_swarm/tools/"
+      purpose: "Tool system and integrations"
+      
+    - name: "ui"
+      path: "src/agency_swarm/ui/"
+      purpose: "User interfaces and visualization"
+      
+    - name: "integrations"
+      path: "src/agency_swarm/integrations/"
+      purpose: "External system integrations"
+
+# Development Environment
+environment:
+  package_manager: "uv"
+  virtual_env: ".venv"
+  
+  # Key commands from Makefile
+  commands:
+    setup: "make sync"
+    lint: "make lint"
+    type_check: "make mypy"
+    test: "make tests"
+    coverage: "make coverage"
+    ci: "make ci"
+    prime: "make prime"
+    
+  # Pre-commit hooks
+  pre_commit:
+    enabled: true
+    config_file: ".pre-commit-config.yaml"
+
+# Documentation Standards
+documentation:
+  framework: "mintlify"
+  config_file: "docs/mintlify.cursorrules"
+  examples_dir: "examples/"
+  
+  # Documentation requirements
+  requirements:
+    - "Follow mintlify.cursorrules for formatting"
+    - "Reference exact code files for documented behavior"
+    - "Keep beginner-friendly and value-focused"
+    - "Update docs when changing APIs or behavior"
+
+# Integration Patterns
+integrations:
+  openai_sdk:
+    version: ">=1.107.1,<2.0"
+    agents_sdk: "0.2.9"
+    
+  supported_models:
+    - "GPT-5 family"
+    - "GPT-4o"
+    - "Claude (via LiteLLM)"
+    - "Gemini (via LiteLLM)"
+    
+  external_tools:
+    - "FastAPI"
+    - "MCP (Model Context Protocol)"
+    - "Vector stores"
+    - "File search"
+
+# Security and API Keys
+security:
+  env_file: ".env"
+  required_keys:
+    - "OPENAI_API_KEY"
+  
+  # From AGENTS.md API keys section
+  key_loading: "Always load via .env with python-dotenv"
+  
+# Git and Version Control
+git:
+  # From project structure
+  main_branch: "main"
+  protected_branches: ["main", "release/*"]
+  
+  # Commit practices
+  commit_style: "conventional"
+  max_subject_length: 72
+  
+  # Pre-commit requirements
+  hooks:
+    - "trailing-whitespace"
+    - "end-of-file-fixer"
+    - "check-yaml"
+    - "check-toml"
+    - "ruff"
+    - "ruff-format"
