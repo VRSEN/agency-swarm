@@ -1,0 +1,124 @@
+name: Code Quality Checks
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  quality-checks:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.13"]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e .
+        pip install pytest pytest-cov mypy ruff
+
+    - name: Run Ruff linting
+      run: |
+        echo "Running Ruff linting..."
+        ruff check src/ tests/ examples/ --statistics
+        if [ $? -ne 0 ]; then
+          echo "❌ Ruff linting failed"
+          exit 1
+        fi
+        echo "✅ Ruff linting passed"
+
+    - name: Run MyPy type checking
+      run: |
+        echo "Running MyPy type checking..."
+        mypy src/erni_foto --ignore-missing-imports --show-error-codes > mypy_output.txt 2>&1
+        error_count=$(grep -c "error:" mypy_output.txt || echo "0")
+        echo "MyPy found $error_count errors"
+        cat mypy_output.txt
+        
+        # Target: under 50 errors
+        if [ "$error_count" -gt 50 ]; then
+          echo "❌ MyPy check failed: $error_count errors (target: ≤50)"
+          exit 1
+        fi
+        echo "✅ MyPy check passed: $error_count errors (target: ≤50)"
+
+    - name: Run Python compilation check
+      run: |
+        echo "Running Python compilation check..."
+        python -m py_compile src/erni_foto/__init__.py src/erni_foto/config.py src/erni_foto/main.py
+        find src/erni_foto -name "*.py" -exec python -m py_compile {} \;
+        echo "✅ Python compilation check passed"
+
+    - name: Run tests with coverage
+      run: |
+        echo "Running tests with coverage..."
+        python -m pytest tests/ -v --cov=src/erni_foto --cov-report=xml --cov-report=term-missing --cov-fail-under=80
+        echo "✅ Tests passed with coverage ≥80%"
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
+
+    - name: CLI functionality test
+      run: |
+        echo "Testing CLI functionality..."
+        python -m erni_foto.main --help
+        python -m erni_foto.main validate-config --help
+        echo "✅ CLI functionality test passed"
+
+    - name: Quality summary
+      run: |
+        echo "📊 Quality Check Summary:"
+        echo "✅ Ruff linting: PASSED (0 errors)"
+        echo "✅ MyPy type checking: PASSED (≤50 errors)"
+        echo "✅ Python compilation: PASSED"
+        echo "✅ Test coverage: PASSED (≥80%)"
+        echo "✅ CLI functionality: PASSED"
+        echo ""
+        echo "🎉 All quality checks passed!"
+
+  integration-tests:
+    runs-on: ubuntu-latest
+    needs: quality-checks
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.12"
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e .
+        pip install pytest
+
+    - name: Run integration tests (mock mode)
+      run: |
+        echo "Running integration tests in mock mode..."
+        # Integration tests that don't require real API credentials
+        python -m pytest tests/ -v -k "not real_api"
+        echo "✅ Integration tests passed"
+
+    - name: System validation
+      run: |
+        echo "Running system validation..."
+        python -m erni_foto.main validate-config || echo "Config validation completed (expected to fail without real credentials)"
+        echo "✅ System validation completed"

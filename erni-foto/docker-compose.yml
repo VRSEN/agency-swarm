@@ -1,0 +1,92 @@
+version: '3.8'
+
+services:
+  erni-foto:
+    build: .
+    container_name: erni-foto-system
+    environment:
+      # OpenAI Configuration
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_VISION_MODEL=${OPENAI_VISION_MODEL:-gpt-4-vision-preview}
+      - OPENAI_MAX_TOKENS=${OPENAI_MAX_TOKENS:-2000}
+      - OPENAI_TEMPERATURE=${OPENAI_TEMPERATURE:-0.2}
+      
+      # Azure Configuration
+      - AZURE_CLIENT_ID=${AZURE_CLIENT_ID}
+      - AZURE_CLIENT_SECRET=${AZURE_CLIENT_SECRET}
+      - AZURE_TENANT_ID=${AZURE_TENANT_ID}
+      
+      # SharePoint Configuration
+      - SHAREPOINT_SITE_URL=${SHAREPOINT_SITE_URL}
+      - SHAREPOINT_SITE_ID=${SHAREPOINT_SITE_ID}
+      
+      # Processing Configuration
+      - PROCESSING_BATCH_SIZE=${PROCESSING_BATCH_SIZE:-25}
+      - PROCESSING_MAX_CONCURRENT_UPLOADS=${PROCESSING_MAX_CONCURRENT_UPLOADS:-3}
+      - PROCESSING_RETRY_ATTEMPTS=${PROCESSING_RETRY_ATTEMPTS:-3}
+      
+      # File Configuration
+      - FILES_DOWNLOAD_DIRECTORY=/app/data/downloads
+      - FILES_TEMP_DIRECTORY=/app/data/temp
+      - FILES_PROCESSED_DIRECTORY=/app/data/processed
+      - FILES_LOG_DIRECTORY=/app/logs
+      
+      # Logging Configuration
+      - LOGGING_LEVEL=${LOGGING_LEVEL:-INFO}
+      - LOGGING_ENABLE_AUDIT_LOG=${LOGGING_ENABLE_AUDIT_LOG:-true}
+    
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./.env:/app/.env:ro
+    
+    ports:
+      - "8000:8000"
+    
+    restart: unless-stopped
+    
+    healthcheck:
+      test: ["CMD", "python", "-c", "from erni_foto import create_agency; agency = create_agency(); print('OK')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    # Override default command for interactive use
+    # command: ["python", "-m", "erni_foto.main", "status"]
+
+  # Optional: Redis for caching (if needed in future)
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: erni-foto-redis
+  #   ports:
+  #     - "6379:6379"
+  #   volumes:
+  #     - redis_data:/data
+  #   restart: unless-stopped
+
+  # Optional: PostgreSQL for persistent storage (if needed in future)
+  # postgres:
+  #   image: postgres:15-alpine
+  #   container_name: erni-foto-postgres
+  #   environment:
+  #     - POSTGRES_DB=erni_foto
+  #     - POSTGRES_USER=erni_foto
+  #     - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-changeme}
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   ports:
+  #     - "5432:5432"
+  #   restart: unless-stopped
+
+volumes:
+  # redis_data:
+  # postgres_data:
+  data:
+    driver: local
+  logs:
+    driver: local
+
+networks:
+  default:
+    name: erni-foto-network
