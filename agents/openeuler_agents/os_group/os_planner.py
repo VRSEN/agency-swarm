@@ -5,10 +5,10 @@ from agents.tools.read_json_file.ReadJsonFile import ReadJsonFile
 _name = "access_planner"
 
 _description = """
-负责访问控制能力群的步骤规划
+负责操作系统能力群的步骤规划
 """
 
-_group_name = "控制访问能力群"
+_group_name = "操作系统能力群"
 
 _input_format = """
 {

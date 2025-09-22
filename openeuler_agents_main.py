@@ -12,9 +12,14 @@ from agents.openeuler_agents import (
     software_rag_optimizer,
     step_inspector,
 )
-from agents.openeuler_agents.os_group import os_planner, os_step_scheduler
+from agents.openeuler_agents.os_group import (
+    os_planner, 
+    os_step_scheduler,
+)
 from agents.openeuler_agents.os_group.network_agent import network_agent
 from agents.openeuler_agents.os_group.permissions_agent import permissions_agent
+from agents.openeuler_agents.os_group.basic_agent import basic_agent
+from agents.openeuler_agents.os_group.user_agent import user_agent
 from agents.openeuler_agents.security_group import (
     security_planner,
     security_step_scheduler,
@@ -191,7 +196,7 @@ def main():
         cap_group_agents = {
             "软件能力群": [software_planner_instance, software_step_scheduler_instance],
             "安全能力群": [security_planner_instance, security_step_scheduler_instance],
-            "控制访问能力群": [os_planner_instance, os_step_scheduler_instance,user_agent_instance,basic_agent_instance],
+            "操作系统能力群": [os_planner_instance, os_step_scheduler_instance],
         }
 
         cap_group_agents_rag = {
@@ -213,10 +218,14 @@ def main():
             "操作系统能力群": [
                 permissions_agent_instance,
                 network_agent_instance,
+                user_agent_instance,
+                basic_agent_instance,
             ],
         }
 
-        text = """我有一台鲲鹏服务器，操作系统是openEuler 22.03 64bit with ARM，远程登录用户为root，公网IP为114.116.242.221，密码是xxx。MySQL版本是8.0，root用户的密码是root。**在鲲鹏服务器上已经安装并部署好A-Tune和MySQL，且用户权限都已经授权好，防火墙允许的端口号也已经设置好，不需要进行检查或确认操作**，请使用A-Tune对MySQL进行优化，提升数据库性能。"""
+        text = """
+        我有一台服务器，操作系统是openEuler 22.03 ，远程登录用户为root，公网IP为121.36.210.47，已经配置好免密登录。
+        该服务器上已经安装并已配置好`secScanner`工具，请使用`secScanner`工具扫描该机器的CVE漏洞。"""
 
         # text = """我想要将本地服务器Ubuntu上的MySQL数据库sbtest迁移到一台鲲鹏服务器上。鲲鹏服务器的操作系统是openEuler 22.03 64bit with ARM，远程登录用户为root，公网IP为114.116.242.221，密码是xxx。Ubuntu的用户为silhouette，IP地址为192.168.254.129，密码是xxx。两台服务器的MySQL版本都是8.0，已经创建好数据库sbtest，root用户的密码都是root。**迁移所需要的所有工具都已经安装完毕，且用户权限都已经授权好，防火墙允许的端口号也已经设置好，不需要进行检查或确认操作**，请帮我制定一个详细的迁移方案，并给出每一步的操作命令。"""
 
@@ -237,7 +246,7 @@ def main():
 
         while True:
             request_id = str(int(request_id) + 1)
-            if use_rag:
+            if use_rag == "True":
                 agency.task_planning_rag(
                     original_request=text,
                     plan_agents=plan_agents_rag,
