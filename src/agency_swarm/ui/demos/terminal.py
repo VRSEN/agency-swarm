@@ -1,6 +1,18 @@
+import asyncio
+import logging
+import os
+import re
 from collections.abc import Generator
 
+import prompt_toolkit as prompt_toolkit
+from prompt_toolkit.completion import Completer, Completion
+from prompt_toolkit.history import InMemoryHistory
+from prompt_toolkit.key_binding import KeyBindings
+
 from agency_swarm.agency.core import Agency
+
+from ..core.console_event_adapter import ConsoleEventAdapter
+from .launcher import TerminalDemoLauncher
 
 
 def start_terminal(
@@ -8,18 +20,6 @@ def start_terminal(
     show_reasoning: bool = False,
 ) -> None:
     """Run the terminal demo: input loop, slash commands, and streaming output."""
-    import asyncio
-    import logging
-    import os
-    import re
-
-    from ..core.console_event_adapter import ConsoleEventAdapter
-
-    # Late import to avoid circulars and keep launcher small
-    TerminalDemoLauncher = __import__(
-        "agency_swarm.ui.demos.launcher", fromlist=["TerminalDemoLauncher"]
-    ).TerminalDemoLauncher
-
     logger = logging.getLogger(__name__)
 
     recipient_agents = [str(agent.name) for agent in agency_instance.entry_points]
@@ -167,11 +167,7 @@ def start_terminal(
         return False
 
     async def main_loop():
-        # prompt_toolkit is a mandatory dependency; fail fast if unavailable
-        from prompt_toolkit import PromptSession
-        from prompt_toolkit.completion import Completion
-        from prompt_toolkit.history import InMemoryHistory
-        from prompt_toolkit.key_binding import KeyBindings
+        # prompt_toolkit is a mandatory dependency; imported at module load
 
         command_help: dict[str, str] = {
             "/help": "Show help",
@@ -189,24 +185,23 @@ def start_terminal(
             "/resume": "/resume",
         }
 
-        class SlashCompleter:
+        class SlashCompleter(Completer):
             def get_completions(self, document, complete_event) -> Generator[Completion]:
                 text = document.text_before_cursor
                 if not text or not text.startswith("/"):
                     return
-                if text == "/":
-                    entries = list(command_help.keys())
-                else:
-                    entries = [c for c in command_help.keys() if c.startswith(text)]
+                key = text
+                entries = list(command_help.keys()) if key == "/" else [c for c in command_help if c.startswith(key)]
                 for cmd in entries:
                     display = command_display_overrides.get(cmd, cmd)
                     yield Completion(
                         text=cmd,
-                        start_position=-len(text),
+                        start_position=-len(key),
                         display=display,
                         display_meta=command_help[cmd],
                     )
 
+        # Provide slash command suggestions only
         completer = SlashCompleter()
         history = InMemoryHistory()
         bindings = KeyBindings()
@@ -221,7 +216,7 @@ def start_terminal(
             buf.insert_text("/")
             buf.start_completion(select_first=True)
 
-        session = PromptSession(
+        session = prompt_toolkit.PromptSession(
             history=history,
             key_bindings=bindings,
             enable_history_search=True,

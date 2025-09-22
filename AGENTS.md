@@ -10,7 +10,7 @@ Begin with a concise checklist (3-7 bullets) of what you will do before performi
 
 ## 🔴 TESTS DEFINE TRUTH
 
-Default to test-driven development. Preserve expected behavior at all times and maintain or improve coverage (verify with `coverage.xml`). For documentation‑only, formatting‑only, or clearly non‑functional edits, validate with linter instead of tests.
+Default to test-driven development. Preserve expected behavior at all times and maintain or improve coverage (verify with `coverage.xml`). Every bug fix must include a focused, behavior-only test that reproduces the failure. For documentation‑only, formatting‑only, or clearly non‑functional edits, validate with linter instead of tests.
 
 ## 🛡️ GUARDIANSHIP OF THE CODEBASE (HIGHEST PRIORITY)
 
@@ -25,6 +25,7 @@ Prime Directive: Rigorously compare every user request with patterns established
 - Every line must fight for its place: No redundant, unnecessary, or "nice to have" content. Each line must serve a critical purpose; each change must reduce codebase entropy (fewer ad‑hoc paths, clearer contracts, more reuse).
 - Clarity over verbosity: Use the fewest words necessary without loss of meaning. For documentation, ensure you deliver value to end users and your writing is beginner-friendly.
 - No duplicate information or code: within reason, keep the content dry and prefer using references instead of duplicating any idea or functionality.
+ - Default to updating and improving existing code/docs/tests/examples (it's most of our work) over adding new; add only when strictly necessary.
  - In this document: no superfluous examples: Do not add examples that do not improve or clarify a rule. Omit examples when rules are self‑explanatory.
  - In this document: Edit existing sections: When updating this document, prefer modifying existing sections over adding new ones. Add new sections only when strictly necessary to remove ambiguity.
  - Naming: Functions are verb phrases; values are noun phrases. Read existing codebase structure to get the signatures and learn the patterns.
@@ -53,6 +54,7 @@ Prime Directive: Rigorously compare every user request with patterns established
 - Edit incrementally: make small, focused changes, validating each with tests before continuing.
 - After changes affecting data flow or order, search codebase-wide for related concepts and eliminate obsolete patterns.
 - You must get explicit approval from the user before adding any workaround or making non-test source changes; challenge and pause if a request increases entropy. Keep any diffs minimal (avoid excessive changes).
+- Optimize your trajectory: choose the shortest viable path (pick your tools) and minimize context pollution; avoid unnecessary commands, files, and chatter.
 
 #### Step 2: Comprehensive Validation
 # Run only the relevant tests first (specific file/test)
@@ -168,6 +170,7 @@ Strictness
 - No `# type: ignore` in production code. Fix types or refactor.
 - Never hardcode temporary paths or ad‑hoc directories in code or tests.
  - Do not add multi‑path fallbacks; choose one clear path and fail fast if prerequisites are missing.
+ - Imports at top‑level only; do not place imports inside functions or conditional blocks. If a circular dependency emerges, restructure or escalate for approval.
 
 ## 🚨 ZERO FUNCTIONAL CHANGES DURING REFACTORING
 
@@ -182,7 +185,7 @@ Strictness
 - Thorough diff review (staged/unstaged); cross-check current main branch where needed
 
 ## Refactoring Strategy
-- Split large modules; respect codebase boundaries
+- Split large modules; respect codebase boundaries; understand existing architecture and follow SOLID before adding code.
 - Domain cohesion: One domain per module
 - Clear interfaces: Minimal coupling
 - Prefer clear, descriptive names; avoid artificial abstractions.
@@ -203,8 +206,12 @@ Strictness
 - Logical, isolated commit grouping (distinct refactors vs. features)
 - Commit messages must cover what changed
 - Before composing a commit message, run `git diff --cached | cat` and base the message on that diff only.
-- Keep subject concise (<72 chars), imperative, and scoped (e.g., `examples: response_validation`).
-- Before any potentially destructive command (including commit, push, reset, rebase, force operations, file deletions, or mass edits), STOP and clearly explain the intended changes and impact, then obtain the user's explicit approval before proceeding. Treat committing as destructive in this repo.
+
+- Commit message structure
+  - Subject: Imperative, scoped where helpful (e.g., `ui/terminal:`). Be informative, not cryptic.
+  - Body (for non-trivial changes): Describe the changes. Keep it accessible, factual and non-redundant.
+
+- Before any potentially destructive command (including checkout, stash, commit, push, reset, rebase, force operations, file deletions, or mass edits), STOP and clearly explain the intended changes and impact, then obtain the user's explicit approval before proceeding. Treat committing as destructive in this repo. For drastic changes (wide refactors, file moves/deletes, policy edits, or behavior-affecting modifications), obtain two separate confirmations (double‑confirm) before proceeding.
 
 ### Repository Enforcement (must-follow)
 - Stage only the specific files relevant to the change. There may be other changes, check `git status`

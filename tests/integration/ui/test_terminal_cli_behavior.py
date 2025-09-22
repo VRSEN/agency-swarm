@@ -132,3 +132,47 @@ def test_cli_status_is_nondestructive(monkeypatch: pytest.MonkeyPatch) -> None:
     terminal.start_terminal(agency, show_reasoning=False)
 
     assert calls == []
+
+
+def test_cli_slash_completions_supports_async(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ensure the prompt completer provides async completions for '/' (bug repro)."""
+    TerminalDemoLauncher.CURRENT_CHAT_ID = None
+
+    # Capture the completer passed into PromptSession without altering behavior elsewhere.
+    import prompt_toolkit as _pt
+
+    captured: dict[str, object] = {}
+
+    def _PS_capture(*a, **k):  # noqa: ANN001, ANN002
+        class _S:  # minimal async session that records the completer
+            async def prompt_async(self, *aa, **kk):  # noqa: ANN001, ANN002
+                captured["completer"] = kk.get("completer")
+                return "/exit"
+
+        return _S()
+
+    monkeypatch.setattr(_pt, "PromptSession", _PS_capture, raising=True)
+
+    agency, _calls = _make_agency_with_stream_stub(monkeypatch)
+    terminal.start_terminal(agency, show_reasoning=False)
+
+    completer = captured.get("completer")
+    assert completer is not None, "PromptSession did not receive a completer"
+    assert hasattr(completer, "get_completions_async"), "Completer must support async API"
+
+    # Verify that '/' yields at least one slash command completion via the async API.
+    from prompt_toolkit.completion import CompleteEvent
+    from prompt_toolkit.document import Document
+
+    async def _collect():
+        out: list[str] = []
+        async for c in completer.get_completions_async(  # type: ignore[attr-defined]
+            Document("/"), CompleteEvent(text_inserted=True)
+        ):
+            out.append(c.text)
+        return out
+
+    import asyncio
+
+    results = asyncio.run(_collect())
+    assert any(item.startswith("/") for item in results), "Expected slash command suggestions"

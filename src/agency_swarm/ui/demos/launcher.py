@@ -1,5 +1,8 @@
+import asyncio
 import uuid
 from typing import Any
+
+from prompt_toolkit.shortcuts import radiolist_dialog
 
 from agency_swarm import Agency
 
@@ -132,42 +135,34 @@ class TerminalDemoLauncher:
             return None
 
         # Try fancy menu with arrow keys first (only if no event loop is running)
+        loop_running = False
         try:
-            import asyncio
-
-            from prompt_toolkit.shortcuts import radiolist_dialog
-
+            asyncio.get_running_loop()
+            loop_running = True
+        except RuntimeError:
             loop_running = False
-            try:
-                asyncio.get_running_loop()
-                loop_running = True
-            except RuntimeError:
-                loop_running = False
 
-            if not loop_running:
-                choices = []
-                for rec in records:
-                    mod = TerminalDemoLauncher._format_relative(rec.get("modified_at"))
-                    created = TerminalDemoLauncher._format_relative(rec.get("created_at"))
-                    msgs = rec.get("msgs") or 0
-                    branch = (rec.get("branch") or "")[:20]
-                    summary = (rec.get("summary") or "").strip()[:40]
+        if not loop_running:
+            choices = []
+            for rec in records:
+                mod = TerminalDemoLauncher._format_relative(rec.get("modified_at"))
+                created = TerminalDemoLauncher._format_relative(rec.get("created_at"))
+                msgs = rec.get("msgs") or 0
+                branch = (rec.get("branch") or "")[:20]
+                summary = (rec.get("summary") or "").strip()[:40]
 
-                    display = f"{mod:<12} {created:<12} {msgs:>3} {branch:<20} {summary}"
-                    choices.append((rec["chat_id"], display))
+                display = f"{mod:<12} {created:<12} {msgs:>3} {branch:<20} {summary}"
+                choices.append((rec["chat_id"], display))
 
-                result = radiolist_dialog(
-                    title="Resume Chat",
-                    text="Use arrow keys to select a chat:",
-                    values=choices,
-                ).run()
+            result = radiolist_dialog(
+                title="Resume Chat",
+                text="Use arrow keys to select a chat:",
+                values=choices,
+            ).run()
 
-                if result:
-                    if TerminalDemoLauncher.load_chat(agency_instance, result):
-                        return result
-
-        except ImportError:
-            pass
+            if result:
+                if TerminalDemoLauncher.load_chat(agency_instance, result):
+                    return result
 
         # Fallback: simple number selection
         input_fn = input_func or input
@@ -205,10 +200,10 @@ class TerminalDemoLauncher:
 
     @staticmethod
     async def compact_thread(agency_instance: Agency, args: list[str]) -> str:
-        from .compact import compact_thread as _compact
-
         prev = TerminalDemoLauncher.get_current_chat_id()
         try:
+            from .compact import compact_thread as _compact
+
             return await _compact(agency_instance, args)
         except Exception as e:
             TerminalDemoLauncher.set_current_chat_id(prev)

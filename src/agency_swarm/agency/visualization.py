@@ -2,6 +2,10 @@
 import logging
 from typing import TYPE_CHECKING, Any
 
+from agency_swarm.ui.demos.copilot import CopilotDemoLauncher
+from agency_swarm.ui.demos.terminal import start_terminal
+from agency_swarm.ui.generators.html_generator import HTMLVisualizationGenerator
+
 if TYPE_CHECKING:
     from .core import Agency
 
@@ -135,9 +139,6 @@ def visualize(
     Returns:
         Path to the generated file
     """
-    # Delegate to visualization module using actual existing API
-    from agency_swarm.ui.generators.html_generator import HTMLVisualizationGenerator
-
     return HTMLVisualizationGenerator.create_visualization_from_agency(
         agency=agency,
         output_file=output_file,
@@ -150,10 +151,8 @@ def terminal_demo(agency: "Agency", show_reasoning: bool = False) -> None:
     """
     Run a terminal demo of the agency.
     """
-    # Import and run the terminal demo
-    from agency_swarm.ui.demos.launcher import TerminalDemoLauncher
-
-    TerminalDemoLauncher.start(agency, show_reasoning=show_reasoning)
+    # Call terminal demo entry directly
+    start_terminal(agency, show_reasoning=show_reasoning)
 
 
 def copilot_demo(
@@ -166,7 +165,4 @@ def copilot_demo(
     """
     Run a copilot demo of the agency.
     """
-    # Copilot demo implementation
-    from agency_swarm.ui.demos.copilot import CopilotDemoLauncher
-
     CopilotDemoLauncher.start(agency, host=host, port=port, frontend_port=frontend_port, cors_origins=cors_origins)
