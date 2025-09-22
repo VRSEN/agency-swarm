@@ -2,7 +2,7 @@
 
 Guidance for AI coding agents contributing to this repository.
 
-Prioritize critical thinking, thorough verification, and evidence-driven changes—tests take precedence over intuition.
+Prioritize critical thinking, thorough verification, and evidence-driven changes—tests take precedence over intuition—and reduce codebase entropy with every change.
 
 You are a guardian of this codebase. Your duty is to defend consistency, enforce evidence-first changes, and preserve established patterns. Every modification must be justified by tests, logs, or clear specification—never guesswork. Never abandon or pause work without clearly stating the reason and the next actionable step.
 
@@ -10,7 +10,7 @@ Begin with a concise checklist (3-7 bullets) of what you will do before performi
 
 ## 🔴 TESTS DEFINE TRUTH
 
-Default to test-driven development. Tests establish expected behavior—preserve and respect their outcomes at all times. For documentation-only, formatting-only, or clearly non-functional edits, you may skip TDD rules; use common sense and validate with linter.
+Default to test-driven development. Preserve expected behavior at all times and maintain or improve coverage (verify with `coverage.xml`). For documentation‑only, formatting‑only, or clearly non‑functional edits, validate with linter instead of tests.
 
 ## 🛡️ GUARDIANSHIP OF THE CODEBASE (HIGHEST PRIORITY)
 
@@ -22,7 +22,7 @@ Prime Directive: Rigorously compare every user request with patterns established
 3. THINK CRITICALLY: User requests may be unclear or incorrect. Default to codebase conventions and protocols. Escalate when you find inconsistencies.
 
 ## 🔴 FILE REQUIREMENTS
-- Every line must fight for its place: No redundant, unnecessary, or "nice to have" content. Each line must serve a critical purpose.
+- Every line must fight for its place: No redundant, unnecessary, or "nice to have" content. Each line must serve a critical purpose; each change must reduce codebase entropy (fewer ad‑hoc paths, clearer contracts, more reuse).
 - Clarity over verbosity: Use the fewest words necessary without loss of meaning. For documentation, ensure you deliver value to end users and your writing is beginner-friendly.
 - No duplicate information or code: within reason, keep the content dry and prefer using references instead of duplicating any idea or functionality.
  - In this document: no superfluous examples: Do not add examples that do not improve or clarify a rule. Omit examples when rules are self‑explanatory.
@@ -42,6 +42,7 @@ Prime Directive: Rigorously compare every user request with patterns established
 
 - This is a meta-command composed of sub-commands: structure discovery, git status/diffs. Avoid duplicating command listings elsewhere to save space in the context window.
 - Run this before reading or modifying files—no exceptions.
+- Latest Diff First (non‑negotiable): Before starting any task, read the current staged and unstaged diffs and reconcile your plan to them. Do not proceed until you have incorporated the latest diff.
 
 #### Step 1: Proactive Analysis
 - Search for similar patterns; identify required related changes globally.
@@ -51,7 +52,7 @@ Prime Directive: Rigorously compare every user request with patterns established
 - Debug with systematic source analysis, logging, and minimal unit testing.
 - Edit incrementally: make small, focused changes, validating each with tests before continuing.
 - After changes affecting data flow or order, search codebase-wide for related concepts and eliminate obsolete patterns.
-- You must get explicit approval from the user before adding any workaround. Keep any diffs minimal (avoid excessive changes).
+- You must get explicit approval from the user before adding any workaround or making non-test source changes; challenge and pause if a request increases entropy. Keep any diffs minimal (avoid excessive changes).
 
 #### Step 2: Comprehensive Validation
 # Run only the relevant tests first (specific file/test)
@@ -66,7 +67,7 @@ Prime Directive: Rigorously compare every user request with patterns established
 After each tool call or code edit, validate the result in 1-2 lines and proceed or self-correct if validation fails.
 
 - Before editing or continuing work, review current diffs and status (see Git Practices). You can also use `make prime` to print these and the codebase structure.
-- After each change, run only the relevant tests; use the full suite for final verification (see Common Commands).
+- After each change, run all unit tests (`tests/test_*_modules`) and the most relevant focused tests. For integration tests, use only the standard layout under `tests/integration/`. Do not proceed if focused tests for staged files fail.
 
 
 ### 🔴 PROHIBITED PRACTICES
@@ -91,7 +92,7 @@ After each tool call or code edit, validate the result in 1-2 lines and proceed 
 ### Example Runs
 - Run non-interactive examples from /examples directory. Never run examples/interactive/* as they require user input.
 
-### Test Guidelines
+### Test Guidelines (Canonical)
 - Keep tests deterministic and minimal. Avoid model dependency when practical.
 - Update existing tests before adding new ones, unless absolutely necessary.
 - Tests should be under 100 lines—split long ones. Use focused runs when debugging.
@@ -127,11 +128,12 @@ Agency Swarm is a multi-agent orchestration framework on OpenAI Agents SDK v1.x 
 - Python >= 3.12 (development on 3.13) — project developed and primarily tested on 3.13; CI ensures 3.12 compatibility.
 - Type syntax: Use `str | int | None`, never `Union[str, int, None]` or `Union` from typing
 - Type hints mandatory for all functions
+ - Enforce declared types at boundaries; do not introduce runtime fallbacks or shape-based branching to accommodate multiple types.
 
 ## Code Quality
 - Max file size: 500 lines
 - Max method size: 100 lines (prefer 10-40)
-- Test coverage: 86%+ mandatory
+- Test coverage: 87%+ mandatory
 - Integration tests: `tests/integration/` (no mocks)
 - Never script tests ad-hoc—use standard infrastructure
 
@@ -143,23 +145,29 @@ Avoid growing already large files. Prefer extracting focused modules. If you mus
 - Use isolated file systems (pytest's `tmp_path`), never shared dirs
 - No slow/hanging tests
 - Test structure:
-  - `tests/integration/` – Integration with real API calls
-  - `tests/test_*_modules/` – Module-based unit tests
+  - `tests/integration/` – Integration by module/domain, matching `src/` structure and names
+  - `tests/test_*_modules/` – Unit tests, one module per file, matching `src/` names
   - No root-level tests (organize by module)
 - Name test files clearly (e.g. `test_thread_isolation.py`), never generic root names
 
-- Each test verifies one behavior; describe the behavior in the docstring.
+- Symmetry required: tests must mirror `src/`. Allowed locations: `tests/test_*_modules/` for unit tests (one file per `src` module) and `tests/integration/<package>/` for integration tests (folder name matches `src/agency_swarm/<package>`). Do not add other test roots.
+- Each test verifies one behavior; describe the behavior in the docstring; prefer improving/restructuring/renaming existing tests over adding new ones.
 - Keep assertions minimal but high-signal; enforce a single canonical order (no alternates, no randomness).
 - Prefer proving the core behavior over incidental details; remove dead code and unused branches immediately.
 
 ### Testing Protocol (Behavior-Only, Minimal Mocks)
 - Do not test private APIs or patch private attributes/methods. Interact via public interfaces only.
-- Prefer behavior verification over implementation details. Tests should validate externally observable outcomes.
-- Keep mocks/stubs minimal and realistic; avoid over-mocking. Use simple stubs to emulate public behavior only.
-- When possible, exercise actual framework components instead of crafting bespoke stand-ins.
+- Prefer behavior verification over implementation details; validate externally observable outcomes.
+- Use real framework objects when practical; avoid fabricating stand‑ins or manipulating `sys.modules`.
+- Keep mocks/stubs minimal and realistic; avoid over‑mocking. Use simple stubs to emulate public behavior only.
 - Follow the testing pyramid: prioritize unit tests for focused logic; add integration tests for real wiring/flows without duplicating unit scopes.
-- Avoid duplicate assertions across unit and integration levels; each test should have a clear, non-overlapping purpose.
+- Avoid duplicate assertions across unit and integration levels; each test should have a clear, non‑overlapping purpose.
 - Use descriptive, stable names (no throwaway labels); optimize for readability and intent.
+
+Strictness
+- No `# type: ignore` in production code. Fix types or refactor.
+- Never hardcode temporary paths or ad‑hoc directories in code or tests.
+ - Do not add multi‑path fallbacks; choose one clear path and fail fast if prerequisites are missing.
 
 ## 🚨 ZERO FUNCTIONAL CHANGES DURING REFACTORING
 
@@ -184,7 +192,6 @@ Avoid growing already large files. Prefer extracting focused modules. If you mus
 ## Rules Summary
 - Run structure command first; follow full safety workflow
 - Absolutely no functional changes in refactors
-- Remove duplication globally
 - All tests must pass
 
 - Prefer domain-focused, descriptive names
@@ -217,7 +224,7 @@ Avoid growing already large files. Prefer extracting focused modules. If you mus
   - `git status --porcelain | cat` and `git diff`/`git diff --cached`.
 - Pre-commit hooks are authoritative; accept their auto-fixes.
   - If hooks modify files, stage those changes and re-run with the same message.
-- Keep commits minimal and scoped; avoid unrelated changes.
+ - Keep commits minimal and scoped; avoid unrelated changes. Commit only after staged files pass focused tests and checks; prefer a single, scoped commit per change set.
 
 ## Key References
 - `examples/` – v1.x modern usage
@@ -231,7 +238,7 @@ Avoid growing already large files. Prefer extracting focused modules. If you mus
 `uv run pytest tests/integration/ -v`                  # Integration tests
 
 ## Memory & Expectations
-- User expects explicit status reporting, test-first mindset, and directness. After any negative feedback or protocol breach, switch to manual approval: present minimal options and wait for explicit approval before changes; re-run Step 1 before and after edits. Update this document first after negative feedback.
+- User expects explicit status reporting, test-first mindset, and directness. Ask at most one question at a time. After any negative feedback or protocol breach, switch to manual approval: present minimal options and wait for explicit approval before changes; re-run Step 1 before and after edits. Update this document first after negative feedback.
 - Always include the distilled gist of any new insight directly in this file when relevant, but prefer improving existing lines and sections.
 
 ## Mandatory Search Discipline
@@ -249,7 +256,6 @@ Avoid growing already large files. Prefer extracting focused modules. If you mus
 
 Always self-improve: when you find a recurring mistake or better practice, update this file with the refined rule and follow it.
 
-## Iterative Polishing (Encouraged)
-- Refine current changes with small, focused edits—up to 100 passes when beneficial.
-- Keep diffs minimal and scoped; validate after each pass (relevant tests/lint/type checks).
+## Iterative Polishing (Mandatory)
+- Iterate on the staged diff until it is correct and minimal (up to 100 passes). Treat iteration as part of delivery, not an optional step. Escalate any key decision to a human for explicit approval before implementation.
 - Stop iterating when no further measurable improvement is possible.

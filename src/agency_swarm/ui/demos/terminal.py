@@ -3,7 +3,10 @@ from collections.abc import Generator
 from agency_swarm.agency.core import Agency
 
 
-def start_terminal(agency_instance: Agency, show_reasoning: bool = False) -> None:
+def start_terminal(
+    agency_instance: Agency,
+    show_reasoning: bool = False,
+) -> None:
     """Run the terminal demo: input loop, slash commands, and streaming output."""
     import asyncio
     import logging
@@ -164,97 +167,78 @@ def start_terminal(agency_instance: Agency, show_reasoning: bool = False) -> Non
         return False
 
     async def main_loop():
-        try:
-            from prompt_toolkit import PromptSession
-            from prompt_toolkit.completion import Completer, Completion
-            from prompt_toolkit.history import InMemoryHistory
-            from prompt_toolkit.key_binding import KeyBindings
-        except Exception:
-            PromptSession = None  # type: ignore
+        # prompt_toolkit is a mandatory dependency; fail fast if unavailable
+        from prompt_toolkit import PromptSession
+        from prompt_toolkit.completion import Completion
+        from prompt_toolkit.history import InMemoryHistory
+        from prompt_toolkit.key_binding import KeyBindings
 
-        if PromptSession is not None:
-            command_help: dict[str, str] = {
-                "/help": "Show help",
-                "/new": "Start a new chat",
-                "/compact": "Keep a summary in context",
-                "/resume": "Resume a conversation",
-                "/status": "Show current setup",
-                "/exit": "Quit",
-            }
+        command_help: dict[str, str] = {
+            "/help": "Show help",
+            "/new": "Start a new chat",
+            "/compact": "Keep a summary in context",
+            "/resume": "Resume a conversation",
+            "/status": "Show current setup",
+            "/exit": "Quit",
+        }
 
-            command_display_overrides: dict[str, str] = {
-                "/exit": "/exit (quit)",
-                "/new": "/new",
-                "/compact": "/compact [instructions]",
-                "/resume": "/resume",
-            }
+        command_display_overrides: dict[str, str] = {
+            "/exit": "/exit (quit)",
+            "/new": "/new",
+            "/compact": "/compact [instructions]",
+            "/resume": "/resume",
+        }
 
-            class SlashCompleter(Completer):  # type: ignore[misc]
-                def get_completions(self, document, complete_event) -> Generator[Completion]:  # type: ignore[override]
-                    text = document.text_before_cursor
-                    if not text or not text.startswith("/"):
-                        return
-                    if text == "/":
-                        entries = list(command_help.keys())
-                    else:
-                        entries = [c for c in command_help.keys() if c.startswith(text)]
-                    for cmd in entries:
-                        display = command_display_overrides.get(cmd, cmd)
-                        yield Completion(
-                            text=cmd,
-                            start_position=-len(text),
-                            display=display,
-                            display_meta=command_help[cmd],
-                        )
+        class SlashCompleter:
+            def get_completions(self, document, complete_event) -> Generator[Completion]:
+                text = document.text_before_cursor
+                if not text or not text.startswith("/"):
+                    return
+                if text == "/":
+                    entries = list(command_help.keys())
+                else:
+                    entries = [c for c in command_help.keys() if c.startswith(text)]
+                for cmd in entries:
+                    display = command_display_overrides.get(cmd, cmd)
+                    yield Completion(
+                        text=cmd,
+                        start_position=-len(text),
+                        display=display,
+                        display_meta=command_help[cmd],
+                    )
 
-            completer = SlashCompleter()
-            history = InMemoryHistory()
-            bindings = KeyBindings()
+        completer = SlashCompleter()
+        history = InMemoryHistory()
+        bindings = KeyBindings()
 
-            @bindings.add("c-c")
-            def _(event) -> None:
-                event.app.exit(exception=KeyboardInterrupt)
+        @bindings.add("c-c")
+        def _(event) -> None:
+            event.app.exit(exception=KeyboardInterrupt)
 
-            @bindings.add("/")
-            def _(event) -> None:
-                buf = event.app.current_buffer
-                buf.insert_text("/")
-                buf.start_completion(select_first=True)
+        @bindings.add("/")
+        def _(event) -> None:
+            buf = event.app.current_buffer
+            buf.insert_text("/")
+            buf.start_completion(select_first=True)
 
-            try:
-                session = PromptSession(
-                    history=history,
-                    key_bindings=bindings,
-                    enable_history_search=True,
-                    mouse_support=False,
-                )
-            except Exception:
-                PromptSession = None
-                session = None
+        session = PromptSession(
+            history=history,
+            key_bindings=bindings,
+            enable_history_search=True,
+            mouse_support=False,
+        )
 
-            if PromptSession is not None and session is not None:
-                while True:
-                    try:
-                        message = await session.prompt_async(
-                            "👤 USER: ",
-                            completer=completer,
-                            complete_while_typing=True,
-                            reserve_space_for_menu=8,
-                        )
-                    except (KeyboardInterrupt, EOFError):
-                        return
-                    except Exception:
-                        PromptSession = None
-                        break
-
-                    event_converter.console.rule()
-                    should_exit = await handle_message(message)
-                    if should_exit:
-                        return
-
-        # Fallback basic input
         while True:
-            message = input("👤 USER: ")
+            try:
+                message = await session.prompt_async(
+                    "👤 USER: ",
+                    completer=completer,
+                    complete_while_typing=True,
+                    reserve_space_for_menu=8,
+                )
+            except (KeyboardInterrupt, EOFError):
+                return
+
             event_converter.console.rule()
             should_exit = await handle_message(message)
             if should_exit:

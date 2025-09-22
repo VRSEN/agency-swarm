@@ -1,5 +1,6 @@
 import pytest
 
+from agency_swarm import Agent
 from agency_swarm.ui.demos.launcher import TerminalDemoLauncher
 from agency_swarm.utils.thread import ThreadManager
 
@@ -40,15 +41,11 @@ class _FailingClient:
         self.responses = _FailingResponses()
 
 
-class _FakeAgent:
-    def __init__(self, name: str, model: str, client):
-        self.name = name
-        self.model = model
-        self._client_sync = client
-
-    @property
-    def client_sync(self):  # match Agent API
-        return self._client_sync
+def _real_agent_with_client(name: str, model: str, client):
+    a = Agent(name=name, instructions="test")
+    a.model = model  # type: ignore[attr-defined]
+    a._openai_client_sync = client
+    return a
 
 
 class _Thread:
@@ -86,7 +83,7 @@ class _SessionAgency:
 async def test_compact_uses_entry_agent_client_sync_and_model_passthrough():
     # Use a non-GPT model to exercise the non-OpenAI reasoning branch
     fake_client = _FakeClient()
-    agent = _FakeAgent(name="Coordinator", model="anthropic/claude-3-5-sonnet", client=fake_client)
+    agent = _real_agent_with_client(name="Coordinator", model="anthropic/claude-3-5-sonnet", client=fake_client)
     agency = _Agency(agent)
 
     chat_id = await TerminalDemoLauncher.compact_thread(agency, [])
@@ -110,7 +107,7 @@ async def test_compact_uses_entry_agent_client_sync_and_model_passthrough():
 
 @pytest.mark.asyncio
 async def test_compact_failure_surfaces_error_and_preserves_state(monkeypatch):
-    failing_agent = _FakeAgent(name="Coordinator", model="anthropic/model", client=_FailingClient())
+    failing_agent = _real_agent_with_client(name="Coordinator", model="anthropic/model", client=_FailingClient())
     agency = _Agency(failing_agent)
 
     original_messages = agency.thread_manager.get_all_messages()
@@ -185,21 +182,11 @@ def test_resume_interactive_list_and_select(tmp_path, monkeypatch):
         line = " ".join(str(a) for a in args)
         printed.append(line)
 
-    # Force fallback mode by mocking prompt_toolkit import failure
-    import builtins
+    # Avoid radiolist UI by simulating a running loop so fallback path is taken
+    import asyncio
 
-    original_import = builtins.__import__
-
-    def mock_import(name, *args, **kwargs):
-        if name == "prompt_toolkit.shortcuts":
-            raise ImportError("Mocked for test")
-        return original_import(name, *args, **kwargs)
-
-    builtins.__import__ = mock_import
-    try:
-        chosen = TerminalDemoLauncher.resume_interactive(agency, input_func=fake_input, print_func=fake_print)
-    finally:
-        builtins.__import__ = original_import
+    monkeypatch.setattr(asyncio, "get_running_loop", lambda: object())
+    chosen = TerminalDemoLauncher.resume_interactive(agency, input_func=fake_input, print_func=fake_print)
 
     assert chosen in {cid_a, cid_b}
     # After resume, agency should have loaded selected chat (either A or B)
