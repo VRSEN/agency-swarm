@@ -1,4 +1,5 @@
 from collections.abc import Generator
+from typing import Any, cast
 
 
 def start_terminal(agency_instance, show_reasoning: bool = False) -> None:
@@ -24,7 +25,7 @@ def start_terminal(agency_instance, show_reasoning: bool = False) -> None:
 
     chat_id = f"run_demo_chat_{uuid.uuid4()}"
 
-    event_converter = ConsoleEventAdapter(show_reasoning=show_reasoning)
+    event_converter = ConsoleEventAdapter(show_reasoning=show_reasoning, agents=agency_instance.agents)
     event_converter.console.rule()
     try:
         cwd = os.getcwd()
@@ -87,6 +88,7 @@ def start_terminal(agency_instance, show_reasoning: bool = False) -> None:
                 chat_id = f"run_demo_chat_{uuid.uuid4()}"
                 event_converter.console.print("Started a new chat session.")
                 event_converter.console.rule()
+                event_converter.handoff_agent = None
                 return False
             if cmd == "resume":
                 chosen = TerminalDemoLauncher.resume_interactive(
@@ -96,6 +98,24 @@ def start_terminal(agency_instance, show_reasoning: bool = False) -> None:
                     chat_id = chosen
                     event_converter.console.print(f"Resumed chat: {chat_id}")
                 event_converter.console.rule()
+                message_history = agency_instance.thread_manager.get_all_messages()
+                event_converter.handoff_agent = None
+                # Restore the recipient if last assistant->user message was from a non-default agent
+                for message in reversed(message_history):
+                    if not isinstance(message, dict):
+                        continue
+                    msg_dict = cast(dict[str, Any], message)
+                    if (
+                        msg_dict.get("type") == "message"
+                        and msg_dict.get("role") == "assistant"
+                        and msg_dict.get("callerAgent") is None
+                    ):
+                        agent = msg_dict.get("agent")
+                        if isinstance(agent, str) and agent != current_default_recipient:
+                            event_converter.handoff_agent = agent
+                        else:
+                            event_converter.handoff_agent = None
+                        break
                 return False
             if cmd == "status":
                 _cwd = os.getcwd()
@@ -121,21 +141,30 @@ def start_terminal(agency_instance, show_reasoning: bool = False) -> None:
         agent_mention_pattern = r"(?:^|\s)@(\w+)(?:\s|$)"
         agent_match = re.search(agent_mention_pattern, message)
 
-        if agent_match:
-            mentioned_agent = agent_match.group(1)
-            try:
-                recipient_agent = [agent for agent in recipient_agents if agent.lower() == mentioned_agent.lower()][0]
-                message = re.sub(agent_mention_pattern, " ", message).strip()
-            except Exception:
-                logger.error(f"Recipient agent {mentioned_agent} not found.", exc_info=True)
+        if message.startswith("@"):
+            mentioned_agent = agent_match.group(1) if agent_match is not None else None
+            for agent in recipient_agents:
+                if message.lower().startswith(f"@{agent.lower()}"):
+                    recipient_agent = agent
+                    message = message[len(f"@{agent.lower()}"):].strip()
+                    break
+            if recipient_agent is None:
+                logger.error(f"Recipient agent {mentioned_agent or 'Unknown'} not found.", exc_info=True)
                 return False
 
-        if recipient_agent is None and agency_instance.entry_points:
-            recipient_agent = current_default_recipient
+        # Clear handoff to correctly display recipient.
+        if recipient_agent is not None and recipient_agent != event_converter.handoff_agent:
+            event_converter.handoff_agent = None
 
         try:
             response_buffer = ""
-            recipient_agent_str: str = recipient_agent if recipient_agent is not None else current_default_recipient
+            recipient_agent_str: str = (
+                recipient_agent
+                if recipient_agent is not None
+                else event_converter.handoff_agent
+                if event_converter.handoff_agent is not None
+                else current_default_recipient
+            )
             async for event in agency_instance.get_response_stream(
                 message=message,
                 recipient_agent=recipient_agent_str,
