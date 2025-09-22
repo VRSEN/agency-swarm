@@ -4,9 +4,68 @@ This guide covers deploying Agency Swarm in production with comprehensive monito
 
 ## 🚀 Quick Start
 
-### 1. Environment Setup
+### 1. GitHub Repository Secrets Setup
 
-Create a `.env` file with required configuration:
+Before deploying to production, configure the following secrets in your GitHub repository:
+
+**Go to:** `Repository → Settings → Secrets and variables → Actions`
+
+#### Required Production Secrets:
+```bash
+OPENAI_API_KEY          # Your OpenAI API key for agent functionality
+APP_TOKEN              # Secure authentication token for API access (generate strong token)
+DOCKER_USERNAME        # Docker Hub username for container registry access
+DOCKER_PASSWORD        # Docker Hub password or access token
+```
+
+#### Optional Production Secrets:
+```bash
+SSL_KEYFILE_CONTENT    # SSL private key content (base64 encoded)
+SSL_CERTFILE_CONTENT   # SSL certificate content (base64 encoded)
+ALERT_WEBHOOK_URL      # Webhook URL for error alerts (Slack/Discord)
+DATABASE_URL           # Database connection string if using persistent storage
+```
+
+#### Security Best Practices:
+- ✅ Use strong, randomly generated tokens (32+ characters)
+- ✅ Rotate secrets regularly (every 90 days recommended)
+- ✅ Use different secrets for staging vs production environments
+- ✅ Never commit secrets to the repository
+- ✅ Test deployment after adding secrets
+
+### 2. Generate Secure Tokens
+
+Use the provided script to generate secure tokens:
+
+```bash
+# Generate all production secrets with setup guide
+python tools/generate_production_secrets.py --environment production
+
+# Generate only APP_TOKEN
+python tools/generate_production_secrets.py --token-only
+
+# Validate existing secrets
+python tools/generate_production_secrets.py --validate
+
+# Encode SSL certificates for GitHub secrets
+python tools/generate_production_secrets.py --ssl-key /path/to/key.pem --ssl-cert /path/to/cert.pem
+```
+
+### 3. Test Secrets Configuration
+
+Run the automated test workflow:
+
+```bash
+# Using GitHub CLI
+gh workflow run test-production-secrets.yml
+
+# Or trigger manually in GitHub Actions tab
+# Repository → Actions → "Test Production Secrets Configuration" → Run workflow
+```
+
+### 4. Local Environment Setup
+
+Create a `.env` file for local development:
 
 ```bash
 # Required
