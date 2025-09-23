@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
@@ -61,13 +62,9 @@ def summarize_messages(messages: list[dict[str, Any]]) -> str:
                     if "All user messages:" in line and i + 1 < len(lines):
                         next_line = lines[i + 1].strip()
                         if next_line.startswith("1."):
-                            import re
-
                             match = re.search(r'"([^"]+)"', next_line)
                             if match:
                                 return _clip(match.group(1))
-            import re
-
             quotes = re.findall(r'"([^"]+)"', content)
             if quotes:
                 return _clip(quotes[0])
@@ -207,23 +204,38 @@ def save_current_chat(agency_instance: Any, chat_id: str) -> None:
     update_index(chat_id, messages, branch)
 
 
+def _read_chat_messages(chat_id: str) -> list[dict[str, Any]]:
+    path = Path(chat_file_path(chat_id))
+    if not path.exists():
+        return []
+
+    with open(path) as f:
+        payload = json.load(f)
+
+    if isinstance(payload, dict):
+        items = payload.get("items")
+        if isinstance(items, list):
+            return items
+    elif isinstance(payload, list):
+        return payload
+
+    raise ValueError("Chat payload must be a list of messages.")
+
+
 def load_chat(agency_instance: Any, chat_id: str) -> bool:
+    """Load messages from disk for a given chat_id.
+
+    Returns False if the chat file does not exist. Returns True after
+    successfully loading (including the edge case of an existing file with
+    zero messages).
+    """
+    path = Path(chat_file_path(chat_id))
+    if not path.exists():
+        return False
     try:
-        with open(chat_file_path(chat_id)) as f:
-            payload = json.load(f)
-        if isinstance(payload, dict) and isinstance(payload.get("items"), list):
-            messages = payload["items"]
-        else:
-            messages = payload if isinstance(payload, list) else None
-        if not isinstance(messages, list):
-            return False
-        agency_instance.thread_manager.clear()
-        add_many = getattr(agency_instance.thread_manager, "add_messages", None)
-        if callable(add_many):
-            add_many(messages)
-        else:
-            for m in messages:
-                agency_instance.thread_manager.add_message(m)
-        return True
+        messages = _read_chat_messages(chat_id)
     except Exception:
         return False
+
+    agency_instance.thread_manager.replace_messages(messages)
+    return True

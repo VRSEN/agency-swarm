@@ -35,7 +35,7 @@ async def test_vector_store_citation_extraction():
         temp_path = Path(temp_dir)
 
         # Copy the existing favorite_books.txt file to our temp directory
-        source_file = Path(__file__).parent.parent / "data" / "files" / "favorite_books.txt"
+        source_file = Path(__file__).resolve().parents[2] / "data" / "files" / "favorite_books.txt"
         test_file = temp_path / "favorite_books.txt"
         shutil.copy2(source_file, test_file)
 
