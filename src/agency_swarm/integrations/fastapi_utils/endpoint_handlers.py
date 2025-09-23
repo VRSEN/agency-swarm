@@ -3,11 +3,10 @@ import json
 import logging
 import time
 from collections.abc import AsyncGenerator, Callable
-from typing import Any
 
 from ag_ui.core import EventType, MessagesSnapshotEvent, RunErrorEvent, RunFinishedEvent, RunStartedEvent
 from ag_ui.encoder import EventEncoder
-from agents import OpenAIResponsesModel, output_guardrail
+from agents import OpenAIResponsesModel, TResponseInputItem, output_guardrail
 from agents.exceptions import OutputGuardrailTripwireTriggered
 from agents.models._openai_shared import get_default_openai_client
 from fastapi import Depends, HTTPException, Request
@@ -344,23 +343,22 @@ async def exception_handler(request, exc):
     return JSONResponse(status_code=500, content={"error": error_message})
 
 
-async def generate_chat_name(new_messages: list[dict[str, Any]]):
+async def generate_chat_name(new_messages: list[TResponseInputItem]):
     client = get_default_openai_client() or AsyncOpenAI()
 
     class ResponseFormat(BaseModel):
         chat_name: str = Field(description="A fitting name for the provided chat history.")
 
-    @output_guardrail
+    @output_guardrail # type: ignore[arg-type]
     async def response_content_guardrail(
         context: RunContextWrapper, agent: Agent, response_text: str | type[BaseModel]
     ) -> GuardrailFunctionOutput:
         tripwire_triggered = False
         output_info = ""
 
-        chat_name = response_text.chat_name if isinstance(response_text, ResponseFormat) else response_text
+        chat_name = response_text.chat_name if isinstance(response_text, ResponseFormat) else str(response_text)
 
         if len(chat_name.split(" ")) < 2 or len(chat_name.split(" ")) > 6:
-            print(f"Chat name: {chat_name}")
             tripwire_triggered = True
             output_info = "The name should contain between 2 and 6 words"
 
@@ -370,7 +368,7 @@ async def generate_chat_name(new_messages: list[dict[str, Any]]):
         )
 
     from agency_swarm.messages import MessageFormatter
-    formatted_messages = MessageFormatter.strip_agency_metadata(new_messages)
+    formatted_messages = str(MessageFormatter.strip_agency_metadata(new_messages)) # type: ignore[arg-type]
     if len(formatted_messages) > 1000:
         formatted_messages = "HISTORY TRUNCATED TO 1000 CHARACTERS:\n" + formatted_messages[:1000]
 
