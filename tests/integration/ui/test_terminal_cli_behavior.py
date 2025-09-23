@@ -112,7 +112,7 @@ def test_cli_compact_updates_chat_id(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_cli_agent_mentions(monkeypatch: pytest.MonkeyPatch) -> None:
     TerminalDemoLauncher.set_current_chat_id(None)
 
-    inputs = iter([" @primary hi there ", "/exit"])  # mixed-case mention, extra spaces
+    inputs = iter(["@Primary hi there", "/exit"])  # mixed-case mention at start, strict parsing
 
     agency, calls = _make_agency_with_stream_stub(monkeypatch)
     _patch_prompt_session(monkeypatch, inputs)

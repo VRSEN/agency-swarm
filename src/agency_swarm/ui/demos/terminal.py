@@ -3,6 +3,7 @@ import logging
 import os
 import re
 from collections.abc import Generator
+from typing import Any, cast
 
 import prompt_toolkit as prompt_toolkit
 from prompt_toolkit.completion import Completer, Completion
@@ -28,7 +29,10 @@ def start_terminal(
 
     chat_id = TerminalDemoLauncher.start_new_chat(agency_instance)
 
-    event_converter = ConsoleEventAdapter(show_reasoning=show_reasoning)
+    event_converter = ConsoleEventAdapter(
+        show_reasoning=show_reasoning,
+        agents=list(agency_instance.agents.keys()),
+    )
     event_converter.console.rule()
     try:
         cwd = os.getcwd()
@@ -78,6 +82,7 @@ def start_terminal(
         chat_id = TerminalDemoLauncher.start_new_chat(agency_instance)
         event_converter.console.print("Started a new chat session.")
         event_converter.console.rule()
+        event_converter.handoff_agent = None
 
     def _resume_chat() -> None:
         """Load a previously saved chat into context."""
@@ -89,6 +94,28 @@ def start_terminal(
             chat_id = chosen
             event_converter.console.print(f"Resumed chat: {chat_id}")
         event_converter.console.rule()
+        # Restore last non-default assistant speaker as active handoff recipient
+        try:
+            message_history = agency_instance.thread_manager.get_all_messages()
+            event_converter.handoff_agent = None
+            for message in reversed(message_history):
+                if not isinstance(message, dict):
+                    continue
+                msg_dict = cast(dict[str, Any], message)
+                if (
+                    msg_dict.get("type") == "message"
+                    and msg_dict.get("role") == "assistant"
+                    and msg_dict.get("callerAgent") is None
+                ):
+                    agent = msg_dict.get("agent")
+                    if isinstance(agent, str) and agent != current_default_recipient:
+                        event_converter.handoff_agent = agent
+                    else:
+                        event_converter.handoff_agent = None
+                    break
+        except Exception:
+            # Non-fatal; resume continues without restoring handoff
+            event_converter.handoff_agent = None
 
     def _print_status() -> None:
         """Display current agency metadata and defaults."""
@@ -140,20 +167,29 @@ def start_terminal(
         agent_mention_pattern = r"(?:^|\s)@(\w+)(?:\s|$)"
         agent_match = re.search(agent_mention_pattern, message)
 
-        if agent_match:
-            mentioned_agent = agent_match.group(1)
-            try:
-                recipient_agent = [agent for agent in recipient_agents if agent.lower() == mentioned_agent.lower()][0]
-                message = re.sub(agent_mention_pattern, " ", message).strip()
-            except Exception:
-                logger.error(f"Recipient agent {mentioned_agent} not found.", exc_info=True)
+        if message.startswith("@"):
+            mentioned_agent = agent_match.group(1) if agent_match is not None else None
+            for agent in recipient_agents:
+                if message.lower().startswith(f"@{agent.lower()}"):
+                    recipient_agent = agent
+                    message = message[len(f"@{agent.lower()}") :].strip()
+                    break
+            if recipient_agent is None:
+                logger.error(f"Recipient agent {mentioned_agent or 'Unknown'} not found.", exc_info=True)
                 return False
 
-        if recipient_agent is None and agency_instance.entry_points:
-            recipient_agent = current_default_recipient
+        # Clear handoff to correctly display recipient when an explicit target is used
+        if recipient_agent is not None and recipient_agent != event_converter.handoff_agent:
+            event_converter.handoff_agent = None
 
         try:
-            recipient_agent_str: str = recipient_agent if recipient_agent is not None else current_default_recipient
+            recipient_agent_str: str = (
+                recipient_agent
+                if recipient_agent is not None
+                else event_converter.handoff_agent
+                if event_converter.handoff_agent is not None
+                else current_default_recipient
+            )
             async for event in agency_instance.get_response_stream(
                 message=message,
                 recipient_agent=recipient_agent_str,
