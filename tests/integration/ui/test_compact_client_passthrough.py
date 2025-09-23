@@ -106,6 +106,20 @@ async def test_compact_uses_entry_agent_client_sync_and_model_passthrough():
 
 
 @pytest.mark.asyncio
+async def test_compact_omits_reasoning_param_for_openai_model():
+    """Compact omits reasoning even for OpenAI models (simpler, safe default)."""
+    fake_client = _FakeClient()
+    agent = _real_agent_with_client(name="Coordinator", model="gpt-5-mini", client=fake_client)
+    agency = _Agency(agent)
+
+    await TerminalDemoLauncher.compact_thread(agency, [])
+
+    last = fake_client.calls[-1]
+    assert last["model"] == "gpt-5-mini"
+    assert last["reasoning"] is None
+
+
+@pytest.mark.asyncio
 async def test_compact_failure_surfaces_error_and_preserves_state(monkeypatch):
     failing_agent = _real_agent_with_client(name="Coordinator", model="anthropic/model", client=_FailingClient())
     agency = _Agency(failing_agent)

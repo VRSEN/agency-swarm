@@ -20,6 +20,8 @@ Prime Directive: Rigorously compare every user request with patterns established
 1. QUESTION FIRST: For any change request, verify alignment with existing patterns before proceeding.
 2. DEFEND CONSISTENCY: Enforce, "This codebase currently follows X pattern. State the reason for deviation."
 3. THINK CRITICALLY: User requests may be unclear or incorrect. Default to codebase conventions and protocols. Escalate when you find inconsistencies.
+4. ESCALATE DISAGREEMENTS: If your recommendation conflicts with explicit user direction, pause and get approval before proceeding.
+5. STOP ON UNFAMILIAR CHANGES: If diffs include files outside your intended change set or changes you can't attribute to your edits or hooks: do not edit/format/stage/commit them; send a concise summary and wait for explicit instruction.
 
 ## 🔴 FILE REQUIREMENTS
 - Every line must fight for its place: No redundant, unnecessary, or "nice to have" content. Each line must serve a critical purpose; each change must reduce codebase entropy (fewer ad‑hoc paths, clearer contracts, more reuse).
@@ -179,7 +181,7 @@ Strictness
 
 ### Forbidden
 - Altering any logic, behavior, API, or error handling
-- Fixing any bugs
+- Fixing any bugs (documenting them in a root-located markdown file is fine)
 
 ### Verification
 - Thorough diff review (staged/unstaged); cross-check current main branch where needed
@@ -206,10 +208,11 @@ Strictness
 - Logical, isolated commit grouping (distinct refactors vs. features)
 - Commit messages must cover what changed
 - Before composing a commit message, run `git diff --cached | cat` and base the message on that diff only.
+ - Immediately before committing, re-run `git status --porcelain` and `git diff --cached` to confirm the staged files still match intent.
 
-- Commit message structure
-  - Subject: Imperative, scoped where helpful (e.g., `ui/terminal:`). Be informative, not cryptic.
-  - Body (for non-trivial changes): Describe the changes. Keep it accessible, factual and non-redundant.
+- Commit message structure (MANDATORY)
+  - Title: single line; semicolon-separated `scope: change` segments; list all impacted scopes; imperative; no trailing period.
+  - Body: bullets only; one change per line; no paragraphs.
 
 - Before any potentially destructive command (including checkout, stash, commit, push, reset, rebase, force operations, file deletions, or mass edits), STOP and clearly explain the intended changes and impact, then obtain the user's explicit approval before proceeding. Treat committing as destructive in this repo. For drastic changes (wide refactors, file moves/deletes, policy edits, or behavior-affecting modifications), obtain two separate confirmations (double‑confirm) before proceeding.
 
@@ -231,7 +234,9 @@ Strictness
   - `git status --porcelain | cat` and `git diff`/`git diff --cached`.
 - Pre-commit hooks are authoritative; accept their auto-fixes.
   - If hooks modify files, stage those changes and re-run with the same message.
+  - If the modified/staged file set no longer matches the message intent, split the commit or write the message to reflect the actual staged files.
  - Keep commits minimal and scoped; avoid unrelated changes. Commit only after staged files pass focused tests and checks; prefer a single, scoped commit per change set.
+ - After committing, self-verify with `git show --name-only -1` that the commit content matches the message; if not, amend immediately.
 
 ## Key References
 - `examples/` – v1.x modern usage

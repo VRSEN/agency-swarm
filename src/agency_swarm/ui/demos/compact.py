@@ -64,12 +64,7 @@ async def compact_thread(agency_instance: Agency, args: list[str]) -> str:
     entry_agent = agency_instance.entry_points[0]
     client = entry_agent.client_sync
 
-    # Minimal reasoning for OpenAI models
-    is_openai_model = isinstance(model_name, str) and ("gpt" in model_name.lower())
-    if is_openai_model:
-        resp = client.responses.create(model=model_name, input=final_prompt, reasoning={"effort": "minimal"})
-    else:
-        resp = client.responses.create(model=model_name, input=final_prompt)
+    resp = client.responses.create(model=model_name, input=final_prompt)
     if not hasattr(resp, "output_text"):
         raise RuntimeError("Client response missing 'output_text' attribute.")
     summary_text = resp.output_text  # type: ignore[attr-defined]
