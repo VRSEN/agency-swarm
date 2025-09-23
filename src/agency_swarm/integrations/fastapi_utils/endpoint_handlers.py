@@ -1,21 +1,34 @@
 import asyncio
 import json
+import logging
 import time
 from collections.abc import AsyncGenerator, Callable
+from typing import Any
 
 from ag_ui.core import EventType, MessagesSnapshotEvent, RunErrorEvent, RunFinishedEvent, RunStartedEvent
 from ag_ui.encoder import EventEncoder
+from agents import OpenAIResponsesModel, output_guardrail
 from agents.exceptions import OutputGuardrailTripwireTriggered
+from agents.models._openai_shared import get_default_openai_client
 from fastapi import Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from openai import AsyncOpenAI
+from pydantic import BaseModel, Field
 
-from agency_swarm.agency import Agency
+from agency_swarm import (
+    Agency,
+    Agent,
+    GuardrailFunctionOutput,
+    RunContextWrapper,
+)
 from agency_swarm.integrations.fastapi_utils.file_handler import upload_from_urls
 from agency_swarm.integrations.fastapi_utils.logging_middleware import get_logs_endpoint_impl
 from agency_swarm.messages import MessageFilter
 from agency_swarm.tools.mcp_manager import attach_persistent_mcp_servers
 from agency_swarm.ui.core.agui_adapter import AguiAdapter, serialize
+
+logger = logging.getLogger(__name__)
 
 
 def get_verify_token(app_token):
@@ -73,6 +86,12 @@ def make_response_endpoint(request_model, agency_factory: Callable[..., Agency],
         result = {"response": response.final_output, "new_messages": filtered_messages}
         if request.file_urls is not None and file_ids_map is not None:
             result["file_ids_map"] = file_ids_map
+        if request.generate_chat_name:
+            try:
+                result["chat_name"] = await generate_chat_name(filtered_messages)
+            except Exception as e:
+                # Do not add errors to the result as they might be mistaken for chat name
+                logger.error(f"Error generating chat name: {e}")
         return result
 
     return handler
@@ -159,6 +178,12 @@ def make_stream_endpoint(request_model, agency_factory: Callable[..., Agency], v
             result = {"new_messages": filtered_messages}
             if request.file_urls is not None and file_ids_map is not None:
                 result["file_ids_map"] = file_ids_map
+            if request.generate_chat_name:
+                try:
+                    result["chat_name"] = await generate_chat_name(filtered_messages)
+                except Exception as e:
+                    # Do not add errors to the result as they might be mistaken for chat name
+                    logger.error(f"Error generating chat name: {e}")
             yield "event: messages\ndata: " + json.dumps(result) + "\n\n"
 
             # explicit terminator
@@ -317,3 +342,64 @@ async def exception_handler(request, exc):
     if isinstance(exc, tuple):
         error_message = str(exc[1]) if len(exc) > 1 else str(exc[0])
     return JSONResponse(status_code=500, content={"error": error_message})
+
+
+async def generate_chat_name(new_messages: list[dict[str, Any]]):
+    client = get_default_openai_client() or AsyncOpenAI()
+
+    class ResponseFormat(BaseModel):
+        chat_name: str = Field(description="A fitting name for the provided chat history.")
+
+    @output_guardrail
+    async def response_content_guardrail(
+        context: RunContextWrapper, agent: Agent, response_text: str | type[BaseModel]
+    ) -> GuardrailFunctionOutput:
+        tripwire_triggered = False
+        output_info = ""
+
+        chat_name = response_text.chat_name if isinstance(response_text, ResponseFormat) else response_text
+
+        if len(chat_name.split(" ")) < 2 or len(chat_name.split(" ")) > 6:
+            print(f"Chat name: {chat_name}")
+            tripwire_triggered = True
+            output_info = "The name should contain between 2 and 6 words"
+
+        return GuardrailFunctionOutput(
+            output_info=output_info,
+            tripwire_triggered=tripwire_triggered,
+        )
+
+    from agency_swarm.messages import MessageFormatter
+    formatted_messages = MessageFormatter.strip_agency_metadata(new_messages)
+    if len(formatted_messages) > 1000:
+        formatted_messages = "HISTORY TRUNCATED TO 1000 CHARACTERS:\n" + formatted_messages[:1000]
+
+    model = OpenAIResponsesModel(model="gpt-5-nano", openai_client=client)
+
+    name_agent = Agent(
+        name="NameGenerator",
+        model=model,
+        instructions=(
+"""
+You are a helpful assistant that generates a human-friendly title for a conversation.
+You will receive a list of messages where the first one is the user input and the rest are
+related to the assistant response.
+Rules:
+- Prioritize the user's first message; use later turns only to disambiguate
+- 2-6 words, Title Case
+- No punctuation except spaces; no emojis, quotes, model/tool names, or trailing period
+- Output only the title text (no explanations)
+- If the first user message is generic (e.g., “hi”), use the best available intent from the rest of the messages.
+- If you lack context of the user input (continuation of an ongoing conversation), derive it from agent's response.
+"""
+        ),
+        output_type=ResponseFormat,
+        validation_attempts=3,
+        output_guardrails=[response_content_guardrail],
+    )
+
+    agency = Agency(name_agent)
+
+    response = await agency.get_response(formatted_messages)
+
+    return response.final_output.chat_name

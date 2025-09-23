@@ -65,7 +65,7 @@ class TestFastAPIFileProcessing:
     def file_server_process(self):
         """Start HTTP file server on port 7860 for serving test files."""
         # Get the path to tests/data/files directory
-        test_files_dir = Path(__file__).parent.parent / "data" / "files"
+        test_files_dir = Path(__file__).parents[2] / "data" / "files"
         if not test_files_dir.exists():
             pytest.skip(f"Test files directory not found: {test_files_dir}")
 
@@ -136,6 +136,21 @@ class TestFastAPIFileProcessing:
                     pytest.skip(f"Could not start FastAPI server: {e}")
 
         yield server_thread
+
+    @pytest.mark.asyncio
+    async def test_chat_name(self, file_server_process, fastapi_server):
+        """Test processing a single text file via file_urls with chat name generation."""
+        url = "http://localhost:8080/test_agency/get_response"
+        payload = {
+            "message": "I want to find a restaurant in New York.",
+            "generate_chat_name": True,
+        }
+        async with self.get_http_client(timeout_seconds=20) as client:
+            response = await client.post(url, json=payload)
+        assert response.status_code == 200
+        response_data = response.json()
+        assert "chat_name" in response_data
+        assert len(response_data["chat_name"]) > 0
 
     @pytest.mark.asyncio
     async def test_file_search_attachment(self, file_server_process, fastapi_server):
