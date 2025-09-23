@@ -36,7 +36,7 @@ def _make_agency_with_stream_stub(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_cli_help_new_and_stream(monkeypatch: pytest.MonkeyPatch) -> None:
-    TerminalDemoLauncher.CURRENT_CHAT_ID = None
+    TerminalDemoLauncher.set_current_chat_id(None)
 
     saved_ids: list[str] = []
 
@@ -64,7 +64,7 @@ def test_cli_help_new_and_stream(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_cli_resume_switches_chat_id(monkeypatch: pytest.MonkeyPatch) -> None:
-    TerminalDemoLauncher.CURRENT_CHAT_ID = None
+    TerminalDemoLauncher.set_current_chat_id(None)
 
     saved_ids: list[str] = []
 
@@ -85,7 +85,7 @@ def test_cli_resume_switches_chat_id(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_cli_compact_updates_chat_id(monkeypatch: pytest.MonkeyPatch) -> None:
-    TerminalDemoLauncher.CURRENT_CHAT_ID = None
+    TerminalDemoLauncher.set_current_chat_id(None)
 
     saved_ids: list[str] = []
 
@@ -110,7 +110,7 @@ def test_cli_compact_updates_chat_id(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_cli_agent_mentions(monkeypatch: pytest.MonkeyPatch) -> None:
-    TerminalDemoLauncher.CURRENT_CHAT_ID = None
+    TerminalDemoLauncher.set_current_chat_id(None)
 
     inputs = iter([" @primary hi there ", "/exit"])  # mixed-case mention, extra spaces
 
@@ -124,7 +124,7 @@ def test_cli_agent_mentions(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_cli_status_is_nondestructive(monkeypatch: pytest.MonkeyPatch) -> None:
-    TerminalDemoLauncher.CURRENT_CHAT_ID = None
+    TerminalDemoLauncher.set_current_chat_id(None)
     inputs = iter(["/status", "/exit"])  # status should not stream
 
     agency, calls = _make_agency_with_stream_stub(monkeypatch)
@@ -136,7 +136,7 @@ def test_cli_status_is_nondestructive(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_cli_slash_completions_supports_async(monkeypatch: pytest.MonkeyPatch) -> None:
     """Ensure the prompt completer provides async completions for '/' (bug repro)."""
-    TerminalDemoLauncher.CURRENT_CHAT_ID = None
+    TerminalDemoLauncher.set_current_chat_id(None)
 
     # Capture the completer passed into PromptSession without altering behavior elsewhere.
     import prompt_toolkit as _pt

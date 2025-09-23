@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
@@ -61,13 +62,9 @@ def summarize_messages(messages: list[dict[str, Any]]) -> str:
                     if "All user messages:" in line and i + 1 < len(lines):
                         next_line = lines[i + 1].strip()
                         if next_line.startswith("1."):
-                            import re
-
                             match = re.search(r'"([^"]+)"', next_line)
                             if match:
                                 return _clip(match.group(1))
-            import re
-
             quotes = re.findall(r'"([^"]+)"', content)
             if quotes:
                 return _clip(quotes[0])

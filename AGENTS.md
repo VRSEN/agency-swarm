@@ -31,6 +31,8 @@ Prime Directive: Rigorously compare every user request with patterns established
  - In this document: no superfluous examples: Do not add examples that do not improve or clarify a rule. Omit examples when rules are self‑explanatory.
  - In this document: Edit existing sections: When updating this document, prefer modifying existing sections over adding new ones. Add new sections only when strictly necessary to remove ambiguity.
  - Naming: Functions are verb phrases; values are noun phrases. Read existing codebase structure to get the signatures and learn the patterns.
+ - Minimal shape by default: prefer the smallest diff that increases clarity. Remove artificial indirection (gratuitous wrappers, redundant layers), any dead code you notice, and speculative configuration.
+ - Single clear path: avoid multi-path behavior where outcomes are identical; flatten unnecessary branching. Do not add optional fallbacks without explicit specification.
 
 ### Writing Style
 - User-facing responses should be expressive Markdown within safety/compliance rules.
@@ -153,10 +155,10 @@ Avoid growing already large files. Prefer extracting focused modules. If you mus
   - `tests/test_*_modules/` – Unit tests, one module per file, matching `src/` names
   - No root-level tests (organize by module)
 - Name test files clearly (e.g. `test_thread_isolation.py`), never generic root names
-
 - Symmetry required: tests must mirror `src/`. Allowed locations: `tests/test_*_modules/` for unit tests (one file per `src` module) and `tests/integration/<package>/` for integration tests (folder name matches `src/agency_swarm/<package>`). Do not add other test roots.
 - Each test verifies one behavior; describe the behavior in the docstring; prefer improving/restructuring/renaming existing tests over adding new ones.
 - Keep assertions minimal but high-signal; enforce a single canonical order (no alternates, no randomness).
+- No OR/alternatives in assertions.
 - Prefer proving the core behavior over incidental details; remove dead code and unused branches immediately.
 
 ### Testing Protocol (Behavior-Only, Minimal Mocks)
@@ -211,8 +213,12 @@ Strictness
  - Immediately before committing, re-run `git status --porcelain` and `git diff --cached` to confirm the staged files still match intent.
 
 - Commit message structure (MANDATORY)
-  - Title: single line; semicolon-separated `scope: change` segments; list all impacted scopes; imperative; no trailing period.
+  - Title: `type: concise change summary`; imperative; no trailing period.
   - Body: bullets only; one change per line; no paragraphs.
+  - Guidance:
+    - Use a conventional, meaningful `type` (e.g., feature, fix, refactor, docs, test, chore).
+    - Keep the summary tightly scoped to the staged diff.
+    - Bullets should mirror the diff at a high signal-to-noise ratio (module: action).
 
 - Before any potentially destructive command (including checkout, stash, commit, push, reset, rebase, force operations, file deletions, or mass edits), STOP and clearly explain the intended changes and impact, then obtain the user's explicit approval before proceeding. Treat committing as destructive in this repo. For drastic changes (wide refactors, file moves/deletes, policy edits, or behavior-affecting modifications), obtain two separate confirmations (double‑confirm) before proceeding.
 

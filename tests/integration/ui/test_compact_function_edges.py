@@ -2,23 +2,13 @@ import pytest
 
 from agency_swarm import Agent
 from agency_swarm.ui.demos.compact import compact_thread
-
-
-class _TM:
-    def __init__(self):
-        self._msgs = []
-
-    def get_all_messages(self):
-        return list(self._msgs)
-
-    def replace_messages(self, msgs):
-        self._msgs = list(msgs)
+from agency_swarm.utils.thread import ThreadManager
 
 
 class _Agency:
     def __init__(self, entry_points):
         self.entry_points = entry_points
-        self.thread_manager = _TM()
+        self.thread_manager = ThreadManager()
 
 
 class _NoOutput:
@@ -54,11 +44,6 @@ async def test_compact_thread_requires_entry_points(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_compact_thread_raises_on_missing_output_text(monkeypatch):
-    # Patch start_new_chat to avoid side effects
-    from agency_swarm.ui.demos.launcher import TerminalDemoLauncher
-
-    monkeypatch.setattr(TerminalDemoLauncher, "start_new_chat", lambda *a, **k: "cid")
-
     agent = _real_agent_with_client(model="gpt-4.1", client=_FakeClient())
     agency = _Agency(entry_points=[agent])
 

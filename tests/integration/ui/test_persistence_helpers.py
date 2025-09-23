@@ -6,24 +6,13 @@ import pytest
 
 from agency_swarm.ui.demos import persistence
 from agency_swarm.ui.demos.launcher import TerminalDemoLauncher
-
-
-class _MemoryThreadManager:
-    def __init__(self, seed: list[dict[str, str]] | None = None) -> None:
-        self.messages = seed or []
-        self.replaced: list[dict[str, str]] | None = None
-
-    def get_all_messages(self) -> list[dict[str, str]]:
-        return list(self.messages)
-
-    def replace_messages(self, messages: list[dict[str, str]]) -> None:
-        self.replaced = list(messages)
-        self.messages = list(messages)
+from agency_swarm.utils.thread import ThreadManager
 
 
 class _Agency:
     def __init__(self, messages: list[dict[str, str]]) -> None:
-        self.thread_manager = _MemoryThreadManager(messages)
+        self.thread_manager = ThreadManager()
+        self.thread_manager.replace_messages(messages)
 
 
 def test_persistence_roundtrip_exercises_helpers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -54,7 +43,7 @@ def test_persistence_roundtrip_exercises_helpers(tmp_path: Path, monkeypatch: py
     # Loading should honour replace_messages and return True even when files exist.
     fresh_agency = _Agency([])
     assert persistence.load_chat(fresh_agency, chat_id) is True
-    assert fresh_agency.thread_manager.replaced == [user_msg, assistant_msg]
+    assert fresh_agency.thread_manager.get_all_messages() == [user_msg, assistant_msg]
 
     # Helpers: summarise by user content and render relative timestamps without crashing.
     summary = persistence.summarize_messages([assistant_msg, user_msg])

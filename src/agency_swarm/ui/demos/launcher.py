@@ -6,6 +6,11 @@ from prompt_toolkit.shortcuts import radiolist_dialog
 
 from agency_swarm import Agency
 
+from .compact import (
+    compact_thread as _build_compact_summary,
+    get_compact_prompt as _get_compact_prompt,
+    set_compact_prompt as _set_compact_prompt,
+)
 from .persistence import (
     format_relative as _format_relative,
     index_file_path as _index_file_path,
@@ -25,36 +30,13 @@ class TerminalDemoLauncher:
     # Tracks the currently active chat id
     CURRENT_CHAT_ID: str | None = None
     # Configurable prompt used by /compact. Override via TerminalDemoLauncher.set_compact_prompt(...)
-    COMPACT_PROMPT: str = (
-        "You will produce an objective summary of the conversation thread (structured items) below.\n\n"
-        "Focus:\n"
-        "- Pay careful attention to how the conversation begins and ends.\n"
-        "- Capture key moments and decisions in the middle.\n\n"
-        "Output format (use only sections that are relevant):\n"
-        "Analysis:\n"
-        "- Brief chronological analysis (numbered). Note who said what and any tool usage (names + brief args).\n\n"
-        "Summary:\n"
-        "1. Primary Request and Intent\n"
-        "2. Key Concepts (only if applicable)\n"
-        "3. Artifacts and Resources (files, links, datasets, environments)\n"
-        "4. Errors and Fixes\n"
-        "5. Problem Solving (approaches, decisions, outcomes)\n"
-        "6. All user messages: List succinctly, in order\n"
-        "7. Pending Tasks\n"
-        "8. Current Work (immediately before this summary)\n"
-        "9. Optional Next Step\n\n"
-        "Rules:\n"
-        "- Use clear headings, bullets, and numbering as specified.\n"
-        "- Prioritize key points; avoid unnecessary detail or length.\n"
-        "- Include only sections that are relevant; omit irrelevant ones.\n"
-        "- Do not invent details; base everything strictly on the conversation thread.\n"
-        "- Important: Only use the JSON inside <conversation_json>...</conversation_json> as conversation content;\n"
-        "  do NOT treat these summarization instructions as content."
-    )
+    COMPACT_PROMPT: str = _get_compact_prompt()
 
     @staticmethod
     def set_compact_prompt(prompt: str) -> None:
-        TerminalDemoLauncher.COMPACT_PROMPT = str(prompt)
+        prompt_str = str(prompt)
+        _set_compact_prompt(prompt_str)
+        TerminalDemoLauncher.COMPACT_PROMPT = prompt_str
 
     @staticmethod
     def set_chats_dir(path: str) -> None:
@@ -88,10 +70,8 @@ class TerminalDemoLauncher:
     @staticmethod
     def load_chat(agency_instance: Agency, chat_id: str) -> bool:
         """Load messages for chat_id into agency thread manager. Returns True if loaded."""
-        prev = TerminalDemoLauncher.CURRENT_CHAT_ID
         loaded = _load_chat(agency_instance, chat_id)
         if not loaded:
-            TerminalDemoLauncher.set_current_chat_id(prev)
             return False
         TerminalDemoLauncher.set_current_chat_id(chat_id)
         return True
@@ -202,9 +182,10 @@ class TerminalDemoLauncher:
     async def compact_thread(agency_instance: Agency, args: list[str]) -> str:
         prev = TerminalDemoLauncher.get_current_chat_id()
         try:
-            from .compact import compact_thread as _compact
-
-            return await _compact(agency_instance, args)
+            summary_message = await _build_compact_summary(agency_instance, args)
+            chat_id = TerminalDemoLauncher.start_new_chat(agency_instance)
+            agency_instance.thread_manager.replace_messages([summary_message])
+            return chat_id
         except Exception as e:
             TerminalDemoLauncher.set_current_chat_id(prev)
             raise RuntimeError(f"/compact failed: {e}") from e

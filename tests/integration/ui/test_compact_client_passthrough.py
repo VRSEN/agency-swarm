@@ -5,6 +5,13 @@ from agency_swarm.ui.demos.launcher import TerminalDemoLauncher
 from agency_swarm.utils.thread import ThreadManager
 
 
+def _seed_messages(agent_name: str) -> list[dict[str, str]]:
+    return [
+        {"role": "user", "content": "hello"},
+        {"role": "assistant", "agent": agent_name, "content": "hi"},
+    ]
+
+
 @pytest.fixture(autouse=True)
 def _reset_launcher_state():
     TerminalDemoLauncher.set_current_chat_id(None)
@@ -48,30 +55,11 @@ def _real_agent_with_client(name: str, model: str, client):
     return a
 
 
-class _Thread:
-    def __init__(self):
-        self.messages = [
-            {"role": "user", "content": "hello"},
-            {"role": "assistant", "agent": "bot", "content": "hi"},
-        ]
-
-    def get_all_messages(self):
-        return list(self.messages)
-
-    def replace_messages(self, msgs):
-        self.messages = list(msgs)
-
-    def clear(self):
-        self.messages.clear()
-
-    def add_message(self, m):
-        self.messages.append(m)
-
-
 class _Agency:
     def __init__(self, agent):
         self.entry_points = [agent]
-        self.thread_manager = _Thread()
+        self.thread_manager = ThreadManager()
+        self.thread_manager.replace_messages(_seed_messages(agent.name))
 
 
 class _SessionAgency:
@@ -165,7 +153,7 @@ def test_resume_interactive_list_and_select(tmp_path, monkeypatch):
 
     class _A:
         def __init__(self):
-            self.thread_manager = _T()
+            self.thread_manager = ThreadManager()
 
     agency = _A()
 
