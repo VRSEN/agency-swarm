@@ -1,20 +1,23 @@
+import asyncio
+import uuid
 from typing import Any
+
+from prompt_toolkit.shortcuts import radiolist_dialog
 
 from agency_swarm import Agency
 
+from .compact import (
+    compact_thread as _build_compact_summary,
+    get_compact_prompt as _get_compact_prompt,
+    set_compact_prompt as _set_compact_prompt,
+)
 from .persistence import (
-    chat_file_path as _chat_file_path,
     format_relative as _format_relative,
-    get_chats_dir as _get_chats_dir,
     index_file_path as _index_file_path,
     list_chat_records as _list_chat_records,
     load_chat as _load_chat,
-    load_index as _load_index,
     save_current_chat as _save_current_chat,
-    save_index as _save_index,
     set_chats_dir as _set_chats_dir,
-    summarize_messages as _summarize_messages,
-    update_index as _update_index,
 )
 
 """Terminal demo launcher.
@@ -24,71 +27,40 @@ This module focuses on terminal interaction only. Copilot demo is in _copilot.py
 
 
 class TerminalDemoLauncher:
-    # Directory for local chat persistence; override via set_chats_dir or env
-    CHATS_DIR: str | None = None
+    # Tracks the currently active chat id
+    CURRENT_CHAT_ID: str | None = None
     # Configurable prompt used by /compact. Override via TerminalDemoLauncher.set_compact_prompt(...)
-    COMPACT_PROMPT: str = (
-        "You will produce an objective summary of the conversation thread (structured items) below.\n\n"
-        "Focus:\n"
-        "- Pay careful attention to how the conversation begins and ends.\n"
-        "- Capture key moments and decisions in the middle.\n\n"
-        "Output format (use only sections that are relevant):\n"
-        "Analysis:\n"
-        "- Brief chronological analysis (numbered). Note who said what and any tool usage (names + brief args).\n\n"
-        "Summary:\n"
-        "1. Primary Request and Intent\n"
-        "2. Key Concepts (only if applicable)\n"
-        "3. Artifacts and Resources (files, links, datasets, environments)\n"
-        "4. Errors and Fixes\n"
-        "5. Problem Solving (approaches, decisions, outcomes)\n"
-        "6. All user messages: List succinctly, in order\n"
-        "7. Pending Tasks\n"
-        "8. Current Work (immediately before this summary)\n"
-        "9. Optional Next Step\n\n"
-        "Rules:\n"
-        "- Use clear headings, bullets, and numbering as specified.\n"
-        "- Prioritize key points; avoid unnecessary detail or length.\n"
-        "- Include only sections that are relevant; omit irrelevant ones.\n"
-        "- Do not invent details; base everything strictly on the conversation thread.\n"
-        "- Important: Only use the JSON inside <conversation_json>...</conversation_json> as conversation content;\n"
-        "  do NOT treat these summarization instructions as content."
-    )
+    COMPACT_PROMPT: str = _get_compact_prompt()
 
     @staticmethod
     def set_compact_prompt(prompt: str) -> None:
-        TerminalDemoLauncher.COMPACT_PROMPT = str(prompt)
+        prompt_str = str(prompt)
+        _set_compact_prompt(prompt_str)
+        TerminalDemoLauncher.COMPACT_PROMPT = prompt_str
 
     @staticmethod
     def set_chats_dir(path: str) -> None:
         """Set directory where chats are stored as JSON files."""
-        TerminalDemoLauncher.CHATS_DIR = str(path)
-        _set_chats_dir(TerminalDemoLauncher.CHATS_DIR)
+        _set_chats_dir(str(path))
 
     @staticmethod
-    def _get_chats_dir() -> str:
-        if TerminalDemoLauncher.CHATS_DIR:
-            _set_chats_dir(TerminalDemoLauncher.CHATS_DIR)
-        return _get_chats_dir()
+    def generate_chat_id() -> str:
+        """Create a unique chat id for new sessions."""
+        return f"run_demo_chat_{uuid.uuid4()}"
 
     @staticmethod
-    def _chat_file_path(chat_id: str) -> str:
-        return _chat_file_path(chat_id)
+    def get_current_chat_id() -> str | None:
+        """Return the most recently active chat id, if any."""
+        return TerminalDemoLauncher.CURRENT_CHAT_ID
+
+    @staticmethod
+    def set_current_chat_id(chat_id: str | None) -> None:
+        """Set the active chat id for the launcher."""
+        TerminalDemoLauncher.CURRENT_CHAT_ID = chat_id
 
     @staticmethod
     def _index_file_path() -> str:
         return _index_file_path()
-
-    @staticmethod
-    def _load_index() -> dict[str, dict[str, Any]]:
-        return _load_index()
-
-    @staticmethod
-    def _save_index(index: dict[str, dict[str, Any]]) -> None:
-        _save_index(index)
-
-    @staticmethod
-    def _update_index(chat_id: str, messages: list[dict[str, Any]], branch: str) -> None:
-        _update_index(chat_id, messages, branch)
 
     @staticmethod
     def save_current_chat(agency_instance: Agency, chat_id: str) -> None:
@@ -98,11 +70,22 @@ class TerminalDemoLauncher:
     @staticmethod
     def load_chat(agency_instance: Agency, chat_id: str) -> bool:
         """Load messages for chat_id into agency thread manager. Returns True if loaded."""
-        return _load_chat(agency_instance, chat_id)
+        loaded = _load_chat(agency_instance, chat_id)
+        if not loaded:
+            return False
+        TerminalDemoLauncher.set_current_chat_id(chat_id)
+        return True
 
     @staticmethod
-    def _summarize_messages(messages: list[dict[str, Any]]) -> str:
-        return _summarize_messages(messages)
+    def start_new_chat(agency_instance: Agency, chat_id: str | None = None) -> str:
+        """Switch the launcher and agency to a fresh chat id with an empty thread."""
+        new_chat_id = chat_id or TerminalDemoLauncher.generate_chat_id()
+        TerminalDemoLauncher.set_current_chat_id(new_chat_id)
+
+        # Reset the thread store
+        agency_instance.thread_manager.replace_messages([])
+
+        return new_chat_id
 
     @staticmethod
     def _format_relative(ts_iso: str | None) -> str:
@@ -132,42 +115,34 @@ class TerminalDemoLauncher:
             return None
 
         # Try fancy menu with arrow keys first (only if no event loop is running)
+        loop_running = False
         try:
-            import asyncio
-
-            from prompt_toolkit.shortcuts import radiolist_dialog
-
+            asyncio.get_running_loop()
+            loop_running = True
+        except RuntimeError:
             loop_running = False
-            try:
-                asyncio.get_running_loop()
-                loop_running = True
-            except RuntimeError:
-                loop_running = False
 
-            if not loop_running:
-                choices = []
-                for rec in records:
-                    mod = TerminalDemoLauncher._format_relative(rec.get("modified_at"))
-                    created = TerminalDemoLauncher._format_relative(rec.get("created_at"))
-                    msgs = rec.get("msgs") or 0
-                    branch = (rec.get("branch") or "")[:20]
-                    summary = (rec.get("summary") or "").strip()[:40]
+        if not loop_running:
+            choices = []
+            for rec in records:
+                mod = TerminalDemoLauncher._format_relative(rec.get("modified_at"))
+                created = TerminalDemoLauncher._format_relative(rec.get("created_at"))
+                msgs = rec.get("msgs") or 0
+                branch = (rec.get("branch") or "")[:20]
+                summary = (rec.get("summary") or "").strip()[:40]
 
-                    display = f"{mod:<12} {created:<12} {msgs:>3} {branch:<20} {summary}"
-                    choices.append((rec["chat_id"], display))
+                display = f"{mod:<12} {created:<12} {msgs:>3} {branch:<20} {summary}"
+                choices.append((rec["chat_id"], display))
 
-                result = radiolist_dialog(
-                    title="Resume Chat",
-                    text="Use arrow keys to select a chat:",
-                    values=choices,
-                ).run()
+            result = radiolist_dialog(
+                title="Resume Chat",
+                text="Use arrow keys to select a chat:",
+                values=choices,
+            ).run()
 
-                if result:
-                    if TerminalDemoLauncher.load_chat(agency_instance, result):
-                        return result
-
-        except ImportError:
-            pass
+            if result:
+                if TerminalDemoLauncher.load_chat(agency_instance, result):
+                    return result
 
         # Fallback: simple number selection
         input_fn = input_func or input
@@ -205,9 +180,15 @@ class TerminalDemoLauncher:
 
     @staticmethod
     async def compact_thread(agency_instance: Agency, args: list[str]) -> str:
-        from .compact import compact_thread as _compact
-
-        return await _compact(agency_instance, args)
+        prev = TerminalDemoLauncher.get_current_chat_id()
+        try:
+            summary_message = await _build_compact_summary(agency_instance, args)
+            chat_id = TerminalDemoLauncher.start_new_chat(agency_instance)
+            agency_instance.thread_manager.replace_messages([summary_message])
+            return chat_id
+        except Exception as e:
+            TerminalDemoLauncher.set_current_chat_id(prev)
+            raise RuntimeError(f"/compact failed: {e}") from e
 
     @staticmethod
     def start(agency_instance: Agency, show_reasoning: bool = False) -> None:
