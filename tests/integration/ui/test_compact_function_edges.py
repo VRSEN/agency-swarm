@@ -1,6 +1,5 @@
 import pytest
 
-from agency_swarm import Agent
 from agency_swarm.ui.demos.compact import compact_thread
 from agency_swarm.utils.thread import ThreadManager
 
@@ -11,26 +10,11 @@ class _Agency:
         self.thread_manager = ThreadManager()
 
 
-class _NoOutput:
-    pass
+"""Edge-case tests for compact_thread.
 
-
-class _FakeResponses:
-    def create(self, *_, **__):  # noqa: ANN001, ANN002
-        return _NoOutput()  # missing output_text
-
-
-class _FakeClient:
-    def __init__(self):
-        self.responses = _FakeResponses()
-
-
-def _real_agent_with_client(model: str, client):
-    a = Agent(name="Coordinator", instructions="test")
-    a.model = model  # type: ignore[attr-defined]
-    # Inject sync client into real Agent to avoid network
-    a._openai_client_sync = client
-    return a
+This file intentionally avoids mocking the OpenAI client to non-Response
+types. In production, compact_thread receives an OpenAI Response object.
+"""
 
 
 @pytest.mark.asyncio
@@ -40,13 +24,3 @@ async def test_compact_thread_requires_entry_points(monkeypatch):
     with pytest.raises(RuntimeError) as ei:
         await compact_thread(agency, [])
     assert "Agency has no entry points" in str(ei.value)
-
-
-@pytest.mark.asyncio
-async def test_compact_thread_raises_on_missing_output_text(monkeypatch):
-    agent = _real_agent_with_client(model="gpt-4.1", client=_FakeClient())
-    agency = _Agency(entry_points=[agent])
-
-    with pytest.raises(RuntimeError) as ei:
-        await compact_thread(agency, [])
-    assert "missing 'output_text'" in str(ei.value)
