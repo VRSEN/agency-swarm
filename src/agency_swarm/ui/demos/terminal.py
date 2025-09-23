@@ -82,6 +82,7 @@ def start_terminal(
         chat_id = TerminalDemoLauncher.start_new_chat(agency_instance)
         event_converter.console.print("Started a new chat session.")
         event_converter.console.rule()
+        event_converter.handoff_agent = None
 
     def _resume_chat() -> None:
         """Load a previously saved chat into context."""
@@ -166,13 +167,15 @@ def start_terminal(
         agent_mention_pattern = r"(?:^|\s)@(\w+)(?:\s|$)"
         agent_match = re.search(agent_mention_pattern, message)
 
-        if agent_match:
-            mentioned_agent = agent_match.group(1)
-            try:
-                recipient_agent = [agent for agent in recipient_agents if agent.lower() == mentioned_agent.lower()][0]
-                message = re.sub(agent_mention_pattern, " ", message).strip()
-            except Exception:
-                logger.error(f"Recipient agent {mentioned_agent} not found.", exc_info=True)
+        if message.startswith("@"):
+            mentioned_agent = agent_match.group(1) if agent_match is not None else None
+            for agent in recipient_agents:
+                if message.lower().startswith(f"@{agent.lower()}"):
+                    recipient_agent = agent
+                    message = message[len(f"@{agent.lower()}") :].strip()
+                    break
+            if recipient_agent is None:
+                logger.error(f"Recipient agent {mentioned_agent or 'Unknown'} not found.", exc_info=True)
                 return False
 
         # Clear handoff to correctly display recipient when an explicit target is used

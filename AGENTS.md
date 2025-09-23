@@ -22,6 +22,7 @@ Prime Directive: Rigorously compare every user request with patterns established
 3. THINK CRITICALLY: User requests may be unclear or incorrect. Default to codebase conventions and protocols. Escalate when you find inconsistencies.
 4. ESCALATE DISAGREEMENTS: If your recommendation conflicts with explicit user direction, pause and get approval before proceeding.
 5. STOP ON UNFAMILIAR CHANGES: If diffs include files outside your intended change set or changes you can't attribute to your edits or hooks: do not edit/format/stage/commit them; send a concise summary and wait for explicit instruction.
+6. STRICT COMMIT DIFF: When asked to apply a specific commit/PR, apply only its exact hunks. If drift blocks any hunk, stop and ask for approval. Do not revert/rename files without explicit approval.
 
 ## 🔴 FILE REQUIREMENTS
 - Every line must fight for its place: No redundant, unnecessary, or "nice to have" content. Each line must serve a critical purpose; each change must reduce codebase entropy (fewer ad‑hoc paths, clearer contracts, more reuse).

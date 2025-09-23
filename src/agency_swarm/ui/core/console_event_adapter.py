@@ -330,10 +330,15 @@ class ConsoleEventAdapter:
                         tool_handoff_name = item.name.replace("transfer_to_", "")
                         self.handoff_agent = tool_handoff_name
                         # Try to restore the correct agent name if it was split by underscores
-                        for agent in self.agents:
-                            if agent.replace("_", " ") == tool_handoff_name.replace("_", " "):
-                                self.handoff_agent = agent
-                                break
+                        try:
+                            for agent in self.agents:
+                                # Compare with underscores treated as spaces for robustness
+                                if str(agent).replace("_", " ") == tool_handoff_name.replace("_", " "):
+                                    self.handoff_agent = str(agent)
+                                    break
+                        except Exception:
+                            # If self.agents is not iterable or any issue occurs, keep tool_handoff_name
+                            pass
 
     def _handle_run_item_stream_event(self, item: Any, agent_name: str, speaking_to: str) -> None:
         if item.type == "tool_call_output_item":

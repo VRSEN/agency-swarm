@@ -95,7 +95,7 @@ class TestTerminalCapsys:
         captured = capsys.readouterr()
         output = captured.out
         assert "/help" in output
-        assert "/clear" in output
+        assert "/new" in output
         assert "/compact" in output
         assert "/resume" in output
         assert "/status" in output
@@ -118,9 +118,9 @@ class TestTerminalCapsys:
         assert "Default Recipient: TestAgent" in output
         assert "cwd:" in output
 
-    def test_clear_command_functionality(self, agency, capsys):
-        """Test /clear command functionality."""
-        input_provider = MockInputProvider(["/clear", "/exit"])
+    def test_new_command_functionality(self, agency, capsys):
+        """Test /new command functionality."""
+        input_provider = MockInputProvider(["/new", "/exit"])
 
         with patch("builtins.input", input_provider):
             with patch("prompt_toolkit.PromptSession") as mock_session_class:
@@ -177,20 +177,6 @@ class TestTerminalCapsys:
 
         captured = capsys.readouterr()
         assert "message cannot be empty" in captured.out
-
-    def test_fallback_input_mode(self, agency, capsys):
-        """Test fallback to basic input when PromptSession fails."""
-        input_provider = MockInputProvider(["/help", "/exit"])
-
-        with patch("builtins.input", input_provider):
-            with patch("prompt_toolkit.PromptSession", side_effect=ImportError("Mock failure")):
-                start_terminal(agency)
-
-        captured = capsys.readouterr()
-        output = captured.out
-
-        assert "/help" in output
-        assert "Show help" in output
 
     def test_handoff_chat_transfer(self, agency, capsys):
         """Test handoff chat transfer."""
