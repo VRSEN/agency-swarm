@@ -139,8 +139,9 @@ class AguiAdapter:
             if msg.role == "assistant":
                 # If the assistant issued tool calls they are contained in
                 # ``msg.tool_calls``.
-                if getattr(msg, "tool_calls", None):
-                    for tc in msg.tool_calls:  # type: ignore[attr-defined]
+                tool_calls = getattr(msg, "tool_calls", None)
+                if tool_calls:
+                    for tc in tool_calls:
                         name = tc.function.name or "tool"
                         arguments = tc.function.arguments or "{}"
 
@@ -373,7 +374,7 @@ class AguiAdapter:
 
             snapshot = MessagesSnapshotEvent(
                 type=EventType.MESSAGES_SNAPSHOT,
-                messages=[AssistantMessage(id=call_id, role="assistant", content=output_text)],
+                messages=[AssistantMessage(id=call_id, role="assistant", content=output_text)],  # type: ignore[arg-type]
             )
 
             annotations = getattr(output_content, "annotations", None)

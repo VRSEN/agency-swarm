@@ -373,3 +373,67 @@ class TestComplexHandoffScenarios:
 
         for output in tool_outputs:
             assert "error" not in output.lower(), f"Found error in tool output: {output}"
+
+    def test_handoff_reminders(self):
+        """Test bidirectional communication flows combined with SendMessageHandoff tool class."""
+
+        class NoReminder(SendMessageHandoff):
+            add_reminder = False
+
+        class CustomReminder(SendMessageHandoff):
+            reminder_override = "Custom reminder"
+
+        agent_a = Agent(
+            name="AgentA", instructions="Primary orchestrator", model_settings=ModelSettings(temperature=0.0)
+        )
+        agent_b = Agent(
+            name="AgentB",
+            instructions="Secondary orchestrator with handoffs",
+            model_settings=ModelSettings(temperature=0.0),
+        )
+        agent_c = Agent(name="AgentC", instructions="Specialist", model_settings=ModelSettings(temperature=0.0))
+
+        # Configure bidirectional communication between A and B, plus handoff capability from B to C
+        agency = Agency(
+            agent_a,
+            agent_b,
+            agent_c,
+            communication_flows=[
+                (agent_a > agent_b, SendMessageHandoff),  # A can send to B
+                (agent_b > agent_c, CustomReminder),  # A can send to C
+                (agent_c > agent_a, NoReminder),  # B can hand off to C (using SendMessageHandoff tool class)
+            ],
+        )
+        # Check default handoff
+        agency.get_response_sync("Transfer to AgentB agent", recipient_agent=agent_a)
+        system_message = agency.thread_manager.get_all_messages()[1]
+
+        assert system_message["role"] == "system", (
+            f"Incorrect role, got: {system_message}, expected reminder system message"
+        )
+        assert system_message["content"] == "You are now AgentB. Please continue the task.", (
+            f"Incorrect content, got: {system_message}, expected reminder system message"
+        )
+
+        agency.thread_manager.clear()
+
+        # Check custom reminder
+        agency.get_response_sync("Transfer to AgentC agent", recipient_agent=agent_b)
+        system_message = agency.thread_manager.get_all_messages()[1]
+
+        assert system_message["role"] == "system", (
+            f"Incorrect role, got: {system_message}, expected reminder system message"
+        )
+        assert system_message["content"] == "Custom reminder", (
+            f"Incorrect content, got: {system_message}, expected 'Custom reminder'"
+        )
+
+        agency.thread_manager.clear()
+
+        # Check no reminder handoff
+        agency.get_response_sync("Transfer to AgentA agent", recipient_agent=agent_c)
+        chat_history = agency.thread_manager.get_all_messages()
+
+        for message in chat_history:
+            if hasattr(message, "role"):
+                assert "system" not in message["role"], f"Incorrect role, got: {message}, expected no system messages"

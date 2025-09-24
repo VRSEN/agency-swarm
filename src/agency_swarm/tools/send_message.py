@@ -12,10 +12,18 @@ import json
 import logging
 from typing import TYPE_CHECKING, Any, Literal
 
-from agents import FunctionTool, InputGuardrailTripwireTriggered, RunContextWrapper, handoff, strict_schema
+from agents import (
+    FunctionTool,
+    HandoffInputData,
+    InputGuardrailTripwireTriggered,
+    RunContextWrapper,
+    handoff,
+    strict_schema,
+)
 from pydantic import BaseModel, ValidationError
 
 from ..context import MasterContext
+from ..messages import MessageFormatter
 from ..streaming.utils import add_agent_name_to_event
 
 if TYPE_CHECKING:
@@ -448,6 +456,9 @@ class SendMessageHandoff:
     A handoff configuration class for defining agent handoffs.
     """
 
+    add_reminder: bool = True  # Adds a reminder system message to the history on handoff
+    reminder_override: str | None = None  # Replaces default reminder with a custom message
+
     def create_handoff(self, recipient_agent: "Agent"):
         """Create and return the handoff object."""
         recipient_agent_name = recipient_agent.name
@@ -463,4 +474,53 @@ class SendMessageHandoff:
 
         schema = strict_schema.ensure_strict_json_schema(InputArgs.model_json_schema())
         handoff_object.input_json_schema = schema
+
+        # Conditionally modify invoke function to include system message into context
+        if self.add_reminder:
+
+            async def message_filter(input_data: HandoffInputData) -> HandoffInputData:
+                ctx = input_data.run_context
+                new_handoff_input_data = input_data.clone()
+
+                if ctx and hasattr(ctx.context, "thread_manager"):
+                    all_messages = ctx.context.thread_manager.get_all_messages()
+                    if all_messages:
+                        last_message = all_messages[-1]
+
+                        # Use reminder_override if provided, otherwise use default reminder
+                        reminder_content = (
+                            self.reminder_override
+                            if self.reminder_override is not None
+                            else f"You are now {recipient_agent.name}. Please continue the task."
+                        )
+
+                        reminder_msg: dict[str, Any] = {
+                            "role": "system",
+                            "content": reminder_content,
+                        }
+                        if isinstance(input_data.input_history, tuple):
+                            new_input_history = input_data.input_history + (reminder_msg.copy(),)
+                        else:
+                            new_input_history = ({"role": "user", "content": input_data.input_history},) + (
+                                reminder_msg.copy(),
+                            )
+
+                        reminder_msg["message_origin"] = "handoff_reminder"
+
+                        # Copy metadata from handoff call to keep track of the CallerAgent correctly
+                        for property_name in MessageFormatter.metadata_fields:
+                            if property_name in last_message:
+                                reminder_msg[property_name] = last_message[property_name]  # type: ignore[literal-required]
+
+                        # Slightly increase the timestamp to keep correct order after sorting
+                        if "timestamp" in reminder_msg and isinstance(reminder_msg["timestamp"], int | float):
+                            reminder_msg["timestamp"] = reminder_msg["timestamp"] + 1
+
+                        ctx.context.thread_manager.add_message(reminder_msg)  # type: ignore[arg-type]
+
+                    new_handoff_input_data = input_data.clone(input_history=new_input_history)
+
+                return new_handoff_input_data
+
+            handoff_object.input_filter = message_filter
         return handoff_object

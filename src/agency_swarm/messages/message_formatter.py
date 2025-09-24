@@ -22,6 +22,16 @@ logger = logging.getLogger(__name__)
 class MessageFormatter:
     """Handles message formatting and structure preparation."""
 
+    metadata_fields: list[str] = [
+        "agent",
+        "callerAgent",
+        "timestamp",
+        "citations",
+        "agent_run_id",
+        "parent_run_id",
+        "message_origin",
+    ]
+
     @staticmethod
     def add_agency_metadata(
         message: TResponseInputItem,
@@ -116,15 +126,7 @@ class MessageFormatter:
                 k: v
                 for k, v in msg.items()
                 if k
-                not in [
-                    "agent",
-                    "callerAgent",
-                    "timestamp",
-                    "citations",
-                    "agent_run_id",
-                    "parent_run_id",
-                    "message_origin",
-                ]
+                not in MessageFormatter.metadata_fields
             }
             cleaned.append(clean_msg)
         return cleaned
