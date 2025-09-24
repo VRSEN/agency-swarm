@@ -43,6 +43,10 @@ class BaseRequest(BaseModel):
         ),
     )
     additional_instructions: str | None = None
+    generate_chat_name: bool | None = Field(
+        default=False,
+        description="Generate a fitting chat name for the user input."
+    )
 
 
 class LogRequest(BaseModel):
