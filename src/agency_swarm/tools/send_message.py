@@ -518,7 +518,7 @@ class SendMessageHandoff:
 
                         ctx.context.thread_manager.add_message(reminder_msg)  # type: ignore[arg-type]
 
-                    new_handoff_input_data = input_data.clone(input_history=new_input_history)
+                        new_handoff_input_data = input_data.clone(input_history=new_input_history)
 
                 return new_handoff_input_data
 

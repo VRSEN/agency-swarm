@@ -29,10 +29,11 @@ Key Implementation Findings:
 from unittest.mock import MagicMock, patch
 
 import pytest
-from agents import ModelSettings
+from agents import HandoffInputData, ModelSettings, RunContextWrapper
 
 from agency_swarm import Agency, Agent
 from agency_swarm.tools import SendMessageHandoff
+from agency_swarm.utils.thread import ThreadManager
 
 
 @pytest.fixture
@@ -214,6 +215,28 @@ class TestHandoffsWithCommunicationFlows:
 
         except Exception as e:
             pytest.skip(f"Orchestrator pattern with handoffs not fully implemented: {e}")
+
+    @pytest.mark.asyncio
+    async def test_handoff_reminder_handles_empty_history(self, specialist_agent):
+        """Ensure reminder injection does not crash when the thread history is empty."""
+
+        handoff_tool = SendMessageHandoff().create_handoff(specialist_agent)
+        assert handoff_tool.input_filter is not None, "Expected handoff to expose an input filter"
+
+        thread_manager = ThreadManager()
+        context = type("Context", (), {"thread_manager": thread_manager})()
+        run_context = RunContextWrapper(context=context)
+        handoff_input = HandoffInputData(
+            input_history=(),
+            pre_handoff_items=(),
+            new_items=(),
+            run_context=run_context,
+        )
+
+        filtered_input = await handoff_tool.input_filter(handoff_input)
+
+        assert filtered_input.input_history == ()
+        assert thread_manager.get_all_messages() == []
 
     def test_communication_flow_isolation(self, mixed_communication_agency):
         """Test that communication flows and handoffs maintain proper isolation."""
