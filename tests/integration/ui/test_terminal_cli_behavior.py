@@ -24,7 +24,11 @@ def _patch_prompt_session(monkeypatch, inputs):
 
 
 def _make_agency_with_stream_stub(monkeypatch: pytest.MonkeyPatch):
-    agency = Agency(Agent(name="Primary", instructions="x"))
+    agency = Agency(
+        Agent(name="Primary", instructions="x"),
+        Agent(name="TestAgent", instructions="x"),
+        Agent(name="Test", instructions="x"),
+    )
     calls: list[tuple[str, str, str]] = []
 
     async def fake_stream(*, message: str, recipient_agent: str, chat_id: str, **_: object):
@@ -121,6 +125,33 @@ def test_cli_agent_mentions(monkeypatch: pytest.MonkeyPatch) -> None:
     msg, recipient, _chat = calls[0]
     assert msg == "hi there"
     assert recipient == "Primary"
+
+
+def test_cli_agent_mentions_allows_punctuation(monkeypatch: pytest.MonkeyPatch) -> None:
+    TerminalDemoLauncher.set_current_chat_id(None)
+
+    inputs = iter(["@Primary, hi there", "/exit"])  # mention immediately followed by punctuation
+
+    agency, calls = _make_agency_with_stream_stub(monkeypatch)
+    _patch_prompt_session(monkeypatch, inputs)
+    terminal.start_terminal(agency, show_reasoning=False)
+
+    msg, recipient, _chat = calls[0]
+    assert msg == ", hi there"
+    assert recipient == "Primary"
+
+
+def test_cli_agent_mentions_prefers_longest_match(monkeypatch: pytest.MonkeyPatch) -> None:
+    TerminalDemoLauncher.set_current_chat_id(None)
+    inputs = iter(["@TestAgent hello", "/exit"])  # overlapping names should resolve to the longest match
+
+    agency, calls = _make_agency_with_stream_stub(monkeypatch)
+    _patch_prompt_session(monkeypatch, inputs)
+    terminal.start_terminal(agency, show_reasoning=False)
+
+    msg, recipient, _chat = calls[0]
+    assert msg == "hello"
+    assert recipient == "TestAgent"
 
 
 def test_cli_status_is_nondestructive(monkeypatch: pytest.MonkeyPatch) -> None:
