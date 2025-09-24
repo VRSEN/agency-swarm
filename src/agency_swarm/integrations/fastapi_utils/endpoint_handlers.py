@@ -3,6 +3,7 @@ import json
 import logging
 import time
 from collections.abc import AsyncGenerator, Callable
+from typing import cast
 
 from ag_ui.core import EventType, MessagesSnapshotEvent, RunErrorEvent, RunFinishedEvent, RunStartedEvent
 from ag_ui.encoder import EventEncoder
@@ -349,7 +350,7 @@ async def generate_chat_name(new_messages: list[TResponseInputItem]):
     class ResponseFormat(BaseModel):
         chat_name: str = Field(description="A fitting name for the provided chat history.")
 
-    @output_guardrail # type: ignore[arg-type]
+    @output_guardrail  # type: ignore[arg-type]
     async def response_content_guardrail(
         context: RunContextWrapper, agent: Agent, response_text: str | type[BaseModel]
     ) -> GuardrailFunctionOutput:
@@ -368,9 +369,16 @@ async def generate_chat_name(new_messages: list[TResponseInputItem]):
         )
 
     from agency_swarm.messages import MessageFormatter
-    formatted_messages = str(MessageFormatter.strip_agency_metadata(new_messages)) # type: ignore[arg-type]
-    if len(formatted_messages) > 1000:
-        formatted_messages = "HISTORY TRUNCATED TO 1000 CHARACTERS:\n" + formatted_messages[:1000]
+
+    sanitized_messages = MessageFormatter.strip_agency_metadata(new_messages)  # type: ignore[arg-type]
+    serialized_history = json.dumps(sanitized_messages, ensure_ascii=False)
+
+    if len(serialized_history) > 1000:
+        message_payload: str | list[TResponseInputItem] = (
+            "HISTORY TRUNCATED TO 1000 CHARACTERS:\n" + serialized_history[:1000]
+        )
+    else:
+        message_payload = cast(list[TResponseInputItem], sanitized_messages)
 
     model = OpenAIResponsesModel(model="gpt-5-nano", openai_client=client)
 
@@ -378,7 +386,7 @@ async def generate_chat_name(new_messages: list[TResponseInputItem]):
         name="NameGenerator",
         model=model,
         instructions=(
-"""
+            """
 You are a helpful assistant that generates a human-friendly title for a conversation.
 You will receive a list of messages where the first one is the user input and the rest are
 related to the assistant response.
@@ -398,6 +406,6 @@ Rules:
 
     agency = Agency(name_agent)
 
-    response = await agency.get_response(formatted_messages)
+    response = await agency.get_response(message_payload)
 
     return response.final_output.chat_name
