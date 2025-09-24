@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, cast
 
 from agents import (
     InputGuardrailTripwireTriggered,
@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from .core import Agent
 
 
-def _extract_guardrail_texts(e: BaseException) -> tuple[Any, str]:
+def _extract_guardrail_texts(e: BaseException) -> tuple[list[TResponseInputItem], str]:
     """Return (assistant_output, guidance_text) from a guardrail exception."""
     assistant_output: list[TResponseInputItem] = []
     guidance_text: str = ""
@@ -24,12 +24,40 @@ def _extract_guardrail_texts(e: BaseException) -> tuple[Any, str]:
             if run_data is not None:
                 assistant_output = [item.to_input_item() for item in run_data.new_items]
 
+            if not assistant_output:
+                agent_output = getattr(guardrail_result, "agent_output", None)
+                if isinstance(agent_output, list):
+                    assistant_output = [
+                        cast(TResponseInputItem, item)
+                        if isinstance(item, dict)
+                        else cast(
+                            TResponseInputItem,
+                            {
+                                "role": "assistant",
+                                "content": str(item),
+                            },
+                        )
+                        for item in agent_output
+                    ]
+                elif isinstance(agent_output, dict):
+                    assistant_output = [cast(TResponseInputItem, agent_output)]
+                elif agent_output is not None:
+                    assistant_output = [
+                        cast(
+                            TResponseInputItem,
+                            {
+                                "role": "assistant",
+                                "content": str(agent_output),
+                            },
+                        )
+                    ]
+
             output_obj = getattr(guardrail_result, "output", None)
             if output_obj is not None:
                 guidance_text = str(getattr(output_obj, "output_info", ""))
     except Exception:
         pass
-    if assistant_output == []:
+    if not assistant_output:
         assistant_output = [
             {
                 "role": "assistant",
