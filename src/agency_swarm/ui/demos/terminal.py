@@ -169,11 +169,23 @@ def start_terminal(
 
         if message.startswith("@"):
             mentioned_agent = agent_match.group(1) if agent_match is not None else None
-            for agent in recipient_agents:
-                if message.lower().startswith(f"@{agent.lower()}"):
-                    recipient_agent = agent
-                    message = message[len(f"@{agent.lower()}") :].strip()
-                    break
+            # Sort from longest to shortest to avoid matching partial names
+            sorted_agents = sorted(recipient_agents, key=len, reverse=True)
+            lowered_message = message.lower()
+            for agent in sorted_agents:
+                agent_token = f"@{agent.lower()}"
+                if not lowered_message.startswith(agent_token):
+                    continue
+
+                boundary_index = len(agent_token)
+                if len(lowered_message) > boundary_index:
+                    next_char = lowered_message[boundary_index]
+                    if next_char.isalnum() or next_char == "_":
+                        continue
+
+                recipient_agent = agent
+                message = message[boundary_index:].lstrip()
+                break
             if recipient_agent is None:
                 logger.error(f"Recipient agent {mentioned_agent or 'Unknown'} not found.", exc_info=True)
                 return False
