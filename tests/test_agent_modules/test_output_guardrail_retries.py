@@ -1,6 +1,7 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from agents import RunErrorDetails
 
 from agency_swarm import Agent, GuardrailFunctionOutput, OutputGuardrailTripwireTriggered, ThreadManager
 from agency_swarm.agent.core import AgencyContext
@@ -9,6 +10,14 @@ from agency_swarm.agent.core import AgencyContext
 def _make_tripwire(agent_output: str, guidance: str) -> OutputGuardrailTripwireTriggered:
     class _GuardrailObj:
         pass
+
+    class _MockRunItem:
+        def __init__(self, role: str, content: str):
+            self.role = role
+            self.content = content
+
+        def to_input_item(self):
+            return {"role": self.role, "content": self.content}
 
     guardrail_result = type(
         "_OutputGuardrailResult",
@@ -20,7 +29,21 @@ def _make_tripwire(agent_output: str, guidance: str) -> OutputGuardrailTripwireT
         },
     )()
 
-    return OutputGuardrailTripwireTriggered(guardrail_result)
+    # Create the exception with the guardrail_result
+    exception = OutputGuardrailTripwireTriggered(guardrail_result)
+
+    # Set the run_data on the exception - needed by _extract_guardrail_texts
+    exception.run_data = RunErrorDetails(
+        input=[],
+        new_items=[_MockRunItem("assistant", agent_output)],
+        raw_responses=[],
+        last_agent=None,
+        context_wrapper=None,
+        input_guardrail_results=[],
+        output_guardrail_results=[],
+    )
+
+    return exception
 
 
 @pytest.mark.asyncio
