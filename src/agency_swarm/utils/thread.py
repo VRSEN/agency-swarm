@@ -33,6 +33,28 @@ class MessageStore:
             logger.warning(f"Attempted to add invalid message: {message}. Expected dict.")
             return
 
+        # openai-agents 0.3.x emits a `tool_called` RunItem as soon as the model
+        # signals `ResponseOutputItemDoneEvent`. We persist that stream event
+        # immediately, then persist the final turn result once the run completes.
+        # Without a guard the same tool/function call would be stored twice, which
+        # later causes "Duplicate item found" errors when conversations re-use the
+        # cached history. Prefer exact-id matches, with a call_id fallback for
+        # function_call_output items.
+        msg_type = message.get("type")
+        message_id = message.get("id")
+        if message_id:
+            if any(existing.get("id") == message_id and existing.get("type") == msg_type for existing in self.messages):
+                logger.debug("Skipping duplicate message with id %s and type %s", message_id, msg_type)
+                return
+        elif msg_type == "function_call_output" and message.get("call_id"):
+            call_id = message.get("call_id")
+            if any(
+                existing.get("type") == "function_call_output" and existing.get("call_id") == call_id
+                for existing in self.messages
+            ):
+                logger.debug("Skipping duplicate function_call_output with call_id %s", call_id)
+                return
+
         self.messages.append(message)
         logger.debug(
             f"Added message to store - agent: {message.get('agent')}, "

@@ -46,15 +46,19 @@ Prime Directive: Rigorously compare every user request with patterns established
 #### Step 0: Build Full Codebase Structure and Comprehensive Change Review
 `make prime`
 
-- This is a meta-command composed of sub-commands: structure discovery, git status/diffs. Avoid duplicating command listings elsewhere to save space in the context window.
+- This meta-command covers structure discovery and git status/diffs; avoid duplicating sub-command listings elsewhere to preserve context.
 - Run this before reading or modifying files—no exceptions.
 - Latest Diff First (non‑negotiable): Before starting any task, read the current staged and unstaged diffs and reconcile your plan to them. Do not proceed until you have incorporated the latest diff.
+- Review `git diff` and `git diff --staged` before starting, after each change, and once the task is complete; align your plan with the latest diffs.
+- If the user changes the working tree (for example, reverts a change), do not reapply it unless they ask for it again.
+- Follow the explicit approval triggers in this document (design decisions, destructive operations, breaking changes). Do not invent extra approval gates that stall progress.
 
 #### Step 1: Proactive Analysis
 - Search for similar patterns; identify required related changes globally.
 - Apply fixes to all instances at once—avoid piecemeal edits.
 - Investigate thoroughly: read complete files, trace full code paths. For debugging, always link failures to their root cause and commit.
 - Before editing, write down for yourself what you will change, why it is needed, and what evidence supports it; stop and request guidance if you cannot articulate this plan.
+- Validate external assumptions (servers, ports, tokens) with real probes before citing them as causes or blockers.
 - Escalate findings to the user immediately when failures/root causes are found. Never proceed with silent fixes.
 - Debug with systematic source analysis, logging, and minimal unit testing.
 - Edit incrementally: make small, focused changes, validating each with tests before continuing.
