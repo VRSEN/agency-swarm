@@ -96,6 +96,7 @@
               "additional-features/few-shot-examples",
               "additional-features/input-output-validation",
               "additional-features/streaming",
+              "additional-features/realtime-agents",
               "additional-features/fastapi-integration",
               "additional-features/mcp-tools-server",
               {
