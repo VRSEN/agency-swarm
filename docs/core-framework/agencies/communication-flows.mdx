@@ -14,9 +14,6 @@ Agency Swarm implements an **orchestrator pattern** where agents use other agent
 - **Agents act as specialized tools** - Each agent can be thought of as a specialized tool that another agent can invoke
 - **Orchestrator agents coordinate workflows** - Typically, one agent orchestrates the entire workflow by calling multiple other agents and compiling their responses
 
-<Tabs defaultValue="v1.x">
-<Tab title="v1.x">
-
 ## Example: Investment Research Platform
 
 ```python
@@ -73,63 +70,6 @@ Communication flows are established using explicit tuples in the `communication_
 The CEO can initiate communication and send tasks to the Developer and the Virtual Assistant, and they can respond back in the same thread, but the Developer or VA cannot initiate a conversation and assign tasks to the CEO.
 
 All agents added as entry points can talk to the user. You can add as many levels of communication as you want.
-
-</Tab>
-<Tab title="v0.x">
-
-<Info>
-v0.x is the **previous production version**. Install with: `pip install "agency-swarm<1.0.0"`
-</Info>
-
-## Example: Investment Research Platform
-
-```python
-# Portfolio Manager orchestrates investment research using response_format for structured responses
-portfolio_manager = Agent(
-    name="PortfolioManager",
-    instructions="Orchestrate investment research by gathering data, delegating analysis, and compiling recommendations",
-    tools=[fetch_market_data],
-)
-
-risk_analyst = Agent(
-    name="RiskAnalyst",
-    instructions="Specialize in investment risk analysis",
-    tools=[analyze_risk_factors],
-    response_format=RiskAssessment,  # Structured output
-)
-
-agency = Agency([
-    portfolio_manager,  # Entry point and orchestrator
-    [portfolio_manager, risk_analyst],     # Portfolio Manager can request risk analysis
-    [portfolio_manager, report_generator], # Portfolio Manager can request report generation
-])
-```
-
-In this example, the Portfolio Manager needs responses from both specialists to make an informed investment decision. The RiskAnalyst provides structured risk assessment data using `response_format`, and control always returns to the Portfolio Manager who compiles the final recommendation.
-
-## Defining Your Own Communication Flows
-
-```python
-from agency_swarm import Agency
-
-agency = Agency([
-    ceo, dev,  # CEO and Developer will be the entry point for communication with the user
-    [ceo, dev],  # CEO can initiate communication with Developer
-    [ceo, va],   # CEO can initiate communication with Virtual Assistant
-    [dev, va]    # Developer can initiate communication with Virtual Assistant
-])
-```
-
-## Communication Flow Patterns
-
-Communication flows are established from left to right inside the `agency_chart`. Agents in the top-level list can talk to users, while nested lists define agent-to-agent communication paths.
-
-The CEO can initiate communication and send tasks to the Developer and the Virtual Assistant, and they can respond back in the same thread, but the Developer or VA cannot initiate a conversation and assign tasks to the CEO.
-
-All agents added as entry points can talk to the user. You can add as many levels of communication as you want.
-
-</Tab>
-</Tabs>
 
 ## Under the Hood
 

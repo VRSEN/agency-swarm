@@ -8,22 +8,17 @@ Validating the outputs of agents and tools is crucial for building reliable and 
 
 ## Validators
 
-There are 4 different validators in Agency Swarm:
+There are 3 different validators in Agency Swarm:
 
 - Tool validators:
   - `field_validator`: Validate individual fields independently.
   - `model_validator`: Perform complex checks involving multiple fields.
 - Agent validators:
-  - `guardrails` (for v1.x and higher) or `response_validator` (for v0.x): Validate the response before sending it to the user or other agents.
-- Universal validators:
-  - `llm_validator` (v0.x): Validate outputs against specified natural language rules.
+  - `guardrails`: Validate the response before sending it to the user or other agents.
 
 ### Agent Response Validator
 
-<Tabs>
-<Tab title="v1.x">
-
-In v1.x, validation is handled through **guardrails** using the agents SDK. Guardrails provide more flexible validation for both input and output.
+In agency swarm, validation is handled through **guardrails** using the agents SDK, which provides more flexible validation for both input and output.
 
 #### Output Guardrails
 
@@ -348,62 +343,6 @@ extra error prefix to the recipient's response to indicate the issue and avoid p
 Due to the nature of Handoffs, using SendMessageHandoff for agent-to-agent communication will bypass input guardrails set between agents.
 </Warning>
 
-
-</Tab>
-<Tab title="v0.x">
-
-<Info>
-This is the previous production version. Install with: `pip install agency-swarm<1.0.0`
-</Info>
-
-You can define a `response_validator` method inside your Agent class to validate responses before sending them to the user or other agents. This method should raise an error if the response is invalid, allowing the agent to handle the error and generate a corrected response.
-
-**Example:**
-
-```python
-from agency_swarm import Agent
-
-class CustomerSupportAgent(Agent):
-    def response_validator(self, message: str) -> str:
-        """Validate the response before sending it."""
-        if "bad word" in message.lower():
-            raise ValueError("Please avoid using inappropriate language.")
-        return message
-```
-
-In this example, `CustomerSupportAgent` checks the response for the presence of "bad word" and raises a `ValueError` if it is found. The error is passed to the Agent to generate a corrected response.
-
-#### Validation Attempts
-
-The `validation_attempts` parameter controls how many times an agent can retry when validation fails. **Default is 1** (one retry). Set `validation_attempts=0` for immediate fail-fast behavior.
-
-```python
-from agency_swarm import Agent
-
-class JSONAgent(Agent):
-    def __init__(self, **kwargs):
-        super().__init__(
-            validation_attempts=3,  # Allow 2 retries for learning
-            **kwargs
-        )
-
-    def response_validator(self, message: str) -> str:
-        """Validate JSON format."""
-        try:
-            json.loads(message)
-            return message
-        except json.JSONDecodeError:
-            raise ValueError("Response must be valid JSON format.")
-```
-
-**When to adjust `validation_attempts`:**
-- **Format validation** (JSON, structured output): Use `validation_attempts=2-3`
-- **Content requirements** that agents can learn: Use `validation_attempts=2`
-- **Critical/security validation**: Use `validation_attempts=0` to disable retries
-
-</Tab>
-</Tabs>
-
 ### Tool Validators
 
 When defining tools, you can use Pydantic validators to prevent invalid data from being passed to the tool by the calling agent.
@@ -453,33 +392,3 @@ class User(BaseTool):
 ```
 </Tab>
 </Tabs>
-
-### LLM Validator (v0.x)
-
-The `llm_validator` validates outputs against specified natural language rules. (v0.x)
-
-**Example:**
-
-```python
-from agency_swarm.tools.send_message import SendMessage
-from agency_swarm.util.validators import llm_validator
-from pydantic import model_validator
-
-class SendMessageLLMValidation(SendMessage):
-    @model_validator(mode='after')
-    def validate_recipient(self):
-        if self.recipient == "CustomerSupportAgent":
-            llm_validator(
-                statement="The message is related to customer support."
-            )(self.message)
-        return self
-```
-
-In this example, the `llm_validator` will throw an error if the message is not related to customer support. The caller agent will then have to fix the recipient or the message and send it again.
-
-<Note>
-Since `llm_validator` uses LLMs for validation, it may incur additional costs and latency due to extra API calls. Use it for fields that require complex validation beyond simple checks.
-</Note>
-
-By combining all the validators described above, you can create validation logic to ensure your agents and tools perform reliably.
-

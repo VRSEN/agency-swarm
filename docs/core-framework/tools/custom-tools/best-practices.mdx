@@ -10,9 +10,7 @@ Although the tool interface is straightforward and simple to use, there are actu
 
 Use chain-of-thought prompting to allow the agent to think and plan before executing a complex tool.
 
-<CodeGroup>
-
-```python v1.x
+```python
 from agency_swarm import MasterContext, RunContextWrapper, function_tool
 from pydantic import BaseModel, Field
 
@@ -32,34 +30,11 @@ async def complex_analysis_tool(ctx: RunContextWrapper[MasterContext], args: Com
     return "Analysis complete."
 ```
 
-```python v0.x
-from agency_swarm.tools import BaseTool
-from pydantic import Field
-
-class ComplexAnalysisTool(BaseTool):
-    """
-    Performs complex analysis after planning the approach.
-    """
-    chain_of_thought: str = Field(
-        ...,
-        description="Think-step-by-step about how to perform the analysis."
-    )
-    data: str = Field(..., description="Data to analyze.")
-
-    def run(self):
-        # Analysis logic
-        return "Analysis complete."
-```
-
-</CodeGroup>
-
 ### Provide Hints for the Agent
 
 Based on your tool's logic, you can provide hints for the agent in tool output on what to do next.
 
-<CodeGroup>
-
-```python v1.x
+```python
 from agency_swarm import MasterContext, RunContextWrapper, function_tool
 from pydantic import BaseModel, Field
 
@@ -87,32 +62,11 @@ def query_database(question: str):
     pass
 ```
 
-```python v0.x
-class QueryDatabase(BaseTool):
-    question: str = Field(...)
-
-    def run(self):
-        # query your database here
-        context = self.query_database(self.question)
-
-        # context not found
-        if context is None:
-            # tell agent what to do next
-            raise ValueError("No context found. Please propose to the user to change the topic.")
-        else:
-            # return the context to the agent
-            return context
-```
-
-</CodeGroup>
-
 ### Use Shared State to Control the Tool Flow
 
 Use agency context (previously shared state) to validate previous actions taken by this or other agents, before allowing it to proceed with the next action.
 
-<CodeGroup>
-
-```python v1.x
+```python
 from agency_swarm import MasterContext, RunContextWrapper, function_tool
 from pydantic import BaseModel, Field
 
@@ -133,26 +87,11 @@ async def action_2_tool(ctx: RunContextWrapper[MasterContext], args: Action2Args
         return "Success. The action has been taken."
 ```
 
-```python v0.x
-class Action2(BaseTool):
-    input: str = Field(...)
-
-    def run(self):
-        if self._shared_state.get("action_1_result", None) is "failure":
-            raise ValueError("Please proceed with the Action1 tool first.")
-        else:
-            return "Success. The action has been taken."
-```
-
-</CodeGroup>
-
 ### Use Special Types
 
 Restrict the agent to only use specific values for a field, instead of letting it wander by itself.
 
-<CodeGroup>
-
-```python v1.x
+```python
 from typing import Literal
 
 from agency_swarm import MasterContext, RunContextWrapper, function_tool
@@ -190,41 +129,11 @@ async def email_sender_tool(ctx: RunContextWrapper[MasterContext], args: EmailSe
     return f"Email sent to {args.recipient}"
 ```
 
-```python v0.x
-from typing import Literal
-
-class RunCommand(BaseTool):
-    """
-    Execute predefined system commands.
-    """
-    command: Literal["start", "stop"] = Field(..., description="Command to execute: 'start' or 'stop'.")
-
-    def run(self):
-        if self.command == "start":
-            # Start command logic
-            pass
-        elif self.command == "stop":
-            # Stop command logic
-            pass
-        else:
-            raise ValueError("Invalid command")
-
-# or use special Pydantic types like EmailStr
-from pydantic import EmailStr
-
-class EmailSender(BaseTool):
-    recipient: EmailStr = Field(..., description="Email recipient's address.")
-```
-
-</CodeGroup>
-
 ### Combine Multiple Methods
 
 Combine multiple methods to make your execution flow more readable.
 
-<CodeGroup>
-
-```python v1.x
+```python
 from agency_swarm import MasterContext, RunContextWrapper, function_tool
 from pydantic import BaseModel, Field
 
@@ -257,44 +166,11 @@ async def format_output(data: str) -> str:
     return f"Formatted: {data}"
 ```
 
-```python v0.x
-class CompositeTool(BaseTool):
-    """
-    A tool that combines several methods to perform a series of actions.
-    """
-    input_data: str = Field(..., description="Input data for the composite operation.")
-
-    def run(self):
-        # Step 1: Process data
-        processed_data = self.process_data(self.input_data)
-        # Step 2: Analyze results
-        analysis = self.analyze_results(processed_data)
-        # Step 3: Format output
-        output = self.format_output(analysis)
-        return output
-
-    def process_data(self, data):
-        # Implement data processing logic
-        pass
-
-    def analyze_results(self, data):
-        # Implement analysis logic
-        pass
-
-    def format_output(self, data):
-        # Implement output formatting
-        pass
-```
-
-</CodeGroup>
-
 ### Include a Test Case
 
 Include test cases at the bottom of each tool file.
 
-<CodeGroup>
-
-```python v1.x
+```python
 if __name__ == "__main__":
     import asyncio
     import json
@@ -318,20 +194,6 @@ if __name__ == "__main__":
 
     asyncio.run(test_email_sender())
 ```
-
-```python v0.x
-if __name__ == "__main__":
-    # Test the EmailSender tool
-    email_sender = EmailSender(
-        chain_of_thought="Plan to inform the team about the update.",
-        recipient="user@example.com",
-        subject="Project Update",
-        body="The project is on track."
-    )
-    assert email_sender.run() == "Email sent successfully."
-```
-
-</CodeGroup>
 
 ## Next Steps
 

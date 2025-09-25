@@ -35,7 +35,7 @@
                                 "pages": [
                                     "welcome/installation",
                                     "welcome/getting-started/from-scratch",
-                                    "welcome/getting-started/genesis-agency",
+                                    "welcome/getting-started/agency-templates",
                                     "welcome/getting-started/cursor-ide"
                                 ]
                             }
@@ -77,7 +77,6 @@
                                 "pages": [
                                     "core-framework/agencies/overview",
                                     "core-framework/agencies/communication-flows",
-                                    "core-framework/agencies/agency-parameters",
                                     "core-framework/agencies/running-agency",
                                     "core-framework/agencies/visualization"
                                 ]
@@ -88,7 +87,6 @@
                     {
                         "group": "Additional Features",
                         "pages": [
-                            "additional-features/asynchronous-execution",
                             "additional-features/agency-context",
                             "additional-features/few-shot-examples",
                             "additional-features/output-validation",

@@ -4,10 +4,6 @@ description: "Sharing data and state across tools and agents using agency contex
 icon: "database"
 ---
 
-<Info>
-**Agency Context** was formerly known as **Shared State** in version 0.x of the Agency Swarm framework. If you're migrating from v0.x, see the [Legacy Shared State (v0.x)](#legacy-shared-state-v0-x) section below.
-</Info>
-
 `Agency Context` is a centralized data store accessible by all tools and agents within an agency. It allows you to share data between agents, control execution flow, and maintain state across tool calls without passing large data structures in messages.
 
 <Note>
@@ -26,7 +22,7 @@ Agency context is particularly useful when your agents interact with multiple to
 
 ![With Agency Context](/images/shared-state-with.png)
 
-## Using Agency Context in v1.x
+## Using Agency Context
 
 The agency context is accessible in both FunctionTools and BaseTools using `.get` and `.set`, which let you access and modify the MasterContext passed during execution.
 
@@ -255,33 +251,11 @@ async def cleanup_temporary_data(ctx: RunContextWrapper[MasterContext]) -> str:
     return "Temporary data cleaned up successfully"
 ```
 
-### Monitor Context Size
-For debugging and monitoring, create tools to inspect agency context:
-
-```python
-@function_tool
-async def show_context_status(ctx: RunContextWrapper[MasterContext]) -> str:
-    """Shows current agency context status for debugging."""
-    context_data = ctx.context.user_context
-
-    status = f"Agency Context Status:\n"
-    status += f"Keys: {len(context_data)}\n"
-    status += f"Current Agent: {ctx.context.current_agent_name}\n"
-
-    for key, value in context_data.items():
-        if isinstance(value, (dict, list)):
-            status += f"  {key}: {type(value).__name__} with {len(value)} items\n"
-        else:
-            status += f"  {key}: {type(value).__name__}\n"
-
-    return status
-```
-
 ## Migrating tools
 
 If you're migrating from Agency Swarm v0.x, and want to use new FunctionTool instead of BaseTool, here's how you can do that:
 
-**BaseTool Pattern (v0.x):**
+**BaseTool Pattern:**
 ```python
 class MyTool(BaseTool):
     def run(self):
@@ -290,7 +264,7 @@ class MyTool(BaseTool):
         return "Done"
 ```
 
-**FunctionTool Pattern (v1.x):**
+**FunctionTool Pattern:**
 ```python
 @function_tool
 async def my_tool(ctx: RunContextWrapper[MasterContext], param: str) -> str:
