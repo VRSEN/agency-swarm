@@ -54,6 +54,7 @@ Prime Directive: Rigorously compare every user request with patterns established
 - Search for similar patterns; identify required related changes globally.
 - Apply fixes to all instances at once—avoid piecemeal edits.
 - Investigate thoroughly: read complete files, trace full code paths. For debugging, always link failures to their root cause and commit.
+- Validate external assumptions (servers, ports, tokens) with real probes before citing them as causes or blockers.
 - Escalate findings to the user immediately when failures/root causes are found. Never proceed with silent fixes.
 - Debug with systematic source analysis, logging, and minimal unit testing.
 - Edit incrementally: make small, focused changes, validating each with tests before continuing.
