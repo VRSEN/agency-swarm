@@ -91,7 +91,7 @@ Agency Swarm supports two primary paradigms for inter-agent communication: direc
 ### Handoffs (via `SendMessageHandoff`)
 
 - **Purpose**: The `SendMessageHandoff` tool class enables an agent to **unidirectionally delegate** a task or an entire interaction flow to another specialized agent. When a handoff occurs, the receiving agent takes over that specific interaction; control does **not** automatically return to the initiating agent for that particular interaction thread.
-- **How it Works**: From the perspective of the underlying language model, a handoff is treated like a special tool (e.g., `transfer_to_BillingAgent`). To enable handoffs, you configure an agent with the `send_message_tool_class=SendMessageHandoff` parameter. The agent's description will be used as the handoff tool instructions. Additionally, unless disabled, it will add a special system message to indicate to the agent that a handoff has happened. This approach helps to reduce hallucinations that often appear on chat transfers.
+- **How it Works**: From the perspective of the underlying language model, a handoff is treated like a special tool (e.g., `transfer_to_BillingAgent`). To enable handoffs, you configure an agent with the `send_message_tool_class=SendMessageHandoff` parameter. The agent's description will be used as the handoff tool instructions. See [`SendMessageHandoff.create_handoff()`](https://github.com/VRSEN/agency-swarm/blob/main/src/agency_swarm/tools/send_message.py#L462-L526) for implementation details.
 - **Configuration**: Set `send_message_tool_class=SendMessageHandoff` when creating the agent. The framework will automatically detect this and configure handoffs using the OpenAI SDK internally.
 - **Analogy**: Transferring a customer in a call center to a specialized department (e.g., Billing). The Billing specialist handles the customer's request from that point forward for that specific issue.
 - **When to use (handoffs)**:
@@ -145,7 +145,7 @@ For example, `name="send_message_formatted"` or `name="send_message_custom"` and
 ### Custom Handoff Class
 
 By default, whenever a handoff occurs, prior to transferring the chat, a special system message will be added to the chat history to remind the recipient agent that a handoff has happened. This helps to reduce the amount of hallucinations and agent confusion whenever a chat transfer happens.
-You can customize the reminder message or disable it entirely by defining a custom Handoff class as follows:
+You can customize the reminder message or disable it entirely by defining a custom Handoff class as follows (see [`add_reminder` and `reminder_override` fields](https://github.com/VRSEN/agency-swarm/blob/main/src/agency_swarm/tools/send_message.py#L454-L460)):
 
 ```python
 from agency_swarm.tools.send_message import SendMessageHandoff

@@ -51,7 +51,10 @@ def intermediate_agent():
     """Create an intermediate agent that has handoffs configured via SendMessageHandoff tool class."""
     return Agent(
         name="AgentB",
-        instructions="You are an intermediate agent. You can hand off tasks to specialized agents.",
+        instructions=(
+            "You are an intermediate agent. Whenever asked to speak with agent C, use the transfer_to_AgentC tool "
+            "immediately, without any questions."
+        ),
         model_settings=ModelSettings(temperature=0.0),
         send_message_tool_class=SendMessageHandoff,
     )
@@ -374,7 +377,7 @@ class TestComplexHandoffScenarios:
         assert "AgentC" in handoff_targets, f"AgentB should have handoff to AgentC, got: {handoff_targets}"
 
     @pytest.mark.asyncio
-    async def test_handoff_follow_up(self, mixed_communication_agency):
+    async def test_nested_handoffs_on_follow_ups(self, mixed_communication_agency):
         """Test that there are no errors on follow up messages."""
 
         # First handoff
@@ -387,7 +390,9 @@ class TestComplexHandoffScenarios:
         assert "transfer_to_AgentC" in tool_names, "Should have used transfer_to_AgentC tool"
 
         # Second handoff (follow-up)
-        async for _ in mixed_communication_agency.get_response_stream("Do the exact same thing again."):
+        async for _ in mixed_communication_agency.get_response_stream(
+            "Ask Agent B to use transfer_to_AgentC tool again."
+        ):
             pass
 
         # Verify no errors in tool outputs
@@ -458,5 +463,5 @@ class TestComplexHandoffScenarios:
         chat_history = agency.thread_manager.get_all_messages()
 
         for message in chat_history:
-            if hasattr(message, "role"):
-                assert "system" not in message["role"], f"Incorrect role, got: {message}, expected no system messages"
+            if "role" in message:
+                assert message["role"] != "system", f"Incorrect role, got: {message}, expected no system messages"
