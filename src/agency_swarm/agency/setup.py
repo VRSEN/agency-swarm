@@ -253,9 +253,9 @@ def configure_agents(agency: "Agency", defined_communication_flows: list[tuple[A
                     if isinstance(effective_tool_class, SendMessageHandoff) or (
                         isinstance(effective_tool_class, type) and issubclass(effective_tool_class, SendMessageHandoff)
                     ):
-                        handoff_instance = SendMessageHandoff().create_handoff(recipient_agent=recipient_agent)
+                        handoff_instance = effective_tool_class().create_handoff(recipient_agent=recipient_agent)
                         agent_instance.handoffs.append(handoff_instance)
-                        logger.debug(f"Added SendMessageHandoff for {agent_name} -> {recipient_name}")
+                        logger.debug(f"Added Handoff for {agent_name} -> {recipient_name}")
                     else:
                         # Register subagent with optional custom tool class
                         if custom_tool_class:

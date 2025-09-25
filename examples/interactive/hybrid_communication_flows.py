@@ -99,6 +99,16 @@ class SendMessageWithProjectContext(SendMessage):
         self.name = "send_message_with_context"
 
 
+# By default, to reduce hallucinations, when using SendMessageHandoff, a reminder system message is added to the history.
+# You can adjust the reminder message or disable it entirely by adjusting parameters below.
+class CustomReminderHandoff(SendMessageHandoff):
+    """SendMessageHandoff with custom reminder."""
+    add_reminder = True # True by default
+
+    # Note: this reminder is for the recipient agent, not the caller agent.
+    # Default reminder: "You are now {recipient_agent_name}. Please continue the task."
+    reminder_override = "You are developer agent, do not forget to ask for security audit."
+
 project_manager = Agent(
     name="ProjectManager",
     description="Coordinates software development projects and ensures quality delivery",
@@ -109,7 +119,7 @@ project_manager = Agent(
         "CRITICAL: When you receive responses from team members, include their complete "
         "findings and recommendations in your final output to maintain transparency."
     ),
-    send_message_tool_class=SendMessageWithProjectContext,
+    send_message_tool_class=CustomReminderHandoff,
     model_settings=ModelSettings(temperature=0),
 )
 

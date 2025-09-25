@@ -29,10 +29,11 @@ Key Implementation Findings:
 from unittest.mock import MagicMock, patch
 
 import pytest
-from agents import ModelSettings
+from agents import HandoffInputData, ModelSettings, RunContextWrapper
 
 from agency_swarm import Agency, Agent
 from agency_swarm.tools import SendMessageHandoff
+from agency_swarm.utils.thread import ThreadManager
 
 
 @pytest.fixture
@@ -50,7 +51,10 @@ def intermediate_agent():
     """Create an intermediate agent that has handoffs configured via SendMessageHandoff tool class."""
     return Agent(
         name="AgentB",
-        instructions="You are an intermediate agent. You can hand off tasks to specialized agents.",
+        instructions=(
+            "You are an intermediate agent. Whenever asked to speak with agent C, use the transfer_to_AgentC tool "
+            "immediately, without any questions."
+        ),
         model_settings=ModelSettings(temperature=0.0),
         send_message_tool_class=SendMessageHandoff,
     )
@@ -215,6 +219,28 @@ class TestHandoffsWithCommunicationFlows:
         except Exception as e:
             pytest.skip(f"Orchestrator pattern with handoffs not fully implemented: {e}")
 
+    @pytest.mark.asyncio
+    async def test_handoff_reminder_handles_empty_history(self, specialist_agent):
+        """Ensure reminder injection does not crash when the thread history is empty."""
+
+        handoff_tool = SendMessageHandoff().create_handoff(specialist_agent)
+        assert handoff_tool.input_filter is not None, "Expected handoff to expose an input filter"
+
+        thread_manager = ThreadManager()
+        context = type("Context", (), {"thread_manager": thread_manager})()
+        run_context = RunContextWrapper(context=context)
+        handoff_input = HandoffInputData(
+            input_history=(),
+            pre_handoff_items=(),
+            new_items=(),
+            run_context=run_context,
+        )
+
+        filtered_input = await handoff_tool.input_filter(handoff_input)
+
+        assert filtered_input.input_history == ()
+        assert thread_manager.get_all_messages() == []
+
     def test_communication_flow_isolation(self, mixed_communication_agency):
         """Test that communication flows and handoffs maintain proper isolation."""
         _ = mixed_communication_agency.agents["AgentA"]
@@ -351,7 +377,7 @@ class TestComplexHandoffScenarios:
         assert "AgentC" in handoff_targets, f"AgentB should have handoff to AgentC, got: {handoff_targets}"
 
     @pytest.mark.asyncio
-    async def test_handoff_follow_up(self, mixed_communication_agency):
+    async def test_nested_handoffs_on_follow_ups(self, mixed_communication_agency):
         """Test that there are no errors on follow up messages."""
 
         # First handoff
@@ -364,7 +390,9 @@ class TestComplexHandoffScenarios:
         assert "transfer_to_AgentC" in tool_names, "Should have used transfer_to_AgentC tool"
 
         # Second handoff (follow-up)
-        async for _ in mixed_communication_agency.get_response_stream("Do the exact same thing again."):
+        async for _ in mixed_communication_agency.get_response_stream(
+            "Ask Agent B to use transfer_to_AgentC tool again."
+        ):
             pass
 
         # Verify no errors in tool outputs
@@ -373,3 +401,67 @@ class TestComplexHandoffScenarios:
 
         for output in tool_outputs:
             assert "error" not in output.lower(), f"Found error in tool output: {output}"
+
+    def test_handoff_reminders(self):
+        """Test bidirectional communication flows combined with SendMessageHandoff tool class."""
+
+        class NoReminder(SendMessageHandoff):
+            add_reminder = False
+
+        class CustomReminder(SendMessageHandoff):
+            reminder_override = "Custom reminder"
+
+        agent_a = Agent(
+            name="AgentA", instructions="Primary orchestrator", model_settings=ModelSettings(temperature=0.0)
+        )
+        agent_b = Agent(
+            name="AgentB",
+            instructions="Secondary orchestrator with handoffs",
+            model_settings=ModelSettings(temperature=0.0),
+        )
+        agent_c = Agent(name="AgentC", instructions="Specialist", model_settings=ModelSettings(temperature=0.0))
+
+        # Configure bidirectional communication between A and B, plus handoff capability from B to C
+        agency = Agency(
+            agent_a,
+            agent_b,
+            agent_c,
+            communication_flows=[
+                (agent_a > agent_b, SendMessageHandoff),  # A can send to B
+                (agent_b > agent_c, CustomReminder),  # A can send to C
+                (agent_c > agent_a, NoReminder),  # B can hand off to C (using SendMessageHandoff tool class)
+            ],
+        )
+        # Check default handoff
+        agency.get_response_sync("Transfer to AgentB agent", recipient_agent=agent_a)
+        system_message = agency.thread_manager.get_all_messages()[1]
+
+        assert system_message["role"] == "system", (
+            f"Incorrect role, got: {system_message}, expected reminder system message"
+        )
+        assert system_message["content"] == "You are now AgentB. Please continue the task.", (
+            f"Incorrect content, got: {system_message}, expected reminder system message"
+        )
+
+        agency.thread_manager.clear()
+
+        # Check custom reminder
+        agency.get_response_sync("Transfer to AgentC agent", recipient_agent=agent_b)
+        system_message = agency.thread_manager.get_all_messages()[1]
+
+        assert system_message["role"] == "system", (
+            f"Incorrect role, got: {system_message}, expected reminder system message"
+        )
+        assert system_message["content"] == "Custom reminder", (
+            f"Incorrect content, got: {system_message}, expected 'Custom reminder'"
+        )
+
+        agency.thread_manager.clear()
+
+        # Check no reminder handoff
+        agency.get_response_sync("Transfer to AgentA agent", recipient_agent=agent_c)
+        chat_history = agency.thread_manager.get_all_messages()
+
+        for message in chat_history:
+            if "role" in message:
+                assert message["role"] != "system", f"Incorrect role, got: {message}, expected no system messages"
