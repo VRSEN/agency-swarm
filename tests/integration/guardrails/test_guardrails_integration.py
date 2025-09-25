@@ -26,6 +26,20 @@ async def require_support_prefix(
     )
 
 
+@input_guardrail(name="RequireSupportPrefixNamedWrapper")
+async def guardrail_wrapper(
+    context: RunContextWrapper, agent: Agent, input_message: str | list[str]
+) -> GuardrailFunctionOutput:
+    assert isinstance(input_message, str), "guardrail_wrapper guardrail must receive a user text message"
+    bad = not input_message.startswith("Support:")
+    return GuardrailFunctionOutput(
+        output_info=(
+            "Named guardrail_wrapper requires prefixing requests with 'Support:' before continuing." if bad else ""
+        ),
+        tripwire_triggered=bad,
+    )
+
+
 @output_guardrail(name="ForbidEmailOutput")
 async def forbid_email_output(context: RunContextWrapper, agent: Agent, response_text: str) -> GuardrailFunctionOutput:
     text = (response_text or "").strip()
@@ -87,6 +101,23 @@ def output_guardrail_agency(output_guardrail_agent: Agent) -> Agency:
     return Agency(output_guardrail_agent)
 
 
+@pytest.fixture
+def named_wrapper_guardrail_agent() -> Agent:
+    return Agent(
+        name="NamedWrapperGuardrailAgent",
+        instructions="You are a helpful assistant.",
+        model="gpt-4o",
+        input_guardrails=[guardrail_wrapper],
+        model_settings=ModelSettings(temperature=0.0),
+        throw_input_guardrail_error=False,
+    )
+
+
+@pytest.fixture
+def named_wrapper_guardrail_agency(named_wrapper_guardrail_agent: Agent) -> Agency:
+    return Agency(named_wrapper_guardrail_agent)
+
+
 def test_input_guardrail_guidance_and_persistence(input_guardrail_agency: Agency):
     agency = input_guardrail_agency
     resp = agency.get_response_sync(message="Hello there")
@@ -100,6 +131,21 @@ def test_input_guardrail_guidance_and_persistence(input_guardrail_agency: Agency
     system_msgs = [m for m in all_msgs if m.get("role") == "system"]
     assert len(system_msgs) == 1
     assert "prefix your request with 'Support:'" in system_msgs[-1].get("content", "")
+    assert system_msgs[-1].get("message_origin") == "input_guardrail_message"
+
+
+def test_input_guardrail_function_named_guardrail_wrapper_is_wrapped(
+    named_wrapper_guardrail_agency: Agency,
+):
+    resp = named_wrapper_guardrail_agency.get_response_sync(message="Help me")
+
+    assert isinstance(resp.final_output, str)
+    assert "Named guardrail_wrapper requires prefixing requests" in resp.final_output
+
+    all_msgs = named_wrapper_guardrail_agency.thread_manager.get_all_messages()
+    system_msgs = [m for m in all_msgs if m.get("role") == "system"]
+    assert len(system_msgs) == 1
+    assert "Named guardrail_wrapper requires prefixing requests" in system_msgs[-1].get("content", "")
     assert system_msgs[-1].get("message_origin") == "input_guardrail_message"
 
 

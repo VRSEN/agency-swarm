@@ -9,6 +9,7 @@ import dataclasses
 import inspect
 import logging
 import warnings
+from functools import wraps
 from typing import TYPE_CHECKING, Any
 
 from agents import Agent as BaseAgent, GuardrailFunctionOutput, ModelSettings, RunContextWrapper
@@ -23,6 +24,8 @@ if TYPE_CHECKING:
     from agency_swarm.agent.core import Agent
 
 logger = logging.getLogger(__name__)
+
+_INPUT_GUARDRAIL_WRAPPED_ATTR = "_agency_swarm_input_guardrail_wrapped"
 
 
 def handle_deprecated_parameters(kwargs: dict[str, Any]) -> dict[str, Any]:
@@ -338,7 +341,7 @@ def resolve_token_settings(model_settings_dict: dict[str, Any], agent_name: str 
     return model_settings_dict
 
 
-def wrap_input_guardrails(agent: "Agent"):
+def wrap_input_guardrails(agent: "Agent") -> None:
     """
     Wraps the input guardrails functions to check if the last message is a user message.
     If yes, extract the user message(s) and pass it to the user's guardrail function
@@ -347,11 +350,15 @@ def wrap_input_guardrails(agent: "Agent"):
     Args:
         agent: The agent instance
     """
-    for guardrail in agent.input_guardrails:
-        if guardrail.guardrail_function.__name__ == "guardrail_wrapper":
+    guardrails = getattr(agent, "input_guardrails", None) or []
+
+    for guardrail in guardrails:
+        guardrail_func = getattr(guardrail, "guardrail_function", None)
+        if guardrail_func is None or getattr(guardrail_func, _INPUT_GUARDRAIL_WRAPPED_ATTR, False):
             continue
 
         def create_guardrail_wrapper(guardrail_func):
+            @wraps(guardrail_func)
             def guardrail_wrapper(context: RunContextWrapper, agent: "Agent", chat_history: str | list[dict]):
                 if isinstance(chat_history, str):
                     return guardrail_func(context, agent, chat_history)
@@ -392,6 +399,7 @@ def wrap_input_guardrails(agent: "Agent"):
                     else:
                         return guardrail_func(context, agent, user_messages)
 
+            setattr(guardrail_wrapper, _INPUT_GUARDRAIL_WRAPPED_ATTR, True)
             return guardrail_wrapper
 
         original_function = guardrail.guardrail_function
