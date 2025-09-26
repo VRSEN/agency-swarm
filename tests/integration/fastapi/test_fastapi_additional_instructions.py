@@ -1,5 +1,6 @@
 """Integration tests to verify additional_instructions handling in FastAPI endpoints."""
 
+from importlib.metadata import PackageNotFoundError, version as get_package_version
 from types import SimpleNamespace
 
 import pytest
@@ -172,6 +173,26 @@ def test_additional_instructions_none_handling(monkeypatch, agency_factory):
 
     assert response.status_code == 200
     assert captured_params["additional_instructions"] is None
+
+
+def test_metadata_includes_version(agency_factory):
+    """Ensure the metadata endpoint reports the installed agency-swarm version."""
+
+    def resolve_expected_version() -> str:
+        try:
+            return get_package_version("agency-swarm")
+        except PackageNotFoundError:
+            return "unknown"
+
+    app = run_fastapi(agencies={"test_agency": agency_factory}, return_app=True, app_token_env="")
+    client = TestClient(app)
+
+    response = client.get("/test_agency/get_metadata")
+
+    assert response.status_code == 200
+    metadata = response.json()
+    assert "agency_swarm_version" in metadata
+    assert metadata["agency_swarm_version"] == resolve_expected_version()
 
 
 @pytest.mark.asyncio

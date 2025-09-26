@@ -3,6 +3,7 @@ import json
 import logging
 import time
 from collections.abc import AsyncGenerator, Callable
+from importlib.metadata import PackageNotFoundError, version as get_package_version
 
 from ag_ui.core import EventType, MessagesSnapshotEvent, RunErrorEvent, RunFinishedEvent, RunStartedEvent
 from ag_ui.encoder import EventEncoder
@@ -28,6 +29,16 @@ from agency_swarm.tools.mcp_manager import attach_persistent_mcp_servers
 from agency_swarm.ui.core.agui_adapter import AguiAdapter, serialize
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_agency_swarm_version() -> str:
+    try:
+        return get_package_version("agency-swarm")
+    except PackageNotFoundError:
+        return "unknown"
+
+
+AGENCY_SWARM_VERSION = _resolve_agency_swarm_version()
 
 
 def get_verify_token(app_token):
@@ -322,7 +333,9 @@ def make_agui_chat_endpoint(request_model, agency_factory: Callable[..., Agency]
 
 def make_metadata_endpoint(agency_metadata: dict, verify_token):
     async def handler(token: str = Depends(verify_token)):
-        return agency_metadata
+        metadata_with_version = dict(agency_metadata)
+        metadata_with_version["agency_swarm_version"] = AGENCY_SWARM_VERSION
+        return metadata_with_version
 
     return handler
 
@@ -349,7 +362,7 @@ async def generate_chat_name(new_messages: list[TResponseInputItem]):
     class ResponseFormat(BaseModel):
         chat_name: str = Field(description="A fitting name for the provided chat history.")
 
-    @output_guardrail # type: ignore[arg-type]
+    @output_guardrail  # type: ignore[arg-type]
     async def response_content_guardrail(
         context: RunContextWrapper, agent: Agent, response_text: str | type[BaseModel]
     ) -> GuardrailFunctionOutput:
@@ -368,7 +381,8 @@ async def generate_chat_name(new_messages: list[TResponseInputItem]):
         )
 
     from agency_swarm.messages import MessageFormatter
-    formatted_messages = str(MessageFormatter.strip_agency_metadata(new_messages)) # type: ignore[arg-type]
+
+    formatted_messages = str(MessageFormatter.strip_agency_metadata(new_messages))  # type: ignore[arg-type]
     if len(formatted_messages) > 1000:
         formatted_messages = "HISTORY TRUNCATED TO 1000 CHARACTERS:\n" + formatted_messages[:1000]
 
@@ -378,7 +392,7 @@ async def generate_chat_name(new_messages: list[TResponseInputItem]):
         name="NameGenerator",
         model=model,
         instructions=(
-"""
+            """
 You are a helpful assistant that generates a human-friendly title for a conversation.
 You will receive a list of messages where the first one is the user input and the rest are
 related to the assistant response.
