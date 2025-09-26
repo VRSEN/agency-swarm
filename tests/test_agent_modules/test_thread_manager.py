@@ -59,6 +59,60 @@ def test_add_messages(method: str, messages: list[dict]):
     assert manager._store.messages == messages
 
 
+def test_duplicate_message_id_replaces_existing_entry():
+    manager = ThreadManager()
+
+    initial = {
+        "type": "message",
+        "id": "msg-1",
+        "role": "assistant",
+        "content": None,
+        "timestamp": 1,
+    }
+    updated = {
+        "type": "message",
+        "id": "msg-1",
+        "role": "assistant",
+        "tool_calls": [
+            {
+                "id": "call-1",
+                "type": "function",
+                "function": {"name": "do_work", "arguments": "{}"},
+            }
+        ],
+        "timestamp": 2,
+    }
+
+    manager.add_message(initial)
+    manager.add_message(updated)
+
+    assert len(manager._store.messages) == 1
+    assert manager._store.messages[0]["tool_calls"] == updated["tool_calls"]
+
+
+def test_duplicate_function_call_output_replaces_existing_entry():
+    manager = ThreadManager()
+
+    first_output = {
+        "type": "function_call_output",
+        "call_id": "call-1",
+        "output": "intermediate",
+        "timestamp": 1,
+    }
+    final_output = {
+        "type": "function_call_output",
+        "call_id": "call-1",
+        "output": "final",
+        "timestamp": 2,
+    }
+
+    manager.add_message(first_output)
+    manager.add_message(final_output)
+
+    assert len(manager._store.messages) == 1
+    assert manager._store.messages[0]["output"] == "final"
+
+
 def test_user_thread_shared_across_agents():
     """Tests that all entry-point agents share the same user thread."""
     manager = ThreadManager()
