@@ -10,6 +10,8 @@ Agency Swarm supports **realtime voice** and **multimodal** sessions on top of O
   This feature is supported in **Agency Swarm v1.0 or later**.
 </Note>
 
+Agency Swarm is adding a `run_realtime` helper that creates the FastAPI server, connects to OpenAI Realtime, and exposes optional Twilio bridges without manual WebSocket endpoints.
+
 ## What you can build
 
 - **Voice-first assistants** for web, mobile, or phone.
@@ -52,33 +54,24 @@ voice_agent = Agent(
 )
 ```
 
-Expose a realtime WebSocket endpoint. The adapter takes care of session creation, routing events to your agent, and streaming audio/text back.
+Start the server with the new helper:
 
 ```python
-# app.py
-from fastapi import FastAPI, WebSocket
-from agency_swarm.integrations.realtime import realtime_session, websocket_events
+# server.py
+from agency_swarm.integrations import run_realtime
 from voice_agent import voice_agent
 
-app = FastAPI()
-
-@app.websocket("/ws/realtime")
-async def ws_realtime(ws: WebSocket):
-    await ws.accept()
-    # Start a session with OpenAI Realtime (model + voice are session-scoped)
-    async with realtime_session(
+if __name__ == "__main__":
+    run_realtime(
         agent=voice_agent,
-        websocket=ws,
         model="gpt-realtime",
         voice="alloy",
-        turn_detection={"type": "server_vad"},  # Voice Activity Detection
-    ) as session:
-        # Forward client events (audio chunks, text, UI controls) into the session
-        async for event in websocket_events(ws):
-            await session.handle(event)
+        host="0.0.0.0",
+        port=8000,
+    )
 ```
 
-That’s it. Your same Agent now speaks/listens over a realtime session.
+`run_realtime` starts the FastAPI app, opens the Realtime connection, and hosts a `/realtime` WebSocket endpoint for you. There is no additional routing code to write.
 
 <Note>
 - **Single-model rule:** realtime uses one model per session; per-agent `model` is ignored during voice sessions.   
@@ -87,7 +80,7 @@ That’s it. Your same Agent now speaks/listens over a realtime session.
 
 ## Add a simple web client (browser)
 
-Use the official OpenAI Realtime example client (WebRTC or WebSocket). Point it to your /ws/realtime endpoint, and you’ll get mic capture, response audio, and a minimal UI.
+Use the official OpenAI Realtime example client (WebRTC or WebSocket). Point it to `ws://localhost:8000/realtime` (or your deployed address), and you’ll get mic capture, response audio, and a minimal UI.
 - Example: FastAPI app + client (OpenAI “realtime/app” sample).
 - Event flow: send conversation.item.create (user input), then response.create to get the model to answer.
 
@@ -95,42 +88,17 @@ See OpenAI’s example for a copy-paste front end and event payloads.
 
 ## Twilio (phone calls) — optional
 
-Use Twilio Media Streams to bridge PSTN to your WebSocket:
+Pass a Twilio number to the helper and it will respond with the TwiML + media-stream bridge automatically:
 
 ```python
-# twilio_bridge.py
-from fastapi import APIRouter, Request, WebSocket
-from twilio.twiml.voice_response import VoiceResponse, Connect, Stream
-from agency_swarm.integrations.realtime import realtime_session, websocket_events
-from voice_agent import voice_agent
-
-router = APIRouter()
-
-@router.post("/incoming-call")
-async def incoming_call(req: Request):
-    host = req.headers["host"]
-    ws_url = f"wss://{host}/twilio/media-stream"
-    twiml = VoiceResponse()
-    twiml.say("Connecting you now.")
-    connect = Connect()
-    connect.stream(url=ws_url)  # Twilio -> your WS
-    twiml.append(connect)
-    return str(twiml)
-
-@router.websocket("/twilio/media-stream")
-async def media_stream(ws: WebSocket):
-    await ws.accept()
-    async with realtime_session(
-        agent=voice_agent,
-        websocket=ws,
-        model="gpt-realtime",
-        voice="alloy",
-        input_audio_format="g711_ulaw",   # Twilio μ-law 8k
-        output_audio_format="g711_ulaw",
-        turn_detection={"type": "server_vad"},
-    ) as session:
-        async for event in websocket_events(ws):
-            await session.handle(event)
+run_realtime(
+    agent=voice_agent,
+    model="gpt-realtime",
+    voice="alloy",
+    twilio_number="+15551234567",
+    twilio_audio_format="g711_ulaw",
+    turn_detection={"type": "server_vad"},
+)
 ```
 
 ### Notes
