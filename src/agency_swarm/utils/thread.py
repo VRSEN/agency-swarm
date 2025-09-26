@@ -43,17 +43,18 @@ class MessageStore:
         msg_type = message.get("type")
         message_id = message.get("id")
         if message_id:
-            if any(existing.get("id") == message_id and existing.get("type") == msg_type for existing in self.messages):
-                logger.debug("Skipping duplicate message with id %s and type %s", message_id, msg_type)
-                return
+            for idx, existing in enumerate(self.messages):
+                if existing.get("id") == message_id and existing.get("type") == msg_type:
+                    self.messages[idx] = message
+                    logger.debug("Replacing duplicate message with id %s and type %s", message_id, msg_type)
+                    return
         elif msg_type == "function_call_output" and message.get("call_id"):
             call_id = message.get("call_id")
-            if any(
-                existing.get("type") == "function_call_output" and existing.get("call_id") == call_id
-                for existing in self.messages
-            ):
-                logger.debug("Skipping duplicate function_call_output with call_id %s", call_id)
-                return
+            for idx, existing in enumerate(self.messages):
+                if existing.get("type") == "function_call_output" and existing.get("call_id") == call_id:
+                    self.messages[idx] = message
+                    logger.debug("Replacing duplicate function_call_output with call_id %s", call_id)
+                    return
 
         self.messages.append(message)
         logger.debug(
