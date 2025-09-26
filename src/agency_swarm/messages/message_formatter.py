@@ -122,12 +122,7 @@ class MessageFormatter:
         cleaned = []
         for msg in messages:
             # Create a copy without agency fields (including citations which OpenAI doesn't accept)
-            clean_msg = {
-                k: v
-                for k, v in msg.items()
-                if k
-                not in MessageFormatter.metadata_fields
-            }
+            clean_msg = {k: v for k, v in msg.items() if k not in MessageFormatter.metadata_fields}
             cleaned.append(clean_msg)
         return cleaned
 
