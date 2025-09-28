@@ -321,9 +321,11 @@ my_mcp_agent = Agent(
 
 ## Runnable Demo
 
-For a practical, runnable example using both `MCPServerStdio` and `MCPServerSse`, see the `demo_mcp.py` script located in the `tests/demos/` directory of the Agency Swarm repository.
+For a practical, runnable example using both `MCPServerStdio` and `MCPServerSse`, run [`examples/mcp_servers.py`](https://github.com/VRSEN/agency-swarm/blob/main/examples/mcp_servers.py).
 
-*   **Remember:** The demo requires you to run the example SSE server ([sse_server.py](https://github.com/VRSEN/agency-swarm/blob/main/tests/scripts/sse_server.py)) in a separate terminal first.
+*   **Local flow:** Start `python examples/utils/stdio_mcp_server.py` and `python examples/utils/sse_mcp_server.py` in separate terminals before running the script.
+*   **Hosted flow:** Update the `HostedMCPTool`'s `server_url` to your ngrok tunnel (for example, `https://<subdomain>.ngrok-free.app/sse/`) and run `ngrok http http://localhost:8000` so the hosted demo can reach the SSE server.
+*   Comment out `public_mcp_server_example()` if you only want to exercise the local stdio workflow.
 
 </Tab>
 </Tabs>
@@ -334,3 +336,7 @@ For a practical, runnable example using both `MCPServerStdio` and `MCPServerSse`
 *   **v1.x:** Use mcp_server for local mcp servers and `HostedMCPTool` for web-based servers, since the latter allows you to avoid maintaining server lifecycle.
 *   **v0.x:** Use `MCPServerStdio` for command-line tools, `MCPServerSse` for SSE servers, and `MCPServerStreamableHttp` for HTTP streaming servers.
 *   External MCP servers must be running separately for the agent to connect to them.
+
+## See Also
+
+- [Agents SDK MCP guide](https://openai.github.io/openai-agents-python/mcp/)
