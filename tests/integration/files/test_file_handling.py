@@ -28,7 +28,7 @@ async def test_agent_processes_message_files_attachment(real_openai_client: Asyn
     Uses a REAL OpenAI client for file upload and REAL agent execution.
     """
     # Use existing rich test PDF from v0.X tests
-    test_pdf_path = Path("tests/data/files/test-pdf.pdf")
+    test_pdf_path = Path("tests/data/files/test-pdf-2.pdf")
     assert test_pdf_path.exists(), f"Test PDF not found at {test_pdf_path}"
 
     uploaded_real_file = await real_openai_client.files.create(file=test_pdf_path.open("rb"), purpose="assistants")
@@ -51,7 +51,7 @@ async def test_agent_processes_message_files_attachment(real_openai_client: Asyn
     agency = Agency(attachment_tester_agent, user_context=None)
 
     # 4. Call get_response with file_ids - OpenAI will automatically process the file
-    message_to_agent = "What content do you see in the attached PDF file? Please summarize what you find."
+    message_to_agent = "What is my favorite food?"
 
     print(f"TEST: Calling get_response for agent '{attachment_tester_agent.name}' with file_ids: [{attached_file_id}]")
     response_result = await agency.get_response(message_to_agent, file_ids=[attached_file_id])
@@ -69,9 +69,9 @@ async def test_agent_processes_message_files_attachment(real_openai_client: Asyn
     )
 
     # Look for the secret phrase that should be in the PDF
-    secret_phrase_found = "first pdf secret phrase" in response_lower
+    secret_phrase_found = "strawberry" in response_lower.lower()
     assert secret_phrase_found, (
-        f"Expected secret phrase 'FIRST PDF SECRET PHRASE' not found in response. "
+        f"Expected word 'strawberry' not found in response. "
         f"This suggests the PDF content was not made available to the LLM. "
         f"Response: {response_result.final_output}"
     )
@@ -111,7 +111,7 @@ async def test_multi_file_type_processing(real_openai_client: AsyncOpenAI, tmp_p
     Uses the existing rich test PDF from the v0.X test suite.
     """
     # Use the existing rich test PDF with secret phrase
-    test_pdf_path = Path("tests/data/files/test-pdf.pdf")
+    test_pdf_path = Path("tests/data/files/test-pdf-2.pdf")
     assert test_pdf_path.exists(), f"Test PDF not found at {test_pdf_path}"
 
     # Upload PDF file to OpenAI
@@ -136,8 +136,8 @@ async def test_multi_file_type_processing(real_openai_client: AsyncOpenAI, tmp_p
         Agency(file_processor_agent, user_context=None)
 
         # Test processing the PDF file
-        question = "What secret phrase do you find in this PDF file?"
-        expected_content = "FIRST PDF SECRET PHRASE"
+        question = "What is my favorite food?"
+        expected_content = "strawberry"
 
         # Process the PDF file - OpenAI will automatically make file content available
         response_result = await file_processor_agent.get_response(question, file_ids=[file_id])
