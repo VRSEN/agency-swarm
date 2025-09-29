@@ -3,6 +3,7 @@ import base64
 import os
 import re
 import shutil
+import time
 from pathlib import Path
 
 import pytest
@@ -17,6 +18,25 @@ OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 @pytest.fixture(scope="module")
 async def real_openai_client():
     return AsyncOpenAI(api_key=OPENAI_API_KEY)
+
+
+async def _wait_for_file_processed(
+    client: AsyncOpenAI, file_id: str, *, timeout: float = 60.0, post_delay: float = 2.0
+) -> None:
+    """Ensure the uploaded file is fully processed before querying the model."""
+    deadline = time.monotonic() + timeout
+    while True:
+        file_info = await client.files.retrieve(file_id)
+        status = getattr(file_info, "status", None)
+        if status == "processed":
+            if post_delay > 0:
+                await asyncio.sleep(post_delay)
+            return
+        if status in {"failed", "error", "deleted"}:
+            raise AssertionError(f"File {file_id} entered unexpected status: {status}")
+        if time.monotonic() >= deadline:
+            raise TimeoutError(f"Timed out waiting for file {file_id} to process (last status: {status})")
+        await asyncio.sleep(1)
 
 
 @pytest.mark.asyncio
@@ -50,6 +70,8 @@ async def test_agent_processes_message_files_attachment(real_openai_client: Asyn
 
     # 4. Call get_response with file_ids - OpenAI will automatically process the file
     message_to_agent = "Please repeat the secret phrase attached."
+
+    await _wait_for_file_processed(real_openai_client, attached_file_id)
 
     print(f"TEST: Calling get_response for agent '{attachment_tester_agent.name}' with file_ids: [{attached_file_id}]")
     response_result = await agency.get_response(message_to_agent, file_ids=[attached_file_id])
@@ -117,6 +139,8 @@ async def test_multi_file_type_processing(real_openai_client: AsyncOpenAI, tmp_p
         uploaded_file = await real_openai_client.files.create(file=f, purpose="assistants")
         file_id = uploaded_file.id
         print(f"Uploaded {test_pdf_path.name}, got ID: {file_id}")
+
+    await _wait_for_file_processed(real_openai_client, file_id)
 
     try:
         # Create an agent WITHOUT custom file processing tools

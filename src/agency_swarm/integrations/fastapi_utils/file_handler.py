@@ -85,7 +85,7 @@ async def upload_to_openai(file_path):
     return uploaded_file.id
 
 
-async def _wait_for_file_processed(file_id: str, timeout: int = 60) -> None:
+async def _wait_for_file_processed(file_id: str, timeout: int = 60, post_delay: float = 3.0) -> None:
     """Poll OpenAI until the uploaded file is processed."""
     client = _get_openai_client()
     for _ in range(timeout):
@@ -96,6 +96,8 @@ async def _wait_for_file_processed(file_id: str, timeout: int = 60) -> None:
             await asyncio.sleep(1)
             continue
         if getattr(file_info, "status", None) == "processed":
+            if post_delay > 0:
+                await asyncio.sleep(post_delay)
             return
         if getattr(file_info, "status", None) == "error":
             raise RuntimeError(f"File processing failed: {file_id}")

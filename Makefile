@@ -1,6 +1,6 @@
 .PHONY: sync
 sync:
-	uv sync --all-extras
+	uv sync --all-extras --dev
 
 .PHONY: prime
 prime:
@@ -75,7 +75,10 @@ clean:
 check: lint mypy
 
 .PHONY: ci
-ci: sync check coverage
+ci:
+	$(MAKE) sync
+	$(MAKE) check
+	$(MAKE) coverage
 
 .PHONY: serve-docs
 serve-docs:
