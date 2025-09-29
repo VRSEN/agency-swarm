@@ -58,7 +58,7 @@ The following parameters are deprecated and will issue warnings:
 - `async_mode` - Asynchronous execution is handled by the underlying SDK
 - `settings_path` & `settings_callbacks` - Responses SDK is now stateless, so agency settings are no longer needed.
 - `threads_callbacks` - Use `load_threads_callback` and `save_threads_callback` directly
-- Agent-level parameters (`temperature`, `top_p`, etc.) - Set these on individual Agent instances
+- Agent-level parameters (`temperature`, `top_p`, `max_prompt_tokens`, `max_completion_tokens`, etc.) - Set these directly on each Agent.
 
 ## Example
 
