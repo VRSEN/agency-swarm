@@ -16,7 +16,14 @@ import pytest
 import uvicorn
 from agents import ModelSettings
 
+try:  # FastAPI is optional in some environments.
+    from fastapi import FastAPI as _FastAPICheck  # noqa: F401
+except Exception:  # pragma: no cover - optional dependency guard
+    _FastAPICheck = None
+
 from agency_swarm import Agency, Agent
+
+pytestmark = pytest.mark.skipif(_FastAPICheck is None, reason="FastAPI extras not installed")
 
 
 class TestFastAPIFileProcessing:
@@ -41,13 +48,12 @@ class TestFastAPIFileProcessing:
         def create_agency(load_threads_callback=None, save_threads_callback=None):
             agent = Agent(
                 name="FileProcessorAgent",
-                instructions="""
-                You are a file processing agent. When you receive files, read their content carefully
-                and provide detailed information about what you find. Always include any secret phrases
-                or specific content mentioned in the files.
-                """,
+                instructions=(
+                    "You are a precise assistant. Answer user questions directly "
+                    "and only use information you are given."
+                ),
                 description="Agent that processes and analyzes file content",
-                model="gpt-4.1",
+                model="gpt-4.1",  # gpt-4o refuses to repeat the PDF phrase despite the attachment.
                 model_settings=ModelSettings(
                     temperature=0,
                 ),
@@ -202,8 +208,8 @@ class TestFastAPIFileProcessing:
         url = "http://localhost:8080/test_agency/get_response"
         payload = {
             "message": (
-                "I'm uploading multiple files. Please tell me the function name presented in the image"
-                "and tell me the contents of the pdf file"
+                "Please repeat the secret phrase inside the attached PDF before doing anything else, "
+                "and then tell me the function name shown in the image."
             ),
             "file_urls": {
                 "text_image": "http://localhost:7860/test-image.png",

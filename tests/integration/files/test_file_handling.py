@@ -39,10 +39,8 @@ async def test_agent_processes_message_files_attachment(real_openai_client: Asyn
     # OpenAI will automatically process the attached file and make content available to the LLM
     attachment_tester_agent = Agent(
         name="AttachmentTesterAgentReal",
-        instructions=(
-            "You are a helpful assistant. When files are attached, you can read their content directly. "
-            "Answer questions about the file content accurately."
-        ),
+        instructions="You are a helpful assistant. Provide direct, accurate answers to user requests.",
+        model="gpt-4.1",  # gpt-4o refuses to repeat the PDF phrase despite the attachment.
         model_settings=ModelSettings(temperature=0.0),
     )
     attachment_tester_agent._openai_client = real_openai_client
@@ -51,7 +49,7 @@ async def test_agent_processes_message_files_attachment(real_openai_client: Asyn
     agency = Agency(attachment_tester_agent, user_context=None)
 
     # 4. Call get_response with file_ids - OpenAI will automatically process the file
-    message_to_agent = "What content do you see in the attached PDF file? Please summarize what you find."
+    message_to_agent = "Please repeat the secret phrase attached."
 
     print(f"TEST: Calling get_response for agent '{attachment_tester_agent.name}' with file_ids: [{attached_file_id}]")
     response_result = await agency.get_response(message_to_agent, file_ids=[attached_file_id])
@@ -125,9 +123,10 @@ async def test_multi_file_type_processing(real_openai_client: AsyncOpenAI, tmp_p
         # OpenAI will automatically process PDF files and make content available
         file_processor_agent = Agent(
             name="FileProcessorAgent",
-            instructions="""You are an agent that can read and analyze PDF files automatically.
-            When PDF files are attached, you can access their content directly.
-            Extract and summarize key information from the PDF content accurately.""",
+            instructions=(
+                "You are a concise assistant. Answer user questions using the information that is available to you."
+            ),
+            model="gpt-4.1",  # gpt-4o refuses to repeat the PDF phrase despite the attachment.
             model_settings=ModelSettings(temperature=0.0),
         )
         file_processor_agent._openai_client = real_openai_client
@@ -136,7 +135,7 @@ async def test_multi_file_type_processing(real_openai_client: AsyncOpenAI, tmp_p
         Agency(file_processor_agent, user_context=None)
 
         # Test processing the PDF file
-        question = "What secret phrase do you find in this PDF file?"
+        question = "Please repeat the secret phrase attached."
         expected_content = "FIRST PDF SECRET PHRASE"
 
         # Process the PDF file - OpenAI will automatically make file content available
