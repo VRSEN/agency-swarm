@@ -203,7 +203,7 @@ class TestFastAPIFileProcessing:
         payload = {
             "message": (
                 "I'm uploading multiple files. Please tell me the function name presented in the image"
-                "and tell me favorite food is."
+                "and tell me what my favorite food is."
             ),
             "file_urls": {
                 "text_image": "http://localhost:7860/test-image.png",
