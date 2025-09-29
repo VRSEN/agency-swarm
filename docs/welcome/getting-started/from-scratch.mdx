@@ -28,11 +28,11 @@ Agency Swarm has two major versions with different approaches. Choose the versio
 
     ```
     /your-agency-path/
-    └── AgentName/                    # Directory for the specific agent
+    └── agent_name/                   # Directory for the specific agent
         ├── files/                    # Directory for files that will be uploaded to openai
         ├── schemas/                  # Directory for OpenAPI schemas to be converted into tools
         ├── tools/                    # Directory for tools to be imported by default.
-        ├── AgentName.py              # The main agent class file
+        ├── agent_name.py             # The agent definition module
         ├── __init__.py               # Initializes the agent folder as a Python package
         └── instructions.md or .txt   # Instruction document for the agent
     ```
@@ -44,9 +44,9 @@ Agency Swarm has two major versions with different approaches. Choose the versio
     The full structure of the project will look like this:
 
     ```
-    AgencyName/
-    ├── AgentName/            # Agent folder created with the command above
-    ├── AnotherAgent/         # Another agent folder
+    agency_name/
+    ├── agent_name/           # Agent folder created with the command above
+    ├── another_agent/        # Another agent folder
     ├── agency.py             # Main file where agents are imported and the agency is defined
     ├── agency_manifesto.md   # Shared instructions and guidelines for all agents
     ├── requirements.txt      # File listing all dependencies
@@ -60,7 +60,7 @@ Agency Swarm has two major versions with different approaches. Choose the versio
 
     By extending agency_swarm's `BaseTool` class and implementing the `run` method.
 
-    **MyCustomTool.py:**
+    **my_custom_tool_class.py:**
 
     ```python
     from agency_swarm.tools import BaseTool
@@ -128,28 +128,27 @@ Agency Swarm has two major versions with different approaches. Choose the versio
   <Step title="Define Agent Roles">
     Adjust the parameters and instructions for each agent.
 
-    **Developer.py:**
+    **developer.py:**
 
     ```python
     from agency_swarm import Agent, ModelSettings
     from .tools.my_custom_tool import my_custom_tool
+    from .tools.my_custom_tool_class import MyCustomTool
 
-    class Developer(Agent):
-        def __init__(self):
-            super().__init__(
-                name="Developer",
-                description="Responsible for executing tasks.",
-                instructions="./instructions.md",
-                tools=[my_custom_tool, MyCustomTool],  # Import tools directly
-                model_settings=ModelSettings(
-                    temperature=0.3,
-                    max_completion_tokens=25000,
-                    model="gpt-4o"
-                )
-            )
+    developer = Agent(
+        name="Developer",
+        description="Responsible for executing tasks.",
+        instructions="./instructions.md",
+        tools=[my_custom_tool, MyCustomTool],  # Import tools directly
+        model_settings=ModelSettings(
+            temperature=0.3,
+            max_tokens=25000,
+            model="gpt-4o"
+        ),
+    )
     ```
 
-    Tools are imported directly into the agent instead of from a folder.
+    Tools are imported directly into the agent definition instead of from a folder.
 
     **instructions.md:**
 
@@ -174,11 +173,8 @@ Agency Swarm has two major versions with different approaches. Choose the versio
 
     ```python
     from agency_swarm import Agency
-    from .Developer import Developer
-    from .CEO import CEO
-
-    developer = Developer()
-    ceo = CEO()
+    from .developer import developer
+    from .ceo import ceo
 
     agency = Agency(
         ceo,  # Entry point agent as positional argument
@@ -268,7 +264,7 @@ v0.x is the **previous production version**. Install with: `pip install "agency-
     **Command Syntax:**
 
     ```bash
-    agency-swarm create-agent-template --name "AgentName" --description "Agent Description" [--path "/path/to/directory"] [--use_txt]
+    agency-swarm create-agent-template --name "agent_name" --description "Agent Description" [--path "/path/to/directory"] [--use_txt]
     ```
 
     **Agent Folder Structure:**
@@ -277,11 +273,11 @@ v0.x is the **previous production version**. Install with: `pip install "agency-
 
     ```
     /your-agency-path/
-    └── AgentName/                    # Directory for the specific agent
+    └── agent_name/                   # Directory for the specific agent
         ├── files/                    # Directory for files that will be uploaded to openai
         ├── schemas/                  # Directory for OpenAPI schemas to be converted into tools
         ├── tools/                    # Directory for tools to be imported by default.
-        ├── AgentName.py              # The main agent class file
+        ├── agent_name.py             # The main agent class file
         ├── __init__.py               # Initializes the agent folder as a Python package
         └── instructions.md or .txt   # Instruction document for the agent
     ```
@@ -293,9 +289,9 @@ v0.x is the **previous production version**. Install with: `pip install "agency-
     The full structure of the project will look like this:
 
     ```
-    AgencyName/
-    ├── AgentName/            # Agent folder created with the command above
-    ├── AnotherAgent/         # Another agent folder
+    agency_name/
+    ├── agent_name/           # Agent folder created with the command above
+    ├── another_agent/        # Another agent folder
     ├── agency.py             # Main file where agents are imported and the agency is defined
     ├── agency_manifesto.md   # Shared instructions and guidelines for all agents
     ├── requirements.txt      # File listing all dependencies
@@ -307,7 +303,7 @@ v0.x is the **previous production version**. Install with: `pip install "agency-
   <Step title="Create Tools">
     Define your custom tools by extending the `BaseTool` class and implementing the `run` method.
 
-    **MyCustomTool.py:**
+    **my_custom_tool.py:**
 
     ```python
     from agency_swarm.tools import BaseTool
@@ -347,7 +343,7 @@ v0.x is the **previous production version**. Install with: `pip install "agency-
   <Step title="Define Agent Roles">
     Adjust the parameters and instructions for each agent.
 
-    **Developer.py:**
+    **developer.py:**
 
     ```python
     from agency_swarm import Agent
@@ -392,8 +388,8 @@ v0.x is the **previous production version**. Install with: `pip install "agency-
 
     ```python
     from agency_swarm import Agency
-    from .Developer import Developer
-    from .CEO import CEO
+    from .developer import Developer
+    from .ceo import CEO
 
     developer = Developer()
     ceo = CEO()
