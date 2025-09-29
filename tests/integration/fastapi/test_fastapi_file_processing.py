@@ -203,11 +203,11 @@ class TestFastAPIFileProcessing:
         payload = {
             "message": (
                 "I'm uploading multiple files. Please tell me the function name presented in the image"
-                "and tell me the contents of the pdf file"
+                "and tell me what my favorite food is."
             ),
             "file_urls": {
                 "text_image": "http://localhost:7860/test-image.png",
-                "pdf_file": "http://localhost:7860/test-pdf.pdf",
+                "pdf_file": "http://localhost:7860/test-pdf-2.pdf",
             },
         }
         headers = {}
@@ -220,7 +220,7 @@ class TestFastAPIFileProcessing:
 
         response_text = response_data["response"].lower()
         # Should find secret phrases from multiple files
-        assert "first pdf secret phrase" in response_text
+        assert "strawberry" in response_text.lower()
         assert "sum_of_squares" in response_text or "sum of squares" in response_text
 
     @pytest.mark.asyncio
