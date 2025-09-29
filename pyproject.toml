@@ -66,6 +66,9 @@ dev-dependencies = [
     "pytest-asyncio>=1.0.0",
     "pytest-mock>=3.14.1",
     "ruff>=0.11.12",
+    "langchain-core>=0.1.0",
+    "langchain-experimental>=0.0.50",
+    "langchain-community>=0.0.20",
 ]
 
 [tool.hatch.build.targets.wheel]

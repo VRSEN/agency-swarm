@@ -342,6 +342,7 @@ class ToolFactory:
         tools: list[type[BaseTool] | FunctionTool] = []
 
         module_name = file.stem
+        module = None
         try:
             spec = importlib.util.spec_from_file_location(module_name, file)
             if spec and spec.loader:
@@ -354,17 +355,18 @@ class ToolFactory:
             logger.error("Error importing tool module %s: %s", file, e)
 
         # BaseTool: expect class with same name as file
-        base_tool = getattr(module, module_name, None)
-        if inspect.isclass(base_tool) and issubclass(base_tool, BaseTool) and base_tool is not BaseTool:
-            try:
-                tools.append(base_tool)
-            except Exception as e:
-                logger.error("Error adapting tool %s: %s", module_name, e)
+        if module:
+            base_tool = getattr(module, module_name, None)
+            if inspect.isclass(base_tool) and issubclass(base_tool, BaseTool) and base_tool is not BaseTool:
+                try:
+                    tools.append(base_tool)
+                except Exception as e:
+                    logger.error("Error adapting tool %s: %s", module_name, e)
 
-        # FunctionTool instances defined in the module
-        for obj in module.__dict__.values():
-            if isinstance(obj, FunctionTool):
-                tools.append(obj)
+            # FunctionTool instances defined in the module
+            for obj in module.__dict__.values():
+                if isinstance(obj, FunctionTool):
+                    tools.append(obj)
 
         return tools
 
