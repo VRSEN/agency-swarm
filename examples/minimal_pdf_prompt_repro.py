@@ -1,8 +1,8 @@
-"""Minimal reproduction for the PDF attachment regression in OpenAI Responses.
+"""Minimal reproduction for the PDF attachment prompt sensitivity in OpenAI Responses.
 
-This script uploads the shared PDF fixture and sends the *same* prompt and
-instructions to multiple models. ``gpt-4.1`` and ``gpt-5`` repeat the secret
-phrase, while ``gpt-4o`` refuses the request even though the PDF is attached.
+Uploading the shared PDF fixture and asking for a summary makes ``gpt-4.1`` insist
+that no file was provided. Repeating the secret phrase works for ``gpt-4.1`` and
+``gpt-5`` (temperature must be omitted), while ``gpt-4o`` continues to refuse.
 """
 
 from __future__ import annotations
@@ -14,7 +14,8 @@ from pathlib import Path
 from openai import AsyncOpenAI
 
 PDF_PATH = Path("tests/data/files/test-pdf.pdf")
-PROMPT = "Please repeat the secret phrase attached."
+SUMMARY_PROMPT = "What content do you see in the attached PDF file? Please summarize what you find."
+SECRET_PHRASE_PROMPT = "Please repeat the secret phrase attached."
 INSTRUCTIONS = "You are a precise assistant. Answer user questions directly."
 FOLLOW_UP_MODELS: tuple[tuple[str, float | None], ...] = (
     ("gpt-4o", 0.0),
@@ -42,6 +43,7 @@ async def query_model(
     *,
     file_id: str,
     model_name: str,
+    prompt: str,
     temperature: float | None,
 ) -> str:
     response = await client.responses.create(
@@ -51,7 +53,7 @@ async def query_model(
             {
                 "role": "user",
                 "content": [
-                    {"type": "input_text", "text": PROMPT},
+                    {"type": "input_text", "text": prompt},
                     {"type": "input_file", "file_id": file_id},
                 ],
             }
@@ -71,16 +73,28 @@ async def main() -> None:
     print(f"Uploaded {PDF_PATH.name}: {file_id}")
 
     try:
-        # Immediate query without waiting for processing.
-        no_wait_output = await query_model(client, file_id=file_id, model_name="gpt-4.1", temperature=0.0)
-        print("\n=== Immediate call (no wait) ===")
-        print(no_wait_output)
-
-        # Poll until OpenAI finishes processing, then retry.
         await _wait_for_file_processed(client, file_id)
-        waited_output = await query_model(client, file_id=file_id, model_name="gpt-4.1", temperature=0.0)
-        print("\n=== After waiting for processing ===")
-        print(waited_output)
+        failing_output = await query_model(
+            client,
+            file_id=file_id,
+            model_name="gpt-4.1",
+            prompt=SUMMARY_PROMPT,
+            temperature=0.0,
+        )
+        print("\n=== gpt-4.1 with summarization prompt ===")
+        print(f"Prompt: {SUMMARY_PROMPT!r}")
+        print(f"Response: {failing_output}")
+
+        succeeding_output = await query_model(
+            client,
+            file_id=file_id,
+            model_name="gpt-4.1",
+            prompt=SECRET_PHRASE_PROMPT,
+            temperature=0.0,
+        )
+        print("\n=== gpt-4.1 with secret phrase prompt ===")
+        print(f"Prompt: {SECRET_PHRASE_PROMPT!r}")
+        print(f"Response: {succeeding_output}")
 
         # Re-use the processed file for the remaining models.
         for model_name, temperature in FOLLOW_UP_MODELS:
@@ -88,11 +102,12 @@ async def main() -> None:
                 client,
                 file_id=file_id,
                 model_name=model_name,
+                prompt=SECRET_PHRASE_PROMPT,
                 temperature=temperature,
             )
             print("\n=== Responses API call ===")
             print(
-                f"Model: {model_name}\nPrompt: {PROMPT!r}\nInstructions: {INSTRUCTIONS!r}\nResponse: {output}"
+                f"Model: {model_name}\nPrompt: {SECRET_PHRASE_PROMPT!r}\nInstructions: {INSTRUCTIONS!r}\nResponse: {output}"
             )
     finally:
         await client.files.delete(file_id)

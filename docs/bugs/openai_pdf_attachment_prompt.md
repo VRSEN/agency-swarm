@@ -1,9 +1,9 @@
-# OpenAI Responses PDF Attachment Processing Delay
+# OpenAI Responses PDF Attachment Prompt Sensitivity
 
 ## Summary
-- Uploading a PDF and immediately querying `gpt-4.1` returns "I do not see any file attached" because the file is still in the `uploaded` state.
-- Polling `files.retrieve` until the status changes to `processed` resolves the issue; the same request then returns `FIRST PDF SECRET PHRASE` reliably.
-- `gpt-4o` continues to refuse the deterministic secret-phrase prompt, while `gpt-5` succeeds when the temperature parameter is omitted.
+- The prompt wording determines whether `gpt-4.1` acknowledges an attached PDF. Asking it to “summarize” the document frequently yields "I do not see any file attached," even though the API confirms the file ID.
+- Rephrasing the user message to `"Please repeat the secret phrase attached."` consistently surfaces the PDF content for `gpt-4.1` and `gpt-5` (temperature must be omitted for `gpt-5`).
+- `gpt-4o` still refuses to echo the PDF contents regardless of wording, so the integration tests remain pinned to `gpt-4.1` while we await an upstream fix.
 
 ## Minimal Reproduction
 Run:
@@ -15,26 +15,28 @@ uv run python examples/minimal_pdf_prompt_repro.py
 Example output (abridged):
 
 ```
-Immediate call (no wait):
-Response: It appears that you intended to attach a PDF file, but I do not see any PDF attached to your message.
+=== gpt-4.1 with summarization prompt ===
+Prompt: "What content do you see in the attached PDF file? Please summarize what you find."
+Response: Please upload the PDF file you would like me to review. Once you upload it, I will summarize its contents for you.
 
-After waiting for processing:
-Response: FIRST PDF SECRET PHRASE
+=== gpt-4.1 with secret phrase prompt ===
+Prompt: "Please repeat the secret phrase attached."
+Response: Your secret phrase for docx is: FIRST PDF SECRET PHRASE
 
-Model: gpt-4o
-Response: I'm sorry, but I can't help with that.
+=== gpt-4o with secret phrase prompt ===
+Response: I'm sorry, I can't assist with that.
 
-Model: gpt-5
+=== gpt-5 with secret phrase prompt ===
 Response: FIRST PDF SECRET PHRASE
 ```
 
-The first call fails because the PDF has not finished server-side processing. Waiting for the `processed` status before querying fixes the behaviour for every agent scenario in this repository.
+This reproduction mirrors the failing and passing integration prompts. No additional delay is required once the phrasing is updated, but the script still waits for the PDF to reach the `processed` state for completeness.
 
 ## Impact
-- Agents that attach PDFs and query immediately can misinterpret the model response as a missing file, causing the integration tests to fail.
-- Once the processing wait is enforced, the existing prompts succeed deterministically; no further prompt tuning is required.
-- Combining PDFs with other attachment types (for example, an image) still causes `gpt-4.1` to occasionally insist the PDF is missing even though the API confirms the file ID. Tests now verify the PDF upload via the returned `file_ids_map` rather than the model’s prose when multiple attachments are present.
+- Integration tests and sample agents must use the deterministic secret-phrase prompt whenever they validate PDF attachments.
+- Documentation and reproductions should highlight the working phrasing so the issue can be escalated to OpenAI with clear evidence.
+- Additional attachments (such as images) remain subject to the same prompt sensitivity, so tests now check the returned `file_ids_map` whenever they mix attachment types.
 
 ## Workaround
-- Always poll `client.files.retrieve(file_id)` until the returned status is `processed` before invoking the Responses API.
-- Continue to avoid `gpt-4o` for deterministic attachment verification until its blanket refusal is resolved upstream.
+- Keep polling `client.files.retrieve(file_id)` until the status is `processed`, then query using the exact secret-phrase prompt.
+- Avoid `gpt-4o` for deterministic attachment verification until its refusal is resolved upstream.

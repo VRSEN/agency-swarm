@@ -59,7 +59,10 @@ async def test_agent_processes_message_files_attachment(real_openai_client: Asyn
     # OpenAI will automatically process the attached file and make content available to the LLM
     attachment_tester_agent = Agent(
         name="AttachmentTesterAgentReal",
-        instructions="You are a helpful assistant. Provide direct, accurate answers to user requests.",
+        instructions=(
+            "You are a helpful assistant. When a PDF is attached, read it carefully and repeat any secret phrase "
+            "exactly as requested. Never claim the file is missing when an attachment is provided."
+        ),
         model="gpt-4.1",  # gpt-4o refuses to repeat the PDF phrase despite the attachment.
         model_settings=ModelSettings(temperature=0.0),
     )
@@ -148,7 +151,8 @@ async def test_multi_file_type_processing(real_openai_client: AsyncOpenAI, tmp_p
         file_processor_agent = Agent(
             name="FileProcessorAgent",
             instructions=(
-                "You are a concise assistant. Answer user questions using the information that is available to you."
+                "You are a helpful assistant. When a PDF attachment is provided, read it and repeat any secret phrase "
+                "exactly as the user requests before doing anything else."
             ),
             model="gpt-4.1",  # gpt-4o refuses to repeat the PDF phrase despite the attachment.
             model_settings=ModelSettings(temperature=0.0),
