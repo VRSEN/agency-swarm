@@ -33,7 +33,7 @@ class TestLangchainIntegration:
             def import_side_effect(name, *args, **kwargs):
                 if name == "langchain_community.tools":
                     raise ImportError("No module named 'langchain_community'")
-                return __import__(name, *args, **kwargs)
+                return original_import(name, *args, **kwargs)
 
             mock_import.side_effect = import_side_effect
 
