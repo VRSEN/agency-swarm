@@ -305,10 +305,12 @@ class TestCreateInvokeForPath:
             }
         }
 
-        callback = ToolFactory._create_invoke_for_path("/test", "POST", {}, tool_schema, "test_func")
+        # Provide minimal OpenAPI metadata so the invoke path builds a proper URL
+        openapi = {"servers": [{"url": "https://api.example.com"}]}
+        callback = ToolFactory._create_invoke_for_path("/test", "POST", openapi, tool_schema, "test_func")
 
         # Test real validation error with missing required field
-        with pytest.raises((ValidationError, Exception)):  # Should raise validation error
+        with pytest.raises(ModelBehaviorError, match="Invalid JSON input in parameters"):
             await callback(None, '{"parameters": {}}')  # Missing required_field
 
 
