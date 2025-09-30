@@ -43,6 +43,9 @@ classifiers = [
 Homepage = "https://github.com/VRSEN/agency-swarm"
 Repository = "https://github.com/VRSEN/agency-swarm"
 
+[project.scripts]
+agency-swarm = "agency_swarm.cli.main:main"
+
 [project.optional-dependencies]
 voice = ["numpy>=2.2.0, <3; python_version>='3.10'", "websockets>=15.0, <16"]
 viz = ["graphviz>=0.17"]
