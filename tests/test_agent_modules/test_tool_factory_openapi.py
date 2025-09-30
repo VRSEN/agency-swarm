@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from agents import FunctionTool
+from agents.exceptions import ModelBehaviorError
 from pydantic import ValidationError
 
 from agency_swarm.tools.base_tool import BaseTool
