@@ -49,7 +49,8 @@ class MessageStore:
                     self.messages[idx] = message
                     logger.debug("Replacing duplicate message with id %s and type %s", message_id, msg_type)
                     return
-        elif msg_type == "function_call_output" and message.get("call_id"):
+
+        if msg_type == "function_call_output":
             call_id = message.get("call_id")
             if call_id and call_id != FAKE_RESPONSES_ID:
                 for idx, existing in enumerate(self.messages):

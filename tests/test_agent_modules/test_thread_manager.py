@@ -114,6 +114,32 @@ def test_duplicate_function_call_output_replaces_existing_entry():
     assert manager._store.messages[0]["output"] == "final"
 
 
+def test_function_call_output_dedupes_by_call_id_even_with_unique_ids():
+    manager = ThreadManager()
+
+    first_output = {
+        "type": "function_call_output",
+        "id": "msg-1",
+        "call_id": "call-1",
+        "output": "placeholder",
+        "timestamp": 1,
+    }
+    final_output = {
+        "type": "function_call_output",
+        "id": "msg-2",
+        "call_id": "call-1",
+        "output": "final",
+        "timestamp": 2,
+    }
+
+    manager.add_message(first_output)
+    manager.add_message(final_output)
+
+    assert len(manager._store.messages) == 1
+    assert manager._store.messages[0]["id"] == "msg-2"
+    assert manager._store.messages[0]["output"] == "final"
+
+
 def test_placeholder_messages_are_not_deduped():
     manager = ThreadManager()
 
