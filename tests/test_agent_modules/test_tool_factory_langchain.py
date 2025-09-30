@@ -27,6 +27,7 @@ class TestLangchainIntegration:
         dummy_tool = DummyTool()
 
         # Mock import to simulate ImportError
+        original_import = builtins.__import__
         with patch("builtins.__import__") as mock_import:
 
             def import_side_effect(name, *args, **kwargs):
