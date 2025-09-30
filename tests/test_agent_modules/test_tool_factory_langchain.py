@@ -4,6 +4,7 @@ Unit tests for ToolFactory LangChain integration.
 Tests the LangChain tool conversion functionality with REAL LangChain tools.
 """
 
+import builtins
 from unittest.mock import patch
 
 import pytest
