@@ -5,18 +5,21 @@ Tests the actual logging behavior, request tracking, file operations,
 and HTTP middleware functionality.
 """
 
+import asyncio
 import json
 import logging
 import os
 import tempfile
-import threading
-import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
+
+os.environ.setdefault("OPENAI_AGENTS_DISABLE_TRACING", "1")
+
 from agents import ModelSettings
+from agents.tracing import set_tracing_disabled
 
 from agency_swarm import Agency, Agent, run_fastapi
 from agency_swarm.integrations.fastapi_utils.logging_middleware import (
@@ -351,7 +354,9 @@ class TestRequestTracker:
     async def test_run_fastapi_logging_integration(self, agency_factory, temp_logs_dir):
         """Test logging middleware with actual run_fastapi method."""
 
-        # Start FastAPI server with logging
+        set_tracing_disabled(True)
+
+        # Build FastAPI app with logging enabled
         app = run_fastapi(
             agencies={"test_agency": agency_factory},
             port=8099,
@@ -361,22 +366,12 @@ class TestRequestTracker:
             enable_logging=True,  # Enable logging to test the middleware
         )
 
-        def run_server():
-            import uvicorn
-
-            uvicorn.run(app, host="127.0.0.1", port=8099, log_level="error")
-
-        server_thread = threading.Thread(target=run_server, daemon=True)
-        server_thread.start()
-
-        # Wait for server to start
-        time.sleep(2)
-
+        transport = httpx.ASGITransport(app=app)
         try:
-            # Make request with log ID header
-            async with httpx.AsyncClient() as client:
+            # Make request with log ID header against in-process app
+            async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
                 response = await client.post(
-                    "http://localhost:8099/test_agency/get_response",
+                    "/test_agency/get_response",
                     json={"message": "Test logging middleware"},
                     headers={"x-agency-log-id": "fastapi-integration-test"},
                     timeout=30.0,
@@ -384,8 +379,13 @@ class TestRequestTracker:
 
             assert response.status_code == 200
 
-            # Check that log file was created
+            # Wait for log file to be written
             log_file = Path(temp_logs_dir) / "fastapi-integration-test.jsonl"
+            for _ in range(20):
+                if log_file.exists():
+                    break
+                await asyncio.sleep(0.1)
+
             assert log_file.exists()
 
             # Verify log content
@@ -399,10 +399,8 @@ class TestRequestTracker:
                 assert "message" in log_entry
                 assert "details" in log_entry
                 assert "timestamp" in log_entry["details"]
-
-        except Exception as e:
-            # Skip test if server startup fails
-            pytest.skip(f"Could not connect to FastAPI server: {e}")
+        finally:
+            await transport.aclose()
 
 
 class TestGetLogsEndpointImpl:
