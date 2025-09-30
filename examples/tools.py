@@ -7,8 +7,6 @@ with field and model validators.
 Run with: python examples/tools.py
 """
 
-from __future__ import annotations
-
 import asyncio
 import os
 import sys
@@ -43,7 +41,7 @@ class AddTool(BaseTool):
         return v
 
     @model_validator(mode="after")
-    def cap_sum(self) -> AddTool:
+    def cap_sum(self) -> "AddTool":
         if self.a + self.b > 100:
             raise ValueError("sum must be <= 100")
         return self
@@ -70,7 +68,7 @@ class AddArgs(BaseModel):
         return v
 
     @model_validator(mode="after")
-    def cap_sum(self) -> AddArgs:
+    def cap_sum(self) -> "AddArgs":
         if self.a + self.b > 100:
             raise ValueError("sum must be <= 100")
         return self
