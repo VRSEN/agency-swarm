@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from agency_swarm import Agent
 
 
