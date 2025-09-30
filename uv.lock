@@ -62,7 +62,12 @@ voice = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "ag-ui-protocol" },
+    { name = "aiofiles" },
     { name = "coverage" },
+    { name = "fastapi" },
+    { name = "filetype" },
+    { name = "httpx" },
     { name = "langchain-community" },
     { name = "langchain-core" },
     { name = "langchain-experimental" },
@@ -72,6 +77,7 @@ dev = [
     { name = "pytest-asyncio" },
     { name = "pytest-mock" },
     { name = "ruff" },
+    { name = "uvicorn", extra = ["standard"] },
 ]
 
 [package.metadata]
@@ -106,7 +112,12 @@ provides-extras = ["voice", "viz", "litellm", "fastapi"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "ag-ui-protocol", specifier = ">=0.1.4" },
+    { name = "aiofiles", specifier = ">=23.2.1" },
     { name = "coverage", specifier = ">=7.8.2" },
+    { name = "fastapi", specifier = ">=0.115.0" },
+    { name = "filetype", specifier = ">=1.2.0" },
+    { name = "httpx", specifier = ">=0.28.0" },
     { name = "langchain-community", specifier = ">=0.0.20" },
     { name = "langchain-core", specifier = ">=0.1.0" },
     { name = "langchain-experimental", specifier = ">=0.0.50" },
@@ -116,6 +127,7 @@ dev = [
     { name = "pytest-asyncio", specifier = ">=1.0.0" },
     { name = "pytest-mock", specifier = ">=3.14.1" },
     { name = "ruff", specifier = ">=0.11.12" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.34.0" },
 ]
 
 [[package]]

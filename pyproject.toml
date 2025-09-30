@@ -69,6 +69,12 @@ dev-dependencies = [
     "langchain-core>=0.1.0",
     "langchain-experimental>=0.0.50",
     "langchain-community>=0.0.20",
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.34.0",
+    "ag-ui-protocol>=0.1.4",
+    "aiofiles>=23.2.1",
+    "filetype>=1.2.0",
+    "httpx>=0.28.0",
 ]
 
 [tool.hatch.build.targets.wheel]
