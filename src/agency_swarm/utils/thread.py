@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from typing import Any, cast
 
 from agents import TResponseInputItem
+from agents.models.fake_id import FAKE_RESPONSES_ID
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +43,7 @@ class MessageStore:
         # function_call_output items.
         msg_type = message.get("type")
         message_id = message.get("id")
-        if message_id:
+        if message_id and message_id != FAKE_RESPONSES_ID:
             for idx, existing in enumerate(self.messages):
                 if existing.get("id") == message_id and existing.get("type") == msg_type:
                     self.messages[idx] = message
@@ -50,11 +51,12 @@ class MessageStore:
                     return
         elif msg_type == "function_call_output" and message.get("call_id"):
             call_id = message.get("call_id")
-            for idx, existing in enumerate(self.messages):
-                if existing.get("type") == "function_call_output" and existing.get("call_id") == call_id:
-                    self.messages[idx] = message
-                    logger.debug("Replacing duplicate function_call_output with call_id %s", call_id)
-                    return
+            if call_id and call_id != FAKE_RESPONSES_ID:
+                for idx, existing in enumerate(self.messages):
+                    if existing.get("type") == "function_call_output" and existing.get("call_id") == call_id:
+                        self.messages[idx] = message
+                        logger.debug("Replacing duplicate function_call_output with call_id %s", call_id)
+                        return
 
         self.messages.append(message)
         logger.debug(

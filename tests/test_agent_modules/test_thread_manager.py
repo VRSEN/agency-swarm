@@ -1,6 +1,7 @@
 import pickle
 
 import pytest
+from agents.models.fake_id import FAKE_RESPONSES_ID
 
 from agency_swarm.utils.thread import ThreadManager
 
@@ -111,6 +112,89 @@ def test_duplicate_function_call_output_replaces_existing_entry():
 
     assert len(manager._store.messages) == 1
     assert manager._store.messages[0]["output"] == "final"
+
+
+def test_placeholder_messages_are_not_deduped():
+    manager = ThreadManager()
+
+    first = {
+        "type": "message",
+        "id": FAKE_RESPONSES_ID,
+        "role": "assistant",
+        "content": "initial",
+        "timestamp": 1,
+    }
+    second = {
+        "type": "message",
+        "id": FAKE_RESPONSES_ID,
+        "role": "assistant",
+        "content": "follow-up",
+        "timestamp": 2,
+    }
+
+    manager.add_message(first)
+    manager.add_message(second)
+
+    assert manager._store.messages == [first, second]
+
+
+def test_placeholder_tool_messages_preserve_prior_calls():
+    manager = ThreadManager()
+
+    first_call = {
+        "type": "function_call",
+        "id": FAKE_RESPONSES_ID,
+        "call_id": "call-1",
+        "role": "assistant",
+        "timestamp": 1,
+        "tool_calls": [
+            {
+                "id": "call-1",
+                "type": "function",
+                "function": {"name": "get_user_id", "arguments": "{}"},
+            }
+        ],
+    }
+    first_output = {
+        "type": "function_call_output",
+        "id": FAKE_RESPONSES_ID,
+        "call_id": "call-1",
+        "output": "User id is 1245725189",
+        "timestamp": 2,
+    }
+    manager.add_message(first_call)
+    manager.add_message(first_output)
+
+    second_call = {
+        "type": "function_call",
+        "id": FAKE_RESPONSES_ID,
+        "call_id": "call-2",
+        "role": "assistant",
+        "timestamp": 3,
+        "tool_calls": [
+            {
+                "id": "call-2",
+                "type": "function",
+                "function": {"name": "get_user_id", "arguments": "{}"},
+            }
+        ],
+    }
+    second_output = {
+        "type": "function_call_output",
+        "id": FAKE_RESPONSES_ID,
+        "call_id": "call-2",
+        "output": "Done",
+        "timestamp": 4,
+    }
+
+    manager.add_message(second_call)
+    manager.add_message(second_output)
+
+    calls = [msg for msg in manager._store.messages if msg.get("type") == "function_call"]
+    outputs = [msg for msg in manager._store.messages if msg.get("type") == "function_call_output"]
+
+    assert {msg["call_id"] for msg in calls} == {"call-1", "call-2"}
+    assert {msg["call_id"] for msg in outputs} == {"call-1", "call-2"}
 
 
 def test_user_thread_shared_across_agents():
