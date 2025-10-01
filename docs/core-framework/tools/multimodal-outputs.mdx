@@ -1,0 +1,206 @@
+---
+title: "Multimodal Tool Outputs"
+description: "Return images and files from your tools to enable richer agent interactions"
+icon: "image"
+---
+
+## Overview
+
+Tools can return **multimodal outputs**: images and files in addition to text. Agents can generate visualizations, documents, and reference rich media in conversations.
+
+## Supported Output Formats
+
+### Image Outputs
+
+Tools can return images in two ways:
+
+1. **Direct dict/object return:**
+
+```python
+from agency_swarm import function_tool
+
+@function_tool
+def generate_chart(data: list[float]) -> dict:
+    """Generate a chart and return it as an image."""
+    # Your image generation logic here
+    image_base64 = create_chart_image(data)
+    
+    return {
+        "type": "image_url",
+        "image_url": {
+            "url": f"data:image/png;base64,{image_base64}"
+        }
+    }
+```
+
+2. **JSON string return (auto-parsed):**
+
+```python
+import json
+
+@function_tool
+def generate_visualization(query: str) -> str:
+    """Generate a visualization based on the query."""
+    image_base64 = create_visualization(query)
+    
+    # Return as JSON string - will be automatically parsed
+    return json.dumps({
+        "type": "image_url",
+        "image_url": {
+            "url": f"data:image/png;base64,{image_base64}"
+        }
+    })
+```
+
+### File Outputs
+
+Tools can return references to uploaded files:
+
+```python
+@function_tool
+def create_report(topic: str) -> dict:
+    """Create a report and return a file reference."""
+    # Upload file using OpenAI Files API and get file_id
+    file_id = upload_to_openai_files(report_content)
+    
+    return {
+        "type": "file",
+        "file": {
+            "file_id": file_id
+        }
+    }
+```
+
+### Multiple Outputs
+
+Return multiple images or files as a list:
+
+```python
+@function_tool
+def generate_comparison_charts(dataset1: list, dataset2: list) -> list:
+    """Generate comparison charts for two datasets."""
+    chart1 = create_chart(dataset1)
+    chart2 = create_chart(dataset2)
+    
+    return [
+        {
+            "type": "image_url",
+            "image_url": {"url": f"data:image/png;base64,{chart1}"}
+        },
+        {
+            "type": "image_url",
+            "image_url": {"url": f"data:image/png;base64,{chart2}"}
+        }
+    ]
+```
+
+## How It Works
+
+Multimodal outputs are automatically detected:
+
+1. **Direct Returns:** Dict or list matching multimodal format passes directly to the model
+2. **String Auto-Parsing:** JSON strings matching the format are parsed automatically
+3. **Fallback:** Other types convert to string
+
+Backward compatible with existing tools.
+
+## Complete Example
+
+Here's a complete example using `BaseTool`:
+
+```python
+from agency_swarm import BaseTool, Agent
+from pydantic import Field
+import base64
+import matplotlib.pyplot as plt
+import io
+
+class GenerateChartTool(BaseTool):
+    """Generate a bar chart from data."""
+    
+    data: list[float] = Field(..., description="Data points for the chart")
+    labels: list[str] = Field(..., description="Labels for each data point")
+    
+    def run(self) -> dict:
+        """Generate and return the chart as a base64-encoded image."""
+        # Create the chart
+        fig, ax = plt.subplots()
+        ax.bar(self.labels, self.data)
+        
+        # Convert to base64
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png')
+        buf.seek(0)
+        image_base64 = base64.b64encode(buf.read()).decode('utf-8')
+        plt.close()
+        
+        # Return in multimodal format
+        return {
+            "type": "image_url",
+            "image_url": {
+                "url": f"data:image/png;base64,{image_base64}"
+            }
+        }
+
+# Create an agent with the tool
+agent = Agent(
+    name="DataViz",
+    instructions="You generate charts and visualizations for data analysis.",
+    tools=[GenerateChartTool]
+)
+```
+
+## Best Practices
+
+<Tip>
+Base64-encoded images can be large. Use file references for large content.
+</Tip>
+
+<Warning>
+Watch token limits with base64-encoded images.
+</Warning>
+
+**Format selection:**
+- Small visualizations: Base64 data URLs
+- Large files: File references via OpenAI Files API
+
+**Error handling:**
+```python
+@function_tool
+def safe_image_generation(prompt: str) -> dict | str:
+    """Generate an image with error handling."""
+    try:
+        image = generate_image(prompt)
+        return {
+            "type": "image_url",
+            "image_url": {"url": f"data:image/png;base64,{image}"}
+        }
+    except Exception as e:
+        return f"Error generating image: {e}"
+```
+
+## Tool Compatibility
+
+Works with `BaseTool` classes and LangChain tools via `ToolFactory` adapters.
+
+## Example
+
+[`examples/multimodal_outputs.py`](https://github.com/VRSEN/agency-swarm/blob/main/examples/multimodal_outputs.py)
+
+Implementation in `src/agency_swarm/tools/utils.py`: `parse_multimodal_output()`
+
+<Info>
+Requires Agency Swarm v1.0.0+, OpenAI Agents SDK v0.3.0+
+</Info>
+
+## See Also
+
+<CardGroup cols={2}>
+  <Card title="Custom Tools" icon="wrench" href="/core-framework/tools/custom-tools/step-by-step-guide">
+    Learn how to create custom tools
+  </Card>
+  <Card title="Tool Factory" icon="industry" href="/core-framework/tools/tool-factory">
+    Convert existing tools to Agency Swarm format
+  </Card>
+</CardGroup>
+

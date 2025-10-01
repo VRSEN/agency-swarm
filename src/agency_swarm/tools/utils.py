@@ -20,6 +20,71 @@ from datamodel_code_generator.parser.jsonschema import JsonSchemaParser
 logger = logging.getLogger(__name__)
 
 
+def parse_multimodal_output(result: Any) -> Any:
+    """
+    Parse and validate multimodal outputs from tools.
+
+    Supports:
+    - Direct dict/list returns with image_url or file structures
+    - JSON strings that match multimodal formats
+    - Regular string outputs (pass-through)
+
+    Args:
+        result: The tool output to parse
+
+    Returns:
+        The parsed output (dict/list for multimodal, str for text)
+    """
+    # If result is already a dict or list, check if it's a multimodal format
+    if isinstance(result, dict | list):
+        if _is_multimodal_format(result):
+            return result
+        return json.dumps(result, default=_stringify_non_serializable)
+
+    # If it's a string, try to parse as JSON and check if it's multimodal
+    if isinstance(result, str):
+        try:
+            parsed = json.loads(result)
+            if _is_multimodal_format(parsed):
+                return parsed
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    # For all other cases, convert to string
+    return str(result)
+
+
+def _is_multimodal_format(data: Any) -> bool:
+    """
+    Check if data matches OpenAI multimodal output format.
+
+    Supported formats:
+    - {"type": "image_url", "image_url": {"url": "..."}}
+    - {"type": "file", "file": {"file_id": "..."}}
+    - List of the above
+    """
+    if isinstance(data, dict):
+        # Check for image_url format
+        if data.get("type") == "image_url" and isinstance(data.get("image_url"), dict):
+            if "url" in data["image_url"]:
+                return True
+        # Check for file format
+        if data.get("type") == "file" and isinstance(data.get("file"), dict):
+            if "file_id" in data["file"]:
+                return True
+    elif isinstance(data, list):
+        # Check if all items in list are multimodal
+        return len(data) > 0 and all(_is_multimodal_format(item) for item in data)
+
+    return False
+
+
+def _stringify_non_serializable(value: Any) -> str:
+    """Convert unsupported JSON values to strings."""
+
+    return str(value)
+
+
 def from_openapi_schema(
     schema: str | dict[str, Any],
     *,
