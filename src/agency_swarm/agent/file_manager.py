@@ -170,7 +170,13 @@ class AgentFileManager:
         # ALWAYS check for existing vector store directories first, regardless of original directory existence
         parent = folder_path.parent
         base_name = folder_path.name
-        candidates = list(parent.glob(f"{base_name}_vs_*"))
+        base_name_without_vs = base_name.split("_vs_")[0] if "_vs_" in base_name else base_name
+
+        candidates = list(parent.glob(f"{base_name_without_vs}_vs_*"))
+
+        # If the provided folder already points to a vector store directory, prefer it.
+        if folder_path.exists() and "_vs_" in base_name and folder_path not in candidates:
+            candidates.insert(0, folder_path)
 
         if candidates:
             # Use the first existing vector store directory found

@@ -1,10 +1,6 @@
-"""
-Tests for agency_swarm.agent.file_manager module.
+"""Tests for agency_swarm.agent.file_manager module."""
 
-Focuses on testing the AgentFileManager class functionality
-to cover error handling and edge cases.
-"""
-
+import logging
 import os
 import tempfile
 from pathlib import Path
@@ -128,66 +124,85 @@ class TestAgentFileManager:
         with pytest.raises(FileNotFoundError, match="File not found: /nonexistent/file.txt"):
             file_manager.get_id_from_file("/nonexistent/file.txt")
 
-    def test_parse_files_folder_existing_vs_directory(self):
-        """Test _parse_files_folder_for_vs_id with existing VS directory."""
+    def test_parse_files_folder_reuses_detected_vector_store(self, tmp_path, caplog):
+        """Reuse an existing vector store directory without logging errors."""
+
         mock_agent = Mock()
         mock_agent.name = "TestAgent"
-        mock_agent.files_folder = "test_folder"
-        mock_agent.get_class_folder_path.return_value = "/base/path"
-        mock_agent.tools = []  # Make tools iterable
-        mock_agent.add_tool = Mock()  # Mock add_tool method
-        mock_agent.client_sync.vector_stores.create.return_value = Mock(id="vs_abc123")
+        mock_agent.files_folder = "files_vs_outdated999"
+        mock_agent.get_class_folder_path.return_value = str(tmp_path)
+        mock_agent.tools = []
+        mock_agent.add_tool = Mock()
+        mock_agent.client_sync.vector_stores.create = Mock()
+
+        existing_vs_dir = tmp_path / "files_vs_existing123"
+        existing_vs_dir.mkdir()
 
         file_manager = AgentFileManager(mock_agent)
 
-        # Create temporary directory structure to simulate existing VS directory
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            base_dir = Path(tmp_dir)
-            vs_dir = base_dir / "test_folder_vs_abc123"
-            vs_dir.mkdir()
+        with (
+            patch.object(AgentFileManager, "upload_file", return_value="file-1"),
+            patch.object(AgentFileManager, "add_file_search_tool"),
+            patch.object(AgentFileManager, "add_code_interpreter_tool"),
+            patch("os.listdir", return_value=[]),
+            caplog.at_level(logging.ERROR),
+        ):
+            file_manager._parse_files_folder_for_vs_id()
 
-            # Mock glob to return the existing VS directory
-            with patch("pathlib.Path.glob") as mock_glob, patch("os.listdir", return_value=[]):
-                mock_glob.return_value = [vs_dir]
+        assert mock_agent.client_sync.vector_stores.create.call_count == 0
+        assert mock_agent._associated_vector_store_id == "vs_existing123"
+        assert mock_agent.files_folder_path == existing_vs_dir.resolve()
+        assert mock_agent.files_folder == str(existing_vs_dir)
+        assert "Files folder" not in caplog.text
 
-                # Mock other Path methods
-                with (
-                    patch("pathlib.Path.parent", new_callable=lambda: base_dir),
-                    patch("pathlib.Path.name", new_callable=lambda: "test_folder"),
-                ):
-                    # Should find existing VS directory and reuse it
-                    file_manager._parse_files_folder_for_vs_id()
+    def test_parse_files_folder_creates_vector_store_without_warning(self, tmp_path, caplog):
+        """Create and rename folder on first discovery without emitting errors."""
 
-                    # Should update agent's files_folder to use existing VS directory
-                    assert str(vs_dir) in mock_agent.files_folder
-
-    def test_parse_files_folder_relative_path_not_directory(self):
-        """Test _parse_files_folder_for_vs_id with relative path that's not a directory."""
         mock_agent = Mock()
         mock_agent.name = "TestAgent"
-        mock_agent.files_folder = "relative/path"
-        mock_agent.get_class_folder_path.return_value = "/base/path"
+        mock_agent.files_folder = "files"
+        mock_agent.get_class_folder_path.return_value = str(tmp_path)
+        mock_agent.tools = []
+        mock_agent.add_tool = Mock()
+        mock_agent.client_sync.vector_stores.create.return_value = Mock(id="vs_created456")
+
+        original_dir = tmp_path / "files"
+        original_dir.mkdir()
 
         file_manager = AgentFileManager(mock_agent)
 
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            # Create a file instead of directory at the resolved path
-            resolved_path = Path(tmp_dir) / "relative" / "path"
-            resolved_path.parent.mkdir(parents=True)
-            resolved_path.write_text("not a directory")
+        with (
+            patch.object(AgentFileManager, "upload_file", return_value="file-1"),
+            patch.object(AgentFileManager, "add_file_search_tool"),
+            patch.object(AgentFileManager, "add_code_interpreter_tool"),
+            patch("os.listdir", return_value=[]),
+            caplog.at_level(logging.ERROR),
+        ):
+            file_manager._parse_files_folder_for_vs_id()
 
-            with (
-                patch("pathlib.Path.glob", return_value=[]),
-                patch("pathlib.Path.exists", return_value=False),
-                patch("pathlib.Path.is_absolute", return_value=False),
-                patch.object(Path, "resolve", return_value=resolved_path),
-                patch("pathlib.Path.is_dir", return_value=False),
-            ):
-                # Should handle non-directory path gracefully
-                file_manager._parse_files_folder_for_vs_id()
+        expected_dir = tmp_path / "files_vs_created456"
+        assert expected_dir.exists()
+        assert mock_agent._associated_vector_store_id == "vs_created456"
+        assert mock_agent.files_folder_path == expected_dir.resolve()
+        assert "Files folder" not in caplog.text
 
-                # Should set files_folder_path to None
-                assert mock_agent.files_folder_path is None
+    def test_parse_files_folder_logs_error_for_missing_directory(self, tmp_path, caplog):
+        """Emit an error when the configured directory cannot be found."""
+
+        mock_agent = Mock()
+        mock_agent.name = "TestAgent"
+        mock_agent.files_folder = "missing"
+        mock_agent.get_class_folder_path.return_value = str(tmp_path)
+        mock_agent.tools = []
+        mock_agent.client_sync = Mock()
+
+        file_manager = AgentFileManager(mock_agent)
+
+        with caplog.at_level(logging.ERROR):
+            file_manager._parse_files_folder_for_vs_id()
+
+        assert mock_agent.files_folder_path is None
+        assert "Files folder" in caplog.text
 
     def test_add_file_search_tool_no_vector_store_ids(self):
         """Test add_file_search_tool when existing tool has no vector store IDs."""
