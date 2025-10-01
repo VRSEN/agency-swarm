@@ -11,8 +11,6 @@ All parameters inside the `Agent` class follow the same structure as the OpenAI 
 
 Controls whether tools execute in parallel or sequentially for a given agent.
 
-<Tabs>
-  <Tab title="v1.x">
 ```python
 from agency_swarm import Agent, ModelSettings
 
@@ -22,18 +20,6 @@ agent = Agent(
     model_settings=ModelSettings(parallel_tool_calls=False),
 )
 ```
-  </Tab>
-  <Tab title="v0.x">
-```python
-from agency_swarm import Agent
-
-agent = Agent(
-    name="MyAgent",
-    parallel_tool_calls=False,
-)
-```
-  </Tab>
-</Tabs>
 
 To force sequential execution for a specific tool regardless of that setting, set `one_call_at_a_time = True` in the tool’s `ToolConfig`. See [Advanced Tool Configuration](/core-framework/tools/custom-tools/configuration).
 
@@ -41,19 +27,10 @@ To force sequential execution for a specific tool regardless of that setting, se
 
 If your `files_folder` ends with `_vs_<vector_store_id>`, Agency Swarm automatically associates files with that Vector Store and adds `FileSearchTool` to the Agent. The `include_search_results` behavior can be toggled via the Agent’s `include_search_results` flag.
 
-Note: in v0.x you could configure `file_search` directly on the Agent (Assistants API). In v1.x prefer the `files_folder` + Vector Store convention.
-
-#### File Search Configuration (v0.x)
-
-Parameters:
-- `max_num_results`: The maximum number of results the file search tool should output. The default is 20 for `gpt-4*` models and 5 for `gpt-3.5-turbo`. This number should be between 1 and 50 inclusive. Note that the file search tool may output fewer than `max_num_results` results.
-- `ranking_options`: The ranking options for the file search. If not specified, the file search tool will use the `auto` ranker and a score_threshold of 0. See the [file search tool documentation](https://platform.openai.com/docs/assistants/tools/file-search#customizing-file-search-settings) for more information.
-
 ### Output Validation
 
-v1.x (Agents SDK): Use `output_guardrails` on the `Agent` to validate outputs. See the detailed guide: [Output Validation](/additional-features/output-validation). For a complete working example, see: [examples/response_validation.py](https://github.com/VRSEN/agency-swarm/blob/main/examples/response_validation.py).
-
-v0.x (Response Validator): You can validate responses before sending them to the user or other agents by defining a `response_validator` method on the Agent. This method should raise an error if the response is invalid, allowing the agent to correct itself.
+Use `output_guardrails` on the `Agent` to validate outputs. See the detailed guide: [Input and Output Validation](/additional-features/input-output-validation).    
+For a complete working example, see: [examples/response_validation.py](https://github.com/VRSEN/agency-swarm/blob/main/examples/response_validation.py).
 
 ### Few‑Shot Examples
 

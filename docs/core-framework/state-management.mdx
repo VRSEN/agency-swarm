@@ -6,9 +6,6 @@ icon: "database"
 
 Agency Swarm conveniently manages the state of your agents and threads, simplifying the agent creation and management process.
 
-<Tabs defaultValue="v1.x">
-<Tab title="v1.x">
-
 ## Agent State Management
 
 With the new https://openai.github.io/openai-agents-python, agents (formerly assistants) are now stateless - eliminating the need to save and pass agent settings for chat persistence. The framework only needs to maintain the conversation history, which Agency Swarm manages through its thread system.
@@ -25,35 +22,6 @@ Since managing conversation state is now a responsibility of the developer in th
     Maintains ongoing conversations without manual history management.
   </Card>
 </CardGroup>
-
-</Tab>
-<Tab title="v0.x">
-
-<Info>
-v0.x is the **previous production version**. Install with: `pip install "agency-swarm<1.0.0"`
-</Info>
-
-## Agent State Management (Assistants API)
-
-This section applies to older versions (v0.x). In OpenAI Assistants API, all agents needed to be updated before they could be used. Agency Swarm managed this by maintaining a local `settings.json` file and comparing local settings with the ones stored on OpenAI's servers. If there were any differences, the Assistants were updated on OpenAI's servers.
-
-<img src="/images/state-management.png" alt="State Management" />
-
-## Thread State Management (Assistants API)
-
-Additionally, OpenAI's Assistants API managed the conversation context through threads. A thread represented a persistent conversation between an assistant and a user, automatically handling the storage and truncation of messages to fit within the model's context window.
-
-<CardGroup cols={2}>
-  <Card title="Persistent Conversations" icon="messages">
-    Maintains ongoing conversations without manual history management.
-  </Card>
-  <Card title="Automatic Context Management" icon="scissors">
-    Handles message storage and truncation within token limits.
-  </Card>
-</CardGroup>
-
-</Tab>
-</Tabs>
 
 ## Next Steps
 
