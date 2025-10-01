@@ -50,15 +50,15 @@ In this example, calling the Query Database tool stores database context, which 
         """
         question: str = Field(..., description="The query to execute.")
 
-        def run(self):
+        async def run(self):
             # Fetch data based on the question
-            context = query_database_api(question)
+            context = query_database_api(self.question)
 
             # Store the context in the agency context
             self._shared_state.set('database_context', context)
             # Same as
             # self.context.set('database_context', context)
-            self._shared_state.set('last_query', question)
+            self._shared_state.set('last_query', self.question)
 
             return "Database context has been retrieved and stored successfully."
 
@@ -66,7 +66,7 @@ In this example, calling the Query Database tool stores database context, which 
         """
         Provides answers based on the context stored in the agency context.
         """
-        def run(self):
+        async def run(self):
             # Access the stored context
             context = self._shared_state.get('database_context')
             # Same as
@@ -258,7 +258,7 @@ If you're migrating from Agency Swarm v0.x, and want to use new FunctionTool ins
 **BaseTool Pattern:**
 ```python
 class MyTool(BaseTool):
-    def run(self):
+    async def run(self):
         self._shared_state.set("key", "value")
         data = self._shared_state.get("key", "default")
         return "Done"
