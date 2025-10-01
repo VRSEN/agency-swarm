@@ -89,7 +89,7 @@
                         "pages": [
                             "additional-features/agency-context",
                             "additional-features/few-shot-examples",
-                            "additional-features/output-validation",
+                            "additional-features/input-output-validation",
                             "additional-features/streaming",
                             "additional-features/fastapi-integration",
                             "additional-features/mcp-tools-server",

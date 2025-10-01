@@ -54,6 +54,7 @@ Prime Directive: Rigorously compare every user request with patterns established
 - Search for similar patterns; identify required related changes globally.
 - Apply fixes to all instances at once—avoid piecemeal edits.
 - Investigate thoroughly: read complete files, trace full code paths. For debugging, always link failures to their root cause and commit.
+- Before editing, write down for yourself what you will change, why it is needed, and what evidence supports it; stop and request guidance if you cannot articulate this plan.
 - Escalate findings to the user immediately when failures/root causes are found. Never proceed with silent fixes.
 - Debug with systematic source analysis, logging, and minimal unit testing.
 - Edit incrementally: make small, focused changes, validating each with tests before continuing.
@@ -127,9 +128,11 @@ Agency Swarm is a multi-agent orchestration framework on OpenAI Agents SDK v1.x 
 - See `docs/migration/guide.mdx` for breaking changes
 - /docs/ is the current reference for v1.x
 
-### Documentation Rules (Mandatory)
-- All documentation writing and updates MUST follow `docs/mintlify.cursorrules` for formatting, components, links, and page metadata. Treat it as a mandatory rules file alongside this document.
+### Documentation Rules
+- All documentation writing and updates MUST follow `docs/mintlify.cursorrules` for formatting, components, links, and page metadata.
 - Reference the exact code files relevant to the documented behavior so maintainers know where to look.
+- Before editing documentation, read the entire target page and any linked official references; record each source in your checklist or plan.
+- If disagreements about wording or scope persist after two iterations, stop, summarize the options, and escalate to the user for guidance instead of continuing revisions.
 
 ## Python Requirements
 - Python >= 3.12 (development on 3.13) — project developed and primarily tested on 3.13; CI ensures 3.12 compatibility.
@@ -213,7 +216,7 @@ Strictness
 - Before composing a commit message, run `git diff --cached | cat` and base the message on that diff only.
  - Immediately before committing, re-run `git status --porcelain` and `git diff --cached` to confirm the staged files still match intent.
 
-- Commit message structure (MANDATORY)
+- Commit message structure
   - Title: `type: concise change summary`; imperative; no trailing period.
   - Body: bullets only; one change per line; no paragraphs.
   - Guidance:
@@ -260,7 +263,7 @@ Strictness
 - User expects explicit status reporting, test-first mindset, and directness. Ask at most one question at a time. After any negative feedback or protocol breach, switch to manual approval: present minimal options and wait for explicit approval before changes; re-run Step 1 before and after edits. Update this document first after negative feedback.
 - Always include the distilled gist of any new insight directly in this file when relevant, but prefer improving existing lines and sections.
 
-## Mandatory Search Discipline
+## Search Discipline
 - After changes, aggressively search for and clean up related patterns throughout the codebase.
 
 ## End-of-Task Checklist
@@ -275,6 +278,6 @@ Strictness
 
 Always self-improve: when you find a recurring mistake or better practice, update this file with the refined rule and follow it.
 
-## Iterative Polishing (Mandatory)
+## Iterative Polishing
 - Iterate on the staged diff until it is correct and minimal (up to 100 passes). Treat iteration as part of delivery, not an optional step. Escalate any key decision to a human for explicit approval before implementation.
 - Stop iterating when no further measurable improvement is possible.

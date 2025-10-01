@@ -6,7 +6,7 @@ in Agency Swarm v1.x. Shows how to implement validation rules that enforce
 specific message formats and prevent inappropriate content in responses.
 
 For more information on guardrails, visit agency-swarm documentation:
-https://agency-swarm.ai/additional-features/output-validation
+https://agency-swarm.ai/additional-features/input-output-validation
 
 ## Key Concepts
 
