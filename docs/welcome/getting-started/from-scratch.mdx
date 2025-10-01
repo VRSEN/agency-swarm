@@ -50,7 +50,7 @@ icon: "code"
   <Step title="Create Tools">
     In 1.x versions of the framework, you have 2 ways of defining custom tools:
 
-    By extending agency_swarm's `BaseTool` class and implementing the `run` method.
+    By extending agency_swarm's `BaseTool` class and implementing the async `run` method.
 
     **my_custom_tool_class.py:**
 
@@ -73,7 +73,7 @@ icon: "code"
         # Additional Pydantic fields as required
         # ...
 
-        def run(self):
+        async def run(self):
             """
             The implementation of the run method, where the tool's main functionality is executed.
             This method should utilize the fields defined above to perform the task.

@@ -66,7 +66,7 @@ To create a custom tool, typically you need to follow these steps:
     Add the functionality that will be executed when the tool is called.
 
     ```python
-    def run(self):
+    async def run(self):
         # Implement the tool's functionality
         result = eval(self.expression)
         return str(result)
@@ -79,9 +79,11 @@ To create a custom tool, typically you need to follow these steps:
     Test the tool independently to ensure it behaves as expected. We recommend adding a `if __name__ == "__main__":` block at the end of the tool file:
 
     ```python
+    import asyncio
+
     if __name__ == "__main__":
         calc = Calculator(expression="2 + 2 * 3")
-        print(calc.run())  # Output should be '8'
+        print(asyncio.run(calc.run()))  # Output should be '8'
     ```
   </Step>
 
@@ -138,13 +140,15 @@ class Calculator(BaseTool):
         if self.expression.endswith("/0"):
             raise ValueError("Division by zero is not permitted")
 
-    def run(self):
+    async def run(self):
         result = eval(self.expression)
         return str(result)
 
 if __name__ == "__main__":
+    import asyncio
+
     calc = Calculator(expression="2 + 2 * 3")
-    print(calc.run())  # Output should be '8'
+    print(asyncio.run(calc.run()))  # Output should be '8'
 ```
 
 </Tab>
