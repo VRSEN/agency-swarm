@@ -1,4 +1,4 @@
-from __future__ import annotations
+"""Integration tests for the FastAPI metadata endpoint."""
 
 import pytest
 

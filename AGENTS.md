@@ -176,9 +176,11 @@ Avoid growing already large files. Prefer extracting focused modules. If you mus
 
 Strictness
 - No `# type: ignore` in production code. Fix types or refactor.
-- Never hardcode temporary paths or ad‑hoc directories in code or tests.
- - Do not add multi‑path fallbacks; choose one clear path and fail fast if prerequisites are missing.
- - Imports at top‑level only; do not place imports inside functions or conditional blocks. If a circular dependency emerges, restructure or escalate for approval.
+- Never hardcode temporary paths or ad-hoc directories in code or tests.
+ - Do not add multi-path fallbacks; choose one clear path and fail fast if prerequisites are missing.
+ - Imports at top-level only; do not place imports inside functions or conditional blocks. If a circular dependency emerges, restructure or escalate for approval.
+- Immediately reflect user feedback in this document whenever it alters expectations (e.g., terminology bans, workflow clarifications).
+- Describe changes precisely—do not claim to fix flakiness unless you observed and documented the flake.
 
 ## 🚨 ZERO FUNCTIONAL CHANGES DURING REFACTORING
 
