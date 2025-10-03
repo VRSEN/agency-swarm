@@ -45,9 +45,6 @@ class AgentFileManager:
     def __init__(self, agent):
         self.agent = agent
 
-    def _should_skip_file(self, filename: str) -> bool:
-        return filename.startswith(".") or filename.startswith("__")
-
     def upload_file(self, file_path: str, include_in_vector_store: bool = True) -> str:
         """
         Uploads a local file to OpenAI and optionally associates it with the agent's
@@ -370,6 +367,9 @@ class AgentFileManager:
         # Delegate to the agent's path resolution method for consistency
         return self.agent.get_class_folder_path()
 
+    def _should_skip_file(self, filename: str) -> bool:
+        return filename.startswith(".") or filename.startswith("__")
+
     def _select_vector_store_path(self, folder_path: Path) -> tuple[Path | None, list[Path]]:
         """Determine which directory should be used for the agent's files folder."""
         base_name = folder_path.name
@@ -397,7 +397,7 @@ class AgentFileManager:
             logger.error(f"Files folder '{folder_path}' is not a directory. Skipping...")
             return None, []
 
-        if "_vs_" in base_name and not folder_path.exists():
+        if not folder_path.exists():
             logger.error(f"Files folder '{folder_path}' does not exist. Skipping...")
             return None, []
 

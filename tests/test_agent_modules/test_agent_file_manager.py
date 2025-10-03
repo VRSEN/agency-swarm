@@ -253,12 +253,12 @@ class TestAgentFileManager:
         assert mock_agent.files_folder_path == expected_dir.resolve()
         assert "Files folder" not in caplog.text
 
-    def test_parse_files_folder_creates_directory_when_missing(self, tmp_path, caplog):
+    def test_missing_files_folder(self, tmp_path, caplog):
         """Create files folder when the configured directory does not exist yet."""
 
         mock_agent = Mock()
         mock_agent.name = "TestAgent"
-        mock_agent.files_folder = "missing"
+        mock_agent.files_folder = "missing_folder"
         mock_agent.get_class_folder_path.return_value = str(tmp_path)
         mock_agent.tools = []
         mock_agent.add_tool = Mock()
@@ -275,11 +275,9 @@ class TestAgentFileManager:
         ):
             file_manager.parse_files_folder_for_vs_id()
 
-        expected_dir = tmp_path / "missing_vs_created789"
-        assert expected_dir.exists()
-        assert mock_agent._associated_vector_store_id == "vs_created789"
-        assert mock_agent.files_folder_path == expected_dir.resolve()
-        assert "Files folder" not in caplog.text
+        # Verify that the error log message was captured
+        expected_log = "missing_folder' does not exist. Skipping..."
+        assert expected_log in caplog.text
 
     def test_parse_files_folder_when_path_is_file_not_directory(self, tmp_path, caplog):
         """
