@@ -408,7 +408,7 @@ class AgentFileManager:
 
     def _create_or_identify_vector_store(self, folder_path: Path) -> str | None:
         """Create vector store and rename folder, or extract existing VS ID from path."""
-        vs_id_match = re.search(r"(.+)_(vs_[a-zA-Z0-9_]{15,})$", str(folder_path))
+        vs_id_match = re.search(r"(.+)_(vs_[a-zA-Z0-9]{15,})$", str(folder_path))
 
         if vs_id_match:
             if not folder_path.exists():
