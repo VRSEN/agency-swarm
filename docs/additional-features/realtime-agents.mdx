@@ -1,0 +1,158 @@
+---
+title: "Realtime Agents"
+description: "Build low-latency voice and multimodal agents with Agency Swarm (v1.0+)."
+icon: "microphone"
+---
+
+Agency Swarm supports **realtime voice** and **multimodal** sessions on top of OpenAI’s Realtime API. You **write agents the same way** you do for text-based chats, and Agency Swarm turns them into realtime voice assistants.
+
+<Note>
+  This feature is supported in **Agency Swarm v1.0 or later**.
+</Note>
+
+Agency Swarm is adding a `run_realtime` helper that creates the FastAPI server, connects to OpenAI Realtime, and exposes optional Twilio bridges without manual WebSocket endpoints.
+
+## What you can build
+
+- **Voice-first assistants** for web, mobile, or phone.
+- **Interruptible** dialogs: users talk over the model; it stops and pivots.
+- **Multimodal** sessions mixing audio + text + images in one stream.
+
+## How it works (at a glance)
+
+Client (mic/WebRTC or Twilio) ↔ **FastAPI WebSocket** ↔ **OpenAI Realtime** ↔ **Agency Swarm Agent + Tools**.
+
+The session uses **one model (e.g. `gpt-realtime`)** and a **session-level voice** (e.g., `alloy`, `verse`). Voice is picked at session start.
+
+## Requirements
+
+- OpenAI access to the **Realtime API** and the `gpt-realtime` model.
+- Python 3.12+.
+- `agency-swarm` v1.0+ with FastAPI extras.
+
+```bash
+pip install "agency-swarm[fastapi]" twilio
+```
+
+## Quickstart (FastAPI, WebSocket)
+
+Define your agent like usual:
+
+```python
+# voice_agent.py
+from agency_swarm import Agent, function_tool
+
+@function_tool
+def lookup_order(order_id: str) -> str:
+    """Return a short order status by ID."""
+    return f"Order {order_id} is on its way 🚚"
+
+voice_agent = Agent(
+    name="Voice Concierge",
+    instructions="Speak briefly. Ask one question at a time. Use tools only when needed.",
+    tools=[lookup_order],
+)
+```
+
+Start the server with the new helper:
+
+```python
+# server.py
+from agency_swarm.integrations import run_realtime
+from voice_agent import voice_agent
+
+if __name__ == "__main__":
+    run_realtime(
+        agent=voice_agent,
+        model="gpt-realtime",
+        voice="alloy",
+        host="0.0.0.0",
+        port=8000,
+    )
+```
+
+`run_realtime` starts the FastAPI app, opens the Realtime connection, and hosts a `/realtime` WebSocket endpoint for you. There is no additional routing code to write.
+
+<Note>
+- **Single-model rule:** realtime uses one model per session; per-agent `model` is ignored during voice sessions.   
+- **Voice:** choose at session start. You can’t switch voices after audio has begun.
+</Note>
+
+## Add a simple web client (browser)
+
+Use the official OpenAI Realtime example client (WebRTC or WebSocket). Point it to `ws://localhost:8000/realtime` (or your deployed address), and you’ll get mic capture, response audio, and a minimal UI.
+- Example: FastAPI app + client (OpenAI “realtime/app” sample).
+- Event flow: send conversation.item.create (user input), then response.create to get the model to answer.
+
+See OpenAI’s example for a copy-paste front end and event payloads.
+
+## Twilio (phone calls) — optional
+
+Pass a Twilio number to the helper and it will respond with the TwiML + media-stream bridge automatically:
+
+```python
+run_realtime(
+    agent=voice_agent,
+    model="gpt-realtime",
+    voice="alloy",
+    twilio_number="+15551234567",
+    twilio_audio_format="g711_ulaw",
+    turn_detection={"type": "server_vad"},
+)
+```
+
+### Notes
+
+- Use HTTPS (valid certs) so Twilio can open the WebSocket.
+- Keep the media stream async — never block the loop with slow I/O.
+- For local dev, tunnel with ngrok http 8000 and set your number’s webhook to /incoming-call.
+
+## Using multiple agents (handoffs)
+
+Realtime supports handoffs through the standard `Agency` communication flows. Register the delegation routes with `SendMessageHandoff` so the session adapter transfers control to the right specialist.
+
+```python
+from agency_swarm import Agency, Agent
+from agency_swarm.tools import SendMessageHandoff
+
+billing = Agent(name="Billing", instructions="Answer billing questions briefly.")
+faq = Agent(name="FAQ", instructions="Answer FAQs briefly.")
+
+concierge = Agent(
+    name="Concierge",
+    instructions="Triage the request, then delegate if needed.",
+)
+
+agency = Agency(
+    concierge,
+    communication_flows=[
+        (concierge > billing, SendMessageHandoff),
+        (concierge > faq, SendMessageHandoff),
+    ],
+)
+
+# Start your realtime session with `agent=concierge` as in the Quickstart.
+```
+
+<Note>
+  Handoffs are supported by the underlying RealtimeAgent type. In telephony transports, test thoroughly—interrupts and audio buffer management can affect stability during/after a handoff. Keep sub-agents concise. 
+</Note>
+
+## Operational tips
+
+- Interrupts: With server VAD, the API emits interruption events; keep your UI/telephony bridge ready to truncate playback and resume.
+- Latency budgets: Run the realtime server in its own process; avoid heavy CPU in the event loop.
+- Observability: Log tool invocations and measure barge-in to stop and first-token to user latencies.
+- Fallbacks: Reuse the same agents for text streaming endpoints if voice is unavailable.
+
+## Troubleshooting
+
+- No audio or clipped speech: Check input_audio_format/output_audio_format (Twilio uses μ-law 8k).
+- Voice stuck on default: Voice must be set before the model emits audio.
+- Per-agent models ignored: By design in realtime — choose the model at session start.
+- Handoff loops: Keep handoff graphs shallow; return to the primary agent explicitly when finished.
+
+## See also
+
+- FastAPI Integration (HTTP/REST patterns you can run alongside realtime): /additional-features/fastapi-integration
+- OpenAI Realtime guides, models, and event references (if you need protocol details).
