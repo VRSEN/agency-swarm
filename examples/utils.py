@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
+import shutil
+import tempfile
+from collections.abc import Iterable, Iterator
+from contextlib import contextmanager
+from pathlib import Path
 
 
 def _extract_text(content: object) -> str:
@@ -38,3 +42,30 @@ def print_history(thread_manager, roles: Iterable[str] = ("assistant", "system")
             role = f"{m.get('callerAgent')}:"
         content = _extract_text(m.get("content"))
         print(f"   [{role}] {content}")
+
+
+@contextmanager
+def temporary_files_folder(source_subdir: str = "data") -> Iterator[Path]:
+    """Copy example files into a disposable `files` directory.
+
+    The provided directory (relative to the examples folder) is copied into a
+    temporary location where the folder is named exactly `files`. Vector store
+    renaming can freely mutate that directory without touching the original
+    assets. The temporary tree is removed on exit.
+    """
+
+    examples_dir = Path(__file__).parent
+    source_dir = examples_dir / source_subdir
+
+    if not source_dir.exists():
+        raise FileNotFoundError(f"Example source directory not found: {source_dir}")
+
+    temp_root = Path(tempfile.mkdtemp(prefix="agency-swarm-files-"))
+    destination = temp_root / "files"
+
+    shutil.copytree(source_dir, destination)
+
+    try:
+        yield destination
+    finally:
+        shutil.rmtree(temp_root, ignore_errors=True)

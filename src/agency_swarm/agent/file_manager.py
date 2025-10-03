@@ -156,140 +156,61 @@ class AgentFileManager:
         else:
             raise FileNotFoundError(f"File not found: {f_path}")
 
-    def _parse_files_folder_for_vs_id(self) -> None:
-        """Synchronously parses files_folder for VS ID and sets path."""
+    def parse_files_folder_for_vs_id(self) -> None:
+        """
+        Discover or create a vector store for the agent's files folder.
+
+        Algorithm:
+        1. Find existing vector store directories (prioritize explicit _vs_ paths)
+        2. Create new vector store and rename folder if needed
+        3. Find new files in original directory
+        4. Upload all files and attach tools
+        """
         self.agent.files_folder_path = None
-        self.agent._associated_vector_store_id = None  # Reset
+        self.agent._associated_vector_store_id = None
 
         if not self.agent.files_folder:
             return
 
-        folder_path = Path(self.agent.get_class_folder_path()) / Path(self.agent.files_folder)
-        original_folder_path = folder_path  # Keep reference to original directory
+        base_folder_path = Path(self.agent.get_class_folder_path()) / Path(self.agent.files_folder)
+        folder_path, candidates = self._select_vector_store_path(base_folder_path)
+        original_folder_path = base_folder_path
 
-        # ALWAYS check for existing vector store directories first, regardless of original directory existence
-        parent = folder_path.parent
-        base_name = folder_path.name
-        base_name_without_vs = base_name.split("_vs_")[0] if "_vs_" in base_name else base_name
-
-        candidates = list(parent.glob(f"{base_name_without_vs}_vs_*"))
-
-        # If the provided folder already points to a vector store directory, prefer it.
-        if folder_path.exists() and "_vs_" in base_name and folder_path not in candidates:
-            candidates.insert(0, folder_path)
+        if folder_path is None:
+            return
 
         if candidates:
-            # Use the first existing vector store directory found
-            folder_path = candidates[0]
             self.agent.files_folder = str(folder_path)
             logger.info(
                 f"Agent {self.agent.name}: Found existing vector store folder '{folder_path}' "
                 f"- reusing instead of creating new one."
             )
-        elif not folder_path.exists():
-            # Try resolving relative to the class folder if not absolute
-            if not folder_path.is_absolute():
-                folder_path = Path(self.agent.get_class_folder_path()).joinpath(self.agent.files_folder)
-            folder_path = folder_path.resolve()
-            if not folder_path.is_dir():
-                logger.error(f"Files folder '{folder_path}' is not a directory. Skipping...")
-                return
 
-        folder_str = str(folder_path)
-        base_path_str = folder_str
-        # Regex to capture base path and a VS ID that itself starts with 'vs_'
-        vs_id_match = re.search(r"(.+)_(vs_[a-zA-Z0-9_]+)$", folder_str)
+        vs_id = self._create_or_identify_vector_store(folder_path)
+        if vs_id is None:
+            self.agent.files_folder_path = None
+            return
 
-        if not vs_id_match:
-            folder_name = Path(base_path_str).name
-            openai_vs_name = folder_name
-            logger.info(
-                f"Agent {self.agent.name}: files_folder '{folder_str}' does not specify a Vector Store ID "
-                "with '_vs_' suffix. Creating a new Vector Store."
-            )
-            created_vs = self.agent.client_sync.vector_stores.create(name=openai_vs_name)
-            vs_id = created_vs.id
-            new_folder_name = f"{folder_name}_{vs_id}"
-            parent_dir = Path(base_path_str).parent
-            new_folder_path = parent_dir / new_folder_name
-            # Rename the folder if it exists and is not already named with the VS id
-            try:
-                if Path(base_path_str).exists() and Path(base_path_str).name != new_folder_name:
-                    # Rename the directory to include the vector store ID
-                    Path(base_path_str).rename(new_folder_path)
-                    base_path_str = str(new_folder_path)
-                    logger.info(f"Agent {self.agent.name}: Renamed folder to {new_folder_path}")
-                elif not Path(base_path_str).exists():
-                    # If the folder does not exist, create it with the new name
-                    new_folder_path.mkdir(parents=True, exist_ok=True)
-                    base_path_str = str(new_folder_path)
-                    logger.info(f"Agent {self.agent.name}: Created files folder {new_folder_path}")
-                else:
-                    # Folder already has the correct name
-                    base_path_str = str(Path(base_path_str).resolve())
-                self.agent._associated_vector_store_id = vs_id
-            except Exception as e:
-                logger.error(f"Agent {self.agent.name}: Error renaming/creating files_folder to {new_folder_path}: {e}")
-                self.agent.files_folder_path = None
-                return
-        else:
-            self.agent._associated_vector_store_id = vs_id_match.group(2)
+        self.agent._associated_vector_store_id = vs_id
+        if not self.agent.files_folder_path:
+            self.agent.files_folder_path = folder_path.resolve()
+        folder_path = self.agent.files_folder_path
 
-        self.agent.files_folder_path = Path(base_path_str).resolve()
-
-        # Check for new files in the original directory when reusing vector store
-        is_reusing_vector_store = candidates and original_folder_path.exists()
-        new_files_to_process = []
-
-        if is_reusing_vector_store:
-            logger.info(
-                f"Agent {self.agent.name}: Checking for new files in original directory '{original_folder_path}'"
-            )
-
-            # Get list of files already processed (have _file-<id> suffix) in vector store directory
-            processed_files = set()
-            for vs_file in self.agent.files_folder_path.iterdir():
-                if vs_file.is_file() and "_file-" in vs_file.name:
-                    # Extract original filename: "name_file-<id>.ext" -> "name.ext"
-                    original_name = vs_file.name.split("_file-")[0] + vs_file.suffix
-                    processed_files.add(original_name)
-
-            # Check original directory for new files (not yet processed)
-            for original_file in original_folder_path.iterdir():
-                if original_file.is_file() and original_file.name not in processed_files:
-                    logger.info(f"Agent {self.agent.name}: Found new file to process: {original_file.name}")
-                    new_files_to_process.append(original_file)
+        new_files: list[Path] = []
+        if candidates and original_folder_path and Path(original_folder_path).exists():
+            new_files = self._find_new_files_to_process(Path(original_folder_path))
 
         code_interpreter_file_ids = []
-
-        # Process existing files in vector store directory
         for file in os.listdir(self.agent.files_folder_path):
-            # Ideally images should be provided as attachments, but code interpreter tool can also handle images.
-            if Path(file).suffix.lower() in CODE_INTERPRETER_FILE_EXTENSIONS + IMAGE_FILE_EXTENSIONS:
-                file_id = self.upload_file(
-                    os.path.join(self.agent.files_folder_path, file), include_in_vector_store=False
-                )
+            file_id = self._upload_file_by_type(self.agent.files_folder_path / file)
+            if file_id:
                 code_interpreter_file_ids.append(file_id)
-            elif Path(file).suffix.lower() in FILE_SEARCH_FILE_EXTENSIONS:
-                self.upload_file(os.path.join(self.agent.files_folder_path, file))
-            else:
-                raise AgentsException(f"Unsupported file extension: {Path(file).suffix.lower()} for file {file}")
 
-        # Process new files found in original directory
-        for new_file in new_files_to_process:
-            logger.info(f"Agent {self.agent.name}: Processing new file {new_file.name}")
-
-            # Upload the new file (this will automatically rename it with file ID and move to vector store dir)
-            if new_file.suffix.lower() in CODE_INTERPRETER_FILE_EXTENSIONS + IMAGE_FILE_EXTENSIONS:
-                file_id = self.upload_file(str(new_file), include_in_vector_store=False)
+        for new_file in new_files:
+            file_id = self._upload_file_by_type(new_file)
+            if file_id:
                 code_interpreter_file_ids.append(file_id)
-            elif Path(new_file).suffix.lower() in FILE_SEARCH_FILE_EXTENSIONS:
-                self.upload_file(str(new_file))
-            else:
-                ext = Path(new_file).suffix.lower()
-                raise AgentsException(f"Unsupported file extension: {ext} for file {new_file}")
 
-        # Add FileSearchTool if VS ID is parsed.
         if self.agent._associated_vector_store_id:
             self.add_file_search_tool(vector_store_id=self.agent._associated_vector_store_id)
         else:
@@ -442,3 +363,109 @@ class AgentFileManager:
         """Get the directory where the agent was instantiated for relative path resolution."""
         # Delegate to the agent's path resolution method for consistency
         return self.agent.get_class_folder_path()
+
+    def _select_vector_store_path(self, folder_path: Path) -> tuple[Path | None, list[Path]]:
+        """Determine which directory should be used for the agent's files folder."""
+        base_name = folder_path.name
+        if not base_name:
+            return None, []
+
+        vs_match = re.match(r"^(.+)_vs_[a-zA-Z0-9_]+$", base_name)
+        base_name_without_vs = vs_match.group(1) if vs_match else base_name
+
+        candidates = [
+            candidate for candidate in folder_path.parent.glob(f"{base_name_without_vs}_vs_*") if candidate.is_dir()
+        ]
+
+        if folder_path.exists() and folder_path.is_dir() and "_vs_" in base_name:
+            folder_resolved = folder_path.resolve()
+            resolved_candidates = [candidate.resolve() for candidate in candidates]
+            if folder_resolved in resolved_candidates:
+                candidates.pop(resolved_candidates.index(folder_resolved))
+            candidates.insert(0, folder_path)
+
+        if candidates:
+            return candidates[0], candidates
+
+        if folder_path.exists() and not folder_path.is_dir():
+            logger.error(f"Files folder '{folder_path}' is not a directory. Skipping...")
+            return None, []
+
+        if "_vs_" in base_name and not folder_path.exists():
+            logger.error(f"Files folder '{folder_path}' does not exist. Skipping...")
+            return None, []
+
+        if folder_path.exists() and folder_path.is_dir():
+            return folder_path, []
+
+        return folder_path, []
+
+    def _create_or_identify_vector_store(self, folder_path: Path) -> str | None:
+        """Create vector store and rename folder, or extract existing VS ID from path."""
+        vs_id_match = re.search(r"(.+)_(vs_[a-zA-Z0-9_]+)$", str(folder_path))
+
+        if vs_id_match:
+            if not folder_path.exists():
+                logger.error(
+                    f"Agent {self.agent.name}: Expected vector store folder '{folder_path}' but it does not exist."
+                )
+                return None
+
+            if not folder_path.is_dir():
+                logger.error(f"Files folder '{folder_path}' is not a directory. Skipping...")
+                return None
+
+            self.agent.files_folder_path = folder_path.resolve()
+            return vs_id_match.group(2)
+
+        logger.info(
+            f"Agent {self.agent.name}: files_folder '{folder_path}' does not specify a Vector Store ID. "
+            "Creating a new Vector Store."
+        )
+        created_vs = self.agent.client_sync.vector_stores.create(name=folder_path.name)
+        new_folder_path = folder_path.parent / f"{folder_path.name}_{created_vs.id}"
+
+        try:
+            if folder_path.exists() and folder_path.name != new_folder_path.name:
+                folder_path.rename(new_folder_path)
+                logger.info(f"Agent {self.agent.name}: Renamed folder to {new_folder_path}")
+            elif not folder_path.exists():
+                new_folder_path.mkdir(parents=True, exist_ok=True)
+                logger.info(f"Agent {self.agent.name}: Created files folder {new_folder_path}")
+
+            self.agent.files_folder_path = new_folder_path.resolve()
+            return created_vs.id
+        except Exception as e:
+            logger.error(f"Agent {self.agent.name}: Error renaming/creating files_folder to {new_folder_path}: {e}")
+            return None
+
+    def _find_new_files_to_process(self, original_folder_path: Path) -> list[Path]:
+        """Find new files in original directory that haven't been processed yet."""
+        if not original_folder_path.exists():
+            return []
+
+        processed_files = set()
+        for vs_file in self.agent.files_folder_path.iterdir():
+            if vs_file.is_file() and "_file-" in vs_file.name:
+                original_name = vs_file.name.split("_file-")[0] + vs_file.suffix
+                processed_files.add(original_name)
+
+        new_files = []
+        for original_file in original_folder_path.iterdir():
+            if original_file.is_file() and original_file.name not in processed_files:
+                logger.info(f"Agent {self.agent.name}: Found new file to process: {original_file.name}")
+                new_files.append(original_file)
+
+        return new_files
+
+    def _upload_file_by_type(self, file_path: Path, include_in_vs: bool = True) -> str | None:
+        """Upload file and return code interpreter file ID if applicable."""
+        ext = file_path.suffix.lower()
+
+        if ext in CODE_INTERPRETER_FILE_EXTENSIONS + IMAGE_FILE_EXTENSIONS:
+            return self.upload_file(str(file_path), include_in_vector_store=False)
+        elif ext in FILE_SEARCH_FILE_EXTENSIONS:
+            self.upload_file(str(file_path))
+            return None
+        else:
+            raise AgentsException(f"Unsupported file extension: {ext} for file {file_path}")

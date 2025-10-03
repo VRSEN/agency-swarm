@@ -147,7 +147,7 @@ class TestAgentFileManager:
             patch("os.listdir", return_value=[]),
             caplog.at_level(logging.ERROR),
         ):
-            file_manager._parse_files_folder_for_vs_id()
+            file_manager.parse_files_folder_for_vs_id()
 
         assert mock_agent.client_sync.vector_stores.create.call_count == 0
         assert mock_agent._associated_vector_store_id == "vs_existing123"
@@ -156,7 +156,7 @@ class TestAgentFileManager:
         assert "Files folder" not in caplog.text
 
     def test_parse_files_folder_creates_vector_store_without_warning(self, tmp_path, caplog):
-        """Create and rename folder on first discovery without emitting errors."""
+        """Create and rename folder on first discovery when directory already exists."""
 
         mock_agent = Mock()
         mock_agent.name = "TestAgent"
@@ -178,7 +178,7 @@ class TestAgentFileManager:
             patch("os.listdir", return_value=[]),
             caplog.at_level(logging.ERROR),
         ):
-            file_manager._parse_files_folder_for_vs_id()
+            file_manager.parse_files_folder_for_vs_id()
 
         expected_dir = tmp_path / "files_vs_created456"
         assert expected_dir.exists()
@@ -186,12 +186,68 @@ class TestAgentFileManager:
         assert mock_agent.files_folder_path == expected_dir.resolve()
         assert "Files folder" not in caplog.text
 
-    def test_parse_files_folder_logs_error_for_missing_directory(self, tmp_path, caplog):
-        """Emit an error when the configured directory cannot be found."""
+    def test_parse_files_folder_creates_directory_when_missing(self, tmp_path, caplog):
+        """Create files folder when the configured directory does not exist yet."""
 
         mock_agent = Mock()
         mock_agent.name = "TestAgent"
         mock_agent.files_folder = "missing"
+        mock_agent.get_class_folder_path.return_value = str(tmp_path)
+        mock_agent.tools = []
+        mock_agent.add_tool = Mock()
+        mock_agent.client_sync.vector_stores.create.return_value = Mock(id="vs_created789")
+
+        file_manager = AgentFileManager(mock_agent)
+
+        with (
+            patch.object(AgentFileManager, "upload_file", return_value="file-1"),
+            patch.object(AgentFileManager, "add_file_search_tool"),
+            patch.object(AgentFileManager, "add_code_interpreter_tool"),
+            patch("os.listdir", return_value=[]),
+            caplog.at_level(logging.ERROR),
+        ):
+            file_manager.parse_files_folder_for_vs_id()
+
+        expected_dir = tmp_path / "missing_vs_created789"
+        assert expected_dir.exists()
+        assert mock_agent._associated_vector_store_id == "vs_created789"
+        assert mock_agent.files_folder_path == expected_dir.resolve()
+        assert "Files folder" not in caplog.text
+
+    def test_parse_files_folder_when_path_is_file_not_directory(self, tmp_path, caplog):
+        """
+        Test that files_folder pointing to a file (not directory) logs error.
+
+        Reproduces bug where a file exists at the files_folder path instead of
+        a directory, and no vector store candidates are found.
+        """
+        mock_agent = Mock()
+        mock_agent.name = "TestAgent"
+        mock_agent.files_folder = "files"
+        mock_agent.get_class_folder_path.return_value = str(tmp_path)
+        mock_agent.tools = []
+        mock_agent.client_sync = Mock()
+
+        # Create a FILE named "files" instead of a directory
+        files_path = tmp_path / "files"
+        files_path.write_text("This is a file, not a directory")
+
+        file_manager = AgentFileManager(mock_agent)
+
+        with caplog.at_level(logging.ERROR):
+            file_manager.parse_files_folder_for_vs_id()
+
+        assert "Files folder" in caplog.text
+        assert "is not a directory" in caplog.text
+        assert mock_agent.files_folder_path is None
+        assert mock_agent._associated_vector_store_id is None
+
+    def test_parse_files_folder_for_missing_vector_store_directory(self, tmp_path, caplog):
+        """Gracefully handle explicit vector store folders that no longer exist."""
+
+        mock_agent = Mock()
+        mock_agent.name = "TestAgent"
+        mock_agent.files_folder = "files_vs_missing123"
         mock_agent.get_class_folder_path.return_value = str(tmp_path)
         mock_agent.tools = []
         mock_agent.client_sync = Mock()
@@ -199,10 +255,119 @@ class TestAgentFileManager:
         file_manager = AgentFileManager(mock_agent)
 
         with caplog.at_level(logging.ERROR):
-            file_manager._parse_files_folder_for_vs_id()
+            file_manager.parse_files_folder_for_vs_id()
 
+        assert "does not exist" in caplog.text
         assert mock_agent.files_folder_path is None
-        assert "Files folder" in caplog.text
+        assert mock_agent._associated_vector_store_id is None
+
+    def test_glob_pattern_with_multiple_vs_in_name(self, tmp_path, caplog):
+        """
+        Test that folder names with multiple '_vs_' don't create overly broad glob patterns.
+
+        Ensures split logic properly extracts base name from patterns like "my_vs_test_vs_123".
+        """
+        mock_agent = Mock()
+        mock_agent.name = "TestAgent"
+        mock_agent.files_folder = "my_vs_test"
+        mock_agent.get_class_folder_path.return_value = str(tmp_path)
+        mock_agent.tools = []
+        mock_agent.add_tool = Mock()
+
+        correct_vs_dir = tmp_path / "my_vs_test_vs_abc123"
+        correct_vs_dir.mkdir()
+
+        unrelated_vs_dir = tmp_path / "my_vs_other_project_vs_xyz789"
+        unrelated_vs_dir.mkdir()
+
+        mock_agent.client_sync.vector_stores.create = Mock()
+
+        file_manager = AgentFileManager(mock_agent)
+
+        with (
+            patch.object(AgentFileManager, "upload_file", return_value="file-1"),
+            patch.object(AgentFileManager, "add_file_search_tool"),
+            patch.object(AgentFileManager, "add_code_interpreter_tool"),
+            patch("os.listdir", return_value=[]),
+            caplog.at_level(logging.INFO),
+        ):
+            file_manager.parse_files_folder_for_vs_id()
+
+        assert mock_agent.files_folder_path == correct_vs_dir.resolve()
+        assert mock_agent._associated_vector_store_id == "vs_abc123"
+        assert "my_vs_test_vs_abc123" in str(mock_agent.files_folder)
+
+    def test_explicit_vector_store_path_is_prioritized(self, tmp_path, caplog):
+        """
+        Test that explicitly specified vector store path is prioritized over glob results.
+
+        When user specifies an existing vector store, it should be used regardless of
+        what other vector stores match the glob pattern.
+        """
+        mock_agent = Mock()
+        mock_agent.name = "TestAgent"
+        mock_agent.files_folder = "files_vs_explicit456"
+        mock_agent.get_class_folder_path.return_value = str(tmp_path)
+        mock_agent.tools = []
+        mock_agent.add_tool = Mock()
+
+        vs_dir_1 = tmp_path / "files_vs_abc123"
+        vs_dir_1.mkdir()
+
+        vs_dir_explicit = tmp_path / "files_vs_explicit456"
+        vs_dir_explicit.mkdir()
+
+        vs_dir_3 = tmp_path / "files_vs_xyz789"
+        vs_dir_3.mkdir()
+
+        file_manager = AgentFileManager(mock_agent)
+
+        with (
+            patch.object(AgentFileManager, "upload_file", return_value="file-1"),
+            patch.object(AgentFileManager, "add_file_search_tool"),
+            patch.object(AgentFileManager, "add_code_interpreter_tool"),
+            patch("os.listdir", return_value=[]),
+            caplog.at_level(logging.INFO),
+        ):
+            file_manager.parse_files_folder_for_vs_id()
+
+        assert mock_agent.files_folder_path == vs_dir_explicit.resolve()
+        assert mock_agent._associated_vector_store_id == "vs_explicit456"
+        assert "files_vs_explicit456" in mock_agent.files_folder
+
+    def test_vector_store_discovery_with_underscores_in_base_name(self, tmp_path, caplog):
+        """
+        Test vector store discovery when base folder name has underscores.
+
+        Ensures "my_project_files" correctly finds "my_project_files_vs_123"
+        without matching unrelated folders.
+        """
+        mock_agent = Mock()
+        mock_agent.name = "TestAgent"
+        mock_agent.files_folder = "my_project_files"
+        mock_agent.get_class_folder_path.return_value = str(tmp_path)
+        mock_agent.tools = []
+        mock_agent.add_tool = Mock()
+
+        correct_vs_dir = tmp_path / "my_project_files_vs_correct123"
+        correct_vs_dir.mkdir()
+
+        unrelated_dir = tmp_path / "my_project_vs_other456"
+        unrelated_dir.mkdir()
+
+        file_manager = AgentFileManager(mock_agent)
+
+        with (
+            patch.object(AgentFileManager, "upload_file", return_value="file-1"),
+            patch.object(AgentFileManager, "add_file_search_tool"),
+            patch.object(AgentFileManager, "add_code_interpreter_tool"),
+            patch("os.listdir", return_value=[]),
+            caplog.at_level(logging.INFO),
+        ):
+            file_manager.parse_files_folder_for_vs_id()
+
+        assert mock_agent.files_folder_path == correct_vs_dir.resolve()
+        assert mock_agent._associated_vector_store_id == "vs_correct123"
 
     def test_add_file_search_tool_no_vector_store_ids(self):
         """Test add_file_search_tool when existing tool has no vector store IDs."""
