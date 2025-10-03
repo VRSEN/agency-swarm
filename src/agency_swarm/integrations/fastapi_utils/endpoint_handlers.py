@@ -349,7 +349,7 @@ async def generate_chat_name(new_messages: list[TResponseInputItem]):
     class ResponseFormat(BaseModel):
         chat_name: str = Field(description="A fitting name for the provided chat history.")
 
-    @output_guardrail # type: ignore[arg-type]
+    @output_guardrail  # type: ignore[arg-type]
     async def response_content_guardrail(
         context: RunContextWrapper, agent: Agent, response_text: str | type[BaseModel]
     ) -> GuardrailFunctionOutput:
@@ -368,7 +368,8 @@ async def generate_chat_name(new_messages: list[TResponseInputItem]):
         )
 
     from agency_swarm.messages import MessageFormatter
-    formatted_messages = str(MessageFormatter.strip_agency_metadata(new_messages)) # type: ignore[arg-type]
+
+    formatted_messages = str(MessageFormatter.strip_agency_metadata(new_messages))  # type: ignore[arg-type]
     if len(formatted_messages) > 1000:
         formatted_messages = "HISTORY TRUNCATED TO 1000 CHARACTERS:\n" + formatted_messages[:1000]
 
@@ -378,7 +379,7 @@ async def generate_chat_name(new_messages: list[TResponseInputItem]):
         name="NameGenerator",
         model=model,
         instructions=(
-"""
+            """
 You are a helpful assistant that generates a human-friendly title for a conversation.
 You will receive a list of messages where the first one is the user input and the rest are
 related to the assistant response.

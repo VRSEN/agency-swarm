@@ -119,7 +119,7 @@ def test_format_relative_edge_cases() -> None:
     now = datetime.now()
     naive_iso = now.isoformat()
     result = persistence.format_relative(naive_iso)
-    assert result.endswith("ago") or result == "-"
+    assert result.endswith("ago")
 
     # Test various time intervals
     now_utc = datetime.now(UTC)
@@ -143,7 +143,7 @@ def test_format_relative_edge_cases() -> None:
     past_3d = now_utc.timestamp() - 3 * 24 * 3600
     past_3d_dt = datetime.fromtimestamp(past_3d, UTC)
     result = persistence.format_relative(past_3d_dt.isoformat())
-    assert "day" in result or "days" in result
+    assert result == "3 days ago"
 
     # 10 days ago (plural)
     past_10d = now_utc.timestamp() - 10 * 24 * 3600

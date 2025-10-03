@@ -361,10 +361,9 @@ class TestDisplayCitations:
         assert "File ID: vs-123" in captured.out
         assert "Tool Call: call_123" in captured.out
         assert (
-            ("Content: This is a long piece of text that should be truncated in the preview "
-            "because it exceeds the 100 char...")
-            in captured.out
-        )
+            "Content: This is a long piece of text that should be truncated in the preview "
+            "because it exceeds the 100 char..."
+        ) in captured.out
 
     def test_displays_direct_file_citations(self, capsys):
         """Test display of direct file citations."""

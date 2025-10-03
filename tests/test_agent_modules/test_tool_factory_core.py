@@ -50,6 +50,7 @@ class TestFromFile:
 
         # Test the tool works
         import json
+
         input_json = json.dumps({"text": "hello"})
         response = await tool_instance.on_invoke_tool(None, input_json)
         assert "Echo: hello" in response

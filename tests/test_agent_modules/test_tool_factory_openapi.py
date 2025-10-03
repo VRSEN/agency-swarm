@@ -116,16 +116,7 @@ class TestFromOpenapiSchema:
 
     def test_converts_json_string_schema(self):
         """Test conversion of OpenAPI schema as JSON string."""
-        openapi_schema = {
-            "paths": {
-                "/test": {
-                    "get": {
-                        "operationId": "get_test",
-                        "summary": "Get test data"
-                    }
-                }
-            }
-        }
+        openapi_schema = {"paths": {"/test": {"get": {"operationId": "get_test", "summary": "Get test data"}}}}
 
         json_string = json.dumps(openapi_schema)
         result = ToolFactory.from_openapi_schema(json_string)
@@ -169,7 +160,7 @@ class TestFromOpenapiSchema:
                     "post": {
                         "operationId": "strict_test",
                         "description": "Strict test",
-                        "parameters": [{"name": "field", "in": "query", "schema": {"type": "string"}}]
+                        "parameters": [{"name": "field", "in": "query", "schema": {"type": "string"}}],
                     }
                 }
             }
@@ -183,16 +174,7 @@ class TestFromOpenapiSchema:
 
     def test_filters_none_headers(self):
         """Test that None headers are filtered out."""
-        openapi_schema = {
-            "paths": {
-                "/test": {
-                    "get": {
-                        "operationId": "header_test",
-                        "description": "Header test"
-                    }
-                }
-            }
-        }
+        openapi_schema = {"paths": {"/test": {"get": {"operationId": "header_test", "description": "Header test"}}}}
 
         headers = {"Authorization": "Bearer token", "X-Custom": None, "Content-Type": "application/json"}
 
@@ -352,6 +334,7 @@ class TestGetOpenapiSchema:
 
     def test_handles_custom_title_and_description(self):
         """Test custom title and description in schema generation."""
+
         class SimpleTestTool(BaseTool):
             def run(self):
                 return "test"

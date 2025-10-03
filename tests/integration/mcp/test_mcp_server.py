@@ -8,6 +8,7 @@ one of them.
 
 import logging
 import os
+import socket
 import sys
 import tempfile
 import threading
@@ -28,25 +29,31 @@ from agents.mcp.server import (
 from agency_swarm import Agency, Agent, run_mcp
 from tests.data.tools.sample_tool import sample_tool
 
-PORT = 8091
-SERVER_URL = f"http://127.0.0.1:{PORT}"
-
 
 def _tools_dir() -> str:
     # Use sample tools bundled with tests
     return str(Path(__file__).parents[2] / "data" / "tools")
 
 
+def _reserve_port(host: str = "127.0.0.1") -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind((host, 0))
+        return sock.getsockname()[1]
+
+
 @pytest.fixture(scope="module")
 def mcp_http_server():
     """Start MCP tools server over HTTP in a background thread."""
+
+    port = _reserve_port()
+    server_url = f"http://127.0.0.1:{port}"
 
     def _run_server():
         # Disable auth for the test by using an empty env var name
         run_mcp(
             tools=_tools_dir(),
             host="127.0.0.1",
-            port=PORT,
+            port=port,
             app_token_env="",  # no auth
             server_name="mcp-tools-server",
             transport="streamable-http",
@@ -60,7 +67,7 @@ def mcp_http_server():
     for i in range(max_retries):
         try:
             # Any response indicates the server is listening; endpoint may not be GET-able
-            resp = httpx.get(SERVER_URL + "/mcp", timeout=2.0)
+            resp = httpx.get(server_url + "/mcp", timeout=2.0)
             if resp.status_code in (200, 400, 404, 405):
                 # Give it a brief moment more to fully initialize
                 time.sleep(0.5)
@@ -70,16 +77,16 @@ def mcp_http_server():
             if i == max_retries - 1:
                 pytest.skip("Could not start MCP HTTP server")
 
-    yield thread
+    yield server_url
     # No explicit shutdown; thread is daemon and server ends with process
 
 
-def _make_agency_with_local_mcp() -> Agency:
+def _make_agency_with_local_mcp(server_url: str) -> Agency:
     """Create an Agency with a local MCP client pointing to the HTTP server."""
     mcp_client = MCPServerStreamableHttp(
         name="Local_MCP_Server",
         params=MCPServerStreamableHttpParams(
-            url=SERVER_URL + "/mcp",
+            url=server_url + "/mcp",
             headers={},
         ),
         cache_tools_list=True,
@@ -98,19 +105,18 @@ def _make_agency_with_local_mcp() -> Agency:
 @pytest.mark.asyncio
 async def test_mcp_http_tools_list(mcp_http_server):
     """Verify the agent can discover tools exposed by the MCP HTTP server."""
-    agency = _make_agency_with_local_mcp()
+    agency = _make_agency_with_local_mcp(mcp_http_server)
     res = await agency.get_response("What tools do you have?")
     text = str(res.final_output).lower()
     # sample_tool is provided by tests/data/tools/sample_tool.py
-    print(text)
-    assert "sample_tool" in text or "sample tool" in text
+    normalized = text.replace(" ", "_")
+    assert "sample_tool" in normalized
 
 
 @pytest.mark.asyncio
 async def test_mcp_http_invoke_sample_tool(mcp_http_server):
     """Verify the agent can invoke a local MCP tool over HTTP."""
-    agency = _make_agency_with_local_mcp()
-    print(agency)
+    agency = _make_agency_with_local_mcp(mcp_http_server)
     res = await agency.get_response("Use sample_tool to echo 'hello mcp'.")
     assert "echo" in str(res.final_output).lower()
 
@@ -160,7 +166,7 @@ if __name__ == "__main__":
     run_mcp(tools=[test_sample_tool], transport="stdio")
 """
 
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
         f.write(server_script)
         server_path = f.name
 
@@ -192,7 +198,8 @@ if __name__ == "__main__":
         response_text = str(res.final_output).lower()
 
         # Should find test_sample_tool from our stdio server
-        assert "test_sample_tool" in response_text or "test sample tool" in response_text
+        normalized = response_text.replace(" ", "_")
+        assert "test_sample_tool" in normalized
 
     finally:
         # Cleanup
