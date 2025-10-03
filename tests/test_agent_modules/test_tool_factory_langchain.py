@@ -40,55 +40,44 @@ class TestLangchainIntegration:
             with pytest.raises(ImportError, match="You must install langchain"):
                 ToolFactory.from_langchain_tool(dummy_tool)
 
-    @pytest.mark.skipif(
-        not pytest.importorskip("langchain_core", reason="langchain not installed"),
-        reason="LangChain not available for testing",
-    )
     def test_converts_real_langchain_tool(self):
         """Test conversion of a real LangChain tool."""
-        try:
-            # Try to import a simple LangChain tool
-            from langchain_core.tools import BaseTool as LangChainBaseTool
+        pytest.importorskip("langchain_core", reason="LangChain not available for testing")
 
-            # Create a real LangChain tool
-            class TestLangChainTool(LangChainBaseTool):
-                name: str = "test_tool"
-                description: str = "test tool for conversion"
+        from langchain_core.tools import BaseTool as LangChainBaseTool
 
-                def _run(self, query: str = "") -> str:
-                    return f"Result for: {query}"
+        class TestLangChainTool(LangChainBaseTool):
+            name: str = "test_tool"
+            description: str = "test tool for conversion"
 
-            tool = TestLangChainTool()
-            result = ToolFactory.from_langchain_tool(tool)
+            def _run(self, query: str = "") -> str:
+                return f"Result for: {query}"
 
-            # Verify conversion worked
-            assert isinstance(result, FunctionTool)
-            assert result.name == "test_tool"
-            assert "test tool" in result.description.lower()
+        tool = TestLangChainTool()
+        result = ToolFactory.from_langchain_tool(tool)
 
-        except ImportError:
-            pytest.skip("LangChain core components not available")
+        # Verify conversion worked
+        assert isinstance(result, FunctionTool)
+        assert result.name == "test_tool"
+        assert "test tool" in result.description.lower()
 
-    @pytest.mark.skipif(
-        not pytest.importorskip("langchain_community", reason="langchain_community not installed"),
-        reason="LangChain community tools not available",
-    )
     def test_converts_real_community_tool(self):
         """Test conversion of a real LangChain community tool."""
-        try:
-            # Try a simple community tool that doesn't require external dependencies
-            from langchain_experimental.tools.python.tool import PythonREPLTool
+        pytest.importorskip("langchain_community", reason="LangChain community tools not available")
+        pytest.importorskip(
+            "langchain_experimental.tools.python.tool",
+            reason="LangChain experimental python tool not available",
+        )
 
-            tool = PythonREPLTool()
-            result = ToolFactory.from_langchain_tool(tool)
+        from langchain_experimental.tools.python.tool import PythonREPLTool
 
-            # Verify conversion worked
-            assert isinstance(result, FunctionTool)
-            assert result.name == "Python_REPL"
-            assert "python" in result.description.lower()
+        tool = PythonREPLTool()
+        result = ToolFactory.from_langchain_tool(tool)
 
-        except ImportError:
-            pytest.skip("LangChain community tools not available")
+        # Verify conversion worked
+        assert isinstance(result, FunctionTool)
+        assert result.name == "Python_REPL"
+        assert "python" in result.description.lower()
 
     def test_handles_empty_list(self):
         """Test handling of empty tools list."""
@@ -98,24 +87,20 @@ class TestLangchainIntegration:
     @pytest.mark.asyncio
     async def test_real_tool_execution(self):
         """Test that converted LangChain tool actually executes."""
-        try:
-            # Import and test a real tool
-            from langchain_core.tools import BaseTool as LangChainBaseTool
+        pytest.importorskip("langchain_core", reason="LangChain not available for execution test")
 
-            class SimpleLangChainTool(LangChainBaseTool):
-                name: str = "simple_tool"
-                description: str = "Simple test tool"
+        from langchain_core.tools import BaseTool as LangChainBaseTool
 
-                def _run(self, input_text: str = "test") -> str:
-                    return f"Processed: {input_text}"
+        class SimpleLangChainTool(LangChainBaseTool):
+            name: str = "simple_tool"
+            description: str = "Simple test tool"
 
-            function_tool = ToolFactory.from_langchain_tool(SimpleLangChainTool)
+            def _run(self, input_text: str = "test") -> str:
+                return f"Processed: {input_text}"
 
-            # Test actual execution
-            import json
+        function_tool = ToolFactory.from_langchain_tool(SimpleLangChainTool)
 
-            result = await function_tool.on_invoke_tool(None, json.dumps({"input_text": "hello"}))
-            assert "Processed: hello" in result
+        import json
 
-        except ImportError:
-            pytest.skip("LangChain not available for execution test")
+        result = await function_tool.on_invoke_tool(None, json.dumps({"input_text": "hello"}))
+        assert "Processed: hello" in result

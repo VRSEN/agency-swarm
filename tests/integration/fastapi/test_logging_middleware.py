@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import tempfile
+from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -33,6 +34,35 @@ from agency_swarm.integrations.fastapi_utils.logging_middleware import (
     request_id_context,
     setup_enhanced_logging,
 )
+
+
+@contextmanager
+def set_context(var, value):
+    """Temporarily set a ContextVar value."""
+
+    token = var.set(value)
+    try:
+        yield
+    finally:
+        var.reset(token)
+
+
+@pytest.fixture(autouse=True)
+def ensure_clean_logging_context():
+    """Ensure logging ContextVars start clean and reset after each test."""
+
+    # Detect leakage from prior tests before forcing a clean baseline.
+    assert request_id_context.get() == ""
+    assert log_to_file_context.get() is False
+
+    request_token = request_id_context.set("")
+    log_token = log_to_file_context.set(False)
+
+    try:
+        yield
+    finally:
+        request_id_context.reset(request_token)
+        log_to_file_context.reset(log_token)
 
 
 @pytest.fixture
@@ -73,9 +103,8 @@ class TestConsoleFormatter:
         record.module = "test_module"
 
         # Set request ID in context
-        request_id_context.set("req-123")
-
-        formatted = formatter.format(record)
+        with set_context(request_id_context, "req-123"):
+            formatted = formatter.format(record)
 
         assert "[req-123]" in formatted
         assert "[INFO]" in formatted
@@ -99,9 +128,8 @@ class TestConsoleFormatter:
         record.module = "test_module"
 
         # Clear request ID context
-        request_id_context.set("")
-
-        formatted = formatter.format(record)
+        with set_context(request_id_context, ""):
+            formatted = formatter.format(record)
 
         assert "[req-" not in formatted  # No request ID prefix
         assert "[WARNING]" in formatted
@@ -213,10 +241,8 @@ class TestConditionalFileHandler:
         )
 
         # Enable file logging and set request ID
-        log_to_file_context.set(True)
-        request_id_context.set("test-id-123")
-
-        handler.emit(record)
+        with set_context(log_to_file_context, True), set_context(request_id_context, "test-id-123"):
+            handler.emit(record)
 
         # Check that log file was created
         log_file = Path(temp_logs_dir) / "test-id-123.jsonl"
@@ -243,10 +269,8 @@ class TestConditionalFileHandler:
         )
 
         # Disable file logging
-        log_to_file_context.set(False)
-        request_id_context.set("test-id-456")
-
-        handler.emit(record)
+        with set_context(log_to_file_context, False), set_context(request_id_context, "test-id-456"):
+            handler.emit(record)
 
         # Check that no log file was created
         log_file = Path(temp_logs_dir) / "test-id-456.jsonl"
@@ -254,7 +278,7 @@ class TestConditionalFileHandler:
 
     def test_handles_write_errors_gracefully(self, temp_logs_dir):
         """Test that handler doesn't crash when file writing fails."""
-        handler = ConditionalFileHandler("/invalid/path/that/does/not/exist")
+        handler = ConditionalFileHandler(temp_logs_dir)
         handler.setFormatter(FileFormatter())
 
         record = logging.LogRecord(
@@ -267,11 +291,10 @@ class TestConditionalFileHandler:
             exc_info=None,
         )
 
-        log_to_file_context.set(True)
-        request_id_context.set("error-test")
-
-        # Should not raise exception
-        handler.emit(record)
+        with set_context(log_to_file_context, True), set_context(request_id_context, "error-test"):
+            # Should not raise exception
+            with patch("builtins.open", side_effect=OSError("write error")):
+                handler.emit(record)
 
 
 class TestSetupEnhancedLogging:
@@ -349,6 +372,30 @@ class TestRequestTracker:
             return MagicMock()
 
         await middleware.dispatch(mock_request, mock_call_next)
+
+        # Context variables should be reset after the request completes
+        assert request_id_context.get() == ""
+        assert log_to_file_context.get() is False
+
+    @pytest.mark.asyncio
+    async def test_resets_context_on_exception(self):
+        """Middleware must reset context when downstream handlers fail."""
+
+        middleware = RequestTracker(MagicMock())
+
+        mock_request = MagicMock()
+        mock_request.headers.get.return_value = "middleware-error-test"
+
+        async def mock_call_next(request):
+            assert request_id_context.get() == "middleware-error-test"
+            assert log_to_file_context.get() is True
+            raise RuntimeError("downstream failure")
+
+        with pytest.raises(RuntimeError):
+            await middleware.dispatch(mock_request, mock_call_next)
+
+        assert request_id_context.get() == ""
+        assert log_to_file_context.get() is False
 
     @pytest.mark.asyncio
     async def test_run_fastapi_logging_integration(self, agency_factory, temp_logs_dir):
