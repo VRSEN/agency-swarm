@@ -24,16 +24,6 @@ load_dotenv()
 ```
 </Accordion>
 
-
-<Accordion title="What's the difference between using .cursorrules (with Cursor IDE) and 'agency-swarm genesis'?" icon="scale-unbalanced">
-There are two ways to create agents with AI:
-
-1. [**Genesis Agency**:](/welcome/getting-started/genesis-agency) A simple command-line tool that helps you create basic agent structures. Great for getting started or simple use cases. Just run `agency-swarm genesis` and follow the prompts.
-
-2. [**Cursor AI Code Editor**](/welcome/getting-started/cursor-ide): Use the `.cursorrules` file in Cursor IDE to create agents. This is the best option for both beginners and experienced developers since it gives you more control over the agent creation process.
-</Accordion>
-
-
 <Accordion title="Can I use open source models with Agency Swarm?" icon="code-fork">
 Yes—you can use open source models for simple, non–mission-critical tasks (usually one or two tools per agent). See [Open Source Models](/additional-features/open-source-models) for more information. Keep in mind that many open source models currently struggle with function calling.
 </Accordion>
@@ -42,9 +32,7 @@ Yes—you can use open source models for simple, non–mission-critical tasks (u
 <Accordion title="How do I save and continue conversations?" icon="messages">
 To persist conversations between application restarts, implement callbacks that save and load the full message history from a local file. For example, define your callback functions:
 
-<CodeGroup>
-
-```python v1.x
+```python
 import os
 import json
 
@@ -68,34 +56,6 @@ agency = Agency(
     save_threads_callback=lambda thread_dict: save_threads(thread_dict, chat_id),
 )
 ```
-
-```python v0.x
-import os
-import json
-
-def load_threads(chat_id):
-    if os.path.exists(f"{chat_id}_threads.json"):
-        with open(f"{chat_id}_threads.json", "r") as file:
-            return json.load(file)
-    return []
-
-def save_threads(new_threads, chat_id):
-    with open(f"{chat_id}_threads.json", "w") as file:
-        json.dump(new_threads, file)
-
-# Then, pass these callbacks during your agency initialization to resume conversations:
-from agency_swarm.agency.genesis import GenesisAgency
-
-agency = GenesisAgency(
-    ...
-    threads_callbacks={
-        'load': lambda: load_threads(chat_id),
-        'save': lambda new_threads: save_threads(new_threads, chat_id)
-    }
-)
-```
-
-</CodeGroup>
 
 This setup preserves your conversation context between runs.
 </Accordion>
@@ -121,9 +81,7 @@ When file types like `.json`, `.docx`, or `.pptx` are uploaded, CodeInterpreter 
 <Accordion title="How can I serve an Agency as an API using FastAPI?" icon="book">
 Embed your agency within a FastAPI endpoint:
 
-<CodeGroup>
-
-```python v1.x
+```python
 from fastapi import FastAPI
 from uuid import uuid4
 
@@ -145,28 +103,6 @@ async def chat(user_request: UserRequest):
 # Or use the built-in FastAPI integration
 agency.run_fastapi(host="0.0.0.0", port=8000)
 ```
-
-```python v0.x
-from fastapi import FastAPI
-from uuid import uuid4
-
-app = FastAPI()
-
-@app.post("/chat")
-async def chat(user_request: UserRequest):
-    chat_id = user_request.chat_id or str(uuid4())
-
-    agency = Agency([...],
-        threads_callbacks={
-            'load': lambda: load_threads(chat_id),
-            'save': lambda new_threads: save_threads(new_threads, chat_id)
-        })
-
-    response = agency.get_completion(user_request.message)
-    return {"chat_id": chat_id, "response": response}
-```
-
-</CodeGroup>
 </Accordion>
 
 

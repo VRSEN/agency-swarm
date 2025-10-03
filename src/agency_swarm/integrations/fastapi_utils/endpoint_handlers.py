@@ -3,6 +3,7 @@ import json
 import logging
 import time
 from collections.abc import AsyncGenerator, Callable
+from importlib import metadata
 
 from ag_ui.core import EventType, MessagesSnapshotEvent, RunErrorEvent, RunFinishedEvent, RunStartedEvent
 from ag_ui.encoder import EventEncoder
@@ -28,6 +29,16 @@ from agency_swarm.tools.mcp_manager import attach_persistent_mcp_servers
 from agency_swarm.ui.core.agui_adapter import AguiAdapter, serialize
 
 logger = logging.getLogger(__name__)
+
+
+def _get_agency_swarm_version() -> str | None:
+    """Return the installed agency-swarm version, if available."""
+
+    try:
+        return metadata.version("agency-swarm")
+    except metadata.PackageNotFoundError:
+        logger.debug("agency-swarm package metadata not found; returning no version")
+        return None
 
 
 def get_verify_token(app_token):
@@ -322,7 +333,11 @@ def make_agui_chat_endpoint(request_model, agency_factory: Callable[..., Agency]
 
 def make_metadata_endpoint(agency_metadata: dict, verify_token):
     async def handler(token: str = Depends(verify_token)):
-        return agency_metadata
+        metadata_with_version = dict(agency_metadata)
+        agency_swarm_version = _get_agency_swarm_version()
+        if agency_swarm_version is not None:
+            metadata_with_version["agency_swarm_version"] = agency_swarm_version
+        return metadata_with_version
 
     return handler
 
