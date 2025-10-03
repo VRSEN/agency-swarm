@@ -3,13 +3,11 @@
 import argparse
 import sys
 
-from dotenv import load_dotenv
+from .migrate_agent import migrate_agent_command
 
 
 def main() -> None:
     """Main CLI entry point."""
-    load_dotenv()
-
     parser = argparse.ArgumentParser(
         prog="agency-swarm",
         description="Agency Swarm CLI tools",
@@ -40,12 +38,26 @@ def main() -> None:
     )
     create_agent_parser.add_argument(
         "--path", default="./", help="Output directory for the agent template (default: current directory)"
+    # Migrate agent command
+    migrate_parser = subparsers.add_parser(
+        "migrate-agent",
+        help="Generate agent from assistants API settings.json",
+        usage="agency-swarm migrate-agent path_to_settings.json [--output-dir DIR]",
+    )
+    migrate_parser.add_argument(
+        "settings_file",
+        help="Path to the settings.json file",
+    )
+    migrate_parser.add_argument(
+        "--output-dir",
+        default=".",
+        help="Output directory for the generated agent (default: current directory)",
     )
 
     args = parser.parse_args()
 
     if args.command == "migrate-agent":
-        pass
+        migrate_agent_command(args.settings_file, args.output_dir)
     elif args.command == "create-agent-template":
         from agency_swarm.utils.create_agent_template import create_agent_template
 

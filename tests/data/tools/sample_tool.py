@@ -1,4 +1,4 @@
-from agents import function_tool
+from agency_swarm import function_tool
 
 
 @function_tool

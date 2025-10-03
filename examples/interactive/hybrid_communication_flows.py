@@ -103,11 +103,13 @@ class SendMessageWithProjectContext(SendMessage):
 # You can adjust the reminder message or disable it entirely by adjusting parameters below.
 class CustomReminderHandoff(SendMessageHandoff):
     """SendMessageHandoff with custom reminder."""
-    add_reminder = True # True by default
+
+    add_reminder = True  # True by default
 
     # Note: this reminder is for the recipient agent, not the caller agent.
     # Default reminder: "You are now {recipient_agent_name}. Please continue the task."
     reminder_override = "You are developer agent, do not forget to ask for security audit."
+
 
 project_manager = Agent(
     name="ProjectManager",

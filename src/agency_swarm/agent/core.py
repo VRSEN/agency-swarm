@@ -204,7 +204,7 @@ class Agent(BaseAgent[MasterContext]):
             raise RuntimeError(f"Agent {self.name} has no file manager configured")
 
         self.file_manager.read_instructions()
-        self.file_manager._parse_files_folder_for_vs_id()
+        self.file_manager.parse_files_folder_for_vs_id()
         parse_schemas(self)
         load_tools_from_folder(self)
 

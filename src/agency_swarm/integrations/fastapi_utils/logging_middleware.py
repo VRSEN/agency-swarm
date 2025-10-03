@@ -140,10 +140,14 @@ class RequestTracker(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         request_id, should_log_to_file = get_log_id_from_headers(request)
-        request_id_context.set(request_id)
-        log_to_file_context.set(should_log_to_file)
+        request_token = request_id_context.set(request_id)
+        log_token = log_to_file_context.set(should_log_to_file)
 
-        response = await call_next(request)
+        try:
+            response = await call_next(request)
+        finally:
+            request_id_context.reset(request_token)
+            log_to_file_context.reset(log_token)
 
         return response
 
