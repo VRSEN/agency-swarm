@@ -38,6 +38,7 @@ def main() -> None:
     )
     create_agent_parser.add_argument(
         "--path", default="./", help="Output directory for the agent template (default: current directory)"
+    )
     # Migrate agent command
     migrate_parser = subparsers.add_parser(
         "migrate-agent",
