@@ -45,6 +45,9 @@ class AgentFileManager:
     def __init__(self, agent):
         self.agent = agent
 
+    def _should_skip_file(self, filename: str) -> bool:
+        return filename.startswith(".") or filename.startswith("__")
+
     def upload_file(self, file_path: str, include_in_vector_store: bool = True) -> str:
         """
         Uploads a local file to OpenAI and optionally associates it with the agent's
@@ -202,6 +205,9 @@ class AgentFileManager:
 
         code_interpreter_file_ids = []
         for file in os.listdir(self.agent.files_folder_path):
+            if self._should_skip_file(file):
+                logger.debug(f"Skipping file '{file}'")
+                continue
             file_id = self._upload_file_by_type(self.agent.files_folder_path / file)
             if file_id:
                 code_interpreter_file_ids.append(file_id)
@@ -370,7 +376,7 @@ class AgentFileManager:
         if not base_name:
             return None, []
 
-        vs_match = re.match(r"^(.+)_vs_[a-zA-Z0-9_]+$", base_name)
+        vs_match = re.match(r"^(.+)_vs_[a-zA-Z0-9]{15,}$", base_name)
         base_name_without_vs = vs_match.group(1) if vs_match else base_name
 
         candidates = [
@@ -402,7 +408,7 @@ class AgentFileManager:
 
     def _create_or_identify_vector_store(self, folder_path: Path) -> str | None:
         """Create vector store and rename folder, or extract existing VS ID from path."""
-        vs_id_match = re.search(r"(.+)_(vs_[a-zA-Z0-9_]+)$", str(folder_path))
+        vs_id_match = re.search(r"(.+)_(vs_[a-zA-Z0-9_]{15,})$", str(folder_path))
 
         if vs_id_match:
             if not folder_path.exists():
@@ -453,6 +459,9 @@ class AgentFileManager:
         new_files = []
         for original_file in original_folder_path.iterdir():
             if original_file.is_file() and original_file.name not in processed_files:
+                if self._should_skip_file(original_file.name):
+                    logger.debug(f"Skipping file '{original_file.name}'")
+                    continue
                 logger.info(f"Agent {self.agent.name}: Found new file to process: {original_file.name}")
                 new_files.append(original_file)
 

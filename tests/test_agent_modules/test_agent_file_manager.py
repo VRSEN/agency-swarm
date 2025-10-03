@@ -17,6 +17,73 @@ from agency_swarm.agent.file_manager import AgentFileManager
 class TestAgentFileManager:
     """Test AgentFileManager class functionality."""
 
+    def test_should_ignore_file(self):
+        """Test _should_ignore_file method ignores files starting with '.' or '__'."""
+        mock_agent = Mock()
+        mock_agent.name = "TestAgent"
+
+        file_manager = AgentFileManager(mock_agent)
+
+        # Files that should be ignored
+        assert file_manager._should_skip_file(".gitignore") is True
+        assert file_manager._should_skip_file("__pycache__") is True
+        assert file_manager._should_skip_file("__init__.py") is True
+
+        # Files that should not be ignored
+        assert file_manager._should_skip_file("regular_file.txt") is False
+        assert file_manager._should_skip_file("file_with_underscore.txt") is False
+
+    @patch("agency_swarm.agent.file_manager.AgentFileManager._upload_file_by_type")
+    def test_parse_files_folder_ignores_dot_and_dunder_files(self, mock_upload):
+        """Test that parse_files_folder_for_vs_id ignores files starting with '.' or '__'."""
+        mock_agent = Mock()
+        mock_agent.name = "TestAgent"
+        mock_agent.files_folder = "test_files"
+        mock_agent.get_class_folder_path.return_value = "/fake/path"
+        mock_agent.client_sync.vector_stores.create.return_value = Mock(id="vs_123")
+        mock_agent.tools = []  # Empty tools list
+
+        file_manager = AgentFileManager(mock_agent)
+
+        # Mock the path operations
+        with (
+            patch("pathlib.Path.exists", return_value=True),
+            patch("pathlib.Path.is_dir", return_value=True),
+            patch("pathlib.Path.resolve", return_value=Path("/fake/path/test_files_vs_123")),
+            patch("pathlib.Path.mkdir"),
+            patch("pathlib.Path.rename"),
+            patch("os.listdir") as mock_listdir,
+            patch.object(file_manager, "add_file_search_tool"),
+            patch.object(file_manager, "add_code_interpreter_tool"),
+        ):
+            # Simulate files in the directory, including ones that should be ignored
+            mock_listdir.return_value = [
+                "regular_file.txt",
+                ".gitignore",
+                "__pycache__",
+                ".env",
+                "document.pdf",
+                "__init__.py",
+            ]
+
+            # Mock upload method to return None (no file ID)
+            mock_upload.return_value = None
+
+            file_manager.parse_files_folder_for_vs_id()
+
+            # Verify that only non-ignored files were processed
+            actual_calls = mock_upload.call_args_list
+            assert len(actual_calls) == 2
+
+            # Check that ignored files were not processed
+            processed_files = [str(call[0][0].name) for call in actual_calls]
+            assert "regular_file.txt" in processed_files
+            assert "document.pdf" in processed_files
+            assert ".gitignore" not in processed_files
+            assert "__pycache__" not in processed_files
+            assert ".env" not in processed_files
+            assert "__init__.py" not in processed_files
+
     def test_upload_file_not_found(self):
         """Test upload_file with non-existent file."""
         mock_agent = Mock()
@@ -129,13 +196,13 @@ class TestAgentFileManager:
 
         mock_agent = Mock()
         mock_agent.name = "TestAgent"
-        mock_agent.files_folder = "files_vs_outdated999"
+        mock_agent.files_folder = "files_vs_outdated812h32989d18h2g8h213h912"
         mock_agent.get_class_folder_path.return_value = str(tmp_path)
         mock_agent.tools = []
         mock_agent.add_tool = Mock()
         mock_agent.client_sync.vector_stores.create = Mock()
 
-        existing_vs_dir = tmp_path / "files_vs_existing123"
+        existing_vs_dir = tmp_path / "files_vs_existing98123hv8912h982y912df"
         existing_vs_dir.mkdir()
 
         file_manager = AgentFileManager(mock_agent)
@@ -150,7 +217,7 @@ class TestAgentFileManager:
             file_manager.parse_files_folder_for_vs_id()
 
         assert mock_agent.client_sync.vector_stores.create.call_count == 0
-        assert mock_agent._associated_vector_store_id == "vs_existing123"
+        assert mock_agent._associated_vector_store_id == "vs_existing98123hv8912h982y912df"
         assert mock_agent.files_folder_path == existing_vs_dir.resolve()
         assert mock_agent.files_folder == str(existing_vs_dir)
         assert "Files folder" not in caplog.text
@@ -274,10 +341,10 @@ class TestAgentFileManager:
         mock_agent.tools = []
         mock_agent.add_tool = Mock()
 
-        correct_vs_dir = tmp_path / "my_vs_test_vs_abc123"
+        correct_vs_dir = tmp_path / "my_vs_test_vs_abc0890f12h897fvh189072gvh"
         correct_vs_dir.mkdir()
 
-        unrelated_vs_dir = tmp_path / "my_vs_other_project_vs_xyz789"
+        unrelated_vs_dir = tmp_path / "my_vs_other_project_vs_xyz78977j12gh89102h3g09123hf"
         unrelated_vs_dir.mkdir()
 
         mock_agent.client_sync.vector_stores.create = Mock()
@@ -294,8 +361,8 @@ class TestAgentFileManager:
             file_manager.parse_files_folder_for_vs_id()
 
         assert mock_agent.files_folder_path == correct_vs_dir.resolve()
-        assert mock_agent._associated_vector_store_id == "vs_abc123"
-        assert "my_vs_test_vs_abc123" in str(mock_agent.files_folder)
+        assert mock_agent._associated_vector_store_id == "vs_abc0890f12h897fvh189072gvh"
+        assert "my_vs_test_vs_abc0890f12h897fvh189072gvh" in str(mock_agent.files_folder)
 
     def test_explicit_vector_store_path_is_prioritized(self, tmp_path, caplog):
         """
@@ -306,18 +373,18 @@ class TestAgentFileManager:
         """
         mock_agent = Mock()
         mock_agent.name = "TestAgent"
-        mock_agent.files_folder = "files_vs_explicit456"
+        mock_agent.files_folder = "files_vs_explicit891y2390g8h1298vh"
         mock_agent.get_class_folder_path.return_value = str(tmp_path)
         mock_agent.tools = []
         mock_agent.add_tool = Mock()
 
-        vs_dir_1 = tmp_path / "files_vs_abc123"
+        vs_dir_1 = tmp_path / "files_vs_abc89123ty892g1h98h1289008i12h"
         vs_dir_1.mkdir()
 
-        vs_dir_explicit = tmp_path / "files_vs_explicit456"
+        vs_dir_explicit = tmp_path / "files_vs_explicit891y2390g8h1298vh"
         vs_dir_explicit.mkdir()
 
-        vs_dir_3 = tmp_path / "files_vs_xyz789"
+        vs_dir_3 = tmp_path / "files_vs_xyz987123yt891h2890fh12890vh"
         vs_dir_3.mkdir()
 
         file_manager = AgentFileManager(mock_agent)
@@ -332,8 +399,8 @@ class TestAgentFileManager:
             file_manager.parse_files_folder_for_vs_id()
 
         assert mock_agent.files_folder_path == vs_dir_explicit.resolve()
-        assert mock_agent._associated_vector_store_id == "vs_explicit456"
-        assert "files_vs_explicit456" in mock_agent.files_folder
+        assert mock_agent._associated_vector_store_id == "vs_explicit891y2390g8h1298vh"
+        assert "files_vs_explicit891y2390g8h1298vh" in mock_agent.files_folder
 
     def test_vector_store_discovery_with_underscores_in_base_name(self, tmp_path, caplog):
         """
@@ -349,10 +416,10 @@ class TestAgentFileManager:
         mock_agent.tools = []
         mock_agent.add_tool = Mock()
 
-        correct_vs_dir = tmp_path / "my_project_files_vs_correct123"
+        correct_vs_dir = tmp_path / "my_project_files_vs_correct9281gh891h9vb191290vb"
         correct_vs_dir.mkdir()
 
-        unrelated_dir = tmp_path / "my_project_vs_other456"
+        unrelated_dir = tmp_path / "my_project_vs_other2891ghf981gv981bvaqw"
         unrelated_dir.mkdir()
 
         file_manager = AgentFileManager(mock_agent)
@@ -367,7 +434,7 @@ class TestAgentFileManager:
             file_manager.parse_files_folder_for_vs_id()
 
         assert mock_agent.files_folder_path == correct_vs_dir.resolve()
-        assert mock_agent._associated_vector_store_id == "vs_correct123"
+        assert mock_agent._associated_vector_store_id == "vs_correct9281gh891h9vb191290vb"
 
     def test_add_file_search_tool_no_vector_store_ids(self):
         """Test add_file_search_tool when existing tool has no vector store IDs."""
