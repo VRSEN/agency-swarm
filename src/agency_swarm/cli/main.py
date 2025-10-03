@@ -3,6 +3,8 @@
 import argparse
 import sys
 
+from agency_swarm.utils.create_agent_template import create_agent_template
+
 from .migrate_agent import migrate_agent_command
 
 
@@ -58,10 +60,9 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.command == "migrate-agent":
-        migrate_agent_command(args.settings_file, args.output_dir)
+        exit_code = migrate_agent_command(args.settings_file, args.output_dir)
+        sys.exit(exit_code)
     elif args.command == "create-agent-template":
-        from agency_swarm.utils.create_agent_template import create_agent_template
-
         try:
             success = create_agent_template(
                 agent_name=args.name,
