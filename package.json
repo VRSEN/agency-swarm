@@ -1,0 +1,14 @@
+{
+    "name": "agency-swarm-agent-generator",
+    "version": "1.0.0",
+    "description": "Generate Agency Swarm v1.x agents from settings.json files",
+    "private": true,
+    "devDependencies": {
+        "@types/node": "^20.0.0",
+        "typescript": "^5.0.0",
+        "ts-node": "^10.9.0"
+    },
+    "engines": {
+        "node": ">=16.0.0"
+    }
+}
