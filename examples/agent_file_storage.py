@@ -22,15 +22,18 @@ Note: You don't need to update the agent's files_folder parameter when the folde
 
 import asyncio
 import os
-import shutil
 import sys
-from pathlib import Path
 
 # Path setup for standalone examples
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
+current_dir = os.path.abspath(os.path.dirname(__file__))
+sys.path.insert(0, current_dir)
+sys.path.insert(0, os.path.abspath(os.path.join(current_dir, "..", "src")))
 
-from agency_swarm import Agency, Agent
-from agency_swarm.utils.citation_extractor import display_citations, extract_vector_store_citations
+from agents import ModelSettings, RunConfig  # noqa: E402
+from utils import temporary_files_folder  # noqa: E402
+
+from agency_swarm import Agency, Agent  # noqa: E402
+from agency_swarm.utils.citation_extractor import display_citations, extract_vector_store_citations  # noqa: E402
 
 
 async def main():
@@ -39,79 +42,51 @@ async def main():
     print("Simple FileSearch Example")
     print("=" * 30)
 
-    # Use the data directory with research files
-    examples_dir = Path(__file__).parent
-    original_docs_dir = examples_dir / "data"
-    docs_dir = examples_dir / "data_test"
+    with temporary_files_folder("data") as docs_dir:
+        all_files = [f for f in docs_dir.iterdir() if f.is_file()]
+        print(f"Using temporary files directory: {docs_dir}")
+        print(f"Found {len(all_files)} file(s) ready for processing")
 
-    # Copy the data folder to data_test
-    if original_docs_dir.exists():
-        if docs_dir.exists():
-            shutil.rmtree(docs_dir)
-        shutil.copytree(original_docs_dir, docs_dir)
-        print(f"Copied data folder to: {docs_dir}")
-    else:
-        print(f"❌ Error: Original data directory not found: {original_docs_dir}")
-        return
+        search_agent = Agent(
+            name="SearchAgent",
+            instructions=(
+                "You are a document search assistant. Always use your FileSearch tool to locate answers and provide clear responses with citations. "
+                "You are allowed to share all data found within documents with the user."
+            ),
+            files_folder=str(docs_dir),
+            include_search_results=True,
+            model="gpt-4.1",
+            model_settings=ModelSettings(temperature=0.0, tool_choice="file_search"),
+            tool_use_behavior="stop_on_first_tool",
+        )
 
-    if not docs_dir.exists() or not any(f.is_file() for f in docs_dir.iterdir()):
-        print(f"❌ Error: No files found in: {docs_dir}")
-        print("   Please ensure there are research files in the data directory.")
-        return
+        agency = Agency(
+            search_agent,
+            shared_instructions="Demonstrate FileSearch with citations.",
+        )
 
-    all_files = [f for f in docs_dir.iterdir() if f.is_file()]
-    print(f"Found {len(all_files)} file(s) in: {docs_dir}")
+        print("Processing files...")
+        await asyncio.sleep(5)
 
-    # Create an agent that can search files with citations
-    search_agent = Agent(
-        name="SearchAgent",
-        instructions=(
-            "You are a document search assistant. Use your FileSearch tool to find information and provide clear answers with citations. "
-            "You are allowed to share all data found within documents with the user."
-        ),
-        files_folder=str(docs_dir),
-        # No FileSearch tool is needed, it will be attached automatically
-        include_search_results=True,  # Enable citation extraction
-    )
+        run_config = RunConfig(model_settings=ModelSettings(tool_choice="file_search"))
 
-    # Create agency
-    agency = Agency(
-        search_agent,
-        shared_instructions="Demonstrate FileSearch with citations.",
-    )
-
-    # Wait for file processing
-    print("Processing files...")
-    await asyncio.sleep(3)
-
-    # Test search with a specific question
-
-    try:
         message = "What is the badge number for Marcus Chen?"
         print(f"\n❓ Query: {message}")
-        response = await agency.get_response(message)
+        response = await agency.get_response(message, run_config=run_config)
         print(f"Answer: {response.final_output}")
 
-        # Extract and display citations using the utility function
         citations = extract_vector_store_citations(response)
         display_citations(citations, "vector store")
 
-        # Check if we got the expected answer
         if "7401" in response.final_output:
             print("✅ Correct answer found!")
+        else:
+            print("❌ Correct answer not found!")
 
-        message = "Extract data from the sample_report.pdf file"
-        print(f"\n❓ Query: {message}")
-        response = await agency.get_response(message)
+        follow_up = "Extract data from the sample_report.pdf file"
+        print(f"\n❓ Query: {follow_up}")
+        response = await agency.get_response(follow_up, run_config=run_config)
         print(f"🤖 Answer: {response.final_output}")
-
-    except Exception as e:
-        print(f"❌ Error: {e}")
-    finally:
-        # Cleanup the test data folder
-        if docs_dir.exists():
-            shutil.rmtree(docs_dir)
-            print(f"Cleaned up test folder: {docs_dir}")
 
     print("\nKey Points:")
     print("   • Files from the given folder are processed and added to a vector store")
