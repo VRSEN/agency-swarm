@@ -227,6 +227,50 @@ class TestCreateAgentTemplateIntegration:
         assert result.returncode != 0
         assert "Folder already exists" in result.stderr
 
+    def test_invalid_agent_name_returns_error(self, tmp_path: Path) -> None:
+        """Invalid agent names should surface a non-zero exit code."""
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "agency_swarm.cli.main",
+                "create-agent-template",
+                "Invalid<Name>",
+                "--path",
+                str(tmp_path),
+            ],
+            capture_output=True,
+            text=True,
+            cwd=Path(__file__).parent.parent.parent.parent,
+        )
+
+        assert result.returncode != 0
+        assert "Agent name contains invalid characters" in result.stdout
+
+    def test_cli_propagates_validation_errors(self, tmp_path: Path) -> None:
+        """CLI should fail fast when validation rejects input."""
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "agency_swarm.cli.main",
+                "create-agent-template",
+                "Invalid Temperature Agent",
+                "--temperature",
+                "3.0",
+                "--path",
+                str(tmp_path),
+            ],
+            capture_output=True,
+            text=True,
+            cwd=Path(__file__).parent.parent.parent.parent,
+        )
+
+        assert result.returncode == 1
+        assert "ERROR: Temperature must be between 0.0 and 2.0" in result.stdout
+
     def test_create_agent_with_all_options(self, tmp_path: Path) -> None:
         """Test create-agent-template command with all available options."""
         result = subprocess.run(

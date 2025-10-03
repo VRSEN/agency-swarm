@@ -38,8 +38,15 @@ def create_agent_template(
     instructions=None,
     use_txt=False,
     include_example_tool=True,
-):
-    """Create an agent template with the specified structure."""
+) -> bool:
+    """Create an agent template with the specified structure.
+
+    Returns
+    -------
+    bool
+        ``True`` when the template is created successfully, ``False`` when
+        validation fails before any files are generated.
+    """
     if not agent_name:
         agent_name = input("Enter agent name: ")
 
@@ -49,7 +56,7 @@ def create_agent_template(
         _validate_temperature(temperature)
     except ValueError as e:
         print(f"\033[91mERROR: {e}\033[0m")
-        return
+        return False
 
     # Check if model is a reasoning model
     is_reasoning_model = any(model.startswith(prefix) for prefix in REASONING_PREFIXES)
@@ -79,7 +86,7 @@ def create_agent_template(
     agent_path = base_path / folder_name
 
     if agent_path.exists():
-        raise Exception("Folder already exists.")
+        raise FileExistsError("Folder already exists.")
 
     agent_path.mkdir(parents=True, exist_ok=False)
 
@@ -149,6 +156,8 @@ def create_agent_template(
     print("Agent folder created successfully.")
     print(f"Created at: {agent_path.absolute()}")
     print(f"Import it with: from {folder_name} import {folder_name}")
+
+    return True
 
 
 agent_template = """from agency_swarm import Agent, ModelSettings{reasoning_import}

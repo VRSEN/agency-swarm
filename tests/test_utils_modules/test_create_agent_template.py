@@ -15,7 +15,8 @@ class TestCreateAgentTemplate:
         """Test creating a basic agent template with minimal parameters."""
         agent_name = "Test Agent"
 
-        create_agent_template(agent_name=agent_name, path=str(tmp_path))
+        result = create_agent_template(agent_name=agent_name, path=str(tmp_path))
+        assert result is True
 
         # Check folder structure (now uses underscores)
         agent_folder = tmp_path / "test_agent"
@@ -37,7 +38,7 @@ class TestCreateAgentTemplate:
         """Test creating agent template without description - should be omitted."""
         agent_name = "Simple Agent"
 
-        create_agent_template(agent_name=agent_name, path=str(tmp_path))
+        assert create_agent_template(agent_name=agent_name, path=str(tmp_path)) is True
 
         agent_folder = tmp_path / "simple_agent"
         agent_file = agent_folder / "simple_agent.py"
@@ -58,7 +59,14 @@ class TestCreateAgentTemplate:
         agent_name = "Data Processor"
         agent_description = "Processes and analyzes data"
 
-        create_agent_template(agent_name=agent_name, agent_description=agent_description, path=str(tmp_path))
+        assert (
+            create_agent_template(
+                agent_name=agent_name,
+                agent_description=agent_description,
+                path=str(tmp_path),
+            )
+            is True
+        )
 
         agent_folder = tmp_path / "data_processor"
         agent_file = agent_folder / "data_processor.py"
@@ -81,7 +89,14 @@ class TestCreateAgentTemplate:
         agent_name = "Research Assistant"
         agent_description = "Helps with research tasks"
 
-        create_agent_template(agent_name=agent_name, agent_description=agent_description, path=str(tmp_path))
+        assert (
+            create_agent_template(
+                agent_name=agent_name,
+                agent_description=agent_description,
+                path=str(tmp_path),
+            )
+            is True
+        )
 
         agent_folder = tmp_path / "research_assistant"
         instructions_file = agent_folder / "instructions.md"
@@ -97,11 +112,14 @@ class TestCreateAgentTemplate:
         agent_description = "Custom description"
         custom_instructions = "These are custom instructions for the agent."
 
-        create_agent_template(
-            agent_name=agent_name,
-            agent_description=agent_description,
-            path=str(tmp_path),
-            instructions=custom_instructions,
+        assert (
+            create_agent_template(
+                agent_name=agent_name,
+                agent_description=agent_description,
+                path=str(tmp_path),
+                instructions=custom_instructions,
+            )
+            is True
         )
 
         agent_folder = tmp_path / "custom_agent"
@@ -116,11 +134,14 @@ class TestCreateAgentTemplate:
         agent_description = "Custom description"
         custom_instructions = "You are a specialized agent. Follow these rules: 1. Be precise 2. Be helpful"
 
-        create_agent_template(
-            agent_name=agent_name,
-            agent_description=agent_description,
-            instructions=custom_instructions,
-            path=str(tmp_path),
+        assert (
+            create_agent_template(
+                agent_name=agent_name,
+                agent_description=agent_description,
+                instructions=custom_instructions,
+                path=str(tmp_path),
+            )
+            is True
         )
 
         agent_folder = tmp_path / "custom_agent"
@@ -140,7 +161,9 @@ class TestCreateAgentTemplate:
         agent_name = "Instruction Agent"
         custom_instructions = "You are a specialized agent with custom instructions."
 
-        create_agent_template(agent_name=agent_name, instructions=custom_instructions, path=str(tmp_path))
+        assert (
+            create_agent_template(agent_name=agent_name, instructions=custom_instructions, path=str(tmp_path)) is True
+        )
 
         agent_folder = tmp_path / "instruction_agent"
 
@@ -159,8 +182,14 @@ class TestCreateAgentTemplate:
         agent_name = "Text Agent"
         agent_description = "Uses txt files"
 
-        create_agent_template(
-            agent_name=agent_name, agent_description=agent_description, path=str(tmp_path), use_txt=True
+        assert (
+            create_agent_template(
+                agent_name=agent_name,
+                agent_description=agent_description,
+                path=str(tmp_path),
+                use_txt=True,
+            )
+            is True
         )
 
         agent_folder = tmp_path / "text_agent"
@@ -179,8 +208,14 @@ class TestCreateAgentTemplate:
         agent_name = "No Tool Agent"
         agent_description = "Agent without example tool"
 
-        create_agent_template(
-            agent_name=agent_name, agent_description=agent_description, path=str(tmp_path), include_example_tool=False
+        assert (
+            create_agent_template(
+                agent_name=agent_name,
+                agent_description=agent_description,
+                path=str(tmp_path),
+                include_example_tool=False,
+            )
+            is True
         )
 
         agent_folder = tmp_path / "no_tool_agent"
@@ -196,7 +231,14 @@ class TestCreateAgentTemplate:
         agent_name = "Import Test Agent"
         agent_description = "Test imports"
 
-        create_agent_template(agent_name=agent_name, agent_description=agent_description, path=str(tmp_path))
+        assert (
+            create_agent_template(
+                agent_name=agent_name,
+                agent_description=agent_description,
+                path=str(tmp_path),
+            )
+            is True
+        )
 
         agent_folder = tmp_path / "import_test_agent"
         init_file = agent_folder / "__init__.py"
@@ -209,7 +251,14 @@ class TestCreateAgentTemplate:
         agent_name = "Tool Test Agent"
         agent_description = "Test tool generation"
 
-        create_agent_template(agent_name=agent_name, agent_description=agent_description, path=str(tmp_path))
+        assert (
+            create_agent_template(
+                agent_name=agent_name,
+                agent_description=agent_description,
+                path=str(tmp_path),
+            )
+            is True
+        )
 
         agent_folder = tmp_path / "tool_test_agent"
         tool_file = agent_folder / "tools" / "ExampleTool.py"
@@ -233,7 +282,7 @@ class TestCreateAgentTemplate:
         (tmp_path / "existing_agent").mkdir()
 
         # Should raise exception
-        with pytest.raises(Exception, match="Folder already exists"):
+        with pytest.raises(FileExistsError, match="Folder already exists"):
             create_agent_template(agent_name=agent_name, agent_description=agent_description, path=str(tmp_path))
 
     def test_agent_name_normalization(self, tmp_path: Path) -> None:
@@ -241,7 +290,14 @@ class TestCreateAgentTemplate:
         agent_name = "Complex Agent Name With Spaces"
         agent_description = "Test name normalization"
 
-        create_agent_template(agent_name=agent_name, agent_description=agent_description, path=str(tmp_path))
+        assert (
+            create_agent_template(
+                agent_name=agent_name,
+                agent_description=agent_description,
+                path=str(tmp_path),
+            )
+            is True
+        )
 
         # Should create folder with underscores
         agent_folder = tmp_path / "complex_agent_name_with_spaces"
@@ -261,7 +317,7 @@ class TestCreateAgentTemplate:
         """Test interactive input when name not provided."""
         mock_input.return_value = "Interactive Agent"
 
-        create_agent_template(path=str(tmp_path))
+        assert create_agent_template(path=str(tmp_path)) is True
 
         # Should create agent with input name
         agent_folder = tmp_path / "interactive_agent"
@@ -278,12 +334,15 @@ class TestCreateAgentTemplate:
         agent_name = "Smart Agent"
         agent_description = "Uses reasoning capabilities"
 
-        create_agent_template(
-            agent_name=agent_name,
-            agent_description=agent_description,
-            model="o1-preview",
-            reasoning="high",
-            path=str(tmp_path),
+        assert (
+            create_agent_template(
+                agent_name=agent_name,
+                agent_description=agent_description,
+                model="gpt-5-mini",
+                reasoning="high",
+                path=str(tmp_path),
+            )
+            is True
         )
 
         agent_folder = tmp_path / "smart_agent"
@@ -292,7 +351,7 @@ class TestCreateAgentTemplate:
 
         # Should have reasoning import and parameter
         assert "from openai.types.shared import Reasoning" in agent_content
-        assert 'model="o1-preview"' in agent_content
+        assert 'model="gpt-5-mini"' in agent_content
         assert 'reasoning=Reasoning(effort="high")' in agent_content
         # Should NOT have temperature
         assert "temperature=" not in agent_content
@@ -302,18 +361,21 @@ class TestCreateAgentTemplate:
         agent_name = "Bad Agent"
         agent_description = "Test error handling"
 
-        create_agent_template(
-            agent_name=agent_name,
-            agent_description=agent_description,
-            model="o1-preview",
-            temperature=0.7,
-            reasoning="medium",
-            path=str(tmp_path),
+        assert (
+            create_agent_template(
+                agent_name=agent_name,
+                agent_description=agent_description,
+                model="gpt-5-mini",
+                temperature=0.7,
+                reasoning="medium",
+                path=str(tmp_path),
+            )
+            is True
         )
 
         # Check error message was printed
         captured = capsys.readouterr()
-        assert "ERROR: Reasoning models (like o1-preview) do not support the temperature parameter" in captured.out
+        assert "ERROR: Reasoning models (like gpt-5-mini) do not support the temperature parameter" in captured.out
         assert "Temperature parameter will be ignored" in captured.out
 
         # Agent should still be created successfully
@@ -332,13 +394,16 @@ class TestCreateAgentTemplate:
         agent_name = "Regular Agent"
         agent_description = "Test error handling"
 
-        create_agent_template(
-            agent_name=agent_name,
-            agent_description=agent_description,
-            model="gpt-4.1",
-            reasoning="high",
-            temperature=0.5,
-            path=str(tmp_path),
+        assert (
+            create_agent_template(
+                agent_name=agent_name,
+                agent_description=agent_description,
+                model="gpt-4.1",
+                reasoning="high",
+                temperature=0.5,
+                path=str(tmp_path),
+            )
+            is True
         )
 
         # Check error message was printed
@@ -365,27 +430,29 @@ class TestCreateAgentTemplate:
 
         # Test empty name - should prompt for input, then validate
         mock_input.return_value = ""  # User enters empty string
-        create_agent_template(agent_name=None, path=str(tmp_path))
+        result = create_agent_template(agent_name=None, path=str(tmp_path))
 
         captured = capsys.readouterr()
         assert "ERROR: Agent name cannot be empty" in captured.out
+        assert result is False
 
     def test_invalid_characters_in_name(self, tmp_path: Path, capsys) -> None:
         """Test that agent names with invalid characters show error."""
         from agency_swarm.utils.create_agent_template import create_agent_template
 
         # Test with invalid characters
-        create_agent_template(agent_name="Bad<Name>", path=str(tmp_path))
+        result = create_agent_template(agent_name="Bad<Name>", path=str(tmp_path))
 
         captured = capsys.readouterr()
         assert "ERROR: Agent name contains invalid characters" in captured.out
+        assert result is False
 
     def test_temperature_validation(self, tmp_path: Path, capsys) -> None:
         """Test temperature validation."""
         from agency_swarm.utils.create_agent_template import create_agent_template
 
         # Test invalid temperature range
-        create_agent_template(
+        result = create_agent_template(
             agent_name="Test Agent",
             temperature=3.0,  # Invalid: > 2.0
             path=str(tmp_path),
@@ -393,3 +460,4 @@ class TestCreateAgentTemplate:
 
         captured = capsys.readouterr()
         assert "ERROR: Temperature must be between 0.0 and 2.0" in captured.out
+        assert result is False
