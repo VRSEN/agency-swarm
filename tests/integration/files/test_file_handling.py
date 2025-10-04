@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import logging
 import os
 import re
 import shutil
@@ -256,6 +257,67 @@ async def _cleanup_file_search_resources(real_openai_client: AsyncOpenAI, folder
                 print(f"Error cleaning up vector store: {e}")
     except Exception as e:
         print(f"Error during cleanup: {e}")
+
+
+@pytest.mark.asyncio
+async def test_files_folder_reuse_without_missing_directory_warning(
+    real_openai_client: AsyncOpenAI, tmp_path: Path, caplog
+):
+    """Agents reuse existing vector store directories without logging directory warnings."""
+
+    caplog.set_level(logging.WARNING, logger="agency_swarm.agent.file_manager")
+
+    source_file = Path("tests/data/files/favorite_books.txt")
+    assert source_file.exists(), f"Test file not found at {source_file}"
+
+    files_dir = tmp_path / "files"
+    files_dir.mkdir()
+    shutil.copy2(source_file, files_dir / source_file.name)
+
+    agent_kwargs = {
+        "name": "FileReuseAgent",
+        "instructions": "You are a document assistant who relies on FileSearch for answers.",
+        "files_folder": str(files_dir),
+        "include_search_results": True,
+        "model": "gpt-4.1",
+        "model_settings": ModelSettings(temperature=0.0, tool_choice="file_search"),
+        "tool_use_behavior": "stop_on_first_tool",
+    }
+
+    first_agent = Agent(**agent_kwargs)
+    first_agent._openai_client = real_openai_client
+
+    Agency(first_agent, user_context=None)
+    await _wait_for_vector_store(real_openai_client, first_agent)
+
+    initial_folder = first_agent.files_folder_path
+    assert initial_folder is not None
+    assert initial_folder.name.startswith("files_vs_"), f"Unexpected folder name: {initial_folder}"
+
+    first_run_logs = "\n".join(
+        record.message for record in caplog.records if record.name == "agency_swarm.agent.file_manager"
+    )
+    assert "not a directory" not in first_run_logs
+    caplog.clear()
+
+    reuse_agent = Agent(**agent_kwargs)
+    reuse_agent._openai_client = real_openai_client
+
+    Agency(reuse_agent, user_context=None)
+    await _wait_for_vector_store(real_openai_client, reuse_agent)
+
+    assert reuse_agent.files_folder_path == initial_folder
+
+    reuse_logs = "\n".join(
+        record.message for record in caplog.records if record.name == "agency_swarm.agent.file_manager"
+    )
+    assert "not a directory" not in reuse_logs
+
+    try:
+        await _cleanup_file_search_resources(real_openai_client, initial_folder, reuse_agent)
+    finally:
+        # Ensure the original `files` path no longer exists, confirming reuse
+        assert not files_dir.exists()
 
 
 @pytest.mark.asyncio

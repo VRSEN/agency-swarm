@@ -1,6 +1,6 @@
 .PHONY: sync
 sync:
-	uv sync --all-extras
+	uv sync --all-extras --dev
 
 .PHONY: prime
 prime:

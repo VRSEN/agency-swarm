@@ -82,9 +82,7 @@ class BaseTool(BaseModel, ABC):
                 schema["description"] = docstring.short_description
             else:
                 class_name = cls.__name__ if hasattr(cls, "__name__") else "Tool"
-                schema["description"] = (
-                    f"Correctly extracted `{class_name}` with all the required parameters with correct types"
-                )
+                schema["description"] = f"`{class_name}` tool"
 
         schema = {
             "name": schema["title"],
