@@ -332,3 +332,53 @@ def test_replace_messages_skips_save_callback():
 
     assert captured == []
     assert [msg["content"] for msg in manager.get_all_messages()] == ["new"]
+
+
+def test_function_call_output_with_same_id_different_call_ids_should_not_dedupe():
+    manager = ThreadManager()
+
+    first_output = {
+        "type": "function_call_output",
+        "id": "msg-1",
+        "call_id": "call-1",
+        "output": "first tool result",
+        "timestamp": 1,
+    }
+    second_output = {
+        "type": "function_call_output",
+        "id": "msg-1",
+        "call_id": "call-2",
+        "output": "second tool result",
+        "timestamp": 2,
+    }
+
+    manager.add_message(first_output)
+    manager.add_message(second_output)
+
+    outputs = [msg for msg in manager._store.messages if msg.get("type") == "function_call_output"]
+    assert len(outputs) == 2
+    assert {msg["call_id"] for msg in outputs} == {"call-1", "call-2"}
+
+
+def test_messages_with_none_type_and_same_id_should_not_dedupe():
+    manager = ThreadManager()
+
+    first_message = {
+        "type": None,
+        "id": "msg-1",
+        "role": "assistant",
+        "content": "first",
+        "timestamp": 1,
+    }
+    second_message = {
+        "type": None,
+        "id": "msg-1",
+        "role": "assistant",
+        "content": "second",
+        "timestamp": 2,
+    }
+
+    manager.add_message(first_message)
+    manager.add_message(second_message)
+
+    assert len(manager._store.messages) == 2

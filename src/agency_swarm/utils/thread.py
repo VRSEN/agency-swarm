@@ -42,13 +42,6 @@ class MessageStore:
         # cached history. Prefer exact-id matches, with a call_id fallback for
         # function_call_output items.
         msg_type = message.get("type")
-        message_id = message.get("id")
-        if message_id and message_id != FAKE_RESPONSES_ID:
-            for idx, existing in enumerate(self.messages):
-                if existing.get("id") == message_id and existing.get("type") == msg_type:
-                    self.messages[idx] = message
-                    logger.debug("Replacing duplicate message with id %s and type %s", message_id, msg_type)
-                    return
 
         if msg_type == "function_call_output":
             call_id = message.get("call_id")
@@ -58,6 +51,29 @@ class MessageStore:
                         self.messages[idx] = message
                         logger.debug("Replacing duplicate function_call_output with call_id %s", call_id)
                         return
+
+        message_id = message.get("id")
+        if message_id and message_id != FAKE_RESPONSES_ID:
+            for idx, existing in enumerate(self.messages):
+                if existing.get("id") != message_id or existing.get("type") != msg_type:
+                    continue
+                if msg_type is None:
+                    # Avoid deduplicating messages without a reliable type signal
+                    continue
+                if msg_type == "function_call_output":
+                    call_id = message.get("call_id")
+                    existing_call_id = existing.get("call_id")
+                    if (
+                        call_id
+                        and call_id != FAKE_RESPONSES_ID
+                        and existing_call_id
+                        and existing_call_id != FAKE_RESPONSES_ID
+                        and existing_call_id != call_id
+                    ):
+                        continue
+                self.messages[idx] = message
+                logger.debug("Replacing duplicate message with id %s and type %s", message_id, msg_type)
+                return
 
         self.messages.append(message)
         logger.debug(
