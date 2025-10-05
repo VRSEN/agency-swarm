@@ -75,6 +75,7 @@ def _persist_run_item_if_needed(
     current_stream_agent_name: str,
     current_agent_run_id: str,
     agency_context: "AgencyContext | None",
+    collected_items: list[Any],
 ) -> None:
     """Persist run item to thread manager with agency metadata if applicable."""
     if (
@@ -90,6 +91,13 @@ def _persist_run_item_if_needed(
             MessageFormatter.strip_agency_metadata([run_item_obj.to_input_item()])[0],
         )
         if item_dict:
+            # Anthropic-specific workaround: skip intermediate messages during tool execution
+            if _should_skip_intermediate_message_for_anthropic(run_item_obj, collected_items, agent):
+                logger.debug(
+                    f"Skipping intermediate MessageOutputItem for Anthropic during tool execution (agent {agent.name})"
+                )
+                return
+
             if isinstance(run_item_obj, MessageOutputItem):
                 single_citation_map = extract_direct_file_annotations([run_item_obj], agent_name=agent.name)
                 MessageFormatter.add_citations_to_message(
@@ -317,6 +325,7 @@ async def run_stream_with_guardrails(
                     current_stream_agent_name=current_stream_agent_name,
                     current_agent_run_id=current_agent_run_id,
                     agency_context=agency_context,
+                    collected_items=collected_items,
                 )
 
                 yield event
@@ -346,7 +355,6 @@ async def run_stream_with_guardrails(
                 include_assistant=False,
             )
             continue
-
         finally:
             try:
                 if not worker_task.done():
@@ -359,3 +367,62 @@ async def run_stream_with_guardrails(
                         await forward_task
             except Exception:
                 pass
+
+
+def _is_anthropic_model(agent: "Agent") -> bool:
+    """Check if agent uses LiteLLM with Anthropic provider."""
+    try:
+        from agents.extensions.models.litellm_model import LitellmModel
+
+        if isinstance(agent.model, LitellmModel):
+            model_name = getattr(agent.model, "model", "")
+            if isinstance(model_name, str) and model_name.startswith("anthropic/"):
+                return True
+    except ImportError:
+        pass
+    return False
+
+
+def _should_skip_intermediate_message_for_anthropic(
+    run_item_obj: RunItem, collected_items: list[Any], agent: "Agent"
+) -> bool:
+    """
+    Determine if MessageOutputItem should be skipped for Anthropic API compatibility.
+
+    Anthropic requires consecutive tool_use/tool_result pairs. Intermediate assistant
+    messages during tool execution must not be persisted for Anthropic models.
+
+    Returns:
+        True if message should be skipped (Anthropic with incomplete tool calls)
+    """
+    if not isinstance(run_item_obj, MessageOutputItem):
+        return False
+
+    if not _is_anthropic_model(agent):
+        return False
+
+    # Check if we have any ToolCallItem in collected_items
+    has_tool_calls = any(hasattr(item, "type") and item.type == "tool_call_item" for item in collected_items)
+
+    if not has_tool_calls:
+        return False
+
+    # Check if all tool calls have outputs
+    tool_call_ids = set()
+    tool_output_ids = set()
+
+    for item in collected_items:
+        if hasattr(item, "type") and item.type == "tool_call_item":
+            if hasattr(item, "raw_item"):
+                call_id = getattr(item.raw_item, "call_id", None)
+                if call_id:
+                    tool_call_ids.add(call_id)
+        elif hasattr(item, "type") and item.type == "tool_call_output_item":
+            if hasattr(item, "raw_item"):
+                raw = item.raw_item
+                call_id = raw.get("call_id") if isinstance(raw, dict) else getattr(raw, "call_id", None)
+                if call_id:
+                    tool_output_ids.add(call_id)
+
+    # Skip message if not all tool calls have outputs yet
+    return bool(tool_call_ids and tool_call_ids != tool_output_ids)
