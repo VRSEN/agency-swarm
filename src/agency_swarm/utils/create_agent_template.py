@@ -30,7 +30,7 @@ def _validate_temperature(temperature: float | None) -> None:
 def create_agent_template(
     agent_name=None,
     agent_description=None,
-    model="gpt-4.1",
+    model="gpt-5",
     reasoning=None,
     max_tokens=None,
     temperature=None,
