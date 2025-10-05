@@ -1,7 +1,7 @@
-"""Integration test verifying LiteLLM placeholder IDs are preserved.
+"""
+Integration test verifying LiteLLM placeholder IDs are preserved.
 
-This test mirrors `litellm_test.py` and requires live Anthropic access. It is
-skipped automatically when `ANTHROPIC_API_KEY` is not configured.
+Requires live Anthropic access; skipped automatically when ANTHROPIC_API_KEY is not configured.
 """
 
 import os

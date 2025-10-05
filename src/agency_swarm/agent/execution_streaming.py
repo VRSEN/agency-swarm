@@ -91,7 +91,12 @@ def _persist_run_item_if_needed(
             MessageFormatter.strip_agency_metadata([run_item_obj.to_input_item()])[0],
         )
         if item_dict:
-            # Anthropic-specific workaround: skip intermediate messages during tool execution
+            # Anthropic API currently requires consecutive tool_use/tool_result pairs without
+            # intervening assistant messages. During streaming, the SDK emits intermediate
+            # MessageOutputItem events before ToolCallOutputItem events arrive. Persisting
+            # these intermediate messages breaks Anthropic's message ordering requirement,
+            # causing "tool_use ids were found without tool_result blocks" errors on
+            # subsequent turns. Skip persisting these messages for LiteLLM+Anthropic only.
             if _should_skip_intermediate_message_for_anthropic(run_item_obj, collected_items, agent):
                 logger.debug(
                     f"Skipping intermediate MessageOutputItem for Anthropic during tool execution (agent {agent.name})"

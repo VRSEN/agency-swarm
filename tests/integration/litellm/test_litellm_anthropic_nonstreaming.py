@@ -1,15 +1,7 @@
 """
-Regression test for LiteLLM/Anthropic message ordering bug.
+Non-streaming version of Anthropic message ordering test.
 
-Bug: After upgrading to openai-agents 0.3.x, streaming mode with LiteLLM/Anthropic
-would fail on the second turn with:
-  "tool_use ids were found without tool_result blocks immediately after..."
-
-Root cause: Intermediate assistant messages during tool execution were persisted,
-breaking Anthropic's requirement for consecutive tool_use/tool_result pairs.
-
-This test verifies the fix: intermediate assistant messages are NOT persisted
-during tool execution, maintaining the correct sequence for Anthropic API.
+Verifies correct message ordering in non-streaming mode.
 """
 
 import os
@@ -59,18 +51,18 @@ def litellm_anthropic_agency():
     )
 
 
-class TestLitellmAnthropicMessageOrdering:
-    """Verify no intermediate assistant messages persist during tool execution."""
+class TestLitellmAnthropicNonStreamingMessageOrdering:
+    """Verify no intermediate assistant messages persist during tool execution (non-streaming mode)."""
 
     @pytest.mark.asyncio
     async def test_tool_usage_no_intermediate_messages(self, litellm_anthropic_agency: Agency):
-        """Verify tool usage with streaming followed by second turn."""
+        """Verify tool usage preserves correct message sequence in non-streaming mode."""
         import litellm
 
         litellm.modify_params = True
 
-        async for _ in litellm_anthropic_agency.get_response_stream(message="get my id"):
-            pass
+        # First turn with tool usage
+        await litellm_anthropic_agency.get_response(message="get my id")
 
         # Verify message structure
         messages = litellm_anthropic_agency.thread_manager.get_all_messages()
@@ -99,21 +91,17 @@ class TestLitellmAnthropicMessageOrdering:
                 )
 
         # Second turn should succeed
-        async for _ in litellm_anthropic_agency.get_response_stream(message="hi"):
-            pass
+        await litellm_anthropic_agency.get_response(message="hi")
 
     @pytest.mark.asyncio
     async def test_handoff_no_intermediate_messages(self, litellm_anthropic_agency: Agency):
-        """Verify handoff preserves correct message sequence in streaming mode."""
+        """Verify handoff preserves correct message sequence in non-streaming mode."""
         import litellm
 
         litellm.modify_params = True
 
         # First turn with handoff
-        async for _ in litellm_anthropic_agency.get_response_stream(
-            message="transfer to worker", recipient_agent="Coordinator"
-        ):
-            pass
+        await litellm_anthropic_agency.get_response(message="transfer to worker", recipient_agent="Coordinator")
 
         # Verify no intermediate assistant messages between tool calls and outputs
         messages = litellm_anthropic_agency.thread_manager.get_all_messages()
@@ -137,5 +125,4 @@ class TestLitellmAnthropicMessageOrdering:
                     )
 
         # Second turn should succeed
-        async for _ in litellm_anthropic_agency.get_response_stream(message="hi"):
-            pass
+        await litellm_anthropic_agency.get_response(message="hi")
