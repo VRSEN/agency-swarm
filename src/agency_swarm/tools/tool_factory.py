@@ -17,7 +17,12 @@ from agents.strict_schema import ensure_strict_json_schema
 from pydantic import BaseModel, ValidationError
 
 from .base_tool import BaseTool
-from .utils import generate_model_from_schema
+from .utils import (
+    build_parameter_object_schema,
+    build_tool_schema,
+    generate_model_from_schema,
+    resolve_url,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -176,49 +181,18 @@ class ToolFactory:
                             req_body_schema = content_obj["schema"]
                             break
 
-                param_properties: dict[str, Any] = {}
-                required_params: list[str] = []
-                for p in verb_spec.get("parameters", []):
-                    # normalise spec → openapi3 guarantees p["schema"] when parsing
-                    if "schema" not in p and "type" in p:
-                        p["schema"] = {"type": p["type"]}
-                    param_schema = param_properties.setdefault(p["name"], p["schema"].copy())
-                    if "description" in p:
-                        param_schema["description"] = p["description"]
-                    if "example" in p:
-                        param_schema["example"] = p["example"]
-                    if "examples" in p:
-                        param_schema["examples"] = p["examples"]
-                    if p.get("required"):
-                        required_params.append(p["name"])
+                parameters_obj_schema = build_parameter_object_schema(
+                    verb_spec.get("parameters", []),
+                    strict,
+                )
 
-                # nested `"parameters"` object for legacy agents
-                parameters_obj_schema: dict[str, Any] = {
-                    "type": "object",
-                    "properties": param_properties,
-                    "required": required_params,
-                    "additionalProperties": False if strict else True,
-                }
-
-                # full JSON schema for the FunctionTool
-                tool_schema: dict[str, Any] = {
-                    "type": "object",
-                    "properties": {
-                        "parameters": parameters_obj_schema,
-                    },
-                    "required": ["parameters"],
-                    "additionalProperties": False if strict else True,
-                    "strict": strict,
-                }
-                if req_body_schema:
-                    req_body_schema = req_body_schema.copy()
-                    if strict:
-                        req_body_schema.setdefault("additionalProperties", False)
-                    tool_schema["properties"]["requestBody"] = req_body_schema
-                    tool_schema["required"].append("requestBody")
-
-                if strict:
-                    tool_schema = ensure_strict_json_schema(tool_schema)
+                tool_schema = build_tool_schema(
+                    parameters_obj_schema,
+                    req_body_schema,
+                    strict=strict,
+                    include_strict_flag=True,
+                )
+                tool_schema["strict"] = strict
 
                 # Callback factory (captures current verb & path)
                 on_invoke_tool = ToolFactory._create_invoke_for_path(
@@ -295,16 +269,9 @@ class ToolFactory:
                         f"Invalid JSON input in request body for tool {request_body_model_.__name__}: {e}"
                     ) from e
 
-            url = f"{openapi['servers'][0]['url']}{path_}"
-            for key, val in param_container.items():
-                token = f"{{{key}}}"
-                if token in url:
-                    url = url.replace(token, str(val))
-                    # null-out so it doesn't go into query string
-                    param_container[key] = None
-            url = url.rstrip("/")
+            url, remaining_params = resolve_url(openapi["servers"][0]["url"], path_, param_container)
 
-            query_params = {k: v for k, v in param_container.items() if v is not None}
+            query_params = {k: v for k, v in remaining_params.items() if v is not None}
             if fixed_params:
                 query_params = {**query_params, **fixed_params}
 
