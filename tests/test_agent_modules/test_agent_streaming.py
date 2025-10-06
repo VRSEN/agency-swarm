@@ -1,7 +1,10 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
+from agents.items import MessageOutputItem
 from agents.lifecycle import RunHooks
+from agents.stream_events import RunItemStreamEvent
+from openai.types.responses import ResponseOutputMessage, ResponseOutputText
 
 from agency_swarm import Agent
 
@@ -10,20 +13,43 @@ from agency_swarm import Agent
 
 @pytest.mark.asyncio
 async def test_get_response_stream_basic():
-    """Validate that streamed dict events are enriched with agent/callerAgent metadata.
+    """Validate that RunItemStreamEvent objects are enriched with agent/callerAgent metadata.
 
     Why this matters: The UI and persistence layers consume these fields to attribute
     output to the correct agent (see docs/additional-features/streaming.mdx and
-    docs/additional-features/observability.mdx). This test proves the need for
-    metadata enrichment in the streaming path.
+    docs/additional-features/observability.mdx). This test proves metadata
+    enrichment works for proper SDK events.
     """
     agent = Agent(name="TestAgent", instructions="Test instructions")
     message_content = "Stream this"
 
+    # Create proper SDK event objects
+    msg_item1 = MessageOutputItem(
+        raw_item=ResponseOutputMessage(
+            id="msg_1",
+            content=[ResponseOutputText(text="Hello ", type="output_text", annotations=[])],
+            role="assistant",
+            status="in_progress",
+            type="message",
+        ),
+        type="message_output_item",
+        agent=None,
+    )
+    msg_item2 = MessageOutputItem(
+        raw_item=ResponseOutputMessage(
+            id="msg_2",
+            content=[ResponseOutputText(text="World", type="output_text", annotations=[])],
+            role="assistant",
+            status="completed",
+            type="message",
+        ),
+        type="message_output_item",
+        agent=None,
+    )
+
     async def dummy_stream():
-        yield {"event": "text", "data": "Hello "}
-        yield {"event": "text", "data": "World"}
-        yield {"event": "done"}
+        yield RunItemStreamEvent(name="message_output_created", item=msg_item1, type="run_item_stream_event")
+        yield RunItemStreamEvent(name="message_output_created", item=msg_item2, type="run_item_stream_event")
 
     class DummyStreamedResult:
         def stream_events(self):
@@ -33,27 +59,39 @@ async def test_get_response_stream_basic():
         events = []
         async for event in agent.get_response_stream(message_content):
             events.append(event)
-        assert events == [
-            {"event": "text", "data": "Hello ", "agent": "TestAgent", "callerAgent": None},
-            {"event": "text", "data": "World", "agent": "TestAgent", "callerAgent": None},
-            {"event": "done", "agent": "TestAgent", "callerAgent": None},
-        ]
+
+        assert len(events) == 2
+        for event in events:
+            assert isinstance(event, RunItemStreamEvent)
+            assert hasattr(event, "agent")
+            assert event.agent == "TestAgent"
+            assert hasattr(event, "callerAgent")
+            assert event.callerAgent is None
 
 
 @pytest.mark.asyncio
 async def test_get_response_stream_final_result_processing():
-    """Validate metadata presence for final_result events in streaming.
+    """Validate metadata presence for RunItemStreamEvent objects in streaming.
 
     Ensures downstream consumers can attribute final output to the right agent,
     per the documented metadata contract.
     """
     agent = Agent(name="TestAgent", instructions="Test instructions")
-    final_content = {"final_key": "final_value"}
+
+    msg_item = MessageOutputItem(
+        raw_item=ResponseOutputMessage(
+            id="msg_final",
+            content=[ResponseOutputText(text="Final result", type="output_text", annotations=[])],
+            role="assistant",
+            status="completed",
+            type="message",
+        ),
+        type="message_output_item",
+        agent=None,
+    )
 
     async def dummy_stream():
-        yield {"event": "text", "data": "Thinking..."}
-        yield {"event": "final_result", "data": final_content}
-        yield {"event": "done"}
+        yield RunItemStreamEvent(name="message_output_created", item=msg_item, type="run_item_stream_event")
 
     class DummyStreamedResult:
         def stream_events(self):
@@ -63,11 +101,14 @@ async def test_get_response_stream_final_result_processing():
         events = []
         async for event in agent.get_response_stream("Process this"):
             events.append(event)
-        assert events == [
-            {"event": "text", "data": "Thinking...", "agent": "TestAgent", "callerAgent": None},
-            {"event": "final_result", "data": final_content, "agent": "TestAgent", "callerAgent": None},
-            {"event": "done", "agent": "TestAgent", "callerAgent": None},
-        ]
+
+        assert len(events) == 1
+        event = events[0]
+        assert isinstance(event, RunItemStreamEvent)
+        assert hasattr(event, "agent")
+        assert event.agent == "TestAgent"
+        assert hasattr(event, "callerAgent")
+        assert event.callerAgent is None
 
 
 @pytest.mark.asyncio
@@ -250,9 +291,7 @@ async def test_get_response_stream_thread_management(
 async def test_stream_assigns_stable_agent_run_id_per_new_agent(
     mock_runner_run_streamed_patch, minimal_agent, mock_thread_manager
 ):
-    """Ensure each new_agent event establishes a stable agent_run_id that is
-    attached to all subsequent events and saved messages for that agent instance.
-    """
+    """Ensure each new agent stream receives its own agent_run_id end-to-end."""
 
     class Obj:
         pass
@@ -269,24 +308,22 @@ async def test_stream_assigns_stable_agent_run_id_per_new_agent(
     class DummyItem:
         def __init__(self, text: str):
             self.text = text
+            self.type = "message_output_item"
 
         def to_input_item(self):
             # Minimal assistant message dict compatible with storage
             return {"role": "assistant", "content": self.text, "id": f"msg_{self.text}"}
 
-    def make_raw_response_item_event(item: DummyItem):
-        e = Obj()
-        e.type = "raw_response_event"
-        e.item = item
-        return e
+    def make_run_item_event(item: DummyItem):
+        return RunItemStreamEvent(name="message_output_created", item=item, type="run_item_stream_event")
 
     async def mock_stream_wrapper():
         # First agent instance
         yield make_new_agent_event("RiskAnalyst", "agent_updated_stream_event_AAAA")
-        yield make_raw_response_item_event(DummyItem("A"))
+        yield make_run_item_event(DummyItem("A"))
         # Second agent instance of the same name
         yield make_new_agent_event("RiskAnalyst", "agent_updated_stream_event_BBBB")
-        yield make_raw_response_item_event(DummyItem("B"))
+        yield make_run_item_event(DummyItem("B"))
 
     class MockStreamedResult:
         def stream_events(self):
@@ -299,17 +336,18 @@ async def test_stream_assigns_stable_agent_run_id_per_new_agent(
         events.append(event)
 
     # Validate agent_run_id propagation on emitted events
+    assert len(events) == 4
     assert getattr(events[0], "type", None) == "agent_updated_stream_event"
     assert getattr(events[0], "agent_run_id", None) == "agent_updated_stream_event_AAAA"
-    assert getattr(events[1], "type", None) == "raw_response_event"
-    assert getattr(events[1], "agent_run_id", None) == "agent_updated_stream_event_AAAA"
+    assert getattr(events[1], "type", None) == "run_item_stream_event"
+    assert events[1].agent_run_id == "agent_updated_stream_event_AAAA"
 
     assert getattr(events[2], "type", None) == "agent_updated_stream_event"
     assert getattr(events[2], "agent_run_id", None) == "agent_updated_stream_event_BBBB"
-    assert getattr(events[3], "type", None) == "raw_response_event"
-    assert getattr(events[3], "agent_run_id", None) == "agent_updated_stream_event_BBBB"
+    assert getattr(events[3], "type", None) == "run_item_stream_event"
+    assert events[3].agent_run_id == "agent_updated_stream_event_BBBB"
 
-    # Validate saved assistant messages include the correct agent_run_id grouping
+    # Validate saved assistant messages include the correct agent_run_id
     saved_batches = [call.args[0] for call in mock_thread_manager.add_messages.call_args_list]
     saved_msgs = [m for batch in saved_batches for m in batch]
     # Keep only assistant outputs created from stream items in this test

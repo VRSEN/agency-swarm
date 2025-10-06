@@ -12,8 +12,8 @@ from agents import (
     Runner,
     TResponseInputItem,
 )
-from agents.items import MessageOutputItem, RunItem
-from agents.stream_events import RunItemStreamEvent
+from agents.items import MessageOutputItem, RunItem, ToolCallItem
+from agents.stream_events import RunItemStreamEvent, StreamEvent
 from openai.types.responses import ResponseOutputMessage, ResponseOutputText
 
 from agency_swarm.context import MasterContext
@@ -75,9 +75,13 @@ def _persist_run_item_if_needed(
     current_stream_agent_name: str,
     current_agent_run_id: str,
     agency_context: "AgencyContext | None",
-    collected_items: list[Any],
 ) -> None:
-    """Persist run item to thread manager with agency metadata if applicable."""
+    """Persist run item to thread manager with agency metadata and Anthropic reordering.
+
+    Extracts the RunItem from the event, adds agency metadata (agent, callerAgent,
+    agent_run_id, parent_run_id), and delegates to `_prepare_items_for_persistence` to handle
+    Anthropic-specific buffering/reordering before saving to the thread manager.
+    """
     if (
         hasattr(event, "item")
         and event.item
@@ -91,33 +95,34 @@ def _persist_run_item_if_needed(
             MessageFormatter.strip_agency_metadata([run_item_obj.to_input_item()])[0],
         )
         if item_dict:
-            # Anthropic API currently requires consecutive tool_use/tool_result pairs without
-            # intervening assistant messages. During streaming, the SDK emits intermediate
-            # MessageOutputItem events before ToolCallOutputItem events arrive. Persisting
-            # these intermediate messages breaks Anthropic's message ordering requirement,
-            # causing "tool_use ids were found without tool_result blocks" errors on
-            # subsequent turns. Skip persisting these messages for LiteLLM+Anthropic only.
-            if _should_skip_intermediate_message_for_anthropic(run_item_obj, collected_items, agent):
-                logger.debug(
-                    f"Skipping intermediate MessageOutputItem for Anthropic during tool execution (agent {agent.name})"
-                )
-                return
-
             if isinstance(run_item_obj, MessageOutputItem):
                 single_citation_map = extract_direct_file_annotations([run_item_obj], agent_name=agent.name)
                 MessageFormatter.add_citations_to_message(
                     run_item_obj, item_dict, single_citation_map, is_streaming=True
                 )
 
-            formatted_item = MessageFormatter.add_agency_metadata(
-                item_dict,  # type: ignore[arg-type]
-                agent=current_stream_agent_name,
-                caller_agent=sender_name,
-                agent_run_id=current_agent_run_id,
-                parent_run_id=parent_run_id,
-            )
-            if not MessageFilter.should_filter(formatted_item):
-                agency_context.thread_manager.add_messages([formatted_item])  # type: ignore[arg-type]
+        formatted_item = MessageFormatter.add_agency_metadata(
+            item_dict,  # type: ignore[arg-type]
+            agent=current_stream_agent_name,
+            caller_agent=sender_name,
+            agent_run_id=current_agent_run_id,
+            parent_run_id=parent_run_id,
+        )
+
+        items_to_add = _prepare_items_for_persistence(
+            formatted_item,
+            run_item_obj=run_item_obj,
+            agent=agent,
+            current_agent_run_id=current_agent_run_id,
+            agency_context=agency_context,
+        )
+
+        if not items_to_add:
+            return
+
+        filtered_items = [item for item in items_to_add if not MessageFilter.should_filter(item)]
+        if filtered_items:
+            agency_context.thread_manager.add_messages(filtered_items)  # type: ignore[arg-type]
 
 
 def perform_streamed_run(
@@ -154,7 +159,7 @@ async def run_stream_with_guardrails(
     parent_run_id: str | None,
     validation_attempts: int,
     throw_input_guardrail_error: bool,
-) -> AsyncGenerator[RunItemStreamEvent]:
+) -> AsyncGenerator[StreamEvent]:
     """Stream events with output-guardrail retries and guidance persistence."""
     attempts_remaining = int(validation_attempts or 0)
     history_for_runner = initial_history_for_runner
@@ -300,43 +305,61 @@ async def run_stream_with_guardrails(
                     yield guardrail_event
                     continue
 
-                if hasattr(event, "item") and event.item:
-                    collected_items.append(event.item)
-
-                (
-                    current_stream_agent_name,
-                    current_agent_run_id,
-                ) = _update_names_from_event(
-                    event,
-                    current_stream_agent_name,
-                    current_agent_run_id,
-                    master_context_for_run,
-                )
-
-                if not getattr(event, "_forwarded", False):
-                    event = add_agent_name_to_event(
-                        event,
-                        current_stream_agent_name,
-                        sender_name,
-                        agent_run_id=current_agent_run_id,
-                        parent_run_id=parent_run_id,
-                    )
-
-                _persist_run_item_if_needed(
+                # Reorder Anthropic tool events: buffer tool_use until message_output arrives.
+                # This ensures both the emitted stream and persisted history satisfy Anthropic's
+                # requirement that tool_use/tool_result pairs remain consecutive without
+                # intervening assistant messages. See helper docstrings for full context.
+                events_to_process = _reorder_anthropic_stream_events_if_needed(
                     event,
                     agent=agent,
-                    sender_name=sender_name,
-                    parent_run_id=parent_run_id,
-                    current_stream_agent_name=current_stream_agent_name,
-                    current_agent_run_id=current_agent_run_id,
                     agency_context=agency_context,
-                    collected_items=collected_items,
                 )
 
-                yield event
+                if not events_to_process:
+                    continue
+
+                for processed_event in events_to_process:
+                    (
+                        current_stream_agent_name,
+                        current_agent_run_id,
+                    ) = _update_names_from_event(
+                        processed_event,
+                        current_stream_agent_name,
+                        current_agent_run_id,
+                        master_context_for_run,
+                    )
+
+                    if not getattr(processed_event, "_forwarded", False):
+                        processed_event = add_agent_name_to_event(
+                            processed_event,
+                            current_stream_agent_name,
+                            sender_name,
+                            agent_run_id=current_agent_run_id,
+                            parent_run_id=parent_run_id,
+                        )
+
+                    if not isinstance(processed_event, RunItemStreamEvent):
+                        yield processed_event  # type: ignore[misc]
+                        continue
+
+                    if processed_event.item:
+                        collected_items.append(processed_event.item)
+
+                    _persist_run_item_if_needed(
+                        processed_event,
+                        agent=agent,
+                        sender_name=sender_name,
+                        parent_run_id=parent_run_id,
+                        current_stream_agent_name=current_stream_agent_name,
+                        current_agent_run_id=current_agent_run_id,
+                        agency_context=agency_context,
+                    )
+
+                    yield processed_event
 
             # After loop, if no guardrail exception, save hosted tool outputs (if any)
             if guardrail_exception is None:
+                _finalize_anthropic_reorder_state(agency_context)
                 if agency_context and agency_context.thread_manager and collected_items:
                     hosted_tool_outputs = MessageFormatter.extract_hosted_tool_results(agent, collected_items)
                     if hosted_tool_outputs:
@@ -347,8 +370,11 @@ async def run_stream_with_guardrails(
 
             # Guardrail tripped: persist guidance-only user message, rebuild history, and retry
             if attempts_remaining <= 0:
+                _finalize_anthropic_reorder_state(agency_context)
                 raise guardrail_exception
             attempts_remaining -= 1
+
+            _finalize_anthropic_reorder_state(agency_context)
 
             history_for_runner = append_guardrail_feedback(
                 agent=agent,
@@ -360,6 +386,7 @@ async def run_stream_with_guardrails(
                 include_assistant=False,
             )
             continue
+
         finally:
             try:
                 if not worker_task.done():
@@ -373,61 +400,206 @@ async def run_stream_with_guardrails(
             except Exception:
                 pass
 
+        _finalize_anthropic_reorder_state(agency_context)
+
 
 def _is_anthropic_model(agent: "Agent") -> bool:
-    """Check if agent uses LiteLLM with Anthropic provider."""
+    """Return True when the agent is configured to call an Anthropic model."""
+
+    model_identifier = getattr(agent, "model", None)
+    if isinstance(model_identifier, str) and model_identifier.startswith("anthropic/"):
+        return True
+
     try:
         from agents.extensions.models.litellm_model import LitellmModel
 
         if isinstance(agent.model, LitellmModel):
-            model_name = getattr(agent.model, "model", "")
-            if isinstance(model_name, str) and model_name.startswith("anthropic/"):
+            litellm_model = getattr(agent.model, "model", "")
+            if isinstance(litellm_model, str) and litellm_model.startswith("anthropic/"):
                 return True
     except ImportError:
         pass
+
+    settings = getattr(agent, "model_settings", None)
+    metadata = getattr(settings, "metadata", None)
+    if isinstance(metadata, dict):
+        meta_model = metadata.get("model")
+        if isinstance(meta_model, str) and meta_model.startswith("anthropic/"):
+            return True
+        provider = metadata.get("provider")
+        if isinstance(provider, str) and provider.lower() == "anthropic":
+            return True
+
     return False
 
 
-def _should_skip_intermediate_message_for_anthropic(
-    run_item_obj: RunItem, collected_items: list[Any], agent: "Agent"
-) -> bool:
+def _resolve_event_agent(default_agent: "Agent", run_item: RunItem) -> "Agent":
+    candidate = getattr(run_item, "agent", None)
+    if candidate is not None and hasattr(candidate, "name"):
+        return candidate  # type: ignore[return-value]
+    return default_agent
+
+
+def _prepare_items_for_persistence(
+    formatted_item: TResponseInputItem,
+    *,
+    run_item_obj: RunItem,
+    agent: "Agent",
+    current_agent_run_id: str,
+    agency_context: "AgencyContext | None",
+) -> list[TResponseInputItem] | None:
+    """Buffer Anthropic tool_use items until their acknowledgement message or tool_result arrives.
+
+    Anthropic API requires consecutive tool_use/tool_result pairs without intervening assistant
+    messages. During streaming, the SDK emits intermediate MessageOutputItem events before
+    ToolCallOutputItem events arrive. If we persist the tool_use immediately, followed by
+    these intermediate messages, the saved history violates Anthropic's ordering requirement,
+    causing "tool_use ids were found without tool_result blocks immediately after" errors on
+    subsequent turns.
+
+    Solution: Hold tool_use items in a buffer until we see either:
+    - The MessageOutputItem that acknowledges tool execution started, OR
+    - The ToolCallOutputItem with the actual tool result
+
+    This ensures the persisted history always has: [assistant_message, tool_use, tool_result]
+    in the correct order for LiteLLM+Anthropic compatibility.
     """
-    Determine if MessageOutputItem should be skipped for Anthropic API compatibility.
 
-    Anthropic requires consecutive tool_use/tool_result pairs. Intermediate assistant
-    messages during tool execution must not be persisted for Anthropic models.
+    event_agent = _resolve_event_agent(agent, run_item_obj)
 
-    Returns:
-        True if message should be skipped (Anthropic with incomplete tool calls)
+    if event_agent is not agent:
+        return [formatted_item]
+
+    if agency_context is None or not _is_anthropic_model(event_agent):
+        return [formatted_item]
+
+    state = _get_anthropic_reorder_state(agency_context, event_agent.name)
+
+    if isinstance(run_item_obj, ToolCallItem):
+        state["awaiting_ack"] = True
+        state["pending"].append(formatted_item)
+        return None
+
+    if isinstance(run_item_obj, MessageOutputItem):
+        items: list[TResponseInputItem] = [formatted_item]
+        if state["pending"]:
+            items.extend(state["pending"])
+            state["pending"].clear()
+        state["awaiting_ack"] = False
+        return items
+
+    if getattr(run_item_obj, "type", None) == "tool_call_output_item" and state["pending"]:
+        items = state["pending"] + [formatted_item]
+        state["pending"].clear()
+        state["awaiting_ack"] = False
+        return items
+
+    return [formatted_item]
+
+
+def _reorder_anthropic_stream_events_if_needed(
+    event: StreamEvent,
+    *,
+    agent: "Agent",
+    agency_context: "AgencyContext | None",
+) -> list[StreamEvent]:
+    """Delay Anthropic tool_use events in the stream until their announcing message arrives.
+
+    This function mirrors `_prepare_items_for_persistence` but operates on the event stream
+    rather than persisted items. By buffering tool_use events and releasing them with their
+    acknowledgement message, we ensure:
+
+    1. Downstream consumers (UI, observability) see events in the correct Anthropic order
+    2. The stream matches the persisted history structure (no event/storage divergence)
+    3. Forwarded sub-agent events maintain their original order (via _forwarded flag)
+
+    See `_prepare_items_for_persistence` docstring for the concrete LiteLLM Anthropic API
+    requirements that necessitate this reordering.
     """
-    if not isinstance(run_item_obj, MessageOutputItem):
-        return False
 
-    if not _is_anthropic_model(agent):
-        return False
+    if not isinstance(event, RunItemStreamEvent):
+        return [event]
 
-    # Check if we have any ToolCallItem in collected_items
-    has_tool_calls = any(hasattr(item, "type") and item.type == "tool_call_item" for item in collected_items)
+    run_item = event.item
+    event_agent = _resolve_event_agent(agent, run_item)
 
-    if not has_tool_calls:
-        return False
+    if agency_context is None or not _is_anthropic_model(event_agent):
+        return [event]
 
-    # Check if all tool calls have outputs
-    tool_call_ids = set()
-    tool_output_ids = set()
+    if getattr(event, "_forwarded", False):
+        return [event]
 
-    for item in collected_items:
-        if hasattr(item, "type") and item.type == "tool_call_item":
-            if hasattr(item, "raw_item"):
-                call_id = getattr(item.raw_item, "call_id", None)
-                if call_id:
-                    tool_call_ids.add(call_id)
-        elif hasattr(item, "type") and item.type == "tool_call_output_item":
-            if hasattr(item, "raw_item"):
-                raw = item.raw_item
-                call_id = raw.get("call_id") if isinstance(raw, dict) else getattr(raw, "call_id", None)
-                if call_id:
-                    tool_output_ids.add(call_id)
+    state = _get_anthropic_reorder_state(agency_context, event_agent.name)
 
-    # Skip message if not all tool calls have outputs yet
-    return bool(tool_call_ids and tool_call_ids != tool_output_ids)
+    if isinstance(run_item, ToolCallItem) and state["awaiting_ack"]:
+        state["awaiting_ack"] = True
+        state["pending_events"].append(event)
+        return []
+
+    if isinstance(run_item, MessageOutputItem):
+        events: list[StreamEvent] = [event]
+        if state["pending_events"]:
+            events.extend(state["pending_events"])
+            state["pending_events"] = []
+        state["awaiting_ack"] = False
+        return events
+
+    if getattr(run_item, "type", None) == "tool_call_output_item":
+        state["awaiting_ack"] = False
+        if state["pending_events"]:
+            events = state["pending_events"] + [event]
+            state["pending_events"] = []
+            return events
+        return [event]
+
+    return [event]
+
+
+def _get_anthropic_reorder_state(
+    agency_context: "AgencyContext",
+    agent_key: str,
+) -> dict[str, Any]:
+    """Return mutable reorder state for the given agent.
+
+    State structure:
+    - pending: list[TResponseInputItem] - buffered items awaiting persistence
+    - pending_events: list[StreamEvent] - buffered stream events awaiting emission
+    - awaiting_ack: bool - True when we have tool_use items waiting for acknowledgement
+    """
+
+    state_map = agency_context._anthropic_reorder_state
+    if state_map is None:
+        state_map = {}
+        agency_context._anthropic_reorder_state = state_map
+
+    state = state_map.get(agent_key)
+    if state is None:
+        state = {"pending": [], "pending_events": [], "awaiting_ack": True}
+        state_map[agent_key] = state
+    return state
+
+
+def _finalize_anthropic_reorder_state(agency_context: "AgencyContext | None") -> None:
+    """Flush any buffered Anthropic items and clear tracking state."""
+
+    if agency_context is None:
+        return
+
+    state_map = agency_context._anthropic_reorder_state
+    if not state_map:
+        return
+
+    pending_items: list[TResponseInputItem] = []
+    for state in state_map.values():
+        buffered = state.get("pending", [])
+        if buffered:
+            pending_items.extend(buffered)
+            state["pending"] = []
+        state["pending_events"] = []
+
+    if pending_items and agency_context.thread_manager:
+        filtered = [item for item in pending_items if not MessageFilter.should_filter(item)]
+        if filtered:
+            agency_context.thread_manager.add_messages(filtered)  # type: ignore[arg-type]
+
+    state_map.clear()

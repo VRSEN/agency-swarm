@@ -2,6 +2,7 @@
 Deterministic streaming order test with two agents and custom tools.
 """
 
+import os
 from typing import Any
 
 import pytest
@@ -33,7 +34,7 @@ def combine_results(results: str) -> str:
 # semantic `tool_call_item` arrives before the agent's own message output.
 # Preserve the deterministic order we now observe so that the tests confirm the
 # integration keeps step with SDK streaming semantics.
-EXPECTED_FLOW: list[tuple[str, str, str | None]] = [
+EXPECTED_FLOW_DEFAULT: list[tuple[str, str, str | None]] = [
     ("tool_call_item", "MainAgent", "get_market_data"),
     ("message_output_item", "MainAgent", None),
     ("tool_call_output_item", "MainAgent", None),
@@ -41,6 +42,22 @@ EXPECTED_FLOW: list[tuple[str, str, str | None]] = [
     ("tool_call_item", "SubAgent", "analyze_risk"),
     ("tool_call_output_item", "SubAgent", None),
     ("message_output_item", "SubAgent", None),
+    ("tool_call_output_item", "MainAgent", None),
+    ("message_output_item", "MainAgent", None),
+]
+
+ANTHROPIC_MODEL_NAME = "anthropic/claude-sonnet-4-20250514"
+
+EXPECTED_FLOW_ANTHROPIC: list[tuple[str, str, str | None]] = [
+    ("message_output_item", "MainAgent", None),
+    ("tool_call_item", "MainAgent", "get_market_data"),
+    ("tool_call_output_item", "MainAgent", None),
+    ("tool_call_item", "MainAgent", "send_message"),
+    ("message_output_item", "SubAgent", None),  # Sub-agent reordering happens independently
+    ("tool_call_item", "SubAgent", "analyze_risk"),
+    ("tool_call_output_item", "SubAgent", None),
+    ("message_output_item", "SubAgent", None),
+    ("message_output_item", "MainAgent", None),
     ("tool_call_output_item", "MainAgent", None),
     ("message_output_item", "MainAgent", None),
 ]
@@ -57,8 +74,36 @@ def analyze_risk(data: str) -> str:
 
 
 @pytest.mark.asyncio
-async def test_full_streaming_flow_hardcoded_sequence() -> None:
+@pytest.mark.parametrize(
+    ("use_anthropic", "expected_flow"),
+    [
+        (False, EXPECTED_FLOW_DEFAULT),
+        pytest.param(
+            True,
+            EXPECTED_FLOW_ANTHROPIC,
+            marks=pytest.mark.skipif(
+                not os.getenv("ANTHROPIC_API_KEY"),
+                reason="ANTHROPIC_API_KEY required for Anthropic test",
+            ),
+        ),
+    ],
+)
+async def test_full_streaming_flow_hardcoded_sequence(
+    use_anthropic: bool, expected_flow: list[tuple[str, str, str | None]]
+) -> None:
     """Proves canonical streaming order for Main→Sub agent with tool calls is deterministic."""
+    if use_anthropic:
+        import litellm
+        from agents.extensions.models.litellm_model import LitellmModel
+
+        litellm.modify_params = True
+
+        main_model = LitellmModel(model=ANTHROPIC_MODEL_NAME)
+        helper_model = LitellmModel(model=ANTHROPIC_MODEL_NAME)
+    else:
+        main_model = None
+        helper_model = None
+
     main = Agent(
         name="MainAgent",
         description="Coordinator",
@@ -67,6 +112,7 @@ async def test_full_streaming_flow_hardcoded_sequence() -> None:
             "Then use the send_message tool to ask SubAgent to analyze the data and reply. "
             "Finally, respond to the user with a brief conclusion."
         ),
+        model=main_model,
         model_settings=ModelSettings(temperature=0.0),
         tools=[get_market_data],
     )
@@ -75,6 +121,7 @@ async def test_full_streaming_flow_hardcoded_sequence() -> None:
         name="SubAgent",
         description="Risk analyzer",
         instructions=("When prompted by MainAgent: call analyze_risk on the provided data, then reply succinctly."),
+        model=helper_model,
         model_settings=ModelSettings(temperature=0.0),
         tools=[analyze_risk],
     )
@@ -113,7 +160,7 @@ async def test_full_streaming_flow_hardcoded_sequence() -> None:
             comparable.append(m)
 
     # Stream must equal the expected sequence
-    assert stream_items == EXPECTED_FLOW, f"Stream flow mismatch:\n got={stream_items}\n exp={EXPECTED_FLOW}"
+    assert stream_items == expected_flow, f"Stream flow mismatch:\n got={stream_items}\n exp={expected_flow}"
 
     # Normalize saved messages to stream-equivalent triples inline
     saved_normalized: list[tuple[str, str, str | None]] = []
@@ -137,7 +184,7 @@ async def test_full_streaming_flow_hardcoded_sequence() -> None:
 
     # Saved messages: compare minimal invariant (type + agent) to reduce coupling
     saved_min = [(t, a) for (t, a, _n) in saved_normalized]
-    expected_min = [(t, a) for (t, a, _n) in EXPECTED_FLOW]
+    expected_min = [(t, a) for (t, a, _n) in expected_flow]
     assert saved_min == expected_min, f"Saved minimal order mismatch:\n got={saved_min}\n exp={expected_min}"
 
 

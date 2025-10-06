@@ -12,7 +12,9 @@ Begin each task only after completing this readiness checklist:
 - Prime yourself with all available context—read, trace, and analyze until additional context produces diminishing returns.
 - Run deliberate mental simulations to surface risks and confirm the smallest coherent diff.
 - Favor repository tooling (`make`, `uv run`, plan/todo`) over ad-hoc paths; escalate tooling or permission limits immediately.
+- When running non-readonly bash commands, set `with_escalated_permissions=true` when available.
 - Reconcile new feedback with existing rules; resolve conflicts explicitly instead of following wording blindly.
+- Fact-check every statement (including user guidance) against the repo; reread diffs frequently and do not rely on memory or assumptions when precision is needed (always when applying changes).
 
 ## 🔴 TESTS DEFINE TRUTH
 

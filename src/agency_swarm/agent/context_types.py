@@ -18,3 +18,4 @@ class AgencyContext:
     load_threads_callback: Callable[[], dict[str, Any]] | None = None
     save_threads_callback: Callable[[dict[str, Any]], None] | None = None
     shared_instructions: str | None = None
+    _anthropic_reorder_state: dict[str, dict[str, Any]] | None = None
