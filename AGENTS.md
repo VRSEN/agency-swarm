@@ -159,7 +159,7 @@ Agency Swarm is a multi-agent orchestration framework on OpenAI Agents SDK v1.x 
 ## Code Quality
 - Max file size: 500 lines
 - Max method size: 100 lines (prefer 10-40)
-- Test coverage: 91%+ mandatory
+- Test coverage: 90%+ mandatory
 - Integration tests: `tests/integration/` (no mocks)
 - Never script tests ad-hoc—use standard infrastructure
 

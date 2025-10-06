@@ -12,7 +12,7 @@ from agents import (
     Runner,
     TResponseInputItem,
 )
-from agents.items import MessageOutputItem, RunItem, ToolCallItem
+from agents.items import HandoffCallItem, MessageOutputItem, RunItem, ToolCallItem
 from agents.stream_events import RunItemStreamEvent, StreamEvent
 from openai.types.responses import ResponseOutputMessage, ResponseOutputText
 
@@ -475,7 +475,7 @@ def _prepare_items_for_persistence(
 
     state = _get_anthropic_reorder_state(agency_context, event_agent.name)
 
-    if isinstance(run_item_obj, ToolCallItem):
+    if isinstance(run_item_obj, ToolCallItem | HandoffCallItem):
         state["awaiting_ack"] = True
         state["pending"].append(formatted_item)
         return None
@@ -488,7 +488,7 @@ def _prepare_items_for_persistence(
         state["awaiting_ack"] = False
         return items
 
-    if getattr(run_item_obj, "type", None) == "tool_call_output_item" and state["pending"]:
+    if getattr(run_item_obj, "type", None) in {"tool_call_output_item", "handoff_output_item"} and state["pending"]:
         items = state["pending"] + [formatted_item]
         state["pending"].clear()
         state["awaiting_ack"] = False
@@ -531,8 +531,7 @@ def _reorder_anthropic_stream_events_if_needed(
 
     state = _get_anthropic_reorder_state(agency_context, event_agent.name)
 
-    if isinstance(run_item, ToolCallItem) and state["awaiting_ack"]:
-        state["awaiting_ack"] = True
+    if isinstance(run_item, ToolCallItem | HandoffCallItem) and state["awaiting_ack"]:
         state["pending_events"].append(event)
         return []
 
@@ -544,7 +543,7 @@ def _reorder_anthropic_stream_events_if_needed(
         state["awaiting_ack"] = False
         return events
 
-    if getattr(run_item, "type", None) == "tool_call_output_item":
+    if getattr(run_item, "type", None) in {"tool_call_output_item", "handoff_output_item"}:
         state["awaiting_ack"] = False
         if state["pending_events"]:
             events = state["pending_events"] + [event]
