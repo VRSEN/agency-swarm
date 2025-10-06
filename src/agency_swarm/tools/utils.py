@@ -68,12 +68,12 @@ def from_openapi_schema(
                 verb_spec.get("requestBody", {}).get("content", {}).get("application/json", {}).get("schema")
             )
 
-            parameters_obj_schema = _build_parameter_object_schema(
+            parameters_obj_schema = build_parameter_object_schema(
                 verb_spec.get("parameters", []),
                 strict,
             )
 
-            tool_schema = _build_tool_schema(parameters_obj_schema, req_body_schema, strict=strict)
+            tool_schema = build_tool_schema(parameters_obj_schema, req_body_schema, strict=strict)
 
             # Callback factory  (captures current verb & path)
 
@@ -92,7 +92,7 @@ def from_openapi_schema(
                 raw_parameters: dict[str, Any] = payload.get("parameters", {})
                 body_payload = payload.get("requestBody")
 
-                url, remaining_params = _resolve_url(base_url_, path_, raw_parameters)
+                url, remaining_params = resolve_url(base_url_, path_, raw_parameters)
 
                 query_params = {k: v for k, v in remaining_params.items() if v is not None}
                 if fixed_params:
@@ -207,7 +207,7 @@ def generate_model_from_schema(schema: dict, class_name: str, strict: bool) -> t
     return model  # type: ignore[return-value]
 
 
-def _collect_parameter_schemas(parameters: list[dict[str, Any]]) -> tuple[dict[str, Any], list[str]]:
+def collect_parameter_schemas(parameters: list[dict[str, Any]]) -> tuple[dict[str, Any], list[str]]:
     """Extract parameter schemas and required flags from an OpenAPI operation."""
     properties: dict[str, Any] = {}
     required: list[str] = []
@@ -232,8 +232,8 @@ def _collect_parameter_schemas(parameters: list[dict[str, Any]]) -> tuple[dict[s
     return properties, required
 
 
-def _build_parameter_object_schema(parameters: list[dict[str, Any]], strict: bool) -> dict[str, Any]:
-    properties, required = _collect_parameter_schemas(parameters)
+def build_parameter_object_schema(parameters: list[dict[str, Any]], strict: bool) -> dict[str, Any]:
+    properties, required = collect_parameter_schemas(parameters)
     return {
         "type": "object",
         "properties": properties,
@@ -242,11 +242,12 @@ def _build_parameter_object_schema(parameters: list[dict[str, Any]], strict: boo
     }
 
 
-def _build_tool_schema(
+def build_tool_schema(
     parameter_schema: dict[str, Any],
     request_body_schema: dict[str, Any] | None,
     *,
     strict: bool,
+    include_strict_flag: bool = False,
 ) -> dict[str, Any]:
     schema: dict[str, Any] = {
         "type": "object",
@@ -254,6 +255,9 @@ def _build_tool_schema(
         "required": ["parameters"],
         "additionalProperties": False if strict else True,
     }
+
+    if include_strict_flag and strict:
+        schema["strict"] = True
 
     if request_body_schema:
         body_schema = request_body_schema.copy()
@@ -265,7 +269,7 @@ def _build_tool_schema(
     return ensure_strict_json_schema(schema) if strict else schema
 
 
-def _resolve_url(base_url: str, path: str, parameters: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+def resolve_url(base_url: str, path: str, parameters: dict[str, Any]) -> tuple[str, dict[str, Any]]:
     """Replace templated path parameters and return remaining query parameters."""
     url = f"{base_url}{path}"
     remaining_params: dict[str, Any] = {}
