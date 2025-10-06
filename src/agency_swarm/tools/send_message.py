@@ -457,10 +457,9 @@ class SendMessageHandoff:
     """
 
     add_reminder: bool = True  # Adds a reminder system message to the history on handoff
-    reminder_override: str | None = None  # Replaces default reminder with a custom message
 
     def create_handoff(self, recipient_agent: "Agent"):
-        """Create and return the handoff object."""
+
         recipient_agent_name = recipient_agent.name
         handoff_object = handoff(
             agent=recipient_agent,
@@ -487,11 +486,11 @@ class SendMessageHandoff:
                     if all_messages:
                         last_message = all_messages[-1]
 
-                        # Use reminder_override if provided, otherwise use default reminder
+                        # Use handoff_reminder if provided, otherwise use default reminder
                         reminder_content = (
-                            self.reminder_override
-                            if self.reminder_override is not None
-                            else f"You are now {recipient_agent.name}. Please continue the task."
+                            recipient_agent.handoff_reminder
+                            if recipient_agent.handoff_reminder is not None
+                            else f"Transfer completed. You are {recipient_agent_name}. Please continue the task."
                         )
 
                         reminder_msg: dict[str, Any] = {
