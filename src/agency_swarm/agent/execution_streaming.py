@@ -90,6 +90,12 @@ def _persist_run_item_if_needed(
         and not getattr(event, "_forwarded", False)
     ):
         run_item_obj = event.item
+
+        # Skip ToolCallItem for handoffs; HandoffCallItem will be persisted instead
+        if isinstance(run_item_obj, ToolCallItem):
+            tool_name = getattr(run_item_obj.raw_item, "name", "")
+            if tool_name.startswith("transfer_to_"):
+                return
         item_dict = cast(
             TResponseInputItem,
             MessageFormatter.strip_agency_metadata([run_item_obj.to_input_item()])[0],

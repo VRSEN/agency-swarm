@@ -118,6 +118,18 @@ class TestLitellmAnthropicMessageOrdering:
         # Verify no intermediate assistant messages between tool calls and outputs
         messages = litellm_anthropic_agency.thread_manager.get_all_messages()
 
+        # Verify no duplicate function_call entries with the same call_id
+        function_calls = [m for m in messages if m.get("type") == "function_call"]
+        call_ids = [m.get("call_id") for m in function_calls]
+        unique_call_ids = set(call_ids)
+
+        assert len(call_ids) == len(unique_call_ids), (
+            f"Found duplicate function_call entries with the same call_id. "
+            f"This violates provider requirements (Anthropic: unique tool_use ids; "
+            f"OpenAI: one tool result per tool_call_id). "
+            f"call_ids={call_ids}"
+        )
+
         for i, msg in enumerate(messages):
             if msg.get("type") == "function_call":
                 call_id = msg.get("call_id")
