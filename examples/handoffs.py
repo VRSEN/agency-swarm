@@ -1,11 +1,11 @@
 """
-Handoffs-Only Example (Meaningful Roles)
+Handoffs Example
 
 This example demonstrates a realistic handoff workflow using SendMessageHandoff.
 
 - DevLead implements features and hands off security-sensitive work to SecurityEngineer (default reminder)
 - SecurityEngineer performs audits and hands off to ComplianceOfficer (reminder disabled)
-- ComplianceOfficer completes compliance checks and can hand back to DevLead (custom reminder)
+- ComplianceOfficer completes compliance checks and hands back to DevLead, triggering a custom reminder for DevLead
 
 Run with: python examples/handoffs.py
 
@@ -66,9 +66,10 @@ def generate_compliance_report(scope: str) -> str:
 
 
 # By default, to reduce hallucinations, when using SendMessageHandoff, a reminder system message is added to the history.
-# You can adjust the reminder message in agents settings or disable it entirely by setting parameter below.
+# You can adjust the reminder message per receiving agent via `Agent.handoff_reminder` or disable it entirely by subclassing.
 class NoReminderHandoff(SendMessageHandoff):
     """SendMessageHandoff with no reminder."""
+
     add_reminder = False  # True by default
 
 
@@ -82,7 +83,10 @@ dev_lead = Agent(
         "Only use transfer tool once."
     ),
     tools=[implement_feature],
-    send_message_tool_class=SendMessageHandoff,  # default reminder behavior
+    send_message_tool_class=SendMessageHandoff,  # default reminder behavior when handing off
+    # Reminder shown when DevLead receives a handoff (e.g., from ComplianceOfficer).
+    # Default format: "Transfer completed. You are {recipient_agent_name}. Please continue the task."
+    handoff_reminder="Compliance review is complete. Confirm deployment steps and attach audit artifacts.",
     model_settings=ModelSettings(temperature=0.0),
 )
 
@@ -95,7 +99,7 @@ security_engineer = Agent(
         "without adding a reminder (disabled)."
     ),
     tools=[security_audit, vulnerability_scan],
-    send_message_tool_class=SendMessageHandoff,  # custom reminder
+    send_message_tool_class=NoReminderHandoff,  # reminder disabled
     model_settings=ModelSettings(temperature=0.0),
 )
 
@@ -104,13 +108,10 @@ compliance_officer = Agent(
     description="Verifies regulatory and policy compliance and issues sign-off.",
     instructions=(
         "You are the ComplianceOfficer. Run policy checks and generate compliance reports. "
-        "When handing back to DevLead, include a custom reminder to confirm sign-off steps and artifacts."
+        "When handing back to DevLead, confirm sign-off steps and artifacts—they receive a custom reminder to double-check."
     ),
     tools=[policy_check, generate_compliance_report],
-    send_message_tool_class=NoReminderHandoff,  # reminder disabled
-    # Note: the handoff_reminder will be given to this agent before the transfer happens.
-    # Default reminder: "You are now {recipient_agent_name}. Please continue the task."
-    handoff_reminder="You are now the ComplianceOfficer agent. Summarize received context and confirm compliance sign-off steps.",
+    send_message_tool_class=SendMessageHandoff,  # default reminder when handing off
     model_settings=ModelSettings(temperature=0.0),
 )
 
@@ -134,7 +135,6 @@ async def main(input_message):
 
 
 if __name__ == "__main__":
-
     input_message = (
         "Implement user authentication with 2FA for our web app. "
         "After implementation, hand off to SecurityEngineer to run security_audit on the auth module and vulnerability_scan on the web app. "

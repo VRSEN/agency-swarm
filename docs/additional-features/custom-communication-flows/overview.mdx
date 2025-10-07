@@ -142,7 +142,7 @@ For example, `name="send_message_formatted"` or `name="send_message_custom"` and
 ### Custom Handoff Class
 
 By default, whenever a handoff occurs, prior to transferring the chat, a special system message will be added to the chat history to remind the recipient agent that a handoff has happened. This helps to reduce the amount of hallucinations and agent confusion whenever a chat transfer happens.
-You can customize the reminder message or disable it entirely by defining a custom Handoff class as follows (see [`add_reminder`](https://github.com/VRSEN/agency-swarm/blob/main/src/agency_swarm/tools/send_message.py#L454-L460) and [`handoffs_reminder`](https://github.com/VRSEN/agency-swarm/blob/main/src/agency_swarm/agent/core.py#L105) parameters):
+You can customize the reminder message or disable it entirely by defining a custom Handoff class as follows (see [`add_reminder`](https://github.com/VRSEN/agency-swarm/blob/main/src/agency_swarm/tools/send_message.py#L454-L460) and [`handoff_reminder`](https://github.com/VRSEN/agency-swarm/blob/main/src/agency_swarm/agent/core.py#L105) parameters). Set `handoff_reminder` on the agent that receives the handoff so the message appears in its context:
 
 ```python
 from agency_swarm import Agent
@@ -163,6 +163,7 @@ from agency_swarm.tools.send_message import SendMessageHandoff
 
 agent = Agent(
     name="CustomHandoffAgent",
+    # Delivered to this agent whenever it receives a handoff.
     handoff_reminder="You are now the active agent. Summarize received context and answer user query.",
 )
 ```

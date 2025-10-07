@@ -459,7 +459,6 @@ class SendMessageHandoff:
     add_reminder: bool = True  # Adds a reminder system message to the history on handoff
 
     def create_handoff(self, recipient_agent: "Agent"):
-
         recipient_agent_name = recipient_agent.name
         handoff_object = handoff(
             agent=recipient_agent,
