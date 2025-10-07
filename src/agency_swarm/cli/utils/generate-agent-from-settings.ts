@@ -169,12 +169,13 @@ function generateInstructionsMd(agentData: AgentSettings): string {
  */
 function generateAgentPy(agentData: AgentSettings, agentName: string): string {
   const displayName = agentData.name;
+  const pythonDisplayName = toPythonObject(displayName);
 
   // Build optional agent parameters
   let optionalParams = '';
 
   if (agentData.description) {
-    optionalParams += `    description="${agentData.description}",\n`;
+    optionalParams += `    description=${toPythonObject(agentData.description)},\n`;
   }
 
   // Handle response_format for JSON output
@@ -233,7 +234,7 @@ function generateAgentPy(agentData: AgentSettings, agentName: string): string {
           let rankingConfig = "ranking_options=RankingOptions(";
           const rankingParts: string[] = [];
 
-          // Always set ranker to "auto" regardless of original value (ranker likely will outdated)
+          // Always set ranker to "auto" because published ranker names change frequently
           rankingParts.push(`ranker="auto"`);
 
           if (rankingOptions.score_threshold !== undefined) {
@@ -285,7 +286,7 @@ function generateAgentPy(agentData: AgentSettings, agentName: string): string {
 
   // Add model as direct parameter if provided
   if (agentData.model) {
-    optionalParams += `    model="${agentData.model}",\n`;
+    optionalParams += `    model=${toPythonObject(agentData.model)},\n`;
   }
 
   // Build ModelSettings - only if we have model settings to include (excluding model)
@@ -363,7 +364,7 @@ function generateAgentPy(agentData: AgentSettings, agentName: string): string {
   const content = `${imports}
 
 ${pydanticModelClass}${pydanticModelClass ? '\n' : ''}${agentName} = Agent(
-    name="${displayName}",
+    name=${pythonDisplayName},
     instructions="./instructions.md",
 ${optionalParams}${modelSettingsBlock})
 

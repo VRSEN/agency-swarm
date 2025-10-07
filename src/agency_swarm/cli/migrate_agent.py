@@ -47,12 +47,10 @@ def check_node_dependencies() -> bool:
 
 
 def migrate_agent_command(settings_file: str, output_dir: str = ".") -> int:
-    """Main function to generate agent from settings.json using TypeScript script.
+    """Generate an agent from a settings.json file using the TypeScript helper script.
 
-    Returns
-    -------
-    int
-        Exit code: 0 for success, 1 for error.
+    Returns:
+        int: Exit code from the generator process when it executes, or 1 when a precondition fails.
     """
     is_windows = platform.system() == "Windows"
 
