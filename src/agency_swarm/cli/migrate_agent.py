@@ -1,6 +1,7 @@
 """Migrate OpenAI Assistant settings.json to Agency Swarm v1.x agent."""
 
 import os
+import platform
 import subprocess
 import sys
 from pathlib import Path
@@ -30,66 +31,57 @@ def find_typescript_script() -> Path | None:
 
 
 def check_node_dependencies() -> bool:
-    """Check if Node.js and required dependencies are available."""
-    import platform
-
+    """Check if Node.js and ts-node are available."""
     is_windows = platform.system() == "Windows"
 
-    try:
-        # Check if Node.js is available
-        subprocess.run(["node", "--version"], capture_output=True, check=True, shell=is_windows)
-
-        # Check if TypeScript is available (either globally or via npx)
-        try:
-            subprocess.run(["npx", "tsc", "--version"], capture_output=True, check=True, shell=is_windows)
-            return True
-        except subprocess.CalledProcessError:
-            try:
-                subprocess.run(["tsc", "--version"], capture_output=True, check=True, shell=is_windows)
-                return True
-            except subprocess.CalledProcessError:
-                # Try ts-node as well since we need it
-                try:
-                    subprocess.run(["npx", "ts-node", "--version"], capture_output=True, check=True, shell=is_windows)
-                    return True
-                except subprocess.CalledProcessError:
-                    return False
-    except (subprocess.CalledProcessError, FileNotFoundError):
+    # Node.js is required
+    if not _command_succeeds(["node", "--version"], shell=is_windows):
         return False
 
+    # ts-node is required (we run the TypeScript directly via ts-node)
+    # Try npx first (more common), then global install
+    if _command_succeeds(["npx", "ts-node", "--version"], shell=is_windows):
+        return True
 
-def migrate_agent_command(settings_file: str, output_dir: str = ".") -> None:
-    """Main function to generate agent from settings.json using TypeScript script."""
-    import platform
+    return _command_succeeds(["ts-node", "--version"], shell=is_windows)
 
+
+def migrate_agent_command(settings_file: str, output_dir: str = ".") -> int:
+    """Generate an agent from a settings.json file using the TypeScript helper script.
+
+    Returns:
+        int: Exit code from the generator process when it executes, or 1 when a precondition fails.
+    """
     is_windows = platform.system() == "Windows"
 
     settings_path = Path(settings_file)
 
     if not settings_path.exists():
-        print(f"Error: Settings file '{settings_file}' not found.")
-        return
+        print(f"Error: Settings file '{settings_file}' not found.", file=sys.stderr)
+        return 1
 
     # Find the TypeScript script
     ts_script = find_typescript_script()
     if not ts_script:
-        print("Error: TypeScript generator script 'generate-agent-from-settings.ts' not found.")
-        print("Expected location: src/agency_swarm/cli/utils/generate-agent-from-settings.ts")
-        return
+        print("Error: TypeScript generator script 'generate-agent-from-settings.ts' not found.", file=sys.stderr)
+        print("Expected location: src/agency_swarm/cli/utils/generate-agent-from-settings.ts", file=sys.stderr)
+        return 1
 
     # Check Node.js dependencies
     if not check_node_dependencies():
-        print("Error: Node.js and TypeScript are required to run the agent generator.")
-        print("Please install Node.js and TypeScript:")
-        print("  1. Install Node.js: https://nodejs.org/")
-        print("  2. Install TypeScript: npm install -g typescript ts-node")
-        return
+        print("Error: Node.js and ts-node are required to run the agent generator.", file=sys.stderr)
+        print("Please install Node.js and ts-node:", file=sys.stderr)
+        print("  1. Install Node.js: https://nodejs.org/", file=sys.stderr)
+        print("  2. Install ts-node: npm install -g ts-node", file=sys.stderr)
+        return 1
 
     # Resolve paths before changing directories
     original_cwd = Path.cwd()
     output_path = Path(output_dir).resolve()
     settings_arg = str(settings_path.resolve())
     output_path.mkdir(parents=True, exist_ok=True)
+
+    result: subprocess.CompletedProcess | None = None
 
     try:
         os.chdir(output_path)
@@ -103,19 +95,34 @@ def migrate_agent_command(settings_file: str, output_dir: str = ".") -> None:
 
         result = subprocess.run(cmd, capture_output=True, text=True, shell=is_windows)
 
-        if result.returncode == 0:
-            print(result.stdout)
-        else:
-            print("Error running TypeScript generator:")
-            print(result.stderr)
-            if result.stdout:
-                print("Output:")
-                print(result.stdout)
-            sys.exit(1)
-
     except Exception as e:
-        print(f"Error running agent generator: {e}")
-        sys.exit(1)
+        print(f"Error running agent generator: {e}", file=sys.stderr)
+        return 1
     finally:
         # Restore original working directory
         os.chdir(original_cwd)
+
+    # Handle result after restoring directory
+    if result and result.returncode == 0:
+        if result.stdout:
+            print(result.stdout)
+        return 0
+
+    # Error case
+    print("Error running TypeScript generator:", file=sys.stderr)
+    if result and result.stderr:
+        print(result.stderr, file=sys.stderr)
+    if result and result.stdout:
+        print("Output:", file=sys.stderr)
+        print(result.stdout, file=sys.stderr)
+
+    return result.returncode if result else 1
+
+
+def _command_succeeds(command: list[str], *, shell: bool) -> bool:
+    """Check if a command runs successfully."""
+    try:
+        subprocess.run(command, capture_output=True, check=True, shell=shell)
+        return True
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return False
