@@ -1,6 +1,6 @@
 """
 This example showcases how you can:
-1. Easily setup an agency that utilizes open-source models
+1. Easily setup an agency that utilizes third-party models (Claude, Gemini, Grok)
 2. Use their native tools (anthropic's web search).
 3. Combine them with unpatched models (to allow for oai's hosted tool usage)
 
@@ -13,7 +13,7 @@ Pre-requisites:
 2. Install openai-agents optional litellm package by running `pip install 'openai-agents[litellm]'`
 3. Install litellm[proxy] separatelly by running `pip install 'litellm[proxy]'`
 
-Run the agency by running `python examples/open_source_models.py`
+Run the agency by running `python examples/third_party_models.py`
 This will open a terminal demo of an startup validation agency with 3 agents:
 1. strategy_agent - gpt agent coordinates and summarizes work of other agents.
 2. market_research_agent - gemini agent that performs market research and competitive analysis.
