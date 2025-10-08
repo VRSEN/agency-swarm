@@ -32,22 +32,43 @@ def test_check_node_dependencies_requires_node(monkeypatch: pytest.MonkeyPatch) 
 
     monkeypatch.setattr("agency_swarm.cli.migrate_agent.subprocess.run", fake_run)
 
-    assert migrate_agent.check_node_dependencies() is False
+    available, runner = migrate_agent.check_node_dependencies()
+    assert available is False
+    assert runner == ""
 
 
 def test_check_node_dependencies_requires_ts_node(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Ensure dependency check fails when ts-node is unavailable even if Node is present."""
+    """Ensure dependency check fails when tsx/ts-node is unavailable even if Node is present."""
 
     def fake_run(command, capture_output, check, shell):  # type: ignore[no-untyped-def]
         # Node is available
         if command[0] == "node":
             return CompletedProcess(command, 0)
-        # ts-node is not available
+        # tsx and ts-node are not available
         raise CalledProcessError(1, command)
 
     monkeypatch.setattr("agency_swarm.cli.migrate_agent.subprocess.run", fake_run)
 
-    assert migrate_agent.check_node_dependencies() is False
+    available, runner = migrate_agent.check_node_dependencies()
+    assert available is False
+    assert runner == ""
+
+
+def test_check_node_dependencies_succeeds_with_tsx(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Dependency check should succeed when tsx is available as preferred runner."""
+
+    def fake_run(command, capture_output, check, shell):  # type: ignore[no-untyped-def]
+        if command[0] == "node":
+            return CompletedProcess(command, 0)
+        if command[:2] == ["npx", "tsx"]:
+            return CompletedProcess(command, 0)
+        raise CalledProcessError(1, command)
+
+    monkeypatch.setattr("agency_swarm.cli.migrate_agent.subprocess.run", fake_run)
+
+    available, runner = migrate_agent.check_node_dependencies()
+    assert available is True
+    assert runner == "tsx"
 
 
 def test_check_node_dependencies_succeeds_with_npx_ts_node(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -56,13 +77,17 @@ def test_check_node_dependencies_succeeds_with_npx_ts_node(monkeypatch: pytest.M
     def fake_run(command, capture_output, check, shell):  # type: ignore[no-untyped-def]
         if command[0] == "node":
             return CompletedProcess(command, 0)
+        if command[:2] == ["npx", "tsx"]:
+            raise CalledProcessError(1, command)  # tsx not available
         if command[:2] == ["npx", "ts-node"]:
             return CompletedProcess(command, 0)
         raise CalledProcessError(1, command)
 
     monkeypatch.setattr("agency_swarm.cli.migrate_agent.subprocess.run", fake_run)
 
-    assert migrate_agent.check_node_dependencies() is True
+    available, runner = migrate_agent.check_node_dependencies()
+    assert available is True
+    assert runner == "ts-node"
 
 
 def test_check_node_dependencies_succeeds_with_global_ts_node(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -71,15 +96,19 @@ def test_check_node_dependencies_succeeds_with_global_ts_node(monkeypatch: pytes
     def fake_run(command, capture_output, check, shell):  # type: ignore[no-untyped-def]
         if command[0] == "node":
             return CompletedProcess(command, 0)
+        if command[:2] == ["npx", "tsx"]:
+            raise CalledProcessError(1, command)  # tsx not available
         if command[:2] == ["npx", "ts-node"]:
-            raise CalledProcessError(1, command)  # npx not available
+            raise CalledProcessError(1, command)  # npx ts-node not available
         if command[0] == "ts-node":
             return CompletedProcess(command, 0)  # global install available
         raise CalledProcessError(1, command)
 
     monkeypatch.setattr("agency_swarm.cli.migrate_agent.subprocess.run", fake_run)
 
-    assert migrate_agent.check_node_dependencies() is True
+    available, runner = migrate_agent.check_node_dependencies()
+    assert available is True
+    assert runner == "ts-node"
 
 
 def test_find_typescript_script_exists() -> None:
@@ -118,7 +147,7 @@ def test_migrate_agent_command_dependency_failure_returns_error(
     ts_script.write_text("// stub")
 
     monkeypatch.setattr(migrate_agent, "find_typescript_script", lambda: ts_script)
-    monkeypatch.setattr(migrate_agent, "check_node_dependencies", lambda: False)
+    monkeypatch.setattr(migrate_agent, "check_node_dependencies", lambda: (False, ""))
 
     exit_code = migrate_agent.migrate_agent_command(str(settings_path), str(tmp_path))
     assert exit_code == 1
@@ -133,9 +162,9 @@ def test_migrate_agent_command_successful_execution(tmp_path: Path, monkeypatch:
     ts_script.write_text("// stub")
 
     monkeypatch.setattr(migrate_agent, "find_typescript_script", lambda: ts_script)
-    monkeypatch.setattr(migrate_agent, "check_node_dependencies", lambda: True)
+    monkeypatch.setattr(migrate_agent, "check_node_dependencies", lambda: (True, "tsx"))
 
-    completed = CompletedProcess(["npx", "ts-node"], 0, stdout="Agent generated successfully\n", stderr="")
+    completed = CompletedProcess(["npx", "tsx"], 0, stdout="Agent generated successfully\n", stderr="")
 
     def fake_run(command, capture_output, text, shell):  # type: ignore[no-untyped-def]
         return completed
@@ -155,9 +184,9 @@ def test_migrate_agent_command_failed_execution(tmp_path: Path, monkeypatch: pyt
     ts_script.write_text("// stub")
 
     monkeypatch.setattr(migrate_agent, "find_typescript_script", lambda: ts_script)
-    monkeypatch.setattr(migrate_agent, "check_node_dependencies", lambda: True)
+    monkeypatch.setattr(migrate_agent, "check_node_dependencies", lambda: (True, "tsx"))
 
-    completed = CompletedProcess(["npx", "ts-node"], 2, stdout="", stderr="TypeScript error\n")
+    completed = CompletedProcess(["npx", "tsx"], 2, stdout="", stderr="TypeScript error\n")
 
     def fake_run(command, capture_output, text, shell):  # type: ignore[no-untyped-def]
         return completed
