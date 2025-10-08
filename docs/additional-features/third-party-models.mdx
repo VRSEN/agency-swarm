@@ -1,14 +1,14 @@
 ---
-title: "Open-Source Models"
-description: "Utilize open-source models with Agency Swarm."
-icon: "code-fork"
+title: "Third-Party Models"
+description: "Use models from Anthropic, Google, AWS, or self-hosted open-source models via LiteLLM."
+icon: "server"
 ---
 
-While OpenAI is generally recommended, there are situations where you might prefer open-source models. Agency Swarm supports various open-source model integrations as alternatives to OpenAI:
+While OpenAI is generally recommended, there are situations where you might prefer third-party models. Agency Swarm supports proprietary providers (Anthropic, Google, AWS) and self-hosted open-source models (Llama, Mistral, etc.) through LiteLLM integration:
 
 ## LiteLLM Integration
 
-Since Agents SDK no longer uses assistants, most of the previously available frameworks became incompatible with it. One of the few frameworks that has been ported for the new SDK is [LiteLLM](https://docs.litellm.ai/docs/response_api), which you can use to connect your agent to various providers, such as: Anthropic, Vertex AI, AWS Bedrock, Azure, and others.
+Since Agents SDK no longer uses assistants, most of the previously available frameworks became incompatible with it. One of the few frameworks that has been ported for the new SDK is [LiteLLM](https://docs.litellm.ai/docs/response_api), which you can use to connect your agent to various providers (Anthropic, Google Vertex AI, AWS Bedrock, Azure) as well as self-hosted open-source models via Ollama, vLLM, and other local serving solutions.
 
 
 <Tabs>
@@ -43,7 +43,7 @@ gemini_agent = Agent(
 </Step>
 
 <Step title="Create and Run Agency">
-Set up your agency and start using open-source models:
+Set up your agency and start using third-party models:
 
 ```python
 import asyncio
@@ -137,7 +137,7 @@ gemini_agent = Agent(
 </Step>
 
 <Step title="Create and Run Agency">
-Set up your agency and start using open-source models:
+Set up your agency and start using third-party models:
 
 ```python
 import asyncio
@@ -193,14 +193,16 @@ Here both Grok and Gemini agents will be able to use their native search tools, 
 ## Limitations
 
 <Warning>
-Be aware of the limitations when using open-source models.
+Be aware of the limitations when using third-party models.
 </Warning>
 
 - **Hosted tools are not supported**: Patched agents are not able to utilize hosted tools, such as WebSearch, FileSearch, CodeInterpreter and others.
 - **Patched and unpatched models should not use handoffs to communicate**: You may use standard OpenAI client and patched agents in a single agency, however using handoff to transfer chat from patched model to unpatched or vice-versa will lead to an error.
-- **Function calling may not be supported by some open-source models**: This limitation prevents the agent from communicating with other agents in the agency. Therefore, it must be positioned at the end of the agency chart and cannot utilize any tools.
+- **Function calling may not be supported by some third-party models**: This limitation prevents the agent from communicating with other agents in the agency. Therefore, it must be positioned at the end of the agency chart and cannot utilize any tools.
 - **RAG is typically limited**: Most open-source implementations have restricted Retrieval-Augmented Generation capabilities. It is recommended to develop a custom tool with your own vector database.
 - **Potential library conflicts**: the Agents SDK is still a fairly new framework which is being actively developed and improved. Due to that, there might be potential conflicts between litellm and openai-agents packages on recent releases.
+
+For Azure OpenAI, see [Azure OpenAI](/additional-features/azure-openai).
 
 ## Future Plans
 

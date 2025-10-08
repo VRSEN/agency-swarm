@@ -103,7 +103,7 @@
                                 ]
                             },
                             "additional-features/azure-openai",
-                            "additional-features/open-source-models",
+                            "additional-features/third-party-models",
                             "additional-features/deployment-to-production",
                             "additional-features/observability"
                         ]
