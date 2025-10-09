@@ -60,7 +60,8 @@ def test_add_messages(method: str, messages: list[dict]):
     assert manager._store.messages == messages
 
 
-def test_duplicate_message_id_replaces_existing_entry():
+def test_duplicate_message_id_is_preserved():
+    """Ensure ThreadManager leaves duplicate message ids intact."""
     manager = ThreadManager()
 
     initial = {
@@ -87,11 +88,11 @@ def test_duplicate_message_id_replaces_existing_entry():
     manager.add_message(initial)
     manager.add_message(updated)
 
-    assert len(manager._store.messages) == 1
-    assert manager._store.messages[0]["tool_calls"] == updated["tool_calls"]
+    assert manager._store.messages == [initial, updated]
 
 
-def test_duplicate_function_call_output_replaces_existing_entry():
+def test_function_call_output_duplicates_are_preserved():
+    """Ensure ThreadManager does not dedupe function_call_output entries."""
     manager = ThreadManager()
 
     first_output = {
@@ -110,11 +111,11 @@ def test_duplicate_function_call_output_replaces_existing_entry():
     manager.add_message(first_output)
     manager.add_message(final_output)
 
-    assert len(manager._store.messages) == 1
-    assert manager._store.messages[0]["output"] == "final"
+    assert manager._store.messages == [first_output, final_output]
 
 
-def test_function_call_output_dedupes_by_call_id_even_with_unique_ids():
+def test_function_call_output_unique_ids_are_preserved():
+    """Ensure distinct message ids for the same call id remain appended."""
     manager = ThreadManager()
 
     first_output = {
@@ -135,9 +136,7 @@ def test_function_call_output_dedupes_by_call_id_even_with_unique_ids():
     manager.add_message(first_output)
     manager.add_message(final_output)
 
-    assert len(manager._store.messages) == 1
-    assert manager._store.messages[0]["id"] == "msg-2"
-    assert manager._store.messages[0]["output"] == "final"
+    assert manager._store.messages == [first_output, final_output]
 
 
 def test_placeholder_messages_are_not_deduped():
@@ -332,6 +331,31 @@ def test_replace_messages_skips_save_callback():
 
     assert captured == []
     assert [msg["content"] for msg in manager.get_all_messages()] == ["new"]
+
+
+def test_thread_manager_allows_duplicate_ids_by_design():
+    """Verify ThreadManager leaves duplicate items untouched (SDK handles dedupe)."""
+    manager = ThreadManager()
+
+    first = {
+        "id": "msg-1",
+        "type": "function_call",
+        "call_id": "call-1",
+        "role": "assistant",
+        "timestamp": 1,
+    }
+    second = {
+        "id": "msg-1",
+        "type": "function_call",
+        "call_id": "call-1",
+        "role": "assistant",
+        "timestamp": 2,
+    }
+
+    manager.add_message(first)
+    manager.add_message(second)
+
+    assert manager._store.messages == [first, second]
 
 
 def test_function_call_output_with_same_id_different_call_ids_should_not_dedupe():

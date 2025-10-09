@@ -4,7 +4,6 @@ from dataclasses import dataclass, field
 from typing import Any, cast
 
 from agents import TResponseInputItem
-from agents.models.fake_id import FAKE_RESPONSES_ID
 
 logger = logging.getLogger(__name__)
 
@@ -33,47 +32,6 @@ class MessageStore:
         if not isinstance(message, dict):
             logger.warning(f"Attempted to add invalid message: {message}. Expected dict.")
             return
-
-        # openai-agents 0.3.x emits a `tool_called` RunItem as soon as the model
-        # signals `ResponseOutputItemDoneEvent`. We persist that stream event
-        # immediately, then persist the final turn result once the run completes.
-        # Without a guard the same tool/function call would be stored twice, which
-        # later causes "Duplicate item found" errors when conversations re-use the
-        # cached history. Prefer exact-id matches, with a call_id fallback for
-        # function_call_output items.
-        msg_type = message.get("type")
-
-        if msg_type == "function_call_output":
-            call_id = message.get("call_id")
-            if call_id and call_id != FAKE_RESPONSES_ID:
-                for idx, existing in enumerate(self.messages):
-                    if existing.get("type") == "function_call_output" and existing.get("call_id") == call_id:
-                        self.messages[idx] = message
-                        logger.debug("Replacing duplicate function_call_output with call_id %s", call_id)
-                        return
-
-        message_id = message.get("id")
-        if message_id and message_id != FAKE_RESPONSES_ID:
-            for idx, existing in enumerate(self.messages):
-                if existing.get("id") != message_id or existing.get("type") != msg_type:
-                    continue
-                if msg_type is None:
-                    # Avoid deduplicating messages without a reliable type signal
-                    continue
-                if msg_type == "function_call_output":
-                    call_id = message.get("call_id")
-                    existing_call_id = existing.get("call_id")
-                    if (
-                        call_id
-                        and call_id != FAKE_RESPONSES_ID
-                        and existing_call_id
-                        and existing_call_id != FAKE_RESPONSES_ID
-                        and existing_call_id != call_id
-                    ):
-                        continue
-                self.messages[idx] = message
-                logger.debug("Replacing duplicate message with id %s and type %s", message_id, msg_type)
-                return
 
         self.messages.append(message)
         logger.debug(

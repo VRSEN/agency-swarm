@@ -7,8 +7,45 @@ from typing import Any
 
 import pytest
 from agents import ModelSettings, function_tool
+from agents.models.fake_id import FAKE_RESPONSES_ID
 
 from agency_swarm import Agency, Agent
+
+
+def _assert_sanitized_history(messages: list[dict[str, Any]]) -> None:
+    """Validate persisted conversation order matches sanitized tool semantics."""
+
+    seen_ids: set[str] = set()
+
+    for index, message in enumerate(messages):
+        msg_type = message.get("type")
+        msg_id = message.get("id")
+        if isinstance(msg_id, str) and msg_id and msg_id != FAKE_RESPONSES_ID:
+            assert msg_id not in seen_ids, f"Duplicate message id detected: {msg_id}"
+            seen_ids.add(msg_id)
+
+        if msg_type != "function_call":
+            continue
+
+        call_id = message.get("call_id")
+        assert isinstance(call_id, str) and call_id, f"Missing call_id for function_call at index {index}"
+
+        output_index = None
+        for candidate in range(index + 1, len(messages)):
+            if (
+                messages[candidate].get("type") == "function_call_output"
+                and messages[candidate].get("call_id") == call_id
+            ):
+                output_index = candidate
+                break
+
+        assert output_index is not None, f"No function_call_output found for call_id {call_id}"
+
+        between = messages[index + 1 : output_index]
+        assistants = [m for m in between if m.get("role") == "assistant"]
+        assert not assistants, (
+            f"Intermediate assistant message found between function_call and output for call_id {call_id}: {assistants}"
+        )
 
 
 # Additional tools for complex scenarios
@@ -49,12 +86,12 @@ EXPECTED_FLOW_DEFAULT: list[tuple[str, str, str | None]] = [
 ANTHROPIC_MODEL_NAME = "anthropic/claude-sonnet-4-20250514"
 
 EXPECTED_FLOW_ANTHROPIC: list[tuple[str, str, str | None]] = [
-    ("message_output_item", "MainAgent", None),
     ("tool_call_item", "MainAgent", "get_market_data"),
+    ("message_output_item", "MainAgent", None),
     ("tool_call_output_item", "MainAgent", None),
     ("tool_call_item", "MainAgent", "send_message"),
-    ("message_output_item", "SubAgent", None),  # Sub-agent reordering happens independently
     ("tool_call_item", "SubAgent", "analyze_risk"),
+    ("message_output_item", "SubAgent", None),
     ("tool_call_output_item", "SubAgent", None),
     ("message_output_item", "SubAgent", None),
     ("message_output_item", "MainAgent", None),
@@ -159,33 +196,9 @@ async def test_full_streaming_flow_hardcoded_sequence(
         if t in {"function_call", "function_call_output"} or role == "assistant":
             comparable.append(m)
 
-    # Stream must equal the expected sequence
     assert stream_items == expected_flow, f"Stream flow mismatch:\n got={stream_items}\n exp={expected_flow}"
 
-    # Normalize saved messages to stream-equivalent triples inline
-    saved_normalized: list[tuple[str, str, str | None]] = []
-    for m in comparable:
-        t = m.get("type")
-        role = m.get("role")
-        agent = m.get("agent")
-        tool_name = None
-        if t == "function_call":
-            # Accept flat shape (preferred) and legacy nested
-            tool_name = m.get("name")
-            if not tool_name:
-                fn = m.get("function_call") or {}
-                tool_name = fn.get("name")
-            norm = "tool_call_item"
-        elif t == "function_call_output":
-            norm = "tool_call_output_item"
-        else:
-            norm = "message_output_item" if role == "assistant" else (t or "unknown")
-        saved_normalized.append((norm, agent, tool_name))
-
-    # Saved messages: compare minimal invariant (type + agent) to reduce coupling
-    saved_min = [(t, a) for (t, a, _n) in saved_normalized]
-    expected_min = [(t, a) for (t, a, _n) in expected_flow]
-    assert saved_min == expected_min, f"Saved minimal order mismatch:\n got={saved_min}\n exp={expected_min}"
+    _assert_sanitized_history(comparable)
 
 
 # Expected flow for multiple sequential sub-agent calls
@@ -274,27 +287,7 @@ async def test_multiple_sequential_subagent_calls() -> None:
         if t in {"function_call", "function_call_output"} or role == "assistant":
             comparable.append(m)
 
-    saved_normalized: list[tuple[str, str, str | None]] = []
-    for m in comparable:
-        t = m.get("type")
-        role = m.get("role")
-        agent = m.get("agent")
-        tool_name = None
-        if t == "function_call":
-            tool_name = m.get("name")
-            if not tool_name:
-                fn = m.get("function_call") or {}
-                tool_name = fn.get("name")
-            norm = "tool_call_item"
-        elif t == "function_call_output":
-            norm = "tool_call_output_item"
-        else:
-            norm = "message_output_item" if role == "assistant" else (t or "unknown")
-        saved_normalized.append((norm, agent, tool_name))
-
-    saved_min = [(t, a) for (t, a, _n) in saved_normalized]
-    expected_min = [(t, a) for (t, a, _n) in EXPECTED_FLOW_MULTIPLE_CALLS]
-    assert saved_min == expected_min, f"Multiple calls saved mismatch:\n got={saved_min}\n exp={expected_min}"
+    _assert_sanitized_history(comparable)
 
 
 # Expected flow for nested delegation (A->B->C) based on actual execution
@@ -403,23 +396,7 @@ async def test_nested_delegation_streaming() -> None:
         if t in {"function_call", "function_call_output"} or role == "assistant":
             comparable.append(m)
 
-    saved_normalized: list[tuple[str, str, str | None]] = []
-    for m in comparable:
-        t = m.get("type")
-        role = m.get("role")
-        agent = m.get("agent")
-        tool_name = None
-        if t == "function_call":
-            tool_name = m.get("name")
-            if not tool_name:
-                fn = m.get("function_call") or {}
-                tool_name = fn.get("name")
-            norm = "tool_call_item"
-        elif t == "function_call_output":
-            norm = "tool_call_output_item"
-        else:
-            norm = "message_output_item" if role == "assistant" else (t or "unknown")
-        saved_normalized.append((norm, agent, tool_name))
+    _assert_sanitized_history(comparable)
 
     # Verify stream contains the required sequence in order (for saved messages verification)
     required_seq = [
@@ -524,24 +501,4 @@ async def test_parallel_subagent_calls() -> None:
         if t in {"function_call", "function_call_output"} or role == "assistant":
             comparable.append(m)
 
-    saved_normalized: list[tuple[str, str, str | None]] = []
-    for m in comparable:
-        t = m.get("type")
-        role = m.get("role")
-        agent = m.get("agent")
-        tool_name = None
-        if t == "function_call":
-            tool_name = m.get("name")
-            if not tool_name:
-                fn = m.get("function_call") or {}
-                tool_name = fn.get("name")
-            norm = "tool_call_item"
-        elif t == "function_call_output":
-            norm = "tool_call_output_item"
-        else:
-            norm = "message_output_item" if role == "assistant" else (t or "unknown")
-        saved_normalized.append((norm, agent, tool_name))
-
-    saved_min = [(t, a) for (t, a, _n) in saved_normalized]
-    expected_min = [(t, a) for (t, a, _n) in EXPECTED_FLOW_PARALLEL]
-    assert saved_min == expected_min, f"Parallel calls saved mismatch:\n got={saved_min}\n exp={expected_min}"
+    _assert_sanitized_history(comparable)

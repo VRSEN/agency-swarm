@@ -217,13 +217,13 @@ class Execution:
         agency_context: "AgencyContext | None" = None,
         parent_run_id: str | None = None,  # Parent agent's execution ID
         **kwargs: Any,
-    ) -> AsyncGenerator[StreamEvent]:
+    ) -> AsyncGenerator[StreamEvent | dict[str, Any]]:
         """
         Streams the agent's response turn-by-turn, yielding events as they occur.
 
         Similar to `get_response`, but returns an async generator that yields
-        `StreamEvent` objects from the OpenAI Agents SDK in real-time, allowing for streaming responses
-        to be displayed or processed incrementally.
+        `StreamEvent` objects (plus structured guidance/error dict payloads) in real-time.
+        This allows streaming responses to be displayed or processed incrementally.
 
         Args:
             message: The input message as a string or structured input items list

@@ -12,7 +12,7 @@ from agents import (
     Runner,
     TResponseInputItem,
 )
-from agents.items import HandoffCallItem, MessageOutputItem, RunItem, ToolCallItem
+from agents.items import MessageOutputItem, RunItem
 from agents.stream_events import RunItemStreamEvent, StreamEvent
 from openai.types.responses import ResponseOutputMessage, ResponseOutputText
 
@@ -75,60 +75,210 @@ def _persist_run_item_if_needed(
     current_stream_agent_name: str,
     current_agent_run_id: str,
     agency_context: "AgencyContext | None",
+    persistence_candidates: list[tuple[RunItem, str, str]],
 ) -> None:
-    """Persist run item to thread manager with agency metadata and Anthropic reordering.
+    """Persist run item to thread manager with agency metadata if applicable."""
+    run_item_obj = getattr(event, "item", None)
+    if run_item_obj is None or getattr(event, "_forwarded", False):
+        return
 
-    Extracts the RunItem from the event, adds agency metadata (agent, callerAgent,
-    agent_run_id, parent_run_id), and delegates to `_prepare_items_for_persistence` to handle
-    Anthropic-specific buffering/reordering before saving to the thread manager.
-    """
-    if (
-        hasattr(event, "item")
-        and event.item
-        and agency_context
-        and agency_context.thread_manager
-        and not getattr(event, "_forwarded", False)
-    ):
-        run_item_obj = event.item
+    if not agency_context or not agency_context.thread_manager:
+        return
 
-        # Skip ToolCallItem for handoffs; HandoffCallItem will be persisted instead
-        if isinstance(run_item_obj, ToolCallItem):
-            tool_name = getattr(run_item_obj.raw_item, "name", "")
-            if tool_name.startswith("transfer_to_"):
-                return
-        item_dict = cast(
-            TResponseInputItem,
-            MessageFormatter.strip_agency_metadata([run_item_obj.to_input_item()])[0],
-        )
-        if item_dict:
-            if isinstance(run_item_obj, MessageOutputItem):
-                single_citation_map = extract_direct_file_annotations([run_item_obj], agent_name=agent.name)
-                MessageFormatter.add_citations_to_message(
-                    run_item_obj, item_dict, single_citation_map, is_streaming=True
-                )
+    item_dict = cast(
+        TResponseInputItem,
+        MessageFormatter.strip_agency_metadata([run_item_obj.to_input_item()])[0],
+    )
+    if item_dict and isinstance(run_item_obj, MessageOutputItem):
+        single_citation_map = extract_direct_file_annotations([run_item_obj], agent_name=agent.name)
+        MessageFormatter.add_citations_to_message(run_item_obj, item_dict, single_citation_map, is_streaming=True)
 
-        formatted_item = MessageFormatter.add_agency_metadata(
-            item_dict,  # type: ignore[arg-type]
-            agent=current_stream_agent_name,
+    formatted_item = MessageFormatter.add_agency_metadata(
+        item_dict,  # type: ignore[arg-type]
+        agent=current_stream_agent_name,
+        caller_agent=sender_name,
+        agent_run_id=current_agent_run_id,
+        parent_run_id=parent_run_id,
+    )
+    if not MessageFilter.should_filter(formatted_item):
+        agency_context.thread_manager.add_messages([formatted_item])  # type: ignore[arg-type]
+
+    run_item_id, call_id = _extract_identifiers(run_item_obj)
+    if run_item_id or call_id:
+        persistence_candidates.append((run_item_obj, current_stream_agent_name, current_agent_run_id))
+
+
+def _persist_streamed_items(
+    *,
+    streaming_result: Any,
+    history_for_runner: list[TResponseInputItem],
+    persistence_candidates: list[tuple[RunItem, str, str]],
+    collected_items: list[RunItem],
+    agent: "Agent",
+    sender_name: str | None,
+    parent_run_id: str | None,
+    fallback_agent_run_id: str,
+    agency_context: "AgencyContext",
+    initial_saved_count: int,
+) -> None:
+    """Persist sanitized items after streaming completes."""
+    if agency_context.thread_manager is None:
+        return
+
+    try:
+        new_history = streaming_result.to_input_list()
+    except Exception:  # Defensive: fall back to existing behavior
+        return
+
+    new_items = [item for item in new_history[len(history_for_runner) :] if isinstance(item, dict)]
+    if not new_items:
+        return
+
+    id_map: dict[str, tuple[RunItem, str, str]] = {}
+    call_map: dict[str, tuple[RunItem, str, str]] = {}
+    for run_item, agent_name, agent_run_id in reversed(persistence_candidates):
+        run_item_id, call_id = _extract_identifiers(run_item)
+        if run_item_id and run_item_id not in id_map:
+            id_map[run_item_id] = (run_item, agent_name, agent_run_id)
+        if call_id and call_id not in call_map:
+            call_map[call_id] = (run_item, agent_name, agent_run_id)
+
+    assistant_messages = [item for item in collected_items if isinstance(item, MessageOutputItem)]
+    citations_by_message = (
+        extract_direct_file_annotations(assistant_messages, agent_name=agent.name) if assistant_messages else {}
+    )
+
+    items_to_save: list[TResponseInputItem] = []
+    current_agent_name = agent.name
+    current_agent_run_id = fallback_agent_run_id
+
+    for item_dict in new_items:
+        item_copy: dict[str, Any] = dict(item_dict)
+
+        run_item_obj: RunItem | None = None
+        run_item_id = item_copy.get("id")
+        call_id = item_copy.get("call_id")
+
+        if isinstance(run_item_id, str) and run_item_id in id_map:
+            run_item_obj, current_agent_name, current_agent_run_id = id_map[run_item_id]
+        elif isinstance(call_id, str) and call_id in call_map:
+            run_item_obj, current_agent_name, current_agent_run_id = call_map[call_id]
+        else:
+            run_item_obj = next((ri for ri in collected_items if getattr(ri, "id", None) == run_item_id), None)
+
+        item_payload = cast(TResponseInputItem, item_copy)
+
+        if run_item_obj and isinstance(run_item_obj, MessageOutputItem):
+            MessageFormatter.add_citations_to_message(
+                run_item_obj, item_payload, citations_by_message, is_streaming=True
+            )
+
+        formatted_item: TResponseInputItem = MessageFormatter.add_agency_metadata(
+            item_payload,
+            agent=current_agent_name,
             caller_agent=sender_name,
             agent_run_id=current_agent_run_id,
             parent_run_id=parent_run_id,
         )
+        items_to_save.append(formatted_item)
 
-        items_to_add = _prepare_items_for_persistence(
-            formatted_item,
-            run_item_obj=run_item_obj,
-            agent=agent,
-            current_agent_run_id=current_agent_run_id,
-            agency_context=agency_context,
-        )
+        if run_item_obj and getattr(run_item_obj, "type", None) == "handoff_output_item":
+            target = MessageFormatter.extract_handoff_target_name(run_item_obj)
+            if target:
+                current_agent_name = target
+        else:
+            current_agent_name = agent.name
+            current_agent_run_id = fallback_agent_run_id
 
-        if not items_to_add:
-            return
+    filtered_items = [item for item in items_to_save if not MessageFilter.should_filter(item)]
+    if not filtered_items:
+        return
 
-        filtered_items = [item for item in items_to_add if not MessageFilter.should_filter(item)]
-        if filtered_items:
-            agency_context.thread_manager.add_messages(filtered_items)  # type: ignore[arg-type]
+    try:
+        existing_messages = agency_context.thread_manager.get_all_messages()
+    except Exception:
+        existing_messages = []
+
+    initial_index = min(max(initial_saved_count, 0), len(existing_messages))
+    preserved_prefix = existing_messages[:initial_index]
+
+    mutable_tail = existing_messages[initial_index:]
+
+    run_ids_to_replace: set[str] = {
+        run_id for item in filtered_items if isinstance(run_id := item.get("agent_run_id"), str)
+    }
+    for _run_item, _, agent_run_id in persistence_candidates:
+        if isinstance(agent_run_id, str):
+            run_ids_to_replace.add(agent_run_id)
+
+    keys_to_replace: set[tuple[str, str | None, str | None]] = set()
+    for run_item, _, _ in persistence_candidates:
+        run_id, call_id = _extract_identifiers(run_item)
+        if isinstance(run_id, str):
+            keys_to_replace.add(("id", run_id, getattr(run_item, "type", None)))
+        if isinstance(call_id, str):
+            keys_to_replace.add(("call", call_id, getattr(run_item, "type", None)))
+
+    for item in filtered_items:
+        key = _message_key(item)
+        if key is not None:
+            keys_to_replace.add(key)
+
+    rebuilt_tail: list[TResponseInputItem] = []
+    for existing_item in mutable_tail:
+        key = _message_key(existing_item)
+        run_id = existing_item.get("agent_run_id")
+        if key is not None and key in keys_to_replace:
+            continue
+        if isinstance(run_id, str) and run_id in run_ids_to_replace:
+            continue
+        rebuilt_tail.append(existing_item)
+
+    sanitized_history = preserved_prefix + rebuilt_tail + filtered_items
+
+    agency_context.thread_manager.replace_messages(sanitized_history)
+    agency_context.thread_manager.persist()
+
+
+def _extract_identifiers(run_item: RunItem) -> tuple[str | None, str | None]:
+    run_item_id = getattr(run_item, "id", None)
+    call_id = getattr(run_item, "call_id", None)
+
+    raw_item = getattr(run_item, "raw_item", None)
+    if isinstance(raw_item, dict):
+        raw_id = raw_item.get("id")
+        raw_call = raw_item.get("call_id")
+        if isinstance(raw_id, str) and not isinstance(run_item_id, str):
+            run_item_id = raw_id
+        if isinstance(raw_call, str) and not isinstance(call_id, str):
+            call_id = raw_call
+    elif raw_item is not None:
+        raw_id = getattr(raw_item, "id", None)
+        raw_call = getattr(raw_item, "call_id", None)
+        if isinstance(raw_id, str) and not isinstance(run_item_id, str):
+            run_item_id = raw_id
+        if isinstance(raw_call, str) and not isinstance(call_id, str):
+            call_id = raw_call
+
+    return (
+        run_item_id if isinstance(run_item_id, str) else None,
+        call_id if isinstance(call_id, str) else None,
+    )
+
+
+def _message_key(message: TResponseInputItem) -> tuple[str, str | None, str | None] | None:
+    if not isinstance(message, dict):
+        return None
+
+    message_id = message.get("id")
+    if isinstance(message_id, str) and message_id:
+        return ("id", message_id, message.get("type"))
+
+    call_id = message.get("call_id")
+    if isinstance(call_id, str) and call_id:
+        return ("call", call_id, message.get("type"))
+
+    return None
 
 
 def perform_streamed_run(
@@ -165,13 +315,12 @@ async def run_stream_with_guardrails(
     parent_run_id: str | None,
     validation_attempts: int,
     throw_input_guardrail_error: bool,
-) -> AsyncGenerator[StreamEvent]:
+) -> AsyncGenerator[StreamEvent | dict[str, Any]]:
     """Stream events with output-guardrail retries and guidance persistence."""
     attempts_remaining = int(validation_attempts or 0)
     history_for_runner = initial_history_for_runner
 
     while True:
-        # Prepare streaming context
         master_context_for_run._is_streaming = True
         try:
             master_context_for_run._current_agent_run_id = current_agent_run_id
@@ -187,6 +336,14 @@ async def run_stream_with_guardrails(
         event_queue: asyncio.Queue[Any] = asyncio.Queue(maxsize=10)
         guardrail_exception: BaseException | None = None
         collected_items: list[RunItem] = []
+        persistence_candidates: list[tuple[RunItem, str, str]] = []
+        streaming_result: Any | None = None
+        initial_saved_count = 0
+        if agency_context and agency_context.thread_manager:
+            try:
+                initial_saved_count = len(agency_context.thread_manager.get_all_messages())
+            except Exception:
+                initial_saved_count = 0
 
         async def _streaming_worker(
             history_for_runner=history_for_runner,
@@ -197,7 +354,7 @@ async def run_stream_with_guardrails(
             agency_context=agency_context,
             sender_name=sender_name,
         ) -> None:
-            nonlocal guardrail_exception
+            nonlocal guardrail_exception, streaming_result
             local_result = None
             try:
                 async with AsyncExitStack() as mcp_stack:
@@ -222,10 +379,8 @@ async def run_stream_with_guardrails(
             except OutputGuardrailTripwireTriggered as e:
                 guardrail_exception = e
             except InputGuardrailTripwireTriggered as e:
-                # For input guardrails, do not retry in streaming mode.
                 try:
                     _, guidance_text = _extract_guardrail_texts(e)
-                    # Persist guidance so it appears in history for observability
                     append_guardrail_feedback(
                         agent=agent,
                         agency_context=agency_context,
@@ -237,15 +392,16 @@ async def run_stream_with_guardrails(
                     )
                 except Exception:
                     guidance_text = str(e)
+                payload = {"type": "input_guardrail_guidance", "content": guidance_text}
                 if throw_input_guardrail_error:
-                    await event_queue.put({"type": "error", "content": guidance_text})
-                else:
-                    await event_queue.put({"type": "input_guardrail_guidance", "content": guidance_text})
+                    payload["type"] = "error"
+                await event_queue.put(payload)
             except Exception as e:
                 await event_queue.put({"type": "error", "content": str(e)})
             finally:
                 try:
                     if local_result is not None:
+                        streaming_result = local_result
                         local_result.cancel()
                 except Exception:
                     pass
@@ -256,7 +412,7 @@ async def run_stream_with_guardrails(
         async def _forward_subagent_events(
             streaming_context=streaming_context,
             event_queue=event_queue,
-        ):
+        ) -> None:
             while True:
                 try:
                     sub_event = await streaming_context.get_event()
@@ -285,7 +441,6 @@ async def run_stream_with_guardrails(
                     yield event  # type: ignore[misc]
                     continue
                 if isinstance(event, dict) and event.get("type") == "input_guardrail_guidance":
-                    # Create an artificial event and present it as agent's response
                     guardrail_message = MessageOutputItem(
                         raw_item=ResponseOutputMessage(
                             id="msg_input_guardrail_guidance",
@@ -311,76 +466,60 @@ async def run_stream_with_guardrails(
                     yield guardrail_event
                     continue
 
-                # Reorder Anthropic tool events: buffer tool_use until message_output arrives.
-                # This ensures both the emitted stream and persisted history satisfy Anthropic's
-                # requirement that tool_use/tool_result pairs remain consecutive without
-                # intervening assistant messages. See helper docstrings for full context.
-                events_to_process = _reorder_anthropic_stream_events_if_needed(
+                (
+                    current_stream_agent_name,
+                    current_agent_run_id,
+                ) = _update_names_from_event(
                     event,
-                    agent=agent,
-                    agency_context=agency_context,
+                    current_stream_agent_name,
+                    current_agent_run_id,
+                    master_context_for_run,
                 )
 
-                if not events_to_process:
-                    continue
-
-                for processed_event in events_to_process:
-                    (
+                if not getattr(event, "_forwarded", False):
+                    event = add_agent_name_to_event(
+                        event,
                         current_stream_agent_name,
-                        current_agent_run_id,
-                    ) = _update_names_from_event(
-                        processed_event,
-                        current_stream_agent_name,
-                        current_agent_run_id,
-                        master_context_for_run,
+                        sender_name,
+                        agent_run_id=current_agent_run_id,
+                        parent_run_id=parent_run_id,
                     )
 
-                    if not getattr(processed_event, "_forwarded", False):
-                        processed_event = add_agent_name_to_event(
-                            processed_event,
-                            current_stream_agent_name,
-                            sender_name,
-                            agent_run_id=current_agent_run_id,
-                            parent_run_id=parent_run_id,
-                        )
+                if isinstance(event, RunItemStreamEvent) and event.item:
+                    collected_items.append(event.item)
 
-                    if not isinstance(processed_event, RunItemStreamEvent):
-                        yield processed_event  # type: ignore[misc]
-                        continue
+                _persist_run_item_if_needed(
+                    event,
+                    agent=agent,
+                    sender_name=sender_name,
+                    parent_run_id=parent_run_id,
+                    current_stream_agent_name=current_stream_agent_name,
+                    current_agent_run_id=current_agent_run_id,
+                    agency_context=agency_context,
+                    persistence_candidates=persistence_candidates,
+                )
 
-                    if processed_event.item:
-                        collected_items.append(processed_event.item)
+                yield event
 
-                    _persist_run_item_if_needed(
-                        processed_event,
+            if guardrail_exception is None:
+                if agency_context and agency_context.thread_manager and streaming_result is not None:
+                    _persist_streamed_items(
+                        streaming_result=streaming_result,
+                        history_for_runner=history_for_runner,
+                        persistence_candidates=persistence_candidates,
+                        collected_items=collected_items,
                         agent=agent,
                         sender_name=sender_name,
                         parent_run_id=parent_run_id,
-                        current_stream_agent_name=current_stream_agent_name,
-                        current_agent_run_id=current_agent_run_id,
+                        fallback_agent_run_id=current_agent_run_id,
                         agency_context=agency_context,
+                        initial_saved_count=initial_saved_count,
                     )
+                return
 
-                    yield processed_event
-
-            # After loop, if no guardrail exception, save hosted tool outputs (if any)
-            if guardrail_exception is None:
-                _finalize_anthropic_reorder_state(agency_context)
-                if agency_context and agency_context.thread_manager and collected_items:
-                    hosted_tool_outputs = MessageFormatter.extract_hosted_tool_results(agent, collected_items)
-                    if hosted_tool_outputs:
-                        filtered_items = MessageFilter.filter_messages(hosted_tool_outputs)  # type: ignore[arg-type]
-                        if filtered_items:
-                            agency_context.thread_manager.add_messages(filtered_items)  # type: ignore[arg-type]
-                break
-
-            # Guardrail tripped: persist guidance-only user message, rebuild history, and retry
             if attempts_remaining <= 0:
-                _finalize_anthropic_reorder_state(agency_context)
                 raise guardrail_exception
             attempts_remaining -= 1
-
-            _finalize_anthropic_reorder_state(agency_context)
 
             history_for_runner = append_guardrail_feedback(
                 agent=agent,
@@ -405,206 +544,3 @@ async def run_stream_with_guardrails(
                         await forward_task
             except Exception:
                 pass
-
-        _finalize_anthropic_reorder_state(agency_context)
-
-
-def _is_anthropic_model(agent: "Agent") -> bool:
-    """Return True when the agent is configured to call an Anthropic model."""
-
-    model_identifier = getattr(agent, "model", None)
-    if isinstance(model_identifier, str) and model_identifier.startswith("anthropic/"):
-        return True
-
-    try:
-        from agents.extensions.models.litellm_model import LitellmModel
-
-        if isinstance(agent.model, LitellmModel):
-            litellm_model = getattr(agent.model, "model", "")
-            if isinstance(litellm_model, str) and litellm_model.startswith("anthropic/"):
-                return True
-    except ImportError:
-        pass
-
-    settings = getattr(agent, "model_settings", None)
-    metadata = getattr(settings, "metadata", None)
-    if isinstance(metadata, dict):
-        meta_model = metadata.get("model")
-        if isinstance(meta_model, str) and meta_model.startswith("anthropic/"):
-            return True
-        provider = metadata.get("provider")
-        if isinstance(provider, str) and provider.lower() == "anthropic":
-            return True
-
-    return False
-
-
-def _resolve_event_agent(default_agent: "Agent", run_item: RunItem) -> "Agent":
-    candidate = getattr(run_item, "agent", None)
-    if candidate is not None and hasattr(candidate, "name"):
-        return candidate  # type: ignore[return-value]
-    return default_agent
-
-
-def _prepare_items_for_persistence(
-    formatted_item: TResponseInputItem,
-    *,
-    run_item_obj: RunItem,
-    agent: "Agent",
-    current_agent_run_id: str,
-    agency_context: "AgencyContext | None",
-) -> list[TResponseInputItem] | None:
-    """Buffer Anthropic tool_use items until their acknowledgement message or tool_result arrives.
-
-    Anthropic API requires consecutive tool_use/tool_result pairs without intervening assistant
-    messages. During streaming, the SDK emits intermediate MessageOutputItem events before
-    ToolCallOutputItem events arrive. If we persist the tool_use immediately, followed by
-    these intermediate messages, the saved history violates Anthropic's ordering requirement,
-    causing "tool_use ids were found without tool_result blocks immediately after" errors on
-    subsequent turns.
-
-    Solution: Hold tool_use items in a buffer until we see either:
-    - The MessageOutputItem that acknowledges tool execution started, OR
-    - The ToolCallOutputItem with the actual tool result
-
-    This ensures the persisted history always has: [assistant_message, tool_use, tool_result]
-    in the correct order for LiteLLM+Anthropic compatibility.
-    """
-
-    event_agent = _resolve_event_agent(agent, run_item_obj)
-
-    if event_agent is not agent:
-        return [formatted_item]
-
-    if agency_context is None or not _is_anthropic_model(event_agent):
-        return [formatted_item]
-
-    state = _get_anthropic_reorder_state(agency_context, event_agent.name)
-
-    if isinstance(run_item_obj, ToolCallItem | HandoffCallItem):
-        state["awaiting_ack"] = True
-        state["pending"].append(formatted_item)
-        return None
-
-    if isinstance(run_item_obj, MessageOutputItem):
-        items: list[TResponseInputItem] = [formatted_item]
-        if state["pending"]:
-            items.extend(state["pending"])
-            state["pending"].clear()
-        state["awaiting_ack"] = False
-        return items
-
-    if getattr(run_item_obj, "type", None) in {"tool_call_output_item", "handoff_output_item"} and state["pending"]:
-        items = state["pending"] + [formatted_item]
-        state["pending"].clear()
-        state["awaiting_ack"] = False
-        return items
-
-    return [formatted_item]
-
-
-def _reorder_anthropic_stream_events_if_needed(
-    event: StreamEvent,
-    *,
-    agent: "Agent",
-    agency_context: "AgencyContext | None",
-) -> list[StreamEvent]:
-    """Delay Anthropic tool_use events in the stream until their announcing message arrives.
-
-    This function mirrors `_prepare_items_for_persistence` but operates on the event stream
-    rather than persisted items. By buffering tool_use events and releasing them with their
-    acknowledgement message, we ensure:
-
-    1. Downstream consumers (UI, observability) see events in the correct Anthropic order
-    2. The stream matches the persisted history structure (no event/storage divergence)
-    3. Forwarded sub-agent events maintain their original order (via _forwarded flag)
-
-    See `_prepare_items_for_persistence` docstring for the concrete LiteLLM Anthropic API
-    requirements that necessitate this reordering.
-    """
-
-    if not isinstance(event, RunItemStreamEvent):
-        return [event]
-
-    run_item = event.item
-    event_agent = _resolve_event_agent(agent, run_item)
-
-    if agency_context is None or not _is_anthropic_model(event_agent):
-        return [event]
-
-    if getattr(event, "_forwarded", False):
-        return [event]
-
-    state = _get_anthropic_reorder_state(agency_context, event_agent.name)
-
-    if isinstance(run_item, ToolCallItem | HandoffCallItem) and state["awaiting_ack"]:
-        state["pending_events"].append(event)
-        return []
-
-    if isinstance(run_item, MessageOutputItem):
-        events: list[StreamEvent] = [event]
-        if state["pending_events"]:
-            events.extend(state["pending_events"])
-            state["pending_events"] = []
-        state["awaiting_ack"] = False
-        return events
-
-    if getattr(run_item, "type", None) in {"tool_call_output_item", "handoff_output_item"}:
-        state["awaiting_ack"] = False
-        if state["pending_events"]:
-            events = state["pending_events"] + [event]
-            state["pending_events"] = []
-            return events
-        return [event]
-
-    return [event]
-
-
-def _get_anthropic_reorder_state(
-    agency_context: "AgencyContext",
-    agent_key: str,
-) -> dict[str, Any]:
-    """Return mutable reorder state for the given agent.
-
-    State structure:
-    - pending: list[TResponseInputItem] - buffered items awaiting persistence
-    - pending_events: list[StreamEvent] - buffered stream events awaiting emission
-    - awaiting_ack: bool - True when we have tool_use items waiting for acknowledgement
-    """
-
-    state_map = agency_context._anthropic_reorder_state
-    if state_map is None:
-        state_map = {}
-        agency_context._anthropic_reorder_state = state_map
-
-    state = state_map.get(agent_key)
-    if state is None:
-        state = {"pending": [], "pending_events": [], "awaiting_ack": True}
-        state_map[agent_key] = state
-    return state
-
-
-def _finalize_anthropic_reorder_state(agency_context: "AgencyContext | None") -> None:
-    """Flush any buffered Anthropic items and clear tracking state."""
-
-    if agency_context is None:
-        return
-
-    state_map = agency_context._anthropic_reorder_state
-    if not state_map:
-        return
-
-    pending_items: list[TResponseInputItem] = []
-    for state in state_map.values():
-        buffered = state.get("pending", [])
-        if buffered:
-            pending_items.extend(buffered)
-            state["pending"] = []
-        state["pending_events"] = []
-
-    if pending_items and agency_context.thread_manager:
-        filtered = [item for item in pending_items if not MessageFilter.should_filter(item)]
-        if filtered:
-            agency_context.thread_manager.add_messages(filtered)  # type: ignore[arg-type]
-
-    state_map.clear()
