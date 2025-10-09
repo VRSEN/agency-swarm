@@ -7,6 +7,7 @@ from agents.stream_events import RunItemStreamEvent
 from openai.types.responses import ResponseOutputMessage, ResponseOutputText
 
 from agency_swarm import Agent
+from agency_swarm.messages import MessageFormatter
 
 # --- Streaming Tests ---
 
@@ -355,3 +356,75 @@ async def test_stream_assigns_stable_agent_run_id_per_new_agent(
     assert set(saved_assistant.keys()) == {"msg_A", "msg_B"}
     assert saved_assistant["msg_A"]["agent_run_id"] == "agent_updated_stream_event_AAAA"
     assert saved_assistant["msg_B"]["agent_run_id"] == "agent_updated_stream_event_BBBB"
+
+
+@pytest.mark.asyncio
+@patch("agents.Runner.run_streamed")
+async def test_streaming_persists_hosted_tool_outputs(
+    mock_runner_run_streamed_patch, minimal_agent, mock_thread_manager
+):
+    """Ensure streaming persists hosted tool outputs via extract_hosted_tool_results."""
+
+    msg_item = MessageOutputItem(
+        raw_item=ResponseOutputMessage(
+            id="msg_stream_hosted",
+            content=[ResponseOutputText(text="Final answer", type="output_text", annotations=[])],
+            role="assistant",
+            status="completed",
+            type="message",
+        ),
+        type="message_output_item",
+        agent=None,
+    )
+
+    class DummyStreamedResult:
+        def __init__(self, input_history):
+            self._input_history = input_history
+
+        def stream_events(self):
+            async def _gen():
+                yield RunItemStreamEvent(
+                    name="message_output_created",
+                    item=msg_item,
+                    type="run_item_stream_event",
+                )
+
+            return _gen()
+
+        def to_input_list(self):
+            return self._input_history + [msg_item.to_input_item()]
+
+        def cancel(self):
+            return None
+
+    def _run_streamed_stub(*args, **kwargs):
+        return DummyStreamedResult(kwargs.get("input", []))
+
+    mock_runner_run_streamed_patch.side_effect = _run_streamed_stub
+
+    hosted_message = MessageFormatter.add_agency_metadata(
+        {
+            "role": "system",
+            "content": "[SEARCH_RESULTS] Tool Call ID: call-123",
+            "message_origin": "file_search_preservation",
+        },
+        agent="TestAgent",
+        caller_agent=None,
+    )
+
+    mock_thread_manager.replace_messages.reset_mock()
+
+    with patch(
+        "agency_swarm.agent.execution_streaming.MessageFormatter.extract_hosted_tool_results",
+        return_value=[hosted_message],
+    ) as mock_extract:
+        async for _ in minimal_agent.get_response_stream("search the files"):
+            pass
+
+    assert mock_extract.called, "Hosted tool outputs should be extracted during streaming persistence"
+
+    assert mock_thread_manager.replace_messages.called, "Streaming persistence should rebuild message history"
+    persisted_history = mock_thread_manager.replace_messages.call_args_list[-1][0][0]
+    assert any(item.get("message_origin") == "file_search_preservation" for item in persisted_history), (
+        "Hosted tool outputs should be included in persisted history"
+    )

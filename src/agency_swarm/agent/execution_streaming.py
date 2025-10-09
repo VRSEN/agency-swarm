@@ -194,6 +194,24 @@ def _persist_streamed_items(
     if not filtered_items:
         return
 
+    synthetic_keys_to_replace: set[tuple[str, str]] = {
+        (origin, str(item.get("content")))
+        for item in filtered_items
+        if isinstance(origin := item.get("message_origin"), str)
+    }
+
+    hosted_tool_outputs = MessageFormatter.extract_hosted_tool_results(agent, collected_items)
+    if hosted_tool_outputs:
+        filtered_hosted_outputs = MessageFilter.filter_messages(hosted_tool_outputs)  # type: ignore[arg-type]
+        for hosted_item in filtered_hosted_outputs:
+            origin = hosted_item.get("message_origin")
+            key = (origin, str(hosted_item.get("content"))) if isinstance(origin, str) else None
+            if key and key in synthetic_keys_to_replace:
+                continue
+            filtered_items.append(hosted_item)
+            if key:
+                synthetic_keys_to_replace.add(key)
+
     try:
         existing_messages = agency_context.thread_manager.get_all_messages()
     except Exception:
@@ -220,18 +238,23 @@ def _persist_streamed_items(
             keys_to_replace.add(("call", call_id, getattr(run_item, "type", None)))
 
     for item in filtered_items:
-        key = _message_key(item)
-        if key is not None:
-            keys_to_replace.add(key)
+        msg_key = _message_key(item)
+        if msg_key is not None:
+            keys_to_replace.add(msg_key)
 
     rebuilt_tail: list[TResponseInputItem] = []
     for existing_item in mutable_tail:
-        key = _message_key(existing_item)
+        existing_key = _message_key(existing_item)
         run_id = existing_item.get("agent_run_id")
-        if key is not None and key in keys_to_replace:
+        if existing_key is not None and existing_key in keys_to_replace:
             continue
         if isinstance(run_id, str) and run_id in run_ids_to_replace:
             continue
+        origin = existing_item.get("message_origin")
+        if isinstance(origin, str):
+            synthetic_key = (origin, str(existing_item.get("content")))
+            if synthetic_key in synthetic_keys_to_replace:
+                continue
         rebuilt_tail.append(existing_item)
 
     sanitized_history = preserved_prefix + rebuilt_tail + filtered_items
