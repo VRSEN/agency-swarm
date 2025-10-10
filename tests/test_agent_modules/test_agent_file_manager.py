@@ -182,6 +182,39 @@ class TestAgentFileManager:
         finally:
             os.unlink(tmp_file_path)
 
+    def test_upload_file_preserves_stem_and_sets_remote_mtime(self, tmp_path):
+        """Uploading files with '_file-' in the stem preserves the stem and aligns mtime with remote timestamp."""
+
+        mock_agent = Mock()
+        mock_agent.name = "TestAgent"
+        mock_agent.files_folder_path = tmp_path
+        mock_agent._associated_vector_store_id = None
+        mock_agent.client_sync = Mock()
+
+        uploaded = Mock()
+        uploaded.id = "file-abc123"
+        uploaded.created_at = 1_700_000_000
+        mock_agent.client_sync.files.create.return_value = uploaded
+
+        file_manager = AgentFileManager(mock_agent)
+
+        original_path = tmp_path / "report_file-final.txt"
+        original_path.write_text("content", encoding="utf-8")
+
+        # Sanity check: filenames containing '_file-' but lacking an id should produce no match
+        assert file_manager.get_id_from_file(original_path) is None
+
+        with patch("agency_swarm.agent.file_manager.os.utime") as mock_utime:
+            result = file_manager.upload_file(str(original_path))
+
+        assert result == uploaded.id
+
+        renamed_path = tmp_path / "report_file-final_file-abc123.txt"
+        assert renamed_path.exists()
+        assert file_manager.get_id_from_file(renamed_path) == uploaded.id
+        mock_agent.client_sync.files.retrieve.assert_not_called()
+        mock_utime.assert_called_once_with(renamed_path, (float(uploaded.created_at), float(uploaded.created_at)))
+
     def test_get_id_from_file_not_found(self):
         """Test get_id_from_file with non-existent file."""
         mock_agent = Mock()
