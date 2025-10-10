@@ -115,6 +115,7 @@ After each tool call or code edit, validate the result in 1-2 lines and proceed 
 
 ### Example Runs
 - Run non-interactive examples from /examples directory. Never run examples/interactive/* as they require user input.
+- MANDATORY: Run 100% of code you touch. If you modify an example, run it. If you modify a module, run its tests.
 
 ### Test Guidelines (Canonical)
 - Keep tests deterministic and minimal. Avoid model dependency when practical.

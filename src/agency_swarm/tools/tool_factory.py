@@ -17,7 +17,7 @@ from agents.strict_schema import ensure_strict_json_schema
 from pydantic import BaseModel, ValidationError
 
 from .base_tool import BaseTool
-from .utils import generate_model_from_schema
+from .utils import generate_model_from_schema, parse_multimodal_output
 
 logger = logging.getLogger(__name__)
 
@@ -83,12 +83,13 @@ class ToolFactory:
             try:
                 # Call the langchain tool
                 result = tool.run(args)
-                return str(result)
+                # Parse multimodal outputs (images, files) or convert to string
+                return parse_multimodal_output(result)
             except TypeError:
                 # Try with single argument if direct dict fails (langchain specifics)
                 if len(args) == 1:
                     result = tool.run(list(args.values())[0])
-                    return str(result)
+                    return parse_multimodal_output(result)
                 else:
                     return f"Error parsing input for tool '{tool.__class__.__name__}'. Please open an issue on github."
             except Exception as e:
@@ -481,7 +482,8 @@ class ToolFactory:
                 else:
                     # Always run sync run() in a thread for async compatibility
                     result = await asyncio.to_thread(tool_instance.run)
-                return str(result)
+                # Parse multimodal outputs (images, files) or convert to string
+                return parse_multimodal_output(result)
             except Exception as e:
                 return f"Error running BaseTool: {e}"
 
