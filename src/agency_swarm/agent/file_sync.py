@@ -59,9 +59,7 @@ class FileSync:
         try:
             vs_files = self.list_all_vector_store_files(vs_id)
         except NotFoundError:
-            logger.warning(
-                f"Agent {self.agent.name}: Vector Store {vs_id} not found during sync. Skipping cleanup."
-            )
+            logger.warning(f"Agent {self.agent.name}: Vector Store {vs_id} not found during sync. Skipping cleanup.")
             return
 
         for vs_file in vs_files:
@@ -97,9 +95,7 @@ class FileSync:
             except NotFoundError:
                 pass
             except Exception as e:
-                logger.debug(
-                    f"Agent {self.agent.name}: Could not detach file {file_id} from Vector Store {vs_id}: {e}"
-                )
+                logger.debug(f"Agent {self.agent.name}: Could not detach file {file_id} from Vector Store {vs_id}: {e}")
         try:
             self.agent.client_sync.files.delete(file_id=file_id)
         except NotFoundError:

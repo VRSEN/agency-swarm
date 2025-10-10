@@ -631,7 +631,6 @@ async def test_vector_store_cleanup_on_init(real_openai_client: AsyncOpenAI, tmp
 
     # Verify the removed OpenAI file no longer exists
     with pytest.raises(NotFoundError):
-        # Different SDK versions may raise NotFoundError or generic error; asserting any exception is sufficient
         await real_openai_client.files.retrieve(file_id=removed_id)
 
     # Cleanup

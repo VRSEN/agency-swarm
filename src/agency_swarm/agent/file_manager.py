@@ -76,9 +76,7 @@ class AgentFileManager:
 
             local_mtime = fpath.stat().st_mtime
             if isinstance(remote_created_at, int | float) and local_mtime <= float(remote_created_at):
-                logger.info(
-                    f"File {fpath.name} unchanged since upload, skipping..."
-                )
+                logger.info(f"File {fpath.name} unchanged since upload, skipping...")
                 return existing_file_id
             else:
                 logger.info(
@@ -102,17 +100,28 @@ class AgentFileManager:
             logger.error(f"Agent {self.agent.name}: Failed to upload file {fpath.name} to OpenAI: {e}")
             raise AgentsException(f"Failed to upload file {fpath.name} to OpenAI: {e}") from e
 
-        # Rename the original file to include the OpenAI ID
+        destination_path: Path | None = None
         try:
             # Compute new filename based on the original stem without trailing _file-id if present
             base_stem = fpath.stem
-            # If filename already had an id, strip the trailing id part
-            if "_file-" in base_stem:
-                base_stem = base_stem.split("_file-")[0]
+            if existing_file_id and base_stem.endswith(f"_{existing_file_id}"):
+                base_stem = base_stem[: -len(existing_file_id) - 1]
             new_filename = f"{base_stem}_{uploaded_file.id}{fpath.suffix}"
             destination_path = self.agent.files_folder_path / new_filename
             fpath.rename(destination_path)
             logger.info(f"Agent {self.agent.name}: Renamed uploaded file to {destination_path}")
+            created_at = getattr(uploaded_file, "created_at", None)
+            if destination_path and isinstance(created_at, int | float | str):
+                try:
+                    timestamp = float(created_at)
+                    os.utime(destination_path, (timestamp, timestamp))
+                except (ValueError, TypeError):
+                    pass
+                except OSError as err:
+                    logger.debug(
+                        f"Agent {self.agent.name}: Failed to align mtime for {destination_path} "
+                        f"with OpenAI timestamp: {err}"
+                    )
         except Exception as e:
             logger.warning(f"Agent {self.agent.name}: Failed to rename file {fpath.name} to {destination_path}: {e}")
             # Not raising an exception here as the file is uploaded to OpenAI,
@@ -158,13 +167,12 @@ class AgentFileManager:
     def get_id_from_file(self, f_path):
         """Get file id from file name"""
         if os.path.isfile(f_path):
-            file_name, file_ext = os.path.splitext(f_path)
+            file_name, _ = os.path.splitext(f_path)
             file_name = os.path.basename(file_name)
-            file_name = file_name.split("_")
-            if len(file_name) > 1:
-                return file_name[-1] if "file-" in file_name[-1] else None
-            else:
-                return None
+            match = re.search(r"_file-([A-Za-z0-9]*\d[A-Za-z0-9]*)$", file_name)
+            if match:
+                return f"file-{match.group(1)}"
+            return None
         else:
             raise FileNotFoundError(f"File not found: {f_path}")
 
@@ -343,7 +351,6 @@ class AgentFileManager:
                     f"Agent {self.agent.name}: Failed to add file {file_id} to Vector Store {vector_store_id}: {e}"
                 )
                 raise AgentsException(f"Failed to add file {file_id} to Vector Store {vector_store_id}: {e}") from e
-
 
     def read_instructions(self):
         if not self.agent.instructions:
