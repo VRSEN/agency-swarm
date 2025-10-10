@@ -4,11 +4,12 @@ import logging
 import os
 import re
 import shutil
+import time
 from pathlib import Path
 
 import pytest
 from agents import ModelSettings, ToolCallItem
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, NotFoundError
 
 from agency_swarm import Agency, Agent
 
@@ -561,3 +562,157 @@ async def test_agent_vision_capabilities(real_openai_client: AsyncOpenAI, tmp_pa
             f"No tool calls should be found for {image_path.name} since OpenAI automatically processes vision. "
             f"The presence of tool calls suggests the implementation is incorrectly trying to use custom tools."
         )
+
+
+@pytest.mark.asyncio
+async def test_vector_store_cleanup_on_init(real_openai_client: AsyncOpenAI, tmp_path: Path):
+    """Agent initialization synchronizes vector store with local files, removing orphaned files from VS and OpenAI."""
+    source_file = Path("tests/data/files/favorite_books.txt")
+    assert source_file.exists(), f"Test file not found at {source_file}"
+
+    # Create temp folder with two files
+    files_dir = tmp_path / "cleanup_files"
+    files_dir.mkdir(exist_ok=True)
+    file_a = files_dir / "books_a.txt"
+    file_b = files_dir / "books_b.txt"
+    file_a.write_text(source_file.read_text(encoding="utf-8"), encoding="utf-8")
+    file_b.write_text(source_file.read_text(encoding="utf-8"), encoding="utf-8")
+
+    agent_kwargs = {
+        "name": "CleanupAgent",
+        "instructions": "Use FileSearch to answer from documents.",
+        "files_folder": str(files_dir),
+        "include_search_results": True,
+        "model": "gpt-4.1",
+        "model_settings": ModelSettings(temperature=0.0, tool_choice="file_search"),
+        "tool_use_behavior": "stop_on_first_tool",
+    }
+
+    # First init: uploads both files and creates VS
+    agent1 = Agent(**agent_kwargs)
+    agent1._openai_client = real_openai_client
+    Agency(agent1, user_context=None)
+    await _wait_for_vector_store(real_openai_client, agent1)
+
+    # Find VS folder and collect uploaded ids
+    candidates = list(files_dir.parent.glob(f"{files_dir.name}_vs_*"))
+    folder_path = candidates[0] if candidates else None
+    assert folder_path and folder_path.exists(), "No vector store folder found"
+
+    uploaded_ids = []
+    for f in folder_path.glob("*"):
+        if f.is_file():
+            fid = agent1.file_manager.get_id_from_file(f)
+            if fid:
+                uploaded_ids.append(fid)
+    assert len(uploaded_ids) == 2, f"Expected 2 uploaded files, got {len(uploaded_ids)}"
+
+    # Remove one local file
+    local_files = [p for p in folder_path.glob("*") if p.is_file()]
+    assert len(local_files) >= 2
+    removed_local = local_files[0]
+    removed_id = agent1.file_manager.get_id_from_file(removed_local)
+    os.remove(removed_local)
+
+    # Re-init: should detach removed from VS and delete OpenAI file object
+    agent2 = Agent(**agent_kwargs)
+    agent2._openai_client = real_openai_client
+    Agency(agent2, user_context=None)
+    await _wait_for_vector_store(real_openai_client, agent2)
+
+    vs_id = agent2._associated_vector_store_id
+    assert isinstance(vs_id, str) and vs_id
+
+    # Verify VS now contains only remaining file
+    vs_files = await real_openai_client.vector_stores.files.list(vector_store_id=vs_id)
+    vs_file_ids = {getattr(f, "file_id", None) or getattr(f, "id", None) for f in vs_files.data}
+    assert removed_id not in vs_file_ids
+    assert len(vs_file_ids) == 1
+
+    # Verify the removed OpenAI file no longer exists
+    with pytest.raises(NotFoundError):
+        # Different SDK versions may raise NotFoundError or generic error; asserting any exception is sufficient
+        await real_openai_client.files.retrieve(file_id=removed_id)
+
+    # Cleanup
+    try:
+        await _cleanup_file_search_resources(real_openai_client, folder_path, agent2)
+    except Exception as e:
+        print(f"Cleanup failed: {e}")
+
+
+@pytest.mark.asyncio
+async def test_file_reupload_on_mtime_update(real_openai_client: AsyncOpenAI, tmp_path: Path):
+    """Modifying local file triggers re-upload with a new file_id and VS update."""
+    source_file = Path("tests/data/files/favorite_books.txt")
+    assert source_file.exists(), f"Test file not found at {source_file}"
+
+    # Create temp folder and copy file
+    files_dir = tmp_path / "reupload_files"
+    files_dir.mkdir(exist_ok=True)
+    local_file = files_dir / "favorite_books.txt"
+    shutil.copy2(source_file, local_file)
+
+    agent_kwargs = {
+        "name": "ReuploadAgent",
+        "instructions": "Use FileSearch to answer from documents.",
+        "files_folder": str(files_dir),
+        "include_search_results": True,
+        "model": "gpt-4.1",
+        "model_settings": ModelSettings(temperature=0.0, tool_choice="file_search"),
+        "tool_use_behavior": "stop_on_first_tool",
+    }
+
+    # First init: upload original file
+    agent1 = Agent(**agent_kwargs)
+    agent1._openai_client = real_openai_client
+    Agency(agent1, user_context=None)
+    await _wait_for_vector_store(real_openai_client, agent1)
+
+    # Locate vector store folder and uploaded file id
+    candidates = list(files_dir.parent.glob(f"{files_dir.name}_vs_*"))
+    folder_path = candidates[0] if candidates else None
+    assert folder_path and folder_path.exists(), "No vector store folder found"
+
+    vs_files_local = [p for p in folder_path.glob("*") if p.is_file()]
+    assert len(vs_files_local) == 1
+    uploaded_path = vs_files_local[0]
+    old_id = agent1.file_manager.get_id_from_file(uploaded_path)
+    assert isinstance(old_id, str) and old_id
+
+    # Ensure mtime > created_at by waiting and modifying the file
+    time.sleep(2)
+    with open(uploaded_path, "a", encoding="utf-8") as f:
+        f.write("\nReupload test line.")
+    # Bump mtime explicitly to avoid rounding issues
+    try:
+        st = uploaded_path.stat()
+        os.utime(uploaded_path, (st.st_atime, st.st_mtime + 2))
+    except Exception:
+        pass
+
+    # Re-init agent: should detect newer mtime and re-upload
+    agent2 = Agent(**agent_kwargs)
+    agent2._openai_client = real_openai_client
+    Agency(agent2, user_context=None)
+    await _wait_for_vector_store(real_openai_client, agent2)
+
+    vs_id = agent2._associated_vector_store_id
+    assert isinstance(vs_id, str) and vs_id
+
+    # Verify vector store now references a new file id
+    vs_files = await real_openai_client.vector_stores.files.list(vector_store_id=vs_id)
+    new_ids = {getattr(f, "file_id", None) or getattr(f, "id", None) for f in vs_files.data}
+    assert len(new_ids) == 1
+    (new_id,) = tuple(new_ids)
+    assert new_id != old_id
+
+    # Old file should be deleted
+    with pytest.raises(NotFoundError):
+        await real_openai_client.files.retrieve(file_id=old_id)
+
+    # Cleanup
+    try:
+        await _cleanup_file_search_resources(real_openai_client, folder_path, agent2)
+    except Exception as e:
+        print(f"Cleanup failed: {e}")

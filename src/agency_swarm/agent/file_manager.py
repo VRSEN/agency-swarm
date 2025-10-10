@@ -9,6 +9,8 @@ from agents.exceptions import AgentsException
 from openai import NotFoundError
 from openai.types.responses.tool_param import CodeInterpreter
 
+from agency_swarm.agent.file_sync import FileSync
+
 logger = logging.getLogger(__name__)
 
 # Shared constants
@@ -44,26 +46,10 @@ class AgentFileManager:
 
     def __init__(self, agent):
         self.agent = agent
+        self._sync = FileSync(agent)
 
     def upload_file(self, file_path: str, include_in_vector_store: bool = True) -> str:
-        """
-        Uploads a local file to OpenAI and optionally associates it with the agent's
-        Vector Store if `self.agent._associated_vector_store_id` is set (derived from
-        `files_folder` using the `_vs_<id>` naming convention).
-
-        The file is renamed to include the OpenAI File ID (e.g., `original_name_<file_id>.ext`)
-        after successful upload to prevent re-uploading the same file.
-
-        Args:
-            file_path (str): The path to the local file to upload.
-            include_in_vector_store (bool): Whether to associate the file with the agent's Vector Store.
-        Returns:
-            str: The OpenAI File ID of the uploaded file.
-
-        Raises:
-            FileNotFoundError: If the `file_path` does not exist.
-            AgentsException: If the upload or Vector Store association fails.
-        """
+        """Upload a local file and optionally associate it with the agent's vector store; returns file_id."""
         fpath = Path(file_path)
         if not fpath.exists():
             raise FileNotFoundError(f"File not found at {file_path}")
@@ -77,12 +63,33 @@ class AgentFileManager:
                 "Please initialize the agent with a valid 'files_folder'."
             )
 
-        # Check if file has already been uploaded
+        # Check if file has already been uploaded and compare mtime vs remote created_at
         existing_file_id = self.get_id_from_file(fpath)
         logger.info(f"Existing file ID: {existing_file_id}")
+
         if existing_file_id:
-            logger.info(f"File {fpath.name} with ID {existing_file_id} is already uploaded, skipping...")
-            return existing_file_id
+            try:
+                remote_file = self.agent.client_sync.files.retrieve(existing_file_id)
+                remote_created_at = getattr(remote_file, "created_at", None)
+            except Exception:
+                remote_created_at = None
+
+            local_mtime = fpath.stat().st_mtime
+            if isinstance(remote_created_at, int | float) and local_mtime <= float(remote_created_at):
+                logger.info(
+                    f"File {fpath.name} unchanged since upload, skipping..."
+                )
+                return existing_file_id
+            else:
+                logger.info(
+                    f"File {fpath.name} appears newer locally (mtime={local_mtime}, created_at={remote_created_at});"
+                    f" replacing file {existing_file_id} on OpenAI."
+                )
+                try:
+                    # Detach from VS and delete remote file before re-upload
+                    self._sync.remove_file_from_vs_and_oai(existing_file_id)
+                except Exception as e:
+                    logger.warning(f"Agent {self.agent.name}: Failed to remove existing file {existing_file_id}: {e}")
 
         try:
             with open(fpath, "rb") as f:
@@ -97,7 +104,12 @@ class AgentFileManager:
 
         # Rename the original file to include the OpenAI ID
         try:
-            new_filename = f"{fpath.stem}_{uploaded_file.id}{fpath.suffix}"
+            # Compute new filename based on the original stem without trailing _file-id if present
+            base_stem = fpath.stem
+            # If filename already had an id, strip the trailing id part
+            if "_file-" in base_stem:
+                base_stem = base_stem.split("_file-")[0]
+            new_filename = f"{base_stem}_{uploaded_file.id}{fpath.suffix}"
             destination_path = self.agent.files_folder_path / new_filename
             fpath.rename(destination_path)
             logger.info(f"Agent {self.agent.name}: Renamed uploaded file to {destination_path}")
@@ -157,15 +169,7 @@ class AgentFileManager:
             raise FileNotFoundError(f"File not found: {f_path}")
 
     def parse_files_folder_for_vs_id(self) -> None:
-        """
-        Discover or create a vector store for the agent's files folder.
-
-        Algorithm:
-        1. Find existing vector store directories (prioritize explicit _vs_ paths)
-        2. Create new vector store and rename folder if needed
-        3. Find new files in original directory
-        4. Upload all files and attach tools
-        """
+        """Discover or create the vector store for files_folder, upload files, and wire tools."""
         self.agent.files_folder_path = None
         self.agent._associated_vector_store_id = None
 
@@ -222,11 +226,14 @@ class AgentFileManager:
         if code_interpreter_file_ids:
             self.add_code_interpreter_tool(code_interpreter_file_ids)
 
+        # After uploads and tool wiring, ensure the vector store is in sync with local folder
+        try:
+            self._sync.sync_with_folder()
+        except Exception as e:
+            logger.error(f"Agent {self.agent.name}: Failed to sync vector store with folder: {e}")
+
     def add_file_search_tool(self, vector_store_id: str, file_ids: list[str] | None = None):
-        """
-        Adds a new vector store to the existing FileSearchTool or creates a new one if it doesn't exist.
-        If optional file_ids provided, they will be added to the provided vector store.
-        """
+        """Ensure FileSearchTool references the given vector_store_id and optionally add file_ids."""
         file_search_tool_exists = any(isinstance(tool, FileSearchTool) for tool in self.agent.tools)
 
         if not file_search_tool_exists:
@@ -273,13 +280,7 @@ class AgentFileManager:
                     break  # Assume only one FileSearchTool
 
     def add_code_interpreter_tool(self, code_interpreter_file_ids: list[str]):
-        """
-        Checks that a CodeInterpreterTool is available and configured.
-
-        If the tool is not present, it will be added.
-        If present but not configured with the file IDs, the file IDs are added to its configuration.
-        If present and configured, the file IDs are added to its configuration.
-        """
+        """Ensure a CodeInterpreterTool exists and contains the provided file IDs."""
 
         code_interpreter_tool_exists = any(isinstance(tool, CodeInterpreterTool) for tool in self.agent.tools)
 
@@ -324,9 +325,7 @@ class AgentFileManager:
                     break  # Assume only one CodeInterpreterTool
 
     def add_files_to_vector_store(self, vector_store_id: str, file_ids: list[str]):
-        """
-        Adds a file to the agent's Vector Store if one is linked to this agent via files_folder
-        """
+        """Add files to the vector store if not already present."""
         existing_files = self.agent.client_sync.vector_stores.files.list(vector_store_id=vector_store_id)
         existing_file_ids = [file.id for file in existing_files.data]
         for file_id in file_ids:
@@ -344,6 +343,7 @@ class AgentFileManager:
                     f"Agent {self.agent.name}: Failed to add file {file_id} to Vector Store {vector_store_id}: {e}"
                 )
                 raise AgentsException(f"Failed to add file {file_id} to Vector Store {vector_store_id}: {e}") from e
+
 
     def read_instructions(self):
         if not self.agent.instructions:
@@ -446,7 +446,7 @@ class AgentFileManager:
             return None
 
     def _find_new_files_to_process(self, original_folder_path: Path) -> list[Path]:
-        """Find new files in original directory that haven't been processed yet."""
+        """Find new files in the original directory that aren't in the VS folder yet."""
         if not original_folder_path.exists():
             return []
 
@@ -468,7 +468,7 @@ class AgentFileManager:
         return new_files
 
     def _upload_file_by_type(self, file_path: Path, include_in_vs: bool = True) -> str | None:
-        """Upload file and return code interpreter file ID if applicable."""
+        """Upload file; return file_id for code interpreter types, else None."""
         ext = file_path.suffix.lower()
 
         if ext in CODE_INTERPRETER_FILE_EXTENSIONS + IMAGE_FILE_EXTENSIONS:
