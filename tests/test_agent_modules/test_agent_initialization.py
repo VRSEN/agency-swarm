@@ -107,6 +107,12 @@ def test_agent_initialization_with_all_parameters():
 
         mock_client = MagicMock()
         mock_client.vector_stores.create.return_value = mock_vector_store
+        # Prevent infinite pagination when syncing vector store files during init
+        list_resp = MagicMock()
+        list_resp.data = []
+        list_resp.has_more = False
+        list_resp.last_id = None
+        mock_client.vector_stores.files.list.return_value = list_resp
 
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
