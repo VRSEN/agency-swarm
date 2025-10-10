@@ -1,6 +1,7 @@
 import pickle
 
 import pytest
+from agents.models.fake_id import FAKE_RESPONSES_ID
 
 from agency_swarm.utils.thread import ThreadManager
 
@@ -57,6 +58,168 @@ def test_add_messages(method: str, messages: list[dict]):
 
     assert len(manager._store.messages) == len(messages)
     assert manager._store.messages == messages
+
+
+def test_duplicate_message_id_is_preserved():
+    """Ensure ThreadManager leaves duplicate message ids intact."""
+    manager = ThreadManager()
+
+    initial = {
+        "type": "message",
+        "id": "msg-1",
+        "role": "assistant",
+        "content": None,
+        "timestamp": 1,
+    }
+    updated = {
+        "type": "message",
+        "id": "msg-1",
+        "role": "assistant",
+        "tool_calls": [
+            {
+                "id": "call-1",
+                "type": "function",
+                "function": {"name": "do_work", "arguments": "{}"},
+            }
+        ],
+        "timestamp": 2,
+    }
+
+    manager.add_message(initial)
+    manager.add_message(updated)
+
+    assert manager._store.messages == [initial, updated]
+
+
+def test_function_call_output_duplicates_are_preserved():
+    """Ensure ThreadManager does not dedupe function_call_output entries."""
+    manager = ThreadManager()
+
+    first_output = {
+        "type": "function_call_output",
+        "call_id": "call-1",
+        "output": "intermediate",
+        "timestamp": 1,
+    }
+    final_output = {
+        "type": "function_call_output",
+        "call_id": "call-1",
+        "output": "final",
+        "timestamp": 2,
+    }
+
+    manager.add_message(first_output)
+    manager.add_message(final_output)
+
+    assert manager._store.messages == [first_output, final_output]
+
+
+def test_function_call_output_unique_ids_are_preserved():
+    """Ensure distinct message ids for the same call id remain appended."""
+    manager = ThreadManager()
+
+    first_output = {
+        "type": "function_call_output",
+        "id": "msg-1",
+        "call_id": "call-1",
+        "output": "placeholder",
+        "timestamp": 1,
+    }
+    final_output = {
+        "type": "function_call_output",
+        "id": "msg-2",
+        "call_id": "call-1",
+        "output": "final",
+        "timestamp": 2,
+    }
+
+    manager.add_message(first_output)
+    manager.add_message(final_output)
+
+    assert manager._store.messages == [first_output, final_output]
+
+
+def test_placeholder_messages_are_not_deduped():
+    manager = ThreadManager()
+
+    first = {
+        "type": "message",
+        "id": FAKE_RESPONSES_ID,
+        "role": "assistant",
+        "content": "initial",
+        "timestamp": 1,
+    }
+    second = {
+        "type": "message",
+        "id": FAKE_RESPONSES_ID,
+        "role": "assistant",
+        "content": "follow-up",
+        "timestamp": 2,
+    }
+
+    manager.add_message(first)
+    manager.add_message(second)
+
+    assert manager._store.messages == [first, second]
+
+
+def test_placeholder_tool_messages_preserve_prior_calls():
+    manager = ThreadManager()
+
+    first_call = {
+        "type": "function_call",
+        "id": FAKE_RESPONSES_ID,
+        "call_id": "call-1",
+        "role": "assistant",
+        "timestamp": 1,
+        "tool_calls": [
+            {
+                "id": "call-1",
+                "type": "function",
+                "function": {"name": "get_user_id", "arguments": "{}"},
+            }
+        ],
+    }
+    first_output = {
+        "type": "function_call_output",
+        "id": FAKE_RESPONSES_ID,
+        "call_id": "call-1",
+        "output": "User id is 1245725189",
+        "timestamp": 2,
+    }
+    manager.add_message(first_call)
+    manager.add_message(first_output)
+
+    second_call = {
+        "type": "function_call",
+        "id": FAKE_RESPONSES_ID,
+        "call_id": "call-2",
+        "role": "assistant",
+        "timestamp": 3,
+        "tool_calls": [
+            {
+                "id": "call-2",
+                "type": "function",
+                "function": {"name": "get_user_id", "arguments": "{}"},
+            }
+        ],
+    }
+    second_output = {
+        "type": "function_call_output",
+        "id": FAKE_RESPONSES_ID,
+        "call_id": "call-2",
+        "output": "Done",
+        "timestamp": 4,
+    }
+
+    manager.add_message(second_call)
+    manager.add_message(second_output)
+
+    calls = [msg for msg in manager._store.messages if msg.get("type") == "function_call"]
+    outputs = [msg for msg in manager._store.messages if msg.get("type") == "function_call_output"]
+
+    assert {msg["call_id"] for msg in calls} == {"call-1", "call-2"}
+    assert {msg["call_id"] for msg in outputs} == {"call-1", "call-2"}
 
 
 def test_user_thread_shared_across_agents():
@@ -168,3 +331,78 @@ def test_replace_messages_skips_save_callback():
 
     assert captured == []
     assert [msg["content"] for msg in manager.get_all_messages()] == ["new"]
+
+
+def test_thread_manager_allows_duplicate_ids_by_design():
+    """Verify ThreadManager leaves duplicate items untouched (SDK handles dedupe)."""
+    manager = ThreadManager()
+
+    first = {
+        "id": "msg-1",
+        "type": "function_call",
+        "call_id": "call-1",
+        "role": "assistant",
+        "timestamp": 1,
+    }
+    second = {
+        "id": "msg-1",
+        "type": "function_call",
+        "call_id": "call-1",
+        "role": "assistant",
+        "timestamp": 2,
+    }
+
+    manager.add_message(first)
+    manager.add_message(second)
+
+    assert manager._store.messages == [first, second]
+
+
+def test_function_call_output_with_same_id_different_call_ids_should_not_dedupe():
+    manager = ThreadManager()
+
+    first_output = {
+        "type": "function_call_output",
+        "id": "msg-1",
+        "call_id": "call-1",
+        "output": "first tool result",
+        "timestamp": 1,
+    }
+    second_output = {
+        "type": "function_call_output",
+        "id": "msg-1",
+        "call_id": "call-2",
+        "output": "second tool result",
+        "timestamp": 2,
+    }
+
+    manager.add_message(first_output)
+    manager.add_message(second_output)
+
+    outputs = [msg for msg in manager._store.messages if msg.get("type") == "function_call_output"]
+    assert len(outputs) == 2
+    assert {msg["call_id"] for msg in outputs} == {"call-1", "call-2"}
+
+
+def test_messages_with_none_type_and_same_id_should_not_dedupe():
+    manager = ThreadManager()
+
+    first_message = {
+        "type": None,
+        "id": "msg-1",
+        "role": "assistant",
+        "content": "first",
+        "timestamp": 1,
+    }
+    second_message = {
+        "type": None,
+        "id": "msg-1",
+        "role": "assistant",
+        "content": "second",
+        "timestamp": 2,
+    }
+
+    manager.add_message(first_message)
+    manager.add_message(second_message)
+
+    assert len(manager._store.messages) == 2

@@ -37,10 +37,16 @@ def mock_thread_manager():
         """Side effect for get_all_messages to return all messages."""
         return messages.copy()
 
+    def replace_messages_side_effect(new_messages):
+        """Replace stored messages with the provided collection."""
+        messages.clear()
+        messages.extend(new_messages)
+
     manager.add_message.side_effect = add_message_side_effect
     manager.add_messages.side_effect = add_messages_side_effect
     manager.get_conversation_history.side_effect = get_conversation_history_side_effect
     manager.get_all_messages.side_effect = get_all_messages_side_effect
+    manager.replace_messages.side_effect = replace_messages_side_effect
 
     # Legacy compatibility - these should not be used but may be called
     manager.get_thread = MagicMock()

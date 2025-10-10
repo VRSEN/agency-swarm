@@ -152,6 +152,8 @@ async def run_sync_with_guardrails(
                             [e.guardrail_result] if getattr(e, "guardrail_result", None) is not None else []
                         ),
                         output_guardrail_results=[],
+                        tool_input_guardrail_results=[],
+                        tool_output_guardrail_results=[],
                         context_wrapper=wrapper,
                         _last_agent=agent,
                     ),

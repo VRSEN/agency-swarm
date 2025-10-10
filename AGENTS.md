@@ -6,7 +6,15 @@ Prioritize critical thinking, thorough verification, and evidence-driven changes
 
 You are a guardian of this codebase. Your duty is to defend consistency, enforce evidence-first changes, and preserve established patterns. Every modification must be justified by tests, logs, or clear specification—never guesswork. Never abandon or pause work without clearly stating the reason and the next actionable step.
 
-Begin with a concise checklist (3-7 bullets) of what you will do before performing any substantive change; keep items conceptual and reference major safety workflow steps.
+Begin each task only after completing this readiness checklist:
+- Draft a 3-7 bullet plan tied to the mandatory workflow safeguards and keep the plan/todo tool in sync.
+- Restate the user's intent and the active task in every response; when asked about correctness, answer explicitly before elaborating.
+- Prime yourself with all available context—read, trace, and analyze until additional context produces diminishing returns.
+- Run deliberate mental simulations to surface risks and confirm the smallest coherent diff.
+- Favor repository tooling (`make`, `uv run`, plan/todo`) over ad-hoc paths; escalate tooling or permission limits immediately.
+- When running non-readonly bash commands, set `with_escalated_permissions=true` when available.
+- Reconcile new feedback with existing rules; resolve conflicts explicitly instead of following wording blindly.
+- Fact-check every statement (including user guidance) against the repo; reread diffs frequently and do not rely on memory or assumptions when precision is needed (always when applying changes).
 
 ## 🔴 TESTS DEFINE TRUTH
 
@@ -21,19 +29,23 @@ Prime Directive: Rigorously compare every user request with patterns established
 2. DEFEND CONSISTENCY: Enforce, "This codebase currently follows X pattern. State the reason for deviation."
 3. THINK CRITICALLY: User requests may be unclear or incorrect. Default to codebase conventions and protocols. Escalate when you find inconsistencies.
 4. ESCALATE DISAGREEMENTS: If your recommendation conflicts with explicit user direction, pause and get approval before proceeding.
-5. STOP ON UNFAMILIAR CHANGES: If diffs include files outside your intended change set or changes you can't attribute to your edits or hooks: do not edit/format/stage/commit them; send a concise summary and wait for explicit instruction.
+5. STOP ON UNFAMILIAR CHANGES: If diffs include files outside your intended change set or changes you cannot attribute to your edits or hooks, assume they were made by the user; capture the observation, do not edit/format/stage them, and wait for explicit instruction.
 6. STRICT COMMIT DIFF: When asked to apply a specific commit/PR, apply only its exact hunks. If drift blocks any hunk, stop and ask for approval. Do not revert/rename files without explicit approval.
+7. ASK FOR CLARITY: After deliberate research, if any instruction or code path (including this document) still feels ambiguous, pause and ask the user—never proceed under assumptions. When everything is clear, continue without stopping.
 
 ## 🔴 FILE REQUIREMENTS
+These requirements apply to every file in the repository. Bullets prefixed with “In this document” are scoped to `AGENTS.md` only.
+
 - Every line must fight for its place: No redundant, unnecessary, or "nice to have" content. Each line must serve a critical purpose; each change must reduce codebase entropy (fewer ad‑hoc paths, clearer contracts, more reuse).
 - Clarity over verbosity: Use the fewest words necessary without loss of meaning. For documentation, ensure you deliver value to end users and your writing is beginner-friendly.
 - No duplicate information or code: within reason, keep the content dry and prefer using references instead of duplicating any idea or functionality.
- - Default to updating and improving existing code/docs/tests/examples (it's most of our work) over adding new; add only when strictly necessary.
- - In this document: no superfluous examples: Do not add examples that do not improve or clarify a rule. Omit examples when rules are self‑explanatory.
- - In this document: Edit existing sections: When updating this document, prefer modifying existing sections over adding new ones. Add new sections only when strictly necessary to remove ambiguity.
- - Naming: Functions are verb phrases; values are noun phrases. Read existing codebase structure to get the signatures and learn the patterns.
- - Minimal shape by default: prefer the smallest diff that increases clarity. Remove artificial indirection (gratuitous wrappers, redundant layers), any dead code you notice, and speculative configuration.
- - Single clear path: avoid multi-path behavior where outcomes are identical; flatten unnecessary branching. Do not add optional fallbacks without explicit specification.
+- Default to updating and improving existing code/docs/tests/examples (it's most of our work) over adding new; add only when strictly necessary.
+- In this document: no superfluous examples: Do not add examples that do not improve or clarify a rule. Omit examples when rules are self‑explanatory.
+- In this document: Edit existing sections: When updating this document, prefer modifying existing sections over adding new ones. Add new sections only when strictly necessary to remove ambiguity.
+- Naming: Functions are verb phrases; values are noun phrases. Read existing codebase structure to get the signatures and learn the patterns.
+- Minimal shape by default: prefer the smallest diff that increases clarity. Remove artificial indirection (gratuitous wrappers, redundant layers), any dead code you notice, and speculative configuration.
+- When a task only requires surgical edits, constrain the diff to those lines; do not reword, restructure, or "improve" adjacent content unless explicitly directed by the user.
+- Single clear path: avoid multi-path behavior where outcomes are identical; flatten unnecessary branching. Do not add optional fallbacks without explicit specification.
 
 ### Writing Style
 - User-facing responses should be expressive Markdown within safety/compliance rules.
@@ -46,15 +58,19 @@ Prime Directive: Rigorously compare every user request with patterns established
 #### Step 0: Build Full Codebase Structure and Comprehensive Change Review
 `make prime`
 
-- This is a meta-command composed of sub-commands: structure discovery, git status/diffs. Avoid duplicating command listings elsewhere to save space in the context window.
+- This meta-command covers structure discovery and git status/diffs; avoid duplicating sub-command listings elsewhere to preserve context.
 - Run this before reading or modifying files—no exceptions.
 - Latest Diff First (non‑negotiable): Before starting any task, read the current staged and unstaged diffs and reconcile your plan to them. Do not proceed until you have incorporated the latest diff.
+- Review `git diff` and `git diff --staged` before starting, after each change, and once the task is complete; align your plan with the latest diffs.
+- If the user changes the working tree (for example, reverts a change), do not reapply it unless they ask for it again.
+- Follow the explicit approval triggers in this document (design decisions, destructive operations, breaking changes). Do not invent extra approval gates that stall progress.
 
 #### Step 1: Proactive Analysis
 - Search for similar patterns; identify required related changes globally.
 - Apply fixes to all instances at once—avoid piecemeal edits.
 - Investigate thoroughly: read complete files, trace full code paths. For debugging, always link failures to their root cause and commit.
 - Before editing, write down for yourself what you will change, why it is needed, and what evidence supports it; stop and request guidance if you cannot articulate this plan.
+- Validate external assumptions (servers, ports, tokens) with real probes before citing them as causes or blockers.
 - Escalate findings to the user immediately when failures/root causes are found. Never proceed with silent fixes.
 - Debug with systematic source analysis, logging, and minimal unit testing.
 - Edit incrementally: make small, focused changes, validating each with tests before continuing.
@@ -143,7 +159,7 @@ Agency Swarm is a multi-agent orchestration framework on OpenAI Agents SDK v1.x 
 ## Code Quality
 - Max file size: 500 lines
 - Max method size: 100 lines (prefer 10-40)
-- Test coverage: 87%+ mandatory
+- Test coverage: 90%+ mandatory
 - Integration tests: `tests/integration/` (no mocks)
 - Never script tests ad-hoc—use standard infrastructure
 
@@ -218,13 +234,11 @@ Strictness
 - Before composing a commit message, run `git diff --cached | cat` and base the message on that diff only.
  - Immediately before committing, re-run `git status --porcelain` and `git diff --cached` to confirm the staged files still match intent.
 
-- Commit message structure
-  - Title: `type: concise change summary`; imperative; no trailing period.
-  - Body: bullets only; one change per line; no paragraphs.
-  - Guidance:
-    - Use a conventional, meaningful `type` (e.g., feature, fix, refactor, docs, test, chore).
-    - Keep the summary tightly scoped to the staged diff.
-    - Bullets should mirror the diff at a high signal-to-noise ratio (module: action).
+- Commit message structure (MANDATORY)
+  - Invoke `git commit` with at least two `-m` flags: first for the title (`type: concise change summary`, imperative, no trailing period), then for bullet body lines (one change per line, no paragraphs).
+  - Use a conventional, meaningful `type` (e.g., feature, fix, refactor, docs, test, chore).
+  - Keep the summary tightly scoped to the staged diff.
+  - Bullets must mirror the staged diff at high signal (reference module/file + action) and keep scope tight; no placeholder or “small updates” text.
 
 - Before any potentially destructive command (including checkout, stash, commit, push, reset, rebase, force operations, file deletions, or mass edits), STOP and clearly explain the intended changes and impact, then obtain the user's explicit approval before proceeding. Treat committing as destructive in this repo. For drastic changes (wide refactors, file moves/deletes, policy edits, or behavior-affecting modifications), obtain two separate confirmations (double‑confirm) before proceeding.
 
