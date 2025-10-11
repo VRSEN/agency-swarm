@@ -102,6 +102,8 @@ class Agent(BaseAgent[MasterContext]):
             validation_attempts (int): Number of retries when an output guardrail trips. Defaults to 1.
             throw_input_guardrail_error (bool): Whether to raise input guardrail errors as exceptions.
                 Defaults to False.
+            handoff_reminder (str | None): Custom reminder for handoffs.
+                Defaults to `Transfer completed. You are {recipient_agent_name}. Please continue the task.`
 
         ## OpenAI Agents SDK Parameters:
             prompt (Prompt | DynamicPromptFunction | None): Dynamic prompt configuration.
@@ -178,6 +180,7 @@ class Agent(BaseAgent[MasterContext]):
         self.include_search_results = current_agent_params.get("include_search_results", False)
         self.validation_attempts = int(current_agent_params.get("validation_attempts", 1))
         self.throw_input_guardrail_error = bool(current_agent_params.get("throw_input_guardrail_error", False))
+        self.handoff_reminder = current_agent_params.get("handoff_reminder")
 
         # Internal state
         self._openai_client = None
