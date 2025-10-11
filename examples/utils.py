@@ -38,7 +38,7 @@ def print_history(thread_manager, roles: Iterable[str] = ("assistant", "system")
             role = f"{m.get('agent')}:"
         elif role == "user" and m.get("callerAgent") is not None:
             role = f"{m.get('callerAgent')}:"
-        content = _extract_text(m.get("content"))
+        content = _extract_text(m.get("content") or m.get("output") or m.get("arguments"))
         print(f"   [{role}] {content}")
 
 
