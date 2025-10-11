@@ -408,9 +408,6 @@ class TestComplexHandoffScenarios:
         class NoReminder(SendMessageHandoff):
             add_reminder = False
 
-        class CustomReminder(SendMessageHandoff):
-            reminder_override = "Custom reminder"
-
         agent_a = Agent(
             name="AgentA", instructions="Primary orchestrator", model_settings=ModelSettings(temperature=0.0)
         )
@@ -419,7 +416,12 @@ class TestComplexHandoffScenarios:
             instructions="Secondary orchestrator with handoffs",
             model_settings=ModelSettings(temperature=0.0),
         )
-        agent_c = Agent(name="AgentC", instructions="Specialist", model_settings=ModelSettings(temperature=0.0))
+        agent_c = Agent(
+            name="AgentC",
+            instructions="Specialist",
+            model_settings=ModelSettings(temperature=0.0),
+            handoff_reminder="Custom reminder",
+        )
 
         # Configure bidirectional communication between A and B, plus handoff capability from B to C
         agency = Agency(
@@ -428,7 +430,7 @@ class TestComplexHandoffScenarios:
             agent_c,
             communication_flows=[
                 (agent_a > agent_b, SendMessageHandoff),  # A can send to B
-                (agent_b > agent_c, CustomReminder),  # A can send to C
+                (agent_b > agent_c, SendMessageHandoff),  # A can send to C
                 (agent_c > agent_a, NoReminder),  # B can hand off to C (using SendMessageHandoff tool class)
             ],
         )
@@ -439,7 +441,7 @@ class TestComplexHandoffScenarios:
         assert system_message["role"] == "system", (
             f"Incorrect role, got: {system_message}, expected reminder system message"
         )
-        assert system_message["content"] == "You are now AgentB. Please continue the task.", (
+        assert system_message["content"] == "Transfer completed. You are AgentB. Please continue the task.", (
             f"Incorrect content, got: {system_message}, expected reminder system message"
         )
 
