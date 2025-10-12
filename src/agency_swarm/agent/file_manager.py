@@ -169,9 +169,10 @@ class AgentFileManager:
         if os.path.isfile(f_path):
             file_name, _ = os.path.splitext(f_path)
             file_name = os.path.basename(file_name)
-            match = re.search(r"_file-([A-Za-z0-9]*\d[A-Za-z0-9]*)$", file_name)
+            match = re.search(r"_file-([A-Za-z0-9]{15,})$", file_name)
             if match:
-                return f"file-{match.group(1)}"
+                id_suffix = match.group(1)
+                return f"file-{id_suffix}"
             return None
         else:
             raise FileNotFoundError(f"File not found: {f_path}")
