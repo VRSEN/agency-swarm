@@ -142,14 +142,30 @@ For example, `name="send_message_formatted"` or `name="send_message_custom"` and
 ### Custom Handoff Class
 
 By default, whenever a handoff occurs, prior to transferring the chat, a special system message will be added to the chat history to remind the recipient agent that a handoff has happened. This helps to reduce the amount of hallucinations and agent confusion whenever a chat transfer happens.
-You can customize the reminder message or disable it entirely by defining a custom Handoff class as follows (see [`add_reminder` and `reminder_override` fields](https://github.com/VRSEN/agency-swarm/blob/main/src/agency_swarm/tools/send_message.py)):
+You can customize the reminder message or disable it entirely by defining a custom Handoff class as follows (see [`add_reminder`](https://github.com/VRSEN/agency-swarm/blob/main/src/agency_swarm/tools/send_message.py) and [`handoff_reminder`](https://github.com/VRSEN/agency-swarm/blob/main/src/agency_swarm/agent/core.py) parameters). Set `handoff_reminder` on the agent that receives the handoff so the message appears in its context:
 
 ```python
+from agency_swarm import Agent
 from agency_swarm.tools.send_message import SendMessageHandoff
 
-class CustomHandoff(SendMessageHandoff):
-    add_reminder = True # Set to False to completely remove the extra message
-    reminder_override = "My custom reminder" # Define custom reminder message
+class NoReminderHandoff(SendMessageHandoff):
+    add_reminder = False # Set to False to completely remove the extra message
+
+agent = Agent(
+    name="NoReminderAgent",
+    send_message_tool_class=NoReminderHandoff, 
+)
+```
+
+```python
+from agency_swarm import Agent
+from agency_swarm.tools.send_message import SendMessageHandoff
+
+agent = Agent(
+    name="CustomHandoffAgent",
+    # Delivered to this agent whenever it receives a handoff.
+    handoff_reminder="You are now the active agent. Summarize received context and answer user query.",
+)
 ```
 
 ### Common Use Cases
