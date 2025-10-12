@@ -11,7 +11,7 @@ Begin each task only after completing this readiness checklist:
 - Restate the user's intent and the active task in every response; when asked about correctness, answer explicitly before elaborating.
 - Prime yourself with all available context—read, trace, and analyze until additional context produces diminishing returns.
 - Run deliberate mental simulations to surface risks and confirm the smallest coherent diff.
-- Favor repository tooling (`make`, `uv run`, plan/todo`) over ad-hoc paths; escalate tooling or permission limits immediately.
+- Favor repository tooling (`make`, `uv run`, plan/todo) over ad-hoc paths; escalate tooling or permission limits immediately.
 - When running non-readonly bash commands, set `with_escalated_permissions=true` when available.
 - Reconcile new feedback with existing rules; resolve conflicts explicitly instead of following wording blindly.
 - Fact-check every statement (including user guidance) against the repo; reread diffs frequently and do not rely on memory or assumptions when precision is needed (always when applying changes).
@@ -30,7 +30,7 @@ Prime Directive: Rigorously compare every user request with patterns established
 3. THINK CRITICALLY: User requests may be unclear or incorrect. Default to codebase conventions and protocols. Escalate when you find inconsistencies.
 4. ESCALATE DISAGREEMENTS: If your recommendation conflicts with explicit user direction, pause and get approval before proceeding.
 5. STOP ON UNFAMILIAR CHANGES: If diffs include files outside your intended change set or changes you cannot attribute to your edits or hooks, assume they were made by the user; capture the observation, do not edit/format/stage them, and wait for explicit instruction.
-6. STRICT COMMIT DIFF: When asked to apply a specific commit/PR, apply only its exact hunks. If drift blocks any hunk, stop and ask for approval. Do not revert/rename files without explicit approval.
+6. EVIDENCE OVER INTUITION: Base all decisions on verifiable evidence—tests, git history, logs, actual code behavior.
 7. ASK FOR CLARITY: After deliberate research, if any instruction or code path (including this document) still feels ambiguous, pause and ask the user—never proceed under assumptions. When everything is clear, continue without stopping.
 
 ## 🔴 FILE REQUIREMENTS
@@ -117,11 +117,19 @@ After each tool call or code edit, validate the result in 1-2 lines and proceed 
 - Run non-interactive examples from /examples directory. Never run examples/interactive/* as they require user input.
 
 ### Test Guidelines (Canonical)
-- Keep tests deterministic and minimal. Avoid model dependency when practical.
-- Update existing tests before adding new ones, unless absolutely necessary.
-- Tests should be under 100 lines—split long ones. Use focused runs when debugging.
-- No OR/alternatives in assertions.
-- Prefer precise, restrictive assertions that fully specify expected outcomes and forbid unintended ones.
+- **Shared rules:**
+  - Max 100 lines per test function; keep deterministic and minimal
+  - Every test documents a single behavior (docstring + descriptive name) so intent stays obvious
+  - Test behavior, not implementation details; never test private APIs or patch private attributes or methods
+  - Use real framework objects when practical
+  - Update existing tests before adding new ones unless the coverage gap is clear and documented
+  - Use focused runs during debugging to minimize noise
+  - Follow the testing pyramid and prevent duplicate assertions across unit and integration levels
+  - Use precise, restrictive assertions, enforce a single canonical order, and never rely on OR or alternative cases
+  - Use descriptive, stable names (no throwaway labels); optimize for readability and intent
+  - Remove dead code uncovered during testing
+- **Unit tests:** Keep offline (no real services); avoid model dependency when practical; keep mocks and stubs minimal and realistic; avoid fabricating stand-ins or manipulating `sys.modules`.
+- **Integration tests:** Exercise real services only when necessary; validate end-to-end wiring without mocks or stubs; ensure observed outcomes stay free of duplicate coverage already handled by unit tests.
 
 ## Architecture Overview
 
@@ -167,6 +175,7 @@ Agency Swarm is a multi-agent orchestration framework on OpenAI Agents SDK v1.x 
 Avoid growing already large files. Prefer extracting focused modules. If you must edit a large file, keep the net change minimal or reduce overall size with light refactors.
 
 ## Test Quality (Critical)
+- Honor the canonical test guidelines above; the rules here constrain layout and hygiene.
 - Max test function: 100 lines
 - Use isolated file systems (pytest's `tmp_path`), never shared dirs
 - No slow/hanging tests
@@ -176,19 +185,8 @@ Avoid growing already large files. Prefer extracting focused modules. If you mus
   - No root-level tests (organize by module)
 - Name test files clearly (e.g. `test_thread_isolation.py`), never generic root names
 - Symmetry required: tests must mirror `src/`. Allowed locations: `tests/test_*_modules/` for unit tests (one file per `src` module) and `tests/integration/<package>/` for integration tests (folder name matches `src/agency_swarm/<package>`). Do not add other test roots.
-- Each test verifies one behavior; describe the behavior in the docstring; prefer improving/restructuring/renaming existing tests over adding new ones.
-- Keep assertions minimal but high-signal; enforce a single canonical order (no alternates, no randomness).
-- No OR/alternatives in assertions.
-- Prefer proving the core behavior over incidental details; remove dead code and unused branches immediately.
-
-### Testing Protocol (Behavior-Only, Minimal Mocks)
-- Do not test private APIs or patch private attributes/methods. Interact via public interfaces only.
-- Prefer behavior verification over implementation details; validate externally observable outcomes.
-- Use real framework objects when practical; avoid fabricating stand‑ins or manipulating `sys.modules`.
-- Keep mocks/stubs minimal and realistic; avoid over‑mocking. Use simple stubs to emulate public behavior only.
-- Follow the testing pyramid: prioritize unit tests for focused logic; add integration tests for real wiring/flows without duplicating unit scopes.
-- Avoid duplicate assertions across unit and integration levels; each test should have a clear, non‑overlapping purpose.
-- Use descriptive, stable names (no throwaway labels); optimize for readability and intent.
+- Prefer improving/restructuring/renaming existing tests over adding new ones.
+- Remove dead code and unused branches immediately.
 
 Strictness
 - No `# type: ignore` in production code. Fix types or refactor.
@@ -276,8 +274,8 @@ Strictness
 `uv run pytest tests/integration/ -v`                  # Integration tests
 
 ## Memory & Expectations
-- User expects explicit status reporting, test-first mindset, and directness. Ask at most one question at a time. After any negative feedback or protocol breach, switch to manual approval: present minimal options and wait for explicit approval before changes; re-run Step 1 before and after edits. Update this document first after negative feedback.
-- Always include the distilled gist of any new insight directly in this file when relevant, but prefer improving existing lines and sections.
+- User expects explicit status reporting, test-first mindset, and directness. Ask at most one question at a time. After any negative feedback or protocol breach, switch to manual approval: present minimal options and wait for explicit approval before changes; re-run Step 1 before and after edits.
+- Always distill new insights into existing sections (prefer refining current lines over adding new ones) and, after every feedback event, see how you can fix the issue immediately; do not stop without a strong reason.
 
 ## Search Discipline
 - After changes, aggressively search for and clean up related patterns throughout the codebase.
