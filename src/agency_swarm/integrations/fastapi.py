@@ -159,7 +159,7 @@ def run_fastapi(
 
     app.add_exception_handler(Exception, exception_handler)
 
-    # Add get_logs endpoint if logging is enabled (skip in DRY_RUN)
+    # Add get_logs endpoint if logging is enabled
     if enable_logging:
         app.add_api_route("/get_logs", make_logs_endpoint(LogRequest, logs_dir, verify_token), methods=["POST"])
         endpoints.append("/get_logs")
