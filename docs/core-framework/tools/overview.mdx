@@ -6,30 +6,30 @@ icon: "globe"
 
 Tools are the most important component of any Agentic system. In this guide, we'll cover the basics: what tools are, key characteristics, and the three primary ways you can build or import your own tools.
 
-## Key Characteristics of Tools
+## Key Principles of Building Effective Tools
 
-Effective tools share the following characteristics:
+Here are the key principles for building effective tools:
 
 <CardGroup cols={3}>
   <Card
-    title="Task-Specific"
-    icon="bullseye"
+    title="Standalone"
+    icon="cube"
   >
-    Each tool performs a single, well-defined task. They should not be focused on an API, but rather on whatever it takes to complete the task.
+    Tools should run independently with minimal dependencies on other tools or agents. Any agent should be able to use any tool without extra re-prompting.
   </Card>
 
   <Card
     title="Configurable"
     icon="gear"
   >
-    Tools can be configured to perform the same task in different ways. The agent must be able to adapt based on previous circumstances.
+    Tools should expose adjustable parameters. The agent should be able to tune modes, thresholds, timeouts, limits, etc to better fit the environment or the task at hand.
   </Card>
 
   <Card
-    title="Reusable"
-    icon="recycle"
+    title="Composable"
+    icon="hammer"
   >
-    Tools must be easily reusable not only by the same agent, but also across different agents. Each tool should have specific instructions on how to use it.
+    Outputs of one tool should match the inputs of another tool. They should allow the agent to compose them into workflows autonomously, instead of pre-defined sequences.
   </Card>
 </CardGroup>
 
