@@ -8,15 +8,36 @@ of send_message tools for inter-agent communication.
 import logging
 from typing import TYPE_CHECKING
 
-from agency_swarm.tools.send_message import SendMessage
+from agency_swarm.agent.tools import _attach_one_call_guard
 
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
+    from agency_swarm.agent.context_types import AgentRuntimeState
     from agency_swarm.agent.core import Agent
+    from agency_swarm.tools.send_message import SendMessage
 
 
-def register_subagent(agent: "Agent", recipient_agent: "Agent", send_message_tool_class: type | None = None) -> None:
+def _resolve_send_message_class(agent: "Agent", requested_class: type["SendMessage"] | None) -> type["SendMessage"]:
+    """Determine the effective SendMessage tool class to instantiate."""
+    from agency_swarm.tools.send_message import SendMessage
+
+    candidate = requested_class or getattr(agent, "send_message_tool_class", None)
+    if isinstance(candidate, type) and issubclass(candidate, SendMessage):
+        return candidate
+
+    if isinstance(candidate, SendMessage):
+        return candidate.__class__
+
+    return SendMessage
+
+
+def register_subagent(
+    agent: "Agent",
+    recipient_agent: "Agent",
+    send_message_tool_class: type["SendMessage"] | None = None,
+    runtime_state: "AgentRuntimeState | None" = None,
+) -> None:
     """
     Registers another agent as a subagent that this agent can communicate with.
 
@@ -52,56 +73,63 @@ def register_subagent(agent: "Agent", recipient_agent: "Agent", send_message_too
     if recipient_name == agent.name:
         raise ValueError("Agent cannot register itself as a subagent.")
 
-    # Initialize _subagents if it doesn't exist
-    if not hasattr(agent, "_subagents") or agent._subagents is None:
-        agent._subagents = {}
+    # Runtime-managed registration path
+    if runtime_state is not None:
+        recipient_key = recipient_name.lower()
 
-    # Use lowercase key for case-insensitive lookup
-    recipient_key = recipient_name.lower()
+        if recipient_key in runtime_state.subagents:
+            logger.warning(
+                f"Agent '{recipient_name}' is already registered as a subagent for '{agent.name}'. Skipping."
+            )
+            return
 
-    if recipient_key in agent._subagents:
-        logger.warning(f"Agent '{recipient_name}' is already registered as a subagent for '{agent.name}'. Skipping.")
+        runtime_state.subagents[recipient_key] = recipient_agent
+        logger.info(f"Agent '{agent.name}' registered subagent: '{recipient_name}'")
+
+        send_message_cls = _resolve_send_message_class(agent, send_message_tool_class)
+        tool_key = send_message_cls.__name__
+        send_message_tool = runtime_state.send_message_tools.get(tool_key)
+
+        if send_message_tool is None or not isinstance(send_message_tool, send_message_cls):
+            try:
+                send_message_tool = send_message_cls(
+                    sender_agent=agent,
+                    recipients={recipient_key: recipient_agent},
+                    runtime_state=runtime_state,
+                )
+            except TypeError:
+                send_message_tool = send_message_cls(
+                    sender_agent=agent,
+                    recipients={recipient_key: recipient_agent},
+                )
+            _attach_one_call_guard(send_message_tool, agent)
+            runtime_state.send_message_tools[tool_key] = send_message_tool
+            logger.debug(f"Created runtime-scoped 'send_message' tool for agent '{agent.name}'")
+        else:
+            if not getattr(send_message_tool, "_one_call_guard_installed", False):
+                _attach_one_call_guard(send_message_tool, agent)
+            if hasattr(send_message_tool, "add_recipient"):
+                send_message_tool.add_recipient(recipient_agent)
+            logger.debug(
+                f"Updated runtime 'send_message' tool with recipient '{recipient_name}' for agent '{agent.name}'"
+            )
         return
 
-    agent._subagents[recipient_key] = recipient_agent
-    logger.info(f"Agent '{agent.name}' registered subagent: '{recipient_name}'")
-
-    # --- Create or update the unified send_message tool --- #
-
-    # Check if we already have a send_message tool of the specific class
+    # Standalone registration falls back to agent-local tool management
+    send_message_cls = _resolve_send_message_class(agent, send_message_tool_class)
     send_message_tool = None
-    for tool in agent.tools:
-        if hasattr(tool, "name") and tool.name.startswith("send_message"):
-            if send_message_tool_class:
-                # If a specific tool class is requested, only match that exact class
-                if isinstance(tool, send_message_tool_class):
-                    send_message_tool = tool
-                    break
-            else:
-                # If no specific class is requested, only match the default SendMessage class
-                if isinstance(tool, SendMessage):
-                    send_message_tool = tool
-                    break
+    for tool in getattr(agent, "tools", []):
+        if hasattr(tool, "name") and tool.name.startswith("send_message") and isinstance(tool, send_message_cls):
+            send_message_tool = tool
+            break
 
     if send_message_tool is None:
-        # Create a new send_message tool
-        effective_tool_class = send_message_tool_class or agent.send_message_tool_class or SendMessage
-
-        send_message_tool = effective_tool_class(
-            sender_agent=agent,
-            recipients={recipient_key: recipient_agent},
-        )
-
-        # Add the unified tool to this agent's tools
+        send_message_tool = send_message_cls(sender_agent=agent, recipients={recipient_name.lower(): recipient_agent})
         agent.add_tool(send_message_tool)
-        logger.debug(f"Created unified 'send_message' tool for agent '{agent.name}'")
+        logger.debug(f"Created standalone 'send_message' tool for agent '{agent.name}'")
     else:
-        # Update existing tool with new recipient
         if hasattr(send_message_tool, "add_recipient"):
             send_message_tool.add_recipient(recipient_agent)
-            logger.debug(f"Updated 'send_message' tool with recipient '{recipient_name}' for agent '{agent.name}'")
-        else:
-            logger.warning(
-                f"Could not update send_message tool with new recipient '{recipient_name}'. "
-                f"Tool does not have add_recipient method."
-            )
+        logger.debug(
+            f"Updated standalone 'send_message' tool with recipient '{recipient_name}' for agent '{agent.name}'"
+        )

@@ -5,7 +5,7 @@ import logging
 import os
 import warnings
 from collections.abc import AsyncGenerator
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from agents import RunConfig, RunHooks, RunResult, TResponseInputItem
 
@@ -20,12 +20,14 @@ from agency_swarm.utils.thread import ThreadLoadCallback, ThreadManager, ThreadS
 from .helpers import get_class_folder_path, handle_deprecated_agency_args, read_instructions
 from .setup import (
     configure_agents,
-    initialize_agent_contexts,
+    initialize_agent_runtime_state,
     parse_agent_flows,
     parse_deprecated_agency_chart,
     register_all_agents_and_set_entry_points,
-    update_agent_contexts_with_communication_flows,
 )
+
+if TYPE_CHECKING:
+    from agency_swarm.agent.context_types import AgentRuntimeState
 
 logger = logging.getLogger(__name__)
 
@@ -70,8 +72,7 @@ class Agency:
     user_context: dict[str, Any]  # Shared user context for MasterContext
     send_message_tool_class: type | None  # Custom SendMessage tool class for all agents
 
-    # Context Factory Pattern - Agency owns agent contexts
-    _agent_contexts: dict[str, AgencyContext]  # agent_name -> context mapping
+    _agent_runtime_state: dict[str, "AgentRuntimeState"]
 
     # Communication tool class mappings for agent-to-agent specific tools
     _communication_tool_classes: dict[tuple[str, str], type]  # (sender_name, receiver_name) -> tool_class
@@ -208,9 +209,11 @@ class Agency:
         self.entry_points = []  # Will be populated by register_all_agents_and_set_entry_points
         register_all_agents_and_set_entry_points(self, _derived_entry_points, _derived_communication_flows)
 
-        # Initialize agent contexts using Context Factory Pattern (after agents are registered)
-        self._agent_contexts = {}
-        initialize_agent_contexts(self, final_load_threads_callback, final_save_threads_callback)
+        # Initialize per-agent runtime storage (after agents are registered)
+        self._agent_runtime_state = {}
+        self._load_threads_callback = final_load_threads_callback
+        self._save_threads_callback = final_save_threads_callback
+        initialize_agent_runtime_state(self)
 
         if not self.agents:
             raise ValueError("Agency must contain at least one agent.")
@@ -226,19 +229,30 @@ class Agency:
         configure_agents(self, _derived_communication_flows)
 
         # Update agent contexts with communication flows
-        update_agent_contexts_with_communication_flows(self, _derived_communication_flows)
-
         logger.info("Agency initialization complete.")
 
         # Register MCP shutdown at process exit so persistent servers are cleaned in scripts
         atexit.register(lambda: asyncio.run(default_mcp_manager.shutdown()))
 
     # Private helper methods that were missed during split
-    def _get_agent_context(self, agent_name: str) -> AgencyContext:
-        """Get the agency context for a specific agent."""
-        if agent_name not in self._agent_contexts:
+    def get_agent_context(self, agent_name: str) -> AgencyContext:
+        """Public accessor for the agency context associated with an agent."""
+        if agent_name not in self._agent_runtime_state:
             raise ValueError(f"No context found for agent: {agent_name}")
-        return self._agent_contexts[agent_name]
+        return AgencyContext(
+            agency_instance=self,
+            thread_manager=self.thread_manager,
+            runtime_state=self._agent_runtime_state[agent_name],
+            load_threads_callback=self._load_threads_callback,
+            save_threads_callback=self._save_threads_callback,
+            shared_instructions=self.shared_instructions,
+        )
+
+    def get_agent_runtime_state(self, agent_name: str) -> "AgentRuntimeState":
+        """Return the runtime state container for the specified agent."""
+        if agent_name not in self._agent_runtime_state:
+            raise ValueError(f"No runtime state found for agent: {agent_name}")
+        return self._agent_runtime_state[agent_name]
 
     # Import and bind methods from split modules with proper type hints
     async def get_response(

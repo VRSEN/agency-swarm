@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from .agent.context_types import AgentRuntimeState
     from .agent.core import Agent
     from .utils.thread import ThreadManager
 
@@ -28,6 +29,7 @@ class MasterContext:
     thread_manager: "ThreadManager"
     agents: dict[str, "Agent"]
     user_context: dict[str, Any] = field(default_factory=dict)
+    agent_runtime_state: dict[str, "AgentRuntimeState"] = field(default_factory=dict)
     current_agent_name: str | None = None  # Name of the agent currently executing
     shared_instructions: str | None = None  # Shared instructions from the agency
     _current_agent_run_id: str | None = None  # Current agent run ID for tracking
@@ -44,6 +46,8 @@ class MasterContext:
             raise TypeError("MasterContext 'agents' must be a dictionary.")
         if not isinstance(self.user_context, dict):
             raise TypeError("MasterContext 'user_context' must be a dictionary.")
+        if not isinstance(self.agent_runtime_state, dict):
+            raise TypeError("MasterContext 'agent_runtime_state' must be a dictionary.")
 
     def get(self, key: str, default: Any = None) -> Any:
         """Helper method to access user_context fields with a default."""

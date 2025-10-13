@@ -155,9 +155,7 @@ def read_instructions(agency: "Agency", path: str) -> None:
 
 def get_agent_context(agency: "Agency", agent_name: str) -> AgencyContext:
     """Get the agency context for a specific agent."""
-    if agent_name not in agency._agent_contexts:
-        raise ValueError(f"No context found for agent: {agent_name}")
-    return agency._agent_contexts[agent_name]
+    return agency.get_agent_context(agent_name)
 
 
 def run_fastapi(

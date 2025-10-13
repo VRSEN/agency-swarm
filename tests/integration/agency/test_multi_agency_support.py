@@ -87,8 +87,8 @@ class TestMultiAgencySupport:
         assert id(agency2.agents["SharedAgent"]) == id(shared_agent)
 
         # Verify each agency has its own context for the shared agent
-        context1 = agency1._get_agent_context("SharedAgent")
-        context2 = agency2._get_agent_context("SharedAgent")
+        context1 = agency1.get_agent_context("SharedAgent")
+        context2 = agency2.get_agent_context("SharedAgent")
 
         # Verify contexts are different and isolated
         assert context1.agency_instance is agency1
@@ -103,8 +103,8 @@ class TestMultiAgencySupport:
         await agency2.get_response("Set test_value to 'agency2_value' using the SharedStateTool")
 
         # Get agency contexts for the shared agent
-        context1 = agency1._get_agent_context("SharedAgent")
-        context2 = agency2._get_agent_context("SharedAgent")
+        context1 = agency1.get_agent_context("SharedAgent")
+        context2 = agency2.get_agent_context("SharedAgent")
 
         assert context1.thread_manager is not context2.thread_manager
 
@@ -146,8 +146,8 @@ class TestMultiAgencySupport:
     async def test_subagent_registration_isolation(self, shared_agent, agency1, agency2):
         """Test that subagent registration is isolated between agencies."""
         # Get agency contexts for the shared agent
-        context1 = agency1._get_agent_context("SharedAgent")
-        context2 = agency2._get_agent_context("SharedAgent")
+        context1 = agency1.get_agent_context("SharedAgent")
+        context2 = agency2.get_agent_context("SharedAgent")
 
         # Each agency should have different subagents
         subagents1 = context1.subagents
@@ -248,8 +248,8 @@ class TestStatelessContextPassing:
     def test_context_factory_validation(self, shared_agent, agency1, agency2):
         """Test that context factory pattern works correctly."""
         # Each agency should have its own context for the shared agent
-        context1 = agency1._get_agent_context("SharedAgent")
-        context2 = agency2._get_agent_context("SharedAgent")
+        context1 = agency1.get_agent_context("SharedAgent")
+        context2 = agency2.get_agent_context("SharedAgent")
 
         # Contexts should be different instances
         assert context1 is not context2
@@ -258,4 +258,4 @@ class TestStatelessContextPassing:
 
         # Invalid agent name should raise error
         with pytest.raises(ValueError, match="No context found for agent"):
-            agency1._get_agent_context("NonexistentAgent")
+            agency1.get_agent_context("NonexistentAgent")

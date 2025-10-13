@@ -1,13 +1,14 @@
 # --- Agency setup and configuration functions ---
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .core import Agency, AgencyChart, CommunicationFlowEntry
 
 from agency_swarm.agent.agent_flow import AgentFlow
-from agency_swarm.agent.core import AgencyContext, Agent
-from agency_swarm.tools.send_message import SendMessageHandoff
+from agency_swarm.agent.context_types import AgentRuntimeState
+from agency_swarm.agent.core import Agent
+from agency_swarm.tools.send_message import SendMessage, SendMessageHandoff
 
 logger = logging.getLogger(__name__)
 
@@ -228,6 +229,8 @@ def configure_agents(agency: "Agency", defined_communication_flows: list[tuple[A
 
     # Configure each agent
     for agent_name, agent_instance in agency.agents.items():
+        runtime_state = agency._agent_runtime_state[agent_name]
+
         # Propagate send_message_tool_class if agent doesn't have one set
         if agency.send_message_tool_class and not agent_instance.send_message_tool_class:
             agent_instance.send_message_tool_class = agency.send_message_tool_class
@@ -254,7 +257,7 @@ def configure_agents(agency: "Agency", defined_communication_flows: list[tuple[A
                         isinstance(effective_tool_class, type) and issubclass(effective_tool_class, SendMessageHandoff)
                     ):
                         handoff_instance = effective_tool_class().create_handoff(recipient_agent=recipient_agent)
-                        agent_instance.handoffs.append(handoff_instance)
+                        runtime_state.handoffs.append(handoff_instance)
                         logger.debug(f"Added Handoff for {agent_name} -> {recipient_name}")
                     else:
                         # Register subagent with optional custom tool class
@@ -264,7 +267,15 @@ def configure_agents(agency: "Agency", defined_communication_flows: list[tuple[A
                                 f"for {agent_name} -> {recipient_name}"
                             )
 
-                        agent_instance.register_subagent(recipient_agent, send_message_tool_class=custom_tool_class)
+                        chosen_tool_class = effective_tool_class or SendMessage
+                        if not isinstance(chosen_tool_class, type) or not issubclass(chosen_tool_class, SendMessage):
+                            chosen_tool_class = SendMessage
+
+                        agent_instance.register_subagent(
+                            recipient_agent,
+                            send_message_tool_class=chosen_tool_class,
+                            runtime_state=runtime_state,
+                        )
 
                 except Exception as e:
                     logger.error(
@@ -276,45 +287,7 @@ def configure_agents(agency: "Agency", defined_communication_flows: list[tuple[A
     logger.info("Agent configuration complete.")
 
 
-def initialize_agent_contexts(
-    agency: "Agency", load_threads_callback: Any = None, save_threads_callback: Any = None
-) -> None:
-    """Initialize agent contexts using the Context Factory Pattern."""
-    for agent_name, _agent in agency.agents.items():
-        # Create context for each agent using the agency's ThreadManager
-        # Each agency has its own ThreadManager, so contexts from different agencies
-        # will have different ThreadManager instances
-        context = AgencyContext(
-            agency_instance=agency,
-            thread_manager=agency.thread_manager,  # Use this agency's ThreadManager
-            subagents={},  # Will be populated in update_agent_contexts_with_communication_flows
-            load_threads_callback=load_threads_callback,
-            save_threads_callback=save_threads_callback,
-            shared_instructions=agency.shared_instructions,
-        )
-        agency._agent_contexts[agent_name] = context
-        logger.debug(f"Created agency context for agent: {agent_name} with agency's ThreadManager")
-
-
-def update_agent_contexts_with_communication_flows(
-    agency: "Agency", communication_flows: list[tuple[Agent, Agent]]
-) -> None:
-    """Update agent contexts with subagent registrations based on communication flows."""
-    # Build communication map: sender -> [receivers]
-    communication_map: dict[str, list[str]] = {}
-    for sender, receiver in communication_flows:
-        sender_name = sender.name
-        receiver_name = receiver.name
-
-        if sender_name not in communication_map:
-            communication_map[sender_name] = []
-        communication_map[sender_name].append(receiver_name)
-
-    # Update each agent's context with its allowed recipients
-    for agent_name, context in agency._agent_contexts.items():
-        allowed_recipients = communication_map.get(agent_name, [])
-        for recipient_name in allowed_recipients:
-            if recipient_name in agency.agents:
-                recipient_agent = agency.agents[recipient_name]
-                context.subagents[recipient_name] = recipient_agent
-                logger.debug(f"Added {recipient_name} as subagent for {agent_name} in agency context")
+def initialize_agent_runtime_state(agency: "Agency") -> None:
+    """Allocate runtime state containers for each agent in the agency."""
+    for agent_name in agency.agents:
+        agency._agent_runtime_state[agent_name] = AgentRuntimeState()

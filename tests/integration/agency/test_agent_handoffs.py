@@ -92,57 +92,38 @@ class TestHandoffsWithCommunicationFlows:
 
     def test_agent_tool_configuration(self, mixed_communication_agency):
         """Test that agents have the correct tools based on communication flows and handoffs."""
-        agent_a = mixed_communication_agency.agents["AgentA"]
-        agent_b = mixed_communication_agency.agents["AgentB"]
-        agent_c = mixed_communication_agency.agents["AgentC"]
+        runtime_state_a = mixed_communication_agency.get_agent_runtime_state("AgentA")
+        runtime_state_b = mixed_communication_agency.get_agent_runtime_state("AgentB")
+        runtime_state_c = mixed_communication_agency.get_agent_runtime_state("AgentC")
 
-        # Get tool names for each agent
-        agent_a_tools = [tool.name if hasattr(tool, "name") else str(tool) for tool in agent_a.tools]
-        agent_c_tools = [tool.name if hasattr(tool, "name") else str(tool) for tool in agent_c.tools]
+        send_message_tools = list(runtime_state_a.send_message_tools.values())
+        assert len(send_message_tools) == 1, "AgentA should expose exactly one runtime send_message tool"
 
-        # AgentA should have a unified send_message tool
-        assert "send_message" in agent_a_tools, f"AgentA should have send_message tool, got: {agent_a_tools}"
+        send_msg_tool = send_message_tools[0]
+        recipient_names = [agent.name for agent in send_msg_tool.recipients.values()]
+        assert "AgentB" in recipient_names, f"AgentB should be in send_message recipients, got: {recipient_names}"
+        assert "AgentC" in recipient_names, f"AgentC should be in send_message recipients, got: {recipient_names}"
 
-        # Verify the send_message tool has the correct recipients
-        send_msg_tool = next(
-            (tool for tool in agent_a.tools if hasattr(tool, "name") and tool.name == "send_message"), None
-        )
-        assert send_msg_tool is not None, "AgentA should have a send_message tool"
-
-        if hasattr(send_msg_tool, "recipients"):
-            recipient_names = [agent.name for agent in send_msg_tool.recipients.values()]
-            assert "AgentB" in recipient_names, f"AgentB should be in send_message recipients, got: {recipient_names}"
-            assert "AgentC" in recipient_names, f"AgentC should be in send_message recipients, got: {recipient_names}"
-
-        # AgentB should have handoff to AgentC in .handoffs attribute
-        assert hasattr(agent_b, "handoffs"), "AgentB should have handoffs attribute"
-        assert agent_b.handoffs is not None, "AgentB handoffs should not be None"
-        assert len(agent_b.handoffs) > 0, "AgentB should have at least one handoff"
-
-        # AgentC should have no communication tools (receives only)
-        assert "send_message" not in agent_c_tools, f"AgentC should not have send_message tool, got: {agent_c_tools}"
+        assert runtime_state_b.handoffs, "AgentB should register handoffs at runtime"
+        assert not runtime_state_c.send_message_tools, "AgentC should not expose send_message tools"
 
     def test_sendmessage_tool_recipients(self, mixed_communication_agency):
         """Test that SendMessage tool has the correct recipients."""
-        agent_a = mixed_communication_agency.agents["AgentA"]
+        runtime_state_a = mixed_communication_agency.get_agent_runtime_state("AgentA")
 
-        # Find the unified send_message tool
-        sendmessage_tools = [tool for tool in agent_a.tools if hasattr(tool, "name") and tool.name == "send_message"]
-
-        # Should have exactly 1 unified send_message tool
+        sendmessage_tools = list(runtime_state_a.send_message_tools.values())
         assert len(sendmessage_tools) == 1, f"AgentA should have 1 send_message tool, got: {len(sendmessage_tools)}"
 
-        # Verify the unified tool has the correct recipients
         send_msg_tool = sendmessage_tools[0]
-        if hasattr(send_msg_tool, "recipients"):
-            recipient_names = [agent.name for agent in send_msg_tool.recipients.values()]
-            assert "AgentB" in recipient_names, f"AgentB should be in recipients, got: {recipient_names}"
-            assert "AgentC" in recipient_names, f"AgentC should be in recipients, got: {recipient_names}"
-            assert len(recipient_names) == 2, f"Should have exactly 2 recipients, got: {recipient_names}"
+        recipient_names = [agent.name for agent in send_msg_tool.recipients.values()]
+        assert "AgentB" in recipient_names, f"AgentB should be in recipients, got: {recipient_names}"
+        assert "AgentC" in recipient_names, f"AgentC should be in recipients, got: {recipient_names}"
+        assert len(recipient_names) == 2, f"Should have exactly 2 recipients, got: {recipient_names}"
 
     def test_handoff_configuration_via_sendmessage_tool_class(self, mixed_communication_agency):
         """Test that handoffs are properly configured via SendMessageHandoff tool class on AgentB."""
         agent_b = mixed_communication_agency.agents["AgentB"]
+        runtime_state_b = mixed_communication_agency.get_agent_runtime_state("AgentB")
 
         # Handoffs in Agency Swarm are configured via SendMessageHandoff tool class
         # We verify that AgentB has the correct send_message_tool_class
@@ -152,11 +133,11 @@ class TestHandoffsWithCommunicationFlows:
         )
 
         # Verify AgentB has handoff to AgentC in .handoffs attribute (not in .tools list)
-        assert hasattr(agent_b, "handoffs"), "AgentB should have handoffs attribute"
-        assert len(agent_b.handoffs) == 1, f"AgentB should have 1 handoff, got: {len(agent_b.handoffs)}"
+        assert runtime_state_b.handoffs, "AgentB runtime state should contain handoffs"
+        assert len(runtime_state_b.handoffs) == 1, f"AgentB should have 1 handoff, got: {len(runtime_state_b.handoffs)}"
 
         # Check that the handoff targets AgentC
-        handoff = agent_b.handoffs[0]
+        handoff = runtime_state_b.handoffs[0]
         assert handoff.agent_name == "AgentC", f"AgentB's handoff should target AgentC, got: {handoff.agent_name}"
 
     def test_agency_configuration_maintains_both_patterns(self, mixed_communication_agency):
@@ -177,18 +158,13 @@ class TestHandoffsWithCommunicationFlows:
 
     def test_tool_count_expectations(self, mixed_communication_agency):
         """Test that each agent has the expected number and type of tools."""
-        agent_a = mixed_communication_agency.agents["AgentA"]
-        agent_b = mixed_communication_agency.agents["AgentB"]
-        agent_c = mixed_communication_agency.agents["AgentC"]
+        runtime_state_a = mixed_communication_agency.get_agent_runtime_state("AgentA")
+        runtime_state_b = mixed_communication_agency.get_agent_runtime_state("AgentB")
+        runtime_state_c = mixed_communication_agency.get_agent_runtime_state("AgentC")
 
-        # AgentA should have 1 unified send_message tool
-        assert len(agent_a.tools) == 1, f"AgentA should have 1 send_message tool, got: {len(agent_a.tools)}"
-
-        # AgentB should have 0 tools (handoffs are in .handoffs attribute, not .tools list)
-        assert len(agent_b.tools) == 0, f"AgentB should have 0 tools, got: {len(agent_b.tools)}"
-
-        # AgentC should have no communication tools (only receives messages)
-        assert len(agent_c.tools) == 0, f"AgentC should have no tools, got: {len(agent_c.tools)}"
+        assert len(runtime_state_a.send_message_tools) == 1, "AgentA should expose 1 send_message tool"
+        assert not runtime_state_b.send_message_tools, "AgentB should not expose send_message tools"
+        assert not runtime_state_c.send_message_tools, "AgentC should not expose send_message tools"
 
     @pytest.mark.asyncio
     async def test_orchestrator_pattern_with_handoffs(self, mixed_communication_agency):
@@ -245,19 +221,18 @@ class TestHandoffsWithCommunicationFlows:
         """Test that communication flows and handoffs maintain proper isolation."""
         _ = mixed_communication_agency.agents["AgentA"]
         _ = mixed_communication_agency.agents["AgentB"]
-        agent_c = mixed_communication_agency.agents["AgentC"]
+        _ = mixed_communication_agency.agents["AgentC"]
 
         # AgentA should be able to communicate with both AgentB and AgentC independently
         # AgentB should only be able to hand off to AgentC (not send messages)
         # AgentC should not be able to initiate communication with others
+        runtime_state_a = mixed_communication_agency.get_agent_runtime_state("AgentA")
+        runtime_state_b = mixed_communication_agency.get_agent_runtime_state("AgentB")
+        runtime_state_c = mixed_communication_agency.get_agent_runtime_state("AgentC")
 
-        # Check that AgentC doesn't have tools to communicate back to AgentA or AgentB
-        agent_c_tool_names = [tool.name if hasattr(tool, "name") else str(tool) for tool in agent_c.tools]
-
-        # AgentC shouldn't have send_message tool
-        assert "send_message" not in agent_c_tool_names, (
-            f"AgentC should not have send_message tool, found tools: {agent_c_tool_names}"
-        )
+        assert runtime_state_a.send_message_tools, "AgentA should have send_message tools"
+        assert not runtime_state_b.send_message_tools, "AgentB should not expose send_message tools"
+        assert not runtime_state_c.send_message_tools, "AgentC should not expose send_message tools"
 
 
 class TestComplexHandoffScenarios:
@@ -286,12 +261,13 @@ class TestComplexHandoffScenarios:
             f"AgentB should have SendMessageHandoff as tool class, got: {agent_b_final.send_message_tool_class}"
         )
 
-        # Verify AgentB has handoffs to both AgentC and AgentD in .handoffs attribute
-        assert hasattr(agent_b_final, "handoffs"), "AgentB should have handoffs attribute"
-        assert len(agent_b_final.handoffs) == 2, f"AgentB should have 2 handoffs, got: {len(agent_b_final.handoffs)}"
+        runtime_state_b = agency.get_agent_runtime_state("AgentB")
+        assert len(runtime_state_b.handoffs) == 2, (
+            f"AgentB should have 2 handoffs, got: {len(runtime_state_b.handoffs)}"
+        )
 
         # Verify the handoff targets are correct
-        handoff_targets = [h.agent_name for h in agent_b_final.handoffs]
+        handoff_targets = [h.agent_name for h in runtime_state_b.handoffs]
         assert "AgentC" in handoff_targets, "AgentB should have handoff to AgentC"
         assert "AgentD" in handoff_targets, "AgentB should have handoff to AgentD"
 
@@ -316,26 +292,28 @@ class TestComplexHandoffScenarios:
             ],
         )
 
-        agent_a_final = agency.agents["AgentA"]
-        agent_b_final = agency.agents["AgentB"]
+        runtime_state_a = agency.get_agent_runtime_state("AgentA")
+        runtime_state_b = agency.get_agent_runtime_state("AgentB")
 
-        # Both AgentA and AgentB should have send_message tools
-        agent_a_tools = [tool.name if hasattr(tool, "name") else str(tool) for tool in agent_a_final.tools]
+        assert runtime_state_a.send_message_tools, "AgentA should expose send_message tools"
+        send_msg_tool = next(iter(runtime_state_a.send_message_tools.values()))
+        recipient_names = [agent.name for agent in send_msg_tool.recipients.values()]
+        assert "AgentB" in recipient_names, f"AgentB should be reachable, got: {recipient_names}"
+        assert "AgentC" in recipient_names, f"AgentC should be reachable, got: {recipient_names}"
 
-        # AgentA should have send_message tool
-        assert "send_message" in agent_a_tools, f"AgentA should have send_message tool, got: {agent_a_tools}"
+        assert len(runtime_state_b.handoffs) == 2, (
+            f"AgentB should have 2 handoffs, got: {len(runtime_state_b.handoffs)}"
+        )
 
-        # AgentB should have handoffs to both AgentA and AgentC in .handoffs attribute
-        assert hasattr(agent_b_final, "handoffs"), "AgentB should have handoffs attribute"
-        assert len(agent_b_final.handoffs) == 2, f"AgentB should have 2 handoffs, got: {len(agent_b_final.handoffs)}"
-
-        handoff_targets = [h.agent_name for h in agent_b_final.handoffs]
+        handoff_targets = [h.agent_name for h in runtime_state_b.handoffs]
         assert "AgentA" in handoff_targets, f"AgentB should have handoff to AgentA, got: {handoff_targets}"
         assert "AgentC" in handoff_targets, f"AgentB should have handoff to AgentC, got: {handoff_targets}"
 
         # Verify AgentB has SendMessageHandoff tool class configured
-        assert hasattr(agent_b_final, "send_message_tool_class"), "AgentB should have send_message_tool_class attribute"
-        assert agent_b_final.send_message_tool_class == SendMessageHandoff, (
+        assert hasattr(agency.agents["AgentB"], "send_message_tool_class"), (
+            "AgentB should have send_message_tool_class attribute"
+        )
+        assert agency.agents["AgentB"].send_message_tool_class == SendMessageHandoff, (
             "AgentB should have SendMessageHandoff as send_message_tool_class"
         )
 
@@ -359,20 +337,20 @@ class TestComplexHandoffScenarios:
             ],
         )
 
-        agent_a_final = agency.agents["AgentA"]
-        agent_b_final = agency.agents["AgentB"]
+        runtime_state_a = agency.get_agent_runtime_state("AgentA")
+        runtime_state_b = agency.get_agent_runtime_state("AgentB")
 
-        # Both AgentA and AgentB should have send_message tools
-        agent_a_tools = [tool.name if hasattr(tool, "name") else str(tool) for tool in agent_a_final.tools]
+        assert runtime_state_a.send_message_tools, "AgentA should expose send_message tools"
+        send_msg_tool = next(iter(runtime_state_a.send_message_tools.values()))
+        recipient_names = [agent.name for agent in send_msg_tool.recipients.values()]
+        assert "AgentB" in recipient_names, "AgentB should be reachable from AgentA"
+        assert "AgentC" in recipient_names, "AgentC should be reachable from AgentA"
 
-        # AgentA should have send_message tool
-        assert "send_message" in agent_a_tools, f"AgentA should have send_message tool, got: {agent_a_tools}"
+        assert len(runtime_state_b.handoffs) == 2, (
+            f"AgentB should have 2 handoffs, got: {len(runtime_state_b.handoffs)}"
+        )
 
-        # AgentB should have handoffs to both AgentA and AgentC in .handoffs attribute
-        assert hasattr(agent_b_final, "handoffs"), "AgentB should have handoffs attribute"
-        assert len(agent_b_final.handoffs) == 2, f"AgentB should have 2 handoffs, got: {len(agent_b_final.handoffs)}"
-
-        handoff_targets = [h.agent_name for h in agent_b_final.handoffs]
+        handoff_targets = [h.agent_name for h in runtime_state_b.handoffs]
         assert "AgentA" in handoff_targets, f"AgentB should have handoff to AgentA, got: {handoff_targets}"
         assert "AgentC" in handoff_targets, f"AgentB should have handoff to AgentC, got: {handoff_targets}"
 

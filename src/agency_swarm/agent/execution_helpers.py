@@ -20,6 +20,7 @@ from openai.types.responses import (
     ResponseFunctionWebSearch,
 )
 
+from agency_swarm.agent.context_types import AgentRuntimeState
 from agency_swarm.context import MasterContext
 from agency_swarm.messages import MessageFormatter
 from agency_swarm.tools.mcp_manager import default_mcp_manager
@@ -225,11 +226,20 @@ def prepare_master_context(
             user_context=context_override or {},
             current_agent_name=agent.name,
             shared_instructions=shared_instructions_for_run,
+            agent_runtime_state={agent.name: AgentRuntimeState(agent.tool_concurrency_manager)},
         )
 
     # Use reference for persistence, or create merged copy if override provided
     base_user_context = getattr(agency_instance, "user_context", {})
     user_context = {**base_user_context, **context_override} if context_override else base_user_context
+
+    runtime_state_map = getattr(agency_instance, "_agent_runtime_state", {})
+    if not isinstance(runtime_state_map, dict):
+        runtime_state_map = {}
+        try:
+            agency_instance._agent_runtime_state = runtime_state_map  # type: ignore[attr-defined]
+        except Exception:
+            pass
 
     return MasterContext(
         thread_manager=thread_manager,
@@ -237,6 +247,7 @@ def prepare_master_context(
         user_context=user_context,
         current_agent_name=agent.name,
         shared_instructions=shared_instructions_for_run,
+        agent_runtime_state=runtime_state_map,
     )
 
 
@@ -344,6 +355,22 @@ def setup_execution(
             if combined is not None:
                 agent.instructions = combined
 
+    # Align handoffs with runtime state for this execution
+    runtime_state = None
+    if agency_context is not None and hasattr(agency_context, "runtime_state"):
+        runtime_state = agency_context.runtime_state
+
+    original_handoffs = list(agent.handoffs)
+    if agency_context is not None:
+        agency_context._handoffs_restore = original_handoffs  # type: ignore[attr-defined]
+    else:
+        agent._handoffs_restore = original_handoffs  # type: ignore[attr-defined]
+
+    if runtime_state and getattr(runtime_state, "handoffs", None):
+        existing = {getattr(h, "agent_name", None) for h in original_handoffs}
+        additional = [h for h in runtime_state.handoffs if getattr(h, "agent_name", None) not in existing]
+        agent.handoffs = original_handoffs + additional
+
     # Log the conversation context
     logger.info(f"Agent '{agent.name}' handling {method_name} from sender: {sender_name}")
 
@@ -391,3 +418,21 @@ def cleanup_execution(
 
     # Always restore original instructions
     agent.instructions = original_instructions
+
+    restore_handoffs: list[Any] | None = None
+    if agency_context is not None:
+        try:
+            restore_handoffs = agency_context._handoffs_restore  # type: ignore[attr-defined]
+            del agency_context._handoffs_restore  # type: ignore[attr-defined]
+        except AttributeError:
+            restore_handoffs = None
+    else:
+        try:
+            restore_handoffs = agent._handoffs_restore  # type: ignore[attr-defined]
+            del agent._handoffs_restore  # type: ignore[attr-defined]
+        except AttributeError:
+            restore_handoffs = None
+
+    if restore_handoffs is not None:
+        agent.handoffs.clear()
+        agent.handoffs.extend(restore_handoffs)

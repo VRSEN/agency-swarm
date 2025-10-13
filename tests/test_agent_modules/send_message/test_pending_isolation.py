@@ -4,15 +4,19 @@ from __future__ import annotations
 
 import asyncio
 import json
-from types import SimpleNamespace
+from types import MethodType, SimpleNamespace
 
 import pytest
 from agents import ModelSettings
 from openai.types.shared import Reasoning
 
 from agency_swarm import Agency, Agent
+from agency_swarm.agent.context_types import AgentRuntimeState
+from agency_swarm.agent.subagents import register_subagent
 from agency_swarm.context import MasterContext
+from agency_swarm.tools.concurrency import ToolConcurrencyManager
 from agency_swarm.tools.send_message import SendMessage
+from agency_swarm.utils.thread import ThreadManager
 
 # Module-level agents reused across agencies to simulate singleton pattern
 COORDINATOR = Agent(
@@ -94,8 +98,10 @@ async def test_send_message_pending_state_isolated_per_thread_manager():
     agency_one = _make_agency(sender, recipient)
     agency_two = _make_agency(sender, recipient)
 
-    send_tool_a = next(tool for tool in agency_one.agents[sender.name].tools if isinstance(tool, SendMessage))
-    send_tool_b = next(tool for tool in agency_two.agents[sender.name].tools if isinstance(tool, SendMessage))
+    runtime_state_one = agency_one.get_agent_runtime_state(sender.name)
+    runtime_state_two = agency_two.get_agent_runtime_state(sender.name)
+    send_tool_a = next(iter(runtime_state_one.send_message_tools.values()))
+    send_tool_b = next(iter(runtime_state_two.send_message_tools.values()))
 
     wrapper_one = _make_wrapper(agency_one)
     wrapper_two = _make_wrapper(agency_two)
@@ -123,8 +129,6 @@ async def test_send_message_pending_state_isolated_per_thread_manager():
     assert first_result != ""
 
 
-# TODO(#module-agent-isolation): remove skip once agent-level state is refactored into agency-scoped storage.
-@pytest.mark.skip(reason="Agent-level state currently shared across module-level singletons; pending refactor")
 @pytest.mark.asyncio
 async def test_module_level_agent_reuse_isolated_recipients():
     """
@@ -144,8 +148,15 @@ async def test_module_level_agent_reuse_isolated_recipients():
     """
 
     agency_a = _make_module_agency(WORKER_A)
+    agency_b = _make_module_agency(WORKER_B)
 
-    send_tool = next(tool for tool in COORDINATOR.tools if isinstance(tool, SendMessage))
+    runtime_state_a = agency_a.get_agent_runtime_state(COORDINATOR.name)
+    runtime_state_b = agency_b.get_agent_runtime_state(COORDINATOR.name)
+
+    # Sanity: ensure runtime states are distinct objects
+    assert runtime_state_a is not runtime_state_b
+
+    send_tool = next(iter(runtime_state_a.send_message_tools.values()))
 
     wrapper_a = _make_wrapper(agency_a)
 
@@ -171,3 +182,92 @@ async def test_module_level_agent_reuse_isolated_recipients():
         "Module-level agent reuse leaked recipients across agencies; "
         "agent-level state must be migrated into agency-scoped storage."
     )
+
+
+@pytest.mark.asyncio
+async def test_runtime_send_message_respects_one_call_guard_across_recipients():
+    """Runtime-scoped send_message tools must retain one-call guard behavior."""
+
+    class SequentialSendMessage(SendMessage):
+        one_call_at_a_time = True
+
+    gate = asyncio.Event()
+    sender = Agent(
+        name="Coordinator",
+        instructions="Coordinate tasks sequentially.",
+        model="gpt-5-mini",
+        send_message_tool_class=SequentialSendMessage,
+    )
+    worker_a = Agent(
+        name="WorkerA",
+        instructions="Handle task A.",
+        model="gpt-5-mini",
+    )
+    worker_b = Agent(
+        name="WorkerB",
+        instructions="Handle task B.",
+        model="gpt-5-mini",
+    )
+
+    async def waiting_response(self, **_kwargs):
+        await gate.wait()
+        return SimpleNamespace(final_output=f"{self.name} result")
+
+    async def fast_response(self, **_kwargs):
+        return SimpleNamespace(final_output=f"{self.name} result")
+
+    worker_a.get_response = MethodType(waiting_response, worker_a)
+    worker_b.get_response = MethodType(fast_response, worker_b)
+
+    runtime_state = AgentRuntimeState(ToolConcurrencyManager())
+
+    register_subagent(sender, worker_a, runtime_state=runtime_state)
+    register_subagent(sender, worker_b, runtime_state=runtime_state)
+
+    send_tool = next(iter(runtime_state.send_message_tools.values()))
+
+    thread_manager = ThreadManager()
+    agents_map = {
+        sender.name: sender,
+        worker_a.name: worker_a,
+        worker_b.name: worker_b,
+    }
+    runtime_map = {sender.name: runtime_state}
+
+    def _make_wrapper() -> SimpleNamespace:
+        context = MasterContext(
+            thread_manager=thread_manager,
+            agents=agents_map,
+            user_context={},
+            agent_runtime_state=runtime_map,
+            current_agent_name=sender.name,
+            shared_instructions=None,
+        )
+        return SimpleNamespace(context=context, tool_call_id="tool-call")
+
+    payload_a = {
+        "recipient_agent": worker_a.name,
+        "my_primary_instructions": "First task",
+        "message": "Do task A",
+        "additional_instructions": "",
+    }
+    payload_b = {
+        "recipient_agent": worker_b.name,
+        "my_primary_instructions": "Second task",
+        "message": "Do task B",
+        "additional_instructions": "",
+    }
+
+    async def invoke(payload: dict[str, str]) -> str:
+        wrapper = _make_wrapper()
+        return await send_tool.on_invoke_tool(wrapper, json.dumps(payload))
+
+    first_task = asyncio.create_task(invoke(payload_a))
+    await asyncio.sleep(0)
+
+    second_result = await invoke(payload_b)
+    assert second_result.startswith("Error: Tool concurrency violation.")
+
+    gate.set()
+    first_result = await first_task
+    assert first_result == "WorkerA result"
