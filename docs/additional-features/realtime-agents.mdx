@@ -10,7 +10,7 @@ Agency Swarm supports **realtime voice** and **multimodal** sessions on top of O
   This feature is supported in **Agency Swarm v1.0 or later**.
 </Note>
 
-Agency Swarm is adding a `run_realtime` helper that creates the FastAPI server, connects to OpenAI Realtime, and exposes optional Twilio bridges without manual WebSocket endpoints.
+Agency Swarm provides a `run_realtime` helper that creates the FastAPI server, connects to OpenAI Realtime, and exposes optional Twilio bridges without manual WebSocket endpoints.
 
 ## What you can build
 
@@ -34,6 +34,10 @@ The session uses **one model (e.g. `gpt-realtime`)** and a **session-level voice
 pip install "agency-swarm[fastapi]" twilio
 ```
 
+<Tip>
+  Load your credentials before running the examples (for example, `source .env` so `OPENAI_API_KEY` is in the environment).
+</Tip>
+
 ## Quickstart (FastAPI, WebSocket)
 
 Define your agent like usual:
@@ -45,7 +49,7 @@ from agency_swarm import Agent, function_tool
 @function_tool
 def lookup_order(order_id: str) -> str:
     """Return a short order status by ID."""
-    return f"Order {order_id} is on its way 🚚"
+    return f"Order {order_id} is on its way."
 
 voice_agent = Agent(
     name="Voice Concierge",
@@ -66,12 +70,13 @@ if __name__ == "__main__":
         agent=voice_agent,
         model="gpt-realtime",
         voice="alloy",
+        turn_detection={"type": "server_vad"},
         host="0.0.0.0",
         port=8000,
     )
 ```
 
-`run_realtime` starts the FastAPI app, opens the Realtime connection, and hosts a `/realtime` WebSocket endpoint for you. There is no additional routing code to write.
+`run_realtime` starts the FastAPI app, opens the Realtime connection, and hosts a `/realtime` WebSocket endpoint for you. There is no additional routing code to write. Run `python -m examples.interactive.realtime.demo` for the bundled browser UI and edit that script to customize the agent behavior.
 
 <Note>
 - **Single-model rule:** realtime uses one model per session; per-agent `model` is ignored during voice sessions.   
@@ -83,6 +88,7 @@ if __name__ == "__main__":
 Use the official OpenAI Realtime example client (WebRTC or WebSocket). Point it to `ws://localhost:8000/realtime` (or your deployed address), and you’ll get mic capture, response audio, and a minimal UI.
 - Example: FastAPI app + client (OpenAI “realtime/app” sample).
 - Event flow: send conversation.item.create (user input), then response.create to get the model to answer.
+- When using the bundled CLI client, audio runs at 24 kHz, matching the default realtime voice output.
 
 See OpenAI’s example for a copy-paste front end and event payloads.
 
