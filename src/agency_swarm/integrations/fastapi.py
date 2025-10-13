@@ -71,6 +71,9 @@ def run_fastapi(
         logger.error(f"FastAPI deployment dependencies are missing: {e}. Please install agency-swarm[fastapi] package")
         return
 
+    dry_run_env = os.getenv("DRY_RUN", "")
+    DRY_RUN = str(dry_run_env).strip().lower() in {"1", "true", "yes", "on"}
+
     app_token = os.getenv(app_token_env)
     if app_token is None or app_token == "":
         logger.warning("App token is not set. Authentication will be disabled.")
@@ -111,30 +114,34 @@ def run_fastapi(
 
             # Store agent instances for easy lookup
             preview_instance = agency_factory(load_threads_callback=lambda: [])
-            AGENT_INSTANCES: dict[str, Agent] = dict(preview_instance.agents.items())
-            AgencyRequest = add_agent_validator(BaseRequest, AGENT_INSTANCES)
-            agency_metadata = preview_instance.get_agency_structure()
-
-            if enable_agui:
-                app.add_api_route(
-                    f"/{agency_name}/get_response_stream",
-                    make_agui_chat_endpoint(RunAgentInputCustom, agency_factory, verify_token),
-                    methods=["POST"],
-                )
-                endpoints.append(f"/{agency_name}/get_response_stream")
+            if DRY_RUN:
+                # In DRY_RUN, avoid building validators;
+                agency_metadata = preview_instance.get_agency_structure()
             else:
-                app.add_api_route(
-                    f"/{agency_name}/get_response",
-                    make_response_endpoint(AgencyRequest, agency_factory, verify_token),
-                    methods=["POST"],
-                )
-                app.add_api_route(
-                    f"/{agency_name}/get_response_stream",
-                    make_stream_endpoint(AgencyRequest, agency_factory, verify_token),
-                    methods=["POST"],
-                )
-                endpoints.append(f"/{agency_name}/get_response")
-                endpoints.append(f"/{agency_name}/get_response_stream")
+                AGENT_INSTANCES: dict[str, Agent] = dict(preview_instance.agents.items())
+                AgencyRequest = add_agent_validator(BaseRequest, AGENT_INSTANCES)
+                agency_metadata = preview_instance.get_agency_structure()
+
+                if enable_agui:
+                    app.add_api_route(
+                        f"/{agency_name}/get_response_stream",
+                        make_agui_chat_endpoint(RunAgentInputCustom, agency_factory, verify_token),
+                        methods=["POST"],
+                    )
+                    endpoints.append(f"/{agency_name}/get_response_stream")
+                else:
+                    app.add_api_route(
+                        f"/{agency_name}/get_response",
+                        make_response_endpoint(AgencyRequest, agency_factory, verify_token),
+                        methods=["POST"],
+                    )
+                    app.add_api_route(
+                        f"/{agency_name}/get_response_stream",
+                        make_stream_endpoint(AgencyRequest, agency_factory, verify_token),
+                        methods=["POST"],
+                    )
+                    endpoints.append(f"/{agency_name}/get_response")
+                    endpoints.append(f"/{agency_name}/get_response_stream")
 
             app.add_api_route(
                 f"/{agency_name}/get_metadata",
@@ -143,7 +150,7 @@ def run_fastapi(
             )
             endpoints.append(f"/{agency_name}/get_metadata")
 
-    if tools:
+    if tools and not DRY_RUN:
         for tool in tools:
             tool_name = tool.name if hasattr(tool, "name") else tool.__name__
             tool_handler = make_tool_endpoint(tool, verify_token)
