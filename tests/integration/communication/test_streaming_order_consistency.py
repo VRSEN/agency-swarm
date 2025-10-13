@@ -2,6 +2,7 @@
 Deterministic streaming order test with two agents and custom tools.
 """
 
+import logging
 import os
 from typing import Any
 
@@ -10,6 +11,8 @@ from agents import ModelSettings, function_tool
 from agents.models.fake_id import FAKE_RESPONSES_ID
 
 from agency_swarm import Agency, Agent
+
+logger = logging.getLogger(__name__)
 
 
 def _assert_sanitized_history(messages: list[dict[str, Any]]) -> None:
@@ -410,6 +413,21 @@ async def test_nested_delegation_streaming() -> None:
     )
 
 
+# Helper to confirm specific tool calls were persisted for an agent
+def _assert_tool_call_recorded(
+    messages: list[dict[str, Any]], agent_name: str, tool_name: str, *, context: str
+) -> None:
+    for message in messages:
+        if message.get("type") != "function_call":
+            continue
+        if message.get("name") != tool_name:
+            continue
+        recorded_agent = message.get("agent") or message.get("callerAgent")
+        if str(recorded_agent) == agent_name:
+            return
+    raise AssertionError(f"Expected {context}: agent '{agent_name}' did not record function_call '{tool_name}'")
+
+
 # Expected flow for parallel sub-agent calls (to different agents)
 EXPECTED_FLOW_PARALLEL: list[tuple[str, str, str | None]] = [
     ("tool_call_item", "Orchestrator", "get_market_data"),  # Get initial data arrives first via tool_called
@@ -486,6 +504,14 @@ async def test_parallel_subagent_calls() -> None:
                 stream_items.append((evt_type, agent_name, tool_name))
 
     # Verify stream matches expected
+    if stream_items != EXPECTED_FLOW_PARALLEL:
+        logger.error(
+            "Parallel sub-agent stream mismatch",
+            extra={
+                "got": stream_items,
+                "expected": EXPECTED_FLOW_PARALLEL,
+            },
+        )
     assert stream_items == EXPECTED_FLOW_PARALLEL, (
         f"Parallel calls stream mismatch:\n got={stream_items}\n exp={EXPECTED_FLOW_PARALLEL}"
     )
@@ -501,4 +527,6 @@ async def test_parallel_subagent_calls() -> None:
         if t in {"function_call", "function_call_output"} or role == "assistant":
             comparable.append(m)
 
+    _assert_tool_call_recorded(new_messages, "ProcessorA", "process_data", context="parallel workflow")
+    _assert_tool_call_recorded(new_messages, "ProcessorB", "validate_result", context="parallel workflow")
     _assert_sanitized_history(comparable)
