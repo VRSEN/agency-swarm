@@ -1,6 +1,8 @@
 """Utility functions for working with model configurations."""
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
+
+from agents import FunctionTool, Tool
 
 if TYPE_CHECKING:
     from agency_swarm.agent.core import Agent
@@ -34,11 +36,9 @@ def get_agent_capabilities(agent: "Agent") -> list[str]:
     """Detect capabilities of an agent based on its configuration.
 
     Capability detection rules:
-    - "tools": Agent defines custom FunctionTool, BaseTool, MCP servers, or HostedMCPTool
+    - "tools": Agent defines custom FunctionTool or MCP servers
+    - Hosted tools report their name (e.g., "code_interpreter", "web_search", "file_search", "hosted_mcp")
     - "reasoning": Model supports reasoning (o-series, gpt-5) or has reasoning parameter
-    - "file_search": Agent uses FileSearchTool
-    - "code_interpreter": Agent uses CodeInterpreterTool
-    - "web_search": Agent uses WebSearchTool
 
     Parameters
     ----------
@@ -50,70 +50,48 @@ def get_agent_capabilities(agent: "Agent") -> list[str]:
     list[str]
         List of capability strings in consistent order
     """
-    from agents import CodeInterpreterTool, FileSearchTool, FunctionTool, HostedMCPTool, WebSearchTool
-
     capabilities: list[str] = []
-
-    # Check for custom tools (FunctionTool, BaseTool, MCP servers, HostedMCPTool)
+    detected_tool_capabilities: list[str] = []
     has_custom_tools = False
-    has_file_search = False
-    has_code_interpreter = False
-    has_web_search = False
 
-    # Check agent.tools
-    if agent.tools:
-        for tool in agent.tools:
-            # Check for hosted tools (not custom)
-            if isinstance(tool, FileSearchTool):
-                has_file_search = True
-            elif isinstance(tool, CodeInterpreterTool):
-                has_code_interpreter = True
-            elif isinstance(tool, WebSearchTool):
-                has_web_search = True
-            elif isinstance(tool, HostedMCPTool | FunctionTool):
-                # HostedMCPTool and FunctionTool are custom tools
+    for tool in agent.tools:
+        if _isinstance_or_subclass(tool, Tool):
+            if _isinstance_or_subclass(tool, FunctionTool):
                 has_custom_tools = True
-            elif hasattr(tool, "__class__") and hasattr(tool.__class__, "__bases__"):
-                # Check if it's a BaseTool subclass
-                # BaseTool is from agency_swarm.tools.base_tool
-                try:
-                    from agency_swarm.tools.base_tool import BaseTool
+            else:
+                name = getattr(tool, "name", None)
+                if isinstance(name, str) and name and name not in detected_tool_capabilities:
+                    detected_tool_capabilities.append(name)
+        else:
+            has_custom_tools = True
 
-                    if isinstance(tool, type) and issubclass(tool, BaseTool):
-                        has_custom_tools = True
-                    elif isinstance(tool, BaseTool):
-                        has_custom_tools = True
-                except ImportError:
-                    pass
-
-    # Check for MCP servers
-    mcp_servers = getattr(agent, "mcp_servers", None)
-    if mcp_servers and isinstance(mcp_servers, list) and len(mcp_servers) > 0:
+    if agent.mcp_servers:
         has_custom_tools = True
 
-    # Add capabilities in consistent order
-    if has_custom_tools:
+    if has_custom_tools and "tools" not in capabilities:
         capabilities.append("tools")
 
-    # Check for reasoning capability
-    model_name = getattr(agent, "model", None)
-    if isinstance(model_name, str) and is_reasoning_model(model_name):
+    model_name = agent.model
+    has_reasoning = isinstance(model_name, str) and is_reasoning_model(model_name)
+    if not has_reasoning:
+        has_reasoning = agent.model_settings.reasoning is not None
+
+    if has_reasoning:
         capabilities.append("reasoning")
-    else:
-        # Also check for reasoning parameter in model_settings
-        model_settings = getattr(agent, "model_settings", None)
-        if model_settings:
-            reasoning = getattr(model_settings, "reasoning", None)
-            if reasoning is not None:
-                capabilities.append("reasoning")
 
-    if has_code_interpreter:
-        capabilities.append("code_interpreter")
+    ordered_tool_names = ["code_interpreter", "web_search", "file_search", "hosted_mcp"]
+    for tool_name in ordered_tool_names:
+        if tool_name in detected_tool_capabilities and tool_name not in capabilities:
+            capabilities.append(tool_name)
 
-    if has_web_search:
-        capabilities.append("web_search")
-
-    if has_file_search:
-        capabilities.append("file_search")
+    for tool_name in detected_tool_capabilities:
+        if tool_name not in capabilities:
+            capabilities.append(tool_name)
 
     return capabilities
+
+
+def _isinstance_or_subclass(obj: object, cls: Any) -> bool:
+    """Return True when obj is an instance of cls or a subclass reference."""
+
+    return isinstance(obj, cls) or (isinstance(obj, type) and issubclass(obj, cls))

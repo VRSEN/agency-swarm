@@ -156,11 +156,12 @@ def test_agent_with_mcp_server():
 
 
 def test_agent_with_hosted_mcp_tool():
-    """Agent with HostedMCPTool has 'tools' capability."""
+    """Agent with HostedMCPTool advertises hosted MCP capability."""
     hosted_mcp = HostedMCPTool(tool_config=Mcp(server_label="test", server_url="https://example.com"))
     agent = Agent(name="HostedMCPAgent", instructions="Test", tools=[hosted_mcp])
     capabilities = get_agent_capabilities(agent)
-    assert "tools" in capabilities
+    assert "hosted_mcp" in capabilities
+    assert "tools" not in capabilities
 
 
 def test_agent_with_all_capabilities():

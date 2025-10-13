@@ -57,11 +57,8 @@ def create_agent_template(
         print(f"\033[91mERROR: {e}\033[0m")
         return False
 
-    # Check if model is a reasoning model
-    model_is_reasoning = is_reasoning_model(model)
-
     # Set appropriate defaults and validate compatibility
-    if model_is_reasoning:
+    if is_reasoning_model(model):
         if temperature is not None:
             print(f"\033[91mERROR: Reasoning models (like {model}) do not support the temperature parameter.\033[0m")
             print("\033[91mTemperature parameter will be ignored.\033[0m")

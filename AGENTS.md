@@ -133,7 +133,7 @@ After each tool call or code edit, validate the result in 1-2 lines and proceed 
 
 ## Architecture Overview
 
-Agency Swarm is a multi-agent orchestration framework on OpenAI Agents SDK v1.x beta. Enables collaborative AI agents with structured flow and persistent conversations.
+Agency Swarm is a multi-agent orchestration framework built on the OpenAI Agents SDK, enabling collaborative AI agents with structured flow and persistent conversations.
 
 ### Core Modules
 1. Agency (`agency.py`): Multi-agent orchestration, agent communication, persistence hooks, entry points: `get_response()`, `get_response_stream()`
