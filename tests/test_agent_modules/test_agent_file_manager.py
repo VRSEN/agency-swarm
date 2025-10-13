@@ -192,7 +192,7 @@ class TestAgentFileManager:
         mock_agent.client_sync = Mock()
 
         uploaded = Mock()
-        uploaded.id = "file-abc123"
+        uploaded.id = "file-S1ABocPKz5LspVToYHJXWP"
         uploaded.created_at = 1_700_000_000
         mock_agent.client_sync.files.create.return_value = uploaded
 
@@ -209,7 +209,7 @@ class TestAgentFileManager:
 
         assert result == uploaded.id
 
-        renamed_path = tmp_path / "report_file-final_file-abc123.txt"
+        renamed_path = tmp_path / "report_file-final_file-S1ABocPKz5LspVToYHJXWP.txt"
         assert renamed_path.exists()
         assert file_manager.get_id_from_file(renamed_path) == uploaded.id
         mock_agent.client_sync.files.retrieve.assert_not_called()
@@ -223,6 +223,30 @@ class TestAgentFileManager:
         # Should raise FileNotFoundError
         with pytest.raises(FileNotFoundError, match="File not found: /nonexistent/file.txt"):
             file_manager.get_id_from_file("/nonexistent/file.txt")
+
+    def test_get_id_from_file_accepts_digit_free_ids(self, tmp_path):
+        """Digit-free, mixed-case OpenAI IDs remain discoverable in local filenames."""
+
+        mock_agent = Mock()
+        file_manager = AgentFileManager(mock_agent)
+
+        path = tmp_path / "notes_file-XugufptanjcVTjYYDTTadG.txt"
+        path.write_text("content", encoding="utf-8")
+
+        assert file_manager.get_id_from_file(path) == "file-XugufptanjcVTjYYDTTadG", (
+            "Expected digit-free OpenAI file IDs to be recognized"
+        )
+
+    def test_get_id_from_file_accepts_lowercase_ids(self, tmp_path):
+        """All-lowercase OpenAI IDs remain discoverable."""
+
+        mock_agent = Mock()
+        file_manager = AgentFileManager(mock_agent)
+
+        path = tmp_path / "draft_file-abcdefghijklmnopqrstuv.txt"
+        path.write_text("content", encoding="utf-8")
+
+        assert file_manager.get_id_from_file(path) == "file-abcdefghijklmnopqrstuv"
 
     def test_parse_files_folder_reuses_detected_vector_store(self, tmp_path, caplog):
         """Reuse an existing vector store directory without logging errors."""

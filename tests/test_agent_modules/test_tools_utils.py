@@ -114,7 +114,9 @@ class TestFromOpenAPISchema:
 
         with patch("agency_swarm.tools.utils.httpx.AsyncClient") as mock_client_cls:
             client = AsyncMock()
-            client.request.return_value.json.return_value = {"id": "456"}
+            mock_response = MagicMock()
+            mock_response.json.return_value = {"id": "456"}
+            client.request.return_value = mock_response
             mock_client_cls.return_value.__aenter__.return_value = client
 
             from_openapi_schema(base_spec)
