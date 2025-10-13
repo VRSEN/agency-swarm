@@ -3,8 +3,7 @@
 import re
 from pathlib import Path
 
-# Reasoning model prefixes that support reasoning parameter but not temperature
-REASONING_PREFIXES = ("gpt-5", "o3", "o4-mini", "o1")
+from .model_utils import is_reasoning_model
 
 
 def _validate_agent_name(name: str) -> None:
@@ -58,11 +57,8 @@ def create_agent_template(
         print(f"\033[91mERROR: {e}\033[0m")
         return False
 
-    # Check if model is a reasoning model
-    is_reasoning_model = any(model.startswith(prefix) for prefix in REASONING_PREFIXES)
-
     # Set appropriate defaults and validate compatibility
-    if is_reasoning_model:
+    if is_reasoning_model(model):
         if temperature is not None:
             print(f"\033[91mERROR: Reasoning models (like {model}) do not support the temperature parameter.\033[0m")
             print("\033[91mTemperature parameter will be ignored.\033[0m")

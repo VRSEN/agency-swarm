@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any
 from agency_swarm.ui.demos.copilot import CopilotDemoLauncher
 from agency_swarm.ui.demos.terminal import start_terminal
 from agency_swarm.ui.generators.html_generator import HTMLVisualizationGenerator
+from agency_swarm.utils.model_utils import get_agent_capabilities
 
 if TYPE_CHECKING:
     from .core import Agency
@@ -40,6 +41,7 @@ def get_agency_structure(agency: "Agency", include_tools: bool = True) -> dict[s
             "instructions": instructions,
             "model": agent.model,
             "hasSubagents": bool(runtime_state.subagents if runtime_state else {}),
+            "capabilities": get_agent_capabilities(agent),
         }
 
         node = {
