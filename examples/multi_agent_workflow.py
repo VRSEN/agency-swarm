@@ -25,9 +25,12 @@ from pydantic import BaseModel, Field
 # Configure basic logging
 logging.basicConfig(level=logging.WARNING, format="%(asctime)s - %(levelname)s - %(message)s")
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
+examples_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, os.path.join(examples_root, "src"))
+sys.path.insert(0, examples_root)
 
 from agency_swarm import Agency, Agent, RunContextWrapper, function_tool  # noqa: E402
+from examples.utils import print_send_message_exchange  # noqa: E402
 
 
 # --- Structured Output Types ---
@@ -129,21 +132,9 @@ agency = Agency(
 
 
 # Helper function to visualize send message arguments
-def print_send_message_history(agency, agent_name: str) -> None:
-    agent_messages = agency._agent_contexts[agent_name].thread_manager._store.messages
-    call_ids = []
+def print_send_message_history(agency: Agency, agent_name: str) -> None:
     print("Message history for inter-agent communications:")
-    i = 1
-    for message in agent_messages:
-        if "parent_run_id" not in message or "role" not in message:
-            continue
-        if message["role"] == "user" and message["agent"] is not None and message["callerAgent"] is not None:
-            call_ids.append(message["parent_run_id"])
-            print(f"{i}. {message['callerAgent']} -> {message['agent']} message: {message['content']}\n")
-            i += 1
-        elif message["role"] == "assistant" and message["parent_run_id"] in call_ids:
-            print(f"{i}. {message['agent']} -> {message['callerAgent']} response: {message['content'][0]['text']}\n")
-            i += 1
+    print_send_message_exchange(agency, owner=agent_name)
 
 
 async def run_workflow():

@@ -13,18 +13,20 @@ Run with: python examples/custom_send_message.py
 """
 
 import asyncio
-import json
 import logging
 import os
 import sys
 
-# Path setup so the example can be run standalone
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
-
 from pydantic import BaseModel, Field
 
-from agency_swarm import Agency, Agent, ModelSettings, function_tool
-from agency_swarm.tools.send_message import SendMessage, SendMessageHandoff
+# Path setup so the example can be run standalone
+examples_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, os.path.join(examples_root, "src"))
+sys.path.insert(0, examples_root)
+
+from agency_swarm import Agency, Agent, ModelSettings, function_tool  # noqa: E402
+from agency_swarm.tools.send_message import SendMessage, SendMessageHandoff  # noqa: E402
+from examples.utils import print_highlighted_send_message_args  # noqa: E402
 
 # Setup logging
 logging.basicConfig(level=logging.WARNING)
@@ -138,17 +140,7 @@ agency = Agency(
 
 # Helper function to visualize send message arguments
 def print_send_message_args(agency, agent_name: str) -> None:
-    agent_messages = agency._agent_contexts[agent_name].thread_manager._store.messages
-    args_str = ""
-    for message in agent_messages:
-        if message["type"] == "function_call" and message["name"].startswith("send_message"):
-            args = json.loads(message["arguments"])
-            args_str = json.dumps(args, indent=2)
-            if "key_moments" in args_str and "decisions" in args_str:
-                args_str = args_str.replace('"key_moments"', '\033[32m"key_moments"\033[0m').replace(
-                    '"decisions"', '\033[32m"decisions"\033[0m'
-                )
-            print(args_str)
+    print_highlighted_send_message_args(agency, agent_name=agent_name)
 
 
 async def main():

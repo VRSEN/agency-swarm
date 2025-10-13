@@ -6,7 +6,7 @@ from collections.abc import AsyncGenerator
 from pathlib import Path
 from typing import Any, TypeVar
 
-from agents import Agent as BaseAgent, RunConfig, RunHooks, RunResult, Tool, TResponseInputItem
+from agents import Agent as BaseAgent, RunConfig, RunContextWrapper, RunHooks, RunResult, Tool, TResponseInputItem
 from openai import AsyncOpenAI, OpenAI
 
 from agency_swarm.agent import (
@@ -28,7 +28,7 @@ from agency_swarm.context import MasterContext
 from agency_swarm.tools.concurrency import ToolConcurrencyManager
 from agency_swarm.tools.mcp_manager import register_and_connect_agent_servers
 
-from .context_types import AgencyContext as AgencyContext
+from .context_types import AgencyContext as AgencyContext, AgentRuntimeState
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +73,6 @@ class Agent(BaseAgent[MasterContext]):
     file_manager: AgentFileManager | None = None  # Initialized in setup_file_manager()
     attachment_manager: AttachmentManager | None = None  # Initialized in setup_file_manager()
     _tool_concurrency_manager: ToolConcurrencyManager
-    _subagents: dict[str, "Agent"] | None = None  # Other agents that this agent can communicate with
 
     # --- SDK Agent Compatibility ---
     # Re-declare attributes from BaseAgent for clarity and potential overrides
@@ -271,6 +270,26 @@ class Agent(BaseAgent[MasterContext]):
         """Provides access to the agent's tool concurrency manager."""
         return self._tool_concurrency_manager
 
+    async def get_all_tools(self, run_context: RunContextWrapper[MasterContext]) -> list[Tool]:
+        """Include agency-scoped runtime tools alongside static tools."""
+        base_tools = await super().get_all_tools(run_context)
+
+        master_context = getattr(run_context, "context", None)
+        runtime_tools: list[Tool] = []
+        if master_context and getattr(master_context, "agent_runtime_state", None):
+            runtime_state = master_context.agent_runtime_state.get(self.name)
+            if runtime_state:
+                runtime_tools = list(runtime_state.send_message_tools.values())
+
+        if not runtime_tools:
+            return base_tools
+
+        seen = {id(tool) for tool in base_tools}
+        for tool in runtime_tools:
+            if id(tool) not in seen:
+                base_tools.append(tool)
+        return base_tools
+
     # --- Tool Management ---
     def add_tool(self, tool: Tool) -> None:
         """
@@ -417,10 +436,12 @@ class Agent(BaseAgent[MasterContext]):
         """Create a minimal context for standalone agent usage (no agency)."""
         from ..utils.thread import ThreadManager
 
+        thread_manager = ThreadManager()
+        runtime_state = AgentRuntimeState(self._tool_concurrency_manager)
         return AgencyContext(
             agency_instance=None,
-            thread_manager=ThreadManager(),
-            subagents={},
+            thread_manager=thread_manager,
+            runtime_state=runtime_state,
             load_threads_callback=None,
             save_threads_callback=None,
             shared_instructions=None,
@@ -446,7 +467,12 @@ class Agent(BaseAgent[MasterContext]):
             raise TypeError("Can only chain to Agent instances")
         return AgentFlow([other, self])
 
-    def register_subagent(self, recipient_agent: "Agent", send_message_tool_class: type | None = None) -> None:
+    def register_subagent(
+        self,
+        recipient_agent: "Agent",
+        send_message_tool_class: type | None = None,
+        runtime_state: AgentRuntimeState | None = None,
+    ) -> None:
         """
         Registers another agent as a subagent that this agent can communicate with.
 
@@ -461,7 +487,7 @@ class Agent(BaseAgent[MasterContext]):
         from .subagents import register_subagent as register_subagent_func
 
         # Use the existing register_subagent function for tool creation
-        register_subagent_func(self, recipient_agent, send_message_tool_class)
+        register_subagent_func(self, recipient_agent, send_message_tool_class, runtime_state=runtime_state)
 
     def _get_caller_directory(self) -> str:
         """Get the directory where this agent is being instantiated (caller's directory)."""

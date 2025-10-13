@@ -29,6 +29,8 @@ def get_agency_structure(agency: "Agency", include_tools: bool = True) -> dict[s
         else:
             instructions = agency.shared_instructions or getattr(agent, "instructions", "") or ""
 
+        runtime_state = agency._agent_runtime_state.get(agent_name)
+
         agent_data: dict[str, Any] = {
             "label": agent_name,
             "description": getattr(agent, "description", "") or "",
@@ -37,7 +39,7 @@ def get_agency_structure(agency: "Agency", include_tools: bool = True) -> dict[s
             "tools": [],
             "instructions": instructions,
             "model": agent.model,
-            "hasSubagents": bool(getattr(agent, "_subagents", {})),
+            "hasSubagents": bool(runtime_state.subagents if runtime_state else {}),
         }
 
         node = {

@@ -30,10 +30,11 @@ async def test_schema_includes_extra_params():
         send_message_tool_class=SendMessageWithContext,
     )
     b = Agent(name="B", instructions="", model_settings=ModelSettings(temperature=0.0))
-    Agency(a, communication_flows=[a > b])
+    agency = Agency(a, communication_flows=[a > b])
 
-    # find the send_message tool on A
-    send_tool = next(t for t in a.tools if hasattr(t, "name") and t.name.startswith("send_message"))
+    # find the send_message tool on A via runtime state
+    runtime_state = agency.get_agent_runtime_state("A")
+    send_tool = next(iter(runtime_state.send_message_tools.values()))
     props = send_tool.params_json_schema.get("properties", {})
     assert "key_moments" in props and props["key_moments"]["type"] == "string"
     assert "decisions" in props and props["decisions"]["type"] == "string"
@@ -50,10 +51,10 @@ async def test_validation_of_extra_params_errors():
         send_message_tool_class=SendMessageWithContext,
     )
     b = Agent(name="B", instructions="Reply with OK", model_settings=ModelSettings(temperature=0.0))
-    Agency(a, communication_flows=[a > b])
+    agency = Agency(a, communication_flows=[a > b])
 
-    # Manually invoke tool to simulate invalid inputs (missing required fields)
-    send_tool = next(t for t in a.tools if hasattr(t, "name") and t.name.startswith("send_message"))
+    runtime_state = agency.get_agent_runtime_state("A")
+    send_tool = next(iter(runtime_state.send_message_tools.values()))
 
     args = {
         "recipient_agent": "B",
@@ -79,9 +80,10 @@ async def test_nested_class_schema_included():
         send_message_tool_class=NestedSendMessage,
     )
     b = Agent(name="B", instructions="", model_settings=ModelSettings(temperature=0.0))
-    Agency(a, communication_flows=[a > b])
+    agency = Agency(a, communication_flows=[a > b])
 
-    send_tool = next(t for t in a.tools if hasattr(t, "name") and t.name.startswith("send_message"))
+    runtime_state = agency.get_agent_runtime_state("A")
+    send_tool = next(iter(runtime_state.send_message_tools.values()))
     props = send_tool.params_json_schema.get("properties", {})
     assert "summary" in props and props["summary"]["type"] == "string"
     required = send_tool.params_json_schema.get("required", [])

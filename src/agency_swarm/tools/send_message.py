@@ -27,6 +27,7 @@ from ..messages import MessageFormatter
 from ..streaming.utils import add_agent_name_to_event
 
 if TYPE_CHECKING:
+    from ..agent.context_types import AgentRuntimeState
     from ..agent.core import AgencyContext, Agent
 
 logger = logging.getLogger(__name__)
@@ -46,26 +47,35 @@ class SendMessage(FunctionTool):
     """
 
     sender_agent: "Agent"
-    # Dict mapping lowercase recipient names to Agent instances
     recipients: dict[str, "Agent"]
-    # Track recipients with pending messages per thread manager (thread-safe)
+    _runtime_state: "AgentRuntimeState | None"
     _pending_per_thread: dict[int | None, set[str]]
-    # Lock to protect concurrent access to _pending_per_thread
     _pending_lock: asyncio.Lock
 
     def __init__(
         self,
         sender_agent: "Agent",
         recipients: dict[str, "Agent"] | None = None,
+        runtime_state: "AgentRuntimeState | None" = None,
         name: str = "send_message",
     ):
         self.sender_agent = sender_agent
-        # Normalize recipient keys to lowercase for case-insensitive lookup
-        self.recipients = {k.lower(): v for k, v in (recipients or {}).items()}
-        # Initialize tracking map for pending recipients keyed by thread manager id
-        self._pending_per_thread = {}
-        # Create lock for thread-safe access
-        self._pending_lock = asyncio.Lock()
+        self._runtime_state = runtime_state
+
+        if self._runtime_state is not None:
+            # Runtime-managed recipients share storage with the agency runtime state
+            self.recipients = self._runtime_state.subagents
+            self._pending_per_thread = self._runtime_state.pending_per_thread
+            self._pending_lock = self._runtime_state.pending_lock
+        else:
+            # Fallback for legacy/standalone usage
+            self.recipients = {k.lower(): v for k, v in (recipients or {}).items()}
+            self._pending_per_thread = {}
+            self._pending_lock = asyncio.Lock()
+
+        if recipients and self._runtime_state is not None:
+            for key, agent in recipients.items():
+                self._runtime_state.subagents[key.lower()] = agent
 
         # Build the recipient agent enum values for the schema
         recipient_names = list(self.recipients.values())
@@ -204,22 +214,42 @@ class SendMessage(FunctionTool):
         # Avoid circular import
         from ..agent.core import AgencyContext
 
-        # Create a minimal agency context for multi-agent communication
-        class MinimalAgency:
-            def __init__(self, agents_dict, user_context):
-                self.agents = agents_dict
-                self.user_context = user_context
-
-        # Since we're using send_message tool, we're always in an agency context
-        agency_instance = MinimalAgency(wrapper.context.agents, wrapper.context.user_context)
-
         # Get shared instructions from the current context
         shared_instructions_from_context = wrapper.context.shared_instructions
+
+        # Create a minimal agency context for multi-agent communication
+        agency_runtime_map = {}
+        if hasattr(wrapper.context, "agent_runtime_state") and wrapper.context.agent_runtime_state is not None:
+            agency_runtime_map = wrapper.context.agent_runtime_state
+
+        class MinimalAgency:
+            def __init__(self, agents_dict, user_context, runtime_state_map):
+                self.agents = agents_dict
+                self.user_context = user_context
+                self._agent_runtime_state = runtime_state_map
+                self.shared_instructions = shared_instructions_from_context
+
+        # Since we're using send_message tool, we're always in an agency context
+        agency_instance = MinimalAgency(wrapper.context.agents, wrapper.context.user_context, agency_runtime_map)
+
+        # Retrieve the runtime state for the recipient, falling back to a local runtime state if needed
+        runtime_state = None
+        target_agent_name = getattr(self.recipient_agent, "name", None)
+        if hasattr(wrapper.context, "agent_runtime_state") and target_agent_name:
+            runtime_state = wrapper.context.agent_runtime_state.get(target_agent_name)
+
+        if runtime_state is None:
+            from ..agent.context_types import AgentRuntimeState
+
+            runtime_state = AgentRuntimeState()
+            runtime_state.subagents.update(self.recipients)
+            if target_agent_name:
+                agency_runtime_map[target_agent_name] = runtime_state
 
         return AgencyContext(
             agency_instance=agency_instance,
             thread_manager=wrapper.context.thread_manager,
-            subagents=self.recipients,
+            runtime_state=runtime_state,
             load_threads_callback=None,
             save_threads_callback=None,
             shared_instructions=shared_instructions_from_context,
