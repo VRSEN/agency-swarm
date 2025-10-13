@@ -25,6 +25,7 @@ from .context import MasterContext  # noqa: E402
 from .hooks import PersistenceHooks  # noqa: E402
 from .integrations.fastapi import run_fastapi  # noqa: E402
 from .integrations.mcp_server import run_mcp  # noqa: E402
+from .integrations.realtime import run_realtime  # noqa: E402
 from .tools import BaseTool  # noqa: E402
 from .tools.send_message import SendMessage  # noqa: E402
 from .utils.thread import ThreadManager  # noqa: E402
@@ -39,6 +40,7 @@ __all__ = [
     "PersistenceHooks",
     "SendMessage",
     "run_fastapi",
+    "run_realtime",
     "run_mcp",
     # Re-exports from Agents SDK
     "ModelSettings",
