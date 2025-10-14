@@ -1,3 +1,26 @@
+from agents import (
+    CodeInterpreterTool,
+    ComputerTool,
+    FileSearchTool,
+    FunctionTool,
+    FunctionToolResult,
+    HostedMCPTool,
+    ImageGenerationTool,
+    LocalShellTool,
+    WebSearchTool,
+    function_tool,
+)
+from openai.types.responses.tool_param import (
+    CodeInterpreter,
+    CodeInterpreterContainer,
+    CodeInterpreterContainerCodeInterpreterToolAuto,
+    ImageGeneration,
+    ImageGenerationInputImageMask,
+    Mcp,
+    McpAllowedTools,
+    McpRequireApproval,
+)
+
 from .base_tool import BaseTool
 from .concurrency import ToolConcurrencyManager
 from .send_message import SendMessage, SendMessageHandoff
@@ -11,4 +34,24 @@ __all__ = [
     "SendMessage",
     "SendMessageHandoff",
     "validate_openapi_spec",
+    # Re-exports from Agents SDK
+    "CodeInterpreterTool",
+    "ComputerTool",
+    "FileSearchTool",
+    "FunctionTool",
+    "FunctionToolResult",
+    "HostedMCPTool",
+    "ImageGenerationTool",
+    "LocalShellTool",
+    "WebSearchTool",
+    "function_tool",
+    # Tool parameter types from OpenAI
+    "CodeInterpreter",
+    "CodeInterpreterContainer",
+    "CodeInterpreterContainerCodeInterpreterToolAuto",
+    "ImageGeneration",
+    "ImageGenerationInputImageMask",
+    "Mcp",
+    "McpAllowedTools",
+    "McpRequireApproval",
 ]
