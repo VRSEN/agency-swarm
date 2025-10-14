@@ -1,5 +1,4 @@
 # --- Core Agency class definition ---
-import asyncio
 import atexit
 import logging
 import os
@@ -232,7 +231,8 @@ class Agency:
         logger.info("Agency initialization complete.")
 
         # Register MCP shutdown at process exit so persistent servers are cleaned in scripts
-        atexit.register(lambda: asyncio.run(default_mcp_manager.shutdown()))
+        if default_mcp_manager.mark_atexit_registered():
+            atexit.register(default_mcp_manager.shutdown_sync)
 
     # Private helper methods that were missed during split
     def get_agent_context(self, agent_name: str) -> AgencyContext:
