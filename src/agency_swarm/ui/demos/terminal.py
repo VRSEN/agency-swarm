@@ -6,6 +6,7 @@ from collections.abc import Generator
 from typing import Any, cast
 
 import prompt_toolkit as prompt_toolkit
+from agents.models.interface import Model
 from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.history import InMemoryHistory
 from prompt_toolkit.key_binding import KeyBindings
@@ -30,11 +31,23 @@ def start_terminal(
 
     # Auto-detect show_reasoning if not explicitly provided
     if show_reasoning is None:
+        show_reasoning = False
         # Check if any agent in the agency uses a reasoning model
-        show_reasoning = any(
-            is_reasoning_model(agent.model) for agent in agency_instance.agents.values()
-        )
-    print(f"show_reasoning: {show_reasoning}")
+        for agent in agency_instance.agents.values():
+            agent_model = agent.model
+            model_name = None
+            if isinstance(agent_model, str):
+                model_name = agent_model
+            elif isinstance(agent_model, Model):
+                # Safely get either 'name' or 'model' attribute
+                model_name = getattr(agent_model, "name", None) or getattr(agent_model, "model", None)
+                # In case it's a Litellm model, remove the provider name
+                if isinstance(model_name, str) and len(split:= model_name.split("/")) > 1:
+                    model_name = split[-1]
+
+            if model_name and is_reasoning_model(model_name):
+                show_reasoning = True
+                break
 
     chat_id = TerminalDemoLauncher.start_new_chat(agency_instance)
 
