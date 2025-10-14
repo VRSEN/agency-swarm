@@ -474,7 +474,7 @@ class Agency:
 
         return visualize(self, output_file, include_tools, open_browser)
 
-    def terminal_demo(self, show_reasoning: bool = False) -> None:
+    def terminal_demo(self, show_reasoning: bool | None = None) -> None:
         """
         Run a terminal demo of the agency.
         """
