@@ -10,6 +10,7 @@ recipient details.
 import asyncio
 import json
 import logging
+import warnings
 from typing import TYPE_CHECKING, Any, Literal
 
 from agents import (
@@ -493,14 +494,20 @@ class SendMessage(FunctionTool):
 
 
 class SendMessageHandoff:
-    """
-    A handoff configuration class for defining agent handoffs.
-    """
+    """A handoff configuration class for defining agent handoffs."""
 
     add_reminder: bool = True  # Adds a reminder system message to the history on handoff
+    reminder_override: str | None = None  # Deprecated in favor of Agent.handoff_reminder
 
     def create_handoff(self, recipient_agent: "Agent"):
         recipient_agent_name = recipient_agent.name
+        legacy_override = getattr(self, "reminder_override", None)
+        if legacy_override is not None:
+            warnings.warn(
+                "SendMessageHandoff.reminder_override is deprecated; set Agent(..., handoff_reminder=...) instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         handoff_object = handoff(
             agent=recipient_agent,
             tool_description_override=recipient_agent.description,
@@ -526,12 +533,16 @@ class SendMessageHandoff:
                     if all_messages:
                         last_message = all_messages[-1]
 
-                        # Use handoff_reminder if provided, otherwise use default reminder
-                        reminder_content = (
-                            recipient_agent.handoff_reminder
-                            if recipient_agent.handoff_reminder is not None
-                            else f"Transfer completed. You are {recipient_agent_name}. Please continue the task."
-                        )
+                        # Agent-level reminder takes precedence over the deprecated reminder_override fallback
+                        agent_override = getattr(recipient_agent, "handoff_reminder", None)
+                        if agent_override is not None:
+                            reminder_content = agent_override
+                        elif legacy_override is not None:
+                            reminder_content = legacy_override
+                        else:
+                            reminder_content = (
+                                f"Transfer completed. You are {recipient_agent_name}. Please continue the task."
+                            )
 
                         reminder_msg: dict[str, Any] = {
                             "role": "system",
