@@ -20,6 +20,9 @@ class PersistentMCPServerManager:
         self._lock: asyncio.Lock = asyncio.Lock()
         self._bg_loop: asyncio.AbstractEventLoop | None = None
         self._bg_thread: threading.Thread | None = None
+        self._sync_shutdown_lock: threading.Lock = threading.Lock()
+        self._registration_lock: threading.Lock = threading.Lock()
+        self._atexit_registered: bool = False
         # Default timeouts for known methods; unknown methods use a safe default
         self._timeouts: dict[str, float] = {
             "connect": 20.0,
@@ -76,6 +79,11 @@ class PersistentMCPServerManager:
                     except Exception as e:  # noqa: BLE001
                         result_fut.set_exception(e)
                     break
+                elif typ == "force_stop":
+                    result_fut = cmd.get("result_fut")
+                    if isinstance(result_fut, Future) and not result_fut.done():
+                        result_fut.set_result(False)
+                    break
 
         # Start driver
         asyncio.run_coroutine_threadsafe(_driver(), loop)
@@ -107,8 +115,34 @@ class PersistentMCPServerManager:
                 def _post(queue=queue, fut=fut):
                     queue.put_nowait({"type": "shutdown", "result_fut": fut})
 
-                self._ensure_bg_loop().call_soon_threadsafe(_post)
-                fut.result(timeout=self._timeouts.get("cleanup", 10.0))
+                loop = self._ensure_bg_loop()
+                loop.call_soon_threadsafe(_post)
+                server_name = getattr(state.get("real"), "name", "<unnamed>")
+                try:
+                    fut.result(timeout=self._timeouts.get("cleanup", 10.0))
+                except TimeoutError:
+                    logger.warning(
+                        "Timed out waiting for MCP server '%s' cleanup; forcing shutdown",
+                        server_name,
+                    )
+
+                    def _force_stop(queue=queue, fut=fut):
+                        queue.put_nowait({"type": "force_stop", "result_fut": fut})
+
+                    loop.call_soon_threadsafe(_force_stop)
+                    try:
+                        fut.result(timeout=0.5)
+                    except TimeoutError:
+                        logger.warning(
+                            "Force-stop for MCP server '%s' did not complete in time",
+                            server_name,
+                        )
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "Error during MCP server '%s' shutdown: %s",
+                        server_name,
+                        exc,
+                    )
             self._drivers.clear()
             self._servers.clear()
             if self._bg_loop is not None:
@@ -164,6 +198,38 @@ class PersistentMCPServerManager:
             return fut.result(timeout=timeout)
 
         return await loop.run_in_executor(None, _get_result)
+
+    def mark_atexit_registered(self) -> bool:
+        with self._registration_lock:
+            if self._atexit_registered:
+                return False
+            self._atexit_registered = True
+            return True
+
+    def shutdown_sync(self) -> None:
+        if not self._sync_shutdown_lock.acquire(blocking=False):
+            return
+        try:
+            try:
+                asyncio.run(self.shutdown())
+            except RuntimeError as exc:
+                message = str(exc)
+                if "asyncio.run() cannot be called from a running event loop" not in message:
+                    logger.warning("Error during persistent MCP manager shutdown: %s", exc)
+                    return
+                try:
+                    loop = asyncio.get_running_loop()
+                except RuntimeError as loop_error:
+                    logger.warning(
+                        "Error during persistent MCP manager shutdown: %s",
+                        loop_error,
+                    )
+                    return
+                loop.create_task(self.shutdown())
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Error during persistent MCP manager shutdown: %s", exc)
+        finally:
+            self._sync_shutdown_lock.release()
 
 
 class LoopAffineAsyncProxy:
