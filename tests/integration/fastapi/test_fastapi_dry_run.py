@@ -61,5 +61,3 @@ def test_dry_run_metadata_includes_tools(monkeypatch, agency_factory_with_tool):
     res_resp = client.post("/test_agency/get_response", json={"message": "hi"})
     print(res_resp.status_code)
     assert res_resp.status_code in (404, 405)
-
-
