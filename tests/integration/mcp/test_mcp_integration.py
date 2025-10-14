@@ -8,6 +8,7 @@ from agents.mcp.server import MCPServerStdio
 from dotenv import load_dotenv
 
 from agency_swarm import Agency, Agent
+from agency_swarm.tools.mcp_manager import LoopAffineAsyncProxy, PersistentMCPServerManager
 
 load_dotenv(override=True)
 
@@ -60,6 +61,34 @@ async def test_mcp_stdio_get_response(caplog):
         or ("Error cleaning up server:" in msg)
         for msg in err_msgs
     ), f"Found MCP cleanup error logs: {err_msgs}"
+
+
+@pytest.mark.asyncio
+async def test_mcp_proxy_enters_async_context_when_session_reset():
+    manager = PersistentMCPServerManager()
+    server = MCPServerStdio(
+        name="Test_STDIO_Server_Context",
+        params={
+            "command": "python",
+            "args": [_stdio_server_path()],
+        },
+        client_session_timeout_seconds=15,
+    )
+
+    await manager.ensure_connected(server)
+    proxy = LoopAffineAsyncProxy(server, manager)
+
+    server.session = None
+
+    try:
+        async with proxy as acquired:
+            assert acquired is server
+            tools = await proxy.list_tools()
+            names = [tool.name for tool in tools]
+            assert "greet" in names
+            assert server.session is not None
+    finally:
+        await manager.shutdown()
 
 
 @pytest.mark.asyncio
