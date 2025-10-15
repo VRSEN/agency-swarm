@@ -31,6 +31,8 @@ class PersistentMCPServerManager:
             "cleanup": 10.0,
             "list_prompts": 10.0,
             "get_prompt": 10.0,
+            "__aenter__": 15.0,
+            "__aexit__": 15.0,
         }
         # Server -> driver mapping (driver runs on background loop in a single task)
         self._drivers: dict[Any, dict[str, Any]] = {}
@@ -242,6 +244,28 @@ class LoopAffineAsyncProxy:
     def __init__(self, server: Any, manager: PersistentMCPServerManager) -> None:
         self._server = server
         self._manager = manager
+
+    async def __aenter__(self) -> Any:  # noqa: ANN401
+        target = getattr(self._server, "__aenter__", None)
+        if target is None:
+            raise TypeError(f"Server {self._server!r} does not support asynchronous context management")
+        result = target()
+        if inspect.isawaitable(result):
+            fut = self._manager._submit_to_loop(result)
+            timeout = self._manager._timeouts.get("__aenter__", 30.0)
+            return await self._manager._await_future(fut, timeout=timeout)
+        return result
+
+    async def __aexit__(self, exc_type, exc, tb) -> Any:  # noqa: ANN001, ANN401
+        target = getattr(self._server, "__aexit__", None)
+        if target is None:
+            raise TypeError(f"Server {self._server!r} does not support asynchronous context management")
+        result = target(exc_type, exc, tb)
+        if inspect.isawaitable(result):
+            fut = self._manager._submit_to_loop(result)
+            timeout = self._manager._timeouts.get("__aexit__", 30.0)
+            return await self._manager._await_future(fut, timeout=timeout)
+        return result
 
     def __getattr__(self, name: str):  # noqa: ANN001
         target = getattr(self._server, name)

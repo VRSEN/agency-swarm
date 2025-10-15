@@ -29,6 +29,21 @@ class _SlowCleanupServer(_DummyServer):
         await super().cleanup()
 
 
+class _AsyncContextServer(_DummyServer):
+    def __init__(self) -> None:
+        super().__init__()
+        self.context_entered = 0
+        self.context_exited = 0
+
+    async def __aenter__(self) -> "_AsyncContextServer":
+        self.context_entered += 1
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> bool:  # noqa: ANN001
+        self.context_exited += 1
+        return False
+
+
 @pytest.mark.asyncio
 async def test_ensure_connected_reuses_driver_for_proxy() -> None:
     manager = PersistentMCPServerManager()
@@ -60,3 +75,23 @@ async def test_shutdown_handles_cleanup_timeout() -> None:
         pytest.fail(f"shutdown should not propagate TimeoutError: {exc}")
 
     assert manager._drivers == {}
+
+
+@pytest.mark.asyncio
+async def test_proxy_supports_async_context_manager() -> None:
+    manager = PersistentMCPServerManager()
+    server = _AsyncContextServer()
+
+    await manager.ensure_connected(server)
+    proxy = LoopAffineAsyncProxy(server, manager)
+
+    try:
+        async with proxy as acquired:
+            assert acquired is server
+            assert server.context_entered == 1
+            assert server.context_exited == 0
+    finally:
+        await manager.shutdown()
+
+    assert server.context_entered == 1
+    assert server.context_exited == 1
