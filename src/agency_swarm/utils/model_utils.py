@@ -30,6 +30,7 @@ def is_reasoning_model(model: str | Model | None) -> bool:
     """
     if not model:
         return False
+    model_name = None
     if isinstance(model, Model):
         # Safely get either 'name' or 'model' attribute
         model_name = getattr(model, "name", None) or getattr(model, "model", None)
@@ -40,6 +41,9 @@ def is_reasoning_model(model: str | Model | None) -> bool:
         model_name = model
     else:
         logger.warning(f"Unknown type for model: {model}")
+        return False
+    if not model_name:
+        logger.warning(f"Could not extract model name for model: {model}")
         return False
     return any(model_name.startswith(prefix) for prefix in REASONING_MODEL_PREFIXES)
 
