@@ -151,7 +151,7 @@ def visualize(
     )
 
 
-def terminal_demo(agency: "Agency", show_reasoning: bool = False) -> None:
+def terminal_demo(agency: "Agency", show_reasoning: bool | None = None) -> None:
     """
     Run a terminal demo of the agency.
     """

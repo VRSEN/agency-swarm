@@ -11,6 +11,7 @@ from prompt_toolkit.history import InMemoryHistory
 from prompt_toolkit.key_binding import KeyBindings
 
 from agency_swarm.agency.core import Agency
+from agency_swarm.utils import is_reasoning_model
 
 from ..core.console_event_adapter import ConsoleEventAdapter
 from .launcher import TerminalDemoLauncher
@@ -18,7 +19,7 @@ from .launcher import TerminalDemoLauncher
 
 def start_terminal(
     agency_instance: Agency,
-    show_reasoning: bool = False,
+    show_reasoning: bool | None = None,
 ) -> None:
     """Run the terminal demo: input loop, slash commands, and streaming output."""
     logger = logging.getLogger(__name__)
@@ -26,6 +27,11 @@ def start_terminal(
     recipient_agents = [str(agent.name) for agent in agency_instance.entry_points]
     if not recipient_agents:
         raise ValueError("Cannot start terminal demo without entry points. Please specify at least one entry point.")
+
+    # Auto-detect show_reasoning if not explicitly provided
+    if show_reasoning is None:
+        # Check if any agent in the agency uses a reasoning model
+        show_reasoning = any(is_reasoning_model(agent.model) for agent in agency_instance.agents.values())
 
     chat_id = TerminalDemoLauncher.start_new_chat(agency_instance)
 
@@ -164,7 +170,7 @@ def start_terminal(
                 return True
 
         recipient_agent = None
-        agent_mention_pattern = r"(?:^|\s)@(\w+)(?:\s|$)"
+        agent_mention_pattern = r"(?:^|\s|,)@(\w+)(?:\s|,|$)"
         agent_match = re.search(agent_mention_pattern, message)
 
         if message.startswith("@"):

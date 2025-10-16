@@ -1,17 +1,18 @@
 """Utility functions for working with model configurations."""
-
+import logging
 from typing import TYPE_CHECKING, Any
 
-from agents import FunctionTool, Tool
+from agents import FunctionTool, Model, Tool
 
 if TYPE_CHECKING:
     from agency_swarm.agent.core import Agent
 
 # Reasoning model prefixes that support reasoning parameter but not temperature
 REASONING_MODEL_PREFIXES = ("gpt-5", "o3", "o4-mini", "o1")
+logger = logging.getLogger(__name__)
 
 
-def is_reasoning_model(model_name: str | None) -> bool:
+def is_reasoning_model(model: str | Model | None) -> bool:
     """Determine if a model supports reasoning capabilities.
 
     Reasoning models include o-series models (o1, o3, o4-mini) and GPT-5 series.
@@ -19,7 +20,7 @@ def is_reasoning_model(model_name: str | None) -> bool:
 
     Parameters
     ----------
-    model_name : str | None
+    model : str | Model | None
         The model identifier (e.g., "gpt-5", "o1-preview", "gpt-4o")
 
     Returns
@@ -27,7 +28,22 @@ def is_reasoning_model(model_name: str | None) -> bool:
     bool
         True if the model supports reasoning, False otherwise
     """
+    if not model:
+        return False
+    model_name = None
+    if isinstance(model, Model):
+        # Safely get either 'name' or 'model' attribute
+        model_name = getattr(model, "name", None) or getattr(model, "model", None)
+        # In case it's a Litellm model, remove the provider name
+        if isinstance(model_name, str) and len(split:= model_name.split("/")) > 1:
+            model_name = split[-1]
+    elif isinstance(model, str):
+        model_name = model
+    else:
+        logger.warning(f"Unknown type for model: {model}")
+        return False
     if not model_name:
+        logger.warning(f"Could not extract model name for model: {model}")
         return False
     return any(model_name.startswith(prefix) for prefix in REASONING_MODEL_PREFIXES)
 
