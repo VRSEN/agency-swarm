@@ -30,7 +30,15 @@ from agents import (  # noqa: E402
     set_tracing_disabled,
     trace,
 )
-from agents.extensions.models.litellm_model import LitellmModel  # noqa: E402
+
+# Optional: LitellmModel requires the litellm extra
+try:
+    from agents.extensions.models.litellm_model import LitellmModel  # noqa: E402, F401
+
+    _LITELLM_AVAILABLE = True
+except ImportError:
+    _LITELLM_AVAILABLE = False
+
 from agents.model_settings import Headers, MCPToolChoice, ToolChoice  # noqa: E402
 from openai._types import Body, Query  # noqa: E402
 from openai.types.responses import ResponseIncludable  # noqa: E402
@@ -90,7 +98,6 @@ __all__ = [
     "HostedMCPTool",
     "trace",
     "Reasoning",
-    "LitellmModel",
     "CodeInterpreterTool",
     "ComputerTool",
     "FileSearchTool",
@@ -127,3 +134,18 @@ __all__ = [
     "Body",
     "ResponseIncludable",
 ]
+
+# Conditionally add LitellmModel if available
+if _LITELLM_AVAILABLE:
+    __all__.append("LitellmModel")
+
+
+def __getattr__(name: str):
+    """Provide helpful error messages for optional dependencies."""
+    if name == "LitellmModel" and not _LITELLM_AVAILABLE:
+        raise ImportError(
+            "`litellm` is required to use the LitellmModel. "
+            "You can install it via the optional dependency group: "
+            "`pip install 'openai-agents[litellm]'`."
+        )
+    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
