@@ -110,6 +110,10 @@ class Execution:
             except Exception:
                 pass
 
+            agency_name = "Unnamed Agency"
+            if agency_context and agency_context.agency_instance:
+                agency_name = getattr(agency_context.agency_instance, "name", None) or agency_name
+
             run_result, master_context_for_run = await run_sync_with_guardrails(
                 agent=self.agent,
                 history_for_runner=history_for_runner,
@@ -117,7 +121,7 @@ class Execution:
                 sender_name=sender_name,
                 agency_context=agency_context,
                 hooks_override=hooks_override,
-                run_config_override=run_config_override or RunConfig(),
+                run_config_override=run_config_override or RunConfig(workflow_name=agency_name),
                 kwargs=kwargs,
                 current_agent_run_id=current_agent_run_id,
                 parent_run_id=parent_run_id,
@@ -283,6 +287,10 @@ class Execution:
                 f"Starting streaming run for agent '{self.agent.name}' with {len(history_for_runner)} history items."
             )
 
+            agency_name = "Unnamed Agency"
+            if agency_context and agency_context.agency_instance:
+                agency_name = getattr(agency_context.agency_instance, "name", None) or agency_name
+
             # Prepare context for streaming and delegate to helper generator
             master_context_for_run = prepare_master_context(self.agent, context_override, agency_context)
             async for event in run_stream_with_guardrails(
@@ -292,7 +300,7 @@ class Execution:
                 sender_name=sender_name,
                 agency_context=agency_context,
                 hooks_override=hooks_override,
-                run_config_override=run_config_override or RunConfig(),
+                run_config_override=run_config_override or RunConfig(workflow_name=agency_name),
                 kwargs=kwargs,
                 current_agent_run_id=current_agent_run_id,
                 parent_run_id=parent_run_id,
