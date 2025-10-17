@@ -2,11 +2,18 @@ import inspect
 import logging
 import os
 import warnings
-from collections.abc import AsyncGenerator
 from pathlib import Path
 from typing import Any, TypeVar
 
-from agents import Agent as BaseAgent, RunConfig, RunContextWrapper, RunHooks, RunResult, Tool, TResponseInputItem
+from agents import (
+    Agent as BaseAgent,
+    RunConfig,
+    RunContextWrapper,
+    RunHooks,
+    RunResult,
+    Tool,
+    TResponseInputItem,
+)
 from openai import AsyncOpenAI, OpenAI
 
 from agency_swarm.agent import (
@@ -22,6 +29,7 @@ from agency_swarm.agent import (
 )
 from agency_swarm.agent.agent_flow import AgentFlow
 from agency_swarm.agent.attachment_manager import AttachmentManager
+from agency_swarm.agent.execution_streaming import StreamingRunResponse
 from agency_swarm.agent.file_manager import AgentFileManager
 from agency_swarm.agent.tools import _attach_one_call_guard
 from agency_swarm.context import MasterContext
@@ -116,17 +124,18 @@ class Agent(BaseAgent[MasterContext]):
             output_guardrails (list[OutputGuardrail] | None): Post-execution validation checks.
             output_type (type[Any] | AgentOutputSchemaBase | None): Type of agent's final output.
             hooks (AgentHooks | None): Lifecycle event callbacks.
-            tool_use_behavior ("run_llm_again" | "stop_on_first_tool" | list[str] | Callable): Tool usage behavior.
+            tool_use_behavior ("run_llm_again" | "stop_on_first_tool" | StopAtTools | dict[str, Any] | Callable):
+                Tool usage behavior.
                 How tool usage is handled:
                 • "run_llm_again": The default behavior. Tools are run, and then the LLM receives the results
                     and gets to respond.
                 • "stop_on_first_tool": The output of the first tool call is used as the final output. This
                     means that the LLM does not process the result of the tool call.
-                • A list of tool names: The agent will stop running if any of the tools in the list are called.
-                    The final output will be the output of the first matching tool call. The LLM does not
-                    process the result of the tool call.
+                • A StopAtTools config (or compatible dict with ``stop_at_tool_names``) identifies tool names
+                    that should terminate the run. The final output will be the output of the first matching
+                    tool call. The LLM does not process the result of the tool call.
                 • A function: If you pass a function, it will be called with the run context and the list of
-                    tool results. It must return a `ToolToFinalOutputResult`, which determines whether the tool
+                    tool results. It must return a `ToolsToFinalOutputResult`, which determines whether the tool
                     calls result in a final output.
             reset_tool_choice (bool | None): Whether to reset tool choice after tool calls.
         """
@@ -384,7 +393,7 @@ class Agent(BaseAgent[MasterContext]):
             **kwargs,
         )
 
-    async def get_response_stream(
+    def get_response_stream(
         self,
         message: str | list[TResponseInputItem],
         sender_name: str | None = None,
@@ -395,8 +404,8 @@ class Agent(BaseAgent[MasterContext]):
         file_ids: list[str] | None = None,
         additional_instructions: str | None = None,
         agency_context: AgencyContext | None = None,  # Context from agency, or None for standalone
-        **kwargs,
-    ) -> AsyncGenerator[Any]:
+        **kwargs: Any,
+    ) -> StreamingRunResponse:
         """Runs the agent's turn in streaming mode.
 
         Args:
@@ -412,14 +421,15 @@ class Agent(BaseAgent[MasterContext]):
             agency_context: AgencyContext for this execution (provided by Agency, or None for standalone use)
             **kwargs: Additional keyword arguments
 
-        Yields:
-            Stream events from the agent's execution
+        Returns:
+            StreamingRunResponse: Async iterable for stream events with access to the
+            final streaming result.
         """
         # If no agency context provided, create a minimal one for standalone usage
         if agency_context is None:
             agency_context = self._create_minimal_context()
 
-        async for event in self._execution.get_response_stream(
+        return self._execution.get_response_stream(
             message=message,
             sender_name=sender_name,
             context_override=context_override,
@@ -430,8 +440,7 @@ class Agent(BaseAgent[MasterContext]):
             additional_instructions=additional_instructions,
             agency_context=agency_context,
             **kwargs,
-        ):
-            yield event
+        )
 
     # --- Helper Methods ---
     # _validate_response removed - use output_guardrails instead

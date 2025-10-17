@@ -6,7 +6,7 @@ from agents.lifecycle import RunHooks
 from agents.stream_events import RunItemStreamEvent
 from openai.types.responses import ResponseOutputMessage, ResponseOutputText
 
-from agency_swarm import Agent
+from agency_swarm import Agency, Agent, StreamingRunResponse
 from agency_swarm.messages import MessageFormatter
 
 # --- Streaming Tests ---
@@ -68,6 +68,108 @@ async def test_get_response_stream_basic():
             assert event.agent == "TestAgent"
             assert hasattr(event, "callerAgent")
             assert event.callerAgent is None
+
+
+@pytest.mark.asyncio
+@patch("agents.Runner.run_streamed")
+async def test_get_response_stream_exposes_run_result(mock_runner_run_streamed):
+    """Ensure streaming runs surface the final RunResultStreaming for downstream hooks."""
+    agent = Agent(name="TestAgent", instructions="Test instructions")
+
+    msg_item = MessageOutputItem(
+        raw_item=ResponseOutputMessage(
+            id="msg_final",
+            content=[ResponseOutputText(text="Final result", type="output_text", annotations=[])],
+            role="assistant",
+            status="completed",
+            type="message",
+        ),
+        type="message_output_item",
+        agent=None,
+    )
+
+    async def dummy_stream():
+        yield RunItemStreamEvent(name="message_output_created", item=msg_item, type="run_item_stream_event")
+
+    final_output_text = "stream final output"
+
+    class DummyStreamedResult:
+        def __init__(self) -> None:
+            self.final_output = final_output_text
+
+        def stream_events(self):
+            return dummy_stream()
+
+        def to_input_list(self):
+            return []
+
+    mock_runner_run_streamed.return_value = DummyStreamedResult()
+
+    stream = agent.get_response_stream("Process this")
+
+    events = []
+    async for event in stream:
+        events.append(event)
+
+    assert events, "Streaming run should emit events"
+    result = await stream.wait_final_result()
+    assert result is not None
+    assert result.final_output == final_output_text
+    assert stream.final_output == final_output_text
+
+
+@pytest.mark.asyncio
+@patch("agents.Runner.run_streamed")
+async def test_agency_stream_propagates_final_output(mock_runner_run_streamed):
+    agent = Agent(name="TestAgent", instructions="Handle tasks")
+    agency = Agency(agent)
+
+    msg_item = MessageOutputItem(
+        raw_item=ResponseOutputMessage(
+            id="msg_final",
+            content=[ResponseOutputText(text="Agency final", type="output_text", annotations=[])],
+            role="assistant",
+            status="completed",
+            type="message",
+        ),
+        type="message_output_item",
+        agent=None,
+    )
+
+    async def dummy_stream():
+        yield RunItemStreamEvent(name="message_output_created", item=msg_item, type="run_item_stream_event")
+
+    final_output_text = "agency stream final"
+
+    class DummyStreamedResult:
+        def __init__(self) -> None:
+            self.final_output = final_output_text
+
+        def stream_events(self):
+            return dummy_stream()
+
+        def to_input_list(self):
+            return [{"role": "assistant", "content": final_output_text, "type": "message"}]
+
+    mock_runner_run_streamed.return_value = DummyStreamedResult()
+
+    stream = agency.get_response_stream("Process this")
+    events = []
+    async for event in stream:
+        events.append(event)
+
+    assert events, "Streaming through agency should emit events"
+    result = await stream.wait_final_result()
+    assert result is not None
+    assert result.final_output == final_output_text
+    assert stream.final_output == final_output_text
+
+
+def test_get_response_stream_initialization_without_event_loop():
+    agent = Agent(name="TestAgent", instructions="Prepare response")
+    stream = agent.get_response_stream("Hello")
+    assert isinstance(stream, StreamingRunResponse)
+    assert stream.final_result is None
 
 
 @pytest.mark.asyncio

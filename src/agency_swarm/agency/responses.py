@@ -1,7 +1,6 @@
 # --- Agency response methods ---
 import asyncio
 import logging
-from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -10,6 +9,7 @@ if TYPE_CHECKING:
 from agents import RunConfig, RunHooks, RunResult, TResponseInputItem
 
 from agency_swarm.agent.core import Agent
+from agency_swarm.agent.execution_streaming import StreamingRunResponse
 from agency_swarm.tools.mcp_manager import attach_persistent_mcp_servers
 
 from .helpers import get_agent_context, resolve_agent
@@ -127,7 +127,7 @@ def get_response_sync(
     )
 
 
-async def get_response_stream(
+def get_response_stream(
     agency: "Agency",
     message: str | list[TResponseInputItem],
     recipient_agent: str | Agent | None = None,
@@ -138,12 +138,13 @@ async def get_response_stream(
     file_ids: list[str] | None = None,
     additional_instructions: str | None = None,
     **kwargs: Any,
-) -> AsyncGenerator[Any]:
+) -> StreamingRunResponse:
     """
     Initiates a streaming interaction with a specified agent within the agency.
 
-    Similar to `get_response`, but delegates to the target agent's `get_response_stream`
-    method to yield events as they occur during execution.
+    Returns a :class:`StreamingRunResponse` wrapper that yields merged events from the
+    primary agent and any delegated sub-agents while exposing the final
+    ``RunResultStreaming`` once available.
 
     Args:
         message (str | list[dict[str, Any]]): The input message for the agent.
@@ -158,57 +159,71 @@ async def get_response_stream(
             agent's instructions for this run only.
         **kwargs: Additional arguments passed down to `get_response_stream` and `run_streamed`.
 
-    Yields:
-        Any: Events from the `agents.Runner.run_streamed` execution.
-
     Raises:
         ValueError: If the specified `recipient_agent` is not found, or if no recipient_agent
                     is specified and no entry points are available.
         TypeError: If `recipient_agent` is not a string or `Agent` instance.
         AgentsException: If errors occur during setup or execution.
     """
-    # Determine recipient agent - default to first entry point if not specified
-    target_recipient = recipient_agent
-    if target_recipient is None:
-        if agency.entry_points:
-            target_recipient = agency.entry_points[0]
-            logger.debug(f"No recipient_agent specified for stream, using first entry point: {target_recipient.name}")
-        else:
-            raise ValueError(
-                "No recipient_agent specified and no entry points available. "
-                "Specify recipient_agent or ensure agency has entry points."
-            )
+    wrapper: StreamingRunResponse
 
-    target_agent = resolve_agent(agency, target_recipient)
+    async def _agency_stream() -> Any:
+        nonlocal wrapper
 
-    effective_hooks = hooks_override or agency.persistence_hooks
+        target_recipient = recipient_agent
+        if target_recipient is None:
+            if agency.entry_points:
+                target_recipient = agency.entry_points[0]
+                logger.debug(
+                    "No recipient_agent specified for stream, using first entry point: %s",
+                    target_recipient.name,
+                )
+            else:
+                raise ValueError(
+                    "No recipient_agent specified and no entry points available. "
+                    "Specify recipient_agent or ensure agency has entry points."
+                )
 
-    # Create streaming context for collecting sub-agent events
-    async with agency.event_stream_merger.create_streaming_context() as streaming_context:
-        # Add streaming context to the context override
-        enhanced_context = context_override or {}
-        enhanced_context["_streaming_context"] = streaming_context
+        target_agent = resolve_agent(agency, target_recipient)
 
-        # Get agency context for the target agent (stateless context passing)
-        agency_context = get_agent_context(agency, target_agent.name)
+        effective_hooks = hooks_override or agency.persistence_hooks
 
-        # On handoffs all servers need to be initialized to be used
-        await attach_persistent_mcp_servers(agency)
+        try:
+            async with agency.event_stream_merger.create_streaming_context() as streaming_context:
+                enhanced_context = context_override or {}
+                enhanced_context["_streaming_context"] = streaming_context
 
-        # Get the primary stream
-        primary_stream = target_agent.get_response_stream(
-            message=message,
-            sender_name=None,
-            context_override=enhanced_context,
-            hooks_override=effective_hooks,
-            run_config_override=run_config_override,
-            message_files=message_files,
-            file_ids=file_ids,
-            additional_instructions=additional_instructions,
-            agency_context=agency_context,  # Pass stateless context
-            **kwargs,
-        )
+                agency_context = get_agent_context(agency, target_agent.name)
 
-        # Merge primary stream with events from sub-agents
-        async for event in agency.event_stream_merger.merge_streams(primary_stream, streaming_context):
-            yield event
+                await attach_persistent_mcp_servers(agency)
+
+                primary_stream = target_agent.get_response_stream(
+                    message=message,
+                    sender_name=None,
+                    context_override=enhanced_context,
+                    hooks_override=effective_hooks,
+                    run_config_override=run_config_override,
+                    message_files=message_files,
+                    file_ids=file_ids,
+                    additional_instructions=additional_instructions,
+                    agency_context=agency_context,
+                    **kwargs,
+                )
+
+                if isinstance(primary_stream, StreamingRunResponse):
+                    wrapper._adopt_stream(primary_stream)
+
+                async for event in agency.event_stream_merger.merge_streams(primary_stream, streaming_context):
+                    yield event
+        except asyncio.CancelledError:
+            wrapper._resolve_final_result(None)
+            raise
+        except Exception as exc:
+            wrapper._resolve_exception(exc)
+            raise
+        finally:
+            if not wrapper._has_inner_stream() and wrapper.final_result is None:
+                wrapper._resolve_final_result(None)
+
+    wrapper = StreamingRunResponse(_agency_stream())
+    return wrapper
