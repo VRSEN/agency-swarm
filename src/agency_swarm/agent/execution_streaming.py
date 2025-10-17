@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 from contextlib import AsyncExitStack, suppress
 from typing import TYPE_CHECKING, Any, cast
 
@@ -10,6 +10,7 @@ from agents import (
     RunConfig,
     RunHooks,
     Runner,
+    RunResultStreaming,
     TResponseInputItem,
 )
 from agents.items import MessageOutputItem, RunItem
@@ -28,6 +29,145 @@ if TYPE_CHECKING:
     from agency_swarm.agent.core import AgencyContext, Agent
 
 logger = logging.getLogger(__name__)
+
+
+def _create_future() -> asyncio.Future[Any]:
+    loop = asyncio.get_running_loop()
+    return loop.create_future()
+
+
+class StreamingRunResponse(AsyncGenerator[StreamEvent | dict[str, Any]]):
+    """Async iterable wrapper that exposes the final RunResultStreaming."""
+
+    def __init__(
+        self,
+        generator: AsyncGenerator[StreamEvent | dict[str, Any]],
+        *,
+        final_future: asyncio.Future[RunResultStreaming | None] | None = None,
+        on_resolve: Callable[[RunResultStreaming | None], None] | None = None,
+    ) -> None:
+        self._generator = generator
+        self._final_future: asyncio.Future[RunResultStreaming | None] | None = final_future
+        self._inner: StreamingRunResponse | None = None
+        self._on_resolve = on_resolve
+        self._pending_result: RunResultStreaming | None = None
+        self._pending_exception: BaseException | None = None
+
+    def __aiter__(self) -> AsyncGenerator[StreamEvent | dict[str, Any]]:
+        self._maybe_bind_loop()
+        return self._generator
+
+    async def __anext__(self) -> StreamEvent | dict[str, Any]:
+        self._maybe_bind_loop()
+        return await self._generator.__anext__()
+
+    async def asend(self, value: Any) -> Any:
+        self._maybe_bind_loop()
+        return await self._generator.asend(value)
+
+    async def athrow(self, typ: Any, val: Any = None, tb: Any = None) -> Any:
+        self._maybe_bind_loop()
+        return await self._generator.athrow(typ, val, tb)
+
+    async def aclose(self) -> None:
+        self._maybe_bind_loop()
+        await self._generator.aclose()
+
+    def _adopt_stream(self, other: "StreamingRunResponse") -> None:
+        self._inner = other
+        self._final_future = other._final_future
+        self._pending_result = other._pending_result
+        self._pending_exception = other._pending_exception
+
+    def _has_inner_stream(self) -> bool:
+        return self._inner is not None
+
+    def _maybe_bind_loop(self) -> None:
+        if self._inner is not None:
+            self._inner._maybe_bind_loop()
+            return
+        if self._final_future is None:
+            try:
+                self._final_future = _create_future()
+            except RuntimeError:
+                return
+        self._flush_pending()
+
+    def _flush_pending(self) -> None:
+        if self._final_future is None:
+            return
+        if self._pending_exception is not None and not self._final_future.done():
+            self._final_future.set_exception(self._pending_exception)
+            self._pending_exception = None
+            self._pending_result = None
+        elif self._pending_result is not None and not self._final_future.done():
+            self._final_future.set_result(self._pending_result)
+            self._pending_result = None
+
+    def _resolve_final_result(self, result: RunResultStreaming | None) -> None:
+        if self._inner is not None:
+            self._inner._resolve_final_result(result)
+            return
+        if self._on_resolve is not None:
+            try:
+                self._on_resolve(result)
+            except Exception:  # pragma: no cover - defensive logging
+                logger.exception("StreamingRunResponse on_resolve callback failed")
+        if self._final_future is None:
+            try:
+                self._final_future = _create_future()
+            except RuntimeError:
+                self._pending_result = result
+                self._pending_exception = None
+                return
+        if not self._final_future.done():
+            self._final_future.set_result(result)
+
+    def _resolve_exception(self, exc: BaseException) -> None:
+        if self._inner is not None:
+            self._inner._resolve_exception(exc)
+            return
+        if self._on_resolve is not None:
+            try:
+                self._on_resolve(None)
+            except Exception:  # pragma: no cover - defensive logging
+                logger.exception("StreamingRunResponse on_resolve callback failed after exception")
+        if self._final_future is None:
+            try:
+                self._final_future = _create_future()
+            except RuntimeError:
+                self._pending_result = None
+                self._pending_exception = exc
+                return
+        if not self._final_future.done():
+            self._final_future.set_exception(exc)
+
+    @property
+    def final_result(self) -> RunResultStreaming | None:
+        if self._inner is not None:
+            return self._inner.final_result
+        if self._final_future is None:
+            return self._pending_result
+        if not self._final_future.done() or self._final_future.cancelled():
+            return None
+        try:
+            return self._final_future.result()
+        except Exception:
+            return None
+
+    @property
+    def final_output(self) -> Any:
+        result = self.final_result
+        return getattr(result, "final_output", None) if result is not None else None
+
+    async def wait_final_result(self) -> RunResultStreaming | None:
+        if self._inner is not None:
+            return await self._inner.wait_final_result()
+        self._maybe_bind_loop()
+        if self._final_future is None:
+            self._final_future = _create_future()
+            self._flush_pending()
+        return await asyncio.shield(self._final_future)
 
 
 def _update_names_from_event(
@@ -324,7 +464,7 @@ def perform_streamed_run(
     )
 
 
-async def run_stream_with_guardrails(
+def run_stream_with_guardrails(
     *,
     agent: "Agent",
     initial_history_for_runner: list[TResponseInputItem],
@@ -338,232 +478,257 @@ async def run_stream_with_guardrails(
     parent_run_id: str | None,
     validation_attempts: int,
     throw_input_guardrail_error: bool,
-) -> AsyncGenerator[StreamEvent | dict[str, Any]]:
+    result_callback: Callable[[RunResultStreaming], None] | None = None,
+) -> StreamingRunResponse:
     """Stream events with output-guardrail retries and guidance persistence."""
-    attempts_remaining = int(validation_attempts or 0)
-    history_for_runner = initial_history_for_runner
 
-    while True:
-        master_context_for_run._is_streaming = True
-        try:
-            master_context_for_run._current_agent_run_id = current_agent_run_id
-            master_context_for_run._parent_run_id = parent_run_id
-        except Exception:
-            pass
+    wrapper: StreamingRunResponse
 
-        from agency_swarm.streaming import StreamingContext
+    async def _guarded_stream() -> AsyncGenerator[StreamEvent | dict[str, Any]]:
+        nonlocal wrapper
+        nonlocal current_agent_run_id
+        attempts_remaining = int(validation_attempts or 0)
+        history_for_runner = initial_history_for_runner
 
-        streaming_context = StreamingContext()
-        master_context_for_run._streaming_context = streaming_context
-
-        event_queue: asyncio.Queue[Any] = asyncio.Queue(maxsize=10)
-        guardrail_exception: BaseException | None = None
-        collected_items: list[RunItem] = []
-        persistence_candidates: list[tuple[RunItem, str, str]] = []
-        streaming_result: Any | None = None
-        initial_saved_count = 0
-        if agency_context and agency_context.thread_manager:
+        while True:
+            master_context_for_run._is_streaming = True
             try:
-                initial_saved_count = len(agency_context.thread_manager.get_all_messages())
-            except Exception:
-                initial_saved_count = 0
-
-        async def _streaming_worker(
-            history_for_runner=history_for_runner,
-            master_context_for_run=master_context_for_run,
-            event_queue=event_queue,
-            current_agent_run_id=current_agent_run_id,
-            parent_run_id=parent_run_id,
-            agency_context=agency_context,
-            sender_name=sender_name,
-        ) -> None:
-            nonlocal guardrail_exception, streaming_result
-            local_result = None
-            try:
-                async with AsyncExitStack() as mcp_stack:
-                    for server in agent.mcp_servers:
-                        if getattr(server, "session", None) is None:
-                            await default_mcp_manager.ensure_connected(server)
-                        if getattr(server, "session", None) is None:
-                            logger.warning(f"Entering async context for server {server.name}")
-                            await mcp_stack.enter_async_context(server)  # type: ignore[arg-type]
-
-                    local_result = perform_streamed_run(
-                        agent=agent,
-                        history_for_runner=history_for_runner,
-                        master_context_for_run=master_context_for_run,
-                        hooks_override=hooks_override,
-                        run_config_override=run_config_override,
-                        kwargs=kwargs,
-                    )
-
-                    async for ev in local_result.stream_events():
-                        await event_queue.put(ev)
-            except OutputGuardrailTripwireTriggered as e:
-                guardrail_exception = e
-            except InputGuardrailTripwireTriggered as e:
-                try:
-                    _, guidance_text = _extract_guardrail_texts(e)
-                    append_guardrail_feedback(
-                        agent=agent,
-                        agency_context=agency_context,
-                        sender_name=sender_name,
-                        parent_run_id=parent_run_id,
-                        current_agent_run_id=current_agent_run_id,
-                        exception=e,
-                        include_assistant=False,
-                    )
-                except Exception:
-                    guidance_text = str(e)
-                payload = {"type": "input_guardrail_guidance", "content": guidance_text}
-                if throw_input_guardrail_error:
-                    payload["type"] = "error"
-                await event_queue.put(payload)
-            except Exception as e:
-                await event_queue.put({"type": "error", "content": str(e)})
-            finally:
-                try:
-                    if local_result is not None:
-                        streaming_result = local_result
-                        local_result.cancel()
-                except Exception:
-                    pass
-                await event_queue.put(None)
-
-        worker_task = asyncio.create_task(_streaming_worker())
-
-        async def _forward_subagent_events(
-            streaming_context=streaming_context,
-            event_queue=event_queue,
-        ) -> None:
-            while True:
-                try:
-                    sub_event = await streaming_context.get_event()
-                    if sub_event is None:
-                        break
-                    if hasattr(sub_event, "__dict__"):
-                        sub_event._forwarded = True
-                    await event_queue.put(sub_event)
-                except Exception:
-                    break
-
-        forward_task = asyncio.create_task(_forward_subagent_events())
-
-        try:
-            current_stream_agent_name = agent.name
-            while True:
-                if worker_task.done() and event_queue.empty():
-                    break
-                try:
-                    event = await asyncio.wait_for(event_queue.get(), timeout=0.25)
-                except asyncio.TimeoutError:  # noqa: UP041
-                    continue
-                if event is None:
-                    break
-                if isinstance(event, dict) and event.get("type") == "error":
-                    yield event  # type: ignore[misc]
-                    continue
-                if isinstance(event, dict) and event.get("type") == "input_guardrail_guidance":
-                    guardrail_message = MessageOutputItem(
-                        raw_item=ResponseOutputMessage(
-                            id="msg_input_guardrail_guidance",
-                            content=[
-                                ResponseOutputText(
-                                    annotations=[],
-                                    text=event.get("content", ""),
-                                    type="output_text",
-                                )
-                            ],
-                            role="assistant",
-                            status="completed",
-                            type="message",
-                        ),
-                        type="message_output_item",
-                        agent=agent,
-                    )
-                    guardrail_event = RunItemStreamEvent(
-                        name="message_output_created",
-                        item=guardrail_message,
-                        type="run_item_stream_event",
-                    )
-                    yield guardrail_event
-                    continue
-
-                (
-                    current_stream_agent_name,
-                    current_agent_run_id,
-                ) = _update_names_from_event(
-                    event,
-                    current_stream_agent_name,
-                    current_agent_run_id,
-                    master_context_for_run,
-                )
-
-                if not getattr(event, "_forwarded", False):
-                    event = add_agent_name_to_event(
-                        event,
-                        current_stream_agent_name,
-                        sender_name,
-                        agent_run_id=current_agent_run_id,
-                        parent_run_id=parent_run_id,
-                    )
-
-                if isinstance(event, RunItemStreamEvent) and event.item:
-                    collected_items.append(event.item)
-
-                _persist_run_item_if_needed(
-                    event,
-                    agent=agent,
-                    sender_name=sender_name,
-                    parent_run_id=parent_run_id,
-                    current_stream_agent_name=current_stream_agent_name,
-                    current_agent_run_id=current_agent_run_id,
-                    agency_context=agency_context,
-                    persistence_candidates=persistence_candidates,
-                )
-
-                yield event
-
-            if guardrail_exception is None:
-                if agency_context and agency_context.thread_manager and streaming_result is not None:
-                    _persist_streamed_items(
-                        streaming_result=streaming_result,
-                        history_for_runner=history_for_runner,
-                        persistence_candidates=persistence_candidates,
-                        collected_items=collected_items,
-                        agent=agent,
-                        sender_name=sender_name,
-                        parent_run_id=parent_run_id,
-                        fallback_agent_run_id=current_agent_run_id,
-                        agency_context=agency_context,
-                        initial_saved_count=initial_saved_count,
-                    )
-                return
-
-            if attempts_remaining <= 0:
-                raise guardrail_exception
-            attempts_remaining -= 1
-
-            history_for_runner = append_guardrail_feedback(
-                agent=agent,
-                agency_context=agency_context,
-                sender_name=sender_name,
-                parent_run_id=parent_run_id,
-                current_agent_run_id=current_agent_run_id,
-                exception=guardrail_exception,
-                include_assistant=False,
-            )
-            continue
-
-        finally:
-            try:
-                if not worker_task.done():
-                    worker_task.cancel()
-                    with suppress(asyncio.CancelledError):
-                        await worker_task
-                if not forward_task.done():
-                    forward_task.cancel()
-                    with suppress(asyncio.CancelledError):
-                        await forward_task
+                master_context_for_run._current_agent_run_id = current_agent_run_id
+                master_context_for_run._parent_run_id = parent_run_id
             except Exception:
                 pass
+
+            from agency_swarm.streaming import StreamingContext
+
+            streaming_context = StreamingContext()
+            master_context_for_run._streaming_context = streaming_context
+
+            event_queue: asyncio.Queue[Any] = asyncio.Queue(maxsize=10)
+            guardrail_exception: BaseException | None = None
+            collected_items: list[RunItem] = []
+            persistence_candidates: list[tuple[RunItem, str, str]] = []
+            streaming_result: RunResultStreaming | None = None
+            initial_saved_count = 0
+            if agency_context and agency_context.thread_manager:
+                try:
+                    initial_saved_count = len(agency_context.thread_manager.get_all_messages())
+                except Exception:
+                    initial_saved_count = 0
+
+            async def _streaming_worker(
+                history_for_runner=history_for_runner,
+                master_context_for_run=master_context_for_run,
+                event_queue=event_queue,
+                current_agent_run_id=current_agent_run_id,
+                parent_run_id=parent_run_id,
+                agency_context=agency_context,
+                sender_name=sender_name,
+            ) -> None:
+                nonlocal guardrail_exception, streaming_result
+                local_result = None
+                try:
+                    async with AsyncExitStack() as mcp_stack:
+                        for server in agent.mcp_servers:
+                            if getattr(server, "session", None) is None:
+                                await default_mcp_manager.ensure_connected(server)
+                            if getattr(server, "session", None) is None:
+                                logger.warning(f"Entering async context for server {server.name}")
+                                await mcp_stack.enter_async_context(server)  # type: ignore[arg-type]
+
+                        local_result = perform_streamed_run(
+                            agent=agent,
+                            history_for_runner=history_for_runner,
+                            master_context_for_run=master_context_for_run,
+                            hooks_override=hooks_override,
+                            run_config_override=run_config_override,
+                            kwargs=kwargs,
+                        )
+
+                        async for ev in local_result.stream_events():
+                            await event_queue.put(ev)
+                except OutputGuardrailTripwireTriggered as e:
+                    guardrail_exception = e
+                except InputGuardrailTripwireTriggered as e:
+                    try:
+                        _, guidance_text = _extract_guardrail_texts(e)
+                        append_guardrail_feedback(
+                            agent=agent,
+                            agency_context=agency_context,
+                            sender_name=sender_name,
+                            parent_run_id=parent_run_id,
+                            current_agent_run_id=current_agent_run_id,
+                            exception=e,
+                            include_assistant=False,
+                        )
+                    except Exception:
+                        guidance_text = str(e)
+                    payload = {"type": "input_guardrail_guidance", "content": guidance_text}
+                    if throw_input_guardrail_error:
+                        payload["type"] = "error"
+                    await event_queue.put(payload)
+                except Exception as e:
+                    await event_queue.put({"type": "error", "content": str(e)})
+                finally:
+                    try:
+                        if local_result is not None:
+                            streaming_result = cast(RunResultStreaming, local_result)
+                            local_result.cancel()
+                    except Exception:
+                        pass
+                    await event_queue.put(None)
+
+            worker_task = asyncio.create_task(_streaming_worker())
+
+            async def _forward_subagent_events(
+                streaming_context=streaming_context,
+                event_queue=event_queue,
+            ) -> None:
+                while True:
+                    try:
+                        sub_event = await streaming_context.get_event()
+                        if sub_event is None:
+                            break
+                        if hasattr(sub_event, "__dict__"):
+                            sub_event._forwarded = True
+                        await event_queue.put(sub_event)
+                    except Exception:
+                        break
+
+            forward_task = asyncio.create_task(_forward_subagent_events())
+
+            try:
+                current_stream_agent_name = agent.name
+                while True:
+                    if worker_task.done() and event_queue.empty():
+                        break
+                    try:
+                        event = await asyncio.wait_for(event_queue.get(), timeout=0.25)
+                    except asyncio.TimeoutError:  # noqa: UP041
+                        continue
+                    if event is None:
+                        break
+                    if isinstance(event, dict) and event.get("type") == "error":
+                        yield event  # type: ignore[misc]
+                        continue
+                    if isinstance(event, dict) and event.get("type") == "input_guardrail_guidance":
+                        guardrail_message = MessageOutputItem(
+                            raw_item=ResponseOutputMessage(
+                                id="msg_input_guardrail_guidance",
+                                content=[
+                                    ResponseOutputText(
+                                        annotations=[],
+                                        text=event.get("content", ""),
+                                        type="output_text",
+                                    )
+                                ],
+                                role="assistant",
+                                status="completed",
+                                type="message",
+                            ),
+                            type="message_output_item",
+                            agent=agent,
+                        )
+                        guardrail_event = RunItemStreamEvent(
+                            name="message_output_created",
+                            item=guardrail_message,
+                            type="run_item_stream_event",
+                        )
+                        yield guardrail_event
+                        continue
+
+                    (
+                        current_stream_agent_name,
+                        current_agent_run_id,
+                    ) = _update_names_from_event(
+                        event,
+                        current_stream_agent_name,
+                        current_agent_run_id,
+                        master_context_for_run,
+                    )
+
+                    if not getattr(event, "_forwarded", False):
+                        event = add_agent_name_to_event(
+                            event,
+                            current_stream_agent_name,
+                            sender_name,
+                            agent_run_id=current_agent_run_id,
+                            parent_run_id=parent_run_id,
+                        )
+
+                    if isinstance(event, RunItemStreamEvent) and event.item:
+                        collected_items.append(event.item)
+
+                    _persist_run_item_if_needed(
+                        event,
+                        agent=agent,
+                        sender_name=sender_name,
+                        parent_run_id=parent_run_id,
+                        current_stream_agent_name=current_stream_agent_name,
+                        current_agent_run_id=current_agent_run_id,
+                        agency_context=agency_context,
+                        persistence_candidates=persistence_candidates,
+                    )
+
+                    yield event
+
+                if guardrail_exception is None:
+                    if agency_context and agency_context.thread_manager and streaming_result is not None:
+                        _persist_streamed_items(
+                            streaming_result=streaming_result,
+                            history_for_runner=history_for_runner,
+                            persistence_candidates=persistence_candidates,
+                            collected_items=collected_items,
+                            agent=agent,
+                            sender_name=sender_name,
+                            parent_run_id=parent_run_id,
+                            fallback_agent_run_id=current_agent_run_id,
+                            agency_context=agency_context,
+                            initial_saved_count=initial_saved_count,
+                        )
+                    if streaming_result is not None:
+                        if result_callback is not None:
+                            try:
+                                result_callback(streaming_result)
+                            except Exception:
+                                logger.exception("Failed to store streaming run result callback")
+                        wrapper._resolve_final_result(streaming_result)
+                    else:
+                        wrapper._resolve_final_result(None)
+                    return
+
+                if attempts_remaining <= 0:
+                    wrapper._resolve_exception(guardrail_exception)
+                    raise guardrail_exception
+                attempts_remaining -= 1
+
+                history_for_runner = append_guardrail_feedback(
+                    agent=agent,
+                    agency_context=agency_context,
+                    sender_name=sender_name,
+                    parent_run_id=parent_run_id,
+                    current_agent_run_id=current_agent_run_id,
+                    exception=guardrail_exception,
+                    include_assistant=False,
+                )
+                continue
+            except asyncio.CancelledError:
+                wrapper._resolve_final_result(None)
+                raise
+            except Exception as exc:
+                wrapper._resolve_exception(exc)
+                raise
+            finally:
+                try:
+                    if not worker_task.done():
+                        worker_task.cancel()
+                        with suppress(asyncio.CancelledError):
+                            await worker_task
+                    if not forward_task.done():
+                        forward_task.cancel()
+                        with suppress(asyncio.CancelledError):
+                            await forward_task
+                except Exception:
+                    pass
+
+    wrapper = StreamingRunResponse(_guarded_stream())
+    return wrapper

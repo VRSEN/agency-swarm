@@ -3,13 +3,13 @@ import atexit
 import logging
 import os
 import warnings
-from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING, Any
 
 from agents import RunConfig, RunHooks, RunResult, TResponseInputItem
 
 from agency_swarm.agent.agent_flow import AgentFlow
 from agency_swarm.agent.core import AgencyContext, Agent
+from agency_swarm.agent.execution_streaming import StreamingRunResponse
 from agency_swarm.hooks import PersistenceHooks
 from agency_swarm.streaming.utils import EventStreamMerger
 from agency_swarm.tools.mcp_manager import default_mcp_manager
@@ -335,7 +335,7 @@ class Agency:
             **kwargs,
         )
 
-    async def get_response_stream(
+    def get_response_stream(
         self,
         message: str | list[TResponseInputItem],
         recipient_agent: str | Agent | None = None,
@@ -346,12 +346,12 @@ class Agency:
         file_ids: list[str] | None = None,
         additional_instructions: str | None = None,
         **kwargs: Any,
-    ) -> AsyncGenerator[Any]:
+    ) -> StreamingRunResponse:
         """
         Initiates a streaming interaction with a specified agent within the agency.
 
-        Similar to `get_response`, but delegates to the target agent's `get_response_stream`
-        method to yield events as they occur during execution.
+        Returns a :class:`StreamingRunResponse` wrapper that mirrors
+        :func:`agency_swarm.agency.responses.get_response_stream`.
 
         Args:
             message (str | list[dict[str, Any]]): The input message for the agent.
@@ -366,12 +366,13 @@ class Agency:
                 agent's instructions for this run only.
             **kwargs: Additional arguments passed down to `get_response_stream` and `run_streamed`.
 
-        Yields:
-            Any: Events from the `agents.Runner.run_streamed` execution.
+        Returns:
+            StreamingRunResponse: Async iterable combining events from the primary
+            agent and delegated sub-agents with access to the final run result.
         """
         from .responses import get_response_stream
 
-        async for event in get_response_stream(
+        return get_response_stream(
             self,
             message,
             recipient_agent,
@@ -382,8 +383,7 @@ class Agency:
             file_ids,
             additional_instructions,
             **kwargs,
-        ):
-            yield event
+        )
 
     def get_completion(
         self,

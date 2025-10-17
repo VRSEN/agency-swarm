@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import uuid
 from collections.abc import AsyncGenerator
@@ -20,7 +21,7 @@ from agency_swarm.agent.execution_helpers import (
     run_sync_with_guardrails,
     setup_execution,
 )
-from agency_swarm.agent.execution_streaming import run_stream_with_guardrails
+from agency_swarm.agent.execution_streaming import StreamingRunResponse, run_stream_with_guardrails
 from agency_swarm.messages import (
     MessageFilter,
     MessageFormatter,
@@ -208,7 +209,7 @@ class Execution:
                 # Ensure instructions are restored even if context was not prepared
                 self.agent.instructions = original_instructions
 
-    async def get_response_stream(
+    def get_response_stream(
         self,
         message: str | list[TResponseInputItem],
         sender_name: str | None = None,
@@ -221,13 +222,12 @@ class Execution:
         agency_context: "AgencyContext | None" = None,
         parent_run_id: str | None = None,  # Parent agent's execution ID
         **kwargs: Any,
-    ) -> AsyncGenerator[StreamEvent | dict[str, Any]]:
+    ) -> StreamingRunResponse:
         """
         Streams the agent's response turn-by-turn, yielding events as they occur.
 
-        Similar to `get_response`, but returns an async generator that yields
-        `StreamEvent` objects (plus structured guidance/error dict payloads) in real-time.
-        This allows streaming responses to be displayed or processed incrementally.
+        Returns a :class:`StreamingRunResponse` that can be iterated to consume stream
+        events while also exposing the final :class:`RunResultStreaming` when available.
 
         Args:
             message: The input message as a string or structured input items list
@@ -241,83 +241,107 @@ class Execution:
                 the agent's instructions for this run only
             **kwargs: Additional keyword arguments including max_turns
 
-        Yields:
-            StreamEvent: Events generated during the agent's execution
+        Returns:
+            StreamingRunResponse: Async iterable yielding stream events and exposing the
+            final run result.
         """
-        # Validate input
+
+        async def _error_stream(error_message: str) -> AsyncGenerator[dict[str, str]]:
+            yield {"type": "error", "content": error_message}
+
         if message is None:
             logger.error("message cannot be None")
-            yield {"type": "error", "content": "message cannot be None"}  # type: ignore[misc]
-            return
+            error_wrapper = StreamingRunResponse(_error_stream("message cannot be None"))
+            error_wrapper._resolve_final_result(None)
+            return error_wrapper
         if isinstance(message, str) and not message.strip():
             logger.error("message cannot be empty")
-            yield {"type": "error", "content": "message cannot be empty"}  # type: ignore[misc]
-            return
+            error_wrapper = StreamingRunResponse(_error_stream("message cannot be empty"))
+            error_wrapper._resolve_final_result(None)
+            return error_wrapper
 
         logger.info(f"Agent '{self.agent.name}' starting streaming run.")
 
-        # Common setup and validation
-        original_instructions = setup_execution(
-            self.agent, sender_name, agency_context, additional_instructions, "get_response_stream"
-        )
+        wrapper: StreamingRunResponse
 
-        master_context_for_run = None
-        try:
-            # Process message and file attachments
-            # attachment_manager is always initialized in Agent.__init__ via setup_file_manager()
-            if self.agent.attachment_manager is None:
-                raise RuntimeError(f"attachment_manager not initialized for agent {self.agent.name}")
-            processed_current_message_items = await self.agent.attachment_manager.process_message_and_files(
-                message, file_ids, message_files, kwargs, "get_response_stream"
-            )
-            # Assign a run id for the current active agent in the stream (may change on handoff/new-agent)
-            current_agent_run_id = f"agent_run_{uuid.uuid4().hex}"
+        async def _stream() -> AsyncGenerator[StreamEvent | dict[str, Any]]:
+            nonlocal wrapper
 
-            # Prepare history for runner, persisting initiating messages with agent_run_id and parent_run_id
-            history_for_runner = MessageFormatter.prepare_history_for_runner(
-                processed_current_message_items,
-                self.agent,
-                sender_name,
-                agency_context,
-                agent_run_id=current_agent_run_id,
-                parent_run_id=parent_run_id,
+            original_instructions = setup_execution(
+                self.agent, sender_name, agency_context, additional_instructions, "get_response_stream"
             )
 
-            logger.debug(
-                f"Starting streaming run for agent '{self.agent.name}' with {len(history_for_runner)} history items."
-            )
+            master_context_for_run = None
+            stream_handle: StreamingRunResponse | None = None
 
-            agency_name = "Unnamed Agency"
-            if agency_context and agency_context.agency_instance:
-                agency_name = getattr(agency_context.agency_instance, "name", None) or agency_name
-
-            # Prepare context for streaming and delegate to helper generator
-            master_context_for_run = prepare_master_context(self.agent, context_override, agency_context)
-            async for event in run_stream_with_guardrails(
-                agent=self.agent,
-                initial_history_for_runner=history_for_runner,
-                master_context_for_run=master_context_for_run,
-                sender_name=sender_name,
-                agency_context=agency_context,
-                hooks_override=hooks_override,
-                run_config_override=run_config_override or RunConfig(workflow_name=agency_name),
-                kwargs=kwargs,
-                current_agent_run_id=current_agent_run_id,
-                parent_run_id=parent_run_id,
-                validation_attempts=int(getattr(self.agent, "validation_attempts", 1) or 0),
-                throw_input_guardrail_error=getattr(self.agent, "throw_input_guardrail_error", False),
-            ):
-                yield event
-
-        finally:
-            # Cleanup execution state
-            if master_context_for_run is not None:
-                cleanup_execution(
-                    self.agent, original_instructions, context_override, agency_context, master_context_for_run
+            try:
+                if self.agent.attachment_manager is None:
+                    raise RuntimeError(f"attachment_manager not initialized for agent {self.agent.name}")
+                processed_current_message_items = await self.agent.attachment_manager.process_message_and_files(
+                    message, file_ids, message_files, kwargs, "get_response_stream"
                 )
-            else:
-                # Ensure instructions are restored even if context was not prepared
-                self.agent.instructions = original_instructions
-            if self.agent.attachment_manager is None:
-                raise RuntimeError(f"attachment_manager not initialized for agent {self.agent.name}")
-            self.agent.attachment_manager.attachments_cleanup()
+                current_agent_run_id = f"agent_run_{uuid.uuid4().hex}"
+
+                history_for_runner = MessageFormatter.prepare_history_for_runner(
+                    processed_current_message_items,
+                    self.agent,
+                    sender_name,
+                    agency_context,
+                    agent_run_id=current_agent_run_id,
+                    parent_run_id=parent_run_id,
+                )
+
+                logger.debug(
+                    "Starting streaming run for agent '%s' with %d history items.",
+                    self.agent.name,
+                    len(history_for_runner),
+                )
+
+                agency_name = "Unnamed Agency"
+                if agency_context and agency_context.agency_instance:
+                    agency_name = getattr(agency_context.agency_instance, "name", None) or agency_name
+
+                master_context_for_run = prepare_master_context(self.agent, context_override, agency_context)
+
+                stream_handle = run_stream_with_guardrails(
+                    agent=self.agent,
+                    initial_history_for_runner=history_for_runner,
+                    master_context_for_run=master_context_for_run,
+                    sender_name=sender_name,
+                    agency_context=agency_context,
+                    hooks_override=hooks_override,
+                    run_config_override=run_config_override or RunConfig(workflow_name=agency_name),
+                    kwargs=kwargs,
+                    current_agent_run_id=current_agent_run_id,
+                    parent_run_id=parent_run_id,
+                    validation_attempts=int(getattr(self.agent, "validation_attempts", 1) or 0),
+                    throw_input_guardrail_error=getattr(self.agent, "throw_input_guardrail_error", False),
+                )
+
+                if isinstance(stream_handle, StreamingRunResponse):
+                    wrapper._adopt_stream(stream_handle)
+
+                async for event in stream_handle:
+                    yield event
+            except asyncio.CancelledError:
+                wrapper._resolve_final_result(None)
+                raise
+            except Exception as exc:
+                wrapper._resolve_exception(exc)
+                raise
+            finally:
+                if master_context_for_run is not None:
+                    cleanup_execution(
+                        self.agent, original_instructions, context_override, agency_context, master_context_for_run
+                    )
+                else:
+                    self.agent.instructions = original_instructions
+                if self.agent.attachment_manager is None:
+                    raise RuntimeError(f"attachment_manager not initialized for agent {self.agent.name}")
+                self.agent.attachment_manager.attachments_cleanup()
+
+                if stream_handle is None and wrapper.final_result is None:
+                    wrapper._resolve_final_result(None)
+
+        wrapper = StreamingRunResponse(_stream())
+        return wrapper

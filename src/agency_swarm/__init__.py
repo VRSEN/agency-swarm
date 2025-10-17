@@ -46,6 +46,7 @@ from openai.types.shared import Reasoning  # noqa: E402
 
 from .agency.core import Agency  # noqa: E402
 from .agent.core import AgencyContext, Agent  # noqa: E402
+from .agent.execution_streaming import StreamingRunResponse  # noqa: E402
 from .context import MasterContext  # noqa: E402
 from .hooks import PersistenceHooks  # noqa: E402
 from .integrations.fastapi import run_fastapi  # noqa: E402
@@ -77,6 +78,7 @@ __all__ = [
     "Agent",
     "Agency",
     "AgencyContext",
+    "StreamingRunResponse",
     "BaseTool",
     "MasterContext",
     "ThreadManager",

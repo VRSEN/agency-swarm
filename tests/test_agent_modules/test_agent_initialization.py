@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock
 
-from agents import FunctionTool, ModelSettings
+from agents import FunctionTool, ModelSettings, StopAtTools
 from pydantic import BaseModel, Field
 
 from agency_swarm import Agent
@@ -37,6 +37,22 @@ def test_agent_initialization_with_tools():
     agent = Agent(name="Agent2", instructions="Use tools", tools=[tool1])
     assert len(agent.tools) == 1
     assert agent.tools[0] == tool1
+
+
+def test_agent_initialization_with_stop_at_tools_object():
+    """Agent accepts StopAtTools typed dict for tool_use_behavior."""
+    behavior = StopAtTools(stop_at_tool_names=["ToolA", "ToolB"])
+    agent = Agent(name="AgentStopAtTools", instructions="Test", tool_use_behavior=behavior)
+
+    assert agent.tool_use_behavior == behavior
+
+
+def test_agent_initialization_with_stop_at_tools_dict():
+    """Agent accepts plain StopAtTools-compatible dict for tool_use_behavior."""
+    behavior_dict = {"stop_at_tool_names": ["ToolC"]}
+    agent = Agent(name="AgentStopAtToolsDict", instructions="Test", tool_use_behavior=behavior_dict)
+
+    assert agent.tool_use_behavior == behavior_dict
 
 
 def test_agent_initialization_with_model_settings():
