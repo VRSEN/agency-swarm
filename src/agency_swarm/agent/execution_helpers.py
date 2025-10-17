@@ -456,12 +456,12 @@ def get_run_trace_id(run_config: RunConfig | None, agency_context: "AgencyContex
         str: The trace ID to use for this run
 
     The function follows this priority order:
-    1. Active OpenAI trace context (highest priority, from `with trace()` blocks)
-    2. Explicit trace_id from run_config (allows manual override)
+    1. Explicit trace_id from run_config (allows manual override)
+    2. Active OpenAI trace context (from `with trace()` blocks)
     3. Most recent run_trace_id from the thread history (preserves continuity)
     4. Newly generated trace_id (fallback for new conversations)
     """
-    # Next try to extract from the run config, to allow for override
+    # First try to extract from the run config, to allow for override
     if run_config:
         if hasattr(run_config, "trace_id") and run_config.trace_id:
             trace_id = run_config.trace_id
@@ -470,7 +470,7 @@ def get_run_trace_id(run_config: RunConfig | None, agency_context: "AgencyContex
             else:
                 return trace_id
 
-    # First check if we're inside an active OpenAI trace() context
+    # Next check if we're inside an active OpenAI trace() context
     current_trace = tracing.get_current_trace()
     if current_trace and hasattr(current_trace, "trace_id") and current_trace.trace_id:
         return current_trace.trace_id
@@ -481,7 +481,7 @@ def get_run_trace_id(run_config: RunConfig | None, agency_context: "AgencyContex
         messages = thread_manager.get_all_messages()
         if messages:
             for message in reversed(messages):
-                trace_id = message.get("run_trace_id")
+                trace_id = message.get("run_trace_id")  # type: ignore[assignment]
                 if trace_id:
                     if not TRACE_REGEX.match(trace_id):
                         logger.warning(f"Incorrectly formatted trace_id: {trace_id}, ignoring")
