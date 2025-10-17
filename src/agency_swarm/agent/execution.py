@@ -16,6 +16,7 @@ from agents.stream_events import StreamEvent
 from agency_swarm.agent.execution_helpers import (
     cleanup_execution,
     extract_hosted_tool_results_if_needed,
+    get_run_trace_id,
     prepare_master_context,
     run_item_to_tresponse_input_item,
     run_sync_with_guardrails,
@@ -92,6 +93,8 @@ class Execution:
             # Generate a unique run id for this agent execution (non-streaming)
             current_agent_run_id = f"agent_run_{uuid.uuid4().hex}"
 
+            run_trace_id = get_run_trace_id(run_config_override, agency_context)
+
             # Prepare history for runner, persisting initiating messages with agent_run_id and parent_run_id
             history_for_runner = MessageFormatter.prepare_history_for_runner(
                 processed_current_message_items,
@@ -100,6 +103,7 @@ class Execution:
                 agency_context,
                 agent_run_id=current_agent_run_id,
                 parent_run_id=parent_run_id,
+                run_trace_id=run_trace_id,
             )
             logger.debug(f"Running agent '{self.agent.name}' with history length {len(history_for_runner)}")
 
@@ -122,10 +126,11 @@ class Execution:
                 sender_name=sender_name,
                 agency_context=agency_context,
                 hooks_override=hooks_override,
-                run_config_override=run_config_override or RunConfig(workflow_name=agency_name),
+                run_config_override=run_config_override or RunConfig(workflow_name=agency_name, trace_id=run_trace_id),
                 kwargs=kwargs,
                 current_agent_run_id=current_agent_run_id,
                 parent_run_id=parent_run_id,
+                run_trace_id=run_trace_id,
                 validation_attempts=int(getattr(self.agent, "validation_attempts", 1) or 0),
                 throw_input_guardrail_error=getattr(self.agent, "throw_input_guardrail_error", False),
             )
@@ -170,6 +175,7 @@ class Execution:
                             caller_agent=sender_name,
                             agent_run_id=current_agent_run_id,
                             parent_run_id=parent_run_id,
+                            run_trace_id=run_trace_id,
                         )
                         items_to_save.append(formatted_item)
                         content_preview = str(item_dict.get("content", ""))[:50]
@@ -282,6 +288,8 @@ class Execution:
                 )
                 current_agent_run_id = f"agent_run_{uuid.uuid4().hex}"
 
+                run_trace_id = get_run_trace_id(run_config_override, agency_context)
+
                 history_for_runner = MessageFormatter.prepare_history_for_runner(
                     processed_current_message_items,
                     self.agent,
@@ -289,6 +297,7 @@ class Execution:
                     agency_context,
                     agent_run_id=current_agent_run_id,
                     parent_run_id=parent_run_id,
+                    run_trace_id=run_trace_id,
                 )
 
                 logger.debug(
@@ -310,10 +319,12 @@ class Execution:
                     sender_name=sender_name,
                     agency_context=agency_context,
                     hooks_override=hooks_override,
-                    run_config_override=run_config_override or RunConfig(workflow_name=agency_name),
+                    run_config_override=run_config_override
+                    or RunConfig(workflow_name=agency_name, trace_id=run_trace_id),
                     kwargs=kwargs,
                     current_agent_run_id=current_agent_run_id,
                     parent_run_id=parent_run_id,
+                    run_trace_id=run_trace_id,
                     validation_attempts=int(getattr(self.agent, "validation_attempts", 1) or 0),
                     throw_input_guardrail_error=getattr(self.agent, "throw_input_guardrail_error", False),
                 )
