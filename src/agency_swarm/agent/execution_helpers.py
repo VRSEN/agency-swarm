@@ -445,6 +445,7 @@ def cleanup_execution(
         agent.handoffs.clear()
         agent.handoffs.extend(restore_handoffs)
 
+
 def get_run_trace_id(run_config: RunConfig | None, agency_context: "AgencyContext | None" = None) -> str:
     """Extract existing trace id or generate a new one if not present.
 
@@ -461,31 +462,51 @@ def get_run_trace_id(run_config: RunConfig | None, agency_context: "AgencyContex
     3. Most recent run_trace_id from the thread history (preserves continuity)
     4. Newly generated trace_id (fallback for new conversations)
     """
+    resolved_trace_id: str | None = None
+    should_assign_trace = False
+
     # First try to extract from the run config, to allow for override
-    if run_config:
-        if hasattr(run_config, "trace_id") and run_config.trace_id:
-            trace_id = run_config.trace_id
-            if not TRACE_REGEX.match(trace_id):
-                logger.warning(f"Incorrectly formatted trace_id: {trace_id}, ignoring")
-            else:
-                return trace_id
+    if run_config and hasattr(run_config, "trace_id"):
+        trace_value = getattr(run_config, "trace_id", None)
+        if isinstance(trace_value, str) and trace_value:
+            if TRACE_REGEX.match(trace_value):
+                return trace_value
+            logger.warning(f"Incorrectly formatted trace_id: {trace_value}, ignoring")
+            should_assign_trace = True
+        else:
+            should_assign_trace = True
 
     # Next check if we're inside an active OpenAI trace() context
     current_trace = tracing.get_current_trace()
-    if current_trace and hasattr(current_trace, "trace_id") and current_trace.trace_id:
-        return current_trace.trace_id
+    current_trace_id = getattr(current_trace, "trace_id", None)
+    if isinstance(current_trace_id, str) and current_trace_id:
+        resolved_trace_id = current_trace_id
+    else:
+        # If not present, try to extract from the thread manager
+        if agency_context:
+            thread_manager = agency_context.thread_manager
+            messages = thread_manager.get_all_messages()
+            if messages:
+                for message in reversed(messages):
+                    trace_from_history = message.get("run_trace_id")
+                    if not trace_from_history:
+                        continue
+                    if not isinstance(trace_from_history, str):
+                        logger.warning("Incorrectly typed trace_id in history, ignoring")
+                        continue
+                    if not TRACE_REGEX.match(trace_from_history):
+                        logger.warning(f"Incorrectly formatted trace_id: {trace_from_history}, ignoring")
+                        continue
+                    resolved_trace_id = trace_from_history
+                    break
+    if resolved_trace_id is None:
+        # If not found, generate a new one
+        resolved_trace_id = tracing.gen_trace_id()
 
-    # If not present, try to extract from the thread manager
-    if agency_context:
-        thread_manager = agency_context.thread_manager
-        messages = thread_manager.get_all_messages()
-        if messages:
-            for message in reversed(messages):
-                trace_id = message.get("run_trace_id")  # type: ignore[assignment]
-                if trace_id:
-                    if not TRACE_REGEX.match(trace_id):
-                        logger.warning(f"Incorrectly formatted trace_id: {trace_id}, ignoring")
-                    else:
-                        return trace_id
-    # If not found, generate a new one
-    return tracing.gen_trace_id()
+    if should_assign_trace and run_config and hasattr(run_config, "trace_id"):
+        try:
+            run_config.trace_id = resolved_trace_id
+        except Exception:
+            logger.warning("Failed to assign trace_id to run_config override", exc_info=True)
+
+    return resolved_trace_id

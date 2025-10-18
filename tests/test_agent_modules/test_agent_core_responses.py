@@ -88,7 +88,25 @@ async def test_get_response_with_overrides(mock_runner_run, minimal_agent):
     assert "hooks" in call_kwargs
     assert call_kwargs["hooks"] == hooks_override
     assert "run_config" in call_kwargs
-    assert call_kwargs["run_config"] == run_config
+    assert call_kwargs["run_config"] is run_config
+    assert isinstance(run_config.trace_id, str)
+    assert run_config.trace_id.startswith("trace_")
+
+
+@pytest.mark.asyncio
+@patch("agents.Runner.run", new_callable=AsyncMock)
+async def test_get_response_with_invalid_trace_override_overwrites(mock_runner_run, minimal_agent):
+    mock_runner_run.return_value = MagicMock(new_items=[], final_output="Test response")
+    run_config = RunConfig(trace_id="not_a_trace")
+
+    await minimal_agent.get_response("Test message", run_config_override=run_config)
+
+    mock_runner_run.assert_called_once()
+    patched_run_config = mock_runner_run.call_args[1]["run_config"]
+    assert patched_run_config is run_config
+    assert isinstance(run_config.trace_id, str)
+    assert run_config.trace_id != "not_a_trace"
+    assert run_config.trace_id.startswith("trace_")
 
 
 @pytest.mark.asyncio
