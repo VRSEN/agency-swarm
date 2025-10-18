@@ -30,6 +30,7 @@ class MessageFormatter:
         "agent_run_id",
         "parent_run_id",
         "message_origin",
+        "run_trace_id",
     ]
 
     @staticmethod
@@ -39,6 +40,7 @@ class MessageFormatter:
         caller_agent: str | None = None,
         agent_run_id: str | None = None,
         parent_run_id: str | None = None,
+        run_trace_id: str | None = None,
     ) -> TResponseInputItem:
         """Add agency-specific metadata to a message.
 
@@ -59,6 +61,8 @@ class MessageFormatter:
             modified_message["agent_run_id"] = agent_run_id  # type: ignore[typeddict-unknown-key]
         if parent_run_id is not None:
             modified_message["parent_run_id"] = parent_run_id  # type: ignore[typeddict-unknown-key]
+        if run_trace_id is not None:
+            modified_message["run_trace_id"] = run_trace_id  # type: ignore[typeddict-unknown-key]
         # Use microsecond precision to reduce timestamp collisions
         # time.time() returns seconds since epoch; multiply to get microseconds
         modified_message["timestamp"] = int(time.time() * 1_000_000)  # type: ignore[typeddict-unknown-key]
@@ -75,6 +79,7 @@ class MessageFormatter:
         agency_context: "AgencyContext | None" = None,
         agent_run_id: str | None = None,
         parent_run_id: str | None = None,
+        run_trace_id: str | None = None,
     ) -> list[TResponseInputItem]:
         """Prepare conversation history for the runner."""
         # Get thread manager from context (required)
@@ -92,6 +97,7 @@ class MessageFormatter:
                 caller_agent=sender_name,
                 agent_run_id=agent_run_id,
                 parent_run_id=parent_run_id,
+                run_trace_id=run_trace_id,
             )
             messages_to_save.append(formatted_msg)  # type: ignore[arg-type]
 

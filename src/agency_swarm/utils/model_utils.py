@@ -1,4 +1,5 @@
 """Utility functions for working with model configurations."""
+
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -35,7 +36,7 @@ def is_reasoning_model(model: str | Model | None) -> bool:
         # Safely get either 'name' or 'model' attribute
         model_name = getattr(model, "name", None) or getattr(model, "model", None)
         # In case it's a Litellm model, remove the provider name
-        if isinstance(model_name, str) and len(split:= model_name.split("/")) > 1:
+        if isinstance(model_name, str) and len(split := model_name.split("/")) > 1:
             model_name = split[-1]
     elif isinstance(model, str):
         model_name = model

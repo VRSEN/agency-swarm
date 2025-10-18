@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
+from agents import RunConfig
 from agents.items import MessageOutputItem
 from agents.lifecycle import RunHooks
 from agents.stream_events import RunItemStreamEvent
@@ -170,6 +171,49 @@ def test_get_response_stream_initialization_without_event_loop():
     stream = agent.get_response_stream("Hello")
     assert isinstance(stream, StreamingRunResponse)
     assert stream.final_result is None
+
+
+@pytest.mark.asyncio
+@patch("agents.Runner.run_streamed")
+async def test_get_response_stream_with_run_config_sets_trace_id(mock_runner_run_streamed):
+    agent = Agent(name="TestAgent", instructions="Trace awareness")
+    run_config = RunConfig()
+
+    msg_item = MessageOutputItem(
+        raw_item=ResponseOutputMessage(
+            id="msg_trace",
+            content=[ResponseOutputText(text="Trace", type="output_text", annotations=[])],
+            role="assistant",
+            status="completed",
+            type="message",
+        ),
+        type="message_output_item",
+        agent=None,
+    )
+
+    async def dummy_stream():
+        yield RunItemStreamEvent(name="message_output_created", item=msg_item, type="run_item_stream_event")
+
+    class DummyStreamedResult:
+        def stream_events(self):
+            return dummy_stream()
+
+        def to_input_list(self):
+            return []
+
+    mock_runner_run_streamed.return_value = DummyStreamedResult()
+
+    stream = agent.get_response_stream("ensure trace", run_config_override=run_config)
+
+    async for _ in stream:
+        pass
+
+    assert isinstance(run_config.trace_id, str)
+    assert run_config.trace_id.startswith("trace_")
+
+    call_kwargs = mock_runner_run_streamed.call_args.kwargs
+    assert "run_config" in call_kwargs
+    assert call_kwargs["run_config"] is run_config
 
 
 @pytest.mark.asyncio

@@ -212,6 +212,7 @@ def _persist_run_item_if_needed(
     agent: "Agent",
     sender_name: str | None,
     parent_run_id: str | None,
+    run_trace_id: str,
     current_stream_agent_name: str,
     current_agent_run_id: str,
     agency_context: "AgencyContext | None",
@@ -239,6 +240,7 @@ def _persist_run_item_if_needed(
         caller_agent=sender_name,
         agent_run_id=current_agent_run_id,
         parent_run_id=parent_run_id,
+        run_trace_id=run_trace_id,
     )
     if not MessageFilter.should_filter(formatted_item):
         agency_context.thread_manager.add_messages([formatted_item])  # type: ignore[arg-type]
@@ -257,6 +259,7 @@ def _persist_streamed_items(
     agent: "Agent",
     sender_name: str | None,
     parent_run_id: str | None,
+    run_trace_id: str,
     fallback_agent_run_id: str,
     agency_context: "AgencyContext",
     initial_saved_count: int,
@@ -319,6 +322,7 @@ def _persist_streamed_items(
             caller_agent=sender_name,
             agent_run_id=current_agent_run_id,
             parent_run_id=parent_run_id,
+            run_trace_id=run_trace_id,
         )
         items_to_save.append(formatted_item)
 
@@ -476,6 +480,7 @@ def run_stream_with_guardrails(
     kwargs: dict[str, Any],
     current_agent_run_id: str,
     parent_run_id: str | None,
+    run_trace_id: str,
     validation_attempts: int,
     throw_input_guardrail_error: bool,
     result_callback: Callable[[RunResultStreaming], None] | None = None,
@@ -556,6 +561,7 @@ def run_stream_with_guardrails(
                             agency_context=agency_context,
                             sender_name=sender_name,
                             parent_run_id=parent_run_id,
+                            run_trace_id=run_trace_id,
                             current_agent_run_id=current_agent_run_id,
                             exception=e,
                             include_assistant=False,
@@ -663,6 +669,7 @@ def run_stream_with_guardrails(
                         agent=agent,
                         sender_name=sender_name,
                         parent_run_id=parent_run_id,
+                        run_trace_id=run_trace_id,
                         current_stream_agent_name=current_stream_agent_name,
                         current_agent_run_id=current_agent_run_id,
                         agency_context=agency_context,
@@ -681,6 +688,7 @@ def run_stream_with_guardrails(
                             agent=agent,
                             sender_name=sender_name,
                             parent_run_id=parent_run_id,
+                            run_trace_id=run_trace_id,
                             fallback_agent_run_id=current_agent_run_id,
                             agency_context=agency_context,
                             initial_saved_count=initial_saved_count,
@@ -706,6 +714,7 @@ def run_stream_with_guardrails(
                     agency_context=agency_context,
                     sender_name=sender_name,
                     parent_run_id=parent_run_id,
+                    run_trace_id=run_trace_id,
                     current_agent_run_id=current_agent_run_id,
                     exception=guardrail_exception,
                     include_assistant=False,
