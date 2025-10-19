@@ -51,6 +51,7 @@ class StreamingRunResponse(AsyncGenerator[StreamEvent | dict[str, Any]]):
         self._inner: StreamingRunResponse | None = None
         self._on_resolve = on_resolve
         self._pending_result: RunResultStreaming | None = None
+        self._pending_result_set = False
         self._pending_exception: BaseException | None = None
 
     def __aiter__(self) -> AsyncGenerator[StreamEvent | dict[str, Any]]:
@@ -74,9 +75,33 @@ class StreamingRunResponse(AsyncGenerator[StreamEvent | dict[str, Any]]):
         await self._generator.aclose()
 
     def _adopt_stream(self, other: "StreamingRunResponse") -> None:
+        existing_future = self._final_future
         self._inner = other
-        self._final_future = other._final_future
+
+        if existing_future is not None:
+            if other._final_future is None:
+                other._final_future = existing_future
+            elif other._final_future is not existing_future:
+
+                def _sync_future(source: asyncio.Future[Any]) -> None:
+                    if existing_future.done():
+                        return
+                    if source.cancelled():
+                        existing_future.cancel()
+                        return
+                    exc = source.exception()
+                    if exc is not None:
+                        existing_future.set_exception(exc)
+                    else:
+                        existing_future.set_result(source.result())
+
+                other._final_future.add_done_callback(_sync_future)
+                if other._final_future.done():
+                    _sync_future(other._final_future)
+
+        self._final_future = other._final_future or existing_future
         self._pending_result = other._pending_result
+        self._pending_result_set = getattr(other, "_pending_result_set", False)
         self._pending_exception = other._pending_exception
 
     def _has_inner_stream(self) -> bool:
@@ -100,9 +125,11 @@ class StreamingRunResponse(AsyncGenerator[StreamEvent | dict[str, Any]]):
             self._final_future.set_exception(self._pending_exception)
             self._pending_exception = None
             self._pending_result = None
-        elif self._pending_result is not None and not self._final_future.done():
+            self._pending_result_set = False
+        elif self._pending_result_set and not self._final_future.done():
             self._final_future.set_result(self._pending_result)
             self._pending_result = None
+            self._pending_result_set = False
 
     def _resolve_final_result(self, result: RunResultStreaming | None) -> None:
         if self._inner is not None:
@@ -118,10 +145,12 @@ class StreamingRunResponse(AsyncGenerator[StreamEvent | dict[str, Any]]):
                 self._final_future = _create_future()
             except RuntimeError:
                 self._pending_result = result
+                self._pending_result_set = True
                 self._pending_exception = None
                 return
         if not self._final_future.done():
             self._final_future.set_result(result)
+        self._pending_result_set = False
 
     def _resolve_exception(self, exc: BaseException) -> None:
         if self._inner is not None:
@@ -137,10 +166,12 @@ class StreamingRunResponse(AsyncGenerator[StreamEvent | dict[str, Any]]):
                 self._final_future = _create_future()
             except RuntimeError:
                 self._pending_result = None
+                self._pending_result_set = False
                 self._pending_exception = exc
                 return
         if not self._final_future.done():
             self._final_future.set_exception(exc)
+        self._pending_result_set = False
 
     @property
     def final_result(self) -> RunResultStreaming | None:
