@@ -37,7 +37,16 @@ def _create_future() -> asyncio.Future[Any]:
 
 
 class StreamingRunResponse(AsyncGenerator[StreamEvent | dict[str, Any]]):
-    """Async iterable wrapper that exposes the final RunResultStreaming."""
+    """Wrap an async generator while preserving the eventual ``RunResultStreaming``.
+
+    The wrapper mirrors the generator interface (`__aiter__`, `asend`, etc.) so
+    callers can stream events immediately, but it also tracks the final result
+    (or exception) using an internal future. Guardrail retries and nested
+    streams adopt each other's futures via :meth:`_adopt_stream`, ensuring a
+    single completion signal. Consumers can inspect :attr:`final_result`,
+    :attr:`final_output`, or await :meth:`wait_final_result` even after the
+    streaming generator has been closed.
+    """
 
     def __init__(
         self,
