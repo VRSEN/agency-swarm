@@ -88,6 +88,8 @@ class StreamingRunResponse(AsyncGenerator[StreamEvent | dict[str, Any]]):
         self._inner = other
 
         if existing_future is not None:
+            existing_loop = existing_future.get_loop()
+
             if other._final_future is None:
                 other._final_future = existing_future
             elif other._final_future is not existing_future:
@@ -96,13 +98,14 @@ class StreamingRunResponse(AsyncGenerator[StreamEvent | dict[str, Any]]):
                     if existing_future.done():
                         return
                     if source.cancelled():
-                        existing_future.cancel()
+                        existing_loop.call_soon_threadsafe(existing_future.cancel)
                         return
-                    exc = source.exception()
-                    if exc is not None:
-                        existing_future.set_exception(exc)
-                    else:
-                        existing_future.set_result(source.result())
+                    try:
+                        result = source.result()
+                    except BaseException as error:  # pragma: no cover - defensive
+                        existing_loop.call_soon_threadsafe(existing_future.set_exception, error)
+                        return
+                    existing_loop.call_soon_threadsafe(existing_future.set_result, result)
 
                 other._final_future.add_done_callback(_sync_future)
                 if other._final_future.done():
