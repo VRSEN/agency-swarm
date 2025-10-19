@@ -1,4 +1,5 @@
 import asyncio
+import threading
 from unittest.mock import MagicMock
 
 import pytest
@@ -75,3 +76,58 @@ async def test_wait_final_result_before_adoption(monkeypatch):
     result = await wait_task
     assert events == [{"type": "test_event"}]
     assert result is final_result
+
+
+@pytest.mark.asyncio
+async def test_adopt_stream_syncs_futures_across_event_loops():
+    """Adopting a stream must safely synchronize final futures from another loop."""
+    from agency_swarm.agent.execution_streaming import StreamingRunResponse
+
+    async def _empty_stream():
+        if False:  # pragma: no cover
+            yield
+
+    external_loop_ready = threading.Event()
+    external_loop = asyncio.new_event_loop()
+
+    def _loop_runner() -> None:
+        asyncio.set_event_loop(external_loop)
+        external_loop_ready.set()
+        external_loop.run_forever()
+
+    runner_thread = threading.Thread(target=_loop_runner, daemon=True)
+    runner_thread.start()
+    external_loop_ready.wait()
+
+    async def _create_future() -> asyncio.Future[object | None]:
+        loop = asyncio.get_running_loop()
+        return loop.create_future()
+
+    try:
+        outer_future = asyncio.run_coroutine_threadsafe(_create_future(), external_loop).result(timeout=1)
+
+        outer_wrapper = StreamingRunResponse(_empty_stream())
+        outer_wrapper._final_future = outer_future
+
+        inner_wrapper = StreamingRunResponse(_empty_stream())
+        inner_wrapper._final_future = asyncio.get_running_loop().create_future()
+
+        outer_wrapper._adopt_stream(inner_wrapper)
+
+        completion = threading.Event()
+        external_loop.call_soon_threadsafe(outer_future.add_done_callback, lambda _fut: completion.set())
+
+        sentinel = object()
+        inner_wrapper._final_future.set_result(sentinel)
+
+        assert await asyncio.to_thread(completion.wait, 1.0)
+
+        async def _await_external() -> object | None:
+            return await outer_future
+
+        result = asyncio.run_coroutine_threadsafe(_await_external(), external_loop).result(timeout=1)
+        assert result is sentinel
+    finally:
+        external_loop.call_soon_threadsafe(external_loop.stop)
+        runner_thread.join(timeout=1)
+        external_loop.close()
