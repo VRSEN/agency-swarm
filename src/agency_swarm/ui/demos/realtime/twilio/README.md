@@ -4,7 +4,7 @@ This example demonstrates how to connect the OpenAI Realtime API to a phone call
 
 ## Prerequisites
 
--   Python 3.9+
+-   Python 3.12+
 -   OpenAI API key with [Realtime API](https://platform.openai.com/docs/guides/realtime) access
 -   [Twilio](https://www.twilio.com/docs/voice) account with a phone number
 -   A tunneling service like [ngrok](https://ngrok.com/) to expose your local server
@@ -38,7 +38,7 @@ This example demonstrates how to connect the OpenAI Realtime API to a phone call
 1. Call your Twilio phone number
 2. You'll hear: "Hello! You're now connected to an AI assistant. You can start talking!"
 3. Start speaking - the AI will respond in real-time
-4. The assistant has access to tools like weather information and current time
+4. The assistant includes demo tools for weather (returns a canned sunny response) and the current time
 
 ## How It Works
 

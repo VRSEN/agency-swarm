@@ -3,17 +3,13 @@ from __future__ import annotations
 import asyncio
 import base64
 import binascii
-import inspect
 import json
 import logging
 from collections.abc import Awaitable, Callable, Mapping
 from contextlib import suppress
 from typing import TYPE_CHECKING, Any, assert_never, cast
 
-from agents import RunContextWrapper
-from agents.agent import AgentBase, MCPConfig
-from agents.handoffs import Handoff
-from agents.realtime import RealtimeAgent, RealtimeRunner, RealtimeSession
+from agents.realtime import RealtimeRunner, RealtimeSession
 from agents.realtime.config import (
     RealtimeInputAudioNoiseReductionConfig,
     RealtimeSessionModelSettings,
@@ -39,17 +35,19 @@ from agents.realtime.events import (
 from agents.realtime.model_inputs import RealtimeModelRawClientMessage, RealtimeModelSendRawMessage
 from starlette.websockets import WebSocket as StarletteWebSocket, WebSocketDisconnect
 
+from agency_swarm.agency.core import Agency
 from agency_swarm.agent.core import Agent
 from agency_swarm.context import MasterContext
+from agency_swarm.realtime.agency import RealtimeAgency
 from agency_swarm.utils.thread import ThreadManager
+
+if TYPE_CHECKING:
+    from fastapi import FastAPI
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 __all__ = ["run_realtime", "RealtimeSessionFactory", "build_model_settings"]
-
-if TYPE_CHECKING:
-    from fastapi import FastAPI, Request
 
 
 def _model_dump(item: Any) -> Any:
@@ -184,140 +182,6 @@ async def _handle_client_payload(session: RealtimeSession, payload: str) -> None
     await session.model.send_event(RealtimeModelSendRawMessage(message=client_message))
 
 
-def _extract_agent_from_handoff(handoff: Handoff) -> Agent | None:
-    on_invoke = getattr(handoff, "on_invoke_handoff", None)
-    if not callable(on_invoke):
-        return None
-    closure = getattr(on_invoke, "__closure__", None)
-    if not closure:
-        return None
-    for cell in closure:
-        try:
-            value = cell.cell_contents
-        except ValueError:
-            continue
-        if isinstance(value, Agent):
-            return value
-    return None
-
-
-def _wrap_is_enabled(
-    is_enabled: bool | Callable[[RunContextWrapper[Any], Agent], Any],
-    original_agent: Agent,
-) -> bool | Callable[[RunContextWrapper[Any], AgentBase[Any]], Awaitable[bool]]:
-    if not callable(is_enabled):
-        return bool(is_enabled)
-
-    async def _wrapped(ctx: RunContextWrapper[Any], _: AgentBase[Any]) -> bool:
-        result = is_enabled(ctx, original_agent)
-        if inspect.isawaitable(result):
-            return bool(await cast(Awaitable[Any], result))
-        return bool(result)
-
-    return _wrapped
-
-
-def _convert_handoff(
-    original: Handoff,
-    original_agent: Agent,
-    realtime_agent: RealtimeAgent,
-) -> Handoff:
-    async def _on_invoke(ctx: RunContextWrapper[Any], input_json: str) -> RealtimeAgent:
-        await original.on_invoke_handoff(ctx, input_json)
-        return realtime_agent
-
-    handoff = Handoff(
-        tool_name=original.tool_name,
-        tool_description=original.tool_description,
-        input_json_schema=original.input_json_schema,
-        on_invoke_handoff=_on_invoke,
-        agent_name=realtime_agent.name,
-        input_filter=original.input_filter,
-        strict_json_schema=original.strict_json_schema,
-        is_enabled=_wrap_is_enabled(original.is_enabled, original_agent),
-    )
-    return cast(Handoff, handoff)
-
-
-def _build_realtime_agent_graph(starting_agent: Agent) -> tuple[RealtimeAgent, dict[str, Agent]]:
-    visited: dict[int, RealtimeAgent] = {}
-    agent_lookup: dict[str, Agent] = {}
-
-    def _convert(agent: Agent) -> RealtimeAgent:
-        existing = visited.get(id(agent))
-        if existing:
-            return existing
-
-        instructions = agent.instructions
-        realtime_instructions: str | Callable[[RunContextWrapper[Any], RealtimeAgent], Awaitable[str]] | None
-
-        if callable(instructions):
-            typed_instructions = cast(
-                Callable[[RunContextWrapper[Any], Agent], Awaitable[str] | str],
-                instructions,
-            )
-
-            async def _instructions(ctx: RunContextWrapper[Any], _: RealtimeAgent) -> str:
-                result = typed_instructions(ctx, agent)
-                if inspect.isawaitable(result):
-                    return cast(str, await result)
-                return cast(str, result)
-
-            realtime_instructions = cast(
-                Callable[[RunContextWrapper[Any], RealtimeAgent], Awaitable[str]],
-                _instructions,
-            )
-        else:
-            realtime_instructions = cast(str | None, instructions)
-
-        prompt_value = agent.prompt
-        prompt = prompt_value if (prompt_value is None or not callable(prompt_value)) else None
-
-        realtime = RealtimeAgent(
-            name=agent.name,
-            instructions=realtime_instructions,
-            handoff_description=agent.handoff_description,
-            tools=list(agent.tools),
-            mcp_servers=list(agent.mcp_servers),
-            mcp_config=cast(MCPConfig, dict(agent.mcp_config)),
-            prompt=prompt,
-            output_guardrails=list(agent.output_guardrails),
-        )
-        visited[id(agent)] = realtime
-        agent_lookup[agent.name] = agent
-
-        converted_handoffs: list[Any] = []
-        for item in agent.handoffs:
-            if isinstance(item, Agent):
-                converted_handoffs.append(_convert(item))
-                continue
-            if not isinstance(item, Handoff):
-                logger.debug("Ignoring unsupported handoff entry %s on agent '%s'", item, agent.name)
-                continue
-
-            target = _extract_agent_from_handoff(item)
-            if target is None:
-                recipients = getattr(agent, "_subagents", None)
-                if isinstance(recipients, dict):
-                    target = recipients.get(item.agent_name.lower())
-            if target is None:
-                logger.warning(
-                    "Skipping handoff '%s' on agent '%s' because the target agent could not be resolved.",
-                    item.tool_name,
-                    agent.name,
-                )
-                continue
-
-            converted = _convert(target)
-            converted_handoffs.append(_convert_handoff(item, target, converted))
-
-        realtime.handoffs = converted_handoffs
-        return realtime
-
-    starting_realtime = _convert(starting_agent)
-    return starting_realtime, agent_lookup
-
-
 def build_model_settings(
     *,
     model: str,
@@ -363,13 +227,12 @@ async def _forward_events_to_twilio(
 
 
 class RealtimeSessionFactory:
-    def __init__(self, starting_agent: Agent, base_model_settings: Mapping[str, Any]):
-        self._agent = starting_agent
+    def __init__(self, realtime_agency: RealtimeAgency, base_model_settings: Mapping[str, Any]):
+        self._agency = realtime_agency
         self._base_model_settings = dict(base_model_settings)
 
     async def create_session(self, overrides: dict[str, Any] | None = None) -> RealtimeSession:
-        realtime_agent, agent_lookup = _build_realtime_agent_graph(self._agent)
-        runner = RealtimeRunner(realtime_agent)
+        runner = RealtimeRunner(self._agency.entry_agent)
         merged_settings: dict[str, Any] = dict(self._base_model_settings)
         if overrides:
             for key, value in overrides.items():
@@ -379,7 +242,13 @@ class RealtimeSessionFactory:
         model_settings = cast(RealtimeSessionModelSettings, merged_settings)
 
         session = await runner.run(
-            context=MasterContext(thread_manager=ThreadManager(), agents=agent_lookup),
+            context=MasterContext(
+                thread_manager=ThreadManager(),
+                agents=self._agency.source_agents,
+                shared_instructions=self._agency.shared_instructions,
+                user_context=dict(self._agency.user_context),
+                agent_runtime_state=self._agency.runtime_state_map,
+            ),
             model_config={"initial_model_settings": model_settings},
         )
         return session
@@ -387,7 +256,8 @@ class RealtimeSessionFactory:
 
 def run_realtime(
     *,
-    agent: Agent,
+    agency: Agency | RealtimeAgency,
+    entry_agent: Agent | str | None = None,
     model: str = "gpt-realtime",
     voice: str | None = None,
     host: str = "0.0.0.0",
@@ -403,10 +273,11 @@ def run_realtime(
     return_app: bool = False,
 ) -> FastAPI | None:
     """Launch a realtime FastAPI server backed by OpenAI's Realtime API."""
+
     try:
-        from fastapi import FastAPI
-        from fastapi.middleware.cors import CORSMiddleware
-        from fastapi.responses import PlainTextResponse
+        from fastapi import FastAPI as FastAPIApp, Request as FastAPIRequest
+        from fastapi.middleware.cors import CORSMiddleware as FastAPICORSMiddleware
+        from fastapi.responses import PlainTextResponse as FastAPIPlainTextResponse
     except ImportError as exc:
         logger.error(
             "Realtime dependencies are missing: %s. Install agency-swarm[fastapi] to use run_realtime.",
@@ -414,10 +285,10 @@ def run_realtime(
         )
         return None
 
-    app = FastAPI()
+    app = FastAPIApp()
     origins = cors_origins or ["*"]
     app.add_middleware(
-        CORSMiddleware,
+        FastAPICORSMiddleware,
         allow_origins=origins,
         allow_credentials=True,
         allow_methods=["*"],
@@ -432,7 +303,8 @@ def run_realtime(
         turn_detection=turn_detection,
         input_audio_noise_reduction=input_audio_noise_reduction,
     )
-    session_factory = RealtimeSessionFactory(agent, base_settings)
+    realtime_agency = _ensure_realtime_agency(agency, entry_agent)
+    session_factory = RealtimeSessionFactory(realtime_agency, base_settings)
 
     @app.websocket("/realtime")
     async def realtime_endpoint(websocket: StarletteWebSocket) -> None:
@@ -502,7 +374,7 @@ def run_realtime(
 
         @app.post(incoming_path)
         @app.get(incoming_path)
-        async def incoming_call(request: Request) -> PlainTextResponse:
+        async def incoming_call(request: FastAPIRequest) -> FastAPIPlainTextResponse:
             forwarded_proto = request.headers.get("x-forwarded-proto", request.url.scheme)
             scheme = "https" if forwarded_proto in {"https", "wss"} else "http"
             ws_scheme = "wss" if scheme == "https" else "ws"
@@ -518,7 +390,7 @@ def run_realtime(
                 "    </Connect>\n"
                 "</Response>"
             )
-            return PlainTextResponse(content=twiml, media_type="text/xml")
+            return FastAPIPlainTextResponse(content=twiml, media_type="text/xml")
 
         @app.websocket(media_path)
         async def twilio_media_stream(websocket: StarletteWebSocket) -> None:
@@ -588,3 +460,25 @@ def run_realtime(
     logger.info("Starting realtime server at http://%s:%s", host, port)
     uvicorn.run(app, host=host, port=port)
     return None
+
+
+def _ensure_realtime_agency(agency: Agency | RealtimeAgency, entry_agent: Agent | str | None) -> RealtimeAgency:
+    if isinstance(agency, RealtimeAgency):
+        if entry_agent is not None:
+            raise ValueError("entry_agent must not be provided when a RealtimeAgency instance is supplied.")
+        return agency
+
+    if isinstance(agency, Agency):
+        resolved_agent: Agent | None
+        if entry_agent is None:
+            resolved_agent = None
+        elif isinstance(entry_agent, Agent):
+            resolved_agent = entry_agent
+        else:
+            resolved_agent = agency.agents.get(entry_agent)
+            if resolved_agent is None:
+                raise ValueError(f"Agent '{entry_agent}' is not registered in the Agency.")
+
+        return agency.to_realtime(resolved_agent)
+
+    raise TypeError(f"Unsupported agency type: {type(agency)!r}")

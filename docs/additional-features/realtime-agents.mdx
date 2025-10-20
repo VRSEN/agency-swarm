@@ -1,22 +1,18 @@
 ---
 title: "Realtime Agents"
-description: "Build low-latency voice and multimodal agents with Agency Swarm (v1.0+)."
+description: "Build low-latency realtime voice agents with Agency Swarm."
 icon: "microphone"
 ---
 
-Agency Swarm supports **realtime voice** and **multimodal** sessions on top of OpenAI’s Realtime API. You **write agents the same way** you do for text-based chats, and Agency Swarm turns them into realtime voice assistants.
+Agency Swarm layers its realtime experience on top of the OpenAI Agents SDK so that you can reuse your existing Agency Swarm Agent parameters (instructions, tools, handoffs) unchanged in voice sessions.
 
-<Note>
-  This feature is supported in **Agency Swarm v1.0 or later**.
-</Note>
-
-Agency Swarm provides a `run_realtime` helper that creates the FastAPI server, connects to OpenAI Realtime, and exposes optional Twilio bridges without manual WebSocket endpoints.
+The `run_realtime` helper converts your `Agent` parameters into realtime counterparts, launches the Agents SDK session, and hosts a FastAPI/WebSocket bridge (with an optional Twilio transport) so you can ship low-latency voice flows without wiring the protocol yourself.
 
 ## What you can build
 
 - **Voice-first assistants** for web, mobile, or phone.
 - **Interruptible** dialogs: users talk over the model; it stops and pivots.
-- **Multimodal** sessions mixing audio + text + images in one stream.
+- **Realtime clients** that stream audio while sharing additional Realtime events (text, tool payloads) through one connection.
 
 ## How it works (at a glance)
 
@@ -24,14 +20,16 @@ Client (mic/WebRTC or Twilio) ↔ **FastAPI WebSocket** ↔ **OpenAI Realtime** 
 
 The session uses **one model (e.g. `gpt-realtime`)** and a **session-level voice** (e.g., `alloy`, `verse`). Voice is picked at session start.
 
+![Hosted Agency Swarm realtime demo UI showing active voice session](/images/agencii-hosted.png)
+
 ## Requirements
 
 - OpenAI access to the **Realtime API** and the `gpt-realtime` model.
 - Python 3.12+.
-- `agency-swarm` v1.0+ with FastAPI extras.
+- `agency-swarm` v1.3+ with FastAPI extras.
 
 ```bash
-pip install "agency-swarm[fastapi]" twilio
+pip install "agency-swarm[fastapi]"
 ```
 
 <Tip>
@@ -62,12 +60,14 @@ Start the server with the new helper:
 
 ```python
 # server.py
+from agency_swarm import Agency
 from agency_swarm.integrations import run_realtime
 from voice_agent import voice_agent
 
 if __name__ == "__main__":
+    agency = Agency(voice_agent)
     run_realtime(
-        agent=voice_agent,
+        agency=agency.to_realtime(),
         model="gpt-realtime",
         voice="alloy",
         turn_detection={"type": "server_vad"},
@@ -88,7 +88,7 @@ if __name__ == "__main__":
 Use the official OpenAI Realtime example client (WebRTC or WebSocket). Point it to `ws://localhost:8000/realtime` (or your deployed address), and you’ll get mic capture, response audio, and a minimal UI.
 - Example: FastAPI app + client (OpenAI “realtime/app” sample).
 - Event flow: send conversation.item.create (user input), then response.create to get the model to answer.
-- When using the bundled CLI client, audio runs at 24 kHz, matching the default realtime voice output.
+- When using the packaged browser demo, audio runs at 24 kHz, matching the default realtime voice output.
 
 See OpenAI’s example for a copy-paste front end and event payloads.
 
@@ -98,7 +98,7 @@ Pass a Twilio number to the helper and it will respond with the TwiML + media-st
 
 ```python
 run_realtime(
-    agent=voice_agent,
+    agency=Agency(voice_agent).to_realtime(),
     model="gpt-realtime",
     voice="alloy",
     twilio_number="+15551234567",
@@ -115,7 +115,7 @@ run_realtime(
 
 ## Using multiple agents (handoffs)
 
-Realtime supports handoffs through the standard `Agency` communication flows. Register the delegation routes with `SendMessageHandoff` so the session adapter transfers control to the right specialist.
+Realtime handoffs reuse the wiring you already defined in your `Agency`. Register your delegation routes with `SendMessageHandoff`, then call `run_realtime` with `agency.to_realtime()`—its designated entry point becomes the realtime starter automatically.
 
 ```python
 from agency_swarm import Agency, Agent
@@ -137,11 +137,11 @@ agency = Agency(
     ],
 )
 
-# Start your realtime session with `agent=concierge` as in the Quickstart.
+run_realtime(agency=agency.to_realtime(), model="gpt-realtime", voice="alloy")
 ```
 
 <Note>
-  Handoffs are supported by the underlying RealtimeAgent type. In telephony transports, test thoroughly—interrupts and audio buffer management can affect stability during/after a handoff. Keep sub-agents concise. 
+  Handoffs are provided by the underlying RealtimeAgent type and must come from your `Agency` configuration—do not populate `agent.handoffs` manually. In telephony transports, test thoroughly—interrupts and audio buffer management can affect stability during/after a handoff. Keep sub-agents concise.
 </Note>
 
 ## Operational tips
