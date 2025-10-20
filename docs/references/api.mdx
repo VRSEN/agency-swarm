@@ -12,33 +12,39 @@ The Agency class orchestrates a collection of Agent instances based on a defined
 from agency_swarm import Agency, Agent
 
 class Agency:
-    def __init__(self,
-                 *entry_points_args: Agent,
-                 communication_flows: list[tuple[Agent, Agent]] | None = None,
-                 agency_chart: AgencyChart | None = None,
-                 name: str | None = None,
-                 shared_instructions: str | None = None,
-                 send_message_tool_class: type | None = None,
-                 load_threads_callback: ThreadLoadCallback | None = None,
-                 save_threads_callback: ThreadSaveCallback | None = None,
-                 user_context: dict[str, Any] | None = None,
-                 **kwargs: Any):
+    def __init__(
+        self,
+        *entry_point_agents: Agent,
+        communication_flows: list[CommunicationFlowEntry] | None = None,
+        agency_chart: AgencyChart | None = None,
+        name: str | None = None,
+        shared_instructions: str | None = None,
+        send_message_tool_class: type | None = None,
+        load_threads_callback: ThreadLoadCallback | None = None,
+        save_threads_callback: ThreadSaveCallback | None = None,
+        user_context: dict[str, Any] | None = None,
+        **kwargs: Any,
+    ):
         """
         Initialize an Agency instance.
 
         Parameters:
-            *entry_points_args: Agent instances that serve as entry points for external interaction
-            communication_flows: List of (sender, receiver) Agent tuples defining allowed communication paths
-            agency_chart: [DEPRECATED] Legacy agency structure definition
+            *entry_point_agents: Agent instances serving as entry points for external interaction
+            communication_flows: Flexible communication flow definitions supporting tuples and AgentFlow objects
+            agency_chart: [DEPRECATED] Legacy structure definition; takes precedence if provided
             name: Optional name for the agency
-            shared_instructions: Instructions prepended to all agents' system prompts
-            send_message_tool_class: Custom SendMessage tool class for enhanced inter-agent communication
-            load_threads_callback: Callable to load conversation threads from persistence
-            save_threads_callback: Callable to save conversation threads to persistence
+            shared_instructions: Instruction text or file path applied to every agent
+            send_message_tool_class: Default SendMessage tool override for inter-agent communication
+            load_threads_callback: Callable used to load persisted conversation threads
+            save_threads_callback: Callable used to save conversation threads
             user_context: Initial shared context accessible to all agents
-            **kwargs: Additional parameters (deprecated ones will issue warnings)
+            **kwargs: Captures deprecated parameters, emitting warnings when used
         """
 ```
+
+> **Note:** `CommunicationFlowEntry` is a type alias defined in `agency_swarm.agency.core`
+> that accepts `(Agent, Agent)` tuples, `AgentFlow` chains, or those accompanied by a
+> custom SendMessage tool class.
 
 ### Key Attributes
 
@@ -46,6 +52,7 @@ class Agency:
 - **`chart`** (AgencyChart): Structure defining agents and their communication paths
 - **`entry_points`** (list[Agent]): Agents designated as entry points for external interaction
 - **`thread_manager`** (ThreadManager): Manager responsible for handling conversation threads
+- **`event_stream_merger`** (EventStreamMerger): Aggregates streaming events from concurrent agent runs
 - **`persistence_hooks`** (PersistenceHooks | None): Optional hooks for loading/saving thread state
 - **`shared_instructions`** (str | None): Instructions prepended to every agent's system prompt
 - **`user_context`** (dict[str, Any]): Shared user-defined context accessible within MasterContext
@@ -56,17 +63,18 @@ class Agency:
 <CodeGroup>
 
 ```python get_response
-async def get_response(self,
-        message: str | list[TResponseInputItem],
-        recipient_agent: str | Agent | None = None,
-        context_override: dict[str, Any] | None = None,
-        hooks_override: RunHooks | None = None,
-        run_config: RunConfig | None = None,
-        message_files: list[str] | None = None,
-        file_ids: list[str] | None = None,
-        additional_instructions: str | None = None,
-        **kwargs: Any
-    ) -> RunResult:
+async def get_response(
+    self,
+    message: str | list[TResponseInputItem],
+    recipient_agent: str | Agent | None = None,
+    context_override: dict[str, Any] | None = None,
+    hooks_override: RunHooks | None = None,
+    run_config: RunConfig | None = None,
+    message_files: list[str] | None = None,
+    file_ids: list[str] | None = None,
+    additional_instructions: str | None = None,
+    **kwargs: Any,
+) -> RunResult:
     """
     Initiate an interaction with a specified agent within the agency.
 
@@ -87,17 +95,18 @@ async def get_response(self,
 ```
 
 ```python get_response_sync
-def get_response_sync(self,
-        message: str | list[TResponseInputItem],
-        recipient_agent: str | Agent | None = None,
-        context_override: dict[str, Any] | None = None,
-        hooks_override: RunHooks | None = None,
-        run_config: RunConfig | None = None,
-        message_files: list[str] | None = None,
-        file_ids: list[str] | None = None,
-        additional_instructions: str | None = None,
-        **kwargs: Any,
-    ) -> RunResult:
+def get_response_sync(
+    self,
+    message: str | list[TResponseInputItem],
+    recipient_agent: str | Agent | None = None,
+    context_override: dict[str, Any] | None = None,
+    hooks_override: RunHooks | None = None,
+    run_config: RunConfig | None = None,
+    message_files: list[str] | None = None,
+    file_ids: list[str] | None = None,
+    additional_instructions: str | None = None,
+    **kwargs: Any,
+) -> RunResult:
     """
     Initiate an interaction with a specified agent within the agency.
 
@@ -118,17 +127,18 @@ def get_response_sync(self,
 ```
 
 ```python get_response_stream
-async def get_response_stream(self,
-        message: str | list[TResponseInputItem],
-        recipient_agent: str | Agent | None = None,
-        context_override: dict[str, Any] | None = None,
-        hooks_override: RunHooks | None = None,
-        run_config_override: RunConfig | None = None,
-        message_files: list[str] | None = None,
-        file_ids: list[str] | None = None,
-        additional_instructions: str | None = None,
-        **kwargs: Any
-    ) -> AsyncGenerator[Any]:
+def get_response_stream(
+    self,
+    message: str | list[TResponseInputItem],
+    recipient_agent: str | Agent | None = None,
+    context_override: dict[str, Any] | None = None,
+    hooks_override: RunHooks | None = None,
+    run_config_override: RunConfig | None = None,
+    message_files: list[str] | None = None,
+    file_ids: list[str] | None = None,
+    additional_instructions: str | None = None,
+    **kwargs: Any,
+) -> StreamingRunResponse:
     """
     Initiate a streaming interaction with a specified agent within the agency.
 
@@ -143,19 +153,20 @@ async def get_response_stream(self,
         additional_instructions: Additional instructions for this run only
         **kwargs: Additional arguments passed to get_response_stream
 
-    Yields:
-        Any: Events from the agents.Runner.run_streamed execution
+    Returns:
+        StreamingRunResponse: Wrapper over the streaming agent execution, yielding events
     """
 ```
 
 ```python run_fastapi
-def run_fastapi(self,
-        host: str = "0.0.0.0",
-        port: int = 8000,
-        app_token_env: str = "APP_TOKEN",
-        cors_origins: list[str] | None = None,
-        enable_agui: bool = False
-    ):
+def run_fastapi(
+    self,
+    host: str = "0.0.0.0",
+    port: int = 8000,
+    app_token_env: str = "APP_TOKEN",
+    cors_origins: list[str] | None = None,
+    enable_agui: bool = False,
+):
     """
     Serve this agency via the FastAPI integration.
 
@@ -169,9 +180,10 @@ def run_fastapi(self,
 ```
 
 ```python get_agency_structure
-def get_agency_structure(self,
-        include_tools: bool = True,
-    ) -> dict[str, Any]:
+def get_agency_structure(
+    self,
+    include_tools: bool = True,
+) -> dict[str, Any]:
     """
     Returns a ReactFlow-compatible JSON structure representing the agency's organization.
 
@@ -184,11 +196,12 @@ def get_agency_structure(self,
 ```
 
 ```python visualize
-def visualize(self,
-        output_file: str = "agency_visualization.html",
-        include_tools: bool = True,
-        open_browser: bool = True
-    ) -> str:
+def visualize(
+    self,
+    output_file: str = "agency_visualization.html",
+    include_tools: bool = True,
+    open_browser: bool = True,
+) -> str:
     """
     Create an HTML visualization of the agency structure.
 
@@ -203,9 +216,22 @@ def visualize(self,
 ```
 
 ```python terminal_demo
-def terminal_demo(self) -> None:
+def terminal_demo(self, show_reasoning: bool | None = None) -> None:
     """
     Run a terminal demo of the agency.
+    """
+```
+
+```python copilot_demo
+def copilot_demo(
+    self,
+    host: str = "0.0.0.0",
+    port: int = 8000,
+    frontend_port: int = 3000,
+    cors_origins: list[str] | None = None,
+) -> None:
+    """
+    Run the bundled copilot demo for the agency.
     """
 ```
 
@@ -216,18 +242,19 @@ def terminal_demo(self) -> None:
 <CodeGroup>
 
 ```python get_completion
-def get_completion(self,
-        message: str,
-        message_files: list[str] | None = None,
-        yield_messages: bool = False,
-        recipient_agent: str | Agent | None = None,
-        additional_instructions: str | None = None,
-        attachments: list[dict] | None = None,
-        tool_choice: dict | None = None,
-        verbose: bool = False,
-        response_format: dict | None = None,
-        **kwargs: Any
-    ) -> str:
+def get_completion(
+    self,
+    message: str,
+    message_files: list[str] | None = None,
+    yield_messages: bool = False,
+    recipient_agent: str | Agent | None = None,
+    additional_instructions: str | None = None,
+    attachments: list[dict] | None = None,
+    tool_choice: dict | None = None,
+    verbose: bool = False,
+    response_format: dict | None = None,
+    **kwargs: Any,
+) -> str:
     """
     [DEPRECATED] Use get_response instead. Returns final text output.
 
@@ -261,20 +288,31 @@ class Agent(BaseAgent[MasterContext]):
         Initialize an Agency Swarm Agent.
 
         Parameters:
-            name (str): The agent's name (required)
-            instructions (str): Agent instructions or path to markdown file
-            model (str): OpenAI model to use
-            model_settings (ModelSettings): Model configuration from agents SDK
-            tools (list[Tool]): List of tools available to the agent
-            files_folder (str | Path | None): Path to folder for file management and vector stores
-            tools_folder (str | Path | None): Path to directory containing tool definitions
-            description (str | None): Description of agent's role for inter-agent communication
-            output_type (type[Any] | None): Type of the agent's final output
-            send_message_tool_class (type | None): Custom SendMessage tool class
-            input_guardrails (list): Input validation guardrails
-            output_guardrails (list): Output validation guardrails
-            hooks (RunHooks | None): Custom execution hooks
-            **kwargs: Additional parameters (deprecated ones will issue warnings)
+            name (str): Agent name (**required**)
+            instructions (str | Path | None): System prompt text or path
+            description (str | None): Optional role description for send_message tools
+            files_folder (str | Path | None): Folder for local file management and vector stores
+            tools_folder (str | Path | None): Directory for automatic tool discovery
+            schemas_folder (str | Path | None): Directory containing OpenAPI schemas for tool generation
+            api_headers (dict[str, dict[str, str]] | None): Per-schema HTTP headers for generated tools
+            api_params (dict[str, dict[str, Any]] | None): Per-schema default parameters for generated tools
+            send_message_tool_class (type | None): Custom SendMessage tool override
+            include_search_results (bool): Include search results in FileSearchTool output (default False)
+            validation_attempts (int): Number of retries when output guardrails trigger (default 1)
+            throw_input_guardrail_error (bool): Raise input guardrail failures as exceptions (default False)
+            handoff_reminder (str | None): Custom reminder text when handing off to another agent
+            model (str | Model | None): Model identifier; defaults to agents SDK configuration
+            model_settings (ModelSettings | None): Model configuration overrides
+            tools (list[Tool] | None): Explicit tool instances to register
+            mcp_servers (list[MCPServer] | None): Model Context Protocol servers to attach
+            mcp_config (MCPConfig | None): Configuration for MCP servers
+            input_guardrails (list[InputGuardrail] | None): Pre-execution validation hooks
+            output_guardrails (list[OutputGuardrail] | None): Post-execution validation hooks
+            output_type (type[Any] | AgentOutputSchemaBase | None): Type of final output structure
+            hooks (AgentHooks | None): Lifecycle callbacks from the agents SDK
+            tool_use_behavior ("run_llm_again" | "stop_on_first_tool" | StopAtTools | dict[str, Any] | Callable):
+                Tool execution policy passed through to the agents SDK
+            reset_tool_choice (bool | None): Whether to reset tool choice after tool calls
         """
 ```
 
@@ -282,25 +320,34 @@ class Agent(BaseAgent[MasterContext]):
 
 - **`files_folder`** (str | Path | None): Local folder for file management and vector stores
 - **`tools_folder`** (str | Path | None): Directory for automatic tool discovery and loading
+- **`schemas_folder`** (str | Path | None): Folder scanned for OpenAPI schemas to auto-generate tools
+- **`api_headers` / `api_params`** (dict): Per-schema metadata applied when generating tools
 - **`description`** (str | None): Agent role description for dynamic send_message tools
-- **`output_type`** (type[Any] | None): Type of the agent's final output
 - **`send_message_tool_class`** (type | None): Custom SendMessage tool class for inter-agent communication
+- **`include_search_results`** (bool): Whether FileSearchTool responses include citation context
+- **`validation_attempts`** (int): Retry count for output guardrail enforcement
+- **`throw_input_guardrail_error`** (bool): Raise instead of returning guardrail errors
+- **`handoff_reminder`** (str | None): Custom reminder appended to handoff prompts
+- **`tool_concurrency_manager`** (ToolConcurrencyManager): Coordinates concurrent tool execution
 
 ### Core Execution Methods
 
 <CodeGroup>
 
 ```python get_response
-async def get_response(self,
-                      message: str | list[TResponseInputItem],
-                      sender_name: str | None = None,
-                      context_override: dict[str, Any] | None = None,
-                      hooks_override: RunHooks | None = None,
-                      run_config_override: RunConfig | None = None,
-                      message_files: list[str] | None = None,
-                      file_ids: list[str] | None = None,
-                      additional_instructions: str | None = None,
-                      **kwargs: Any) -> RunResult:
+async def get_response(
+    self,
+    message: str | list[TResponseInputItem],
+    sender_name: str | None = None,
+    context_override: dict[str, Any] | None = None,
+    hooks_override: RunHooks | None = None,
+    run_config_override: RunConfig | None = None,
+    message_files: list[str] | None = None,
+    file_ids: list[str] | None = None,
+    additional_instructions: str | None = None,
+    agency_context: AgencyContext | None = None,
+    **kwargs: Any,
+) -> RunResult:
     """
     Run the agent's turn in the conversation loop.
 
@@ -309,11 +356,12 @@ async def get_response(self,
         sender_name: Name of sending agent (None for user interactions)
         context_override: Optional context data to override default MasterContext values
         hooks_override: Optional hooks to override default agent hooks
-        run_config: Optional run configuration settings
+        run_config_override: Optional run configuration settings
         message_files: DEPRECATED: Use file_ids instead
         file_ids: List of OpenAI file IDs to attach to the message
         additional_instructions: Additional instructions for this run only
-        **kwargs: Additional keyword arguments including max_turns
+        agency_context: Injected AgencyContext (auto-created when running standalone)
+        **kwargs: Additional keyword arguments forwarded to the agents SDK (e.g., max_turns)
 
     Returns:
         RunResult: The complete execution result from the agents SDK
@@ -321,14 +369,19 @@ async def get_response(self,
 ```
 
 ```python get_response_stream
-async def get_response_stream(self,
-                             message: str | list[TResponseInputItem],
-                             sender_name: str | None = None,
-                             context_override: dict[str, Any] | None = None,
-                             hooks_override: RunHooks | None = None,
-                             run_config_override: RunConfig | None = None,
-                             additional_instructions: str | None = None,
-                             **kwargs) -> AsyncGenerator[Any]:
+def get_response_stream(
+    self,
+    message: str | list[TResponseInputItem],
+    sender_name: str | None = None,
+    context_override: dict[str, Any] | None = None,
+    hooks_override: RunHooks | None = None,
+    run_config_override: RunConfig | None = None,
+    message_files: list[str] | None = None,
+    file_ids: list[str] | None = None,
+    additional_instructions: str | None = None,
+    agency_context: AgencyContext | None = None,
+    **kwargs: Any,
+) -> StreamingRunResponse:
     """
     Run the agent's turn in streaming mode.
 
@@ -338,11 +391,13 @@ async def get_response_stream(self,
         context_override: Optional context data to override default values
         hooks_override: Optional hooks to override default agent hooks
         run_config_override: Optional run configuration
+        message_files: DEPRECATED: Use file_ids instead
         additional_instructions: Additional instructions for this run only
-        **kwargs: Additional keyword arguments
+        agency_context: Injected AgencyContext (auto-created when running standalone)
+        **kwargs: Additional keyword arguments forwarded to the agents SDK
 
-    Yields:
-        Stream events from the agent's execution
+    Returns:
+        StreamingRunResponse: Async iterable over streamed events with access to the final result
     """
 ```
 
@@ -366,14 +421,21 @@ def add_tool(self, tool: Tool) -> None:
 ```
 
 ```python register_subagent
-def register_subagent(self, recipient_agent: "Agent") -> None:
+def register_subagent(
+    self,
+    recipient_agent: "Agent",
+    send_message_tool_class: type | None = None,
+    runtime_state: AgentRuntimeState | None = None,
+) -> None:
     """
     Register another agent as a subagent for communication.
 
-    Creates a dynamic send_message_to_<RecipientName> tool for inter-agent communication.
+    Creates a dynamic `send_message_to_<RecipientName>` tool for inter-agent communication.
 
     Parameters:
         recipient_agent: The Agent instance to register as a recipient
+        send_message_tool_class: Optional custom SendMessage override for this pair
+        runtime_state: Optional runtime state container injected by the owning Agency
 
     Raises:
         TypeError: If recipient_agent is not a valid Agent instance
@@ -398,19 +460,9 @@ def upload_file(self, file_path: str, include_in_vector_store: bool = True) -> s
 
     Returns:
         str: File ID of the uploaded file
-    """
-```
 
-```python check_file_exists
-async def check_file_exists(self, file_name_or_path: str) -> str | None:
-    """
-    Check if a file exists using the agent's file manager.
-
-    Parameters:
-        file_name_or_path: Name or path of the file to check
-
-    Returns:
-        str | None: File ID if exists, None otherwise
+    Raises:
+        RuntimeError: If the agent has no file manager configured
     """
 ```
 
