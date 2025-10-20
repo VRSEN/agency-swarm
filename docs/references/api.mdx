@@ -392,6 +392,7 @@ def get_response_stream(
         hooks_override: Optional hooks to override default agent hooks
         run_config_override: Optional run configuration
         message_files: DEPRECATED: Use file_ids instead
+        file_ids: List of OpenAI file IDs to attach to the message
         additional_instructions: Additional instructions for this run only
         agency_context: Injected AgencyContext (auto-created when running standalone)
         **kwargs: Additional keyword arguments forwarded to the agents SDK
