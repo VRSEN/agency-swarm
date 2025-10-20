@@ -259,7 +259,7 @@ def _persist_run_item_if_needed(
     current_stream_agent_name: str,
     current_agent_run_id: str,
     agency_context: "AgencyContext | None",
-    persistence_candidates: list[tuple[RunItem, str, str]],
+    persistence_candidates: list[tuple[RunItem, str, str, str | None]],
 ) -> None:
     """Persist run item to thread manager with agency metadata if applicable."""
     run_item_obj = getattr(event, "item", None)
@@ -290,14 +290,25 @@ def _persist_run_item_if_needed(
 
     run_item_id, call_id = _extract_identifiers(run_item_obj)
     if run_item_id or call_id:
-        persistence_candidates.append((run_item_obj, current_stream_agent_name, current_agent_run_id))
+        tool_run_agent = getattr(run_item_obj, "agent", None)
+        tool_agent_name = (
+            getattr(tool_run_agent, "name", None)
+            if tool_run_agent is not None
+            else None
+        )
+        if not isinstance(tool_agent_name, str) or not tool_agent_name:
+            tool_agent_name = current_stream_agent_name
+
+        persistence_candidates.append(
+            (run_item_obj, tool_agent_name, current_agent_run_id, sender_name)
+        )
 
 
 def _persist_streamed_items(
     *,
     streaming_result: Any,
     history_for_runner: list[TResponseInputItem],
-    persistence_candidates: list[tuple[RunItem, str, str]],
+    persistence_candidates: list[tuple[RunItem, str, str, str | None]],
     collected_items: list[RunItem],
     agent: "Agent",
     sender_name: str | None,
@@ -320,14 +331,14 @@ def _persist_streamed_items(
     if not new_items:
         return
 
-    id_map: dict[str, tuple[RunItem, str, str]] = {}
-    call_map: dict[str, tuple[RunItem, str, str]] = {}
-    for run_item, agent_name, agent_run_id in reversed(persistence_candidates):
+    id_map: dict[str, tuple[RunItem, str, str, str | None]] = {}
+    call_map: dict[str, tuple[RunItem, str, str, str | None]] = {}
+    for run_item, agent_name, agent_run_id, caller_name in reversed(persistence_candidates):
         run_item_id, call_id = _extract_identifiers(run_item)
         if run_item_id and run_item_id not in id_map:
-            id_map[run_item_id] = (run_item, agent_name, agent_run_id)
+            id_map[run_item_id] = (run_item, agent_name, agent_run_id, caller_name)
         if call_id and call_id not in call_map:
-            call_map[call_id] = (run_item, agent_name, agent_run_id)
+            call_map[call_id] = (run_item, agent_name, agent_run_id, caller_name)
 
     assistant_messages = [item for item in collected_items if isinstance(item, MessageOutputItem)]
     citations_by_message = (
@@ -345,10 +356,11 @@ def _persist_streamed_items(
         run_item_id = item_copy.get("id")
         call_id = item_copy.get("call_id")
 
+        caller_name: str | None = sender_name
         if isinstance(run_item_id, str) and run_item_id in id_map:
-            run_item_obj, current_agent_name, current_agent_run_id = id_map[run_item_id]
+            run_item_obj, current_agent_name, current_agent_run_id, caller_name = id_map[run_item_id]
         elif isinstance(call_id, str) and call_id in call_map:
-            run_item_obj, current_agent_name, current_agent_run_id = call_map[call_id]
+            run_item_obj, current_agent_name, current_agent_run_id, caller_name = call_map[call_id]
         else:
             run_item_obj = next((ri for ri in collected_items if getattr(ri, "id", None) == run_item_id), None)
 
@@ -362,7 +374,7 @@ def _persist_streamed_items(
         formatted_item: TResponseInputItem = MessageFormatter.add_agency_metadata(
             item_payload,
             agent=current_agent_name,
-            caller_agent=sender_name,
+            caller_agent=caller_name,
             agent_run_id=current_agent_run_id,
             parent_run_id=parent_run_id,
             run_trace_id=run_trace_id,
@@ -387,7 +399,7 @@ def _persist_streamed_items(
         if isinstance(origin := item.get("message_origin"), str)
     }
 
-    hosted_tool_outputs = MessageFormatter.extract_hosted_tool_results(agent, collected_items)
+    hosted_tool_outputs = MessageFormatter.extract_hosted_tool_results(agent, collected_items, sender_name)
     if hosted_tool_outputs:
         filtered_hosted_outputs = MessageFilter.filter_messages(hosted_tool_outputs)  # type: ignore[arg-type]
         for hosted_item in filtered_hosted_outputs:
@@ -412,12 +424,12 @@ def _persist_streamed_items(
     run_ids_to_replace: set[str] = {
         run_id for item in filtered_items if isinstance(run_id := item.get("agent_run_id"), str)
     }
-    for _run_item, _, agent_run_id in persistence_candidates:
+    for _run_item, _, agent_run_id, _caller_name in reversed(persistence_candidates):
         if isinstance(agent_run_id, str):
             run_ids_to_replace.add(agent_run_id)
 
     keys_to_replace: set[tuple[str, str | None, str | None]] = set()
-    for run_item, _, _ in persistence_candidates:
+    for run_item, _, _, _caller_name in reversed(persistence_candidates):
         run_id, call_id = _extract_identifiers(run_item)
         if isinstance(run_id, str):
             keys_to_replace.add(("id", run_id, getattr(run_item, "type", None)))
@@ -554,7 +566,7 @@ def run_stream_with_guardrails(
             event_queue: asyncio.Queue[Any] = asyncio.Queue(maxsize=10)
             guardrail_exception: BaseException | None = None
             collected_items: list[RunItem] = []
-            persistence_candidates: list[tuple[RunItem, str, str]] = []
+            persistence_candidates: list[tuple[RunItem, str, str, str | None]] = []
             streaming_result: RunResultStreaming | None = None
             initial_saved_count = 0
             if agency_context and agency_context.thread_manager:
