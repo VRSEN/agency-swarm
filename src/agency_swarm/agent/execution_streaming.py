@@ -356,13 +356,18 @@ def _persist_streamed_items(
         run_item_id = item_copy.get("id")
         call_id = item_copy.get("call_id")
 
-        caller_name: str | None = sender_name
+        mapped_values: tuple[RunItem, str, str, str | None] | None = None
         if isinstance(run_item_id, str) and run_item_id in id_map:
-            run_item_obj, current_agent_name, current_agent_run_id, caller_name = id_map[run_item_id]
+            mapped_values = id_map[run_item_id]
         elif isinstance(call_id, str) and call_id in call_map:
-            run_item_obj, current_agent_name, current_agent_run_id, caller_name = call_map[call_id]
+            mapped_values = call_map[call_id]
         else:
             run_item_obj = next((ri for ri in collected_items if getattr(ri, "id", None) == run_item_id), None)
+
+        if mapped_values is not None:
+            run_item_obj, current_agent_name, current_agent_run_id, caller_name = mapped_values
+        else:
+            caller_name = sender_name
 
         item_payload = cast(TResponseInputItem, item_copy)
 
