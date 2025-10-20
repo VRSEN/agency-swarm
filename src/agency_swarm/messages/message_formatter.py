@@ -195,10 +195,19 @@ class MessageFormatter:
             logger.debug(f"Added {len(item_dict['citations'])} citations to {msg_type} {run_item_obj.raw_item.id}")  # type: ignore[typeddict-item]
 
     @staticmethod
-    def extract_hosted_tool_results(agent: "Agent", run_items: list[RunItem]) -> list[TResponseInputItem]:
+    def extract_hosted_tool_results(
+        agent: "Agent",
+        run_items: list[RunItem],
+        caller_agent: str | None = None,
+    ) -> list[TResponseInputItem]:
         """
         Extract hosted tool results (FileSearch, WebSearch) from assistant message content
         and create special assistant messages to capture search results in conversation history.
+
+        Args:
+            agent: The agent whose run produced the hosted tool results.
+            run_items: Items emitted during the run.
+            caller_agent: Active conversation partner initiating the run (None for user).
         """
         synthetic_outputs = []
 
@@ -243,7 +252,7 @@ class MessageFormatter:
                                 "message_origin": "file_search_preservation",
                             },
                             agent=agent.name,
-                            caller_agent=None,
+                            caller_agent=caller_agent,
                         )
                     )
                     logger.debug(f"Created file_search results message for call_id: {tool_call.id}")
@@ -277,7 +286,7 @@ class MessageFormatter:
                                 "message_origin": "web_search_preservation",
                             },
                             agent=agent.name,
-                            caller_agent=None,
+                            caller_agent=caller_agent,
                         )
                     )
                     logger.debug(f"Created web_search results message for call_id: {tool_call.id}")

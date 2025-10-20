@@ -139,7 +139,9 @@ class Execution:
                 logger.debug(f"Preparing to save {len(run_result.new_items)} new items from RunResult")
 
                 # Only extract hosted tool results if hosted tools were actually used
-                hosted_tool_outputs = extract_hosted_tool_results_if_needed(self.agent, run_result.new_items)
+                hosted_tool_outputs = extract_hosted_tool_results_if_needed(
+                    self.agent, run_result.new_items, caller_agent=sender_name
+                )
 
                 # Extract direct file annotations from assistant messages
                 assistant_messages = [item for item in run_result.new_items if isinstance(item, MessageOutputItem)]

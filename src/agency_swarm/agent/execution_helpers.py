@@ -240,7 +240,11 @@ def prepare_master_context(
     )
 
 
-def extract_hosted_tool_results_if_needed(agent: "Agent", run_items: list[RunItem]) -> list[TResponseInputItem]:
+def extract_hosted_tool_results_if_needed(
+    agent: "Agent",
+    run_items: list[RunItem],
+    caller_agent: str | None = None,
+) -> list[TResponseInputItem]:
     """
     Optimized version that only extracts hosted tool results if hosted tools were actually used.
     This prevents expensive parsing on every response when no hosted tools exist.
@@ -263,7 +267,7 @@ def extract_hosted_tool_results_if_needed(agent: "Agent", run_items: list[RunIte
         logger.debug("No hosted tool calls found in run_items")
         return []  # Early exit - no hosted tools used
 
-    return MessageFormatter.extract_hosted_tool_results(agent, run_items)
+    return MessageFormatter.extract_hosted_tool_results(agent, run_items, caller_agent=caller_agent)
 
 
 def setup_execution(

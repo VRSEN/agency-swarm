@@ -200,7 +200,9 @@ def _persist_streamed_items(
         if isinstance(origin := item.get("message_origin"), str)
     }
 
-    hosted_tool_outputs = MessageFormatter.extract_hosted_tool_results(agent, collected_items)
+    hosted_tool_outputs = MessageFormatter.extract_hosted_tool_results(
+        agent, collected_items, caller_agent=sender_name
+    )
     if hosted_tool_outputs:
         filtered_hosted_outputs = MessageFilter.filter_messages(hosted_tool_outputs)  # type: ignore[arg-type]
         for hosted_item in filtered_hosted_outputs:

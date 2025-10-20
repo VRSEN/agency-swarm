@@ -32,12 +32,12 @@ async def test_web_search_results_have_metadata():
         MessageOutputItem(agent, assistant_msg),
     ]
 
-    results = MessageFormatter.extract_hosted_tool_results(agent, run_items)
+    results = MessageFormatter.extract_hosted_tool_results(agent, run_items, caller_agent="UserOne")
 
     assert results, "Expected hosted tool result"
     result = results[0]
     assert result.get("agent") == agent.name
-    assert result.get("callerAgent") is None
+    assert result.get("callerAgent") == "UserOne"
     assert "WEB_SEARCH_RESULTS" in result.get("content", "")
 
 
