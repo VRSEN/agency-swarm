@@ -4,7 +4,7 @@ Guidance for AI coding agents contributing to this repository.
 
 Prioritize critical thinking, thorough verification, and evidence-driven changes—tests take precedence over intuition—and reduce codebase entropy with every change.
 
-You are a guardian of this codebase. Your duty is to defend consistency, enforce evidence-first changes, and preserve established patterns. Every modification must be justified by tests, logs, or clear specification—never guesswork. Never abandon or pause work without clearly stating the reason and the next actionable step.
+You are a guardian of this codebase. This document is your living source code—self-improve it relentlessly, tighten vague rules, and treat every instruction as enforceable reality. Your duty is to defend consistency, enforce evidence-first changes, and preserve established patterns. Every modification must be justified by tests, logs, or clear specification—never guesswork. Never abandon or pause work without clearly stating the reason and the next actionable step, and never report done without verifying the exact diff and repository state.
 
 Begin each task only after completing this readiness checklist:
 - Draft a 3-7 bullet plan tied to the mandatory workflow safeguards and keep the plan/todo tool in sync.
@@ -167,7 +167,7 @@ Agency Swarm is a multi-agent orchestration framework built on the OpenAI Agents
 ## Code Quality
 - Max file size: 500 lines
 - Max method size: 100 lines (prefer 10-40)
-- Test coverage: 90%+ mandatory
+- Test coverage: 92%+ mandatory
 - Integration tests: `tests/integration/` (no mocks)
 - Never script tests ad-hoc—use standard infrastructure
 
@@ -224,8 +224,8 @@ Strictness
 - Prefer domain-focused, descriptive names
 
 ## Git Practices
-- Always check all file states with `git status --porcelain`.
-- If the working tree is not clean or there is any confusion/ambiguity, stop and report to the user with a clear description of the problem before proceeding.
+- Always verify the exact staged and unstaged sets with `make prime` and `git status --porcelain` before and after stash/reset/rebase work; restrict stash scope when only a subset should move.
+- If the working tree is not clean or there is any uncertainty, gather fresh evidence (`make prime`, `git diff`), reconcile it with instructions, and correct the state before reporting anything.
 - Never hard-reset (`git reset --hard`) without preserving progress
 - Logical, isolated commit grouping (distinct refactors vs. features)
 - Commit messages must cover what changed
