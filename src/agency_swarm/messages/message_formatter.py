@@ -222,11 +222,7 @@ class MessageFormatter:
                     hosted_tool_calls.append(item)
             elif isinstance(item, MessageOutputItem):
                 msg_agent_obj = getattr(item, "agent", None)
-                msg_agent_name = (
-                    getattr(msg_agent_obj, "name", None)
-                    if msg_agent_obj is not None
-                    else None
-                )
+                msg_agent_name = getattr(msg_agent_obj, "name", None) if msg_agent_obj is not None else None
                 if not isinstance(msg_agent_name, str) or not msg_agent_name:
                     msg_agent_name = agent.name
                 assistant_messages_by_agent.setdefault(msg_agent_name, []).append(item)

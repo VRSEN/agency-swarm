@@ -249,6 +249,18 @@ def _update_names_from_event(
     return current_stream_agent_name, current_agent_run_id
 
 
+def _resolve_caller_agent(payload: Any, default: str | None) -> str | None:
+    """Extract caller agent metadata from heterogeneous payload structures."""
+    caller_agent: str | None
+    if isinstance(payload, dict):
+        caller_agent = payload.get("callerAgent")
+    else:
+        caller_agent = getattr(payload, "callerAgent", None)
+    if isinstance(caller_agent, str) and caller_agent:
+        return caller_agent
+    return default
+
+
 def _persist_run_item_if_needed(
     event: Any,
     *,
@@ -277,10 +289,12 @@ def _persist_run_item_if_needed(
         single_citation_map = extract_direct_file_annotations([run_item_obj], agent_name=agent.name)
         MessageFormatter.add_citations_to_message(run_item_obj, item_dict, single_citation_map, is_streaming=True)
 
+    caller_for_event = _resolve_caller_agent(event, sender_name)
+
     formatted_item = MessageFormatter.add_agency_metadata(
         item_dict,  # type: ignore[arg-type]
         agent=current_stream_agent_name,
-        caller_agent=sender_name,
+        caller_agent=caller_for_event,
         agent_run_id=current_agent_run_id,
         parent_run_id=parent_run_id,
         run_trace_id=run_trace_id,
@@ -291,17 +305,11 @@ def _persist_run_item_if_needed(
     run_item_id, call_id = _extract_identifiers(run_item_obj)
     if run_item_id or call_id:
         tool_run_agent = getattr(run_item_obj, "agent", None)
-        tool_agent_name = (
-            getattr(tool_run_agent, "name", None)
-            if tool_run_agent is not None
-            else None
-        )
+        tool_agent_name = getattr(tool_run_agent, "name", None) if tool_run_agent is not None else None
         if not isinstance(tool_agent_name, str) or not tool_agent_name:
             tool_agent_name = current_stream_agent_name
 
-        persistence_candidates.append(
-            (run_item_obj, tool_agent_name, current_agent_run_id, sender_name)
-        )
+        persistence_candidates.append((run_item_obj, tool_agent_name, current_agent_run_id, caller_for_event))
 
 
 def _persist_streamed_items(
@@ -355,6 +363,7 @@ def _persist_streamed_items(
         run_item_obj: RunItem | None = None
         run_item_id = item_copy.get("id")
         call_id = item_copy.get("call_id")
+        caller_name = _resolve_caller_agent(item_copy, sender_name)
 
         mapped_values: tuple[RunItem, str, str, str | None] | None = None
         if isinstance(run_item_id, str) and run_item_id in id_map:
@@ -366,8 +375,6 @@ def _persist_streamed_items(
 
         if mapped_values is not None:
             run_item_obj, current_agent_name, current_agent_run_id, caller_name = mapped_values
-        else:
-            caller_name = sender_name
 
         item_payload = cast(TResponseInputItem, item_copy)
 
