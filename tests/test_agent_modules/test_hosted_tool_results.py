@@ -5,6 +5,7 @@ from openai.types.responses.response_output_message import ResponseOutputMessage
 
 from agency_swarm.agent.core import Agent
 from agency_swarm.messages import MessageFormatter
+from agency_swarm.utils.thread import ThreadManager
 
 
 @pytest.mark.asyncio
@@ -40,6 +41,46 @@ async def test_web_search_results_have_metadata():
     assert result.get("callerAgent") is None
     assert "WEB_SEARCH_RESULTS" in result.get("content", "")
 
+
+def test_web_search_results_use_provided_caller_agent():
+    """Synthetic preservation should inherit the active caller when provided."""
+    agent = Agent(name="MetaAgent", instructions="Test")
+
+    web_call = ResponseFunctionWebSearch(
+        id="call-with-caller",
+        action=ActionSearch(query="hello", type="search"),
+        status="completed",
+        type="web_search_call",
+    )
+
+    assistant_msg = ResponseOutputMessage(
+        id="msg-with-caller",
+        content=[ResponseOutputText(annotations=[], text="result", type="output_text")],
+        role="assistant",
+        status="completed",
+        type="message",
+    )
+
+    run_items = [
+        ToolCallItem(agent, web_call),
+        MessageOutputItem(agent, assistant_msg),
+    ]
+
+    caller_agent = "Orchestrator"
+    results = MessageFormatter.extract_hosted_tool_results(agent, run_items, caller_agent)
+
+    assert results, "Expected hosted tool result"
+    result = results[0]
+    assert result.get("callerAgent") == caller_agent
+
+    thread_manager = ThreadManager()
+    thread_manager.add_messages(results)
+
+    orchestrator_thread = thread_manager.get_conversation_history(agent.name, caller_agent)
+    user_thread = thread_manager.get_conversation_history(agent.name, None)
+
+    assert orchestrator_thread and orchestrator_thread[0]["callerAgent"] == caller_agent
+    assert not user_thread, "Preservation message should not bleed into user thread"
 
 def test_extract_no_results_returns_empty():
     """Ensure empty list is returned when no hosted tool calls present."""
