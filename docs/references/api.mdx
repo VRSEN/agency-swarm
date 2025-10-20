@@ -12,33 +12,37 @@ The Agency class orchestrates a collection of Agent instances based on a defined
 from agency_swarm import Agency, Agent
 
 class Agency:
-    def __init__(self,
-                 *entry_points_args: Agent,
-                 communication_flows: list[tuple[Agent, Agent]] | None = None,
-                 agency_chart: AgencyChart | None = None,
-                 name: str | None = None,
-                 shared_instructions: str | None = None,
-                 send_message_tool_class: type | None = None,
-                 load_threads_callback: ThreadLoadCallback | None = None,
-                 save_threads_callback: ThreadSaveCallback | None = None,
-                 user_context: dict[str, Any] | None = None,
-                 **kwargs: Any):
+    def __init__(
+        self,
+        *entry_point_agents: Agent,
+        communication_flows: list[CommunicationFlowEntry] | None = None,
+        agency_chart: AgencyChart | None = None,
+        name: str | None = None,
+        shared_instructions: str | None = None,
+        send_message_tool_class: type | None = None,
+        load_threads_callback: ThreadLoadCallback | None = None,
+        save_threads_callback: ThreadSaveCallback | None = None,
+        user_context: dict[str, Any] | None = None,
+        **kwargs: Any,
+    ):
         """
         Initialize an Agency instance.
 
         Parameters:
-            *entry_points_args: Agent instances that serve as entry points for external interaction
-            communication_flows: List of (sender, receiver) Agent tuples defining allowed communication paths
+            *entry_point_agents: Agent instances that serve as entry points for external interaction
+            communication_flows: Sequence describing sender/receiver pairs or AgentFlow chains (optionally with custom tools)
             agency_chart: [DEPRECATED] Legacy agency structure definition
-            name: Optional name for the agency
-            shared_instructions: Instructions prepended to all agents' system prompts
-            send_message_tool_class: Custom SendMessage tool class for enhanced inter-agent communication
+            name: Optional display name for the agency
+            shared_instructions: Instruction text or file path prepended to all agents' system prompts
+            send_message_tool_class: Default SendMessage tool class for inter-agent communication
             load_threads_callback: Callable to load conversation threads from persistence
             save_threads_callback: Callable to save conversation threads to persistence
             user_context: Initial shared context accessible to all agents
-            **kwargs: Additional parameters (deprecated ones will issue warnings)
+            **kwargs: Additional parameters captured for backward compatibility
         """
 ```
+
+`CommunicationFlowEntry` accepts `(sender_agent, receiver_agent)`, `AgentFlow` chains, or those tuples paired with a custom tool class.
 
 ### Key Attributes
 
@@ -118,7 +122,7 @@ def get_response_sync(self,
 ```
 
 ```python get_response_stream
-async def get_response_stream(self,
+def get_response_stream(self,
         message: str | list[TResponseInputItem],
         recipient_agent: str | Agent | None = None,
         context_override: dict[str, Any] | None = None,
@@ -128,7 +132,7 @@ async def get_response_stream(self,
         file_ids: list[str] | None = None,
         additional_instructions: str | None = None,
         **kwargs: Any
-    ) -> AsyncGenerator[Any]:
+    ) -> StreamingRunResponse:
     """
     Initiate a streaming interaction with a specified agent within the agency.
 
@@ -143,8 +147,8 @@ async def get_response_stream(self,
         additional_instructions: Additional instructions for this run only
         **kwargs: Additional arguments passed to get_response_stream
 
-    Yields:
-        Any: Events from the agents.Runner.run_streamed execution
+    Returns:
+        StreamingRunResponse: Async iterable merging events with access to the final run result
     """
 ```
 
@@ -203,9 +207,24 @@ def visualize(self,
 ```
 
 ```python terminal_demo
-def terminal_demo(self) -> None:
+def terminal_demo(self, show_reasoning: bool | None = None) -> None:
     """
     Run a terminal demo of the agency.
+
+    Parameters:
+        show_reasoning: Override Agency UI reasoning visibility when available
+    """
+```
+
+```python copilot_demo
+def copilot_demo(self,
+        host: str = "0.0.0.0",
+        port: int = 8000,
+        frontend_port: int = 3000,
+        cors_origins: list[str] | None = None,
+    ) -> None:
+    """
+    Run the Copilot web demo for this agency.
     """
 ```
 
@@ -262,18 +281,28 @@ class Agent(BaseAgent[MasterContext]):
 
         Parameters:
             name (str): The agent's name (required)
-            instructions (str): Agent instructions or path to markdown file
-            model (str): OpenAI model to use
-            model_settings (ModelSettings): Model configuration from agents SDK
-            tools (list[Tool]): List of tools available to the agent
-            files_folder (str | Path | None): Path to folder for file management and vector stores
-            tools_folder (str | Path | None): Path to directory containing tool definitions
+            instructions (str | Path | None): Agent instructions or path to markdown file
             description (str | None): Description of agent's role for inter-agent communication
+            model (str | Model | None): OpenAI model identifier to use
+            model_settings (ModelSettings | None): Model configuration from the agents SDK
+            tools (list[Tool] | None): Tools available to the agent
+            files_folder (str | Path | None): Path to folder for file management and optional vector store setup
+            tools_folder (str | Path | None): Path to directory containing tool definitions
+            schemas_folder (str | Path | None): Directory with OpenAPI schemas for automatic tool creation
+            api_headers (dict[str, dict[str, str]] | None): Optional per-schema headers for generated tools
+            api_params (dict[str, dict[str, Any]] | None): Optional per-schema parameters for generated tools
             output_type (type[Any] | None): Type of the agent's final output
-            send_message_tool_class (type | None): Custom SendMessage tool class
+            send_message_tool_class (type | None): Custom SendMessage tool or handoff tool class
+            include_search_results (bool): Include vector store search results in FileSearchTool output
+            validation_attempts (int): Retry count when output guardrails fail
+            throw_input_guardrail_error (bool): Whether to raise input guardrail failures as exceptions
+            handoff_reminder (str | None): Custom reminder message for handoffs
             input_guardrails (list): Input validation guardrails
             output_guardrails (list): Output validation guardrails
             hooks (RunHooks | None): Custom execution hooks
+            mcp_servers (list[MCPServer] | None): Model Context Protocol servers to register and connect
+            mcp_config (MCPConfig | None): Configuration for MCP servers
+            tool_use_behavior (...): Tool usage configuration forwarded to the agents SDK
             **kwargs: Additional parameters (deprecated ones will issue warnings)
         """
 ```
@@ -300,6 +329,7 @@ async def get_response(self,
                       message_files: list[str] | None = None,
                       file_ids: list[str] | None = None,
                       additional_instructions: str | None = None,
+                      agency_context: AgencyContext | None = None,
                       **kwargs: Any) -> RunResult:
     """
     Run the agent's turn in the conversation loop.
@@ -313,6 +343,7 @@ async def get_response(self,
         message_files: DEPRECATED: Use file_ids instead
         file_ids: List of OpenAI file IDs to attach to the message
         additional_instructions: Additional instructions for this run only
+        agency_context: Agency-scoped execution context (automatically provided by Agency)
         **kwargs: Additional keyword arguments including max_turns
 
     Returns:
@@ -328,7 +359,10 @@ async def get_response_stream(self,
                              hooks_override: RunHooks | None = None,
                              run_config_override: RunConfig | None = None,
                              additional_instructions: str | None = None,
-                             **kwargs) -> AsyncGenerator[Any]:
+                             message_files: list[str] | None = None,
+                             file_ids: list[str] | None = None,
+                             agency_context: AgencyContext | None = None,
+                             **kwargs) -> StreamingRunResponse:
     """
     Run the agent's turn in streaming mode.
 
@@ -339,10 +373,13 @@ async def get_response_stream(self,
         hooks_override: Optional hooks to override default agent hooks
         run_config_override: Optional run configuration
         additional_instructions: Additional instructions for this run only
+        message_files: DEPRECATED: Use file_ids instead
+        file_ids: List of file IDs to attach to the message
+        agency_context: Agency-scoped execution context (automatically provided by Agency)
         **kwargs: Additional keyword arguments
 
-    Yields:
-        Stream events from the agent's execution
+    Returns:
+        StreamingRunResponse: Async iterable for streaming events with access to the final result
     """
 ```
 
@@ -366,7 +403,11 @@ def add_tool(self, tool: Tool) -> None:
 ```
 
 ```python register_subagent
-def register_subagent(self, recipient_agent: "Agent") -> None:
+def register_subagent(self,
+        recipient_agent: "Agent",
+        send_message_tool_class: type | None = None,
+        runtime_state: AgentRuntimeState | None = None,
+    ) -> None:
     """
     Register another agent as a subagent for communication.
 
@@ -374,10 +415,8 @@ def register_subagent(self, recipient_agent: "Agent") -> None:
 
     Parameters:
         recipient_agent: The Agent instance to register as a recipient
-
-    Raises:
-        TypeError: If recipient_agent is not a valid Agent instance
-        ValueError: If attempting to register the agent itself as a subagent
+        send_message_tool_class: Optional custom send message tool override
+        runtime_state: Optional runtime state container (automatically provided by Agency)
     """
 ```
 
@@ -398,19 +437,6 @@ def upload_file(self, file_path: str, include_in_vector_store: bool = True) -> s
 
     Returns:
         str: File ID of the uploaded file
-    """
-```
-
-```python check_file_exists
-async def check_file_exists(self, file_name_or_path: str) -> str | None:
-    """
-    Check if a file exists using the agent's file manager.
-
-    Parameters:
-        file_name_or_path: Name or path of the file to check
-
-    Returns:
-        str | None: File ID if exists, None otherwise
     """
 ```
 
