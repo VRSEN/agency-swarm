@@ -5,8 +5,6 @@ Launches the packaged browser frontend + FastAPI backend.
 Edit this file to customize the agent behavior.
 """
 
-from __future__ import annotations
-
 import sys
 from pathlib import Path
 

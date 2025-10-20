@@ -1,8 +1,7 @@
-from __future__ import annotations
-
 from pathlib import Path
 from typing import Any
 
+from agency_swarm.agency.core import Agency
 from agency_swarm.agent.core import Agent
 
 
@@ -60,7 +59,9 @@ class RealtimeDemoLauncher:
             turn_detection=turn_detection,
             input_audio_noise_reduction=input_audio_noise_reduction,
         )
-        session_factory = RealtimeSessionFactory(agent, base_settings)
+        agency = Agency(agent)
+        realtime_agency = agency.to_realtime()
+        session_factory = RealtimeSessionFactory(realtime_agency, base_settings)
         app = create_realtime_demo_app(
             session_factory,
             static_dir=demo_static_dir,
