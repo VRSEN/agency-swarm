@@ -44,22 +44,8 @@ voice_agent = Agent(
 ```
 
 <Tip>
-If you already have a typed Agency Swarm agent, you do not need to change the class—voice uses the same instance.
+If you've already built your agency, you do not need to change anything!
 </Tip>
-
-## Try it instantly
-
-Hear the experience without writing server code by running the packaged demo:
-
-```bash
-python -m examples.interactive.realtime.demo
-```
-
-The script launches a local FastAPI bridge and serves a browser client at `http://localhost:8000`. Edit `examples/interactive/realtime/demo.py` to swap in your agent, tweak the greeting, or change the tool list.
-
-<Note>
-The packaged UI comes from OpenAI’s realtime reference app and ships with Agency Swarm. Run the scripts in `examples/interactive/realtime/` to launch it locally, or browse the source at [github.com/VRSEN/agency-swarm/tree/main/examples/interactive/realtime](https://github.com/VRSEN/agency-swarm/tree/main/examples/interactive/realtime).
-</Note>
 
 ## Add handoffs (optional)
 
@@ -88,13 +74,13 @@ agency = Agency(
 
 When the concierge invokes `SendMessageHandoff`, the realtime session routes audio and tool access to the designated specialist agent.
 
-## Next steps
-
-- [Deploy your voice agents](./deployment) for FastAPI control, browser clients, and Twilio phone calls.
-- Explore the generated demo UI in `src/agency_swarm/ui/demos/realtime/app` to customise the web experience.
-- Review OpenAI’s realtime [Quickstart](https://openai.github.io/openai-agents-python/realtime/quickstart/) and [Guide](https://openai.github.io/openai-agents-python/realtime/guide/) for protocol details—Agency Swarm builds on those primitives.
-
 ## Troubleshooting
 
 - **Realtime access errors** — ensure the API key you load before launch has the `gpt-realtime` (or compatible) capability; the helper surfaces the HTTP status code in the logs.
 - **Call feels slow** — keep agent instructions concise and offload long-running work to tools so the model can respond within the audio budget.
+
+## Next steps
+
+- Try the [realtime browser demo](https://github.com/VRSEN/agency-swarm/tree/main/examples/interactive/realtime)
+- [Deploy your agents](./deployment) for phone calls using Twilio.
+- Review OpenAI’s realtime [Quickstart](https://openai.github.io/openai-agents-python/realtime/quickstart/) and [Guide](https://openai.github.io/openai-agents-python/realtime/guide/) for protocol details—Agency Swarm builds on those primitives.
