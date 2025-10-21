@@ -2,7 +2,6 @@ from pathlib import Path
 from typing import Any
 
 from agency_swarm.agency.core import Agency
-from agency_swarm.agent.core import Agent
 
 
 class RealtimeDemoLauncher:
@@ -10,7 +9,7 @@ class RealtimeDemoLauncher:
 
     @staticmethod
     def start(
-        agent: Agent,
+        agency: Agency,
         *,
         host: str = "0.0.0.0",
         port: int = 8000,
@@ -23,8 +22,11 @@ class RealtimeDemoLauncher:
         cors_origins: list[str] | None = None,
     ) -> None:
         """Start the realtime demo server and keep it running until interrupted."""
-        if agent is None:
-            raise ValueError("RealtimeDemoLauncher.start requires an Agent instance.")
+        if not isinstance(agency, Agency):
+            raise TypeError("RealtimeDemoLauncher.start expects an Agency instance.")
+        if not agency.entry_points:
+            raise ValueError("RealtimeDemoLauncher.start requires the Agency to define at least one entry point.")
+        entry_agent = agency.entry_points[0]
 
         try:
             import uvicorn
@@ -59,8 +61,7 @@ class RealtimeDemoLauncher:
             turn_detection=turn_detection,
             input_audio_noise_reduction=input_audio_noise_reduction,
         )
-        agency = Agency(agent)
-        realtime_agency = agency.to_realtime()
+        realtime_agency = agency.to_realtime(entry_agent)
         session_factory = RealtimeSessionFactory(realtime_agency, base_settings)
         app = create_realtime_demo_app(
             session_factory,
