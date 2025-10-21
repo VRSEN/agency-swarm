@@ -1,5 +1,9 @@
 import pytest
 from agents.items import MessageOutputItem, ToolCallItem
+from openai.types.responses.response_file_search_tool_call import (
+    ResponseFileSearchToolCall,
+    Result as FileSearchResult,
+)
 from openai.types.responses.response_function_web_search import ActionSearch, ResponseFunctionWebSearch
 from openai.types.responses.response_output_message import ResponseOutputMessage, ResponseOutputText
 
@@ -32,12 +36,16 @@ async def test_web_search_results_have_metadata():
         MessageOutputItem(agent, assistant_msg),
     ]
 
-    results = MessageFormatter.extract_hosted_tool_results(agent, run_items)
+    results = MessageFormatter.extract_hosted_tool_results(
+        agent,
+        run_items,
+        caller_agent="Researcher",
+    )
 
     assert results, "Expected hosted tool result"
     result = results[0]
     assert result.get("agent") == agent.name
-    assert result.get("callerAgent") is None
+    assert result.get("callerAgent") == "Researcher"
     assert "WEB_SEARCH_RESULTS" in result.get("content", "")
 
 
@@ -45,7 +53,11 @@ def test_extract_no_results_returns_empty():
     """Ensure empty list is returned when no hosted tool calls present."""
     agent = Agent(name="EmptyAgent", instructions="Test")
 
-    results = MessageFormatter.extract_hosted_tool_results(agent, [])
+    results = MessageFormatter.extract_hosted_tool_results(
+        agent,
+        [],
+        caller_agent="AnyAgent",
+    )
     assert results == []
 
 
@@ -79,7 +91,7 @@ def test_web_search_results_deduplicated():
 
     run_items = [ToolCallItem(agent, web_call)] + [MessageOutputItem(agent, m) for m in assistant_msgs]
 
-    results = MessageFormatter.extract_hosted_tool_results(agent, run_items)
+    results = MessageFormatter.extract_hosted_tool_results(agent, run_items)  # type: ignore[arg-type]
     assert len(results) == 1
     assert "result1" in results[0]["content"]
     assert "result2" not in results[0]["content"]
@@ -141,3 +153,81 @@ def test_multiple_web_searches_get_distinct_results():
     assert "search_2" in results[1]["content"]
     assert "JavaScript results" in results[1]["content"]
     assert "Python results" not in results[1]["content"]
+
+
+def test_file_search_results_only_persist_for_executing_agent():
+    """Ensure hosted tool preservation is only emitted by the agent that ran the tool."""
+    ceo = Agent(name="CEO", instructions="Test")
+    worker = Agent(name="Worker", instructions="Test")
+
+    tool_call = ResponseFileSearchToolCall(
+        id="fs_unique",
+        queries=["favorite books"],
+        status="completed",
+        type="file_search_call",
+        results=[
+            FileSearchResult(
+                file_id="file-1",
+                filename="favorite_books.txt",
+                score=0.9,
+                text="Books list",
+            )
+        ],
+    )
+
+    hosted_run_items = [ToolCallItem(ceo, tool_call)]
+
+    ceo_results = MessageFormatter.extract_hosted_tool_results(
+        ceo,
+        hosted_run_items,
+        caller_agent="Worker",
+    )
+    assert ceo_results, "Executing agent should persist hosted tool results"
+
+    worker_results = MessageFormatter.extract_hosted_tool_results(
+        worker,
+        hosted_run_items,
+        caller_agent="Worker",
+    )
+    assert worker_results == [], "Non-executing agent must not duplicate hosted tool preservation"
+
+
+def test_web_search_results_only_persist_for_executing_agent():
+    """Ensure web search preservation is written only by the executing agent."""
+    ceo = Agent(name="CEO", instructions="Test")
+    worker = Agent(name="Worker", instructions="Test")
+
+    web_call = ResponseFunctionWebSearch(
+        id="web_unique",
+        action=ActionSearch(query="web search", type="search"),
+        status="completed",
+        type="web_search_call",
+    )
+
+    assistant_msg = ResponseOutputMessage(
+        id="web_msg",
+        content=[ResponseOutputText(annotations=[], text="Search content", type="output_text")],
+        role="assistant",
+        status="completed",
+        type="message",
+    )
+
+    run_items = [
+        ToolCallItem(ceo, web_call),
+        MessageOutputItem(ceo, assistant_msg),
+    ]
+
+    ceo_results = MessageFormatter.extract_hosted_tool_results(
+        ceo,
+        run_items,
+        caller_agent="Worker",
+    )
+    assert ceo_results, "Executing agent should persist web search results"
+    assert "WEB_SEARCH_RESULTS" in ceo_results[0]["content"]
+
+    worker_results = MessageFormatter.extract_hosted_tool_results(
+        worker,
+        run_items,
+        caller_agent="Worker",
+    )
+    assert worker_results == [], "Non-executing agent must not duplicate web search preservation"

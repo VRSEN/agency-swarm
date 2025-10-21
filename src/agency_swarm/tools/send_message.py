@@ -407,19 +407,21 @@ class SendMessage(FunctionTool):
 
                         # Log tool calls from sub-agent
                         if hasattr(item, "type") and item.type == "tool_call_item":
-                            if hasattr(item, "raw_item") and hasattr(item.raw_item, "name"):
-                                tool_name = item.raw_item.name
+                            raw_item = getattr(item, "raw_item", None)
+                            tool_name = getattr(raw_item, "name", None)
+                            if isinstance(tool_name, str) and tool_name:
                                 tool_calls_seen.append(tool_name)
                                 logger.info(f"[SUB-AGENT '{recipient_name_for_call}'] Tool call: {tool_name}")
 
                         # Extract final output
                         elif hasattr(item, "type") and item.type == "message_output_item":
-                            if hasattr(item, "raw_item") and hasattr(item.raw_item, "content"):
-                                content = item.raw_item.content
-                                if content and len(content) > 0:
-                                    text_content = getattr(content[0], "text", "")
-                                    if text_content:
-                                        final_output_text = text_content
+                            raw_item = getattr(item, "raw_item", None)
+                            content = getattr(raw_item, "content", None)
+                            if content and len(content) > 0:
+                                first_content = content[0]
+                                text_content = getattr(first_content, "text", "")
+                                if text_content:
+                                    final_output_text = text_content
 
                     # Send error message to the caller if it occurs
                     if isinstance(event, dict) and event.get("type") == "error":

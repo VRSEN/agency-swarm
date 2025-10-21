@@ -201,7 +201,11 @@ class MessageFormatter:
             logger.debug(f"Added {len(item_dict['citations'])} citations to {msg_type} {run_item_obj.raw_item.id}")  # type: ignore[typeddict-item]
 
     @staticmethod
-    def extract_hosted_tool_results(agent: "Agent", run_items: list[RunItem]) -> list[TResponseInputItem]:
+    def extract_hosted_tool_results(
+        agent: "Agent",
+        run_items: list[RunItem],
+        caller_agent: str | None = None,
+    ) -> list[TResponseInputItem]:
         """
         Extract hosted tool results (FileSearch, WebSearch) from assistant message content
         and create special assistant messages to capture search results in conversation history.
@@ -210,22 +214,37 @@ class MessageFormatter:
 
         # Find hosted tool calls and assistant messages
         hosted_tool_calls = []
-        assistant_messages = []
+        assistant_messages_by_agent: dict[str, list[MessageOutputItem]] = {}
 
         for item in run_items:
             if isinstance(item, ToolCallItem):
                 if isinstance(item.raw_item, ResponseFileSearchToolCall | ResponseFunctionWebSearch):
                     hosted_tool_calls.append(item)
             elif isinstance(item, MessageOutputItem):
-                assistant_messages.append(item)
+                msg_agent_obj = getattr(item, "agent", None)
+                msg_agent_name = getattr(msg_agent_obj, "name", None) if msg_agent_obj is not None else None
+                if not isinstance(msg_agent_name, str) or not msg_agent_name:
+                    msg_agent_name = agent.name
+                assistant_messages_by_agent.setdefault(msg_agent_name, []).append(item)
 
-        # Track which assistant messages have been used for web search
-        used_assistant_msg_indices = set()
+        # Track which assistant messages have been used for web search per agent
+        used_assistant_msg_indices: dict[str, set[int]] = {}
+
+        def resolve_agent_name(tool_call_item: ToolCallItem) -> str:
+            run_agent = getattr(tool_call_item, "agent", None)
+            resolved_name = getattr(run_agent, "name", None)
+            if isinstance(resolved_name, str) and resolved_name:
+                return resolved_name
+            return agent.name
 
         # Extract results for each hosted tool call
         for tool_call_item in hosted_tool_calls:
             tool_call = tool_call_item.raw_item
 
+            tool_agent_name = resolve_agent_name(tool_call_item)
+            # Avoid overwriting propagated messages
+            if tool_agent_name != agent.name:
+                continue
             # Capture search results for tool output persistence
             if isinstance(tool_call, ResponseFileSearchToolCall):
                 search_results_content = f"[SEARCH_RESULTS] Tool Call ID: {tool_call.id}\nTool Type: file_search\n"
@@ -248,8 +267,8 @@ class MessageFormatter:
                                 "content": search_results_content,
                                 "message_origin": "file_search_preservation",
                             },
-                            agent=agent.name,
-                            caller_agent=None,
+                            agent=tool_agent_name,
+                            caller_agent=caller_agent,
                         )
                     )
                     logger.debug(f"Created file_search results message for call_id: {tool_call.id}")
@@ -259,20 +278,23 @@ class MessageFormatter:
 
                 # Capture FULL search results (not truncated to 500 chars)
                 found_content = False
-                for idx, msg_item in enumerate(assistant_messages):
-                    # Skip if this message was already used for another web search
-                    if idx in used_assistant_msg_indices:
-                        continue
-                    message = msg_item.raw_item
-                    if hasattr(message, "content") and message.content:
-                        for content_item in message.content:
-                            if hasattr(content_item, "text") and content_item.text:
-                                search_results_content += f"Search Results:\n{content_item.text}\n"
-                                found_content = True
-                                used_assistant_msg_indices.add(idx)
-                                break  # Process only first text content item per message
-                        if found_content:
-                            break  # Process only first available assistant message with content
+                agent_messages = assistant_messages_by_agent.get(tool_agent_name, [])
+                if agent_messages:
+                    used_indices = used_assistant_msg_indices.setdefault(tool_agent_name, set())
+                    for idx, msg_item in enumerate(agent_messages):
+                        # Skip if this message was already used for another web search
+                        if idx in used_indices:
+                            continue
+                        message = msg_item.raw_item
+                        if hasattr(message, "content") and message.content:
+                            for content_item in message.content:
+                                if hasattr(content_item, "text") and content_item.text:
+                                    search_results_content += f"Search Results:\n{content_item.text}\n"
+                                    found_content = True
+                                    used_indices.add(idx)
+                                    break  # Process only first text content item per message
+                            if found_content:
+                                break  # Process only first available assistant message with content
 
                 if found_content:
                     synthetic_outputs.append(
@@ -282,8 +304,8 @@ class MessageFormatter:
                                 "content": search_results_content,
                                 "message_origin": "web_search_preservation",
                             },
-                            agent=agent.name,
-                            caller_agent=None,
+                            agent=tool_agent_name,
+                            caller_agent=caller_agent,
                         )
                     )
                     logger.debug(f"Created web_search results message for call_id: {tool_call.id}")
