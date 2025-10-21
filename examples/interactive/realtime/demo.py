@@ -11,7 +11,7 @@ from pathlib import Path
 # Ensure local src/ is importable when running directly from the repo checkout.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
-from agency_swarm import Agent, function_tool
+from agency_swarm import Agency, Agent, function_tool
 from agency_swarm.ui.demos.realtime import RealtimeDemoLauncher
 
 
@@ -30,6 +30,8 @@ VOICE_AGENT = Agent(
     tools=[lookup_order],
 )
 
+VOICE_AGENCY = Agency(VOICE_AGENT)
+
 
 def main() -> None:
     print("Agency Swarm Realtime Browser Demo")
@@ -38,7 +40,7 @@ def main() -> None:
     print("Press Ctrl+C to stop.\n")
 
     RealtimeDemoLauncher.start(
-        VOICE_AGENT,
+        VOICE_AGENCY,
         model="gpt-realtime",
         voice="alloy",
         turn_detection={"type": "server_vad"},
