@@ -1,19 +1,37 @@
 ---
 title: "Multimodal Tool Outputs"
-description: "Return images and files from your tools to enable richer agent interactions"
+description: "Return images and files from your tools."
 icon: "image"
 ---
 
-## Overview
+## What This Feature Unlocks
 
-Tools can return **multimodal outputs**: images and files in addition to text. Agents can generate visualizations, documents, and reference rich media in conversations.
+Returning images and files from the tools enables real agentic feedback loops on completely new modalities.
 
-## Supported Output Formats
+For example, instead of dumping all the data into an agent, and hoping for the best, you can export it in CSV, generate a visualization, and allow the agent to provide insights based on that visualization. Just like a real data analyst.
 
-### Image Outputs
+This saves your context window and unlocks autonomous agentic workflows for a lot of new use cases:
 
-`ToolOutputImage` represents “a tool output that should be sent to the model as an image,” per the SDK docstring.  
-You can populate the fields directly, or rely on our convenience helper.
+## New Use Cases
+
+- **Software Development**: Agents can check websites autonomously and iterate until all elements are properly positioned, enabling them to tackle complex projects without manual screenshot feedback.
+
+- **Brand Asset Generation**: Provide brand guidelines, logos, and messaging, then let agents iterate on image and video generation (including Sora 2) until outputs fully match your expectations.
+
+- **Screen-Aware Assistance**: Build agents that help visually impaired individuals navigate websites or create customer support agents that see the user's current webpage for better assistance.
+
+- **Data Analytics**: Export large datasets as CSV, generate visual graphs, and let agents provide insights based on visualizations without overloading the context window.
+
+
+## Output Formats
+
+### Images (PNG, JPG)
+
+To return an image from a tool, you can either:
+
+    1. Use the `ToolOutputImage` class.
+    2. Return a dict with the `type` set to `"image"` and either `image_url` (URL or data URL) or `file_id`.
+    3. Use our convenience `tool_output_image_from_path` function.
 
 ```python
 from agency_swarm import ToolOutputImage, ToolOutputImageDict, function_tool
@@ -27,7 +45,6 @@ def fetch_gallery_image() -> ToolOutputImage:
         detail="auto",
     )
 
-
 @function_tool
 def fetch_gallery_image_dict() -> ToolOutputImageDict:
     """Dict variant of the same image output."""
@@ -37,20 +54,15 @@ def fetch_gallery_image_dict() -> ToolOutputImageDict:
         "detail": "auto",
     }
 
-
 @function_tool
 def fetch_local_image() -> ToolOutputImage:
     """Load an image from disk using the helper."""
     return tool_output_image_from_path("examples/data/landscape_scene.png", detail="auto")
 ```
 
-The dict form mirrors the `ToolOutputImageDict` schema—set `type` to `"image"` and provide either `image_url` (URL or data URL) or `file_id`.
+### Files (CSV, PDF, ZIP)
 
-### File Outputs
-
-`ToolOutputFileContent` “should be sent to the model as a file.” According to the docstring you must provide one of `file_data` (base64), `file_url`, or `file_id`, optionally adding `filename`.
-
-When you choose `file_data`, include `filename` to hint a download name; URL-based outputs rely on the remote server metadata instead.
+Similarly to return a file from a tool:
 
 ```python
 from agency_swarm import ToolOutputFileContent, function_tool
@@ -76,10 +88,13 @@ def fetch_remote_archive() -> ToolOutputFileContent:
     return tool_output_file_from_url("https://example.com/archive.zip")
 ```
 
-### Multiple Outputs
+<Note>
+When you choose `file_data`, include `filename` to hint a download name; URL-based outputs rely on the remote server metadata instead.
+</Note>
 
-`ToolOutputText` simply wraps a string (“tool output that should be sent to the model as text”), so you can construct it directly or rely on plain strings when multimodal attachments aren’t needed.  
-Return multiple outputs by yielding a list of structured items (any mix of text, image, or file outputs).
+### Combining Multiple Outputs
+
+Return multiple outputs by yielding a list of items above:
 
 ```python
 from agency_swarm import ToolOutputFileContent, ToolOutputImage, ToolOutputText
@@ -95,35 +110,7 @@ def prepare_showcase() -> list:
     ]
 ```
 
-### Helper Utilities
-
-If you often load assets from disk, import the convenience helpers we ship in ``agency_swarm.tools.utils``.
-
-```python
-from pathlib import Path
-
-from agency_swarm.tools.utils import (
-    tool_output_file_from_path,
-    tool_output_file_from_url,
-    tool_output_image_from_path,
-)
-
-image_output = tool_output_image_from_path(Path("examples/data/landscape_scene.png"), detail="auto")
-local_file_output = tool_output_file_from_path(Path("examples/data/sample_report.pdf"))
-remote_file_output = tool_output_file_from_url(
-    "https://raw.githubusercontent.com/VRSEN/agency-swarm/main/examples/data/sample_report.pdf"
-)
-```
-
-## How It Works
-
-The Agents SDK inspects tool return values:
-
-1. `ToolOutputText`, `ToolOutputImage`, `ToolOutputFileContent` are forwarded as multimodal responses.
-2. Dicts or lists that match the same schema (with `type: "text" | "image" | "file"`) are accepted.
-3. All other values fall back to `str(result)` so existing text-only tools keep working.
-
-## Complete Example
+## Complete Example (replace with real example from youtube video)
 
 Here's a complete example using `BaseTool`:
 
@@ -164,33 +151,16 @@ agent = Agent(
 )
 ```
 
-## Best Practices
+<Note>
+`function_tool` decorators and `BaseTool` classes both support multimodal outputs in the exact same way.
+</Note>
 
-<Tip>
-Base64-encoded images can be large. Use file references for large content.
-</Tip>
+## Tips & Best Practices
 
-<Warning>
-Watch token limits with base64-encoded images.
-</Warning>
+- Base64-encoded images can be large. Use file references for large content.
+- [TODO: Artemii add more tips here]
 
-**Format selection:** use data URLs for small visuals, and prefer `file_id` / `file_url` when assets are large or shared across runs.
+## Real Examples
 
-## Tool Compatibility
-
-Works with `BaseTool` classes and LangChain tools via `ToolFactory` adapters; both paths emit the structured outputs that the Agents SDK expects.
-
-## Example
-
-[`examples/multimodal_outputs.py`](https://github.com/VRSEN/agency-swarm/blob/main/examples/multimodal_outputs.py)
-
-## See Also
-
-<CardGroup cols={2}>
-  <Card title="Custom Tools" icon="wrench" href="/core-framework/tools/custom-tools/step-by-step-guide">
-    Learn how to create custom tools
-  </Card>
-  <Card title="Tool Factory" icon="industry" href="/core-framework/tools/tool-factory">
-    Convert existing tools to Agency Swarm format
-  </Card>
-</CardGroup>
+- [Inlcude repo fromt youtubve video later]
+- [`examples/multimodal_outputs.py`](https://github.com/VRSEN/agency-swarm/blob/main/examples/multimodal_outputs.py)
