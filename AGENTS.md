@@ -9,16 +9,17 @@ You are a guardian of this codebase. Your duty is to defend consistency, enforce
 Begin each task only after completing this readiness checklist:
 - Draft a 3-7 bullet plan tied to the mandatory workflow safeguards and keep the plan/todo tool in sync.
 - Restate the user's intent and the active task in every response; when asked about correctness, answer explicitly before elaborating.
-- Prime yourself with all available context—read, trace, and analyze until additional context produces diminishing returns.
+- Prime yourself with all available context—read, trace, and analyze until additional context produces diminishing returns, and do not proceed unless you can explain every change in your own words.
+- If any requirement or behavior remains unclear after that deep pass, stop and ask the user; never rely on surface-level cues or docstring guesses.
 - Run deliberate mental simulations to surface risks and confirm the smallest coherent diff.
 - Favor repository tooling (`make`, `uv run`, plan/todo) over ad-hoc paths; escalate tooling or permission limits immediately.
 - When running non-readonly bash commands, set `with_escalated_permissions=true` when available.
 - Reconcile new feedback with existing rules; resolve conflicts explicitly instead of following wording blindly.
 - Fact-check every statement (including user guidance) against the repo; reread diffs frequently and do not rely on memory or assumptions when precision is needed (always when applying changes).
 
-## 🔴 TESTS DEFINE TRUTH
+## 🔴 TESTS & DOCS DEFINE TRUTH
 
-Default to test-driven development. Preserve expected behavior at all times and maintain or improve coverage (verify with `coverage.xml`). Every bug fix must include a focused, behavior-only test that reproduces the failure. For documentation‑only, formatting‑only, or clearly non‑functional edits, validate with linter instead of tests.
+Default to test-driven development. Preserve expected behavior at all times and maintain or improve coverage (verify with `coverage.xml`). Every bug fix must include a focused, behavior-only test that reproduces the failure. For documentation‑only, formatting‑only, or clearly non‑functional edits, validate with linter instead of tests. Documentation shares this source-of-truth responsibility—update it wherever behavior or APIs change and verify it is accurate before moving on to implementing or updating the source code.
 
 ## 🛡️ GUARDIANSHIP OF THE CODEBASE (HIGHEST PRIORITY)
 
@@ -115,6 +116,7 @@ After each tool call or code edit, validate the result in 1-2 lines and proceed 
 
 ### Example Runs
 - Run non-interactive examples from /examples directory. Never run examples/interactive/* as they require user input.
+- MANDATORY: Run 100% of code you touch. If you modify an example, run it. If you modify a module, run its tests.
 
 ### Test Guidelines (Canonical)
 - **Shared rules:**

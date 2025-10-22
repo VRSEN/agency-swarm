@@ -7,6 +7,12 @@ from agents import (
     HostedMCPTool,
     ImageGenerationTool,
     LocalShellTool,
+    ToolOutputFileContent,
+    ToolOutputFileContentDict,
+    ToolOutputImage,
+    ToolOutputImageDict,
+    ToolOutputText,
+    ToolOutputTextDict,
     WebSearchTool,
     function_tool,
 )
@@ -25,7 +31,12 @@ from .base_tool import BaseTool
 from .concurrency import ToolConcurrencyManager
 from .send_message import SendMessage, SendMessageHandoff
 from .tool_factory import ToolFactory
-from .utils import validate_openapi_spec
+from .utils import (
+    tool_output_file_from_path,
+    tool_output_file_from_url,
+    tool_output_image_from_path,
+    validate_openapi_spec,
+)
 
 __all__ = [
     "BaseTool",
@@ -34,6 +45,9 @@ __all__ = [
     "SendMessage",
     "SendMessageHandoff",
     "validate_openapi_spec",
+    "tool_output_image_from_path",
+    "tool_output_file_from_path",
+    "tool_output_file_from_url",
     # Re-exports from Agents SDK
     "CodeInterpreterTool",
     "ComputerTool",
@@ -45,6 +59,12 @@ __all__ = [
     "LocalShellTool",
     "WebSearchTool",
     "function_tool",
+    "ToolOutputText",
+    "ToolOutputTextDict",
+    "ToolOutputImage",
+    "ToolOutputImageDict",
+    "ToolOutputFileContent",
+    "ToolOutputFileContentDict",
     # Tool parameter types from OpenAI
     "CodeInterpreter",
     "CodeInterpreterContainer",
