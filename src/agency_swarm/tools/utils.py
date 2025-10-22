@@ -1,16 +1,19 @@
 from __future__ import annotations
 
+import base64
 import json
 import logging
+import mimetypes
 from collections.abc import Callable
 from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
+from pathlib import Path
 from typing import Any, Literal, Optional, Union
 
 import httpx
 import jsonref
-from agents import FunctionTool
+from agents import FunctionTool, ToolOutputFileContent, ToolOutputImage
 from agents.run_context import RunContextWrapper
 from agents.strict_schema import ensure_strict_json_schema
 from datamodel_code_generator import DataModelType, PythonVersion
@@ -18,6 +21,52 @@ from datamodel_code_generator.model import get_data_model_types
 from datamodel_code_generator.parser.jsonschema import JsonSchemaParser
 
 logger = logging.getLogger(__name__)
+
+
+def tool_output_image_from_path(
+    path: str | Path,
+    *,
+    detail: Literal["auto", "high", "low"] = "auto",
+) -> ToolOutputImage:
+    """
+    Build a ``ToolOutputImage`` from a local image file by returning a data URL.
+
+    Args:
+        path: Path to the image file on disk.
+        detail: Optional detail hint to forward to the vision model.
+    """
+
+    file_path = Path(path)
+    mime_type, _ = mimetypes.guess_type(file_path.name)
+    if not mime_type:
+        mime_type = "image/png"
+    encoded_image = base64.b64encode(file_path.read_bytes()).decode("utf-8")
+    return ToolOutputImage(image_url=f"data:{mime_type};base64,{encoded_image}", detail=detail)
+
+
+def tool_output_file_from_path(path: str | Path, *, filename: str | None = None) -> ToolOutputFileContent:
+    """
+    Build a ``ToolOutputFileContent`` from a local file by embedding base64 data.
+
+    Args:
+        path: Path to the file on disk.
+        filename: Optional filename hint for the client.
+    """
+
+    file_path = Path(path)
+    encoded_file = base64.b64encode(file_path.read_bytes()).decode("utf-8")
+    return ToolOutputFileContent(file_data=encoded_file, filename=filename or file_path.name)
+
+
+def tool_output_file_from_url(url: str) -> ToolOutputFileContent:
+    """
+    Build a ``ToolOutputFileContent`` that references an externally hosted file.
+
+    Args:
+        url: Publicly reachable URL for the file.
+    """
+
+    return ToolOutputFileContent(file_url=url)
 
 
 def from_openapi_schema(
