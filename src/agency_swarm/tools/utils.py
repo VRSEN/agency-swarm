@@ -43,6 +43,21 @@ def tool_output_image_from_path(
     encoded_image = base64.b64encode(file_path.read_bytes()).decode("utf-8")
     return ToolOutputImage(image_url=f"data:{mime_type};base64,{encoded_image}", detail=detail)
 
+def tool_output_image_from_file_id(
+    file_id: str,
+    *,
+    detail: Literal["auto", "high", "low"] = "auto",
+) -> ToolOutputImage:
+    """
+    Build a ``ToolOutputImage`` from a local image file by returning a data URL.
+
+    Args:
+        file_id: openai file id of the image file.
+        detail: Optional detail hint to forward to the vision model.
+    """
+
+    return ToolOutputImage(file_id=file_id, detail=detail)
+
 
 def tool_output_file_from_path(path: str | Path, *, filename: str | None = None) -> ToolOutputFileContent:
     """
@@ -51,9 +66,15 @@ def tool_output_file_from_path(path: str | Path, *, filename: str | None = None)
     Args:
         path: Path to the file on disk.
         filename: Optional filename hint for the client.
+
+    Raises:
+        ValueError: If the file is not a PDF.
     """
 
     file_path = Path(path)
+    # Raise a different error, as oai's error message can be misleading
+    if file_path.suffix.lower() != ".pdf":
+        raise ValueError(f"ToolOutputFileContent only supports PDF files, got: {file_path.suffix}")
     encoded_file = base64.b64encode(file_path.read_bytes()).decode("utf-8")
     return ToolOutputFileContent(file_data=encoded_file, filename=filename or file_path.name)
 
@@ -67,6 +88,17 @@ def tool_output_file_from_url(url: str) -> ToolOutputFileContent:
     """
 
     return ToolOutputFileContent(file_url=url)
+
+
+def tool_output_file_from_file_id(file_id: str) -> ToolOutputFileContent:
+    """
+    Build a ``ToolOutputFileContent`` that references an openai file id.
+
+    Args:
+        file_id: openai file id of the pdf file.
+    """
+
+    return ToolOutputFileContent(file_id=file_id)
 
 
 def from_openapi_schema(

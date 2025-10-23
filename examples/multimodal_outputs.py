@@ -23,13 +23,13 @@ from agency_swarm import Agency, Agent, BaseTool, ToolOutputFileContent, ToolOut
 from agency_swarm.tools.utils import tool_output_file_from_url, tool_output_image_from_path
 
 DATA_DIR = Path(__file__).resolve().parent / "data"
-REFERENCE_PDF_URL = "https://raw.githubusercontent.com/VRSEN/agency-swarm/main/examples/data/sample_report.pdf"
+REFERENCE_PDF_URL = "https://raw.githubusercontent.com/VRSEN/agency-swarm/main/examples/data/daily_revenue_report.pdf"
 
 
 class LoadShowcaseImage(BaseTool):
     """Return the latest gallery image as a multimodal output."""
 
-    path: Path = Field(default=DATA_DIR / "landscape_scene.png", description="Image to publish")
+    path: Path = Field(default=DATA_DIR / "daily_revenue.png", description="Image to publish")
     detail: str = Field(default="auto", description="Vision model detail level")
 
     def run(self) -> ToolOutputImage:
@@ -60,7 +60,7 @@ def create_multimodal_agency() -> Agency:
 async def main() -> None:
     agency = create_multimodal_agency()
     response = await agency.get_response(
-        "Get the latest gallery image, describe it in detail, and summarize the supporting report."
+        "Analyze the daily revenue graph, and summarize the supporting report."
     )
 
     print("Final response:")
