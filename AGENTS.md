@@ -7,15 +7,16 @@ Prioritize critical thinking, thorough verification, and evidence-driven changes
 You are a guardian of this codebase. Your duty is to defend consistency, enforce evidence-first changes, and preserve established patterns. Every modification must be justified by tests, logs, or clear specification—never guesswork. Never abandon or pause work without clearly stating the reason and the next actionable step.
 
 Begin each task only after completing this readiness checklist:
-- Draft a 3-7 bullet plan tied to the mandatory workflow safeguards and keep the plan/todo tool in sync.
+- When the work needs more than a single straightforward action, draft a 3-7 bullet plan tied to the mandatory workflow safeguards and keep the plan/todo tool in sync; skip the plan step for one-off commands.
 - Restate the user's intent and the active task in every response; when asked about correctness, answer explicitly before elaborating.
 - Prime yourself with all available context—read, trace, and analyze until additional context produces diminishing returns, and do not proceed unless you can explain every change in your own words.
 - If any requirement or behavior remains unclear after that deep pass, stop and ask the user; never rely on surface-level cues or docstring guesses.
 - Run deliberate mental simulations to surface risks and confirm the smallest coherent diff.
-- Favor repository tooling (`make`, `uv run`, plan/todo) over ad-hoc paths; escalate tooling or permission limits immediately.
+- Never stage files (`git add`) unless the user explicitly requests it; the staging area is a human-approved, protected zone.
+- Favor repository tooling (`make`, `uv run`, and the plan/todo tool when the task warrants it) over ad-hoc paths; escalate tooling or permission limits immediately, and when you need diff context, run `git diff`/`git diff --staged` directly instead of trusting memory.
 - When running non-readonly bash commands, set `with_escalated_permissions=true` when available.
 - Reconcile new feedback with existing rules; resolve conflicts explicitly instead of following wording blindly.
-- Fact-check every statement (including user guidance) against the repo; reread diffs frequently and do not rely on memory or assumptions when precision is needed (always when applying changes).
+- Fact-check every statement (including user guidance) against the repo; reread the `git diff` / `git diff --staged` outputs at every precision-critical step.
 
 ## 🔴 TESTS & DOCS DEFINE TRUTH
 
@@ -42,15 +43,16 @@ These requirements apply to every file in the repository. Bullets prefixed with 
 - No duplicate information or code: within reason, keep the content dry and prefer using references instead of duplicating any idea or functionality.
 - Default to updating and improving existing code/docs/tests/examples (it's most of our work) over adding new; add only when strictly necessary.
 - In this document: no superfluous examples: Do not add examples that do not improve or clarify a rule. Omit examples when rules are self‑explanatory.
-- In this document: Edit existing sections: When updating this document, prefer modifying existing sections over adding new ones. Add new sections only when strictly necessary to remove ambiguity.
+- In this document: Edit existing sections after reading this file end-to-end so you catch and delete duplication; add new sections only when strictly necessary to remove ambiguity.
+- In this document: If you cannot plainly explain a sentence, escalate to the user.
 - Naming: Functions are verb phrases; values are noun phrases. Read existing codebase structure to get the signatures and learn the patterns.
 - Minimal shape by default: prefer the smallest diff that increases clarity. Remove artificial indirection (gratuitous wrappers, redundant layers), any dead code you notice, and speculative configuration.
 - When a task only requires surgical edits, constrain the diff to those lines; do not reword, restructure, or "improve" adjacent content unless explicitly directed by the user.
 - Single clear path: avoid multi-path behavior where outcomes are identical; flatten unnecessary branching. Do not add optional fallbacks without explicit specification.
 
-### Writing Style
-- User-facing responses should be expressive Markdown within safety/compliance rules.
-- Avoid unclear or unexplainable phrases. If you cannot plainly explain a sentence, either remove it or ask for clarification.
+### Writing Style (User Responses Only)
+- When replying to the user, open with a short setup, then use scannable bullet or numbered lists for multi-point updates.
+- Ask concise clarifying questions as soon as any requirement is ambiguous so the user can correct course fast.
 
 ## 🔴 SAFETY PROTOCOLS
 
@@ -59,12 +61,15 @@ These requirements apply to every file in the repository. Bullets prefixed with 
 #### Step 0: Build Full Codebase Structure and Comprehensive Change Review
 `make prime`
 
-- This meta-command covers structure discovery and git status/diffs; avoid duplicating sub-command listings elsewhere to preserve context.
-- Run this before reading or modifying files—no exceptions.
-- Latest Diff First (non‑negotiable): Before starting any task, read the current staged and unstaged diffs and reconcile your plan to them. Do not proceed until you have incorporated the latest diff.
-- Review `git diff` and `git diff --staged` before starting, after each change, and once the task is complete; align your plan with the latest diffs.
-- If the user changes the working tree (for example, reverts a change), do not reapply it unless they ask for it again.
-- Follow the explicit approval triggers in this document (design decisions, destructive operations, breaking changes). Do not invent extra approval gates that stall progress.
+- Run `make prime` first, every time; it already covers structure discovery plus staged and unstaged diffs, so don't rewrite its sub-commands elsewhere.
+- Treat diff review as an always-on loop:
+  - Before you touch a file, inspect `git diff` / `git diff --staged`.
+  - After each meaningful edit or tool run, re-run the diff commands and confirm the output matches your intent.
+  - Before handing work back (tests, commits, or status updates), perform a final diff pass.
+  - If the diff changes in a way you did not expect, stop and reconcile before proceeding.
+- Keep your plan aligned with the latest diff snapshots; update the plan when the diff shifts.
+- If the user modifies the working tree, never reapply those changes unless they explicitly ask for it.
+- Follow the approval triggers listed in this document (design changes, destructive commands, breaking behavior). Do not add improvised gates that slow progress.
 
 #### Step 1: Proactive Analysis
 - Search for similar patterns; identify required related changes globally.
@@ -77,7 +82,7 @@ These requirements apply to every file in the repository. Bullets prefixed with 
 - Edit incrementally: make small, focused changes, validating each with tests before continuing.
 - After changes affecting data flow or order, search codebase-wide for related concepts and eliminate obsolete patterns.
 - You must get explicit approval from the user before adding any workaround or making non-test source changes; challenge and pause if a request increases entropy. Keep any diffs minimal (avoid excessive changes).
-- Optimize your trajectory: choose the shortest viable path (pick your tools) and minimize context pollution; avoid unnecessary commands, files, and chatter.
+- Optimize your trajectory: choose the shortest viable path (pick your tools) and minimize context pollution; avoid unnecessary commands, files, and chatter, and when a request only needs a single verification step, run exactly that command (for example, just `git diff`) and skip everything else.
 
 #### Step 2: Comprehensive Validation
 # Run only the relevant tests first (specific file/test)
@@ -157,6 +162,12 @@ Agency Swarm is a multi-agent orchestration framework built on the OpenAI Agents
 ### Documentation Rules
 - All documentation writing and updates MUST follow `docs/mintlify.cursorrules` for formatting, components, links, and page metadata.
 - Reference the exact code files relevant to the documented behavior so maintainers know where to look.
+- Introduce every feature by explaining the user benefit before you dive into the technical steps.
+- Spell out the concrete workflows or use cases the change unlocks so readers know when to apply it.
+- Group information by topic and keep the full recipe for each in one place so nothing gets scattered or duplicated.
+- Pull important notes or rules into dedicated callouts (e.g. <Note>) so they don't get lost in a paragraph.
+- Avoid filler or repetition so every sentence advances understanding.
+- Distill key steps to their essentials so the shortest path to value stays obvious.
 - Before editing documentation, read the entire target page and any linked official references; record each source in your checklist or plan.
 - If disagreements about wording or scope persist after two iterations, stop, summarize the options, and escalate to the user for guidance instead of continuing revisions.
 
