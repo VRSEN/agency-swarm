@@ -54,11 +54,11 @@
                                         "pages": [
                                             "core-framework/tools/custom-tools/step-by-step-guide",
                                             "core-framework/tools/custom-tools/pydantic-is-all-you-need",
+                                            "core-framework/tools/custom-tools/multimodal-outputs",
                                             "core-framework/tools/custom-tools/best-practices",
                                             "core-framework/tools/custom-tools/configuration"
                                         ]
                                     },
-                                    "core-framework/tools/multimodal-outputs",
                                     "core-framework/tools/openapi-schemas",
                                     "core-framework/tools/mcp-integration"
                                 ]
