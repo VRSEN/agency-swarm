@@ -8,7 +8,7 @@ icon: "image"
 
 Returning images and files from the tools enables real agentic feedback loops on completely new modalities.
 
-For example, instead of dumping all the data into an agent, and hoping for the best, you can export it in CSV, generate a visualization, and allow the agent to provide insights based on that visualization. Just like a real data analyst.
+For example, instead of dumping all the data into an agent, and hoping for the best, you can generate a visualization or analyze PDF reports, and allow the agent to provide insights based on that output. Just like a real data analyst.
 
 This saves your context window and unlocks autonomous agentic workflows for a lot of new use cases:
 
@@ -25,7 +25,7 @@ This saves your context window and unlocks autonomous agentic workflows for a lo
     Build agents that help visually impaired individuals navigate websites or create customer support agents that see the user's current webpage for better assistance.
   </Card>
   <Card title="Data Analytics" icon="chart-area">
-    Export large datasets as CSV, generate visual graphs, and let agents provide insights based on visualizations without overloading the context window.
+    Generate visual graphs and analyze PDF reports, then let agents provide insights based on these outputs without overloading the context window.
   </Card>
 </CardGroup>
 
@@ -73,7 +73,7 @@ class FetchLocalImage(BaseTool):
         return tool_output_image_from_path(self.path, detail="auto")
 ```
 
-### Files (CSV, PDF, ZIP)
+### Files (PDF)
 
 Similarly to return a file from a tool:
 
@@ -99,16 +99,16 @@ class FetchLocalReport(BaseTool):
     def run(self) -> ToolOutputFileContent:
         return tool_output_file_from_path(self.path)
 
-class FetchRemoteArchive(BaseTool):
-    """Return a remote ZIP using the helper."""
-    archive_url: str = Field(default="https://example.com/archive.zip", description="Archive to expose")
+class FetchRemoteReport(BaseTool):
+    """Return a remote file using the helper."""
+    archive_url: str = Field(default="https://example.com/document.pdf", description="File to expose")
 
     def run(self) -> ToolOutputFileContent:
         return tool_output_file_from_url(self.archive_url)
 ```
 
 <Note>
-When you choose `file_data`, include `filename` to hint a download name; URL-based outputs rely on the remote server metadata instead.
+`tool_output_file_from_path` only supports PDF files.
 </Note>
 
 ### Combining Multiple Outputs

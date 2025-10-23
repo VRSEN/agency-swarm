@@ -7,6 +7,8 @@ from __future__ import annotations
 import base64
 from pathlib import Path
 
+import pytest
+
 from agency_swarm import ToolOutputFileContent, ToolOutputImage
 from agency_swarm.tools.utils import (
     tool_output_file_from_path,
@@ -38,15 +40,23 @@ def test_tool_output_image_from_path_returns_data_url(tmp_path):
 
 
 def test_tool_output_file_from_path_embeds_file_data(tmp_path):
-    file_path = tmp_path / "attachment.txt"
-    file_path.write_text("sample content", encoding="utf-8")
+    file_path = tmp_path / "document.pdf"
+    file_path.write_text("sample pdf content", encoding="utf-8")
 
     result = tool_output_file_from_path(file_path)
 
     assert isinstance(result, ToolOutputFileContent)
-    assert result.filename == "attachment.txt"
+    assert result.filename == "document.pdf"
     assert result.file_data is not None
-    assert base64.b64decode(result.file_data.encode("utf-8")).decode("utf-8") == "sample content"
+    assert base64.b64decode(result.file_data.encode("utf-8")).decode("utf-8") == "sample pdf content"
+
+
+def test_tool_output_file_from_path_rejects_non_pdf(tmp_path):
+    file_path = tmp_path / "document.txt"
+    file_path.write_text("not a pdf", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="ToolOutputFileContent only supports PDF files"):
+        tool_output_file_from_path(file_path)
 
 
 def test_tool_output_file_from_url_returns_remote_reference():
