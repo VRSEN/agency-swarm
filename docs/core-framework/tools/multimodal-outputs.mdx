@@ -14,14 +14,20 @@ This saves your context window and unlocks autonomous agentic workflows for a lo
 
 ## New Use Cases
 
-- **Software Development**: Agents can check websites autonomously and iterate until all elements are properly positioned, enabling them to tackle complex projects without manual screenshot feedback.
-
-- **Brand Asset Generation**: Provide brand guidelines, logos, and messaging, then let agents iterate on image and video generation (including Sora 2) until outputs fully match your expectations.
-
-- **Screen-Aware Assistance**: Build agents that help visually impaired individuals navigate websites or create customer support agents that see the user's current webpage for better assistance.
-
-- **Data Analytics**: Export large datasets as CSV, generate visual graphs, and let agents provide insights based on visualizations without overloading the context window.
-
+<CardGroup cols={2}>
+  <Card title="Software Development" icon="code">
+    Agents can check websites autonomously and iterate until all elements are properly positioned, enabling them to tackle complex projects without manual screenshot feedback.
+  </Card>
+  <Card title="Brand Asset Generation" icon="paintbrush">
+    Provide brand guidelines, logos, and messaging, then let agents iterate on image and video generation (including Sora 2) until outputs fully match your expectations.
+  </Card>
+  <Card title="Screen-Aware Assistance" icon="eye">
+    Build agents that help visually impaired individuals navigate websites or create customer support agents that see the user's current webpage for better assistance.
+  </Card>
+  <Card title="Data Analytics" icon="chart-area">
+    Export large datasets as CSV, generate visual graphs, and let agents provide insights based on visualizations without overloading the context window.
+  </Card>
+</CardGroup>
 
 ## Output Formats
 
@@ -29,35 +35,42 @@ This saves your context window and unlocks autonomous agentic workflows for a lo
 
 To return an image from a tool, you can either:
 
-    1. Use the `ToolOutputImage` class.
-    2. Return a dict with the `type` set to `"image"` and either `image_url` (URL or data URL) or `file_id`.
-    3. Use our convenience `tool_output_image_from_path` function.
+1. Use the `ToolOutputImage` class.
+2. Return a dict with the `type` set to `"image"` and either `image_url` (URL or data URL) or `file_id`.
+3. Use our convenience `tool_output_image_from_path` function.
 
 ```python
-from agency_swarm import ToolOutputImage, ToolOutputImageDict, function_tool
+from agency_swarm import BaseTool, ToolOutputImage, ToolOutputImageDict
 from agency_swarm.tools.utils import tool_output_image_from_path
+from pydantic import Field
 
-@function_tool
-def fetch_gallery_image() -> ToolOutputImage:
+class FetchGalleryImage(BaseTool):
     """Return a static gallery image."""
-    return ToolOutputImage(
-        image_url="https://upload.wikimedia.org/wikipedia/commons/0/0c/GoldenGateBridge-001.jpg",
-        detail="auto",
-    )
+    detail: str = Field(default="auto", description="Level of detail")
 
-@function_tool
-def fetch_gallery_image_dict() -> ToolOutputImageDict:
+    def run(self) -> ToolOutputImage:
+        return ToolOutputImage(
+            image_url="https://upload.wikimedia.org/wikipedia/commons/0/0c/GoldenGateBridge-001.jpg",
+            detail=self.detail,
+        )
+
+class FetchGalleryImageDict(BaseTool):
     """Dict variant of the same image output."""
-    return {
-        "type": "image",
-        "image_url": "https://upload.wikimedia.org/wikipedia/commons/0/0c/GoldenGateBridge-001.jpg",
-        "detail": "auto",
-    }
+    detail: str = Field(default="auto", description="Level of detail")
 
-@function_tool
-def fetch_local_image() -> ToolOutputImage:
+    def run(self) -> ToolOutputImageDict:
+        return {
+            "type": "image",
+            "image_url": "https://upload.wikimedia.org/wikipedia/commons/0/0c/GoldenGateBridge-001.jpg",
+            "detail": self.detail,
+        }
+
+class FetchLocalImage(BaseTool):
     """Load an image from disk using the helper."""
-    return tool_output_image_from_path("examples/data/landscape_scene.png", detail="auto")
+    path: str = Field(default="examples/data/landscape_scene.png", description="Image to publish")
+
+    def run(self) -> ToolOutputImage:
+        return tool_output_image_from_path(self.path, detail="auto")
 ```
 
 ### Files (CSV, PDF, ZIP)
@@ -65,27 +78,33 @@ def fetch_local_image() -> ToolOutputImage:
 Similarly to return a file from a tool:
 
 ```python
-from agency_swarm import ToolOutputFileContent, function_tool
+from agency_swarm import BaseTool, ToolOutputFileContent
 from agency_swarm.tools.utils import tool_output_file_from_path, tool_output_file_from_url
+from pydantic import Field
 
-@function_tool
-def fetch_reference_report() -> ToolOutputFileContent:
+class FetchReferenceReport(BaseTool):
     """Return a reference PDF hosted remotely."""
-    return ToolOutputFileContent(
-        file_url="https://raw.githubusercontent.com/VRSEN/agency-swarm/main/examples/data/sample_report.pdf"
+    source_url: str = Field(
+        default="https://raw.githubusercontent.com/VRSEN/agency-swarm/main/examples/data/sample_report.pdf",
+        description="Remote file to share",
     )
 
+    def run(self) -> ToolOutputFileContent:
+        return ToolOutputFileContent(file_url=self.source_url)
 
-@function_tool
-def fetch_local_report() -> ToolOutputFileContent:
+class FetchLocalReport(BaseTool):
     """Return a report stored on disk."""
-    return tool_output_file_from_path("examples/data/sample_report.pdf")
+    path: str = Field(default="examples/data/sample_report.pdf", description="Local file path")
 
+    def run(self) -> ToolOutputFileContent:
+        return tool_output_file_from_path(self.path)
 
-@function_tool
-def fetch_remote_archive() -> ToolOutputFileContent:
+class FetchRemoteArchive(BaseTool):
     """Return a remote ZIP using the helper."""
-    return tool_output_file_from_url("https://example.com/archive.zip")
+    archive_url: str = Field(default="https://example.com/archive.zip", description="Archive to expose")
+
+    def run(self) -> ToolOutputFileContent:
+        return tool_output_file_from_url(self.archive_url)
 ```
 
 <Note>
@@ -94,20 +113,24 @@ When you choose `file_data`, include `filename` to hint a download name; URL-bas
 
 ### Combining Multiple Outputs
 
-Return multiple outputs by yielding a list of items above:
+Return multiple outputs by returning a list from `run`.
 
 ```python
-from agency_swarm import ToolOutputFileContent, ToolOutputImage, ToolOutputText
+from agency_swarm import BaseTool, ToolOutputFileContent, ToolOutputImage, ToolOutputText
 
-@function_tool
-def prepare_showcase() -> list:
+class PrepareShowcase(BaseTool):
     """Return rich media and a short description."""
-    return [
-        ToolOutputImage(image_url="https://example.com/teaser-a.png"),
-        ToolOutputImage(image_url="https://example.com/teaser-b.png"),
-        ToolOutputText(text="Gallery updated: Teaser A and Teaser B now live."),
-        ToolOutputFileContent(file_id="file-report-123"),
-    ]
+    teaser_a: str = "https://example.com/teaser-a.png"
+    teaser_b: str = "https://example.com/teaser-b.png"
+    report_id: str = "file-report-123"
+
+    def run(self) -> list:
+        return [
+            ToolOutputImage(image_url=self.teaser_a),
+            ToolOutputImage(image_url=self.teaser_b),
+            ToolOutputText(text="Gallery updated: Teaser A and Teaser B now live."),
+            ToolOutputFileContent(file_id=self.report_id),
+        ]
 ```
 
 ## Complete Example (replace with real example from youtube video)
@@ -155,12 +178,24 @@ agent = Agent(
 `function_tool` decorators and `BaseTool` classes both support multimodal outputs in the exact same way.
 </Note>
 
+```python
+from agency_swarm import ToolOutputImage, function_tool
+
+@function_tool
+def fetch_gallery_image() -> ToolOutputImage:
+    return ToolOutputImage(
+        image_url="https://upload.wikimedia.org/wikipedia/commons/0/0c/GoldenGateBridge-001.jpg",
+        detail="auto",
+    )
+```
+
 ## Tips & Best Practices
 
 - Base64-encoded images can be large. Use file references for large content.
-- [TODO: Artemii add more tips here]
+- Compress screenshots and other visuals before returning them to cut token usage without sacrificing clarity.
+- Include the image names in your textual response whenever you return more than one image so the agent can reference them unambiguously.
 
 ## Real Examples
 
-- [Inlcude repo fromt youtubve video later]
+- [TBD: Include repo from YouTube video]
 - [`examples/multimodal_outputs.py`](https://github.com/VRSEN/agency-swarm/blob/main/examples/multimodal_outputs.py)
