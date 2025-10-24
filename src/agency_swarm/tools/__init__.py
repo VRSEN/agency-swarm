@@ -32,8 +32,10 @@ from .concurrency import ToolConcurrencyManager
 from .send_message import SendMessage, SendMessageHandoff
 from .tool_factory import ToolFactory
 from .utils import (
+    tool_output_file_from_file_id,
     tool_output_file_from_path,
     tool_output_file_from_url,
+    tool_output_image_from_file_id,
     tool_output_image_from_path,
     validate_openapi_spec,
 )
@@ -46,8 +48,10 @@ __all__ = [
     "SendMessageHandoff",
     "validate_openapi_spec",
     "tool_output_image_from_path",
+    "tool_output_image_from_file_id",
     "tool_output_file_from_path",
     "tool_output_file_from_url",
+    "tool_output_file_from_file_id",
     # Re-exports from Agents SDK
     "CodeInterpreterTool",
     "ComputerTool",

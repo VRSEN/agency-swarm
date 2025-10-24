@@ -77,8 +77,10 @@ from .tools import (  # noqa: E402
     ToolOutputText,
     ToolOutputTextDict,
     WebSearchTool,
+    tool_output_file_from_file_id,
     tool_output_file_from_path,
     tool_output_file_from_url,
+    tool_output_image_from_file_id,
     tool_output_image_from_path,
 )
 from .utils.thread import ThreadManager  # noqa: E402
@@ -151,8 +153,10 @@ __all__ = [
     "ToolOutputFileContent",
     "ToolOutputFileContentDict",
     "tool_output_image_from_path",
+    "tool_output_image_from_file_id",
     "tool_output_file_from_path",
     "tool_output_file_from_url",
+    "tool_output_file_from_file_id",
 ]
 
 # Conditionally add LitellmModel if available
