@@ -108,8 +108,13 @@ class FetchRemoteReport(BaseTool):
 ```
 
 <Note>
-`tool_output_file_from_path` only supports PDF files.
+When you choose `file_data`, include `filename` to hint a download name; URL-based outputs rely on the remote server metadata instead.
 </Note>
+
+<Warning>
+`tool_output_file_from_path` only supports PDF files.
+</Warning>
+
 
 ### Combining Multiple Outputs
 
