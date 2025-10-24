@@ -133,32 +133,35 @@ class AgentFileManager:
         # Associate with Vector Store if one is linked to this agent via files_folder
         if self.agent._associated_vector_store_id and include_in_vector_store:
             try:
-                # First, check if the vector store still exists.
+                vector_store_id = self.agent._associated_vector_store_id
                 try:
-                    self.agent.client_sync.vector_stores.retrieve(
-                        vector_store_id=self.agent._associated_vector_store_id
-                    )
+                    self.agent.client_sync.vector_stores.retrieve(vector_store_id=vector_store_id)
                     logger.debug(
-                        f"Agent {self.agent.name}: Confirmed Vector Store {self.agent._associated_vector_store_id} "
+                        f"Agent {self.agent.name}: Confirmed Vector Store {vector_store_id} "
                         f"exists before associating file {uploaded_file.id}."
                     )
                 except NotFoundError:
                     logger.warning(
-                        f"Agent {self.agent.name}: Vector Store {self.agent._associated_vector_store_id} "
+                        f"Agent {self.agent.name}: Vector Store {vector_store_id} "
                         f"not found during file {uploaded_file.id} association. "
-                        "It might have been deleted after agent initialization. Skipping association."
+                        "Skipping association."
                     )
-                    return uploaded_file.id  # File is uploaded, but association is skipped. Early exit.
+                    return uploaded_file.id
 
-                # If VS exists, proceed to associate the file and block until ingestion completes.
-                vs_file = self.agent.client_sync.vector_stores.files.create_and_poll(
-                    vector_store_id=self.agent._associated_vector_store_id,
+                enqueue_response = self.agent.client_sync.vector_stores.files.create(
+                    vector_store_id=vector_store_id,
                     file_id=uploaded_file.id,
                 )
                 logger.info(
-                    f"Agent {self.agent.name}: Associated file {uploaded_file.id} "
-                    f"with Vector Store {self.agent._associated_vector_store_id} "
-                    f"(status={getattr(vs_file, 'status', 'unknown')})."
+                    "Agent %s: Queued file %s for vector store %s (status=%s).",
+                    self.agent.name,
+                    uploaded_file.id,
+                    vector_store_id,
+                    getattr(enqueue_response, "status", "unknown"),
+                )
+                self._sync.wait_for_vector_store_file_ready(
+                    vector_store_id=vector_store_id,
+                    file_id=uploaded_file.id,
                 )
             except Exception as e:
                 logger.error(

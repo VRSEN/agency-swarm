@@ -120,6 +120,65 @@ class FileSync:
     def _should_skip_file(self, filename: str) -> bool:
         return filename.startswith(".") or filename.startswith("__")
 
+    def wait_for_vector_store_file_ready(
+        self, *, vector_store_id: str, file_id: str, timeout_seconds: float = 120.0
+    ) -> None:
+        """Poll until the file appears in the vector store with status completed or timing out."""
+        deadline = time.monotonic() + timeout_seconds
+        logged_wait = False
+        while time.monotonic() < deadline:
+            try:
+                vs_file = self.agent.client_sync.vector_stores.files.retrieve(
+                    vector_store_id=vector_store_id,
+                    file_id=file_id,
+                )
+            except NotFoundError:
+                if not logged_wait:
+                    logger.debug(
+                        "Agent %s: Waiting for file %s to appear in Vector Store %s.",
+                        self.agent.name,
+                        file_id,
+                        vector_store_id,
+                    )
+                    logged_wait = True
+                time.sleep(1.0)
+                continue
+            except Exception as exc:
+                logger.warning(
+                    "Agent %s: Error polling Vector Store %s for file %s: %s",
+                    self.agent.name,
+                    vector_store_id,
+                    file_id,
+                    exc,
+                )
+                return
+
+            status = getattr(vs_file, "status", None)
+            if status == "completed":
+                logger.info(
+                    "Agent %s: File %s is ready in Vector Store %s.",
+                    self.agent.name,
+                    file_id,
+                    vector_store_id,
+                )
+                return
+            if status == "failed":
+                logger.error(
+                    "Agent %s: Vector Store %s reported failure ingesting file %s.",
+                    self.agent.name,
+                    vector_store_id,
+                    file_id,
+                )
+                return
+            time.sleep(1.0)
+
+        logger.warning(
+            "Agent %s: Timed out waiting for file %s to finish processing in Vector Store %s.",
+            self.agent.name,
+            file_id,
+            vector_store_id,
+        )
+
     def _wait_for_vector_store_file_absence(
         self, *, vector_store_id: str, file_id: str, timeout_seconds: float = 60.0
     ) -> None:
