@@ -1,27 +1,34 @@
 import logging
+import time
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from openai import NotFoundError
 
 logger = logging.getLogger(__name__)
 
+if TYPE_CHECKING:
+    from agency_swarm.agent.core import Agent
+
 
 class FileSync:
     """Encapsulates vector store synchronization and file removal helpers."""
 
-    def __init__(self, agent):
-        self.agent = agent
+    def __init__(self, agent: "Agent") -> None:
+        self.agent: "Agent" = agent
 
     def collect_local_file_ids(self) -> set[str]:
         local_ids: set[str] = set()
         folder = self.agent.files_folder_path
         if not folder or not Path(folder).exists():
             return local_ids
+        file_manager = self.agent.file_manager
+        if file_manager is None:
+            raise RuntimeError(f"Agent {self.agent.name}: File manager is not initialized")
         for entry in Path(folder).iterdir():
             if entry.is_file() and not self._should_skip_file(entry.name):
                 try:
-                    file_id = self.agent.file_manager.get_id_from_file(entry)
+                    file_id = file_manager.get_id_from_file(entry)
                     if file_id:
                         local_ids.add(file_id)
                 except FileNotFoundError:
@@ -35,7 +42,10 @@ class FileSync:
         all_files: list[Any] = []
         after: str | None = None
         while True:
-            resp = client.vector_stores.files.list(vector_store_id=vector_store_id, limit=100, after=after)
+            list_kwargs: dict[str, Any] = {"vector_store_id": vector_store_id, "limit": 100}
+            if after is not None:
+                list_kwargs["after"] = after
+            resp = client.vector_stores.files.list(**list_kwargs)
             data = getattr(resp, "data", [])
             all_files.extend(data)
             has_more = bool(getattr(resp, "has_more", False))
@@ -72,6 +82,7 @@ class FileSync:
                 logger.info(
                     f"Agent {self.agent.name}: Removed file {file_id} from Vector Store {vs_id} (not present locally)."
                 )
+                self._wait_for_vector_store_file_absence(vector_store_id=vs_id, file_id=file_id)
             except NotFoundError:
                 pass
             except Exception as e:
@@ -82,6 +93,7 @@ class FileSync:
             try:
                 self.agent.client_sync.files.delete(file_id=file_id)
                 logger.info(f"Agent {self.agent.name}: Deleted OpenAI file {file_id} as part of sync.")
+                self._wait_for_openai_file_absence(file_id)
             except NotFoundError:
                 pass
             except Exception as e:
@@ -92,12 +104,14 @@ class FileSync:
         if vs_id:
             try:
                 self.agent.client_sync.vector_stores.files.delete(vector_store_id=vs_id, file_id=file_id)
+                self._wait_for_vector_store_file_absence(vector_store_id=vs_id, file_id=file_id)
             except NotFoundError:
                 pass
             except Exception as e:
                 logger.debug(f"Agent {self.agent.name}: Could not detach file {file_id} from Vector Store {vs_id}: {e}")
         try:
             self.agent.client_sync.files.delete(file_id=file_id)
+            self._wait_for_openai_file_absence(file_id)
         except NotFoundError:
             pass
         except Exception as e:
@@ -105,3 +119,37 @@ class FileSync:
 
     def _should_skip_file(self, filename: str) -> bool:
         return filename.startswith(".") or filename.startswith("__")
+
+    def _wait_for_vector_store_file_absence(
+        self, *, vector_store_id: str, file_id: str, timeout_seconds: float = 60.0
+    ) -> None:
+        deadline = time.monotonic() + timeout_seconds
+        while time.monotonic() < deadline:
+            try:
+                self.agent.client_sync.vector_stores.files.retrieve(vector_store_id=vector_store_id, file_id=file_id)
+            except NotFoundError:
+                return
+            except Exception as exc:
+                logger.debug(
+                    f"Agent {self.agent.name}: Error while polling deletion of {file_id} from Vector Store "
+                    f"{vector_store_id}: {exc}"
+                )
+                return
+            time.sleep(1.0)
+        logger.warning(
+            f"Agent {self.agent.name}: Timed out waiting for file {file_id} to disappear from Vector Store "
+            f"{vector_store_id}."
+        )
+
+    def _wait_for_openai_file_absence(self, file_id: str, timeout_seconds: float = 60.0) -> None:
+        deadline = time.monotonic() + timeout_seconds
+        while time.monotonic() < deadline:
+            try:
+                self.agent.client_sync.files.retrieve(file_id)
+            except NotFoundError:
+                return
+            except Exception as exc:
+                logger.debug(f"Agent {self.agent.name}: Error while polling deletion of OpenAI file {file_id}: {exc}")
+                return
+            time.sleep(1.0)
+        logger.warning(f"Agent {self.agent.name}: Timed out waiting for OpenAI file {file_id} to be fully deleted.")

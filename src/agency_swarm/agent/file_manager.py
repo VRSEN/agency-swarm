@@ -2,7 +2,7 @@ import logging
 import os
 import re
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from agents import CodeInterpreterTool, FileSearchTool
 from agents.exceptions import AgentsException
@@ -10,6 +10,9 @@ from openai import NotFoundError
 from openai.types.responses.tool_param import CodeInterpreter
 
 from agency_swarm.agent.file_sync import FileSync
+
+if TYPE_CHECKING:
+    from agency_swarm.agent.core import Agent
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +48,7 @@ class AgentFileManager:
     """Manages permanent file operations for agents, including uploads and vector store management."""
 
     def __init__(self, agent):
-        self.agent = agent
+        self.agent: Agent = agent
         self._sync = FileSync(agent)
 
     def upload_file(self, file_path: str, include_in_vector_store: bool = True) -> str:
@@ -147,13 +150,15 @@ class AgentFileManager:
                     )
                     return uploaded_file.id  # File is uploaded, but association is skipped. Early exit.
 
-                # If VS exists, proceed to associate the file
-                self.agent.client_sync.vector_stores.files.create(
-                    vector_store_id=self.agent._associated_vector_store_id, file_id=uploaded_file.id
+                # If VS exists, proceed to associate the file and block until ingestion completes.
+                vs_file = self.agent.client_sync.vector_stores.files.create_and_poll(
+                    vector_store_id=self.agent._associated_vector_store_id,
+                    file_id=uploaded_file.id,
                 )
                 logger.info(
                     f"Agent {self.agent.name}: Associated file {uploaded_file.id} "
-                    f"with Vector Store {self.agent._associated_vector_store_id}."
+                    f"with Vector Store {self.agent._associated_vector_store_id} "
+                    f"(status={getattr(vs_file, 'status', 'unknown')})."
                 )
             except Exception as e:
                 logger.error(
@@ -345,8 +350,13 @@ class AgentFileManager:
                 continue
 
             try:
-                self.agent.client_sync.vector_stores.files.create(vector_store_id=vector_store_id, file_id=file_id)
-                logger.info(f"Agent {self.agent.name}: Added file {file_id} to Vector Store {vector_store_id}.")
+                vs_file = self.agent.client_sync.vector_stores.files.create_and_poll(
+                    vector_store_id=vector_store_id, file_id=file_id
+                )
+                logger.info(
+                    f"Agent {self.agent.name}: Added file {file_id} to Vector Store {vector_store_id} "
+                    f"(status={getattr(vs_file, 'status', 'unknown')})."
+                )
             except Exception as e:
                 logger.error(
                     f"Agent {self.agent.name}: Failed to add file {file_id} to Vector Store {vector_store_id}: {e}"
@@ -459,7 +469,10 @@ class AgentFileManager:
             return []
 
         processed_files = set()
-        for vs_file in self.agent.files_folder_path.iterdir():
+        files_folder_path = self.agent.files_folder_path
+        if files_folder_path is None:
+            return []
+        for vs_file in files_folder_path.iterdir():
             if vs_file.is_file() and "_file-" in vs_file.name:
                 original_name = vs_file.name.split("_file-")[0] + vs_file.suffix
                 processed_files.add(original_name)

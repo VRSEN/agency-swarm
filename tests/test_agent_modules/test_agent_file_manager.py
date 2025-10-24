@@ -131,6 +131,7 @@ class TestAgentFileManager:
         mock_agent.client_sync.vector_stores.retrieve.side_effect = NotFoundError(
             "Vector store not found", response=mock_response, body={"error": "not_found"}
         )
+        mock_agent.client_sync.vector_stores.files.create_and_poll = Mock()
 
         file_manager = AgentFileManager(mock_agent)
         file_manager.get_id_from_file = Mock(return_value=None)
@@ -146,7 +147,7 @@ class TestAgentFileManager:
             assert result == "file-123"
 
             # Should not attempt to associate with missing vector store
-            mock_agent.client_sync.vector_stores.files.create.assert_not_called()
+            mock_agent.client_sync.vector_stores.files.create_and_poll.assert_not_called()
         finally:
             os.unlink(tmp_file_path)
 
@@ -163,9 +164,7 @@ class TestAgentFileManager:
 
         # Mock vector store retrieve to succeed
         mock_agent.client_sync.vector_stores.retrieve.return_value = Mock()
-
-        # Mock vector store files create to fail
-        mock_agent.client_sync.vector_stores.files.create.side_effect = Exception("Association failed")
+        mock_agent.client_sync.vector_stores.files.create_and_poll = Mock(side_effect=Exception("Association failed"))
 
         file_manager = AgentFileManager(mock_agent)
         file_manager.get_id_from_file = Mock(return_value=None)
@@ -600,7 +599,7 @@ class TestAgentFileManager:
         file_manager.add_files_to_vector_store("vs_test123", ["file-existing123", "file-new456"])
 
         # Should only call create for the new file
-        mock_agent.client_sync.vector_stores.files.create.assert_called_once_with(
+        mock_agent.client_sync.vector_stores.files.create_and_poll.assert_called_once_with(
             vector_store_id="vs_test123", file_id="file-new456"
         )
 
@@ -615,7 +614,7 @@ class TestAgentFileManager:
         mock_agent.client_sync.vector_stores.files.list.return_value = mock_files_list
 
         # Mock create to fail
-        mock_agent.client_sync.vector_stores.files.create.side_effect = Exception("Create failed")
+        mock_agent.client_sync.vector_stores.files.create_and_poll.side_effect = Exception("Create failed")
 
         file_manager = AgentFileManager(mock_agent)
 
