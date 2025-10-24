@@ -49,7 +49,7 @@ def tool_output_image_from_file_id(
     detail: Literal["auto", "high", "low"] = "auto",
 ) -> ToolOutputImage:
     """
-    Build a ``ToolOutputImage`` from a local image file by returning a data URL.
+    Build a ``ToolOutputImage`` from an OpenAI file ID.
 
     Args:
         file_id: openai file id of the image file.
@@ -75,6 +75,8 @@ def tool_output_file_from_path(path: str | Path, *, filename: str | None = None)
     # Raise a different error, as oai's error message can be misleading
     if file_path.suffix.lower() != ".pdf":
         raise ValueError(f"ToolOutputFileContent only supports PDF files, got: {file_path.suffix}")
+    if filename and not filename.lower().endswith(".pdf"):
+        raise ValueError(f"Filename must end with .pdf, got: {filename}")
     encoded_file = base64.b64encode(file_path.read_bytes()).decode("utf-8")
     return ToolOutputFileContent(file_data=encoded_file, filename=filename or file_path.name)
 
