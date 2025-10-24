@@ -123,7 +123,7 @@ Define tools using the modern `@function_tool` decorator (recommended), or exten
         files_folder="./files", # files to be uploaded to OpenAI
         schemas_folder="./schemas", # OpenAPI schemas to be converted into tools
         tools=[my_custom_tool],  # FunctionTool returned by @function_tool (or adapt BaseTool via ToolFactory)
-        model="gpt-5-mini",
+        model="gpt-5",
         model_settings=ModelSettings(
             max_tokens=25000,
         ),
