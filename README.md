@@ -6,13 +6,6 @@
 
 The **Agency Swarm** is a framework for building multi-agent applications. It leverages and extends the [OpenAI Agents SDK](https://github.com/openai/openai-agents-python), providing specialized features for creating, orchestrating, and managing collaborative swarms of AI agents.
 
-Agency Swarm enhances the underlying SDK by introducing:
-- True agent collaboration with flexible, user-defined communication flows (orchestrator–workers pattern with async execution support).
-- An `Agency` with explicit `communication_flows` and the `>` operator to define complex, directional communication between agents.
-- Flexible conversation persistence: provide `load_threads_callback` and `save_threads_callback` to the `Agency` to load/save threads to external storage (e.g., a database). This enables conversations to continue across sessions in production.
-- A specialized `send_message` tool automatically configured for agents, enabling them to communicate based on the defined communication flows.
-- `agency_swarm.Agent`, which extends the base SDK `Agent` with built-in file handling and sub-agent registration.
-
 This framework continues the original vision of Arsenii Shatokhin (aka VRSEN) to simplify the creation of AI agencies by thinking about automation in terms of real-world organizational structures, making it intuitive for both agents and users.
 
 **Migrating from v0.x?** Please see our [Migration Guide](https://agency-swarm.ai/migration/guide) for details on adapting your project to this new SDK-based version.
@@ -47,7 +40,7 @@ pip install -U agency-swarm
 - **Python**: 3.12+
 - **Model backends:**
   - **OpenAI (native):** GPT-5 family, GPT-4o, etc.
-  - **Via LiteLLM (router):** Anthropic (Claude), Google (Gemini), Azure OpenAI, **OpenRouter (gateway)**, etc.
+  - **Via LiteLLM (router):** Anthropic (Claude), Google (Gemini), Grok (xAI), Azure OpenAI, **OpenRouter (gateway)**, etc.
 - **OS**: macOS, Linux, Windows
 
 If you hit environment issues, see the [Installation guide](https://agency-swarm.ai/welcome/installation).
@@ -130,8 +123,8 @@ Define tools using the modern `@function_tool` decorator (recommended), or exten
         files_folder="./files", # files to be uploaded to OpenAI
         schemas_folder="./schemas", # OpenAPI schemas to be converted into tools
         tools=[my_custom_tool],  # FunctionTool returned by @function_tool (or adapt BaseTool via ToolFactory)
+        model="gpt-5-mini",
         model_settings=ModelSettings(
-            model="gpt-5-mini",
             max_tokens=25000,
         ),
     )
