@@ -14,8 +14,8 @@ if TYPE_CHECKING:
 class FileSync:
     """Encapsulates vector store synchronization and file removal helpers."""
 
-    def __init__(self, agent: "Agent") -> None:
-        self.agent: "Agent" = agent
+    def __init__(self, agent: "Agent") -> None:  # noqa: UP037
+        self.agent: "Agent" = agent  # noqa: UP037
 
     def collect_local_file_ids(self) -> set[str]:
         local_ids: set[str] = set()

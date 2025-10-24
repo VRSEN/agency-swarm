@@ -85,6 +85,9 @@ These requirements apply to every file in the repository. Bullets prefixed with 
 # Format code before running CI (auto-fixes style)
 `make format`
 
+# Lint and type-check before staging or committing
+`make check`
+
 # Run the full suite (`make ci`) before PR/merge or when verifying repo-wide health
 `make ci`
 
