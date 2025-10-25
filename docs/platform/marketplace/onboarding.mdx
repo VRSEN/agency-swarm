@@ -1,0 +1,305 @@
+---
+title: "Onboarding"
+description: "Learn how to templatize your agents on our marketplace."
+icon: "store"
+---
+When posting an agency on our marketplace, you can define a custom `OnboardingTool` to allow end users to customize your agents for their own businesses.
+
+## Why Customization is Important?
+
+When building AI agents, you might encounter clients who want to deploy agents for the same roles.
+
+For example, almost every company employs an **accountant**. And so, if you built an accounting agent for one company, you might want to reuse it later.
+
+However, although the **general process** for the same role across various companies is similar, the **specific process** is always unique. 
+
+For example, one company might do accounting **weekly**, another one **monthly**. One company might use **Xero**, another one **Quick books**. One company prefers to send invoices via **email**, another one via their **customer portal**, and so on. 
+
+As you can see, **even if you built an agent for the same role at one company, it’s not gonna be useful at another company**. 
+
+## How Agencii Solves Agent Onboarding
+
+On our platform, we tackle this issue by creating a custom `OnboardingTool` class. 
+
+Inside this tool class, you can define all the parameters that you need in order to customize your agents before deployment. 
+
+For our accounting agent above, for example, this class might look like this:
+
+```python
+from agency_swarm.tools import BaseTool
+from pydantic import Field
+import os
+from dotenv import load_dotenv
+from typing import Literal
+
+load_dotenv()
+
+class OnboardingTool(BaseTool):
+    """
+    Customizes the accounting agent based on the client's specific accounting processes, 
+    software, and preferences before deployment.
+    """
+    
+    agent_name: str = Field(
+        ..., 
+        description="Name of your accounting agent visible to the user."
+    )
+    business_overview: str = Field(
+        ..., 
+        description="Brief business overview including industry, size, and accounting needs."
+    )
+    accounting_frequency: Literal["weekly", "monthly", "quarterly"] = Field(
+        ..., 
+        description="How often accounting tasks should be performed."
+    )
+    accounting_software: Literal["xero", "quickbooks", "freshbooks", "sage", "other"] = Field(
+        ..., 
+        description="The accounting software platform the client uses."
+    )
+    invoice_delivery_method: Literal["email", "customer_portal", "both"] = Field(
+        ..., 
+        description="Preferred method for sending invoices to clients."
+    )
+
+    def run(self):
+        """
+        Programmatically writes a JSON config containing all user-provided accounting parameters
+        to onboarding_config.json, in the exact same directory as this tool file.
+        """
+        import json
+
+        # Get tool directory path
+        tool_dir = os.path.dirname(os.path.abspath(__file__))
+        config_path = os.path.join(tool_dir, "onboarding_config.json")
+
+        # Dynamically collect all pydantic model fields into a dict
+        config = self.model_dump()
+
+        # Write config file
+        try:
+            with open(config_path, "w", encoding="utf-8") as f:
+                json.dump(config, f, indent=2, ensure_ascii=False)
+            return f"Accounting agent configuration created at: {config_path}"
+        except Exception as e:
+            return f"Error writing config file: {str(e)}"
+
+if __name__ == "__main__":
+    # Test with sample accounting client data
+    tool = OnboardingTool(
+        agent_name="Acme Corp Accounting Agent",
+        business_overview="Mid-size manufacturing company with 50 employees.",
+        accounting_frequency="monthly",
+        accounting_software="xero",
+        invoice_delivery_method="customer_portal"
+    )
+    print(tool.run())
+```
+
+**Key things to note**:
+
+- `OnboardingTool` must extend `BaseTool` class.
+- File name must be `onboarding_tool.py`
+- The file needs to be placed in the **repository root directory**.
+- All field descriptions will be displayed during the onboarding process on our platform.
+- We will replace “_” with spaces, capitalize fields names and display them as titles, unless you `ui:title` parameter is provided.
+
+## How This Will Look On Agencii
+
+When users deploy your agents from the marketplace, we will parse this class into a JSON schema and display it as a form:
+
+![onboarding form example](/images/platform/onboarding_form.png)
+
+All that the user who wants to deploy your agency needs to do is simply fill out this form! That's it!
+
+## Step-by-Step Guide: How to Create Your Own Agent Onboarding Form 
+
+1. **Copy our template and place it in `onboarding_tool.py` file in the root directory:**
+    
+    ```python
+    from agency_swarm.tools import BaseTool
+    from pydantic import Field
+    import os
+    from dotenv import load_dotenv
+    from typing import Literal
+    
+    load_dotenv()
+    
+    class OnboardingTool(BaseTool):
+        """
+        Customizes your agent based on client-specific requirements before deployment.
+        Replace the fields below with parameters relevant to your use case.
+        """
+        
+        # String fields - use for names, descriptions, and text inputs
+        agent_name: str = Field(
+            ..., 
+            description="Name of your agent visible to the user."
+        )
+        business_overview: str = Field(
+            ..., 
+            description="Brief overview of the client's business or requirements."
+        )
+        # String fields for additional context
+        additional_notes: str = Field(
+            ..., 
+            description="Any additional notes or special requirements for the agent."
+        )
+    
+        def run(self):
+            """
+            Saves the configuration as a Python file with a config object
+            """
+            import json
+    
+            tool_dir = os.path.dirname(os.path.abspath(__file__))
+            config_path = os.path.join(tool_dir, "onboarding_config.py")
+    
+            config = self.model_dump()
+    
+            try:
+                # Generate Python code with the config as a dictionary
+                python_code = f"# Auto-generated onboarding configuration\n\nconfig = {json.dumps(config, indent=4)}\n"
+                
+                with open(config_path, "w", encoding="utf-8") as f:
+                    f.write(python_code)
+                return f"Configuration saved at: {config_path}\n\nYou can now import it with:\nfrom onboarding_config import config"
+            except Exception as e:
+                return f"Error writing config file: {str(e)}"
+    
+    if __name__ == "__main__":
+        tool = OnboardingTool(
+            agent_name="Example Agent",
+            business_overview="Example business description",
+            file_ids=[],
+            additional_notes="Any special requirements go here"
+        )
+        print(tool.run())
+    ```
+    
+2. Add your own specific fields with pydantic that are required to fine-tune your agents:
+    
+    ```python
+    # Example: Adding Literal field (dropdown menu)
+    from typing import Literal
+    
+    class OnboardingTool(BaseTool):
+    
+    		# ...
+        
+        # Literal field - creates a dropdown with predefined options
+    		 model: Literal["gpt-4o", "gpt-5-mini", "gpt-5"] = Field(
+            ...,
+            description="Select the AI model to use for the agent."
+        )
+        
+        # ...
+    ```
+    
+3. **Execute the tool file:**
+    
+    ```python
+    python onboarding_tool.py
+    ```
+    
+    This will generate `onboarding_config.py` next to your onboarding tool file.
+    
+    <aside>
+    ❗
+    
+    In most cases, you don’t need to change the `run` method. You can simply use the values from `config.py` in your code. (See steps below)
+    
+    </aside>
+    
+4. **Customize your agents**
+    
+    Use the values from the generated [config.py](http://config.py) file in your code to customize your agents:
+    
+    ```python
+    from agency_swarm import Agent
+    from onboarding_config import config
+    import os
+    
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    instructions_path = os.path.join(current_dir, "instructions.md")
+    
+    def render_instructions():
+        with open(instructions_path, "r") as file:
+            instructions = file.read()
+    
+        instructions = instructions.format(
+            agent_name=config["agent_name"],
+            business_overview=config["business_overview"],
+            additional_notes=config["additional_notes"]
+        )
+        return instructions
+    
+    rag_agent = Agent(
+        name=onboarding_config["agent_name"],
+        description=onboarding_config["agent_description"],
+        instructions=render_instructions(),
+        files_folder="./files",
+        model=config["model"],
+    )
+    ```
+    
+    In this example we:
+    
+    - Customized the instructions.
+    - Customized the model.
+5. Deploy and list on marketplace
+    1. Deploy your agent as usual, just make sure to commit the default `onboarding_config`for your own account.
+    2. Test the agency is working as expected on your account first.
+    3. List your agent on our marketplace by going to https://agencii.ai/marketplace/
+
+That’s it! This is how simple it is to customize and scale your agents with our platform.
+
+## Advanced Fields & Parameters
+
+We use [react-jsonschema-form](https://react-jsonschema-form.readthedocs.io/en/stable/) to render the onboarding form.
+
+You can use the following uiSchema parameters to customize the form:
+
+- `ui:widget`: controls which UI component is used for the field. (e.g. `text`, `textarea`, etc.)
+- `ui:options`: controls widget-specific options (e.g. `rows`, `inputType`, `label`, etc.).
+- `ui:title`: overrides the field’s title.
+- `ui:description`: overrides the field’s description.
+- `ui:readonly`: makes the field read-only.
+- `ui:disabled`: disables user interaction entirely.
+- `required`: belongs in the **JSON schema**, not the uiSchema.
+
+### File Uploads
+
+To upload your files, you must add `"x-file-upload-path"` , and the type of the field must be set `list[str]` .
+
+```python
+# List fields - use for multiple selections or file uploads
+accountant_agent_knowledge: list[str] = Field(
+    ...,
+    description="Files that accountant agent must have as knowledge.",
+		json_schema_extra={
+            "x-file-upload-path": "./accountant_agent/files",           # standard JSON Schema
+        },
+)
+```
+
+After user uploads the files, they will be added to `./accountant_agent/files` folder.
+
+### Multiline Text Inputs
+
+`ui:widget` parameter in `json_schema_extra` controls UI component displayed in the onboarding form
+
+```python
+additional_notes: Optional[str] = Field(
+    None, 
+    description="Any additional notes for the agent to go into prompt.",
+    json_schema_extra={
+        "ui:widget": "textarea",
+    },
+)
+```
+
+## A Note on Form Updates
+
+- If you push a change to the form, **the users of your agents will be required to re-enter any new and updated fields**. Do this with caution!
+- The summary of the commit that triggered the update will be displayed to the user in the form as the reason for the update.
+- The new version won’t be deployed for the users until they complete an onboarding form.
