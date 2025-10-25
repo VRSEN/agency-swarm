@@ -19,7 +19,7 @@ from agency_swarm.agent.execution_helpers import (
     get_run_trace_id,
     prepare_master_context,
     run_item_to_tresponse_input_item,
-    run_sync_with_guardrails,
+    run_with_guardrails,
     setup_execution,
 )
 from agency_swarm.agent.execution_streaming import StreamingRunResponse, run_stream_with_guardrails
@@ -119,7 +119,7 @@ class Execution:
             if agency_context and agency_context.agency_instance:
                 agency_name = getattr(agency_context.agency_instance, "name", None) or agency_name
 
-            run_result, master_context_for_run = await run_sync_with_guardrails(
+            run_result, master_context_for_run = await run_with_guardrails(
                 agent=self.agent,
                 history_for_runner=history_for_runner,
                 master_context_for_run=master_context_for_run,

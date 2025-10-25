@@ -12,6 +12,7 @@ from agents.exceptions import AgentsException
 from openai import NotFoundError
 
 from agency_swarm.agent.file_manager import AgentFileManager
+from agency_swarm.agent.file_sync import FileSync
 
 
 class TestAgentFileManager:
@@ -131,6 +132,7 @@ class TestAgentFileManager:
         mock_agent.client_sync.vector_stores.retrieve.side_effect = NotFoundError(
             "Vector store not found", response=mock_response, body={"error": "not_found"}
         )
+        mock_agent.client_sync.vector_stores.files.create = Mock()
 
         file_manager = AgentFileManager(mock_agent)
         file_manager.get_id_from_file = Mock(return_value=None)
@@ -164,23 +166,78 @@ class TestAgentFileManager:
         # Mock vector store retrieve to succeed
         mock_agent.client_sync.vector_stores.retrieve.return_value = Mock()
 
-        # Mock vector store files create to fail
-        mock_agent.client_sync.vector_stores.files.create.side_effect = Exception("Association failed")
+        file_manager = AgentFileManager(mock_agent)
+        file_manager.get_id_from_file = Mock(return_value=None)
+
+        with patch.object(
+            file_manager._sync,
+            "wait_for_vector_store_file_ready",
+            side_effect=Exception("Association failed"),
+        ):
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".txt") as tmp_file:
+                tmp_file.write(b"test content")
+                tmp_file_path = tmp_file.name
+
+            try:
+                # Should handle association failure gracefully and still return file ID
+                result = file_manager.upload_file(tmp_file_path)
+                assert result == "file-123"
+            finally:
+                os.unlink(tmp_file_path)
+
+    def test_upload_file_waits_for_vector_store_ingestion(self, tmp_path):
+        """Association tolerates initial NotFound and polls until completion."""
+
+        mock_agent = Mock()
+        mock_agent.name = "PollingAgent"
+        mock_agent.files_folder_path = tmp_path
+        mock_agent._associated_vector_store_id = "vs_valid123"
+        mock_agent.client_sync = Mock()
+
+        uploaded = Mock(id="file-abc123")
+        uploaded.created_at = 1_700_000_000
+        mock_agent.client_sync.files.create.return_value = uploaded
+        mock_agent.client_sync.vector_stores.retrieve.return_value = Mock()
+        mock_agent.client_sync.vector_stores.files.create.return_value = Mock(status="in_progress")
 
         file_manager = AgentFileManager(mock_agent)
         file_manager.get_id_from_file = Mock(return_value=None)
 
-        # Create a temporary file to test with
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".txt") as tmp_file:
-            tmp_file.write(b"test content")
-            tmp_file_path = tmp_file.name
+        local_file = tmp_path / "report.txt"
+        local_file.write_text("contents", encoding="utf-8")
 
-        try:
-            # Should handle association failure gracefully and still return file ID
-            result = file_manager.upload_file(tmp_file_path)
-            assert result == "file-123"
-        finally:
-            os.unlink(tmp_file_path)
+        with patch.object(file_manager._sync, "wait_for_vector_store_file_ready") as mock_wait:
+            result = file_manager.upload_file(str(local_file))
+
+        assert result == uploaded.id
+        assert mock_agent.client_sync.vector_stores.files.create.call_count == 1
+        mock_wait.assert_called_once_with(vector_store_id="vs_valid123", file_id=uploaded.id)
+
+    def test_file_sync_wait_for_vector_store_file_ready_handles_not_found(self):
+        """FileSync polling handles initial NotFound and completes when status ready."""
+
+        mock_agent = Mock()
+        mock_agent.name = "SyncAgent"
+        mock_agent.client_sync = Mock()
+
+        not_found_error = NotFoundError(
+            "missing",
+            response=Mock(status_code=404),
+            body={"error": "not_found"},
+        )
+        mock_agent.client_sync.vector_stores.files.retrieve.side_effect = [
+            not_found_error,
+            Mock(status="in_progress"),
+            Mock(status="completed"),
+        ]
+
+        sync = FileSync(mock_agent)
+
+        with patch("agency_swarm.agent.file_sync.time.sleep") as mock_sleep:
+            sync.wait_for_vector_store_file_ready(vector_store_id="vs123", file_id="file456", timeout_seconds=5.0)
+
+        assert mock_agent.client_sync.vector_stores.files.retrieve.call_count == 3
+        assert mock_sleep.call_count == 2
 
     def test_upload_file_preserves_stem_and_sets_remote_mtime(self, tmp_path):
         """Uploading files with '_file-' in the stem preserves the stem and aligns mtime with remote timestamp."""
@@ -600,7 +657,7 @@ class TestAgentFileManager:
         file_manager.add_files_to_vector_store("vs_test123", ["file-existing123", "file-new456"])
 
         # Should only call create for the new file
-        mock_agent.client_sync.vector_stores.files.create.assert_called_once_with(
+        mock_agent.client_sync.vector_stores.files.create_and_poll.assert_called_once_with(
             vector_store_id="vs_test123", file_id="file-new456"
         )
 
@@ -615,7 +672,7 @@ class TestAgentFileManager:
         mock_agent.client_sync.vector_stores.files.list.return_value = mock_files_list
 
         # Mock create to fail
-        mock_agent.client_sync.vector_stores.files.create.side_effect = Exception("Create failed")
+        mock_agent.client_sync.vector_stores.files.create_and_poll.side_effect = Exception("Create failed")
 
         file_manager = AgentFileManager(mock_agent)
 
