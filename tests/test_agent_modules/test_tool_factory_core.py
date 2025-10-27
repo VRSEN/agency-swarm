@@ -8,7 +8,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
-from agents import FunctionTool
+from agents import FunctionTool, ToolOutputImage
 
 from agency_swarm.tools.base_tool import BaseTool
 from agency_swarm.tools.tool_factory import ToolFactory
@@ -176,6 +176,23 @@ class TestAdaptBaseTool:
         callback_result = await result.on_invoke_tool(mock_ctx, "{}")
 
         assert "Error running BaseTool: Tool execution failed" in callback_result
+
+    @pytest.mark.asyncio
+    async def test_callback_returns_structured_output(self):
+        """ToolFactory should not stringify structured outputs."""
+
+        class StructuredTool(BaseTool):
+            """Tool returning an image output."""
+
+            def run(self):
+                return ToolOutputImage(image_url="https://example.com/sample.png")
+
+        result = ToolFactory.adapt_base_tool(StructuredTool)
+
+        mock_ctx = MagicMock()
+        callback_result = await result.on_invoke_tool(mock_ctx, "{}")
+
+        assert isinstance(callback_result, ToolOutputImage)
 
     @pytest.mark.asyncio
     async def test_callback_handles_invalid_json(self):
