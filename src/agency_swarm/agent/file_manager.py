@@ -2,14 +2,19 @@ import logging
 import os
 import re
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from agents import CodeInterpreterTool, FileSearchTool
 from agents.exceptions import AgentsException
 from openai import NotFoundError
+from openai.types import FileObject
 from openai.types.responses.tool_param import CodeInterpreter
+from openai.types.vector_stores.vector_store_file import LastError, VectorStoreFile
 
 from agency_swarm.agent.file_sync import FileSync
+
+if TYPE_CHECKING:
+    from agency_swarm.agent.core import Agent
 
 logger = logging.getLogger(__name__)
 
@@ -45,10 +50,17 @@ class AgentFileManager:
     """Manages permanent file operations for agents, including uploads and vector store management."""
 
     def __init__(self, agent):
-        self.agent = agent
+        self.agent: Agent = agent
         self._sync = FileSync(agent)
 
-    def upload_file(self, file_path: str, include_in_vector_store: bool = True) -> str:
+    def upload_file(
+        self,
+        file_path: str,
+        include_in_vector_store: bool = True,
+        *,
+        wait_for_ingestion: bool = True,
+        pending_ingestions: list[tuple[str, str]] | None = None,
+    ) -> str:
         """Upload a local file and optionally associate it with the agent's vector store; returns file_id."""
         fpath = Path(file_path)
         if not fpath.exists():
@@ -69,13 +81,13 @@ class AgentFileManager:
 
         if existing_file_id:
             try:
-                remote_file = self.agent.client_sync.files.retrieve(existing_file_id)
-                remote_created_at = getattr(remote_file, "created_at", None)
+                remote_file: FileObject = self.agent.client_sync.files.retrieve(existing_file_id)
+                remote_created_at: int | None = remote_file.created_at
             except Exception:
                 remote_created_at = None
 
             local_mtime = fpath.stat().st_mtime
-            if isinstance(remote_created_at, int | float) and local_mtime <= float(remote_created_at):
+            if remote_created_at is not None and local_mtime <= float(remote_created_at):
                 logger.info(f"File {fpath.name} unchanged since upload, skipping...")
                 return existing_file_id
             else:
@@ -91,7 +103,7 @@ class AgentFileManager:
 
         try:
             with open(fpath, "rb") as f:
-                uploaded_file = self.agent.client_sync.files.create(file=f, purpose="assistants")
+                uploaded_file: FileObject = self.agent.client_sync.files.create(file=f, purpose="assistants")
             logger.info(
                 f"Agent {self.agent.name}: Successfully uploaded file {fpath.name} to OpenAI. "
                 f"File ID: {uploaded_file.id}"
@@ -110,13 +122,11 @@ class AgentFileManager:
             destination_path = self.agent.files_folder_path / new_filename
             fpath.rename(destination_path)
             logger.info(f"Agent {self.agent.name}: Renamed uploaded file to {destination_path}")
-            created_at = getattr(uploaded_file, "created_at", None)
-            if destination_path and isinstance(created_at, int | float | str):
+            created_at: int | None = uploaded_file.created_at
+            if destination_path and created_at is not None:
                 try:
-                    timestamp = float(created_at)
-                    os.utime(destination_path, (timestamp, timestamp))
-                except (ValueError, TypeError):
-                    pass
+                    ts = float(created_at)
+                    os.utime(destination_path, (ts, ts))
                 except OSError as err:
                     logger.debug(
                         f"Agent {self.agent.name}: Failed to align mtime for {destination_path} "
@@ -127,40 +137,62 @@ class AgentFileManager:
             # Not raising an exception here as the file is uploaded to OpenAI,
             # but local rename failed. The File ID is still returned.
 
+        if (
+            self.agent._associated_vector_store_id
+            and include_in_vector_store
+            and not wait_for_ingestion
+            and pending_ingestions is None
+        ):
+            raise ValueError("pending_ingestions must be provided when wait_for_ingestion is False.")
+
         # Associate with Vector Store if one is linked to this agent via files_folder
         if self.agent._associated_vector_store_id and include_in_vector_store:
             try:
-                # First, check if the vector store still exists.
+                vector_store_id = self.agent._associated_vector_store_id
                 try:
-                    self.agent.client_sync.vector_stores.retrieve(
-                        vector_store_id=self.agent._associated_vector_store_id
-                    )
+                    self.agent.client_sync.vector_stores.retrieve(vector_store_id=vector_store_id)
                     logger.debug(
-                        f"Agent {self.agent.name}: Confirmed Vector Store {self.agent._associated_vector_store_id} "
+                        f"Agent {self.agent.name}: Confirmed Vector Store {vector_store_id} "
                         f"exists before associating file {uploaded_file.id}."
                     )
                 except NotFoundError:
                     logger.warning(
-                        f"Agent {self.agent.name}: Vector Store {self.agent._associated_vector_store_id} "
+                        f"Agent {self.agent.name}: Vector Store {vector_store_id} "
                         f"not found during file {uploaded_file.id} association. "
-                        "It might have been deleted after agent initialization. Skipping association."
+                        "Skipping association."
                     )
-                    return uploaded_file.id  # File is uploaded, but association is skipped. Early exit.
+                    return uploaded_file.id
 
-                # If VS exists, proceed to associate the file
-                self.agent.client_sync.vector_stores.files.create(
-                    vector_store_id=self.agent._associated_vector_store_id, file_id=uploaded_file.id
+                enqueue_response = self.agent.client_sync.vector_stores.files.create(
+                    vector_store_id=vector_store_id,
+                    file_id=uploaded_file.id,
                 )
                 logger.info(
-                    f"Agent {self.agent.name}: Associated file {uploaded_file.id} "
-                    f"with Vector Store {self.agent._associated_vector_store_id}."
+                    "Agent %s: Queued file %s for vector store %s (status=%s).",
+                    self.agent.name,
+                    uploaded_file.id,
+                    vector_store_id,
+                    getattr(enqueue_response, "status", "unknown"),
                 )
+                if wait_for_ingestion:
+                    self._sync.wait_for_vector_store_files_ready(
+                        [(vector_store_id, uploaded_file.id)],
+                    )
+                else:
+                    assert pending_ingestions is not None
+                    pending_ingestions.append((vector_store_id, uploaded_file.id))
+            except AgentsException as exc:
+                logger.error(
+                    f"Agent {self.agent.name}: Failed to associate file {uploaded_file.id} "
+                    f"with Vector Store {self.agent._associated_vector_store_id}: {exc}"
+                )
+                raise
             except Exception as e:
                 logger.error(
                     f"Agent {self.agent.name}: Failed to associate file {uploaded_file.id} "
                     f"with Vector Store {self.agent._associated_vector_store_id}: {e}"
                 )
-                # Don't raise an exception here if association fails.
+                # Don't raise an exception here if association fails for other reasons.
 
         return uploaded_file.id
 
@@ -213,19 +245,31 @@ class AgentFileManager:
         if candidates and original_folder_path and Path(original_folder_path).exists():
             new_files = self._find_new_files_to_process(Path(original_folder_path))
 
+        pending_ingestions: list[tuple[str, str]] = []
         code_interpreter_file_ids = []
         for file in os.listdir(self.agent.files_folder_path):
             if self._should_skip_file(file):
                 logger.debug(f"Skipping file '{file}'")
                 continue
-            file_id = self._upload_file_by_type(self.agent.files_folder_path / file)
+            file_id = self._upload_file_by_type(
+                self.agent.files_folder_path / file,
+                wait_for_ingestion=False,
+                pending_ingestions=pending_ingestions,
+            )
             if file_id:
                 code_interpreter_file_ids.append(file_id)
 
         for new_file in new_files:
-            file_id = self._upload_file_by_type(new_file)
+            file_id = self._upload_file_by_type(
+                new_file,
+                wait_for_ingestion=False,
+                pending_ingestions=pending_ingestions,
+            )
             if file_id:
                 code_interpreter_file_ids.append(file_id)
+
+        if pending_ingestions:
+            self._sync.wait_for_vector_store_files_ready(pending_ingestions)
 
         if self.agent._associated_vector_store_id:
             self.add_file_search_tool(vector_store_id=self.agent._associated_vector_store_id)
@@ -345,8 +389,41 @@ class AgentFileManager:
                 continue
 
             try:
-                self.agent.client_sync.vector_stores.files.create(vector_store_id=vector_store_id, file_id=file_id)
-                logger.info(f"Agent {self.agent.name}: Added file {file_id} to Vector Store {vector_store_id}.")
+                vs_file: VectorStoreFile = self.agent.client_sync.vector_stores.files.create_and_poll(
+                    vector_store_id=vector_store_id, file_id=file_id
+                )
+                status = vs_file.status
+                if status in {"failed", "cancelled"}:
+                    last_error: LastError | None = vs_file.last_error
+                    if last_error:
+                        error_detail = f" Details: code={last_error.code}, message={last_error.message}"
+                    else:
+                        error_detail = ""
+                    logger.error(
+                        "Agent %s: Vector Store %s returned status %s for file %s.%s",
+                        self.agent.name,
+                        vector_store_id,
+                        status,
+                        file_id,
+                        error_detail,
+                    )
+                    raise AgentsException(
+                        f"Vector Store {vector_store_id} reported status {status} "
+                        f"while adding file {file_id}{error_detail}"
+                    )
+                if status == "completed":
+                    logger.info(
+                        f"Agent {self.agent.name}: Added file {file_id} to Vector Store {vector_store_id} "
+                        f"(status={vs_file.status})."
+                    )
+                else:
+                    logger.warning(
+                        "Agent %s: Vector Store %s returned non-terminal status %s for file %s.",
+                        self.agent.name,
+                        vector_store_id,
+                        status,
+                        file_id,
+                    )
             except Exception as e:
                 logger.error(
                     f"Agent {self.agent.name}: Failed to add file {file_id} to Vector Store {vector_store_id}: {e}"
@@ -459,7 +536,10 @@ class AgentFileManager:
             return []
 
         processed_files = set()
-        for vs_file in self.agent.files_folder_path.iterdir():
+        files_folder_path = self.agent.files_folder_path
+        if files_folder_path is None:
+            return []
+        for vs_file in files_folder_path.iterdir():
             if vs_file.is_file() and "_file-" in vs_file.name:
                 original_name = vs_file.name.split("_file-")[0] + vs_file.suffix
                 processed_files.add(original_name)
@@ -475,14 +555,31 @@ class AgentFileManager:
 
         return new_files
 
-    def _upload_file_by_type(self, file_path: Path, include_in_vs: bool = True) -> str | None:
+    def _upload_file_by_type(
+        self,
+        file_path: Path,
+        include_in_vs: bool = True,
+        *,
+        wait_for_ingestion: bool = True,
+        pending_ingestions: list[tuple[str, str]] | None = None,
+    ) -> str | None:
         """Upload file; return file_id for code interpreter types, else None."""
         ext = file_path.suffix.lower()
 
         if ext in CODE_INTERPRETER_FILE_EXTENSIONS + IMAGE_FILE_EXTENSIONS:
-            return self.upload_file(str(file_path), include_in_vector_store=False)
+            return self.upload_file(
+                str(file_path),
+                include_in_vector_store=False,
+                wait_for_ingestion=wait_for_ingestion,
+                pending_ingestions=pending_ingestions,
+            )
         elif ext in FILE_SEARCH_FILE_EXTENSIONS:
-            self.upload_file(str(file_path))
+            self.upload_file(
+                str(file_path),
+                include_in_vector_store=include_in_vs,
+                wait_for_ingestion=wait_for_ingestion,
+                pending_ingestions=pending_ingestions,
+            )
             return None
         else:
             raise AgentsException(f"Unsupported file extension: {ext} for file {file_path}")

@@ -39,6 +39,7 @@ Prime Directive: Rigorously compare every user request with patterns established
 These requirements apply to every file in the repository. Bullets prefixed with “In this document” are scoped to `AGENTS.md` only.
 
 - Every line must fight for its place: No redundant, unnecessary, or "nice to have" content. Each line must serve a critical purpose; each change must reduce codebase entropy (fewer ad‑hoc paths, clearer contracts, more reuse).
+- Performance is a first-class constraint: favor the fastest viable design, measure regressions immediately, and back every slowdown with data and reviewer approval.
 - Clarity over verbosity: Use the fewest words necessary without loss of meaning. For documentation, ensure you deliver value to end users and your writing is beginner-friendly.
 - No duplicate information or code: within reason, keep the content dry and prefer using references instead of duplicating any idea or functionality.
 - Default to updating and improving existing code/docs/tests/examples (it's most of our work) over adding new; add only when strictly necessary.
@@ -75,6 +76,7 @@ These requirements apply to every file in the repository. Bullets prefixed with 
 - Search for similar patterns; identify required related changes globally.
 - Apply fixes to all instances at once—avoid piecemeal edits.
 - Investigate thoroughly: read complete files, trace full code paths. For debugging, always link failures to their root cause and commit.
+- Before changing runtime code, confirm whether upstream libraries (e.g. `openai`, `openai-agents`) already ship concrete models and lean on them; prefer typed attribute access over speculative dynamic checks.
 - Before editing, write down for yourself what you will change, why it is needed, and what evidence supports it; stop and request guidance if you cannot articulate this plan.
 - Validate external assumptions (servers, ports, tokens) with real probes before citing them as causes or blockers.
 - Escalate findings to the user immediately when failures/root causes are found. Never proceed with silent fixes.
@@ -90,6 +92,9 @@ These requirements apply to every file in the repository. Bullets prefixed with 
 
 # Format code before running CI (auto-fixes style)
 `make format`
+
+# Lint and type-check before staging or committing
+`make check`
 
 # Run the full suite (`make ci`) before PR/merge or when verifying repo-wide health
 `make ci`
@@ -128,7 +133,7 @@ After each tool call or code edit, validate the result in 1-2 lines and proceed 
   - Max 100 lines per test function; keep deterministic and minimal
   - Every test documents a single behavior (docstring + descriptive name) so intent stays obvious
   - Test behavior, not implementation details; never test private APIs or patch private attributes or methods
-  - Use real framework objects when practical
+  - Use real framework objects when practical, leaning on the concrete OpenAI/Agents SDK models so mypy can verify attribute access instead of tolerating generic mocks
   - Update existing tests before adding new ones unless the coverage gap is clear and documented
   - Use focused runs during debugging to minimize noise
   - Follow the testing pyramid and prevent duplicate assertions across unit and integration levels
@@ -203,6 +208,7 @@ Avoid growing already large files. Prefer extracting focused modules. If you mus
 
 Strictness
 - No `# type: ignore` in production code. Fix types or refactor.
+- Use the authoritative typed models from dependencies whenever they exist (e.g., `openai.types.responses`, `agents.items`). Annotate variables and access their attributes directly; ad-hoc duck typing (`getattr`, broad `isinstance`, loose dict probing) is not acceptable.
 - Never hardcode temporary paths or ad-hoc directories in code or tests.
  - Do not add multi-path fallbacks; choose one clear path and fail fast if prerequisites are missing.
  - Imports at top-level only; do not place imports inside functions or conditional blocks. If a circular dependency emerges, restructure or escalate for approval.

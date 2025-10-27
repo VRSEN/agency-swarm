@@ -260,6 +260,19 @@ async def _cleanup_file_search_resources(real_openai_client: AsyncOpenAI, folder
         print(f"Error during cleanup: {e}")
 
 
+async def _assert_openai_file_absent(real_openai_client: AsyncOpenAI, file_id: str, timeout_seconds: int = 120) -> None:
+    """Polls until the given OpenAI file_id is confirmed deleted, mirroring FileSync waits."""
+    deadline = asyncio.get_event_loop().time() + timeout_seconds
+    while True:
+        try:
+            await real_openai_client.files.retrieve(file_id=file_id)
+        except NotFoundError:
+            return
+        if asyncio.get_event_loop().time() >= deadline:
+            pytest.fail(f"OpenAI file {file_id} still exists after waiting {timeout_seconds} seconds")
+        await asyncio.sleep(1)
+
+
 @pytest.mark.asyncio
 async def test_files_folder_reuse_without_missing_directory_warning(
     real_openai_client: AsyncOpenAI, tmp_path: Path, caplog
@@ -624,14 +637,12 @@ async def test_vector_store_cleanup_on_init(real_openai_client: AsyncOpenAI, tmp
     assert isinstance(vs_id, str) and vs_id
 
     # Verify VS now contains only remaining file
-    vs_files = await real_openai_client.vector_stores.files.list(vector_store_id=vs_id)
+    vs_files = await real_openai_client.vector_stores.files.list(vector_store_id=vs_id, filter="completed")
     vs_file_ids = {getattr(f, "file_id", None) or getattr(f, "id", None) for f in vs_files.data}
     assert removed_id not in vs_file_ids
     assert len(vs_file_ids) == 1
 
-    # Verify the removed OpenAI file no longer exists
-    with pytest.raises(NotFoundError):
-        await real_openai_client.files.retrieve(file_id=removed_id)
+    await _assert_openai_file_absent(real_openai_client, removed_id)
 
     # Cleanup
     try:
@@ -700,15 +711,13 @@ async def test_file_reupload_on_mtime_update(real_openai_client: AsyncOpenAI, tm
     assert isinstance(vs_id, str) and vs_id
 
     # Verify vector store now references a new file id
-    vs_files = await real_openai_client.vector_stores.files.list(vector_store_id=vs_id)
+    vs_files = await real_openai_client.vector_stores.files.list(vector_store_id=vs_id, filter="completed")
     new_ids = {getattr(f, "file_id", None) or getattr(f, "id", None) for f in vs_files.data}
     assert len(new_ids) == 1
     (new_id,) = tuple(new_ids)
     assert new_id != old_id
 
-    # Old file should be deleted
-    with pytest.raises(NotFoundError):
-        await real_openai_client.files.retrieve(file_id=old_id)
+    await _assert_openai_file_absent(real_openai_client, old_id)
 
     # Cleanup
     try:
