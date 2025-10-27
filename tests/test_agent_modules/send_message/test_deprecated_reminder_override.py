@@ -1,6 +1,5 @@
-from __future__ import annotations
-
 from types import SimpleNamespace
+from typing import Self
 
 import pytest
 from agents import ModelSettings
@@ -41,7 +40,7 @@ class _DummyHandoffInputData:
         self.run_context = run_context
         self.input_history = input_history
 
-    def clone(self, input_history: tuple[dict[str, object], ...] | None = None) -> _DummyHandoffInputData:
+    def clone(self, input_history: tuple[dict[str, object], ...] | None = None) -> Self:
         return _DummyHandoffInputData(
             self.run_context, input_history if input_history is not None else self.input_history
         )

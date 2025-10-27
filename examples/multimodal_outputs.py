@@ -59,9 +59,7 @@ def create_multimodal_agency() -> Agency:
 
 async def main() -> None:
     agency = create_multimodal_agency()
-    response = await agency.get_response(
-        "Analyze the daily revenue graph, and summarize the supporting report."
-    )
+    response = await agency.get_response("Analyze the daily revenue graph, and summarize the supporting report.")
 
     print("Final response:")
     print(response.final_output)

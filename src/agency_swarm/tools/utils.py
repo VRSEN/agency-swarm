@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import base64
 import json
 import logging
@@ -22,6 +20,20 @@ from datamodel_code_generator.parser.jsonschema import JsonSchemaParser
 
 logger = logging.getLogger(__name__)
 
+PDF_MIME_TYPE = "application/pdf"
+
+
+def _build_data_url(file_path: Path, mime_type: str) -> str:
+    encoded_file = base64.b64encode(file_path.read_bytes()).decode("utf-8")
+    return f"data:{mime_type};base64,{encoded_file}"
+
+
+def _resolve_mime_type(file_path: Path) -> str:
+    mime_type, _ = mimetypes.guess_type(file_path.name)
+    if not mime_type:
+        raise ValueError(f"Unable to determine MIME type for file: {file_path}")
+    return mime_type
+
 
 def tool_output_image_from_path(
     path: str | Path,
@@ -34,14 +46,15 @@ def tool_output_image_from_path(
     Args:
         path: Path to the image file on disk.
         detail: Optional detail hint to forward to the vision model.
+
+    Raises:
+        ValueError: If the file type cannot be resolved from the path.
     """
 
     file_path = Path(path)
-    mime_type, _ = mimetypes.guess_type(file_path.name)
-    if not mime_type:
-        mime_type = "image/png"
-    encoded_image = base64.b64encode(file_path.read_bytes()).decode("utf-8")
-    return ToolOutputImage(image_url=f"data:{mime_type};base64,{encoded_image}", detail=detail)
+    mime_type = _resolve_mime_type(file_path)
+    return ToolOutputImage(image_url=_build_data_url(file_path, mime_type), detail=detail)
+
 
 def tool_output_image_from_file_id(
     file_id: str,
@@ -72,13 +85,14 @@ def tool_output_file_from_path(path: str | Path, *, filename: str | None = None)
     """
 
     file_path = Path(path)
-    # Raise a different error, as oai's error message can be misleading
-    if file_path.suffix.lower() != ".pdf":
-        raise ValueError(f"ToolOutputFileContent only supports PDF files, got: {file_path.suffix}")
     if filename and not filename.lower().endswith(".pdf"):
         raise ValueError(f"Filename must end with .pdf, got: {filename}")
-    encoded_file = base64.b64encode(file_path.read_bytes()).decode("utf-8")
-    return ToolOutputFileContent(file_data=encoded_file, filename=filename or file_path.name)
+    mime_type = _resolve_mime_type(file_path)
+    if mime_type != PDF_MIME_TYPE:
+        raise ValueError("Only PDF files are supported.")
+    return ToolOutputFileContent(
+        file_data=_build_data_url(file_path, PDF_MIME_TYPE), filename=filename or file_path.name
+    )
 
 
 def tool_output_file_from_url(url: str) -> ToolOutputFileContent:

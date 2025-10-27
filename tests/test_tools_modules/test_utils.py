@@ -2,8 +2,6 @@
 Tests for multimodal helper utilities.
 """
 
-from __future__ import annotations
-
 import base64
 from pathlib import Path
 
@@ -39,6 +37,14 @@ def test_tool_output_image_from_path_returns_data_url(tmp_path):
     assert base64.b64decode(encoded) == image_path.read_bytes()
 
 
+def test_tool_output_image_from_path_rejects_unknown_type(tmp_path):
+    image_path = tmp_path / "pixel"
+    image_path.write_bytes(_write_png(tmp_path).read_bytes())
+
+    with pytest.raises(ValueError, match="Unable to determine MIME type"):
+        tool_output_image_from_path(image_path)
+
+
 def test_tool_output_file_from_path_embeds_file_data(tmp_path):
     file_path = tmp_path / "document.pdf"
     file_path.write_text("sample pdf content", encoding="utf-8")
@@ -48,14 +54,16 @@ def test_tool_output_file_from_path_embeds_file_data(tmp_path):
     assert isinstance(result, ToolOutputFileContent)
     assert result.filename == "document.pdf"
     assert result.file_data is not None
-    assert base64.b64decode(result.file_data.encode("utf-8")).decode("utf-8") == "sample pdf content"
+    assert result.file_data.startswith("data:application/pdf;base64,")
+    encoded = result.file_data.split(",", 1)[1]
+    assert base64.b64decode(encoded.encode("utf-8")).decode("utf-8") == "sample pdf content"
 
 
 def test_tool_output_file_from_path_rejects_non_pdf(tmp_path):
     file_path = tmp_path / "document.txt"
     file_path.write_text("not a pdf", encoding="utf-8")
 
-    with pytest.raises(ValueError, match="ToolOutputFileContent only supports PDF files"):
+    with pytest.raises(ValueError, match="Only PDF files are supported."):
         tool_output_file_from_path(file_path)
 
 

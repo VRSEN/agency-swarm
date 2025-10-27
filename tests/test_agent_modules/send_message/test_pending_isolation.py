@@ -1,7 +1,5 @@
 """SendMessage isolation regression tests."""
 
-from __future__ import annotations
-
 import asyncio
 import json
 from types import MethodType, SimpleNamespace
