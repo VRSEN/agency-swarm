@@ -23,7 +23,7 @@ class TestFastAPIFileProcessing:
     """Test suite for FastAPI file processing with file_urls parameter."""
 
     @staticmethod
-    def get_http_client(timeout_seconds: int = 60) -> httpx.AsyncClient:
+    def get_http_client(timeout_seconds: int = 120) -> httpx.AsyncClient:
         """Create an HTTP client with proper timeout configuration."""
         timeout_config = httpx.Timeout(
             timeout_seconds,  # Total timeout (first positional arg)
@@ -162,7 +162,7 @@ class TestFastAPIFileProcessing:
         }
         headers = {}
 
-        async with self.get_http_client(timeout_seconds=90) as client:
+        async with self.get_http_client(timeout_seconds=120) as client:
             response = await client.post(url, json=payload, headers=headers)
 
         assert response.status_code == 200
@@ -183,7 +183,7 @@ class TestFastAPIFileProcessing:
         }
         headers = {}
 
-        async with self.get_http_client(timeout_seconds=90) as client:
+        async with self.get_http_client(timeout_seconds=120) as client:
             response = await client.post(url, json=payload, headers=headers)
 
         assert response.status_code == 200
@@ -212,7 +212,7 @@ class TestFastAPIFileProcessing:
         }
         headers = {}
 
-        async with self.get_http_client(timeout_seconds=90) as client:
+        async with self.get_http_client(timeout_seconds=120) as client:
             response = await client.post(url, json=payload, headers=headers)
 
         assert response.status_code == 200
@@ -234,7 +234,7 @@ class TestFastAPIFileProcessing:
         headers = {}
 
         collected_data = []
-        async with self.get_http_client(timeout_seconds=90) as client:
+        async with self.get_http_client(timeout_seconds=120) as client:
             async with client.stream("POST", url, json=payload, headers=headers) as response:
                 assert response.status_code == 200
                 async for line in response.aiter_lines():

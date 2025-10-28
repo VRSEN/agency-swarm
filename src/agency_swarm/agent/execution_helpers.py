@@ -82,7 +82,7 @@ async def perform_single_run(
 # perform_streamed_run moved to execution_streaming.py
 
 
-async def run_sync_with_guardrails(
+async def run_with_guardrails(
     *,
     agent: "Agent",
     history_for_runner: list[TResponseInputItem],

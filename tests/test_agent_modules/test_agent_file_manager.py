@@ -4,14 +4,39 @@ import logging
 import os
 import tempfile
 from pathlib import Path
+from typing import Literal
 from unittest.mock import Mock, patch
 
 import pytest
 from agents import CodeInterpreterTool, FileSearchTool
 from agents.exceptions import AgentsException
 from openai import NotFoundError
+from openai._types import omit
+from openai.pagination import SyncCursorPage
+from openai.types.vector_stores.vector_store_file import LastError, VectorStoreFile
 
 from agency_swarm.agent.file_manager import AgentFileManager
+from agency_swarm.agent.file_sync import FileSync
+
+
+def make_vector_store_file(
+    *,
+    file_id: str,
+    vector_store_id: str,
+    status: Literal["in_progress", "completed", "cancelled", "failed"] = "completed",
+    last_error: LastError | None = None,
+) -> VectorStoreFile:
+    return VectorStoreFile.model_construct(
+        id=file_id,
+        created_at=0,
+        object="vector_store.file",
+        status=status,
+        usage_bytes=0,
+        vector_store_id=vector_store_id,
+        last_error=last_error,
+        attributes=None,
+        chunking_strategy=None,
+    )
 
 
 class TestAgentFileManager:
@@ -131,6 +156,7 @@ class TestAgentFileManager:
         mock_agent.client_sync.vector_stores.retrieve.side_effect = NotFoundError(
             "Vector store not found", response=mock_response, body={"error": "not_found"}
         )
+        mock_agent.client_sync.vector_stores.files.create = Mock()
 
         file_manager = AgentFileManager(mock_agent)
         file_manager.get_id_from_file = Mock(return_value=None)
@@ -164,23 +190,208 @@ class TestAgentFileManager:
         # Mock vector store retrieve to succeed
         mock_agent.client_sync.vector_stores.retrieve.return_value = Mock()
 
-        # Mock vector store files create to fail
-        mock_agent.client_sync.vector_stores.files.create.side_effect = Exception("Association failed")
+        file_manager = AgentFileManager(mock_agent)
+        file_manager.get_id_from_file = Mock(return_value=None)
+
+        with patch.object(
+            file_manager._sync,
+            "wait_for_vector_store_files_ready",
+            side_effect=Exception("Association failed"),
+        ):
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".txt") as tmp_file:
+                tmp_file.write(b"test content")
+                tmp_file_path = tmp_file.name
+
+            try:
+                # Should handle association failure gracefully and still return file ID
+                result = file_manager.upload_file(tmp_file_path)
+                assert result == "file-123"
+            finally:
+                os.unlink(tmp_file_path)
+
+    def test_upload_file_waits_for_vector_store_ingestion(self, tmp_path):
+        """Association tolerates initial NotFound and polls until completion."""
+
+        mock_agent = Mock()
+        mock_agent.name = "PollingAgent"
+        mock_agent.files_folder_path = tmp_path
+        mock_agent._associated_vector_store_id = "vs_valid123"
+        mock_agent.client_sync = Mock()
+
+        uploaded = Mock(id="file-abc123")
+        uploaded.created_at = 1_700_000_000
+        mock_agent.client_sync.files.create.return_value = uploaded
+        mock_agent.client_sync.vector_stores.retrieve.return_value = Mock()
+        mock_agent.client_sync.vector_stores.files.create.return_value = Mock(status="in_progress")
 
         file_manager = AgentFileManager(mock_agent)
         file_manager.get_id_from_file = Mock(return_value=None)
 
-        # Create a temporary file to test with
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".txt") as tmp_file:
-            tmp_file.write(b"test content")
-            tmp_file_path = tmp_file.name
+        local_file = tmp_path / "report.txt"
+        local_file.write_text("contents", encoding="utf-8")
 
-        try:
-            # Should handle association failure gracefully and still return file ID
-            result = file_manager.upload_file(tmp_file_path)
-            assert result == "file-123"
-        finally:
-            os.unlink(tmp_file_path)
+        with patch.object(file_manager._sync, "wait_for_vector_store_files_ready") as mock_wait:
+            result = file_manager.upload_file(str(local_file))
+
+        assert result == uploaded.id
+        assert mock_agent.client_sync.vector_stores.files.create.call_count == 1
+        mock_wait.assert_called_once_with([("vs_valid123", uploaded.id)])
+
+    def test_upload_file_defers_wait_when_pending_list_provided(self, tmp_path):
+        """upload_file can defer vector store polling when provided with a pending list."""
+
+        mock_agent = Mock()
+        mock_agent.name = "BatchingAgent"
+        mock_agent.files_folder_path = tmp_path
+        mock_agent._associated_vector_store_id = "vs_batch123"
+        mock_agent.client_sync = Mock()
+
+        uploaded = Mock(id="file-batch123")
+        uploaded.created_at = 1_700_000_000
+        mock_agent.client_sync.files.create.return_value = uploaded
+        mock_agent.client_sync.vector_stores.retrieve.return_value = Mock()
+        mock_agent.client_sync.vector_stores.files.create.return_value = Mock(status="in_progress")
+
+        file_manager = AgentFileManager(mock_agent)
+        file_manager.get_id_from_file = Mock(return_value=None)
+
+        local_file = tmp_path / "report.txt"
+        local_file.write_text("contents", encoding="utf-8")
+
+        pending: list[tuple[str, str]] = []
+        with patch.object(file_manager._sync, "wait_for_vector_store_files_ready") as mock_wait:
+            result = file_manager.upload_file(
+                str(local_file),
+                wait_for_ingestion=False,
+                pending_ingestions=pending,
+            )
+
+        assert result == uploaded.id
+        assert pending == [("vs_batch123", uploaded.id)]
+        mock_wait.assert_not_called()
+
+    def test_upload_file_requires_pending_list_when_wait_deferred(self, tmp_path):
+        """wait_for_ingestion=False without pending list raises to prevent silent starvation."""
+
+        mock_agent = Mock()
+        mock_agent.name = "GuardAgent"
+        mock_agent.files_folder_path = tmp_path
+        mock_agent._associated_vector_store_id = "vs_guard123"
+        mock_agent.client_sync = Mock()
+
+        uploaded = Mock(id="file-guard123")
+        uploaded.created_at = 1_700_000_000
+        mock_agent.client_sync.files.create.return_value = uploaded
+        mock_agent.client_sync.vector_stores.retrieve.return_value = Mock()
+        mock_agent.client_sync.vector_stores.files.create.return_value = Mock(status="in_progress")
+
+        file_manager = AgentFileManager(mock_agent)
+        file_manager.get_id_from_file = Mock(return_value=None)
+
+        local_file = tmp_path / "report.txt"
+        local_file.write_text("contents", encoding="utf-8")
+
+        with pytest.raises(ValueError, match="pending_ingestions"):
+            file_manager.upload_file(
+                str(local_file),
+                wait_for_ingestion=False,
+            )
+
+    def test_upload_file_raises_on_vector_store_ingestion_failure(self, tmp_path):
+        """Vector store ingestion failures surface as AgentsException."""
+
+        mock_agent = Mock()
+        mock_agent.name = "FailingAgent"
+        mock_agent.files_folder_path = tmp_path
+        mock_agent._associated_vector_store_id = "vs_fail123"
+        mock_agent.client_sync = Mock()
+
+        uploaded = Mock()
+        uploaded.id = "file-fail123"
+        uploaded.created_at = 1_700_000_000
+        mock_agent.client_sync.files.create.return_value = uploaded
+        mock_agent.client_sync.vector_stores.retrieve.return_value = Mock()
+        mock_agent.client_sync.vector_stores.files.create.return_value = Mock(status="in_progress")
+
+        failure_vs_file = make_vector_store_file(
+            file_id=uploaded.id,
+            vector_store_id="vs_fail123",
+            status="failed",
+            last_error=LastError(code="server_error", message="ingestion failed"),
+        )
+        mock_agent.client_sync.vector_stores.files.retrieve.return_value = failure_vs_file
+
+        file_manager = AgentFileManager(mock_agent)
+        file_manager.get_id_from_file = Mock(return_value=None)
+
+        local_file = tmp_path / "report.txt"
+        local_file.write_text("contents", encoding="utf-8")
+
+        with pytest.raises(AgentsException, match="ingestion failed"):
+            file_manager.upload_file(str(local_file))
+
+    def test_file_sync_wait_for_vector_store_file_ready_handles_not_found(self):
+        """FileSync polling handles initial NotFound and completes when status ready."""
+
+        mock_agent = Mock()
+        mock_agent.name = "SyncAgent"
+        mock_agent.client_sync = Mock()
+
+        not_found_error = NotFoundError(
+            "missing",
+            response=Mock(status_code=404),
+            body={"error": "not_found"},
+        )
+        mock_agent.client_sync.vector_stores.files.retrieve.side_effect = [
+            not_found_error,
+            Mock(status="in_progress"),
+            Mock(status="completed"),
+        ]
+
+        sync = FileSync(mock_agent)
+
+        with patch("agency_swarm.agent.file_sync.time.sleep") as mock_sleep:
+            sync.wait_for_vector_store_file_ready(vector_store_id="vs123", file_id="file456", timeout_seconds=5.0)
+
+        assert mock_agent.client_sync.vector_stores.files.retrieve.call_count == 3
+        assert mock_sleep.call_count == 2
+
+    def test_file_sync_list_all_vector_store_files_passes_after_parameter(self):
+        """FileSync.list_all_vector_store_files includes None and cursor values for after parameter."""
+        mock_agent = Mock()
+        mock_agent.name = "SyncAgent"
+        mock_agent.client_sync = Mock()
+
+        first_file = make_vector_store_file(file_id="file-1", vector_store_id="vs123")
+        second_file = make_vector_store_file(file_id="file-2", vector_store_id="vs123")
+
+        first_resp = SyncCursorPage(
+            data=[first_file],
+            has_more=True,
+            client=None,
+            params={},
+            options={},
+        )
+
+        second_resp = SyncCursorPage(
+            data=[second_file],
+            has_more=False,
+            client=None,
+            params={},
+            options={},
+        )
+
+        mock_agent.client_sync.vector_stores.files.list.side_effect = [first_resp, second_resp]
+
+        sync = FileSync(mock_agent)
+
+        result = sync.list_all_vector_store_files("vs123")
+
+        assert result == [first_file, second_file]
+
+        calls = mock_agent.client_sync.vector_stores.files.list.call_args_list
+        assert calls[0].kwargs == {"vector_store_id": "vs123", "limit": 100, "after": omit}
+        assert calls[1].kwargs == {"vector_store_id": "vs123", "limit": 100, "after": "file-1"}
 
     def test_upload_file_preserves_stem_and_sets_remote_mtime(self, tmp_path):
         """Uploading files with '_file-' in the stem preserves the stem and aligns mtime with remote timestamp."""
@@ -585,14 +796,15 @@ class TestAgentFileManager:
         mock_agent = Mock()
         mock_agent.name = "TestAgent"
 
-        # Mock existing files in vector store
-        mock_existing_file = Mock()
-        mock_existing_file.id = "file-existing123"
+        mock_existing_file = make_vector_store_file(file_id="file-existing123", vector_store_id="vs_test123")
 
         mock_files_list = Mock()
         mock_files_list.data = [mock_existing_file]
 
         mock_agent.client_sync.vector_stores.files.list.return_value = mock_files_list
+        mock_agent.client_sync.vector_stores.files.create_and_poll.return_value = make_vector_store_file(
+            file_id="file-new456", vector_store_id="vs_test123"
+        )
 
         file_manager = AgentFileManager(mock_agent)
 
@@ -600,7 +812,7 @@ class TestAgentFileManager:
         file_manager.add_files_to_vector_store("vs_test123", ["file-existing123", "file-new456"])
 
         # Should only call create for the new file
-        mock_agent.client_sync.vector_stores.files.create.assert_called_once_with(
+        mock_agent.client_sync.vector_stores.files.create_and_poll.assert_called_once_with(
             vector_store_id="vs_test123", file_id="file-new456"
         )
 
@@ -615,13 +827,64 @@ class TestAgentFileManager:
         mock_agent.client_sync.vector_stores.files.list.return_value = mock_files_list
 
         # Mock create to fail
-        mock_agent.client_sync.vector_stores.files.create.side_effect = Exception("Create failed")
+        mock_agent.client_sync.vector_stores.files.create_and_poll.side_effect = Exception("Create failed")
 
         file_manager = AgentFileManager(mock_agent)
 
         # Should raise AgentsException
         with pytest.raises(AgentsException, match="Failed to add file file-123 to Vector Store vs_test123"):
             file_manager.add_files_to_vector_store("vs_test123", ["file-123"])
+
+    def test_add_files_to_vector_store_failed_status(self):
+        """Vector store add_files_to_vector_store raises when poll returns failed status."""
+        mock_agent = Mock()
+        mock_agent.name = "TestAgent"
+
+        mock_files_list = Mock()
+        mock_files_list.data = []
+        mock_agent.client_sync.vector_stores.files.list.return_value = mock_files_list
+
+        mock_agent.client_sync.vector_stores.files.create_and_poll.return_value = make_vector_store_file(
+            file_id="file-123",
+            vector_store_id="vs_test123",
+            status="failed",
+            last_error=LastError(code="server_error", message="ingestion failed"),
+        )
+
+        file_manager = AgentFileManager(mock_agent)
+
+        with pytest.raises(AgentsException, match="status failed"):
+            file_manager.add_files_to_vector_store("vs_test123", ["file-123"])
+
+        mock_agent.client_sync.vector_stores.files.create_and_poll.assert_called_once_with(
+            vector_store_id="vs_test123", file_id="file-123"
+        )
+
+    def test_add_files_to_vector_store_cancelled_status(self, caplog):
+        """Vector store add_files_to_vector_store raises when poll returns cancelled status."""
+        mock_agent = Mock()
+        mock_agent.name = "TestAgent"
+
+        mock_files_list = Mock()
+        mock_files_list.data = []
+        mock_agent.client_sync.vector_stores.files.list.return_value = mock_files_list
+
+        mock_agent.client_sync.vector_stores.files.create_and_poll.return_value = make_vector_store_file(
+            file_id="file-456",
+            vector_store_id="vs_test123",
+            status="cancelled",
+        )
+
+        file_manager = AgentFileManager(mock_agent)
+
+        with caplog.at_level(logging.INFO):
+            with pytest.raises(AgentsException, match="status cancelled"):
+                file_manager.add_files_to_vector_store("vs_test123", ["file-456"])
+
+        mock_agent.client_sync.vector_stores.files.create_and_poll.assert_called_once_with(
+            vector_store_id="vs_test123", file_id="file-456"
+        )
+        assert all("Added file" not in record.getMessage() for record in caplog.records)
 
     def test_read_instructions_class_relative_path(self):
         """Test read_instructions with class-relative path."""
