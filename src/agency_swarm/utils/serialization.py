@@ -24,10 +24,8 @@ def serialize(obj: Any, _visited: set[int] | None = None, string_output: bool = 
     # Check for circular references
     obj_id = id(obj)
     if obj_id in _visited:
-        if string_output:
-            return str(obj)  # Return string representation for circular refs
-        else:
-            return obj
+        # Always stringify circular refs to prevent JSON serialization errors
+        return str(obj)
 
     if dataclasses.is_dataclass(obj):
         _visited.add(obj_id)
