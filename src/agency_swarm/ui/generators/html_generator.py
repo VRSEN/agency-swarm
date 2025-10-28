@@ -10,6 +10,8 @@ import webbrowser
 from pathlib import Path
 from typing import Any
 
+from agency_swarm.utils.serialization import serialize
+
 
 class HTMLVisualizationGenerator:
     """
@@ -49,7 +51,7 @@ class HTMLVisualizationGenerator:
 
         # Prepare template variables
         agency_name = positioned_data.get("metadata", {}).get("agencyName", "Agency Swarm Visualization")
-        agency_json = json.dumps(positioned_data, indent=2)
+        agency_json = json.dumps(serialize(positioned_data, string_output=False), indent=2)
 
         # Replace placeholders in HTML template
         html_content = html_template.replace("{{ agency_name }}", agency_name)
@@ -104,7 +106,7 @@ class HTMLVisualizationGenerator:
         # HTML file
         html_template = self._load_template("visualization.html")
         agency_name = positioned_data.get("metadata", {}).get("agencyName", "Agency Swarm Visualization")
-        agency_json = json.dumps(positioned_data, indent=2)
+        agency_json = json.dumps(serialize(positioned_data, string_output=False), indent=2)
 
         html_content = html_template.replace("{{ agency_name }}", agency_name)
         html_content = html_content.replace("{AGENCY_DATA_PLACEHOLDER}", agency_json)
