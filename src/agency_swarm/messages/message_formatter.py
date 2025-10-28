@@ -11,7 +11,14 @@ from agents import (
     ToolCallItem,
     TResponseInputItem,
 )
-from openai.types.responses import ResponseFileSearchToolCall, ResponseFunctionWebSearch
+from openai.types.responses import (
+    ResponseFileSearchToolCall,
+    ResponseFunctionWebSearch,
+    ResponseOutputMessage,
+    ResponseOutputText,
+)
+from openai.types.responses.response_file_search_tool_call import Result as ResponseFileSearchResult
+from pydantic import ValidationError
 
 if TYPE_CHECKING:
     from agency_swarm.agent.core import AgencyContext, Agent
@@ -221,21 +228,48 @@ class MessageFormatter:
                 if isinstance(item.raw_item, ResponseFileSearchToolCall | ResponseFunctionWebSearch):
                     hosted_tool_calls.append(item)
             elif isinstance(item, MessageOutputItem):
-                msg_agent_obj = getattr(item, "agent", None)
-                msg_agent_name = getattr(msg_agent_obj, "name", None) if msg_agent_obj is not None else None
-                if not isinstance(msg_agent_name, str) or not msg_agent_name:
-                    msg_agent_name = agent.name
+                msg_agent_name = agent.name
+                try:
+                    candidate_name = item.agent.name
+                except AttributeError:
+                    candidate_name = None
+                if isinstance(candidate_name, str) and candidate_name:
+                    msg_agent_name = candidate_name
                 assistant_messages_by_agent.setdefault(msg_agent_name, []).append(item)
 
         # Track which assistant messages have been used for web search per agent
         used_assistant_msg_indices: dict[str, set[int]] = {}
 
         def resolve_agent_name(tool_call_item: ToolCallItem) -> str:
-            run_agent = getattr(tool_call_item, "agent", None)
-            resolved_name = getattr(run_agent, "name", None)
+            try:
+                resolved_name = tool_call_item.agent.name
+            except AttributeError:
+                resolved_name = None
             if isinstance(resolved_name, str) and resolved_name:
                 return resolved_name
             return agent.name
+
+        def resolve_file_search_result(result: object) -> tuple[str, str]:
+            if isinstance(result, ResponseFileSearchResult):
+                normalized = result
+            else:
+                try:
+                    normalized = ResponseFileSearchResult.model_validate(result)
+                except ValidationError as exc:
+                    raise TypeError(
+                        f"Expected ResponseFileSearchResult-compatible data, received {type(result)!r}"
+                    ) from exc
+
+            file_id_value = normalized.file_id
+            if isinstance(file_id_value, str) and file_id_value:
+                file_id = file_id_value
+            elif file_id_value is None:
+                file_id = "unknown"
+            else:
+                file_id = str(file_id_value)
+
+            text = normalized.text or ""
+            return file_id, text
 
         # Extract results for each hosted tool call
         for tool_call_item in hosted_tool_calls:
@@ -252,11 +286,10 @@ class MessageFormatter:
                 file_count = 0
 
                 # Extract results directly from tool call response
-                if hasattr(tool_call, "results") and tool_call.results:
+                if tool_call.results:
                     for result in tool_call.results:
                         file_count += 1
-                        file_id = getattr(result, "file_id", "unknown")
-                        content_text = getattr(result, "text", "")
+                        file_id, content_text = resolve_file_search_result(result)
                         search_results_content += f"File {file_count}: {file_id}\nContent: {content_text}\n\n"
 
                 if file_count > 0:
@@ -286,15 +319,27 @@ class MessageFormatter:
                         if idx in used_indices:
                             continue
                         message = msg_item.raw_item
-                        if hasattr(message, "content") and message.content:
-                            for content_item in message.content:
-                                if hasattr(content_item, "text") and content_item.text:
-                                    search_results_content += f"Search Results:\n{content_item.text}\n"
-                                    found_content = True
-                                    used_indices.add(idx)
-                                    break  # Process only first text content item per message
-                            if found_content:
-                                break  # Process only first available assistant message with content
+                        content_items = []
+                        if isinstance(message, ResponseOutputMessage):
+                            content_items = message.content
+                        elif hasattr(message, "content"):
+                            content_items = message.content or []
+
+                        for content_item in content_items:
+                            text_value = None
+                            if isinstance(content_item, ResponseOutputText):
+                                text_value = content_item.text
+                            elif hasattr(content_item, "text"):
+                                text_value = content_item.text  # type: ignore[attr-defined]
+
+                            if text_value:
+                                search_results_content += f"Search Results:\n{text_value}\n"
+                                found_content = True
+                                used_indices.add(idx)
+                                break
+
+                        if found_content:
+                            break  # Process only first available assistant message with content
 
                 if found_content:
                     synthetic_outputs.append(
