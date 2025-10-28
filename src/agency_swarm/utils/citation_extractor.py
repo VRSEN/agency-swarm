@@ -7,7 +7,12 @@ message content and tool call results.
 
 import logging
 
-from agents.items import MessageOutputItem
+from agents import RunResult
+from agents.items import MessageOutputItem, ToolCallItem
+from openai.types.responses import ResponseFileSearchToolCall
+from openai.types.responses.response_file_search_tool_call import Result as ResponseFileSearchResult
+from openai.types.responses.response_output_text import AnnotationFileCitation
+from pydantic import ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -39,18 +44,19 @@ def extract_direct_file_annotations(
         # Look for annotations in each content item
         annotations_found = []
         for content_item in message.content:
-            if hasattr(content_item, "annotations") and content_item.annotations:
-                # Extract file citations from annotations
-                for annotation in content_item.annotations:
-                    if hasattr(annotation, "type") and annotation.type == "file_citation":
-                        citation_info = {
-                            "file_id": getattr(annotation, "file_id", "unknown"),
-                            "filename": getattr(annotation, "filename", "unknown"),
-                            "index": getattr(annotation, "index", 0),
-                            "type": annotation.type,
-                            "method": "direct_file",
-                        }
-                        annotations_found.append(citation_info)
+            annotations = getattr(content_item, "annotations", None)
+            if not annotations:
+                continue
+
+            # Extract file citations from annotations
+            for annotation in annotations:
+                try:
+                    citation = _extract_annotation_citation(annotation)
+                except TypeError as exc:
+                    logger.warning("Ignoring unsupported annotation %r: %s", type(annotation), exc)
+                    continue
+                if citation is not None:
+                    annotations_found.append(citation)
 
         # Store citations mapped to message ID
         if annotations_found:
@@ -60,23 +66,31 @@ def extract_direct_file_annotations(
     return citations_by_message
 
 
-def extract_vector_store_citations(run_result):
+def extract_vector_store_citations(run_result: RunResult) -> list[dict]:
     """Extract FileSearch tool citations from RunResult.new_items"""
     citations = []
 
     for item in run_result.new_items:
-        if hasattr(item, "raw_item") and hasattr(item.raw_item, "type"):
-            if item.raw_item.type == "file_search_call":
-                tool_call = item.raw_item
-                if hasattr(tool_call, "results") and tool_call.results:
-                    for result in tool_call.results:
-                        citation = {
-                            "method": "vector_store",
-                            "file_id": getattr(result, "file_id", "unknown"),
-                            "text": getattr(result, "text", ""),
-                            "tool_call_id": tool_call.id,
-                        }
-                        citations.append(citation)
+        if not isinstance(item, ToolCallItem):
+            continue
+
+        tool_call = item.raw_item
+        if not isinstance(tool_call, ResponseFileSearchToolCall):
+            continue
+
+        results = tool_call.results or []
+        tool_call_id = tool_call.id
+
+        for result in results:
+            file_id, text = _resolve_file_search_result(result)
+            citations.append(
+                {
+                    "method": "vector_store",
+                    "file_id": file_id,
+                    "text": text,
+                    "tool_call_id": tool_call_id,
+                }
+            )
 
     return citations
 
@@ -147,3 +161,62 @@ def display_citations(citations, citation_type=""):
             print(f"     Content: {content_preview}")
         print()
     return True
+
+
+def _extract_annotation_citation(annotation: object) -> dict | None:
+    normalized = _coerce_file_annotation(annotation)
+    if normalized is None:
+        return None
+
+    if not isinstance(normalized.file_id, str) or not normalized.file_id:
+        raise TypeError("AnnotationFileCitation missing required file_id")
+    if not isinstance(normalized.filename, str) or not normalized.filename:
+        raise TypeError("AnnotationFileCitation missing required filename")
+
+    index = normalized.index
+    if not isinstance(index, int):
+        raise TypeError("AnnotationFileCitation index must be an integer")
+
+    return {
+        "file_id": normalized.file_id,
+        "filename": normalized.filename,
+        "index": index,
+        "type": normalized.type,
+        "method": "direct_file",
+    }
+
+
+def _coerce_file_annotation(annotation: object) -> AnnotationFileCitation | None:
+    if isinstance(annotation, AnnotationFileCitation):
+        return annotation
+    try:
+        candidate = AnnotationFileCitation.model_validate(annotation)
+    except ValidationError:
+        return None
+    if candidate.type != "file_citation":
+        return None
+    return candidate
+
+
+def _resolve_file_search_result(result: object) -> tuple[str, str]:
+    normalized = _coerce_file_search_result(result)
+
+    file_id_value = normalized.file_id
+    if isinstance(file_id_value, str) and file_id_value:
+        file_id = file_id_value
+    elif file_id_value is None:
+        file_id = "unknown"
+    else:
+        file_id = str(file_id_value)
+
+    text = normalized.text or ""
+    return file_id, text
+
+
+def _coerce_file_search_result(result: object) -> ResponseFileSearchResult:
+    if isinstance(result, ResponseFileSearchResult):
+        return result
+    try:
+        return ResponseFileSearchResult.model_validate(result)
+    except ValidationError as exc:
+        raise TypeError(f"Unsupported file search result type: {type(result)!r}") from exc
