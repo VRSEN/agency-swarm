@@ -160,7 +160,8 @@
               "platform/integrations/slack-integration",
               "platform/integrations/whatsapp-integration",
               "platform/integrations/zapier-integration",
-              "platform/integrations/web-api"
+              "platform/integrations/web-api",
+              "platform/integrations/widget"
             ]
           },
           {
