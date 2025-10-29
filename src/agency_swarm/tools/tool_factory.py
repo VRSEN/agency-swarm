@@ -246,7 +246,7 @@ class ToolFactory:
                 # Validate parameters
                 try:
                     parsed = param_model_(**param_container) if param_container else param_model_()
-                    param_container = parsed.model_dump()
+                    param_container = parsed.model_dump(mode="json")
                 except ValidationError as e:
                     raise ModelBehaviorError(
                         f"Invalid JSON input in parameters for tool {param_model_.__name__}: {e}"
@@ -258,7 +258,7 @@ class ToolFactory:
                 # Validate request body
                 try:
                     parsed = request_body_model_(**body_payload) if body_payload else request_body_model_()
-                    body_payload = parsed.model_dump()
+                    body_payload = parsed.model_dump(mode="json")
                 except ValidationError as e:
                     raise ModelBehaviorError(
                         f"Invalid JSON input in request body for tool {request_body_model_.__name__}: {e}"

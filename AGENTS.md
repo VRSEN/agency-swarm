@@ -81,6 +81,7 @@ These requirements apply to every file in the repository. Bullets prefixed with 
 - Validate external assumptions (servers, ports, tokens) with real probes before citing them as causes or blockers.
 - Escalate findings to the user immediately when failures/root causes are found. Never proceed with silent fixes.
 - Debug with systematic source analysis, logging, and minimal unit testing.
+- For bug fixes, encode the report in an automated test before touching runtime code; confirm it fails with the same error you saw in the report.
 - Edit incrementally: make small, focused changes, validating each with tests before continuing.
 - After changes affecting data flow or order, search codebase-wide for related concepts and eliminate obsolete patterns.
 - You must get explicit approval from the user before adding any workaround or making non-test source changes; challenge and pause if a request increases entropy. Keep any diffs minimal (avoid excessive changes).
@@ -204,6 +205,7 @@ Avoid growing already large files. Prefer extracting focused modules. If you mus
 - Name test files clearly (e.g. `test_thread_isolation.py`), never generic root names
 - Symmetry required: tests must mirror `src/`. Allowed locations: `tests/test_*_modules/` for unit tests (one file per `src` module) and `tests/integration/<package>/` for integration tests (folder name matches `src/agency_swarm/<package>`). Do not add other test roots.
 - Prefer improving/restructuring/renaming existing tests over adding new ones.
+- Retire unit tests that mask gaps in real behavior; prefer integration coverage that exercises the full agent/tool flow before trusting functionality.
 - Remove dead code and unused branches immediately.
 
 Strictness
