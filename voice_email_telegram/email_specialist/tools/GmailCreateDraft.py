@@ -1,13 +1,16 @@
-from agency_swarm.tools import BaseTool
-from pydantic import Field
-import os
-import json
 import base64
-from email.mime.text import MIMEText
+import json
+import os
 from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+
 from dotenv import load_dotenv
+from pydantic import Field
+
+from agency_swarm.tools import BaseTool
 
 load_dotenv()
+
 
 class GmailCreateDraft(BaseTool):
     """
@@ -15,35 +18,17 @@ class GmailCreateDraft(BaseTool):
     Stores the draft without sending it, allowing for review and modification.
     """
 
-    to: str = Field(
-        ...,
-        description="Recipient email address(es), comma-separated for multiple"
-    )
+    to: str = Field(..., description="Recipient email address(es), comma-separated for multiple")
 
-    subject: str = Field(
-        ...,
-        description="Email subject line"
-    )
+    subject: str = Field(..., description="Email subject line")
 
-    body: str = Field(
-        ...,
-        description="Email body content (plain text or HTML)"
-    )
+    body: str = Field(..., description="Email body content (plain text or HTML)")
 
-    cc: str = Field(
-        default="",
-        description="CC recipients, comma-separated"
-    )
+    cc: str = Field(default="", description="CC recipients, comma-separated")
 
-    bcc: str = Field(
-        default="",
-        description="BCC recipients, comma-separated"
-    )
+    bcc: str = Field(default="", description="BCC recipients, comma-separated")
 
-    body_type: str = Field(
-        default="plain",
-        description="Body content type: 'plain' or 'html'"
-    )
+    body_type: str = Field(default="plain", description="Body content type: 'plain' or 'html'")
 
     def run(self):
         """
@@ -56,10 +41,13 @@ class GmailCreateDraft(BaseTool):
         # Check for Gmail credentials
         gmail_token = os.getenv("GMAIL_ACCESS_TOKEN")
         if not gmail_token:
-            return json.dumps({
-                "error": "GMAIL_ACCESS_TOKEN not found. Please authenticate with Gmail API.",
-                "help": "This tool requires Gmail API OAuth2 authentication. Set up credentials at console.cloud.google.com"
-            })
+            return json.dumps(
+                {
+                    "error": "GMAIL_ACCESS_TOKEN not found. Please authenticate with Gmail API.",
+                    "help": "This tool requires Gmail API OAuth2 authentication. "
+                    "Set up credentials at console.cloud.google.com",
+                }
+            )
 
         try:
             # Create MIME message
@@ -80,7 +68,7 @@ class GmailCreateDraft(BaseTool):
                 message["Bcc"] = self.bcc
 
             # Encode message
-            raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode("utf-8")
+            base64.urlsafe_b64encode(message.as_bytes()).decode("utf-8")
 
             # For now, return a mock draft ID since we need proper Gmail API setup
             # In production, this would make an API call to Gmail
@@ -93,15 +81,14 @@ class GmailCreateDraft(BaseTool):
                 "subject": self.subject,
                 "body_preview": self.body[:100] + "..." if len(self.body) > 100 else self.body,
                 "message": "Draft created (mock). In production, this would create an actual Gmail draft.",
-                "note": "To enable Gmail API: Install google-auth and google-api-python-client, set up OAuth2 credentials"
+                "note": "To enable Gmail API: Install google-auth and google-api-python-client, "
+                "set up OAuth2 credentials",
             }
 
             return json.dumps(result, indent=2)
 
         except Exception as e:
-            return json.dumps({
-                "error": f"Error creating draft: {str(e)}"
-            })
+            return json.dumps({"error": f"Error creating draft: {str(e)}"})
 
 
 if __name__ == "__main__":
@@ -109,11 +96,7 @@ if __name__ == "__main__":
 
     # Test 1: Simple draft
     print("\n1. Create simple draft:")
-    tool = GmailCreateDraft(
-        to="john@example.com",
-        subject="Test Email",
-        body="This is a test email body."
-    )
+    tool = GmailCreateDraft(to="john@example.com", subject="Test Email", body="This is a test email body.")
     result = tool.run()
     print(result)
 
@@ -124,7 +107,7 @@ if __name__ == "__main__":
         cc="manager@example.com",
         bcc="archive@example.com",
         subject="Project Update",
-        body="Here's the latest update on the project..."
+        body="Here's the latest update on the project...",
     )
     result = tool.run()
     print(result)
@@ -143,12 +126,7 @@ if __name__ == "__main__":
         </body>
     </html>
     """
-    tool = GmailCreateDraft(
-        to="client@example.com",
-        subject="Formatted Email",
-        body=html_body,
-        body_type="html"
-    )
+    tool = GmailCreateDraft(to="client@example.com", subject="Formatted Email", body=html_body, body_type="html")
     result = tool.run()
     print(result)
 
@@ -157,7 +135,7 @@ if __name__ == "__main__":
     tool = GmailCreateDraft(
         to="user1@example.com, user2@example.com, user3@example.com",
         subject="Team Announcement",
-        body="Hello team,\n\nThis is an important announcement.\n\nBest regards,\nManager"
+        body="Hello team,\n\nThis is an important announcement.\n\nBest regards,\nManager",
     )
     result = tool.run()
     print(result)
@@ -169,7 +147,8 @@ if __name__ == "__main__":
 I hope this email finds you well. I wanted to provide you with a comprehensive update on the project status.
 
 Project Overview:
-The project has been progressing well over the past few weeks. We've completed several key milestones and are on track to meet our deadline.
+The project has been progressing well over the past few weeks. We've completed several key milestones and are on "
+"track to meet our deadline.
 
 Completed Items:
 - Initial design phase
@@ -184,7 +163,8 @@ Upcoming Tasks:
 - Training materials
 
 Timeline:
-We expect to complete all remaining tasks within the next two weeks. The final delivery date remains on schedule for the end of the month.
+We expect to complete all remaining tasks within the next two weeks. The final delivery date remains on "
+"schedule for the end of the month.
 
 Please let me know if you have any questions or concerns.
 
@@ -192,9 +172,7 @@ Best regards,
 Project Manager"""
 
     tool = GmailCreateDraft(
-        to="client@example.com",
-        subject="Comprehensive Project Update - October 2024",
-        body=long_body
+        to="client@example.com", subject="Comprehensive Project Update - October 2024", body=long_body
     )
     result = tool.run()
     print(result)

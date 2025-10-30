@@ -1,5 +1,6 @@
-from agency_swarm import Agent
 import os
+
+from agency_swarm import Agent
 
 _current_dir = os.path.dirname(os.path.abspath(__file__))
 

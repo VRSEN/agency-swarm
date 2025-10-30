@@ -1,11 +1,14 @@
-from agency_swarm.tools import BaseTool
-from pydantic import Field
-import os
 import json
+import os
+
 import requests
 from dotenv import load_dotenv
+from pydantic import Field
+
+from agency_swarm.tools import BaseTool
 
 load_dotenv()
+
 
 class Mem0GetAll(BaseTool):
     """
@@ -13,15 +16,9 @@ class Mem0GetAll(BaseTool):
     Useful for getting complete user context or exporting preferences.
     """
 
-    user_id: str = Field(
-        ...,
-        description="User identifier to retrieve all memories for"
-    )
+    user_id: str = Field(..., description="User identifier to retrieve all memories for")
 
-    limit: int = Field(
-        default=100,
-        description="Maximum number of memories to return (1-100)"
-    )
+    limit: int = Field(default=100, description="Maximum number of memories to return (1-100)")
 
     def run(self):
         """
@@ -35,17 +32,11 @@ class Mem0GetAll(BaseTool):
 
         try:
             # Mem0 API endpoint to get all memories
-            url = f"https://api.mem0.ai/v1/memories/"
+            url = "https://api.mem0.ai/v1/memories/"
 
-            headers = {
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json"
-            }
+            headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
 
-            params = {
-                "user_id": self.user_id,
-                "limit": min(max(self.limit, 1), 100)
-            }
+            params = {"user_id": self.user_id, "limit": min(max(self.limit, 1), 100)}
 
             response = requests.get(url, headers=headers, params=params, timeout=30)
 
@@ -57,16 +48,14 @@ class Mem0GetAll(BaseTool):
                     "success": True,
                     "user_id": self.user_id,
                     "total_memories": len(memories),
-                    "memories": memories
+                    "memories": memories,
                 }
 
                 return json.dumps(result, indent=2)
             else:
-                error_detail = response.text
                 try:
-                    error_data = response.json()
-                    error_detail = error_data.get("message", str(error_data))
-                except:
+                    response.json()
+                except json.JSONDecodeError:
                     pass
 
                 # Fall back to mock data
@@ -76,9 +65,7 @@ class Mem0GetAll(BaseTool):
             # Return mock data if API fails
             return self._get_mock_memories()
         except Exception as e:
-            return json.dumps({
-                "error": f"Error retrieving memories: {str(e)}"
-            })
+            return json.dumps({"error": f"Error retrieving memories: {str(e)}"})
 
     def _get_mock_memories(self):
         """Returns mock memory collection for testing"""
@@ -88,68 +75,68 @@ class Mem0GetAll(BaseTool):
                 "text": "User prefers casual tone when emailing Sarah at supplier.com",
                 "category": "tone_preference",
                 "confidence": 0.9,
-                "created": "2024-10-25T10:00:00Z"
+                "created": "2024-10-25T10:00:00Z",
             },
             {
                 "memory_id": "mem_002",
                 "text": "User signs emails with 'Best regards, John Smith'",
                 "category": "signature",
                 "confidence": 0.95,
-                "created": "2024-10-26T14:30:00Z"
+                "created": "2024-10-26T14:30:00Z",
             },
             {
                 "memory_id": "mem_003",
                 "text": "User prefers professional but friendly tone for most emails",
                 "category": "tone_preference",
                 "confidence": 0.8,
-                "created": "2024-10-27T09:15:00Z"
+                "created": "2024-10-27T09:15:00Z",
             },
             {
                 "memory_id": "mem_004",
                 "text": "Use 'Thanks' for internal emails, 'Best regards' for clients",
                 "category": "signature",
                 "confidence": 0.88,
-                "created": "2024-10-27T11:20:00Z"
+                "created": "2024-10-27T11:20:00Z",
             },
             {
                 "memory_id": "mem_005",
                 "text": "Successfully sent shipment delay email to john@acmecorp.com using professional tone",
                 "category": "history",
                 "confidence": 0.75,
-                "created": "2024-10-28T15:45:00Z"
+                "created": "2024-10-28T15:45:00Z",
             },
             {
                 "memory_id": "mem_006",
                 "text": "Client ABC Inc prefers detailed updates with bullet points",
                 "category": "recipient_preference",
                 "confidence": 0.85,
-                "created": "2024-10-29T08:00:00Z"
+                "created": "2024-10-29T08:00:00Z",
             },
             {
                 "memory_id": "mem_007",
                 "text": "Sarah responds best to brief emails with clear action items",
                 "category": "style",
                 "confidence": 0.85,
-                "created": "2024-10-29T10:30:00Z"
+                "created": "2024-10-29T10:30:00Z",
             },
             {
                 "memory_id": "mem_008",
                 "text": "Always include quantities when reordering from suppliers",
                 "category": "content_preference",
                 "confidence": 0.92,
-                "created": "2024-10-29T12:00:00Z"
-            }
+                "created": "2024-10-29T12:00:00Z",
+            },
         ]
 
         # Apply limit
-        limited_memories = mock_memories[:self.limit]
+        limited_memories = mock_memories[: self.limit]
 
         result = {
             "success": True,
             "user_id": self.user_id,
             "total_memories": len(limited_memories),
             "memories": limited_memories,
-            "message": "Mock data returned. Set MEM0_API_KEY for production use."
+            "message": "Mock data returned. Set MEM0_API_KEY for production use.",
         }
 
         return json.dumps(result, indent=2)

@@ -1,10 +1,12 @@
-from agency_swarm.tools import BaseTool
-from pydantic import Field
 from typing import Literal
-import os
+
 from dotenv import load_dotenv
+from pydantic import Field
+
+from agency_swarm.tools import BaseTool
 
 load_dotenv()
+
 
 class ApprovalStateMachine(BaseTool):
     """
@@ -33,11 +35,8 @@ class ApprovalStateMachine(BaseTool):
         "REVISING",
         "SENDING",
         "COMPLETED",
-        "ERROR"
-    ] = Field(
-        ...,
-        description="The current state of the workflow"
-    )
+        "ERROR",
+    ] = Field(..., description="The current state of the workflow")
 
     action: Literal[
         "voice_received",
@@ -50,11 +49,8 @@ class ApprovalStateMachine(BaseTool):
         "email_sent",
         "error_occurred",
         "error_handled",
-        "workflow_complete"
-    ] = Field(
-        ...,
-        description="The action to perform that triggers a state transition"
-    )
+        "workflow_complete",
+    ] = Field(..., description="The action to perform that triggers a state transition")
 
     def run(self):
         """
@@ -105,7 +101,11 @@ class ApprovalStateMachine(BaseTool):
 
         # Check if action is valid for current state
         if self.action not in transitions[self.current_state]:
-            return f"Error: Action '{self.action}' is not valid for state '{self.current_state}'. Valid actions: {list(transitions[self.current_state].keys())}"
+            valid_actions = list(transitions[self.current_state].keys())
+            return (
+                f"Error: Action '{self.action}' is not valid for state '{self.current_state}'. "
+                f"Valid actions: {valid_actions}"
+            )
 
         # Get new state
         new_state = transitions[self.current_state][self.action]

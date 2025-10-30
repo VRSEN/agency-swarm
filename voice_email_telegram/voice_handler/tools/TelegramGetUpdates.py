@@ -1,11 +1,14 @@
-from agency_swarm.tools import BaseTool
-from pydantic import Field
-import os
 import json
+import os
+
 import requests
 from dotenv import load_dotenv
+from pydantic import Field
+
+from agency_swarm.tools import BaseTool
 
 load_dotenv()
+
 
 class TelegramGetUpdates(BaseTool):
     """
@@ -13,20 +16,11 @@ class TelegramGetUpdates(BaseTool):
     Used to monitor for incoming voice messages from users.
     """
 
-    offset: int = Field(
-        default=0,
-        description="Updates offset for long polling (use last update_id + 1)"
-    )
+    offset: int = Field(default=0, description="Updates offset for long polling (use last update_id + 1)")
 
-    timeout: int = Field(
-        default=30,
-        description="Long polling timeout in seconds (0-50)"
-    )
+    timeout: int = Field(default=30, description="Long polling timeout in seconds (0-50)")
 
-    limit: int = Field(
-        default=100,
-        description="Maximum number of updates to retrieve (1-100)"
-    )
+    limit: int = Field(default=100, description="Maximum number of updates to retrieve (1-100)")
 
     def run(self):
         """
@@ -35,17 +29,11 @@ class TelegramGetUpdates(BaseTool):
         """
         bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
         if not bot_token:
-            return json.dumps({
-                "error": "TELEGRAM_BOT_TOKEN not found in environment variables"
-            })
+            return json.dumps({"error": "TELEGRAM_BOT_TOKEN not found in environment variables"})
 
         try:
             url = f"https://api.telegram.org/bot{bot_token}/getUpdates"
-            params = {
-                "offset": self.offset,
-                "timeout": self.timeout,
-                "limit": self.limit
-            }
+            params = {"offset": self.offset, "timeout": self.timeout, "limit": self.limit}
 
             response = requests.get(url, params=params, timeout=self.timeout + 10)
             response.raise_for_status()
@@ -53,24 +41,14 @@ class TelegramGetUpdates(BaseTool):
             data = response.json()
 
             if not data.get("ok"):
-                return json.dumps({
-                    "error": f"Telegram API error: {data.get('description', 'Unknown error')}"
-                })
+                return json.dumps({"error": f"Telegram API error: {data.get('description', 'Unknown error')}"})
 
             # Extract useful information
             updates = data.get("result", [])
-            result = {
-                "success": True,
-                "update_count": len(updates),
-                "updates": []
-            }
+            result = {"success": True, "update_count": len(updates), "updates": []}
 
             for update in updates:
-                update_info = {
-                    "update_id": update.get("update_id"),
-                    "message": None,
-                    "callback_query": None
-                }
+                update_info = {"update_id": update.get("update_id"), "message": None, "callback_query": None}
 
                 if "message" in update:
                     msg = update["message"]
@@ -81,7 +59,7 @@ class TelegramGetUpdates(BaseTool):
                         "username": msg.get("from", {}).get("username"),
                         "text": msg.get("text"),
                         "voice": msg.get("voice"),
-                        "date": msg.get("date")
+                        "date": msg.get("date"),
                     }
 
                 if "callback_query" in update:
@@ -91,7 +69,7 @@ class TelegramGetUpdates(BaseTool):
                         "from_user": callback.get("from", {}).get("id"),
                         "message_id": callback.get("message", {}).get("message_id"),
                         "chat_id": callback.get("message", {}).get("chat", {}).get("id"),
-                        "data": callback.get("data")
+                        "data": callback.get("data"),
                     }
 
                 result["updates"].append(update_info)
@@ -103,13 +81,9 @@ class TelegramGetUpdates(BaseTool):
             return json.dumps(result, indent=2)
 
         except requests.exceptions.RequestException as e:
-            return json.dumps({
-                "error": f"Failed to connect to Telegram API: {str(e)}"
-            })
+            return json.dumps({"error": f"Failed to connect to Telegram API: {str(e)}"})
         except Exception as e:
-            return json.dumps({
-                "error": f"Error getting updates: {str(e)}"
-            })
+            return json.dumps({"error": f"Error getting updates: {str(e)}"})
 
 
 if __name__ == "__main__":

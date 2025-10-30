@@ -1,9 +1,12 @@
-from agency_swarm.tools import BaseTool
-from pydantic import Field
 import json
+
 from dotenv import load_dotenv
+from pydantic import Field
+
+from agency_swarm.tools import BaseTool
 
 load_dotenv()
+
 
 class FormatContextForDrafting(BaseTool):
     """
@@ -13,18 +16,13 @@ class FormatContextForDrafting(BaseTool):
     """
 
     memories: str = Field(
-        ...,
-        description="JSON string containing array of memory objects from MEM0_SEARCH or MEM0_GET_ALL"
+        ..., description="JSON string containing array of memory objects from MEM0_SEARCH or MEM0_GET_ALL"
     )
 
-    recipient: str = Field(
-        default="",
-        description="Email recipient (used to filter relevant memories)"
-    )
+    recipient: str = Field(default="", description="Email recipient (used to filter relevant memories)")
 
     intent: str = Field(
-        default="",
-        description="Optional JSON string with email intent to help prioritize relevant memories"
+        default="", description="Optional JSON string with email intent to help prioritize relevant memories"
     )
 
     def run(self):
@@ -45,19 +43,20 @@ class FormatContextForDrafting(BaseTool):
                 "common_phrases": [],
                 "subject_preferences": [],
                 "relevant_history": [],
-                "confidence_score": 0.0
+                "confidence_score": 0.0,
             }
 
             # Parse intent if provided
-            intent_data = {}
             if self.intent:
                 try:
-                    intent_data = json.loads(self.intent)
-                except:
+                    json.loads(self.intent)
+                except json.JSONDecodeError:
                     pass
 
             # If no memories provided, return default context
-            if not memories_data or (isinstance(memories_data, dict) and "memories" in memories_data and not memories_data["memories"]):
+            if not memories_data or (
+                isinstance(memories_data, dict) and "memories" in memories_data and not memories_data["memories"]
+            ):
                 context["message"] = "No memories found. Using default preferences."
                 return json.dumps(context, indent=2)
 
@@ -79,7 +78,7 @@ class FormatContextForDrafting(BaseTool):
 
                 # Extract memory content
                 memory_text = memory.get("text", memory.get("content", ""))
-                memory_category = memory.get("category", memory.get("type", "general"))
+                memory.get("category", memory.get("type", "general"))
                 memory_confidence = float(memory.get("confidence", 0.5))
 
                 # Update confidence tracking
@@ -94,7 +93,9 @@ class FormatContextForDrafting(BaseTool):
                     if memory_confidence > 0.6:
                         # Extract signature from memory
                         for line in memory_text.split("\n"):
-                            if any(word in line.lower() for word in ["regards", "sincerely", "thanks", "cheers", "best"]):
+                            if any(
+                                word in line.lower() for word in ["regards", "sincerely", "thanks", "cheers", "best"]
+                            ):
                                 context["signature"] = line.strip()
                                 break
 
@@ -111,10 +112,7 @@ class FormatContextForDrafting(BaseTool):
 
                 # Style notes
                 if any(word in memory_lower for word in ["prefer", "always", "never", "style"]):
-                    context["style_notes"].append({
-                        "note": memory_text,
-                        "confidence": memory_confidence
-                    })
+                    context["style_notes"].append({"note": memory_text, "confidence": memory_confidence})
 
                 # Recipient-specific information
                 if self.recipient and self.recipient.lower() in memory_lower:
@@ -134,26 +132,17 @@ class FormatContextForDrafting(BaseTool):
 
                 # Historical context
                 if "sent" in memory_lower or "email" in memory_lower:
-                    context["relevant_history"].append({
-                        "summary": memory_text,
-                        "confidence": memory_confidence
-                    })
+                    context["relevant_history"].append({"summary": memory_text, "confidence": memory_confidence})
 
             # Calculate overall confidence
             if count > 0:
                 context["confidence_score"] = total_confidence / count
 
             # Limit arrays to most relevant items
-            context["style_notes"] = sorted(
-                context["style_notes"],
-                key=lambda x: x["confidence"],
-                reverse=True
-            )[:5]
+            context["style_notes"] = sorted(context["style_notes"], key=lambda x: x["confidence"], reverse=True)[:5]
 
             context["relevant_history"] = sorted(
-                context["relevant_history"],
-                key=lambda x: x["confidence"],
-                reverse=True
+                context["relevant_history"], key=lambda x: x["confidence"], reverse=True
             )[:3]
 
             # Add summary
@@ -162,23 +151,19 @@ class FormatContextForDrafting(BaseTool):
                 "has_signature": bool(context["signature"]),
                 "has_recipient_info": bool(context["recipient_info"]),
                 "style_notes_count": len(context["style_notes"]),
-                "history_items": len(context["relevant_history"])
+                "history_items": len(context["relevant_history"]),
             }
 
             return json.dumps(context, indent=2)
 
         except json.JSONDecodeError as e:
-            return json.dumps({
-                "error": f"Invalid JSON in memories: {str(e)}",
-                "signature": None,
-                "tone_preference": "professional"
-            })
+            return json.dumps(
+                {"error": f"Invalid JSON in memories: {str(e)}", "signature": None, "tone_preference": "professional"}
+            )
         except Exception as e:
-            return json.dumps({
-                "error": f"Error formatting context: {str(e)}",
-                "signature": None,
-                "tone_preference": "professional"
-            })
+            return json.dumps(
+                {"error": f"Error formatting context: {str(e)}", "signature": None, "tone_preference": "professional"}
+            )
 
 
 if __name__ == "__main__":
@@ -187,56 +172,48 @@ if __name__ == "__main__":
 
     # Test 1: Complete set of memories
     print("\n1. Complete memory set:")
-    memories = json.dumps({
-        "memories": [
-            {
-                "text": "User prefers casual tone when emailing Sarah at supplier.com",
-                "category": "tone_preference",
-                "confidence": 0.9
-            },
-            {
-                "text": "Always signs emails with 'Best regards, John Smith'",
-                "category": "signature",
-                "confidence": 0.95
-            },
-            {
-                "text": "Prefers brief, direct emails without long introductions",
-                "category": "style",
-                "confidence": 0.8
-            },
-            {
-                "text": "Successfully sent shipment update to john@acmecorp.com using professional tone",
-                "category": "history",
-                "confidence": 0.7
-            }
-        ]
-    })
+    memories = json.dumps(
+        {
+            "memories": [
+                {
+                    "text": "User prefers casual tone when emailing Sarah at supplier.com",
+                    "category": "tone_preference",
+                    "confidence": 0.9,
+                },
+                {
+                    "text": "Always signs emails with 'Best regards, John Smith'",
+                    "category": "signature",
+                    "confidence": 0.95,
+                },
+                {
+                    "text": "Prefers brief, direct emails without long introductions",
+                    "category": "style",
+                    "confidence": 0.8,
+                },
+                {
+                    "text": "Successfully sent shipment update to john@acmecorp.com using professional tone",
+                    "category": "history",
+                    "confidence": 0.7,
+                },
+            ]
+        }
+    )
     tool = FormatContextForDrafting(memories=memories, recipient="sarah@supplier.com")
     result = tool.run()
     print(result)
 
     # Test 2: Recipient-specific memories
     print("\n2. Recipient-specific memories:")
-    memories = json.dumps({
-        "memories": [
-            {
-                "text": "Sarah at supplier.com prefers casual communication",
-                "confidence": 0.85
-            },
-            {
-                "text": "When emailing Sarah, always mention order quantities upfront",
-                "confidence": 0.9
-            },
-            {
-                "text": "Sarah responds best to friendly tone with 'Thanks' closing",
-                "confidence": 0.8
-            }
-        ]
-    })
-    tool = FormatContextForDrafting(
-        memories=memories,
-        recipient="sarah@supplier.com"
+    memories = json.dumps(
+        {
+            "memories": [
+                {"text": "Sarah at supplier.com prefers casual communication", "confidence": 0.85},
+                {"text": "When emailing Sarah, always mention order quantities upfront", "confidence": 0.9},
+                {"text": "Sarah responds best to friendly tone with 'Thanks' closing", "confidence": 0.8},
+            ]
+        }
     )
+    tool = FormatContextForDrafting(memories=memories, recipient="sarah@supplier.com")
     result = tool.run()
     print(result)
 
@@ -249,83 +226,58 @@ if __name__ == "__main__":
 
     # Test 4: Subject line preferences
     print("\n4. Subject line preferences:")
-    memories = json.dumps({
-        "memories": [
-            {
-                "text": "Always include [URGENT] in subject line for time-sensitive emails",
-                "category": "subject_preference",
-                "confidence": 0.9
-            },
-            {
-                "text": "Subject lines should be clear and action-oriented",
-                "confidence": 0.75
-            }
-        ]
-    })
+    memories = json.dumps(
+        {
+            "memories": [
+                {
+                    "text": "Always include [URGENT] in subject line for time-sensitive emails",
+                    "category": "subject_preference",
+                    "confidence": 0.9,
+                },
+                {"text": "Subject lines should be clear and action-oriented", "confidence": 0.75},
+            ]
+        }
+    )
     tool = FormatContextForDrafting(memories=memories)
     result = tool.run()
     print(result)
 
     # Test 5: With email intent
     print("\n5. With email intent:")
-    memories = json.dumps({
-        "memories": [
-            {
-                "text": "User prefers professional tone for client emails",
-                "confidence": 0.85
-            },
-            {
-                "text": "Signs client emails with 'Best regards, Sarah Johnson, Account Manager'",
-                "confidence": 0.9
-            }
-        ]
-    })
-    intent = json.dumps({
-        "recipient": "client@example.com",
-        "subject": "Project Update",
-        "tone": "professional"
-    })
+    memories = json.dumps(
+        {
+            "memories": [
+                {"text": "User prefers professional tone for client emails", "confidence": 0.85},
+                {"text": "Signs client emails with 'Best regards, Sarah Johnson, Account Manager'", "confidence": 0.9},
+            ]
+        }
+    )
+    intent = json.dumps({"recipient": "client@example.com", "subject": "Project Update", "tone": "professional"})
     tool = FormatContextForDrafting(memories=memories, intent=intent)
     result = tool.run()
     print(result)
 
     # Test 6: Mixed confidence levels
     print("\n6. Mixed confidence memories:")
-    memories = json.dumps({
-        "memories": [
-            {
-                "text": "Maybe prefers formal tone?",
-                "confidence": 0.3
-            },
-            {
-                "text": "Definitely uses 'Cheers' for informal emails",
-                "confidence": 0.95
-            },
-            {
-                "text": "Possibly likes bullet points",
-                "confidence": 0.5
-            },
-            {
-                "text": "Always includes phone number in signature for urgent matters",
-                "confidence": 0.88
-            }
-        ]
-    })
+    memories = json.dumps(
+        {
+            "memories": [
+                {"text": "Maybe prefers formal tone?", "confidence": 0.3},
+                {"text": "Definitely uses 'Cheers' for informal emails", "confidence": 0.95},
+                {"text": "Possibly likes bullet points", "confidence": 0.5},
+                {"text": "Always includes phone number in signature for urgent matters", "confidence": 0.88},
+            ]
+        }
+    )
     tool = FormatContextForDrafting(memories=memories)
     result = tool.run()
     print(result)
 
     # Test 7: Alternative memory format
     print("\n7. Alternative memory format (results array):")
-    memories = json.dumps({
-        "results": [
-            {
-                "content": "User tone is professional",
-                "type": "preference",
-                "confidence": 0.8
-            }
-        ]
-    })
+    memories = json.dumps(
+        {"results": [{"content": "User tone is professional", "type": "preference", "confidence": 0.8}]}
+    )
     tool = FormatContextForDrafting(memories=memories)
     result = tool.run()
     print(result)

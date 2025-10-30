@@ -1,12 +1,15 @@
-from agency_swarm.tools import BaseTool
-from pydantic import Field
-from typing import Literal
 import json
 import os
+from typing import Literal
+
 from dotenv import load_dotenv
 from openai import OpenAI
+from pydantic import Field
+
+from agency_swarm.tools import BaseTool
 
 load_dotenv()
+
 
 class ExtractPreferences(BaseTool):
     """
@@ -15,25 +18,14 @@ class ExtractPreferences(BaseTool):
     that can be stored for future use.
     """
 
-    text: str = Field(
-        ...,
-        description="Text to analyze for preferences (voice transcript, feedback, or interaction)"
-    )
+    text: str = Field(..., description="Text to analyze for preferences (voice transcript, feedback, or interaction)")
 
-    interaction_type: Literal[
-        "voice_message",
-        "revision_feedback",
-        "approval",
-        "rejection",
-        "general"
-    ] = Field(
-        ...,
-        description="Type of interaction being analyzed"
+    interaction_type: Literal["voice_message", "revision_feedback", "approval", "rejection", "general"] = Field(
+        ..., description="Type of interaction being analyzed"
     )
 
     context: str = Field(
-        default="",
-        description="Optional JSON string with additional context (e.g., recipient, subject, draft content)"
+        default="", description="Optional JSON string with additional context (e.g., recipient, subject, draft content)"
     )
 
     def run(self):
@@ -43,15 +35,10 @@ class ExtractPreferences(BaseTool):
         """
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
-            return json.dumps({
-                "error": "OPENAI_API_KEY not found in environment variables"
-            })
+            return json.dumps({"error": "OPENAI_API_KEY not found in environment variables"})
 
         if not self.text or len(self.text.strip()) < 3:
-            return json.dumps({
-                "preferences": [],
-                "message": "Text is too short to extract meaningful preferences"
-            })
+            return json.dumps({"preferences": [], "message": "Text is too short to extract meaningful preferences"})
 
         try:
             client = OpenAI(api_key=api_key)
@@ -88,12 +75,9 @@ Extract any clear user preferences from this interaction. Return only JSON."""
 
             response = client.chat.completions.create(
                 model="gpt-4o-mini",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
+                messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
                 temperature=0.3,
-                response_format={"type": "json_object"}
+                response_format={"type": "json_object"},
             )
 
             # Extract preferences
@@ -107,15 +91,9 @@ Extract any clear user preferences from this interaction. Return only JSON."""
             return json.dumps(result_data, indent=2)
 
         except json.JSONDecodeError as e:
-            return json.dumps({
-                "error": f"Failed to parse GPT response: {str(e)}",
-                "preferences": []
-            })
+            return json.dumps({"error": f"Failed to parse GPT response: {str(e)}", "preferences": []})
         except Exception as e:
-            return json.dumps({
-                "error": f"Error extracting preferences: {str(e)}",
-                "preferences": []
-            })
+            return json.dumps({"error": f"Error extracting preferences: {str(e)}", "preferences": []})
 
 
 if __name__ == "__main__":
@@ -125,8 +103,7 @@ if __name__ == "__main__":
     # Test 1: Voice message with contact info
     print("\n1. Voice message with contact info:")
     tool = ExtractPreferences(
-        text="Send an email to John at Acme Corp about the shipment delay",
-        interaction_type="voice_message"
+        text="Send an email to John at Acme Corp about the shipment delay", interaction_type="voice_message"
     )
     result = tool.run()
     print(result)
@@ -136,7 +113,7 @@ if __name__ == "__main__":
     tool = ExtractPreferences(
         text="Too formal, make it more casual and friendly like I usually write to Sarah",
         interaction_type="revision_feedback",
-        context=json.dumps({"recipient": "sarah@supplier.com"})
+        context=json.dumps({"recipient": "sarah@supplier.com"}),
     )
     result = tool.run()
     print(result)
@@ -145,7 +122,7 @@ if __name__ == "__main__":
     print("\n3. Multiple preferences in feedback:")
     tool = ExtractPreferences(
         text="Make it shorter, more direct, and always use 'Best' instead of 'Best regards' when emailing clients",
-        interaction_type="revision_feedback"
+        interaction_type="revision_feedback",
     )
     result = tool.run()
     print(result)
@@ -155,10 +132,7 @@ if __name__ == "__main__":
     tool = ExtractPreferences(
         text="Perfect, send it!",
         interaction_type="approval",
-        context=json.dumps({
-            "draft_tone": "professional but friendly",
-            "recipient_type": "supplier"
-        })
+        context=json.dumps({"draft_tone": "professional but friendly", "recipient_type": "supplier"}),
     )
     result = tool.run()
     print(result)
@@ -167,7 +141,7 @@ if __name__ == "__main__":
     print("\n5. Rejection with style notes:")
     tool = ExtractPreferences(
         text="No, I never sign emails to the team with 'Best regards'. Just use 'Thanks' for internal emails",
-        interaction_type="rejection"
+        interaction_type="rejection",
     )
     result = tool.run()
     print(result)
@@ -175,8 +149,7 @@ if __name__ == "__main__":
     # Test 6: Voice with urgency pattern
     print("\n6. Voice showing urgency handling:")
     tool = ExtractPreferences(
-        text="This is urgent! Email support immediately about the server being down",
-        interaction_type="voice_message"
+        text="This is urgent! Email support immediately about the server being down", interaction_type="voice_message"
     )
     result = tool.run()
     print(result)
@@ -184,26 +157,23 @@ if __name__ == "__main__":
     # Test 7: General interaction with name/relationship
     print("\n7. Contact relationship info:")
     tool = ExtractPreferences(
-        text="Email my supplier Sarah about reordering. She's at supplier dot com",
-        interaction_type="voice_message"
+        text="Email my supplier Sarah about reordering. She's at supplier dot com", interaction_type="voice_message"
     )
     result = tool.run()
     print(result)
 
     # Test 8: Empty/short text
     print("\n8. Too short text:")
-    tool = ExtractPreferences(
-        text="Ok",
-        interaction_type="approval"
-    )
+    tool = ExtractPreferences(text="Ok", interaction_type="approval")
     result = tool.run()
     print(result)
 
     # Test 9: Subject line preference
     print("\n9. Subject line style preference:")
     tool = ExtractPreferences(
-        text="Change the subject to something clearer. I always put the action needed in brackets like [URGENT] or [ACTION REQUIRED]",
-        interaction_type="revision_feedback"
+        text="Change the subject to something clearer. I always put the action needed in brackets like [URGENT] or "
+        "[ACTION REQUIRED]",
+        interaction_type="revision_feedback",
     )
     result = tool.run()
     print(result)

@@ -1,11 +1,14 @@
-from agency_swarm.tools import BaseTool
-from pydantic import Field
-import os
 import json
+import os
+
 from dotenv import load_dotenv
 from openai import OpenAI
+from pydantic import Field
+
+from agency_swarm.tools import BaseTool
 
 load_dotenv()
+
 
 class ExtractEmailIntent(BaseTool):
     """
@@ -14,14 +17,11 @@ class ExtractEmailIntent(BaseTool):
     Uses GPT-4 for intelligent parsing of casual voice input.
     """
 
-    transcript: str = Field(
-        ...,
-        description="The voice transcription text to parse for email intent"
-    )
+    transcript: str = Field(..., description="The voice transcription text to parse for email intent")
 
     user_context: str = Field(
         default="",
-        description="Optional JSON string with additional user context (e.g., common contacts, previous preferences)"
+        description="Optional JSON string with additional user context (e.g., common contacts, previous preferences)",
     )
 
     def run(self):
@@ -31,14 +31,10 @@ class ExtractEmailIntent(BaseTool):
         """
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
-            return json.dumps({
-                "error": "OPENAI_API_KEY not found in environment variables"
-            })
+            return json.dumps({"error": "OPENAI_API_KEY not found in environment variables"})
 
         if not self.transcript or len(self.transcript.strip()) < 5:
-            return json.dumps({
-                "error": "Transcript is too short or empty"
-            })
+            return json.dumps({"error": "Transcript is too short or empty"})
 
         try:
             client = OpenAI(api_key=api_key)
@@ -65,12 +61,9 @@ Extract the email intent from this voice message. Return only JSON."""
 
             response = client.chat.completions.create(
                 model="gpt-4o-mini",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
+                messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
                 temperature=0.3,
-                response_format={"type": "json_object"}
+                response_format={"type": "json_object"},
             )
 
             # Extract the JSON response
@@ -85,15 +78,11 @@ Extract the email intent from this voice message. Return only JSON."""
             return json.dumps(intent_data, indent=2)
 
         except json.JSONDecodeError as e:
-            return json.dumps({
-                "error": f"Failed to parse GPT response as JSON: {str(e)}",
-                "original_transcript": self.transcript
-            })
+            return json.dumps(
+                {"error": f"Failed to parse GPT response as JSON: {str(e)}", "original_transcript": self.transcript}
+            )
         except Exception as e:
-            return json.dumps({
-                "error": f"Error extracting intent: {str(e)}",
-                "original_transcript": self.transcript
-            })
+            return json.dumps({"error": f"Error extracting intent: {str(e)}", "original_transcript": self.transcript})
 
 
 if __name__ == "__main__":
@@ -103,7 +92,8 @@ if __name__ == "__main__":
     # Test 1: Complete email request
     print("\n1. Complete email request:")
     tool = ExtractEmailIntent(
-        transcript="Send an email to john@acmecorp.com about the shipment delay. Tell him the order will arrive next Tuesday instead of Monday."
+        transcript="Send an email to john@acmecorp.com about the shipment delay. "
+        "Tell him the order will arrive next Tuesday instead of Monday."
     )
     result = tool.run()
     print(result)
@@ -118,32 +108,23 @@ if __name__ == "__main__":
 
     # Test 3: Missing recipient
     print("\n3. Missing recipient:")
-    tool = ExtractEmailIntent(
-        transcript="Send an email about the meeting tomorrow at 2 PM"
-    )
+    tool = ExtractEmailIntent(transcript="Send an email about the meeting tomorrow at 2 PM")
     result = tool.run()
     print(result)
 
     # Test 4: Formal business email
     print("\n4. Formal business email:")
     tool = ExtractEmailIntent(
-        transcript="I need to send a formal email to the board of directors regarding Q4 financial results. Include revenue growth, cost reductions, and future outlook."
+        transcript="I need to send a formal email to the board of directors regarding Q4 financial results. "
+        "Include revenue growth, cost reductions, and future outlook."
     )
     result = tool.run()
     print(result)
 
     # Test 5: With user context
     print("\n5. With user context:")
-    user_context = json.dumps({
-        "common_contacts": {
-            "Sarah": "sarah@supplier.com",
-            "John": "john@acmecorp.com"
-        }
-    })
-    tool = ExtractEmailIntent(
-        transcript="Tell Sarah we need to reorder",
-        user_context=user_context
-    )
+    user_context = json.dumps({"common_contacts": {"Sarah": "sarah@supplier.com", "John": "john@acmecorp.com"}})
+    tool = ExtractEmailIntent(transcript="Tell Sarah we need to reorder", user_context=user_context)
     result = tool.run()
     print(result)
 

@@ -1,10 +1,13 @@
-from agency_swarm.tools import BaseTool
-from pydantic import Field
-import os
 import json
+import os
+
 from dotenv import load_dotenv
+from pydantic import Field
+
+from agency_swarm.tools import BaseTool
 
 load_dotenv()
+
 
 class GmailListDrafts(BaseTool):
     """
@@ -12,15 +15,9 @@ class GmailListDrafts(BaseTool):
     Returns a list of drafts with their IDs, subjects, and recipients.
     """
 
-    max_results: int = Field(
-        default=10,
-        description="Maximum number of drafts to return (1-100)"
-    )
+    max_results: int = Field(default=10, description="Maximum number of drafts to return (1-100)")
 
-    query: str = Field(
-        default="",
-        description="Optional search query to filter drafts (e.g., 'subject:urgent')"
-    )
+    query: str = Field(default="", description="Optional search query to filter drafts (e.g., 'subject:urgent')")
 
     def run(self):
         """
@@ -29,16 +26,12 @@ class GmailListDrafts(BaseTool):
         """
         gmail_token = os.getenv("GMAIL_ACCESS_TOKEN")
         if not gmail_token:
-            return json.dumps({
-                "error": "GMAIL_ACCESS_TOKEN not found. Please authenticate with Gmail API."
-            })
+            return json.dumps({"error": "GMAIL_ACCESS_TOKEN not found. Please authenticate with Gmail API."})
 
         try:
             # Validate max_results
             if self.max_results < 1 or self.max_results > 100:
-                return json.dumps({
-                    "error": "max_results must be between 1 and 100"
-                })
+                return json.dumps({"error": "max_results must be between 1 and 100"})
 
             # In production, this would call Gmail API
             # For now, return mock draft list
@@ -49,29 +42,29 @@ class GmailListDrafts(BaseTool):
                     "to": "john@acmecorp.com",
                     "subject": "Shipment Delay Update",
                     "snippet": "Hi John, I wanted to reach out regarding your recent order...",
-                    "created": "2024-10-29T10:30:00Z"
+                    "created": "2024-10-29T10:30:00Z",
                 },
                 {
                     "draft_id": "draft_xyz789",
                     "to": "sarah@supplier.com",
                     "subject": "Reorder Blue Widgets",
                     "snippet": "Hey Sarah, Hope you're doing well! We'd like to reorder...",
-                    "created": "2024-10-29T14:15:00Z"
+                    "created": "2024-10-29T14:15:00Z",
                 },
                 {
                     "draft_id": "draft_def456",
                     "to": "team@company.com",
                     "subject": "Weekly Team Update",
                     "snippet": "Hello team, Here's this week's update on our projects...",
-                    "created": "2024-10-28T09:00:00Z"
+                    "created": "2024-10-28T09:00:00Z",
                 },
                 {
                     "draft_id": "draft_ghi789",
                     "to": "client@example.com",
                     "subject": "Project Proposal",
                     "snippet": "Dear Client, Thank you for your interest in our services...",
-                    "created": "2024-10-27T16:45:00Z"
-                }
+                    "created": "2024-10-27T16:45:00Z",
+                },
             ]
 
             # Apply query filter if provided
@@ -79,18 +72,17 @@ class GmailListDrafts(BaseTool):
             if self.query:
                 query_lower = self.query.lower()
                 filtered_drafts = [
-                    d for d in mock_drafts
-                    if query_lower in d["subject"].lower() or query_lower in d["to"].lower()
+                    d for d in mock_drafts if query_lower in d["subject"].lower() or query_lower in d["to"].lower()
                 ]
 
             # Apply max_results limit
-            limited_drafts = filtered_drafts[:self.max_results]
+            limited_drafts = filtered_drafts[: self.max_results]
 
             result = {
                 "success": True,
                 "total_drafts": len(limited_drafts),
                 "drafts": limited_drafts,
-                "message": "Drafts retrieved (mock data). In production, this would fetch from Gmail API."
+                "message": "Drafts retrieved (mock data). In production, this would fetch from Gmail API.",
             }
 
             if self.query:
@@ -102,9 +94,7 @@ class GmailListDrafts(BaseTool):
             return json.dumps(result, indent=2)
 
         except Exception as e:
-            return json.dumps({
-                "error": f"Error listing drafts: {str(e)}"
-            })
+            return json.dumps({"error": f"Error listing drafts: {str(e)}"})
 
 
 if __name__ == "__main__":

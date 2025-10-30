@@ -1,13 +1,15 @@
-from agency_swarm.tools import BaseTool
-from pydantic import Field
-import os
-import json
 import base64
+import json
+import os
 from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+
 from dotenv import load_dotenv
+from pydantic import Field
+
+from agency_swarm.tools import BaseTool
 
 load_dotenv()
+
 
 class GmailSendEmail(BaseTool):
     """
@@ -15,35 +17,17 @@ class GmailSendEmail(BaseTool):
     Can send a saved draft by draft_id or compose and send a new email directly.
     """
 
-    draft_id: str = Field(
-        default="",
-        description="Gmail draft ID to send (if sending an existing draft)"
-    )
+    draft_id: str = Field(default="", description="Gmail draft ID to send (if sending an existing draft)")
 
-    to: str = Field(
-        default="",
-        description="Recipient email address (required if not using draft_id)"
-    )
+    to: str = Field(default="", description="Recipient email address (required if not using draft_id)")
 
-    subject: str = Field(
-        default="",
-        description="Email subject (required if not using draft_id)"
-    )
+    subject: str = Field(default="", description="Email subject (required if not using draft_id)")
 
-    body: str = Field(
-        default="",
-        description="Email body (required if not using draft_id)"
-    )
+    body: str = Field(default="", description="Email body (required if not using draft_id)")
 
-    cc: str = Field(
-        default="",
-        description="CC recipients, comma-separated"
-    )
+    cc: str = Field(default="", description="CC recipients, comma-separated")
 
-    bcc: str = Field(
-        default="",
-        description="BCC recipients, comma-separated"
-    )
+    bcc: str = Field(default="", description="BCC recipients, comma-separated")
 
     def run(self):
         """
@@ -52,9 +36,7 @@ class GmailSendEmail(BaseTool):
         """
         gmail_token = os.getenv("GMAIL_ACCESS_TOKEN")
         if not gmail_token:
-            return json.dumps({
-                "error": "GMAIL_ACCESS_TOKEN not found. Please authenticate with Gmail API."
-            })
+            return json.dumps({"error": "GMAIL_ACCESS_TOKEN not found. Please authenticate with Gmail API."})
 
         try:
             # Validate inputs
@@ -66,14 +48,14 @@ class GmailSendEmail(BaseTool):
                     "message_id": message_id,
                     "draft_id": self.draft_id,
                     "sent_via": "draft",
-                    "message": "Email sent successfully (mock). In production, this would send the Gmail draft."
+                    "message": "Email sent successfully (mock). In production, this would send the Gmail draft.",
                 }
             else:
                 # Composing and sending new email
                 if not self.to or not self.subject or not self.body:
-                    return json.dumps({
-                        "error": "Missing required fields: to, subject, and body are required when not using draft_id"
-                    })
+                    return json.dumps(
+                        {"error": "Missing required fields: to, subject, and body are required when not using draft_id"}
+                    )
 
                 # Create MIME message
                 message = MIMEText(self.body, "plain")
@@ -86,7 +68,7 @@ class GmailSendEmail(BaseTool):
                     message["Bcc"] = self.bcc
 
                 # Encode message
-                raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode("utf-8")
+                base64.urlsafe_b64encode(message.as_bytes()).decode("utf-8")
 
                 # Mock send
                 message_id = f"msg_{hash(self.subject + self.to)}"
@@ -96,7 +78,7 @@ class GmailSendEmail(BaseTool):
                     "to": self.to,
                     "subject": self.subject,
                     "sent_via": "direct",
-                    "message": "Email sent successfully (mock). In production, this would send via Gmail API."
+                    "message": "Email sent successfully (mock). In production, this would send via Gmail API.",
                 }
 
             # Add note about production setup
@@ -105,9 +87,7 @@ class GmailSendEmail(BaseTool):
             return json.dumps(result, indent=2)
 
         except Exception as e:
-            return json.dumps({
-                "error": f"Error sending email: {str(e)}"
-            })
+            return json.dumps({"error": f"Error sending email: {str(e)}"})
 
 
 if __name__ == "__main__":
@@ -124,7 +104,7 @@ if __name__ == "__main__":
     tool = GmailSendEmail(
         to="john@example.com",
         subject="Meeting Confirmation",
-        body="Hi John,\n\nConfirming our meeting tomorrow at 2 PM.\n\nBest regards,\nSarah"
+        body="Hi John,\n\nConfirming our meeting tomorrow at 2 PM.\n\nBest regards,\nSarah",
     )
     result = tool.run()
     print(result)
@@ -136,7 +116,7 @@ if __name__ == "__main__":
         cc="manager@example.com",
         bcc="archive@example.com",
         subject="Team Update",
-        body="Hello team,\n\nHere's this week's update...\n\nBest,\nLead"
+        body="Hello team,\n\nHere's this week's update...\n\nBest,\nLead",
     )
     result = tool.run()
     print(result)
@@ -145,7 +125,7 @@ if __name__ == "__main__":
     print("\n4. Test with missing fields (should error):")
     tool = GmailSendEmail(
         to="test@example.com",
-        subject="Test"
+        subject="Test",
         # Missing body
     )
     result = tool.run()
@@ -156,7 +136,8 @@ if __name__ == "__main__":
     tool = GmailSendEmail(
         to="support@hosting.com",
         subject="URGENT: Server Down",
-        body="Our production server is currently down and affecting all users. Please investigate immediately.\n\nSeverity: Critical\nTime: Now\n\nThank you."
+        body="Our production server is currently down and affecting all users. "
+        "Please investigate immediately.\n\nSeverity: Critical\nTime: Now\n\nThank you.",
     )
     result = tool.run()
     print(result)

@@ -1,10 +1,13 @@
-from agency_swarm.tools import BaseTool
-from pydantic import Field
 import json
 import re
+
 from dotenv import load_dotenv
+from pydantic import Field
+
+from agency_swarm.tools import BaseTool
 
 load_dotenv()
+
 
 class ValidateEmailContent(BaseTool):
     """
@@ -13,10 +16,7 @@ class ValidateEmailContent(BaseTool):
     and identifies any issues that would prevent successful email delivery.
     """
 
-    draft: str = Field(
-        ...,
-        description="JSON string containing the email draft (to, subject, body)"
-    )
+    draft: str = Field(..., description="JSON string containing the email draft (to, subject, body)")
 
     def run(self):
         """
@@ -39,7 +39,7 @@ class ValidateEmailContent(BaseTool):
                 # Validate email format
                 recipient = draft_data["to"].strip()
                 # Simple email regex pattern
-                email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+                email_pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
 
                 # Handle multiple recipients (comma-separated)
                 recipients = [r.strip() for r in recipient.split(",")]
@@ -77,7 +77,9 @@ class ValidateEmailContent(BaseTool):
                     warnings.append("Email body contains 'MISSING' - may need user clarification")
 
                 # Check for signature
-                if not any(closing in body for closing in ["Best regards", "Sincerely", "Thanks", "Regards", "Cheers", "Best"]):
+                if not any(
+                    closing in body for closing in ["Best regards", "Sincerely", "Thanks", "Regards", "Cheers", "Best"]
+                ):
                     warnings.append("Email may be missing a closing/signature")
 
             # Check for placeholder text
@@ -109,8 +111,8 @@ class ValidateEmailContent(BaseTool):
                 "fields_checked": {
                     "recipient": "to" in draft_data and bool(draft_data.get("to")),
                     "subject": "subject" in draft_data and bool(draft_data.get("subject")),
-                    "body": "body" in draft_data and bool(draft_data.get("body"))
-                }
+                    "body": "body" in draft_data and bool(draft_data.get("body")),
+                },
             }
 
             if is_valid:
@@ -121,19 +123,23 @@ class ValidateEmailContent(BaseTool):
             return json.dumps(result, indent=2)
 
         except json.JSONDecodeError as e:
-            return json.dumps({
-                "is_valid": False,
-                "errors": [f"Invalid JSON format: {str(e)}"],
-                "warnings": [],
-                "message": "Cannot validate - draft is not valid JSON"
-            })
+            return json.dumps(
+                {
+                    "is_valid": False,
+                    "errors": [f"Invalid JSON format: {str(e)}"],
+                    "warnings": [],
+                    "message": "Cannot validate - draft is not valid JSON",
+                }
+            )
         except Exception as e:
-            return json.dumps({
-                "is_valid": False,
-                "errors": [f"Validation error: {str(e)}"],
-                "warnings": [],
-                "message": "Validation failed due to unexpected error"
-            })
+            return json.dumps(
+                {
+                    "is_valid": False,
+                    "errors": [f"Validation error: {str(e)}"],
+                    "warnings": [],
+                    "message": "Validation failed due to unexpected error",
+                }
+            )
 
 
 if __name__ == "__main__":
@@ -142,110 +148,105 @@ if __name__ == "__main__":
 
     # Test 1: Valid complete email
     print("\n1. Valid complete email:")
-    draft = json.dumps({
-        "to": "john@acmecorp.com",
-        "subject": "Shipment Delay Update",
-        "body": "Hi John,\n\nI wanted to let you know about a delay in your shipment. It will arrive Tuesday instead of Monday.\n\nBest regards,\nSarah"
-    })
+    draft = json.dumps(
+        {
+            "to": "john@acmecorp.com",
+            "subject": "Shipment Delay Update",
+            "body": "Hi John,\n\nI wanted to let you know about a delay in your shipment. "
+            "It will arrive Tuesday instead of Monday.\n\nBest regards,\nSarah",
+        }
+    )
     tool = ValidateEmailContent(draft=draft)
     result = tool.run()
     print(result)
 
     # Test 2: Missing recipient
     print("\n2. Missing recipient:")
-    draft = json.dumps({
-        "subject": "Test Subject",
-        "body": "Test body"
-    })
+    draft = json.dumps({"subject": "Test Subject", "body": "Test body"})
     tool = ValidateEmailContent(draft=draft)
     result = tool.run()
     print(result)
 
     # Test 3: Invalid email format
     print("\n3. Invalid email format:")
-    draft = json.dumps({
-        "to": "not-an-email",
-        "subject": "Test",
-        "body": "Test body content"
-    })
+    draft = json.dumps({"to": "not-an-email", "subject": "Test", "body": "Test body content"})
     tool = ValidateEmailContent(draft=draft)
     result = tool.run()
     print(result)
 
     # Test 4: Empty subject and body
     print("\n4. Empty subject (warning):")
-    draft = json.dumps({
-        "to": "valid@example.com",
-        "subject": "",
-        "body": "This has content but no subject"
-    })
+    draft = json.dumps({"to": "valid@example.com", "subject": "", "body": "This has content but no subject"})
     tool = ValidateEmailContent(draft=draft)
     result = tool.run()
     print(result)
 
     # Test 5: Multiple recipients
     print("\n5. Multiple recipients (one invalid):")
-    draft = json.dumps({
-        "to": "john@example.com, invalid-email, sarah@test.com",
-        "subject": "Team Update",
-        "body": "Hello everyone,\n\nHere's the update.\n\nBest regards,\nManager"
-    })
+    draft = json.dumps(
+        {
+            "to": "john@example.com, invalid-email, sarah@test.com",
+            "subject": "Team Update",
+            "body": "Hello everyone,\n\nHere's the update.\n\nBest regards,\nManager",
+        }
+    )
     tool = ValidateEmailContent(draft=draft)
     result = tool.run()
     print(result)
 
     # Test 6: Placeholder text
     print("\n6. Contains placeholder text:")
-    draft = json.dumps({
-        "to": "client@example.com",
-        "subject": "Proposal",
-        "body": "Dear [Name],\n\nPlease review the attached proposal.\n\nBest regards,\n[User]"
-    })
+    draft = json.dumps(
+        {
+            "to": "client@example.com",
+            "subject": "Proposal",
+            "body": "Dear [Name],\n\nPlease review the attached proposal.\n\nBest regards,\n[User]",
+        }
+    )
     tool = ValidateEmailContent(draft=draft)
     result = tool.run()
     print(result)
 
     # Test 7: Very short body
     print("\n7. Very short body (warning):")
-    draft = json.dumps({
-        "to": "test@example.com",
-        "subject": "Quick note",
-        "body": "Thanks"
-    })
+    draft = json.dumps({"to": "test@example.com", "subject": "Quick note", "body": "Thanks"})
     tool = ValidateEmailContent(draft=draft)
     result = tool.run()
     print(result)
 
     # Test 8: With CC and BCC
     print("\n8. With valid CC and BCC:")
-    draft = json.dumps({
-        "to": "primary@example.com",
-        "cc": "manager@example.com, team@example.com",
-        "bcc": "archive@example.com",
-        "subject": "Project Update",
-        "body": "Here's the latest update on the project.\n\nBest regards,\nTeam Lead"
-    })
+    draft = json.dumps(
+        {
+            "to": "primary@example.com",
+            "cc": "manager@example.com, team@example.com",
+            "bcc": "archive@example.com",
+            "subject": "Project Update",
+            "body": "Here's the latest update on the project.\n\nBest regards,\nTeam Lead",
+        }
+    )
     tool = ValidateEmailContent(draft=draft)
     result = tool.run()
     print(result)
 
     # Test 9: Long subject line
     print("\n9. Very long subject line:")
-    draft = json.dumps({
-        "to": "user@example.com",
-        "subject": "This is an extremely long subject line that goes on and on and on and contains way too much information that should probably be in the body of the email instead of the subject line because it exceeds the recommended length",
-        "body": "Short body"
-    })
+    draft = json.dumps(
+        {
+            "to": "user@example.com",
+            "subject": "This is an extremely long subject line that goes on and on and on and contains way too much "
+            "information that should probably be in the body of the email instead of the subject line "
+            "because it exceeds the recommended length",
+            "body": "Short body",
+        }
+    )
     tool = ValidateEmailContent(draft=draft)
     result = tool.run()
     print(result)
 
     # Test 10: Missing body
     print("\n10. Missing body:")
-    draft = json.dumps({
-        "to": "recipient@example.com",
-        "subject": "Empty Email"
-    })
+    draft = json.dumps({"to": "recipient@example.com", "subject": "Empty Email"})
     tool = ValidateEmailContent(draft=draft)
     result = tool.run()
     print(result)

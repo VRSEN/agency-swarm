@@ -1,10 +1,13 @@
-from agency_swarm.tools import BaseTool
-from pydantic import Field
-import os
 import json
+import os
+
 from dotenv import load_dotenv
+from pydantic import Field
+
+from agency_swarm.tools import BaseTool
 
 load_dotenv()
+
 
 class GmailGetDraft(BaseTool):
     """
@@ -12,10 +15,7 @@ class GmailGetDraft(BaseTool):
     Used to fetch draft content for revision or review.
     """
 
-    draft_id: str = Field(
-        ...,
-        description="Gmail draft ID to retrieve"
-    )
+    draft_id: str = Field(..., description="Gmail draft ID to retrieve")
 
     def run(self):
         """
@@ -24,9 +24,7 @@ class GmailGetDraft(BaseTool):
         """
         gmail_token = os.getenv("GMAIL_ACCESS_TOKEN")
         if not gmail_token:
-            return json.dumps({
-                "error": "GMAIL_ACCESS_TOKEN not found. Please authenticate with Gmail API."
-            })
+            return json.dumps({"error": "GMAIL_ACCESS_TOKEN not found. Please authenticate with Gmail API."})
 
         try:
             # In production, this would make an API call to Gmail
@@ -37,13 +35,20 @@ class GmailGetDraft(BaseTool):
                 "draft_abc123": {
                     "to": "john@acmecorp.com",
                     "subject": "Shipment Delay Update",
-                    "body": "Hi John,\n\nI wanted to reach out regarding your recent order. Unfortunately, we've experienced a slight delay in shipping. The order will now arrive on Tuesday instead of Monday as originally scheduled.\n\nWe apologize for any inconvenience this may cause and appreciate your understanding.\n\nBest regards,\nSarah Johnson"
+                    "body": "Hi John,\n\nI wanted to reach out regarding your recent order. Unfortunately, "
+                    "we've experienced a slight delay in shipping. The order will now arrive on Tuesday instead of "
+                    "Monday as originally scheduled.\n\nWe apologize for any inconvenience this may cause and "
+                    "appreciate your understanding.\n\nBest regards,\nSarah Johnson",
                 },
                 "draft_xyz789": {
                     "to": "sarah@supplier.com",
                     "subject": "Reorder Blue Widgets",
-                    "body": "Hey Sarah,\n\nHope you're doing well! We'd like to reorder the blue widgets - we'll need 500 units this time.\n\nLet me know when you can get those shipped out.\n\nThanks!\nUser"
-                }
+                    "body": (
+                        "Hey Sarah,\n\nHope you're doing well! We'd like to reorder the blue widgets - "
+                        "we'll need 500 units this time.\n\nLet me know when you can get those shipped "
+                        "out.\n\nThanks!\nUser"
+                    ),
+                },
             }
 
             if self.draft_id in mock_drafts:
@@ -54,7 +59,7 @@ class GmailGetDraft(BaseTool):
                     "to": draft_data["to"],
                     "subject": draft_data["subject"],
                     "body": draft_data["body"],
-                    "message": "Draft retrieved (mock data). In production, this would fetch from Gmail API."
+                    "message": "Draft retrieved (mock data). In production, this would fetch from Gmail API.",
                 }
             else:
                 # Generate generic mock data for unknown draft IDs
@@ -64,7 +69,7 @@ class GmailGetDraft(BaseTool):
                     "to": "recipient@example.com",
                     "subject": "Email Draft",
                     "body": "This is a mock draft body for testing purposes.",
-                    "message": "Draft retrieved (mock). In production, this would fetch actual draft from Gmail."
+                    "message": "Draft retrieved (mock). In production, this would fetch actual draft from Gmail.",
                 }
 
             result["note"] = "This is a mock implementation. Set up Gmail API OAuth2 for production use."
@@ -72,9 +77,7 @@ class GmailGetDraft(BaseTool):
             return json.dumps(result, indent=2)
 
         except Exception as e:
-            return json.dumps({
-                "error": f"Error retrieving draft: {str(e)}"
-            })
+            return json.dumps({"error": f"Error retrieving draft: {str(e)}"})
 
 
 if __name__ == "__main__":

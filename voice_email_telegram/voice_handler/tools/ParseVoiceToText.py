@@ -1,10 +1,13 @@
-from agency_swarm.tools import BaseTool
-from pydantic import Field
 import os
+
 from dotenv import load_dotenv
 from openai import OpenAI
+from pydantic import Field
+
+from agency_swarm.tools import BaseTool
 
 load_dotenv()
+
 
 class ParseVoiceToText(BaseTool):
     """
@@ -13,13 +16,13 @@ class ParseVoiceToText(BaseTool):
     """
 
     audio_file_path: str = Field(
-        ...,
-        description="Path to the audio file to transcribe (supports mp3, mp4, mpeg, mpga, m4a, wav, webm)"
+        ..., description="Path to the audio file to transcribe (supports mp3, mp4, mpeg, mpga, m4a, wav, webm)"
     )
 
     language: str = Field(
         default="en",
-        description="Language code for transcription (e.g., 'en' for English, 'es' for Spanish). Use 'auto' for automatic detection."
+        description="Language code for transcription (e.g., 'en' for English, 'es' for Spanish). "
+        "Use 'auto' for automatic detection.",
     )
 
     def run(self):
@@ -49,15 +52,10 @@ class ParseVoiceToText(BaseTool):
                 # Use whisper-1 model for transcription
                 if self.language and self.language != "auto":
                     transcription = client.audio.transcriptions.create(
-                        model="whisper-1",
-                        file=audio_file,
-                        language=self.language
+                        model="whisper-1", file=audio_file, language=self.language
                     )
                 else:
-                    transcription = client.audio.transcriptions.create(
-                        model="whisper-1",
-                        file=audio_file
-                    )
+                    transcription = client.audio.transcriptions.create(model="whisper-1", file=audio_file)
 
             # Return the transcribed text
             return transcription.text

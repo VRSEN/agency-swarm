@@ -1,11 +1,14 @@
-from agency_swarm.tools import BaseTool
-from pydantic import Field
-import os
 import json
+import os
+
 import requests
 from dotenv import load_dotenv
+from pydantic import Field
+
+from agency_swarm.tools import BaseTool
 
 load_dotenv()
+
 
 class TelegramDownloadFile(BaseTool):
     """
@@ -13,15 +16,9 @@ class TelegramDownloadFile(BaseTool):
     First gets file path, then downloads the file to local storage.
     """
 
-    file_id: str = Field(
-        ...,
-        description="Telegram file_id from a message (e.g., voice.file_id)"
-    )
+    file_id: str = Field(..., description="Telegram file_id from a message (e.g., voice.file_id)")
 
-    save_path: str = Field(
-        default="/tmp",
-        description="Directory to save the downloaded file"
-    )
+    save_path: str = Field(default="/tmp", description="Directory to save the downloaded file")
 
     def run(self):
         """
@@ -30,9 +27,7 @@ class TelegramDownloadFile(BaseTool):
         """
         bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
         if not bot_token:
-            return json.dumps({
-                "error": "TELEGRAM_BOT_TOKEN not found in environment variables"
-            })
+            return json.dumps({"error": "TELEGRAM_BOT_TOKEN not found in environment variables"})
 
         try:
             # Step 1: Get file path from Telegram
@@ -45,9 +40,7 @@ class TelegramDownloadFile(BaseTool):
             data = response.json()
 
             if not data.get("ok"):
-                return json.dumps({
-                    "error": f"Telegram API error: {data.get('description', 'Unknown error')}"
-                })
+                return json.dumps({"error": f"Telegram API error: {data.get('description', 'Unknown error')}"})
 
             file_path = data["result"]["file_path"]
             file_size = data["result"].get("file_size", 0)
@@ -75,19 +68,15 @@ class TelegramDownloadFile(BaseTool):
                 "file_id": self.file_id,
                 "local_path": local_path,
                 "file_size": file_size,
-                "telegram_path": file_path
+                "telegram_path": file_path,
             }
 
             return json.dumps(result, indent=2)
 
         except requests.exceptions.RequestException as e:
-            return json.dumps({
-                "error": f"Failed to download file: {str(e)}"
-            })
+            return json.dumps({"error": f"Failed to download file: {str(e)}"})
         except Exception as e:
-            return json.dumps({
-                "error": f"Error downloading file: {str(e)}"
-            })
+            return json.dumps({"error": f"Error downloading file: {str(e)}"})
 
 
 if __name__ == "__main__":
@@ -103,10 +92,7 @@ if __name__ == "__main__":
 
     # Test 2: Try to download (will fail without valid file_id)
     print("\n2. Test download with dummy file_id:")
-    tool = TelegramDownloadFile(
-        file_id="test_file_id_12345",
-        save_path="/tmp/telegram_files"
-    )
+    tool = TelegramDownloadFile(file_id="test_file_id_12345", save_path="/tmp/telegram_files")
     result = tool.run()
     print(result)
 
