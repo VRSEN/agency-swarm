@@ -51,4 +51,3 @@ def serialize(obj: Any, _visited: set[int] | None = None, string_output: bool = 
             return str(obj)
         else:
             return obj
-
