@@ -1,0 +1,53 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Pastebin API",
+    "description": "Create pastes programmatically.",
+    "version": "v1.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://pastebin.example.com"
+    }
+  ],
+  "paths": {
+    "/pastes": {
+      "post": {
+        "operationId": "createPaste",
+        "summary": "Create a new paste entry",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string"
+                  },
+                  "content": {
+                    "type": "string"
+                  },
+                  "visibility": {
+                    "type": "string",
+                    "enum": [
+                      "public",
+                      "unlisted",
+                      "private"
+                    ]
+                  }
+                },
+                "required": [
+                  "title",
+                  "content",
+                  "visibility"
+                ]
+              }
+            }
+          }
+        },
+        "description": "Create a new paste entry"
+      }
+    }
+  }
+}

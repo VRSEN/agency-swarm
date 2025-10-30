@@ -68,8 +68,8 @@ from agency_swarm.tools import ToolFactory
 
 tools = ToolFactory.from_openapi_schema(
     "<your OpenAPI schema here>",
-    headers={'api_schema.json': {'Authorization': 'Bearer token'}},
-    params={'api_schema.json': {'param1': 'value1'}},
+    headers={'Authorization': 'Bearer token'},
+    params={'param1': 'value1'},
     strict=False
 )
 ```
@@ -96,8 +96,8 @@ tools = ToolFactory.from_openapi_schema(response.json())
 Argument descriptions:
 
 - `schema`: The OpenAPI schema to convert.
-- `headers`: Custom headers for API calls, like authentication tokens.
-- `params`: Extra parameters for specific schemas.
+- `headers`: HTTP headers applied to every request generated from the schema. For per-file mappings when using `Agent(schemas_folder=...)`, pass them via the agent's `api_headers` argument.
+- `params`: Query parameters appended to every request generated from the schema.
 - `strict`: Whether to use strict OpenAI mode.
 
 To add your tools to your agent with the 2nd option, simply pass the `tools` list to your agent:
