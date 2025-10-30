@@ -12,13 +12,9 @@ icon: "window"
 
 ![Widget preview](/images/integrations/widget/widget_1.png)
 
----
-
 ## Prerequisites
 
 - Deployed Agency in the Agencii dashboard.
-
----
 
 ## Quick Start
 
@@ -27,15 +23,15 @@ icon: "window"
     1. In the Agencii dashboard, open **Deploy → Widgets** and create a new widget.
     2. Configure the widget's name, description, position and conversation starters.
     3. Customize the widget's appearance by choosing a theme mode, logo, and color scheme.
-    4. Select Agency and Selectable Agents.
-    5. Select any advanced settings like Allowed Domains, open widget automatically, etc.
+    4. Select the agency and any selectable agents.
+    5. Configure advanced settings such as Allowed Domains and auto-open behavior as needed.
     6. Save changes.
     7. Test your widget!
   </Step>
 
   <Step title="Embed the widget">
     1. In the Agencii dashboard, open **Deploy → Widgets** and find the widget you created.
-    2. Click on the 3 dot menu on the right side of the widget row and select **Embed**.
+    2. Click the three-dot menu on the right side of the widget row and select **Embed**.
     ![Embed widget](/images/integrations/widget/widget_2.png)
     3. Copy the embedding script.
     4. Paste the script into your website's HTML file (or adjust the script to your needs).
@@ -44,25 +40,21 @@ icon: "window"
 
   <Step title="Share the widget">
     1. In the Agencii dashboard, open **Deploy → Widgets** and find the widget you created.
-    2. Click on the 3 dot menu on the right side of the widget row and select **Share** OR use Share button near the 3 dot menu.
-    3. It will open a new window with the widget embedded into simple blank page.
+    2. Click the **Share** button on the right side of the widget row.
+    3. This opens a new window with the widget embedded on a blank page.
 
     ![Live widget embedded on a landing page](/images/integrations/widget/widget_3.png)
   </Step>
 </Steps>
 
----
-
 <Tip>
-You can embed several widgets on the same page by using embedding script multiple times with different `widgetId`s and `chatContainer` selectors.
+You can embed several widgets on the same page by using the embedding script multiple times with different `widgetId`s and `chatContainer` selectors.
 </Tip>
 
 
 <Tip>
 If you are prototyping locally, temporarily add `http://localhost:3000` (or your dev origin) to the widget's allowed domains list if you are using the Allowed Domains feature.
 </Tip>
-
----
 
 ## Widget Controls
 
@@ -96,12 +88,11 @@ window.dispatchEvent(
 ```
 
 > ✅ The widget must be initialized on the page.
-
----
+> Replace `WIDGET_ID` with the identifier provided in your widget embed script.
 
 ## Commands
 
-### 1) Open / Close Widget
+### Open or close the widget
 
 Opens or closes the widget UI.
 
@@ -139,17 +130,15 @@ window.dispatchEvent(
 
 ```
 
-### Typical use cases
+#### Typical use cases
 
 - Bind to a "Chat" / "Support" button to open the widget.
 - Close the widget after a route change or when a modal shows.
 
----
-
-### 2) Send Message to Widget
+### Send a message to the widget
 
 Programmatically sends a text message into the widget (e.g., seed a greeting or pass context).
-This event does not open the widget automatically. So, dispatch `open-widget` event first.
+This event does not open the widget automatically, so dispatch an `open-widget` event first.
 
 **Type:** `send-message-to-widget`
 
@@ -169,8 +158,6 @@ window.dispatchEvent(
 );
 
 ```
-
----
 
 ## Multiple Widgets on One Page
 
