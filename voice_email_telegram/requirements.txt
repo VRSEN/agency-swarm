@@ -1,0 +1,17 @@
+agency-swarm>=0.7.2
+python-dotenv>=1.0.0
+openai>=1.0.0
+pydantic>=2.0.0
+requests>=2.31.0
+
+# Composio SDK (optional - has dependency issues, using direct API calls instead)
+# composio-core>=0.5.0
+# composio-openai>=0.5.0
+
+# Optional: For production Gmail integration
+# google-auth>=2.23.0
+# google-auth-oauthlib>=1.1.0
+# google-api-python-client>=2.100.0
+
+# Note: python-telegram-bot is not needed as we use direct Telegram Bot API calls
+# Note: All integrations (Telegram, Gmail, ElevenLabs, Mem0) use direct API calls via requests
