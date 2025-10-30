@@ -38,7 +38,8 @@ from openai.types.responses.response_output_text import AnnotationFileCitation
 from openai.types.responses.response_text_delta_event import Logprob, ResponseTextDeltaEvent
 from pydantic import BaseModel
 
-from agency_swarm.ui.core.agui_adapter import AguiAdapter, serialize
+from agency_swarm.ui.core.agui_adapter import AguiAdapter
+from agency_swarm.utils.serialization import serialize
 
 
 def make_raw_event(data):
