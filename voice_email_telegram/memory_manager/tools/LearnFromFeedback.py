@@ -24,7 +24,7 @@ class LearnFromFeedback(BaseTool):
         description="User's feedback (can be empty for approvals, or revision instructions for rejections)"
     )
 
-    action: Field[str] = Field(
+    action: str = Field(
         ...,
         description="User action: 'approved' or 'rejected'"
     )
