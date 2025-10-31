@@ -1,22 +1,18 @@
 """
 Unit tests for citation extraction utilities.
-
-Tests individual citation extraction functions in isolation using mocks
-to ensure proper behavior without external dependencies.
 """
 
-from dataclasses import dataclass
 from unittest.mock import MagicMock
 
-import pytest
 from agents.items import MessageOutputItem, ToolCallItem
 from openai.types.responses.response_file_search_tool_call import (
     ResponseFileSearchToolCall,
     Result as FileSearchResult,
 )
 from openai.types.responses.response_output_message import ResponseOutputMessage, ResponseOutputText
-from openai.types.responses.response_output_text import AnnotationFileCitation
+from openai.types.responses.response_output_text import AnnotationFileCitation, AnnotationURLCitation
 
+from agency_swarm.agent.core import Agent
 from agency_swarm.utils.citation_extractor import (
     display_citations,
     extract_direct_file_annotations,
@@ -25,19 +21,20 @@ from agency_swarm.utils.citation_extractor import (
 )
 
 
-@dataclass
-class LegacyContentItem:
-    annotations: list[dict]
-
-
-@dataclass
-class LegacyMessage:
-    id: str
-    content: list[LegacyContentItem]
-
-
 class TestExtractDirectFileAnnotations:
     """Test direct file citation extraction from message annotations."""
+
+    @staticmethod
+    def _message_item(content: list[ResponseOutputText], message_id: str) -> MessageOutputItem:
+        agent = Agent(name="Annotator", instructions="Collect citations")
+        message = ResponseOutputMessage(
+            id=message_id,
+            content=content,
+            role="assistant",
+            status="completed",
+            type="message",
+        )
+        return MessageOutputItem(agent=agent, raw_item=message)
 
     def test_extracts_file_citations_from_annotations(self):
         """Ensure annotations backed by SDK models are captured."""
@@ -48,16 +45,7 @@ class TestExtractDirectFileAnnotations:
             type="file_citation",
         )
         content_item = ResponseOutputText(annotations=[annotation], text="Here you go", type="output_text")
-        message = ResponseOutputMessage(
-            id="msg_123",
-            content=[content_item],
-            role="assistant",
-            status="completed",
-            type="message",
-        )
-
-        msg_item = MagicMock(spec=MessageOutputItem)
-        msg_item.raw_item = message
+        msg_item = self._message_item([content_item], message_id="msg_123")
 
         result = extract_direct_file_annotations([msg_item])
 
@@ -81,16 +69,7 @@ class TestExtractDirectFileAnnotations:
             for i in range(3)
         ]
         content_item = ResponseOutputText(annotations=annotations, text="Multiple refs", type="output_text")
-        message = ResponseOutputMessage(
-            id="msg_multi",
-            content=[content_item],
-            role="assistant",
-            status="completed",
-            type="message",
-        )
-
-        msg_item = MagicMock(spec=MessageOutputItem)
-        msg_item.raw_item = message
+        msg_item = self._message_item([content_item], message_id="msg_multi")
 
         result = extract_direct_file_annotations([msg_item])
 
@@ -100,37 +79,20 @@ class TestExtractDirectFileAnnotations:
 
     def test_skips_messages_without_content(self):
         """Messages with no content yield no citations."""
-        message = ResponseOutputMessage(
-            id="msg_empty",
-            content=[],
-            role="assistant",
-            status="completed",
-            type="message",
-        )
-
-        msg_item = MagicMock(spec=MessageOutputItem)
-        msg_item.raw_item = message
-
+        msg_item = self._message_item([], message_id="msg_empty")
         assert extract_direct_file_annotations([msg_item]) == {}
 
     def test_skips_non_file_citation_annotations(self):
         """Annotations of other types are ignored."""
-        content_item = LegacyContentItem(annotations=[{"type": "image_file", "url": "http://example.com"}])
-        message = LegacyMessage(id="msg_no_citations", content=[content_item])
-
-        msg_item = MagicMock(spec=MessageOutputItem)
-        msg_item.raw_item = message
-
-        assert extract_direct_file_annotations([msg_item]) == {}
-
-    def test_ignores_invalid_annotation_payload(self, caplog: pytest.LogCaptureFixture):
-        """Invalid annotation payloads are skipped with a warning."""
-        caplog.set_level("WARNING")
-        content_item = LegacyContentItem(annotations=[{"type": "file_citation"}])
-        message = LegacyMessage(id="msg_incomplete", content=[content_item])
-
-        msg_item = MagicMock(spec=MessageOutputItem)
-        msg_item.raw_item = message
+        url_annotation = AnnotationURLCitation(
+            start_index=0,
+            end_index=5,
+            title="Example",
+            type="url_citation",
+            url="https://example.com",
+        )
+        content_item = ResponseOutputText(annotations=[url_annotation], text="See link", type="output_text")
+        msg_item = self._message_item([content_item], message_id="msg_no_citations")
 
         assert extract_direct_file_annotations([msg_item]) == {}
 

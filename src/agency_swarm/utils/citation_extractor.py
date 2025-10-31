@@ -11,8 +11,8 @@ from agents import RunResult
 from agents.items import MessageOutputItem, ToolCallItem
 from openai.types.responses import ResponseFileSearchToolCall
 from openai.types.responses.response_file_search_tool_call import Result as ResponseFileSearchResult
-from openai.types.responses.response_output_text import AnnotationFileCitation
-from pydantic import ValidationError
+from openai.types.responses.response_output_message import ResponseOutputMessage
+from openai.types.responses.response_output_text import AnnotationFileCitation, ResponseOutputText
 
 logger = logging.getLogger(__name__)
 
@@ -38,25 +38,16 @@ def extract_direct_file_annotations(
 
     for msg_item in assistant_messages:
         message = msg_item.raw_item
-        if not hasattr(message, "content") or not message.content:
+        if not isinstance(message, ResponseOutputMessage):
             continue
 
-        # Look for annotations in each content item
-        annotations_found = []
+        annotations_found: list[dict] = []
         for content_item in message.content:
-            annotations = getattr(content_item, "annotations", None)
-            if not annotations:
+            if not isinstance(content_item, ResponseOutputText):
                 continue
-
-            # Extract file citations from annotations
-            for annotation in annotations:
-                try:
-                    citation = _extract_annotation_citation(annotation)
-                except TypeError as exc:
-                    logger.warning("Ignoring unsupported annotation %r: %s", type(annotation), exc)
-                    continue
-                if citation is not None:
-                    annotations_found.append(citation)
+            for annotation in content_item.annotations:
+                if isinstance(annotation, AnnotationFileCitation):
+                    annotations_found.append(_build_file_citation(annotation))
 
         # Store citations mapped to message ID
         if annotations_found:
@@ -78,7 +69,7 @@ def extract_vector_store_citations(run_result: RunResult) -> list[dict]:
         if not isinstance(tool_call, ResponseFileSearchToolCall):
             continue
 
-        results = tool_call.results or []
+        results: list[ResponseFileSearchResult] = tool_call.results or []
         tool_call_id = tool_call.id
 
         for result in results:
@@ -163,45 +154,18 @@ def display_citations(citations, citation_type=""):
     return True
 
 
-def _extract_annotation_citation(annotation: object) -> dict | None:
-    normalized = _coerce_file_annotation(annotation)
-    if normalized is None:
-        return None
-
-    if not isinstance(normalized.file_id, str) or not normalized.file_id:
-        raise TypeError("AnnotationFileCitation missing required file_id")
-    if not isinstance(normalized.filename, str) or not normalized.filename:
-        raise TypeError("AnnotationFileCitation missing required filename")
-
-    index = normalized.index
-    if not isinstance(index, int):
-        raise TypeError("AnnotationFileCitation index must be an integer")
-
+def _build_file_citation(annotation: AnnotationFileCitation) -> dict:
     return {
-        "file_id": normalized.file_id,
-        "filename": normalized.filename,
-        "index": index,
-        "type": normalized.type,
+        "file_id": annotation.file_id,
+        "filename": annotation.filename,
+        "index": annotation.index,
+        "type": annotation.type,
         "method": "direct_file",
     }
 
 
-def _coerce_file_annotation(annotation: object) -> AnnotationFileCitation | None:
-    if isinstance(annotation, AnnotationFileCitation):
-        return annotation
-    try:
-        candidate = AnnotationFileCitation.model_validate(annotation)
-    except ValidationError:
-        return None
-    if candidate.type != "file_citation":
-        return None
-    return candidate
-
-
-def _resolve_file_search_result(result: object) -> tuple[str, str]:
-    normalized = _coerce_file_search_result(result)
-
-    file_id_value = normalized.file_id
+def _resolve_file_search_result(result: ResponseFileSearchResult) -> tuple[str, str]:
+    file_id_value = result.file_id
     if isinstance(file_id_value, str) and file_id_value:
         file_id = file_id_value
     elif file_id_value is None:
@@ -209,14 +173,5 @@ def _resolve_file_search_result(result: object) -> tuple[str, str]:
     else:
         file_id = str(file_id_value)
 
-    text = normalized.text or ""
+    text = result.text or ""
     return file_id, text
-
-
-def _coerce_file_search_result(result: object) -> ResponseFileSearchResult:
-    if isinstance(result, ResponseFileSearchResult):
-        return result
-    try:
-        return ResponseFileSearchResult.model_validate(result)
-    except ValidationError as exc:
-        raise TypeError(f"Unsupported file search result type: {type(result)!r}") from exc
