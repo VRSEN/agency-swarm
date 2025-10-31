@@ -18,7 +18,6 @@ from openai.types.responses import (
     ResponseOutputText,
 )
 from openai.types.responses.response_file_search_tool_call import Result as ResponseFileSearchResult
-from pydantic import ValidationError
 
 if TYPE_CHECKING:
     from agency_swarm.agent.core import AgencyContext, Agent
@@ -220,7 +219,7 @@ class MessageFormatter:
         synthetic_outputs = []
 
         # Find hosted tool calls and assistant messages
-        hosted_tool_calls = []
+        hosted_tool_calls: list[ToolCallItem] = []
         assistant_messages_by_agent: dict[str, list[MessageOutputItem]] = {}
 
         for item in run_items:
@@ -249,18 +248,8 @@ class MessageFormatter:
                 return resolved_name
             return agent.name
 
-        def resolve_file_search_result(result: object) -> tuple[str, str]:
-            if isinstance(result, ResponseFileSearchResult):
-                normalized = result
-            else:
-                try:
-                    normalized = ResponseFileSearchResult.model_validate(result)
-                except ValidationError as exc:
-                    raise TypeError(
-                        f"Expected ResponseFileSearchResult-compatible data, received {type(result)!r}"
-                    ) from exc
-
-            file_id_value = normalized.file_id
+        def resolve_file_search_result(result: ResponseFileSearchResult) -> tuple[str, str]:
+            file_id_value = result.file_id
             if isinstance(file_id_value, str) and file_id_value:
                 file_id = file_id_value
             elif file_id_value is None:
@@ -268,7 +257,7 @@ class MessageFormatter:
             else:
                 file_id = str(file_id_value)
 
-            text = normalized.text or ""
+            text = result.text or ""
             return file_id, text
 
         # Extract results for each hosted tool call
@@ -279,18 +268,16 @@ class MessageFormatter:
             # Avoid overwriting propagated messages
             if tool_agent_name != agent.name:
                 continue
-            # Capture search results for tool output persistence
             if isinstance(tool_call, ResponseFileSearchToolCall):
                 search_results_content = f"[SEARCH_RESULTS] Tool Call ID: {tool_call.id}\nTool Type: file_search\n"
 
+                iterable_results: list[ResponseFileSearchResult] = tool_call.results or []
                 file_count = 0
 
-                # Extract results directly from tool call response
-                if tool_call.results:
-                    for result in tool_call.results:
-                        file_count += 1
-                        file_id, content_text = resolve_file_search_result(result)
-                        search_results_content += f"File {file_count}: {file_id}\nContent: {content_text}\n\n"
+                for result in iterable_results:
+                    file_id, content_text = resolve_file_search_result(result)
+                    file_count += 1
+                    search_results_content += f"File {file_count}: {file_id}\nContent: {content_text}\n\n"
 
                 if file_count > 0:
                     synthetic_outputs.append(
