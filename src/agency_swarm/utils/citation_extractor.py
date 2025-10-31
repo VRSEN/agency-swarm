@@ -45,7 +45,8 @@ def extract_direct_file_annotations(
         for content_item in message.content:
             if not isinstance(content_item, ResponseOutputText):
                 continue
-            for annotation in content_item.annotations:
+            annotations = content_item.annotations or []
+            for annotation in annotations:
                 if isinstance(annotation, AnnotationFileCitation):
                     annotations_found.append(_build_file_citation(annotation))
 
