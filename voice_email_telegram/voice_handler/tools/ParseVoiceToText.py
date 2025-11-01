@@ -1,3 +1,4 @@
+import json
 import os
 
 from dotenv import load_dotenv
@@ -28,21 +29,21 @@ class ParseVoiceToText(BaseTool):
     def run(self):
         """
         Transcribes the audio file using OpenAI Whisper API.
-        Returns the transcribed text or an error message.
+        Returns JSON string with transcript or error.
         """
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
-            return "Error: OPENAI_API_KEY not found in environment variables"
+            return json.dumps({"error": "OPENAI_API_KEY not found in environment variables"})
 
         # Check if file exists
         if not os.path.exists(self.audio_file_path):
-            return f"Error: Audio file not found at path: {self.audio_file_path}"
+            return json.dumps({"error": f"Audio file not found at path: {self.audio_file_path}"})
 
         # Check file size (Whisper has a 25MB limit)
         file_size = os.path.getsize(self.audio_file_path)
         max_size = 25 * 1024 * 1024  # 25MB in bytes
         if file_size > max_size:
-            return f"Error: File size ({file_size / 1024 / 1024:.2f}MB) exceeds the 25MB limit"
+            return json.dumps({"error": f"File size ({file_size / 1024 / 1024:.2f}MB) exceeds the 25MB limit"})
 
         try:
             client = OpenAI(api_key=api_key)
@@ -57,11 +58,16 @@ class ParseVoiceToText(BaseTool):
                 else:
                     transcription = client.audio.transcriptions.create(model="whisper-1", file=audio_file)
 
-            # Return the transcribed text
-            return transcription.text
+            # Return the transcribed text as JSON
+            return json.dumps({
+                "success": True,
+                "transcript": transcription.text,
+                "audio_file": self.audio_file_path,
+                "language": self.language
+            }, indent=2)
 
         except Exception as e:
-            return f"Error during transcription: {str(e)}"
+            return json.dumps({"error": f"Error during transcription: {str(e)}"}, indent=2)
 
 
 if __name__ == "__main__":

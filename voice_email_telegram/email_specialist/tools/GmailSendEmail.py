@@ -1,8 +1,7 @@
-import base64
 import json
 import os
-from email.mime.text import MIMEText
 
+from composio import Composio
 from dotenv import load_dotenv
 from pydantic import Field
 
@@ -31,63 +30,82 @@ class GmailSendEmail(BaseTool):
 
     def run(self):
         """
-        Sends an email via Gmail API.
+        Sends an email via Gmail API using Composio.
         Returns JSON string with message ID and send confirmation.
         """
-        gmail_token = os.getenv("GMAIL_ACCESS_TOKEN")
-        if not gmail_token:
-            return json.dumps({"error": "GMAIL_ACCESS_TOKEN not found. Please authenticate with Gmail API."})
+        # Get Composio credentials
+        api_key = os.getenv("COMPOSIO_API_KEY")
+        entity_id = os.getenv("GMAIL_ENTITY_ID")
+
+        if not api_key or not entity_id:
+            return json.dumps({
+                "error": "Missing Composio credentials. Set COMPOSIO_API_KEY and GMAIL_ENTITY_ID in .env"
+            })
 
         try:
             # Validate inputs
             if self.draft_id:
-                # Sending an existing draft
-                message_id = f"msg_{hash(self.draft_id)}"
-                result = {
+                return json.dumps({
+                    "error": "Draft sending not yet implemented. Please compose and send directly.",
+                    "note": "Use to, subject, and body parameters instead of draft_id"
+                })
+
+            # Composing and sending new email
+            if not self.to or not self.subject or not self.body:
+                return json.dumps({
+                    "error": "Missing required fields: to, subject, and body are required"
+                })
+
+            # Initialize Composio client
+            client = Composio(api_key=api_key)
+
+            # Prepare email parameters
+            email_params = {
+                "recipient_email": self.to,
+                "subject": self.subject,
+                "body": self.body,
+                "is_html": False
+            }
+
+            # Add CC if provided
+            if self.cc:
+                email_params["cc"] = self.cc.split(',') if isinstance(self.cc, str) else self.cc
+
+            # Add BCC if provided
+            if self.bcc:
+                email_params["bcc"] = self.bcc.split(',') if isinstance(self.bcc, str) else self.bcc
+
+            # Execute Gmail send via Composio
+            result = client.tools.execute(
+                "GMAIL_SEND_EMAIL",
+                email_params,
+                user_id=entity_id,
+                dangerously_skip_version_check=True
+            )
+
+            # Format response
+            if result.get("successful"):
+                return json.dumps({
                     "success": True,
-                    "message_id": message_id,
-                    "draft_id": self.draft_id,
-                    "sent_via": "draft",
-                    "message": "Email sent successfully (mock). In production, this would send the Gmail draft.",
-                }
-            else:
-                # Composing and sending new email
-                if not self.to or not self.subject or not self.body:
-                    return json.dumps(
-                        {"error": "Missing required fields: to, subject, and body are required when not using draft_id"}
-                    )
-
-                # Create MIME message
-                message = MIMEText(self.body, "plain")
-                message["To"] = self.to
-                message["Subject"] = self.subject
-
-                if self.cc:
-                    message["Cc"] = self.cc
-                if self.bcc:
-                    message["Bcc"] = self.bcc
-
-                # Encode message
-                base64.urlsafe_b64encode(message.as_bytes()).decode("utf-8")
-
-                # Mock send
-                message_id = f"msg_{hash(self.subject + self.to)}"
-                result = {
-                    "success": True,
-                    "message_id": message_id,
+                    "message_id": result.get("data", {}).get("id"),
+                    "thread_id": result.get("data", {}).get("threadId"),
                     "to": self.to,
                     "subject": self.subject,
-                    "sent_via": "direct",
-                    "message": "Email sent successfully (mock). In production, this would send via Gmail API.",
-                }
-
-            # Add note about production setup
-            result["note"] = "This is a mock implementation. Set up Gmail API OAuth2 for production use."
-
-            return json.dumps(result, indent=2)
+                    "sent_via": "composio",
+                    "message": "Email sent successfully via Composio Gmail integration"
+                }, indent=2)
+            else:
+                return json.dumps({
+                    "success": False,
+                    "error": result.get("error", "Unknown error"),
+                    "message": "Failed to send email"
+                }, indent=2)
 
         except Exception as e:
-            return json.dumps({"error": f"Error sending email: {str(e)}"})
+            return json.dumps({
+                "error": f"Error sending email: {str(e)}",
+                "type": type(e).__name__
+            }, indent=2)
 
 
 if __name__ == "__main__":

@@ -24,7 +24,7 @@ class ExtractPreferences(BaseTool):
         ..., description="Type of interaction being analyzed"
     )
 
-    context: str = Field(
+    additional_context: str = Field(
         default="", description="Optional JSON string with additional context (e.g., recipient, subject, draft content)"
     )
 
@@ -45,8 +45,8 @@ class ExtractPreferences(BaseTool):
 
             # Build context if provided
             context_info = ""
-            if self.context:
-                context_info = f"\n\nAdditional Context: {self.context}"
+            if self.additional_context:
+                context_info = f"\n\nAdditional Context: {self.additional_context}"
 
             # Create prompt for preference extraction
             system_prompt = """You are an expert at identifying user preferences from text.

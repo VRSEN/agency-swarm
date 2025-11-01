@@ -1,8 +1,8 @@
-from ceo import ceo
+from ceo.ceo import ceo
 from dotenv import load_dotenv
-from email_specialist import email_specialist
-from memory_manager import memory_manager
-from voice_handler import voice_handler
+from email_specialist.email_specialist import email_specialist
+from memory_manager.memory_manager import memory_manager
+from voice_handler.voice_handler import voice_handler
 
 from agency_swarm import Agency
 
@@ -11,15 +11,13 @@ load_dotenv()
 # Agency with Orchestrator-Workers pattern
 # CEO coordinates all workflow through sequential handoffs
 agency = Agency(
-    [
+    agency_chart=[
         ceo,  # Entry point
         [ceo, voice_handler],  # CEO <-> Voice Handler
         [ceo, email_specialist],  # CEO <-> Email Specialist
         [ceo, memory_manager],  # CEO <-> Memory Manager
     ],
     shared_instructions="./agency_manifesto.md",
-    temperature=0.5,
-    max_prompt_tokens=25000,
 )
 
 if __name__ == "__main__":

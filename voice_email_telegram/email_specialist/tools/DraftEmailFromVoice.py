@@ -23,7 +23,7 @@ class DraftEmailFromVoice(BaseTool):
         "ExtractEmailIntent",
     )
 
-    context: str = Field(
+    user_context: str = Field(
         default="{}",
         description="JSON string containing user preferences (signature, common phrases, style guidelines)",
     )
@@ -42,9 +42,9 @@ class DraftEmailFromVoice(BaseTool):
             return json.dumps({"error": "OPENAI_API_KEY not found in environment variables"})
 
         try:
-            # Parse intent and context
+            # Parse intent and user_context
             intent_data = json.loads(self.intent)
-            context_data = json.loads(self.context) if self.context else {}
+            context_data = json.loads(self.user_context) if self.user_context else {}
 
             # Validate required fields
             if "recipient" not in intent_data or intent_data["recipient"] == "MISSING":
@@ -145,7 +145,7 @@ if __name__ == "__main__":
         }
     )
     context = json.dumps({"signature": "Best regards,\nSarah Johnson", "tone_preference": "professional but friendly"})
-    tool = DraftEmailFromVoice(intent=intent, context=context)
+    tool = DraftEmailFromVoice(intent=intent, user_context=context)
     result = tool.run()
     print(result)
 
@@ -162,7 +162,7 @@ if __name__ == "__main__":
         }
     )
     context = json.dumps({"signature": "Thanks!\nAlex"})
-    tool = DraftEmailFromVoice(intent=intent, context=context)
+    tool = DraftEmailFromVoice(intent=intent, user_context=context)
     result = tool.run()
     print(result)
 
