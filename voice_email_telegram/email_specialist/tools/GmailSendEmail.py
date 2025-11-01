@@ -79,8 +79,7 @@ class GmailSendEmail(BaseTool):
             result = client.tools.execute(
                 "GMAIL_SEND_EMAIL",
                 email_params,
-                user_id=entity_id,
-                dangerously_skip_version_check=True
+                user_id=entity_id
             )
 
             # Format response
