@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
 GmailCreateDraft Tool
-Creates email drafts in Gmail using Composio SDK.
-Uses VALIDATED pattern from FINAL_VALIDATION_SUMMARY.md
+Creates email drafts in Gmail using Composio REST API.
+UPDATED: Uses REST API instead of SDK (SDK has compatibility issues).
 """
 import json
 import os
+import requests
 
-from composio import Composio
 from dotenv import load_dotenv
 from pydantic import Field
 
@@ -18,10 +18,10 @@ load_dotenv()
 
 class GmailCreateDraft(BaseTool):
     """
-    Creates an email draft in Gmail using Composio SDK.
+    Creates an email draft in Gmail using Composio REST API.
     Stores the draft without sending it, allowing for review and modification before sending.
 
-    This tool uses the VALIDATED Composio SDK pattern with GMAIL_CREATE_EMAIL_DRAFT action.
+    This tool uses the Composio REST API with GMAIL_CREATE_EMAIL_DRAFT action.
     """
 
     to: str = Field(
@@ -51,30 +51,22 @@ class GmailCreateDraft(BaseTool):
 
     def run(self):
         """
-        Creates a draft in Gmail via Composio SDK.
+        Creates a draft in Gmail via Composio REST API.
         Returns JSON string with draft ID, success status, and message.
-
-        Uses the validated pattern:
-        - Composio client with API key
-        - GMAIL_CREATE_EMAIL_DRAFT action
-        - user_id=entity_id for authentication
         """
         # Get Composio credentials from environment
         api_key = os.getenv("COMPOSIO_API_KEY")
-        entity_id = os.getenv("GMAIL_ENTITY_ID")
+        entity_id = os.getenv("GMAIL_CONNECTION_ID")
 
         # Validate credentials
         if not api_key or not entity_id:
             return json.dumps({
                 "success": False,
-                "error": "Missing Composio credentials. Set COMPOSIO_API_KEY and GMAIL_ENTITY_ID in .env",
+                "error": "Missing Composio credentials. Set COMPOSIO_API_KEY and GMAIL_CONNECTION_ID in .env",
                 "draft_id": None
             }, indent=2)
 
         try:
-            # Initialize Composio client (VALIDATED PATTERN)
-            client = Composio(api_key=api_key)
-
             # Prepare draft parameters
             draft_params = {
                 "recipient_email": self.to,
@@ -90,15 +82,25 @@ class GmailCreateDraft(BaseTool):
             if self.bcc:
                 draft_params["bcc"] = self.bcc.split(',') if isinstance(self.bcc, str) else self.bcc
 
-            # Execute GMAIL_CREATE_EMAIL_DRAFT via Composio (VALIDATED PATTERN)
-            result = client.tools.execute(
-                "GMAIL_CREATE_EMAIL_DRAFT",
-                draft_params,
-                user_id=entity_id  # CRITICAL: Uses entity_id for authentication
-            )
+            # Prepare API request
+            url = "https://backend.composio.dev/api/v2/actions/GMAIL_CREATE_EMAIL_DRAFT/execute"
+            headers = {
+                "X-API-Key": api_key,
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "connectedAccountId": entity_id,
+                "input": draft_params
+            }
+
+            # Execute via Composio REST API
+            response = requests.post(url, headers=headers, json=payload, timeout=30)
+            response.raise_for_status()
+
+            result = response.json()
 
             # Check if draft creation was successful
-            if result.get("successful"):
+            if result.get("successfull") or result.get("data"):
                 draft_data = result.get("data", {})
                 draft_id = draft_data.get("id", "unknown")
 
@@ -109,7 +111,7 @@ class GmailCreateDraft(BaseTool):
                     "subject": self.subject,
                     "body_preview": self.body[:100] + "..." if len(self.body) > 100 else self.body,
                     "message": f"Draft created successfully with ID: {draft_id}",
-                    "created_via": "composio_sdk",
+                    "created_via": "composio_rest_api",
                     "thread_id": draft_data.get("threadId"),
                     "raw_data": draft_data
                 }, indent=2)
@@ -124,6 +126,14 @@ class GmailCreateDraft(BaseTool):
                     "raw_response": result
                 }, indent=2)
 
+        except requests.exceptions.RequestException as e:
+            return json.dumps({
+                "success": False,
+                "error": f"API request failed: {str(e)}",
+                "error_type": "RequestException",
+                "draft_id": None,
+                "message": "Draft creation failed due to an error"
+            }, indent=2)
         except Exception as e:
             # Handle unexpected errors
             return json.dumps({
@@ -141,7 +151,7 @@ if __name__ == "__main__":
     Tests various draft creation scenarios.
     """
     print("=" * 80)
-    print("TESTING GmailCreateDraft (Composio SDK)")
+    print("TESTING GmailCreateDraft (Composio REST API)")
     print("=" * 80)
 
     # Test 1: Simple draft
@@ -150,7 +160,7 @@ if __name__ == "__main__":
     tool = GmailCreateDraft(
         to="john@example.com",
         subject="Test Email",
-        body="This is a test email body created via Composio SDK."
+        body="This is a test email body created via Composio REST API."
     )
     result = tool.run()
     print(result)
@@ -248,23 +258,17 @@ Project Manager
     result = tool.run()
     print(result)
 
-    # Test 6: Missing credentials (error test)
-    print("\n[TEST 6] Test error handling (credential check):")
-    print("-" * 80)
-    print("NOTE: This test validates that the tool handles missing credentials gracefully.")
-    print("If credentials are present, this will create a draft (expected behavior).")
-
     print("\n" + "=" * 80)
     print("TEST SUITE COMPLETED")
     print("=" * 80)
     print("\nProduction Setup Instructions:")
     print("1. Set COMPOSIO_API_KEY in .env file")
-    print("2. Set GMAIL_ENTITY_ID in .env file (your Composio connected account)")
+    print("2. Set GMAIL_CONNECTION_ID in .env file (your Composio connected account)")
     print("3. Ensure Gmail integration is connected via Composio dashboard")
     print("4. GMAIL_CREATE_EMAIL_DRAFT action must be enabled for your integration")
-    print("\nValidated Pattern Used:")
-    print("- Composio SDK with client.tools.execute()")
+    print("\nREST API Pattern Used:")
+    print("- Direct REST API call to https://backend.composio.dev/api/v2/actions")
     print("- Action: GMAIL_CREATE_EMAIL_DRAFT")
-    print("- Authentication: user_id=entity_id")
+    print("- Authentication: connectedAccountId in payload")
     print("- Returns: JSON with success, draft_id, and message")
     print("=" * 80)

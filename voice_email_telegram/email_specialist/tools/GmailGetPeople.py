@@ -2,16 +2,16 @@
 """
 GmailGetPeople Tool - Get detailed information about a specific person/contact.
 
-Based on validated pattern from FINAL_VALIDATION_SUMMARY.md
-Uses Composio SDK client.tools.execute() with GMAIL_GET_PEOPLE action.
+UPDATED: Uses Composio REST API directly instead of SDK (SDK has compatibility issues).
+This approach matches the working GmailFetchEmails.py implementation.
 
 This tool retrieves complete contact information for a specific person using their
 resource name from the People API. Use GmailSearchPeople first to find the resource_name.
 """
 import json
 import os
+import requests
 
-from composio import Composio
 from dotenv import load_dotenv
 from pydantic import Field
 
@@ -54,103 +54,155 @@ class GmailGetPeople(BaseTool):
     """
 
     resource_name: str = Field(
-        ...,
-        description="People API resource name (required). Format: 'people/123' or 'people/c1234567890'. "
-                    "Obtain this from GmailSearchPeople results. Example: 'people/c1234567890'"
+        default="",
+        description="People API resource name. Format: 'people/123' or 'people/c1234567890'. "
+                    "Obtain this from GmailSearchPeople results. Leave empty to list 'Other Contacts'."
     )
 
     person_fields: str = Field(
         default="names,emailAddresses,phoneNumbers,photos,addresses,organizations,birthdays,biographies",
         description="Comma-separated list of fields to retrieve. Default includes most common fields. "
-                    "Available fields: names, emailAddresses, phoneNumbers, photos, addresses, organizations, "
+                    "Available: names, emailAddresses, phoneNumbers, photos, addresses, organizations, "
                     "birthdays, events, biographies, urls, relations, sipAddresses, skills, interests, "
                     "occupations, genders, clientData, userDefined, metadata"
     )
 
-    user_id: str = Field(
-        default="me",
-        description="Gmail user ID. Default is 'me' for the authenticated user."
+    other_contacts: bool = Field(
+        default=False,
+        description="If True, retrieve 'Other Contacts' (people interacted with but not saved), ignoring resource_name. Default is False."
+    )
+
+    page_size: int = Field(
+        default=100,
+        description="Number of 'Other Contacts' to return per page. Only used when other_contacts=True. Default is 100."
+    )
+
+    page_token: str = Field(
+        default="",
+        description="Pagination token for 'Other Contacts'. Only used when other_contacts=True."
     )
 
     def run(self):
         """
-        Executes GMAIL_GET_PEOPLE via Composio SDK.
+        Executes GMAIL_GET_PEOPLE via Composio REST API.
 
         Returns:
             JSON string with:
             - success: bool - Whether fetch was successful
-            - person: dict - Complete person object with all requested fields
+            - person: dict - Complete person object with all requested fields (single person mode)
+            - people: list - List of people (when other_contacts=True)
             - resource_name: str - Resource name used
             - fields_returned: list - Fields that were successfully retrieved
             - error: str - Error message if failed
         """
         # Get Composio credentials
         api_key = os.getenv("COMPOSIO_API_KEY")
-        entity_id = os.getenv("GMAIL_ENTITY_ID")
+        connection_id = os.getenv("GMAIL_CONNECTION_ID")
 
-        if not api_key or not entity_id:
+        if not api_key or not connection_id:
             return json.dumps({
                 "success": False,
-                "error": "Missing Composio credentials. Set COMPOSIO_API_KEY and GMAIL_ENTITY_ID in .env",
+                "error": "Missing Composio credentials. Set COMPOSIO_API_KEY and GMAIL_CONNECTION_ID in .env",
                 "person": None
             }, indent=2)
 
         try:
-            # Strip and validate resource_name
-            cleaned_resource_name = self.resource_name.strip() if self.resource_name else ""
+            # Validate resource_name when not using other_contacts mode
+            if not self.other_contacts:
+                cleaned_resource_name = self.resource_name.strip() if self.resource_name else ""
 
-            if not cleaned_resource_name:
+                if not cleaned_resource_name:
+                    return json.dumps({
+                        "success": False,
+                        "error": "resource_name cannot be empty when other_contacts=False. Provide a People API resource name like 'people/c1234567890' or set other_contacts=True",
+                        "person": None
+                    }, indent=2)
+
+                # Validate resource_name format
+                if not cleaned_resource_name.startswith("people/"):
+                    return json.dumps({
+                        "success": False,
+                        "error": f"Invalid resource_name format: '{cleaned_resource_name}'. Must start with 'people/' (e.g., 'people/c1234567890')",
+                        "person": None
+                    }, indent=2)
+
+            # Prepare API request
+            url = "https://backend.composio.dev/api/v2/actions/GMAIL_GET_PEOPLE/execute"
+            headers = {
+                "X-API-Key": api_key,
+                "Content-Type": "application/json"
+            }
+
+            # Build input parameters
+            input_params = {
+                "person_fields": self.person_fields,
+                "other_contacts": self.other_contacts
+            }
+
+            if self.other_contacts:
+                # Other Contacts mode - list mode
+                input_params["page_size"] = self.page_size
+                if self.page_token and self.page_token.strip():
+                    input_params["page_token"] = self.page_token.strip()
+            else:
+                # Single person mode
+                input_params["resource_name"] = cleaned_resource_name
+
+            payload = {
+                "connectedAccountId": connection_id,
+                "input": input_params
+            }
+
+            # Execute via Composio REST API
+            response = requests.post(url, headers=headers, json=payload, timeout=30)
+            response.raise_for_status()
+
+            result = response.json()
+
+            # Extract data from response
+            if result.get("successfull") or result.get("data"):
+                data = result.get("data", {})
+
+                if self.other_contacts:
+                    # Other Contacts mode - list of people
+                    people = data.get("otherContacts", [])
+                    next_page_token = data.get("nextPageToken", "")
+
+                    # Format people
+                    formatted_people = [self._format_person_data(p) for p in people]
+
+                    return json.dumps({
+                        "success": True,
+                        "count": len(formatted_people),
+                        "people": formatted_people,
+                        "next_page_token": next_page_token,
+                        "has_more": bool(next_page_token),
+                        "other_contacts": True
+                    }, indent=2)
+                else:
+                    # Single person mode
+                    formatted_person = self._format_person_data(data)
+                    fields_returned = list(formatted_person.keys())
+
+                    return json.dumps({
+                        "success": True,
+                        "resource_name": cleaned_resource_name,
+                        "person": formatted_person,
+                        "fields_returned": fields_returned,
+                        "other_contacts": False
+                    }, indent=2)
+            else:
                 return json.dumps({
                     "success": False,
-                    "error": "resource_name cannot be empty. Provide a People API resource name like 'people/c1234567890'",
+                    "error": result.get("error", "Unknown error from Composio API"),
                     "person": None
                 }, indent=2)
 
-            # Validate resource_name format (after stripping)
-            if not cleaned_resource_name.startswith("people/"):
-                return json.dumps({
-                    "success": False,
-                    "error": f"Invalid resource_name format: '{cleaned_resource_name}'. Must start with 'people/' (e.g., 'people/c1234567890')",
-                    "person": None
-                }, indent=2)
-
-            # Initialize Composio client
-            client = Composio(api_key=api_key)
-
-            # Execute GMAIL_GET_PEOPLE via Composio
-            result = client.tools.execute(
-                "GMAIL_GET_PEOPLE",
-                {
-                    "resource_name": cleaned_resource_name,
-                    "person_fields": self.person_fields,
-                    "user_id": self.user_id
-                },
-                user_id=entity_id
-            )
-
-            # Extract person data from response
-            person_data = result.get("data", {})
-
-            # Format person information for easier consumption
-            formatted_person = self._format_person_data(person_data)
-
-            # Get list of fields that were returned
-            fields_returned = list(formatted_person.keys())
-
-            # Format successful response
-            return json.dumps({
-                "success": True,
-                "resource_name": cleaned_resource_name,
-                "person": formatted_person,
-                "fields_returned": fields_returned,
-                "raw_data": person_data  # Include raw data for advanced use
-            }, indent=2)
-
-        except Exception as e:
+        except requests.exceptions.RequestException as e:
             return json.dumps({
                 "success": False,
-                "error": f"Error fetching person details: {str(e)}",
-                "type": type(e).__name__,
+                "error": f"API request failed: {str(e)}",
+                "type": "RequestException",
                 "resource_name": self.resource_name,
                 "person": None
             }, indent=2)
@@ -308,11 +360,12 @@ if __name__ == "__main__":
     result = tool.run()
     print(result)
 
-    # Test 3: Get person with extended fields
-    print("\n3. Get person with extended fields:")
+    # Test 3: List Other Contacts
+    print("\n3. List Other Contacts:")
     tool = GmailGetPeople(
-        resource_name="people/c1234567890",
-        person_fields="names,emailAddresses,phoneNumbers,urls,relations,skills,interests"
+        other_contacts=True,
+        page_size=10,
+        person_fields="names,emailAddresses,phoneNumbers"
     )
     result = tool.run()
     print(result)
@@ -335,40 +388,13 @@ if __name__ == "__main__":
     result = tool.run()
     print(result)
 
-    # Test 6: Minimal fields (just names)
-    print("\n6. Get person with minimal fields (names only):")
-    tool = GmailGetPeople(
-        resource_name="people/c1234567890",
-        person_fields="names"
-    )
-    result = tool.run()
-    print(result)
-
-    # Test 7: Photos and profile fields
-    print("\n7. Get person with photos and profile fields:")
-    tool = GmailGetPeople(
-        resource_name="people/c1234567890",
-        person_fields="names,photos,biographies,urls"
-    )
-    result = tool.run()
-    print(result)
-
-    # Test 8: Work-related fields
-    print("\n8. Get person with work-related fields:")
-    tool = GmailGetPeople(
-        resource_name="people/c1234567890",
-        person_fields="names,emailAddresses,phoneNumbers,organizations,addresses"
-    )
-    result = tool.run()
-    print(result)
-
     print("\n" + "=" * 80)
     print("Test completed!")
     print("\nUsage Examples:")
     print("- Get complete profile: person_fields='names,emailAddresses,phoneNumbers,photos,addresses,organizations,birthdays,biographies'")
     print("- Get basic contact: person_fields='names,emailAddresses,phoneNumbers'")
     print("- Get work info: person_fields='names,emailAddresses,organizations'")
-    print("- Get social info: person_fields='names,urls,biographies'")
+    print("- List Other Contacts: other_contacts=True")
     print("\nUse Cases:")
     print("- Fetch complete contact details for CRM")
     print("- Get all available information about a person")
@@ -380,6 +406,6 @@ if __name__ == "__main__":
     print("3. Fetch full details: GmailGetPeople(resource_name='people/c1234567890')")
     print("\nProduction Requirements:")
     print("- Set COMPOSIO_API_KEY in .env")
-    print("- Set GMAIL_ENTITY_ID in .env")
+    print("- Set GMAIL_CONNECTION_ID in .env")
     print("- Gmail account connected via Composio")
     print("- People API scope enabled in Gmail connection")

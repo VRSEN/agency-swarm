@@ -5,12 +5,12 @@ GmailListThreads.py - List email threads (conversations) with search capabilitie
 Purpose: List Gmail threads (conversations containing multiple messages) with optional search filtering.
 A thread represents an email conversation that may contain multiple related messages.
 
-Pattern: Uses VALIDATED Composio SDK pattern from FINAL_VALIDATION_SUMMARY.md
+UPDATED: Uses Composio REST API instead of SDK (SDK has compatibility issues).
 """
 import json
 import os
+import requests
 
-from composio import Composio
 from dotenv import load_dotenv
 from pydantic import Field
 
@@ -46,7 +46,7 @@ class GmailListThreads(BaseTool):
 
     def run(self):
         """
-        Executes GMAIL_LIST_THREADS via Composio SDK.
+        Executes GMAIL_LIST_THREADS via Composio REST API.
 
         Returns:
             JSON string containing:
@@ -57,12 +57,12 @@ class GmailListThreads(BaseTool):
         """
         # Get Composio credentials from environment
         api_key = os.getenv("COMPOSIO_API_KEY")
-        entity_id = os.getenv("GMAIL_ENTITY_ID")
+        entity_id = os.getenv("GMAIL_CONNECTION_ID")
 
         if not api_key or not entity_id:
             return json.dumps({
                 "success": False,
-                "error": "Missing Composio credentials. Set COMPOSIO_API_KEY and GMAIL_ENTITY_ID in .env",
+                "error": "Missing Composio credentials. Set COMPOSIO_API_KEY and GMAIL_CONNECTION_ID in .env",
                 "count": 0,
                 "threads": []
             }, indent=2)
@@ -77,9 +77,6 @@ class GmailListThreads(BaseTool):
                     "threads": []
                 }, indent=2)
 
-            # Initialize Composio client
-            client = Composio(api_key=api_key)
-
             # Prepare parameters for GMAIL_LIST_THREADS
             params = {
                 "max_results": self.max_results,
@@ -90,25 +87,51 @@ class GmailListThreads(BaseTool):
             if self.query:
                 params["query"] = self.query
 
-            # Execute GMAIL_LIST_THREADS via Composio SDK
-            result = client.tools.execute(
-                "GMAIL_LIST_THREADS",
-                params,
-                user_id=entity_id
-            )
+            # Prepare API request
+            url = "https://backend.composio.dev/api/v2/actions/GMAIL_LIST_THREADS/execute"
+            headers = {
+                "X-API-Key": api_key,
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "connectedAccountId": entity_id,
+                "input": params
+            }
+
+            # Execute via Composio REST API
+            response = requests.post(url, headers=headers, json=payload, timeout=30)
+            response.raise_for_status()
+
+            result = response.json()
 
             # Extract threads from response
-            threads = result.get("data", {}).get("threads", [])
+            if result.get("successfull") or result.get("data"):
+                threads = result.get("data", {}).get("threads", [])
 
-            # Format response
+                # Format response
+                return json.dumps({
+                    "success": True,
+                    "count": len(threads),
+                    "threads": threads,
+                    "query": self.query if self.query else "all threads",
+                    "max_results": self.max_results
+                }, indent=2)
+            else:
+                return json.dumps({
+                    "success": False,
+                    "error": result.get("error", "Unknown error"),
+                    "count": 0,
+                    "threads": []
+                }, indent=2)
+
+        except requests.exceptions.RequestException as e:
             return json.dumps({
-                "success": True,
-                "count": len(threads),
-                "threads": threads,
-                "query": self.query if self.query else "all threads",
-                "max_results": self.max_results
+                "success": False,
+                "error": f"API request failed: {str(e)}",
+                "type": "RequestException",
+                "count": 0,
+                "threads": []
             }, indent=2)
-
         except Exception as e:
             return json.dumps({
                 "success": False,
@@ -217,7 +240,6 @@ if __name__ == "__main__":
     print("- 'after:2024/11/01' - Threads after date")
     print("- 'before:2024/11/01' - Threads before date")
     print("\nProduction ready:")
-    print("- Uses validated Composio SDK pattern")
-    print("- Requires COMPOSIO_API_KEY and GMAIL_ENTITY_ID in .env")
-    print("- Uses user_id=entity_id (NOT dangerously_skip_version_check)")
+    print("- Uses Composio REST API pattern")
+    print("- Requires COMPOSIO_API_KEY and GMAIL_CONNECTION_ID in .env")
     print("- Returns JSON with success, count, threads array")

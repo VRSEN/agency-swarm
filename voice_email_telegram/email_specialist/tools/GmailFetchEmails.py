@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-GmailFetchEmails Tool - Fetches Gmail emails using Composio SDK with advanced search.
+GmailFetchEmails Tool - Fetches Gmail emails using Composio REST API.
 
-Based on validated pattern from FINAL_VALIDATION_SUMMARY.md
-Uses Composio SDK client.tools.execute() with GMAIL_FETCH_EMAILS action.
+UPDATED: Uses Composio REST API directly instead of SDK (SDK has compatibility issues).
+This approach matches the working Rube MCP implementation.
 """
 import json
 import os
+import requests
 
-from composio import Composio
 from dotenv import load_dotenv
 from pydantic import Field
 
@@ -53,7 +53,7 @@ class GmailFetchEmails(BaseTool):
 
     def run(self):
         """
-        Executes GMAIL_FETCH_EMAILS via Composio SDK.
+        Executes GMAIL_FETCH_EMAILS via Composio REST API.
 
         Returns:
             JSON string with:
@@ -65,59 +65,74 @@ class GmailFetchEmails(BaseTool):
         """
         # Get Composio credentials
         api_key = os.getenv("COMPOSIO_API_KEY")
-        entity_id = os.getenv("GMAIL_ENTITY_ID")
+        entity_id = os.getenv("GMAIL_CONNECTION_ID")  # Use connection ID (ca_*) not entity ID
 
         if not api_key or not entity_id:
             return json.dumps({
                 "success": False,
-                "error": "Missing Composio credentials. Set COMPOSIO_API_KEY and GMAIL_ENTITY_ID in .env",
+                "error": "Missing Composio credentials. Set COMPOSIO_API_KEY and GMAIL_CONNECTION_ID in .env",
                 "count": 0,
                 "messages": []
             }, indent=2)
 
         try:
             # Validate max_results range
-            if self.max_results < 1 or self.max_results > 100:
+            if self.max_results < 1 or self.max_results > 500:
                 return json.dumps({
                     "success": False,
-                    "error": "max_results must be between 1 and 100",
+                    "error": "max_results must be between 1 and 500",
                     "count": 0,
                     "messages": []
                 }, indent=2)
 
-            # Initialize Composio client
-            client = Composio(api_key=api_key)
-
-            # Execute GMAIL_FETCH_EMAILS via Composio
-            result = client.tools.execute(
-                "GMAIL_FETCH_EMAILS",
-                {
+            # Prepare API request
+            url = "https://backend.composio.dev/api/v2/actions/GMAIL_FETCH_EMAILS/execute"
+            headers = {
+                "X-API-Key": api_key,
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "connectedAccountId": entity_id,
+                "input": {
                     "query": self.query,
                     "max_results": self.max_results,
-                    "user_id": "me",  # Gmail API user identifier
-                    "include_payload": True,  # Include full email content
-                    "verbose": False  # Fast mode for better performance
-                },
-                user_id=entity_id
-            )
+                    "user_id": "me",
+                    "include_payload": True,
+                    "verbose": True
+                }
+            }
+
+            # Execute via Composio REST API
+            response = requests.post(url, headers=headers, json=payload, timeout=30)
+            response.raise_for_status()
+
+            result = response.json()
 
             # Extract messages from response
-            messages = result.get("data", {}).get("messages", [])
+            if result.get("successfull") or result.get("data"):
+                messages = result.get("data", {}).get("messages", [])
 
-            # Format successful response
-            return json.dumps({
-                "success": True,
-                "count": len(messages),
-                "messages": messages,
-                "query": self.query if self.query else "all recent emails",
-                "max_results": self.max_results
-            }, indent=2)
+                # Format successful response
+                return json.dumps({
+                    "success": True,
+                    "count": len(messages),
+                    "messages": messages,
+                    "query": self.query if self.query else "all recent emails",
+                    "max_results": self.max_results
+                }, indent=2)
+            else:
+                return json.dumps({
+                    "success": False,
+                    "error": result.get("error", "Unknown error from Composio API"),
+                    "count": 0,
+                    "messages": []
+                }, indent=2)
 
-        except Exception as e:
+        except requests.exceptions.RequestException as e:
             return json.dumps({
                 "success": False,
-                "error": f"Error fetching emails: {str(e)}",
-                "type": type(e).__name__,
+                "error": f"API request failed: {str(e)}",
+                "type": "RequestException",
                 "count": 0,
                 "messages": [],
                 "query": self.query

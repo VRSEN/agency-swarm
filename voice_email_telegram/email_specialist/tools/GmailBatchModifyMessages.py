@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 import json
 import os
+import requests
 
-from composio import Composio
 from dotenv import load_dotenv
 from pydantic import Field
 
@@ -45,16 +45,16 @@ class GmailBatchModifyMessages(BaseTool):
 
     def run(self):
         """
-        Executes GMAIL_BATCH_MODIFY_MESSAGES via Composio SDK.
+        Executes GMAIL_BATCH_MODIFY_MESSAGES via Composio REST API.
         Returns JSON string with success status and modified message count.
         """
         # Get Composio credentials
         api_key = os.getenv("COMPOSIO_API_KEY")
-        entity_id = os.getenv("GMAIL_ENTITY_ID")
+        entity_id = os.getenv("GMAIL_CONNECTION_ID")
 
         if not api_key or not entity_id:
             return json.dumps({
-                "error": "Missing Composio credentials. Set COMPOSIO_API_KEY and GMAIL_ENTITY_ID in .env"
+                "error": "Missing Composio credentials. Set COMPOSIO_API_KEY and GMAIL_CONNECTION_ID in .env"
             })
 
         try:
@@ -69,9 +69,6 @@ class GmailBatchModifyMessages(BaseTool):
                     "error": "At least one of add_label_ids or remove_label_ids must be provided"
                 })
 
-            # Initialize Composio client
-            client = Composio(api_key=api_key)
-
             # Prepare batch modify parameters
             params = {
                 "message_ids": self.message_ids,
@@ -85,15 +82,25 @@ class GmailBatchModifyMessages(BaseTool):
             if self.remove_label_ids:
                 params["remove_label_ids"] = self.remove_label_ids
 
-            # Execute Gmail batch modify via Composio
-            result = client.tools.execute(
-                "GMAIL_BATCH_MODIFY_MESSAGES",
-                params,
-                user_id=entity_id
-            )
+            # Prepare API request
+            url = "https://backend.composio.dev/api/v2/actions/GMAIL_BATCH_MODIFY_MESSAGES/execute"
+            headers = {
+                "X-API-Key": api_key,
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "connectedAccountId": entity_id,
+                "input": params
+            }
+
+            # Execute via Composio REST API
+            response = requests.post(url, headers=headers, json=payload, timeout=30)
+            response.raise_for_status()
+
+            result = response.json()
 
             # Format response
-            if result.get("successful"):
+            if result.get("successfull") or result.get("data"):
                 # Build operation summary
                 operations = []
                 if self.add_label_ids:
@@ -117,6 +124,11 @@ class GmailBatchModifyMessages(BaseTool):
                     "message": "Failed to modify messages"
                 }, indent=2)
 
+        except requests.exceptions.RequestException as e:
+            return json.dumps({
+                "error": f"API request failed: {str(e)}",
+                "type": "RequestException"
+            }, indent=2)
         except Exception as e:
             return json.dumps({
                 "error": f"Error modifying messages: {str(e)}",
@@ -245,7 +257,7 @@ if __name__ == "__main__":
     print("- SPAM: Spam messages")
     print("- TRASH: Trashed messages")
     print("\nProduction usage:")
-    print("- Requires valid Composio API key and Gmail entity ID")
+    print("- Requires valid Composio API key and Gmail connection ID")
     print("- Message IDs must be valid Gmail message IDs")
     print("- Label IDs are case-sensitive")
     print("- Can combine multiple add/remove operations in one call")

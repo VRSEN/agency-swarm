@@ -1,5 +1,6 @@
 import json
 import os
+import requests
 
 from dotenv import load_dotenv
 from pydantic import Field
@@ -19,91 +20,91 @@ class GmailGetDraft(BaseTool):
 
     def run(self):
         """
-        Fetches the draft from Gmail API.
+        Fetches the draft from Gmail via Composio REST API.
         Returns JSON string with draft content (to, subject, body).
         """
-        gmail_token = os.getenv("GMAIL_ACCESS_TOKEN")
-        if not gmail_token:
-            return json.dumps({"error": "GMAIL_ACCESS_TOKEN not found. Please authenticate with Gmail API."})
+        # Get Composio credentials
+        api_key = os.getenv("COMPOSIO_API_KEY")
+        entity_id = os.getenv("GMAIL_CONNECTION_ID")
+
+        if not api_key or not entity_id:
+            return json.dumps({
+                "error": "Missing Composio credentials. Set COMPOSIO_API_KEY and GMAIL_CONNECTION_ID in .env"
+            })
 
         try:
-            # In production, this would make an API call to Gmail
-            # For now, return mock data based on draft_id
-
-            # Mock draft data
-            mock_drafts = {
-                "draft_abc123": {
-                    "to": "john@acmecorp.com",
-                    "subject": "Shipment Delay Update",
-                    "body": "Hi John,\n\nI wanted to reach out regarding your recent order. Unfortunately, "
-                    "we've experienced a slight delay in shipping. The order will now arrive on Tuesday instead of "
-                    "Monday as originally scheduled.\n\nWe apologize for any inconvenience this may cause and "
-                    "appreciate your understanding.\n\nBest regards,\nSarah Johnson",
-                },
-                "draft_xyz789": {
-                    "to": "sarah@supplier.com",
-                    "subject": "Reorder Blue Widgets",
-                    "body": (
-                        "Hey Sarah,\n\nHope you're doing well! We'd like to reorder the blue widgets - "
-                        "we'll need 500 units this time.\n\nLet me know when you can get those shipped "
-                        "out.\n\nThanks!\nUser"
-                    ),
-                },
+            # Prepare API request
+            url = "https://backend.composio.dev/api/v2/actions/GMAIL_GET_DRAFT/execute"
+            headers = {
+                "X-API-Key": api_key,
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "connectedAccountId": entity_id,
+                "input": {
+                    "draft_id": self.draft_id,
+                    "user_id": "me"
+                }
             }
 
-            if self.draft_id in mock_drafts:
-                draft_data = mock_drafts[self.draft_id]
-                result = {
+            # Execute via Composio REST API
+            response = requests.post(url, headers=headers, json=payload, timeout=30)
+            response.raise_for_status()
+
+            result = response.json()
+
+            # Check if successful
+            if result.get("successfull") or result.get("data"):
+                draft_data = result.get("data", {})
+
+                return json.dumps({
                     "success": True,
                     "draft_id": self.draft_id,
-                    "to": draft_data["to"],
-                    "subject": draft_data["subject"],
-                    "body": draft_data["body"],
-                    "message": "Draft retrieved (mock data). In production, this would fetch from Gmail API.",
-                }
+                    "draft_data": draft_data,
+                    "message": "Draft retrieved successfully"
+                }, indent=2)
             else:
-                # Generate generic mock data for unknown draft IDs
-                result = {
-                    "success": True,
-                    "draft_id": self.draft_id,
-                    "to": "recipient@example.com",
-                    "subject": "Email Draft",
-                    "body": "This is a mock draft body for testing purposes.",
-                    "message": "Draft retrieved (mock). In production, this would fetch actual draft from Gmail.",
-                }
+                return json.dumps({
+                    "success": False,
+                    "error": result.get("error", "Unknown error"),
+                    "message": f"Failed to retrieve draft {self.draft_id}"
+                }, indent=2)
 
-            result["note"] = "This is a mock implementation. Set up Gmail API OAuth2 for production use."
-
-            return json.dumps(result, indent=2)
-
+        except requests.exceptions.RequestException as e:
+            return json.dumps({
+                "error": f"API request failed: {str(e)}",
+                "type": "RequestException"
+            }, indent=2)
         except Exception as e:
-            return json.dumps({"error": f"Error retrieving draft: {str(e)}"})
+            return json.dumps({
+                "error": f"Error retrieving draft: {str(e)}",
+                "type": type(e).__name__
+            }, indent=2)
 
 
 if __name__ == "__main__":
     print("Testing GmailGetDraft...")
 
     # Test 1: Get known draft
-    print("\n1. Get known mock draft:")
+    print("\n1. Get draft:")
     tool = GmailGetDraft(draft_id="draft_abc123")
     result = tool.run()
     print(result)
 
-    # Test 2: Get another known draft
-    print("\n2. Get another mock draft:")
+    # Test 2: Get another draft
+    print("\n2. Get another draft:")
     tool = GmailGetDraft(draft_id="draft_xyz789")
     result = tool.run()
     print(result)
 
     # Test 3: Get unknown draft
-    print("\n3. Get unknown draft (generates generic mock):")
+    print("\n3. Get unknown draft:")
     tool = GmailGetDraft(draft_id="draft_unknown_123")
     result = tool.run()
     print(result)
 
     print("\nTest completed!")
-    print("\nProduction implementation:")
-    print("- Use service.users().drafts().get(userId='me', id=draft_id)")
-    print("- Decode base64 message content")
-    print("- Parse MIME message to extract to, subject, body")
-    print("- Handle multipart messages (plain text + HTML)")
+    print("\nProduction setup:")
+    print("- Requires COMPOSIO_API_KEY in .env")
+    print("- Requires GMAIL_CONNECTION_ID in .env")
+    print("- Gmail connected via Composio dashboard")

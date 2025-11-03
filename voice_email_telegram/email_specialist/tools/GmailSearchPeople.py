@@ -2,13 +2,13 @@
 """
 GmailSearchPeople Tool - Search Gmail contacts and people you've interacted with.
 
-Based on validated pattern from FINAL_VALIDATION_SUMMARY.md
-Uses Composio SDK client.tools.execute() with GMAIL_SEARCH_PEOPLE action.
+UPDATED: Uses Composio REST API directly instead of SDK (SDK has compatibility issues).
+This approach matches the working GmailFetchEmails.py implementation.
 """
 import json
 import os
+import requests
 
-from composio import Composio
 from dotenv import load_dotenv
 from pydantic import Field
 
@@ -45,12 +45,22 @@ class GmailSearchPeople(BaseTool):
 
     page_size: int = Field(
         default=10,
-        description="Maximum number of results to return (1-100). Default is 10."
+        description="Maximum number of results to return (1-30, API caps at 30). Default is 10."
+    )
+
+    other_contacts: bool = Field(
+        default=False,
+        description="Include 'Other Contacts' (people interacted with but not saved). Default is False."
+    )
+
+    person_fields: str = Field(
+        default="names,emailAddresses,photos",
+        description="Comma-separated fields to return (e.g., 'names,emailAddresses,phoneNumbers'). Default includes names, emails, photos."
     )
 
     def run(self):
         """
-        Executes GMAIL_SEARCH_PEOPLE via Composio SDK.
+        Executes GMAIL_SEARCH_PEOPLE via Composio REST API.
 
         Returns:
             JSON string with:
@@ -62,12 +72,12 @@ class GmailSearchPeople(BaseTool):
         """
         # Get Composio credentials
         api_key = os.getenv("COMPOSIO_API_KEY")
-        entity_id = os.getenv("GMAIL_ENTITY_ID")
+        connection_id = os.getenv("GMAIL_CONNECTION_ID")
 
-        if not api_key or not entity_id:
+        if not api_key or not connection_id:
             return json.dumps({
                 "success": False,
-                "error": "Missing Composio credentials. Set COMPOSIO_API_KEY and GMAIL_ENTITY_ID in .env",
+                "error": "Missing Composio credentials. Set COMPOSIO_API_KEY and GMAIL_CONNECTION_ID in .env",
                 "count": 0,
                 "people": []
             }, indent=2)
@@ -82,72 +92,90 @@ class GmailSearchPeople(BaseTool):
                     "people": []
                 }, indent=2)
 
-            # Validate page_size range
-            if self.page_size < 1 or self.page_size > 100:
+            # Validate page_size range (API caps at 30)
+            if self.page_size < 1 or self.page_size > 30:
                 return json.dumps({
                     "success": False,
-                    "error": "page_size must be between 1 and 100",
+                    "error": "page_size must be between 1 and 30",
                     "count": 0,
                     "people": []
                 }, indent=2)
 
-            # Initialize Composio client
-            client = Composio(api_key=api_key)
-
-            # Execute GMAIL_SEARCH_PEOPLE via Composio
-            result = client.tools.execute(
-                "GMAIL_SEARCH_PEOPLE",
-                {
+            # Prepare API request
+            url = "https://backend.composio.dev/api/v2/actions/GMAIL_SEARCH_PEOPLE/execute"
+            headers = {
+                "X-API-Key": api_key,
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "connectedAccountId": connection_id,
+                "input": {
                     "query": self.query.strip(),
-                    "page_size": self.page_size,
-                    "read_mask": "names,emailAddresses,photos"  # Fields to retrieve
-                },
-                user_id=entity_id
-            )
+                    "pageSize": self.page_size,
+                    "other_contacts": self.other_contacts,
+                    "person_fields": self.person_fields
+                }
+            }
+
+            # Execute via Composio REST API
+            response = requests.post(url, headers=headers, json=payload, timeout=30)
+            response.raise_for_status()
+
+            result = response.json()
 
             # Extract people from response
-            people_data = result.get("data", {})
-            people = people_data.get("people", [])
+            if result.get("successfull") or result.get("data"):
+                people_data = result.get("data", {})
+                people = people_data.get("results", [])
 
-            # Format people for easier consumption
-            formatted_people = []
-            for person in people:
-                # Extract names
-                names = person.get("names", [])
-                display_name = names[0].get("displayName", "") if names else "Unknown"
+                # Format people for easier consumption
+                formatted_people = []
+                for person in people:
+                    person_obj = person.get("person", {})
 
-                # Extract email addresses
-                emails = person.get("emailAddresses", [])
-                email_list = [email.get("value", "") for email in emails if email.get("value")]
+                    # Extract names
+                    names = person_obj.get("names", [])
+                    display_name = names[0].get("displayName", "") if names else "Unknown"
 
-                # Extract photo URL
-                photos = person.get("photos", [])
-                photo_url = photos[0].get("url", "") if photos else ""
+                    # Extract email addresses
+                    emails = person_obj.get("emailAddresses", [])
+                    email_list = [email.get("value", "") for email in emails if email.get("value")]
 
-                # Build formatted contact
-                formatted_person = {
-                    "name": display_name,
-                    "emails": email_list,
-                    "photo_url": photo_url,
-                    "resource_name": person.get("resourceName", "")
-                }
+                    # Extract photo URL
+                    photos = person_obj.get("photos", [])
+                    photo_url = photos[0].get("url", "") if photos else ""
 
-                formatted_people.append(formatted_person)
+                    # Build formatted contact
+                    formatted_person = {
+                        "name": display_name,
+                        "emails": email_list,
+                        "photo_url": photo_url,
+                        "resource_name": person_obj.get("resourceName", "")
+                    }
 
-            # Format successful response
-            return json.dumps({
-                "success": True,
-                "count": len(formatted_people),
-                "people": formatted_people,
-                "query": self.query,
-                "page_size": self.page_size
-            }, indent=2)
+                    formatted_people.append(formatted_person)
 
-        except Exception as e:
+                # Format successful response
+                return json.dumps({
+                    "success": True,
+                    "count": len(formatted_people),
+                    "people": formatted_people,
+                    "query": self.query,
+                    "page_size": self.page_size
+                }, indent=2)
+            else:
+                return json.dumps({
+                    "success": False,
+                    "error": result.get("error", "Unknown error from Composio API"),
+                    "count": 0,
+                    "people": []
+                }, indent=2)
+
+        except requests.exceptions.RequestException as e:
             return json.dumps({
                 "success": False,
-                "error": f"Error searching people: {str(e)}",
-                "type": type(e).__name__,
+                "error": f"API request failed: {str(e)}",
+                "type": "RequestException",
                 "count": 0,
                 "people": [],
                 "query": self.query
@@ -176,9 +204,9 @@ if __name__ == "__main__":
     result = tool.run()
     print(result)
 
-    # Test 4: Search by partial email
-    print("\n4. Search by partial email (domain):")
-    tool = GmailSearchPeople(query="@company.com", page_size=10)
+    # Test 4: Search with other_contacts enabled
+    print("\n4. Search with other_contacts enabled:")
+    tool = GmailSearchPeople(query="Michael", page_size=10, other_contacts=True)
     result = tool.run()
     print(result)
 
@@ -190,7 +218,7 @@ if __name__ == "__main__":
 
     # Test 6: Invalid page_size (should error)
     print("\n6. Test with invalid page_size (should error):")
-    tool = GmailSearchPeople(query="Michael", page_size=150)
+    tool = GmailSearchPeople(query="Michael", page_size=50)
     result = tool.run()
     print(result)
 
@@ -200,21 +228,13 @@ if __name__ == "__main__":
     result = tool.run()
     print(result)
 
-    # Test 8: Search with special characters
-    print("\n8. Search with special characters:")
-    tool = GmailSearchPeople(query="O'Brien", page_size=5)
-    result = tool.run()
-    print(result)
-
-    # Test 9: Limit results to 3
-    print("\n9. Search with small page size:")
-    tool = GmailSearchPeople(query="John", page_size=3)
-    result = tool.run()
-    print(result)
-
-    # Test 10: Search with very common name
-    print("\n10. Search with common name (larger page size):")
-    tool = GmailSearchPeople(query="David", page_size=20)
+    # Test 8: Search with additional person fields
+    print("\n8. Search with phone numbers included:")
+    tool = GmailSearchPeople(
+        query="David",
+        page_size=5,
+        person_fields="names,emailAddresses,phoneNumbers,photos"
+    )
     result = tool.run()
     print(result)
 
@@ -224,7 +244,6 @@ if __name__ == "__main__":
     print("- 'John Smith' - Search by full name")
     print("- 'Sarah' - Search by first name")
     print("- 'john@example.com' - Search by email address")
-    print("- '@company.com' - Search by email domain")
     print("- 'Johnson' - Search by last name")
     print("\nUse Cases:")
     print("- Find someone's email address before sending")
@@ -233,6 +252,6 @@ if __name__ == "__main__":
     print("- Get contact details for drafting emails")
     print("\nProduction Requirements:")
     print("- Set COMPOSIO_API_KEY in .env")
-    print("- Set GMAIL_ENTITY_ID in .env")
+    print("- Set GMAIL_CONNECTION_ID in .env")
     print("- Gmail account connected via Composio")
     print("- People API scope enabled in Gmail connection")

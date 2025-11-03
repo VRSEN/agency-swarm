@@ -1,7 +1,7 @@
 import json
 import os
+import requests
 
-from composio import Composio
 from dotenv import load_dotenv
 from pydantic import Field
 
@@ -30,16 +30,16 @@ class GmailSendEmail(BaseTool):
 
     def run(self):
         """
-        Sends an email via Gmail API using Composio.
+        Sends an email via Gmail API using Composio REST API.
         Returns JSON string with message ID and send confirmation.
         """
         # Get Composio credentials
         api_key = os.getenv("COMPOSIO_API_KEY")
-        entity_id = os.getenv("GMAIL_ENTITY_ID")
+        entity_id = os.getenv("GMAIL_CONNECTION_ID")
 
         if not api_key or not entity_id:
             return json.dumps({
-                "error": "Missing Composio credentials. Set COMPOSIO_API_KEY and GMAIL_ENTITY_ID in .env"
+                "error": "Missing Composio credentials. Set COMPOSIO_API_KEY and GMAIL_CONNECTION_ID in .env"
             })
 
         try:
@@ -55,9 +55,6 @@ class GmailSendEmail(BaseTool):
                 return json.dumps({
                     "error": "Missing required fields: to, subject, and body are required"
                 })
-
-            # Initialize Composio client
-            client = Composio(api_key=api_key)
 
             # Prepare email parameters
             email_params = {
@@ -75,19 +72,30 @@ class GmailSendEmail(BaseTool):
             if self.bcc:
                 email_params["bcc"] = self.bcc.split(',') if isinstance(self.bcc, str) else self.bcc
 
-            # Execute Gmail send via Composio
-            result = client.tools.execute(
-                "GMAIL_SEND_EMAIL",
-                email_params,
-                user_id=entity_id
-            )
+            # Prepare API request
+            url = "https://backend.composio.dev/api/v2/actions/GMAIL_SEND_EMAIL/execute"
+            headers = {
+                "X-API-Key": api_key,
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "connectedAccountId": entity_id,
+                "input": email_params
+            }
+
+            # Execute via Composio REST API
+            response = requests.post(url, headers=headers, json=payload, timeout=30)
+            response.raise_for_status()
+
+            result = response.json()
 
             # Format response
-            if result.get("successful"):
+            if result.get("successfull") or result.get("data"):
+                data = result.get("data", {})
                 return json.dumps({
                     "success": True,
-                    "message_id": result.get("data", {}).get("id"),
-                    "thread_id": result.get("data", {}).get("threadId"),
+                    "message_id": data.get("id"),
+                    "thread_id": data.get("threadId"),
                     "to": self.to,
                     "subject": self.subject,
                     "sent_via": "composio",
@@ -100,6 +108,11 @@ class GmailSendEmail(BaseTool):
                     "message": "Failed to send email"
                 }, indent=2)
 
+        except requests.exceptions.RequestException as e:
+            return json.dumps({
+                "error": f"API request failed: {str(e)}",
+                "type": "RequestException"
+            }, indent=2)
         except Exception as e:
             return json.dumps({
                 "error": f"Error sending email: {str(e)}",
@@ -161,7 +174,6 @@ if __name__ == "__main__":
 
     print("\nTest completed!")
     print("\nProduction setup:")
-    print("- Requires Gmail API OAuth2 authentication")
-    print("- Install google-api-python-client")
-    print("- Use service.users().messages().send() for actual sending")
-    print("- Use service.users().drafts().send() for draft sending")
+    print("- Requires COMPOSIO_API_KEY in .env")
+    print("- Requires GMAIL_CONNECTION_ID in .env")
+    print("- Gmail connected via Composio dashboard")

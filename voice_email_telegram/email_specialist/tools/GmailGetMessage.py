@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 import json
 import os
+import requests
 
-from composio import Composio
 from dotenv import load_dotenv
 from pydantic import Field
 
@@ -24,16 +24,16 @@ class GmailGetMessage(BaseTool):
 
     def run(self):
         """
-        Fetches detailed message information via Composio Gmail API.
+        Fetches detailed message information via Composio REST API.
         Returns JSON string with complete message data.
         """
         # Get Composio credentials
         api_key = os.getenv("COMPOSIO_API_KEY")
-        entity_id = os.getenv("GMAIL_ENTITY_ID")
+        entity_id = os.getenv("GMAIL_CONNECTION_ID")
 
         if not api_key or not entity_id:
             return json.dumps({
-                "error": "Missing Composio credentials. Set COMPOSIO_API_KEY and GMAIL_ENTITY_ID in .env"
+                "error": "Missing Composio credentials. Set COMPOSIO_API_KEY and GMAIL_CONNECTION_ID in .env"
             }, indent=2)
 
         # Validate message_id
@@ -43,28 +43,35 @@ class GmailGetMessage(BaseTool):
             }, indent=2)
 
         try:
-            # Initialize Composio client
-            client = Composio(api_key=api_key)
-
-            # Execute Gmail fetch message by ID via Composio
-            result = client.tools.execute(
-                "GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID",
-                {
+            # Prepare API request
+            url = "https://backend.composio.dev/api/v2/actions/GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID/execute"
+            headers = {
+                "X-API-Key": api_key,
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "connectedAccountId": entity_id,
+                "input": {
                     "message_id": self.message_id
-                },
-                user_id=entity_id
-            )
+                }
+            }
+
+            # Execute via Composio REST API
+            response = requests.post(url, headers=headers, json=payload, timeout=30)
+            response.raise_for_status()
+
+            result = response.json()
 
             # Check if successful
-            if result.get("successful"):
+            if result.get("successfull") or result.get("data"):
                 message_data = result.get("data", {})
 
                 # Extract key fields for easier access
-                headers = message_data.get("payload", {}).get("headers", [])
+                headers_list = message_data.get("payload", {}).get("headers", [])
 
                 # Helper function to get header value
                 def get_header(name):
-                    for header in headers:
+                    for header in headers_list:
                         if header.get("name", "").lower() == name.lower():
                             return header.get("value", "")
                     return ""
@@ -93,8 +100,8 @@ class GmailGetMessage(BaseTool):
 
                     return body_text
 
-                payload = message_data.get("payload", {})
-                body_data = get_body_text(payload)
+                payload_data = message_data.get("payload", {})
+                body_data = get_body_text(payload_data)
 
                 # Format response with structured data
                 return json.dumps({
@@ -122,6 +129,12 @@ class GmailGetMessage(BaseTool):
                     "message": f"Failed to fetch message {self.message_id}"
                 }, indent=2)
 
+        except requests.exceptions.RequestException as e:
+            return json.dumps({
+                "error": f"API request failed: {str(e)}",
+                "type": "RequestException",
+                "message_id": self.message_id
+            }, indent=2)
         except Exception as e:
             return json.dumps({
                 "error": f"Error fetching message: {str(e)}",
