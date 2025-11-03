@@ -1,0 +1,206 @@
+---
+title: "Multimodal Tool Outputs"
+description: "Return images and files from your tools."
+icon: "image"
+---
+
+## What This Feature Unlocks
+
+Returning images and files from the tools enables real agentic feedback loops on completely new modalities.
+
+For example, instead of dumping all the data into an agent, and hoping for the best, you can generate a visualization or analyze PDF reports, and allow the agent to provide insights based on that output. Just like a real data analyst.
+
+This saves your context window and unlocks autonomous agentic workflows for a lot of new use cases:
+
+## New Use Cases
+
+<CardGroup cols={2}>
+  <Card title="Software Development" icon="code">
+    Agents can check websites autonomously and iterate until all elements are properly positioned, enabling them to tackle complex projects without manual screenshot feedback.
+  </Card>
+  <Card title="Brand Asset Generation" icon="paintbrush">
+    Provide brand guidelines, logos, and messaging, then let agents iterate on image and video generation (including Sora 2) until outputs fully match your expectations.
+  </Card>
+  <Card title="Screen-Aware Assistance" icon="eye">
+    Build agents that help visually impaired individuals navigate websites or create customer support agents that see the user's current webpage for better assistance.
+  </Card>
+  <Card title="Data Analytics" icon="chart-area">
+    Generate visual graphs and analyze PDF reports, then let agents provide insights based on these outputs without overloading the context window.
+  </Card>
+</CardGroup>
+
+## Output Formats
+
+### Images (PNG, JPG)
+
+To return an image from a tool, you can either:
+
+1. Use the `ToolOutputImage` class.
+2. Return a dict with the `type` set to `"image"` and either `image_url` (URL or data URL) or `file_id`.
+3. Use our convenience `tool_output_image_from_path` function.
+
+```python
+from agency_swarm import BaseTool, ToolOutputImage, ToolOutputImageDict
+from agency_swarm.tools.utils import tool_output_image_from_path
+from pydantic import Field
+
+class FetchGalleryImage(BaseTool):
+    """Return a static gallery image."""
+    detail: str = Field(default="auto", description="Level of detail")
+
+    def run(self) -> ToolOutputImage:
+        return ToolOutputImage(
+            image_url="https://upload.wikimedia.org/wikipedia/commons/0/0c/GoldenGateBridge-001.jpg",
+            detail=self.detail,
+        )
+
+class FetchGalleryImageDict(BaseTool):
+    """Dict variant of the same image output."""
+    detail: str = Field(default="auto", description="Level of detail")
+
+    def run(self) -> ToolOutputImageDict:
+        return {
+            "type": "image",
+            "image_url": "https://upload.wikimedia.org/wikipedia/commons/0/0c/GoldenGateBridge-001.jpg",
+            "detail": self.detail,
+        }
+
+class FetchLocalImage(BaseTool):
+    """Load an image from disk using the helper."""
+    path: str = Field(default="examples/data/landscape_scene.png", description="Image to publish")
+
+    def run(self) -> ToolOutputImage:
+        return tool_output_image_from_path(self.path, detail="auto")
+```
+
+### Files (PDF)
+
+Similarly to return a file from a tool:
+
+```python
+from agency_swarm import BaseTool, ToolOutputFileContent
+from agency_swarm.tools.utils import tool_output_file_from_path, tool_output_file_from_url
+from pydantic import Field
+
+class FetchReferenceReport(BaseTool):
+    """Return a reference PDF hosted remotely."""
+    source_url: str = Field(
+        default="https://raw.githubusercontent.com/VRSEN/agency-swarm/main/examples/data/sample_report.pdf",
+        description="Remote file to share",
+    )
+
+    def run(self) -> ToolOutputFileContent:
+        return ToolOutputFileContent(file_url=self.source_url)
+
+class FetchLocalReport(BaseTool):
+    """Return a report stored on disk."""
+    path: str = Field(default="examples/data/sample_report.pdf", description="Local file path")
+
+    def run(self) -> ToolOutputFileContent:
+        return tool_output_file_from_path(self.path)
+
+class FetchRemoteReport(BaseTool):
+    """Return a remote file using the helper."""
+    archive_url: str = Field(default="https://example.com/document.pdf", description="File to expose")
+
+    def run(self) -> ToolOutputFileContent:
+        return tool_output_file_from_url(self.archive_url)
+```
+
+<Note>
+When you choose `file_data`, include `filename` to hint a download name; URL-based outputs rely on the remote server metadata instead.
+</Note>
+
+<Warning>
+`tool_output_file_from_path` only supports PDF files.
+</Warning>
+
+
+### Combining Multiple Outputs
+
+Return multiple outputs by returning a list from `run`.
+
+```python
+from agency_swarm import BaseTool, ToolOutputFileContent, ToolOutputImage, ToolOutputText
+
+class PrepareShowcase(BaseTool):
+    """Return rich media and a short description."""
+    teaser_a: str = "https://example.com/teaser-a.png"
+    teaser_b: str = "https://example.com/teaser-b.png"
+    report_id: str = "file-report-123"
+
+    def run(self) -> list:
+        return [
+            ToolOutputImage(image_url=self.teaser_a),
+            ToolOutputImage(image_url=self.teaser_b),
+            ToolOutputText(text="Gallery updated: Teaser A and Teaser B now live."),
+            ToolOutputFileContent(file_id=self.report_id),
+        ]
+```
+
+## Complete Example (Chart generation tool)
+
+Here's a complete example using `BaseTool`:
+
+```python
+from agency_swarm import Agent, BaseTool, ToolOutputImage
+from pydantic import Field
+import base64
+import matplotlib.pyplot as plt
+import io
+
+class GenerateChartTool(BaseTool):
+    """Generate a bar chart from data."""
+    
+    data: list[float] = Field(..., description="Data points for the chart")
+    labels: list[str] = Field(..., description="Labels for each data point")
+    
+    def run(self) -> ToolOutputImage:
+        """Generate and return the chart as a base64-encoded image."""
+        # Create the chart
+        fig, ax = plt.subplots()
+        ax.bar(self.labels, self.data)
+        
+        # Convert to base64
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png')
+        buf.seek(0)
+        image_base64 = base64.b64encode(buf.read()).decode('utf-8')
+        plt.close()
+        
+        # Return in multimodal format
+        return ToolOutputImage(image_url=f"data:image/png;base64,{image_base64}")
+
+# Create an agent with the tool
+agent = Agent(
+    name="DataViz",
+    instructions="You generate charts and visualizations for data analysis.",
+    tools=[GenerateChartTool]
+)
+```
+
+<Note>
+`function_tool` decorators and `BaseTool` classes both support multimodal outputs in the exact same way.
+</Note>
+
+```python
+from agency_swarm import ToolOutputImage, function_tool
+
+@function_tool
+def fetch_gallery_image() -> ToolOutputImage:
+    return ToolOutputImage(
+        image_url="https://upload.wikimedia.org/wikipedia/commons/0/0c/GoldenGateBridge-001.jpg",
+        detail="auto",
+    )
+```
+
+## Tips & Best Practices
+
+- Base64-encoded images can be large. Use file references for large content.
+- Compress screenshots and other visuals before returning them to cut token usage without sacrificing clarity.
+- Include the image names in your textual response whenever you return more than one image so the agent can reference them unambiguously.
+
+## Real Examples
+
+- [TBD: Include repo from YouTube video]
+- [`examples/multimodal_outputs.py`](https://github.com/VRSEN/agency-swarm/blob/main/examples/multimodal_outputs.py)

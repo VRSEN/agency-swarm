@@ -7,7 +7,12 @@ message content and tool call results.
 
 import logging
 
-from agents.items import MessageOutputItem
+from agents import RunResult
+from agents.items import MessageOutputItem, ToolCallItem
+from openai.types.responses import ResponseFileSearchToolCall
+from openai.types.responses.response_file_search_tool_call import Result as ResponseFileSearchResult
+from openai.types.responses.response_output_message import ResponseOutputMessage
+from openai.types.responses.response_output_text import AnnotationFileCitation, ResponseOutputText
 
 logger = logging.getLogger(__name__)
 
@@ -33,24 +38,17 @@ def extract_direct_file_annotations(
 
     for msg_item in assistant_messages:
         message = msg_item.raw_item
-        if not hasattr(message, "content") or not message.content:
+        if not isinstance(message, ResponseOutputMessage):
             continue
 
-        # Look for annotations in each content item
-        annotations_found = []
+        annotations_found: list[dict] = []
         for content_item in message.content:
-            if hasattr(content_item, "annotations") and content_item.annotations:
-                # Extract file citations from annotations
-                for annotation in content_item.annotations:
-                    if hasattr(annotation, "type") and annotation.type == "file_citation":
-                        citation_info = {
-                            "file_id": getattr(annotation, "file_id", "unknown"),
-                            "filename": getattr(annotation, "filename", "unknown"),
-                            "index": getattr(annotation, "index", 0),
-                            "type": annotation.type,
-                            "method": "direct_file",
-                        }
-                        annotations_found.append(citation_info)
+            if not isinstance(content_item, ResponseOutputText):
+                continue
+            annotations = content_item.annotations or []
+            for annotation in annotations:
+                if isinstance(annotation, AnnotationFileCitation):
+                    annotations_found.append(_build_file_citation(annotation))
 
         # Store citations mapped to message ID
         if annotations_found:
@@ -60,23 +58,31 @@ def extract_direct_file_annotations(
     return citations_by_message
 
 
-def extract_vector_store_citations(run_result):
+def extract_vector_store_citations(run_result: RunResult) -> list[dict]:
     """Extract FileSearch tool citations from RunResult.new_items"""
     citations = []
 
     for item in run_result.new_items:
-        if hasattr(item, "raw_item") and hasattr(item.raw_item, "type"):
-            if item.raw_item.type == "file_search_call":
-                tool_call = item.raw_item
-                if hasattr(tool_call, "results") and tool_call.results:
-                    for result in tool_call.results:
-                        citation = {
-                            "method": "vector_store",
-                            "file_id": getattr(result, "file_id", "unknown"),
-                            "text": getattr(result, "text", ""),
-                            "tool_call_id": tool_call.id,
-                        }
-                        citations.append(citation)
+        if not isinstance(item, ToolCallItem):
+            continue
+
+        tool_call = item.raw_item
+        if not isinstance(tool_call, ResponseFileSearchToolCall):
+            continue
+
+        results: list[ResponseFileSearchResult] = tool_call.results or []
+        tool_call_id = tool_call.id
+
+        for result in results:
+            file_id, text = _resolve_file_search_result(result)
+            citations.append(
+                {
+                    "method": "vector_store",
+                    "file_id": file_id,
+                    "text": text,
+                    "tool_call_id": tool_call_id,
+                }
+            )
 
     return citations
 
@@ -147,3 +153,26 @@ def display_citations(citations, citation_type=""):
             print(f"     Content: {content_preview}")
         print()
     return True
+
+
+def _build_file_citation(annotation: AnnotationFileCitation) -> dict:
+    return {
+        "file_id": annotation.file_id,
+        "filename": annotation.filename,
+        "index": annotation.index,
+        "type": annotation.type,
+        "method": "direct_file",
+    }
+
+
+def _resolve_file_search_result(result: ResponseFileSearchResult) -> tuple[str, str]:
+    file_id_value = result.file_id
+    if isinstance(file_id_value, str) and file_id_value:
+        file_id = file_id_value
+    elif file_id_value is None:
+        file_id = "unknown"
+    else:
+        file_id = str(file_id_value)
+
+    text = result.text or ""
+    return file_id, text

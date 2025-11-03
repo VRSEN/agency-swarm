@@ -37,7 +37,16 @@ def _create_future() -> asyncio.Future[Any]:
 
 
 class StreamingRunResponse(AsyncGenerator[StreamEvent | dict[str, Any]]):
-    """Async iterable wrapper that exposes the final RunResultStreaming."""
+    """Wrap an async generator while preserving the eventual ``RunResultStreaming``.
+
+    The wrapper mirrors the generator interface (`__aiter__`, `asend`, etc.) so
+    callers can stream events immediately, but it also tracks the final result
+    (or exception) using an internal future. Guardrail retries and nested
+    streams adopt each other's futures via :meth:`_adopt_stream`, ensuring a
+    single completion signal. Consumers can inspect :attr:`final_result`,
+    :attr:`final_output`, or await :meth:`wait_final_result` even after the
+    streaming generator has been closed.
+    """
 
     def __init__(
         self,
@@ -51,6 +60,7 @@ class StreamingRunResponse(AsyncGenerator[StreamEvent | dict[str, Any]]):
         self._inner: StreamingRunResponse | None = None
         self._on_resolve = on_resolve
         self._pending_result: RunResultStreaming | None = None
+        self._pending_result_set = False
         self._pending_exception: BaseException | None = None
 
     def __aiter__(self) -> AsyncGenerator[StreamEvent | dict[str, Any]]:
@@ -74,9 +84,36 @@ class StreamingRunResponse(AsyncGenerator[StreamEvent | dict[str, Any]]):
         await self._generator.aclose()
 
     def _adopt_stream(self, other: "StreamingRunResponse") -> None:
+        existing_future = self._final_future
         self._inner = other
-        self._final_future = other._final_future
+
+        if existing_future is not None:
+            existing_loop = existing_future.get_loop()
+
+            if other._final_future is None:
+                other._final_future = existing_future
+            elif other._final_future is not existing_future:
+
+                def _sync_future(source: asyncio.Future[Any]) -> None:
+                    if existing_future.done():
+                        return
+                    if source.cancelled():
+                        existing_loop.call_soon_threadsafe(existing_future.cancel)
+                        return
+                    try:
+                        result = source.result()
+                    except BaseException as error:  # pragma: no cover - defensive
+                        existing_loop.call_soon_threadsafe(existing_future.set_exception, error)
+                        return
+                    existing_loop.call_soon_threadsafe(existing_future.set_result, result)
+
+                other._final_future.add_done_callback(_sync_future)
+                if other._final_future.done():
+                    _sync_future(other._final_future)
+
+        self._final_future = other._final_future or existing_future
         self._pending_result = other._pending_result
+        self._pending_result_set = getattr(other, "_pending_result_set", False)
         self._pending_exception = other._pending_exception
 
     def _has_inner_stream(self) -> bool:
@@ -100,9 +137,11 @@ class StreamingRunResponse(AsyncGenerator[StreamEvent | dict[str, Any]]):
             self._final_future.set_exception(self._pending_exception)
             self._pending_exception = None
             self._pending_result = None
-        elif self._pending_result is not None and not self._final_future.done():
+            self._pending_result_set = False
+        elif self._pending_result_set and not self._final_future.done():
             self._final_future.set_result(self._pending_result)
             self._pending_result = None
+            self._pending_result_set = False
 
     def _resolve_final_result(self, result: RunResultStreaming | None) -> None:
         if self._inner is not None:
@@ -118,10 +157,12 @@ class StreamingRunResponse(AsyncGenerator[StreamEvent | dict[str, Any]]):
                 self._final_future = _create_future()
             except RuntimeError:
                 self._pending_result = result
+                self._pending_result_set = True
                 self._pending_exception = None
                 return
         if not self._final_future.done():
             self._final_future.set_result(result)
+        self._pending_result_set = False
 
     def _resolve_exception(self, exc: BaseException) -> None:
         if self._inner is not None:
@@ -137,10 +178,12 @@ class StreamingRunResponse(AsyncGenerator[StreamEvent | dict[str, Any]]):
                 self._final_future = _create_future()
             except RuntimeError:
                 self._pending_result = None
+                self._pending_result_set = False
                 self._pending_exception = exc
                 return
         if not self._final_future.done():
             self._final_future.set_exception(exc)
+        self._pending_result_set = False
 
     @property
     def final_result(self) -> RunResultStreaming | None:
@@ -206,16 +249,29 @@ def _update_names_from_event(
     return current_stream_agent_name, current_agent_run_id
 
 
+def _resolve_caller_agent(payload: Any, default: str | None) -> str | None:
+    """Extract caller agent metadata from heterogeneous payload structures."""
+    caller_agent: str | None
+    if isinstance(payload, dict):
+        caller_agent = payload.get("callerAgent")
+    else:
+        caller_agent = getattr(payload, "callerAgent", None)
+    if isinstance(caller_agent, str) and caller_agent:
+        return caller_agent
+    return default
+
+
 def _persist_run_item_if_needed(
     event: Any,
     *,
     agent: "Agent",
     sender_name: str | None,
     parent_run_id: str | None,
+    run_trace_id: str,
     current_stream_agent_name: str,
     current_agent_run_id: str,
     agency_context: "AgencyContext | None",
-    persistence_candidates: list[tuple[RunItem, str, str]],
+    persistence_candidates: list[tuple[RunItem, str, str, str | None]],
 ) -> None:
     """Persist run item to thread manager with agency metadata if applicable."""
     run_item_obj = getattr(event, "item", None)
@@ -233,30 +289,39 @@ def _persist_run_item_if_needed(
         single_citation_map = extract_direct_file_annotations([run_item_obj], agent_name=agent.name)
         MessageFormatter.add_citations_to_message(run_item_obj, item_dict, single_citation_map, is_streaming=True)
 
+    caller_for_event = _resolve_caller_agent(event, sender_name)
+
     formatted_item = MessageFormatter.add_agency_metadata(
         item_dict,  # type: ignore[arg-type]
         agent=current_stream_agent_name,
-        caller_agent=sender_name,
+        caller_agent=caller_for_event,
         agent_run_id=current_agent_run_id,
         parent_run_id=parent_run_id,
+        run_trace_id=run_trace_id,
     )
     if not MessageFilter.should_filter(formatted_item):
         agency_context.thread_manager.add_messages([formatted_item])  # type: ignore[arg-type]
 
     run_item_id, call_id = _extract_identifiers(run_item_obj)
     if run_item_id or call_id:
-        persistence_candidates.append((run_item_obj, current_stream_agent_name, current_agent_run_id))
+        tool_run_agent = getattr(run_item_obj, "agent", None)
+        tool_agent_name = getattr(tool_run_agent, "name", None) if tool_run_agent is not None else None
+        if not isinstance(tool_agent_name, str) or not tool_agent_name:
+            tool_agent_name = current_stream_agent_name
+
+        persistence_candidates.append((run_item_obj, tool_agent_name, current_agent_run_id, caller_for_event))
 
 
 def _persist_streamed_items(
     *,
     streaming_result: Any,
     history_for_runner: list[TResponseInputItem],
-    persistence_candidates: list[tuple[RunItem, str, str]],
+    persistence_candidates: list[tuple[RunItem, str, str, str | None]],
     collected_items: list[RunItem],
     agent: "Agent",
     sender_name: str | None,
     parent_run_id: str | None,
+    run_trace_id: str,
     fallback_agent_run_id: str,
     agency_context: "AgencyContext",
     initial_saved_count: int,
@@ -274,14 +339,14 @@ def _persist_streamed_items(
     if not new_items:
         return
 
-    id_map: dict[str, tuple[RunItem, str, str]] = {}
-    call_map: dict[str, tuple[RunItem, str, str]] = {}
-    for run_item, agent_name, agent_run_id in reversed(persistence_candidates):
+    id_map: dict[str, tuple[RunItem, str, str, str | None]] = {}
+    call_map: dict[str, tuple[RunItem, str, str, str | None]] = {}
+    for run_item, agent_name, agent_run_id, caller_name in reversed(persistence_candidates):
         run_item_id, call_id = _extract_identifiers(run_item)
         if run_item_id and run_item_id not in id_map:
-            id_map[run_item_id] = (run_item, agent_name, agent_run_id)
+            id_map[run_item_id] = (run_item, agent_name, agent_run_id, caller_name)
         if call_id and call_id not in call_map:
-            call_map[call_id] = (run_item, agent_name, agent_run_id)
+            call_map[call_id] = (run_item, agent_name, agent_run_id, caller_name)
 
     assistant_messages = [item for item in collected_items if isinstance(item, MessageOutputItem)]
     citations_by_message = (
@@ -298,13 +363,18 @@ def _persist_streamed_items(
         run_item_obj: RunItem | None = None
         run_item_id = item_copy.get("id")
         call_id = item_copy.get("call_id")
+        caller_name = _resolve_caller_agent(item_copy, sender_name)
 
+        mapped_values: tuple[RunItem, str, str, str | None] | None = None
         if isinstance(run_item_id, str) and run_item_id in id_map:
-            run_item_obj, current_agent_name, current_agent_run_id = id_map[run_item_id]
+            mapped_values = id_map[run_item_id]
         elif isinstance(call_id, str) and call_id in call_map:
-            run_item_obj, current_agent_name, current_agent_run_id = call_map[call_id]
+            mapped_values = call_map[call_id]
         else:
             run_item_obj = next((ri for ri in collected_items if getattr(ri, "id", None) == run_item_id), None)
+
+        if mapped_values is not None:
+            run_item_obj, current_agent_name, current_agent_run_id, caller_name = mapped_values
 
         item_payload = cast(TResponseInputItem, item_copy)
 
@@ -316,9 +386,10 @@ def _persist_streamed_items(
         formatted_item: TResponseInputItem = MessageFormatter.add_agency_metadata(
             item_payload,
             agent=current_agent_name,
-            caller_agent=sender_name,
+            caller_agent=caller_name,
             agent_run_id=current_agent_run_id,
             parent_run_id=parent_run_id,
+            run_trace_id=run_trace_id,
         )
         items_to_save.append(formatted_item)
 
@@ -340,7 +411,7 @@ def _persist_streamed_items(
         if isinstance(origin := item.get("message_origin"), str)
     }
 
-    hosted_tool_outputs = MessageFormatter.extract_hosted_tool_results(agent, collected_items)
+    hosted_tool_outputs = MessageFormatter.extract_hosted_tool_results(agent, collected_items, sender_name)
     if hosted_tool_outputs:
         filtered_hosted_outputs = MessageFilter.filter_messages(hosted_tool_outputs)  # type: ignore[arg-type]
         for hosted_item in filtered_hosted_outputs:
@@ -365,12 +436,12 @@ def _persist_streamed_items(
     run_ids_to_replace: set[str] = {
         run_id for item in filtered_items if isinstance(run_id := item.get("agent_run_id"), str)
     }
-    for _run_item, _, agent_run_id in persistence_candidates:
+    for _run_item, _, agent_run_id, _caller_name in reversed(persistence_candidates):
         if isinstance(agent_run_id, str):
             run_ids_to_replace.add(agent_run_id)
 
     keys_to_replace: set[tuple[str, str | None, str | None]] = set()
-    for run_item, _, _ in persistence_candidates:
+    for run_item, _, _, _caller_name in reversed(persistence_candidates):
         run_id, call_id = _extract_identifiers(run_item)
         if isinstance(run_id, str):
             keys_to_replace.add(("id", run_id, getattr(run_item, "type", None)))
@@ -476,6 +547,7 @@ def run_stream_with_guardrails(
     kwargs: dict[str, Any],
     current_agent_run_id: str,
     parent_run_id: str | None,
+    run_trace_id: str,
     validation_attempts: int,
     throw_input_guardrail_error: bool,
     result_callback: Callable[[RunResultStreaming], None] | None = None,
@@ -506,7 +578,7 @@ def run_stream_with_guardrails(
             event_queue: asyncio.Queue[Any] = asyncio.Queue(maxsize=10)
             guardrail_exception: BaseException | None = None
             collected_items: list[RunItem] = []
-            persistence_candidates: list[tuple[RunItem, str, str]] = []
+            persistence_candidates: list[tuple[RunItem, str, str, str | None]] = []
             streaming_result: RunResultStreaming | None = None
             initial_saved_count = 0
             if agency_context and agency_context.thread_manager:
@@ -556,6 +628,7 @@ def run_stream_with_guardrails(
                             agency_context=agency_context,
                             sender_name=sender_name,
                             parent_run_id=parent_run_id,
+                            run_trace_id=run_trace_id,
                             current_agent_run_id=current_agent_run_id,
                             exception=e,
                             include_assistant=False,
@@ -663,6 +736,7 @@ def run_stream_with_guardrails(
                         agent=agent,
                         sender_name=sender_name,
                         parent_run_id=parent_run_id,
+                        run_trace_id=run_trace_id,
                         current_stream_agent_name=current_stream_agent_name,
                         current_agent_run_id=current_agent_run_id,
                         agency_context=agency_context,
@@ -681,6 +755,7 @@ def run_stream_with_guardrails(
                             agent=agent,
                             sender_name=sender_name,
                             parent_run_id=parent_run_id,
+                            run_trace_id=run_trace_id,
                             fallback_agent_run_id=current_agent_run_id,
                             agency_context=agency_context,
                             initial_saved_count=initial_saved_count,
@@ -706,6 +781,7 @@ def run_stream_with_guardrails(
                     agency_context=agency_context,
                     sender_name=sender_name,
                     parent_run_id=parent_run_id,
+                    run_trace_id=run_trace_id,
                     current_agent_run_id=current_agent_run_id,
                     exception=guardrail_exception,
                     include_assistant=False,

@@ -1,0 +1,175 @@
+---
+title: "Website Widget"
+description: "Embed the Agencii chat widget on any site in minutes."
+icon: "window"
+---
+
+## Feature Overview
+
+- Launch your existing agent as an embeddable web widget with zero additional hosting.
+- Switch agencies on the fly by updating the widget in the dashboard — no code redeploy needed.
+- Personalize every deployment with optional `additionalInstructions` that shape the assistant's behavior per site.
+
+![Widget preview](/images/integrations/widget/widget_1.png)
+
+## Prerequisites
+
+- Deployed Agency in the Agencii dashboard.
+
+## Quick Start
+
+<Steps>
+  <Step title="Create a new widget">
+    1. In the Agencii dashboard, open **Deploy → Widgets** and create a new widget.
+    2. Configure the widget's name, description, position and conversation starters.
+    3. Customize the widget's appearance by choosing a theme mode, logo, and color scheme.
+    4. Select the agency and any selectable agents.
+    5. Configure advanced settings such as Allowed Domains and auto-open behavior as needed.
+    6. Save changes.
+    7. Test your widget!
+  </Step>
+
+  <Step title="Embed the widget">
+    1. In the Agencii dashboard, open **Deploy → Widgets** and find the widget you created.
+    2. Click the three-dot menu on the right side of the widget row and select **Embed**.
+    ![Embed widget](/images/integrations/widget/widget_2.png)
+    3. Copy the embedding script.
+    4. Paste the script into your website's HTML file (or adjust the script to your needs).
+    5. Load the page and confirm the widget works as expected.
+  </Step>
+
+  <Step title="Share the widget">
+    1. In the Agencii dashboard, open **Deploy → Widgets** and find the widget you created.
+    2. Click the **Share** button on the right side of the widget row.
+    3. This opens a new window with the widget embedded on a blank page.
+
+    ![Live widget embedded on a landing page](/images/integrations/widget/widget_3.png)
+  </Step>
+</Steps>
+
+<Tip>
+You can embed several widgets on the same page by using the embedding script multiple times with different `widgetId`s and `chatContainer` selectors.
+</Tip>
+
+
+<Tip>
+If you are prototyping locally, temporarily add `http://localhost:3000` (or your dev origin) to the widget's allowed domains list if you are using the Allowed Domains feature.
+</Tip>
+
+## Widget Controls
+
+You can control the widget from your site/app by dispatching a `CustomEvent` named **"widget-control"** on `window` with a `detail` payload. The widget listens for this event and performs the requested action.
+
+**Event name:** `widget-control`
+
+**Payload shape:**
+
+```tsx
+interface WidgetControlEventDetail {
+  /** Command name */
+  type: 'open-widget' | 'send-message-to-widget';
+  /** Command-specific payload */
+  data: boolean | string;
+  /** Target widget instance */
+  widgetId: string; // e.g., 'WIDGET_123'
+}
+
+```
+
+**Dispatch pattern:**
+
+```tsx
+window.dispatchEvent(
+  new CustomEvent<WidgetControlEventDetail>('widget-control', {
+    detail: { type, data, widgetId },
+  })
+);
+
+```
+
+> ✅ The widget must be initialized on the page.
+> Replace `WIDGET_ID` with the identifier provided in your widget embed script.
+
+## Commands
+
+### Open or close the widget
+
+Opens or closes the widget UI.
+
+**Type:** `open-widget`
+
+**Data:** `boolean` — `true` to **open**, `false` to **close**.
+
+**Example — open:**
+
+```jsx
+window.dispatchEvent(
+  new CustomEvent('widget-control', {
+    detail: {
+      type: 'open-widget',
+      data: true, // open
+      widgetId: WIDGET_ID,
+    },
+  })
+);
+
+```
+
+**Example — close:**
+
+```jsx
+window.dispatchEvent(
+  new CustomEvent('widget-control', {
+    detail: {
+      type: 'open-widget',
+      data: false, // close
+      widgetId: WIDGET_ID,
+    },
+  })
+);
+
+```
+
+#### Typical use cases
+
+- Bind to a "Chat" / "Support" button to open the widget.
+- Close the widget after a route change or when a modal shows.
+
+### Send a message to the widget
+
+Programmatically sends a text message into the widget (e.g., seed a greeting or pass context).
+This event does not open the widget automatically, so dispatch an `open-widget` event first.
+
+**Type:** `send-message-to-widget`
+
+**Data:** `string` — the message body.
+
+**Example:**
+
+```jsx
+window.dispatchEvent(
+  new CustomEvent('widget-control', {
+    detail: {
+      type: 'send-message-to-widget',
+      data: 'Hi',
+      widgetId: WIDGET_ID,
+    },
+  })
+);
+
+```
+
+## Multiple Widgets on One Page
+
+If you embed multiple widget instances, dispatch events with the **specific** `widgetId` you want to control. The widget code should internally ignore events addressed to other IDs.
+
+```jsx
+const SALES_WIDGET = 'WIDGET_SALES';
+const SUPPORT_WIDGET = 'WIDGET_SUPPORT';
+
+// Open Support, keep Sales unchanged
+window.dispatchEvent(new CustomEvent('widget-control', {
+  detail: { type: 'open-widget', data: true, widgetId: SUPPORT_WIDGET },
+}));
+
+```

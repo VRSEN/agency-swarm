@@ -1,9 +1,6 @@
-import dataclasses
 import json
 import logging
 from typing import Any
-
-from pydantic import BaseModel
 
 try:
     from ag_ui.core import (
@@ -30,40 +27,9 @@ except ImportError as exc:
         "ag_ui.core is required for the AG-UI adapter. Install with `pip install ag-ui-protocol`."
     ) from exc
 
+from agency_swarm.utils.serialization import serialize
+
 logger = logging.getLogger(__name__)
-
-
-# Universal function to serialize any object to a JSON-compatible format
-def serialize(obj, _visited=None):
-    if _visited is None:
-        _visited = set()
-
-    # Check for circular references
-    obj_id = id(obj)
-    if obj_id in _visited:
-        return str(obj)  # Return string representation for circular refs
-
-    if dataclasses.is_dataclass(obj):
-        _visited.add(obj_id)
-        # Use __dict__ to preserve dynamically added attributes like agent and callerAgent
-        result = {k: serialize(v, _visited) for k, v in obj.__dict__.items() if not k.startswith("_")}
-        _visited.discard(obj_id)
-        return result
-    elif isinstance(obj, BaseModel):
-        return {k: serialize(v, _visited) for k, v in obj.model_dump().items()}
-    elif isinstance(obj, list | tuple):
-        return [serialize(item, _visited) for item in obj]
-    elif isinstance(obj, dict):
-        return {k: serialize(v, _visited) for k, v in obj.items()}
-    elif hasattr(obj, "__dict__") and not isinstance(obj, type):
-        # Handle any object with __dict__ (regular dynamic objects)
-        # This ensures circular reference tracking for all objects with attributes
-        _visited.add(obj_id)
-        result = {k: serialize(v, _visited) for k, v in obj.__dict__.items() if not k.startswith("_")}
-        _visited.discard(obj_id)
-        return result
-    else:
-        return str(obj)
 
 
 class AguiAdapter:

@@ -75,6 +75,7 @@ def append_guardrail_feedback(
     agency_context: "AgencyContext | None",
     sender_name: str | None,
     parent_run_id: str | None,
+    run_trace_id: str,
     current_agent_run_id: str,
     exception: BaseException,
     include_assistant: bool,
@@ -98,6 +99,7 @@ def append_guardrail_feedback(
                         caller_agent=sender_name,
                         agent_run_id=current_agent_run_id,
                         parent_run_id=parent_run_id,
+                        run_trace_id=run_trace_id,
                     )
                 )
 
@@ -123,6 +125,7 @@ def append_guardrail_feedback(
                 caller_agent=sender_name,
                 agent_run_id=current_agent_run_id,
                 parent_run_id=parent_run_id,
+                run_trace_id=run_trace_id,
             )
         )
 
@@ -136,4 +139,5 @@ def append_guardrail_feedback(
         agency_context,
         agent_run_id=current_agent_run_id,
         parent_run_id=parent_run_id,
+        run_trace_id=run_trace_id,
     )

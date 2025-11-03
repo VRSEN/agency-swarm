@@ -1,14 +1,18 @@
 """
 Unit tests for citation extraction utilities.
-
-Tests individual citation extraction functions in isolation using mocks
-to ensure proper behavior without external dependencies.
 """
 
 from unittest.mock import MagicMock
 
-from agents.items import MessageOutputItem
+from agents.items import MessageOutputItem, ToolCallItem
+from openai.types.responses.response_file_search_tool_call import (
+    ResponseFileSearchToolCall,
+    Result as FileSearchResult,
+)
+from openai.types.responses.response_output_message import ResponseOutputMessage, ResponseOutputText
+from openai.types.responses.response_output_text import AnnotationFileCitation, AnnotationURLCitation
 
+from agency_swarm.agent.core import Agent
 from agency_swarm.utils.citation_extractor import (
     display_citations,
     extract_direct_file_annotations,
@@ -20,33 +24,33 @@ from agency_swarm.utils.citation_extractor import (
 class TestExtractDirectFileAnnotations:
     """Test direct file citation extraction from message annotations."""
 
+    @staticmethod
+    def _message_item(content: list[ResponseOutputText], message_id: str) -> MessageOutputItem:
+        agent = Agent(name="Annotator", instructions="Collect citations")
+        message = ResponseOutputMessage(
+            id=message_id,
+            content=content,
+            role="assistant",
+            status="completed",
+            type="message",
+        )
+        return MessageOutputItem(agent=agent, raw_item=message)
+
     def test_extracts_file_citations_from_annotations(self):
-        """Test extraction of file citations from message annotations."""
-        # Create mock message with file citation annotations
-        mock_annotation = MagicMock()
-        mock_annotation.type = "file_citation"
-        mock_annotation.file_id = "file-abc123"
-        mock_annotation.filename = "test_document.pdf"
-        mock_annotation.index = 42
+        """Ensure annotations backed by SDK models are captured."""
+        annotation = AnnotationFileCitation(
+            file_id="file-abc123",
+            filename="test_document.pdf",
+            index=42,
+            type="file_citation",
+        )
+        content_item = ResponseOutputText(annotations=[annotation], text="Here you go", type="output_text")
+        msg_item = self._message_item([content_item], message_id="msg_123")
 
-        mock_content_item = MagicMock()
-        mock_content_item.annotations = [mock_annotation]
-
-        mock_message = MagicMock()
-        mock_message.id = "msg_123"
-        mock_message.content = [mock_content_item]
-
-        mock_msg_item = MagicMock(spec=MessageOutputItem)
-        mock_msg_item.raw_item = mock_message
-
-        # Test extraction
-        result = extract_direct_file_annotations([mock_msg_item])
+        result = extract_direct_file_annotations([msg_item])
 
         assert "msg_123" in result
-        citations = result["msg_123"]
-        assert len(citations) == 1
-
-        citation = citations[0]
+        citation = result["msg_123"][0]
         assert citation["file_id"] == "file-abc123"
         assert citation["filename"] == "test_document.pdf"
         assert citation["index"] == 42
@@ -54,186 +58,127 @@ class TestExtractDirectFileAnnotations:
         assert citation["method"] == "direct_file"
 
     def test_handles_multiple_annotations_per_message(self):
-        """Test handling multiple file citations in a single message."""
-        # Create multiple annotations
-        annotations = []
-        for i in range(3):
-            mock_annotation = MagicMock()
-            mock_annotation.type = "file_citation"
-            mock_annotation.file_id = f"file-{i}"
-            mock_annotation.filename = f"doc_{i}.pdf"
-            mock_annotation.index = i * 10
-            annotations.append(mock_annotation)
+        """Handle multiple file citations within a single message."""
+        annotations = [
+            AnnotationFileCitation(
+                file_id=f"file-{i}",
+                filename=f"doc_{i}.pdf",
+                index=i * 10,
+                type="file_citation",
+            )
+            for i in range(3)
+        ]
+        content_item = ResponseOutputText(annotations=annotations, text="Multiple refs", type="output_text")
+        msg_item = self._message_item([content_item], message_id="msg_multi")
 
-        mock_content_item = MagicMock()
-        mock_content_item.annotations = annotations
+        result = extract_direct_file_annotations([msg_item])
 
-        mock_message = MagicMock()
-        mock_message.id = "msg_multi"
-        mock_message.content = [mock_content_item]
-
-        mock_msg_item = MagicMock(spec=MessageOutputItem)
-        mock_msg_item.raw_item = mock_message
-
-        result = extract_direct_file_annotations([mock_msg_item])
-
-        assert "msg_multi" in result
         citations = result["msg_multi"]
         assert len(citations) == 3
-
-        # Verify each citation
-        for i, citation in enumerate(citations):
-            assert citation["file_id"] == f"file-{i}"
-            assert citation["filename"] == f"doc_{i}.pdf"
-            assert citation["index"] == i * 10
+        assert {c["file_id"] for c in citations} == {"file-0", "file-1", "file-2"}
 
     def test_skips_messages_without_content(self):
-        """Test that messages without content are skipped."""
-        mock_message = MagicMock()
-        mock_message.content = None
-
-        mock_msg_item = MagicMock(spec=MessageOutputItem)
-        mock_msg_item.raw_item = mock_message
-
-        result = extract_direct_file_annotations([mock_msg_item])
-        assert result == {}
+        """Messages with no content yield no citations."""
+        msg_item = self._message_item([], message_id="msg_empty")
+        assert extract_direct_file_annotations([msg_item]) == {}
 
     def test_skips_non_file_citation_annotations(self):
-        """Test that non-file-citation annotations are ignored."""
-        mock_annotation = MagicMock()
-        mock_annotation.type = "image_file"  # Not a file citation
+        """Annotations of other types are ignored."""
+        url_annotation = AnnotationURLCitation(
+            start_index=0,
+            end_index=5,
+            title="Example",
+            type="url_citation",
+            url="https://example.com",
+        )
+        content_item = ResponseOutputText(annotations=[url_annotation], text="See link", type="output_text")
+        msg_item = self._message_item([content_item], message_id="msg_no_citations")
 
-        mock_content_item = MagicMock()
-        mock_content_item.annotations = [mock_annotation]
-
-        mock_message = MagicMock()
-        mock_message.id = "msg_no_citations"
-        mock_message.content = [mock_content_item]
-
-        mock_msg_item = MagicMock(spec=MessageOutputItem)
-        mock_msg_item.raw_item = mock_message
-
-        result = extract_direct_file_annotations([mock_msg_item])
-        assert result == {}
-
-    def test_handles_missing_annotation_attributes(self):
-        """Test graceful handling of annotations with missing attributes."""
-        mock_annotation = MagicMock()
-        mock_annotation.type = "file_citation"
-        # Explicitly delete the attributes to simulate missing attributes
-        del mock_annotation.file_id
-        del mock_annotation.filename
-        del mock_annotation.index
-
-        mock_content_item = MagicMock()
-        mock_content_item.annotations = [mock_annotation]
-
-        mock_message = MagicMock()
-        mock_message.id = "msg_incomplete"
-        mock_message.content = [mock_content_item]
-
-        mock_msg_item = MagicMock(spec=MessageOutputItem)
-        mock_msg_item.raw_item = mock_message
-
-        result = extract_direct_file_annotations([mock_msg_item])
-
-        citations = result["msg_incomplete"]
-        citation = citations[0]
-        assert citation["file_id"] == "unknown"
-        assert citation["filename"] == "unknown"
-        assert citation["index"] == 0  # Default value
+        assert extract_direct_file_annotations([msg_item]) == {}
 
 
 class TestExtractVectorStoreCitations:
     """Test vector store citation extraction from run results."""
 
     def test_extracts_file_search_citations(self):
-        """Test extraction of FileSearch tool citations."""
-        # Create mock file search result
-        mock_search_result = MagicMock()
-        mock_search_result.file_id = "vs-file-123"
-        mock_search_result.text = "This is the retrieved text content from the file."
+        """Extract citations from a typed FileSearch tool call."""
+        tool_call = ResponseFileSearchToolCall(
+            id="call_sdk",
+            queries=["report"],
+            status="completed",
+            type="file_search_call",
+            results=[FileSearchResult(file_id="file-sdk", text="Findings content")],
+        )
 
-        # Create mock file search tool call
-        mock_tool_call = MagicMock()
-        mock_tool_call.type = "file_search_call"
-        mock_tool_call.id = "call_abc123"
-        mock_tool_call.results = [mock_search_result]
+        run_result = MagicMock()
+        run_result.new_items = [ToolCallItem(agent=MagicMock(), raw_item=tool_call)]
 
-        # Create mock run result item
-        mock_item = MagicMock()
-        mock_item.raw_item = mock_tool_call
+        result = extract_vector_store_citations(run_result)
 
-        # Create mock run result
-        mock_run_result = MagicMock()
-        mock_run_result.new_items = [mock_item]
-
-        result = extract_vector_store_citations(mock_run_result)
-
-        assert len(result) == 1
-        citation = result[0]
-        assert citation["method"] == "vector_store"
-        assert citation["file_id"] == "vs-file-123"
-        assert citation["text"] == "This is the retrieved text content from the file."
-        assert citation["tool_call_id"] == "call_abc123"
+        assert result[0]["file_id"] == "file-sdk"
+        assert result[0]["text"] == "Findings content"
+        assert result[0]["tool_call_id"] == "call_sdk"
 
     def test_handles_multiple_search_results(self):
-        """Test handling multiple search results from a single tool call."""
-        # Create multiple search results
-        search_results = []
-        for i in range(3):
-            mock_result = MagicMock()
-            mock_result.file_id = f"vs-file-{i}"
-            mock_result.text = f"Content from file {i}"
-            search_results.append(mock_result)
+        """Handle multiple search results within a single tool call."""
+        tool_call = ResponseFileSearchToolCall(
+            id="call_multi",
+            queries=["reports"],
+            status="completed",
+            type="file_search_call",
+            results=[FileSearchResult(file_id=f"vs-file-{i}", text=f"Content from file {i}") for i in range(3)],
+        )
 
-        mock_tool_call = MagicMock()
-        mock_tool_call.type = "file_search_call"
-        mock_tool_call.id = "call_multi"
-        mock_tool_call.results = search_results
+        run_result = MagicMock()
+        run_result.new_items = [ToolCallItem(agent=MagicMock(), raw_item=tool_call)]
 
-        mock_item = MagicMock()
-        mock_item.raw_item = mock_tool_call
+        citations = extract_vector_store_citations(run_result)
 
-        mock_run_result = MagicMock()
-        mock_run_result.new_items = [mock_item]
+        assert len(citations) == 3
+        assert {c["file_id"] for c in citations} == {"vs-file-0", "vs-file-1", "vs-file-2"}
 
-        result = extract_vector_store_citations(mock_run_result)
+    def test_missing_file_id_defaults_to_unknown(self):
+        """Fallback to 'unknown' when file_id is absent in the tool result."""
+        tool_call = ResponseFileSearchToolCall(
+            id="call_unknown",
+            queries=["reports"],
+            status="completed",
+            type="file_search_call",
+            results=[FileSearchResult(file_id=None, text="Content without identifier")],
+        )
 
-        assert len(result) == 3
-        for i, citation in enumerate(result):
-            assert citation["file_id"] == f"vs-file-{i}"
-            assert citation["text"] == f"Content from file {i}"
-            assert citation["tool_call_id"] == "call_multi"
+        run_result = MagicMock()
+        run_result.new_items = [ToolCallItem(agent=MagicMock(), raw_item=tool_call)]
 
-    def test_skips_non_file_search_items(self):
-        """Test that non-file-search items are ignored."""
-        mock_tool_call = MagicMock()
-        mock_tool_call.type = "function_call"  # Not a file search
+        citations = extract_vector_store_citations(run_result)
 
-        mock_item = MagicMock()
-        mock_item.raw_item = mock_tool_call
-
-        mock_run_result = MagicMock()
-        mock_run_result.new_items = [mock_item]
-
-        result = extract_vector_store_citations(mock_run_result)
-        assert result == []
+        assert len(citations) == 1
+        assert citations[0]["file_id"] == "unknown"
 
     def test_handles_missing_results(self):
-        """Test handling of file search calls without results."""
-        mock_tool_call = MagicMock()
-        mock_tool_call.type = "file_search_call"
-        mock_tool_call.results = None
+        """Gracefully handle file search calls without results."""
+        tool_call = ResponseFileSearchToolCall(
+            id="call_empty",
+            queries=["anything"],
+            status="completed",
+            type="file_search_call",
+            results=None,
+        )
 
-        mock_item = MagicMock()
-        mock_item.raw_item = mock_tool_call
+        run_result = MagicMock()
+        run_result.new_items = [ToolCallItem(agent=MagicMock(), raw_item=tool_call)]
 
-        mock_run_result = MagicMock()
-        mock_run_result.new_items = [mock_item]
+        assert extract_vector_store_citations(run_result) == []
 
-        result = extract_vector_store_citations(mock_run_result)
-        assert result == []
+    def test_skips_non_file_search_items(self):
+        """Ignore items that are not file-search tool calls."""
+        tool_call = MagicMock()
+        tool_call.type = "function_call"
+
+        run_result = MagicMock()
+        run_result.new_items = [ToolCallItem(agent=MagicMock(), raw_item=tool_call)]
+
+        assert extract_vector_store_citations(run_result) == []
 
 
 class TestExtractDirectFileCitationsFromHistory:

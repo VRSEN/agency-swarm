@@ -495,6 +495,7 @@ class Agent(BaseAgent[MasterContext]):
             recipient_agent (Agent): The `Agent` instance to register as a recipient.
             send_message_tool_class: Optional custom send message tool class to use for this specific
                                agent-to-agent communication. If None, uses agent's default or SendMessage.
+            runtime_state: Optional runtime state container injected by the owning Agency
         """
         # Import to avoid circular dependency
         from .subagents import register_subagent as register_subagent_func

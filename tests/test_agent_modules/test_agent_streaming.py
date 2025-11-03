@@ -1,12 +1,15 @@
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
+from agents import RunConfig
 from agents.items import MessageOutputItem
 from agents.lifecycle import RunHooks
 from agents.stream_events import RunItemStreamEvent
 from openai.types.responses import ResponseOutputMessage, ResponseOutputText
 
 from agency_swarm import Agency, Agent, StreamingRunResponse
+from agency_swarm.agent.execution_streaming import _persist_streamed_items
 from agency_swarm.messages import MessageFormatter
 
 # --- Streaming Tests ---
@@ -170,6 +173,49 @@ def test_get_response_stream_initialization_without_event_loop():
     stream = agent.get_response_stream("Hello")
     assert isinstance(stream, StreamingRunResponse)
     assert stream.final_result is None
+
+
+@pytest.mark.asyncio
+@patch("agents.Runner.run_streamed")
+async def test_get_response_stream_with_run_config_sets_trace_id(mock_runner_run_streamed):
+    agent = Agent(name="TestAgent", instructions="Trace awareness")
+    run_config = RunConfig()
+
+    msg_item = MessageOutputItem(
+        raw_item=ResponseOutputMessage(
+            id="msg_trace",
+            content=[ResponseOutputText(text="Trace", type="output_text", annotations=[])],
+            role="assistant",
+            status="completed",
+            type="message",
+        ),
+        type="message_output_item",
+        agent=None,
+    )
+
+    async def dummy_stream():
+        yield RunItemStreamEvent(name="message_output_created", item=msg_item, type="run_item_stream_event")
+
+    class DummyStreamedResult:
+        def stream_events(self):
+            return dummy_stream()
+
+        def to_input_list(self):
+            return []
+
+    mock_runner_run_streamed.return_value = DummyStreamedResult()
+
+    stream = agent.get_response_stream("ensure trace", run_config_override=run_config)
+
+    async for _ in stream:
+        pass
+
+    assert isinstance(run_config.trace_id, str)
+    assert run_config.trace_id.startswith("trace_")
+
+    call_kwargs = mock_runner_run_streamed.call_args.kwargs
+    assert "run_config" in call_kwargs
+    assert call_kwargs["run_config"] is run_config
 
 
 @pytest.mark.asyncio
@@ -529,4 +575,59 @@ async def test_streaming_persists_hosted_tool_outputs(
     persisted_history = mock_thread_manager.replace_messages.call_args_list[-1][0][0]
     assert any(item.get("message_origin") == "file_search_preservation" for item in persisted_history), (
         "Hosted tool outputs should be included in persisted history"
+    )
+
+
+def test_streaming_forwarded_items_preserve_caller_metadata(monkeypatch, mock_thread_manager):
+    """Forwarded run items must retain their original caller metadata when persisted."""
+    worker = Agent(name="Worker", instructions="Delegates work")
+    analyst = Agent(name="Analyst", instructions="Research specialist")
+
+    forwarded_raw = ResponseOutputMessage(
+        id="forwarded_msg",
+        content=[ResponseOutputText(text="Analysis", type="output_text", annotations=[])],
+        role="assistant",
+        status="completed",
+        type="message",
+    )
+    forwarded_item = MessageOutputItem(agent=analyst, raw_item=forwarded_raw)
+    forwarded_payload = dict(forwarded_item.to_input_item())
+    forwarded_payload["callerAgent"] = worker.name
+
+    agency_context = SimpleNamespace(thread_manager=mock_thread_manager)
+    stream_result = SimpleNamespace(to_input_list=lambda: [forwarded_payload])
+
+    monkeypatch.setattr(
+        "agency_swarm.agent.execution_streaming.MessageFormatter.extract_hosted_tool_results",
+        lambda *args, **kwargs: [],
+    )
+    monkeypatch.setattr(
+        "agency_swarm.agent.execution_streaming.MessageFilter.should_filter",
+        lambda _item: False,
+    )
+    monkeypatch.setattr(
+        "agency_swarm.agent.execution_streaming.MessageFilter.filter_messages",
+        lambda items: items,
+    )
+
+    _persist_streamed_items(
+        streaming_result=stream_result,
+        history_for_runner=[],
+        persistence_candidates=[],
+        collected_items=[forwarded_item],
+        agent=worker,
+        sender_name="Manager",
+        parent_run_id=None,
+        run_trace_id="trace_forwarded",
+        fallback_agent_run_id="agent_run_worker",
+        agency_context=agency_context,
+        initial_saved_count=0,
+    )
+
+    mock_thread_manager.replace_messages.assert_called()
+    persisted = mock_thread_manager.replace_messages.call_args[0][0]
+    assert persisted, "Forwarded item must be persisted to thread history"
+    saved_entry = persisted[-1]
+    assert saved_entry.get("callerAgent") == worker.name, (
+        "Forwarded item should retain the original caller, not the top-level sender"
     )

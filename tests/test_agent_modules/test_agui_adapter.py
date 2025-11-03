@@ -23,9 +23,23 @@ from ag_ui.core import (
     ToolMessage,
     UserMessage,
 )
+from openai.types.responses import (
+    ResponseCodeInterpreterToolCall,
+    ResponseFileSearchToolCall,
+    ResponseFunctionToolCall,
+    ResponseOutputMessage,
+    ResponseOutputText,
+)
+from openai.types.responses.response_file_search_tool_call import Result as FileSearchResult
+from openai.types.responses.response_function_call_arguments_delta_event import ResponseFunctionCallArgumentsDeltaEvent
+from openai.types.responses.response_output_item_added_event import ResponseOutputItemAddedEvent
+from openai.types.responses.response_output_item_done_event import ResponseOutputItemDoneEvent
+from openai.types.responses.response_output_text import AnnotationFileCitation
+from openai.types.responses.response_text_delta_event import Logprob, ResponseTextDeltaEvent
 from pydantic import BaseModel
 
-from agency_swarm.ui.core.agui_adapter import AguiAdapter, serialize
+from agency_swarm.ui.core.agui_adapter import AguiAdapter
+from agency_swarm.utils.serialization import serialize
 
 
 def make_raw_event(data):
@@ -135,17 +149,40 @@ def test_openai_events_emit_message_lifecycle():
     adapter = AguiAdapter()
     run_id = "run-1"
 
+    message = ResponseOutputMessage(
+        id="m-1",
+        content=[ResponseOutputText(annotations=[], text="Hi", type="output_text")],
+        role="assistant",
+        status="completed",
+        type="message",
+    )
+
     start_event = make_raw_event(
-        SimpleNamespace(
+        ResponseOutputItemAddedEvent(
+            item=message,
+            output_index=0,
+            sequence_number=1,
             type="response.output_item.added",
-            item=SimpleNamespace(type="message", role="assistant", id="m-1"),
         )
     )
-    delta_event = make_raw_event(SimpleNamespace(type="response.output_text.delta", item_id="m-1", delta="Hi"))
+
+    delta_event = make_raw_event(
+        ResponseTextDeltaEvent(
+            content_index=0,
+            delta="Hi",
+            item_id="m-1",
+            logprobs=[],
+            output_index=0,
+            sequence_number=2,
+            type="response.output_text.delta",
+        )
+    )
     done_event = make_raw_event(
-        SimpleNamespace(
+        ResponseOutputItemDoneEvent(
+            item=message,
+            output_index=0,
+            sequence_number=3,
             type="response.output_item.done",
-            item=SimpleNamespace(type="message", id="m-1"),
         )
     )
 
@@ -162,29 +199,52 @@ def test_openai_events_emit_message_lifecycle():
 def test_openai_events_track_tool_calls_and_arguments():
     adapter = AguiAdapter()
     run_id = "run-2"
-    raw_tool = SimpleNamespace(type="function_call", id="item-1", call_id="call-1", name="search", arguments="{}")
+    raw_tool = ResponseFunctionToolCall(
+        arguments="{}",
+        call_id="call-1",
+        name="search",
+        type="function_call",
+        id="item-1",
+        status="in_progress",
+    )
 
     adapter.openai_to_agui_events(
-        make_raw_event(SimpleNamespace(type="response.output_item.added", item=raw_tool)),
+        make_raw_event(
+            ResponseOutputItemAddedEvent(
+                item=raw_tool,
+                output_index=0,
+                sequence_number=1,
+                type="response.output_item.added",
+            )
+        ),
         run_id=run_id,
     )
     args_event = adapter.openai_to_agui_events(
         make_raw_event(
-            SimpleNamespace(type="response.function_call_arguments.delta", item_id="item-1", delta='{"q": "')
+            ResponseFunctionCallArgumentsDeltaEvent(
+                item_id="item-1",
+                delta='{"q": "',
+                output_index=0,
+                sequence_number=2,
+                type="response.function_call_arguments.delta",
+            )
         ),
         run_id=run_id,
     )
     done_events = adapter.openai_to_agui_events(
         make_raw_event(
-            SimpleNamespace(
+            ResponseOutputItemDoneEvent(
                 type="response.output_item.done",
-                item=SimpleNamespace(
-                    type="function_call",
-                    id="item-1",
+                item=ResponseFunctionToolCall(
+                    arguments='{"q": "weather"}',
                     call_id="call-1",
                     name="search",
-                    arguments='{"q": "weather"}',
+                    type="function_call",
+                    id="item-1",
+                    status="completed",
                 ),
+                output_index=0,
+                sequence_number=3,
             )
         ),
         run_id=run_id,
@@ -195,6 +255,50 @@ def test_openai_events_track_tool_calls_and_arguments():
     assert isinstance(done_events, list)
     assert isinstance(done_events[0], ToolCallEndEvent)
     assert isinstance(done_events[1], MessagesSnapshotEvent)
+
+
+def test_openai_typed_events_emit_message_lifecycle():
+    adapter = AguiAdapter()
+    run_id = "typed-run"
+
+    message = ResponseOutputMessage(
+        id="msg-typed",
+        content=[ResponseOutputText(annotations=[], text="Hello world", type="output_text")],
+        role="assistant",
+        status="completed",
+        type="message",
+    )
+
+    start_event = ResponseOutputItemAddedEvent(
+        item=message,
+        output_index=0,
+        sequence_number=1,
+        type="response.output_item.added",
+    )
+    delta_event = ResponseTextDeltaEvent(
+        content_index=0,
+        delta="!",
+        item_id="msg-typed",
+        logprobs=[Logprob(token="!", logprob=0.0, top_logprobs=[])],
+        output_index=0,
+        sequence_number=2,
+        type="response.output_text.delta",
+    )
+    done_event = ResponseOutputItemDoneEvent(
+        item=message,
+        output_index=0,
+        sequence_number=3,
+        type="response.output_item.done",
+    )
+
+    start = adapter.openai_to_agui_events(make_raw_event(start_event), run_id=run_id)
+    delta = adapter.openai_to_agui_events(make_raw_event(delta_event), run_id=run_id)
+    done = adapter.openai_to_agui_events(make_raw_event(done_event), run_id=run_id)
+
+    assert isinstance(start, TextMessageStartEvent)
+    assert isinstance(delta, TextMessageContentEvent)
+    assert isinstance(done, TextMessageEndEvent)
+    assert delta.message_id == "msg-typed"
 
 
 def test_openai_events_handles_exceptions_with_run_error():
@@ -271,8 +375,14 @@ def test_openai_events_ignore_tool_done_without_call_id():
 def test_run_item_stream_events_emit_snapshots():
     adapter = AguiAdapter()
     run_id = "run-3"
-    output_content = SimpleNamespace(text="Answer", annotations=None)
-    raw_item = SimpleNamespace(id="msg-1", content=[output_content])
+    output_content = ResponseOutputText(annotations=[], text="Answer", type="output_text")
+    raw_item = ResponseOutputMessage(
+        id="msg-1",
+        content=[output_content],
+        role="assistant",
+        status="completed",
+        type="message",
+    )
     item = SimpleNamespace(raw_item=raw_item)
 
     events = adapter.openai_to_agui_events(make_stream_event("message_output_created", item), run_id=run_id)
@@ -285,10 +395,15 @@ def test_run_item_stream_events_emit_snapshots():
 def test_run_item_stream_with_annotations_returns_custom_event():
     adapter = AguiAdapter()
     run_id = "annotated"
-    annotation = MagicMock()
-    annotation.model_dump.return_value = {"type": "citation", "offset": 1}
-    output_content = SimpleNamespace(text="Answer", annotations=[annotation])
-    raw_item = SimpleNamespace(id="msg-annot", content=[output_content])
+    annotation = AnnotationFileCitation(file_id="file-annot", filename="doc.pdf", index=1, type="file_citation")
+    output_content = ResponseOutputText(annotations=[annotation], text="Answer", type="output_text")
+    raw_item = ResponseOutputMessage(
+        id="msg-annot",
+        content=[output_content],
+        role="assistant",
+        status="completed",
+        type="message",
+    )
     item = SimpleNamespace(raw_item=raw_item)
 
     events = adapter.openai_to_agui_events(make_stream_event("message_output_created", item), run_id=run_id)
@@ -296,7 +411,7 @@ def test_run_item_stream_with_annotations_returns_custom_event():
     assert isinstance(events, list)
     assert any(isinstance(e, CustomEvent) for e in events)
     custom = next(e for e in events if isinstance(e, CustomEvent))
-    assert custom.value["annotations"] == [{"type": "citation", "offset": 1}]
+    assert custom.value["annotations"] == [annotation.model_dump()]
 
 
 def test_run_item_stream_ignores_message_without_text():
@@ -354,18 +469,49 @@ def test_run_item_stream_unknown_event_is_returned_as_raw_event():
 def test_tool_meta_handles_non_function_tools():
     adapter = AguiAdapter()
 
-    file_search = SimpleNamespace(
-        type="file_search_call",
+    typed_file_search = ResponseFileSearchToolCall(
         id="file-1",
         queries=["foo"],
-        results=["bar"],
+        status="completed",
+        type="file_search_call",
+        results=[FileSearchResult(file_id="doc", text="bar")],
     )
-    code_interpreter = SimpleNamespace(
-        type="code_interpreter_call",
-        id="ci-7",
+    typed_code_interpreter = ResponseCodeInterpreterToolCall(
         code="print(42)",
         container_id="cont",
-        outputs=["42"],
+        id="ci-7",
+        outputs=[{"type": "logs", "logs": "42"}],
+        type="code_interpreter_call",
+        status="completed",
+    )
+
+    @dataclasses.dataclass
+    class LegacyFileSearchCall:
+        type: str
+        id: str
+        queries: list[str]
+        results: list[dict]
+
+    @dataclasses.dataclass
+    class LegacyCodeInterpreterCall:
+        type: str
+        id: str
+        code: str
+        container_id: str
+        outputs: list[dict]
+
+    file_search = LegacyFileSearchCall(
+        type="file_search_call",
+        id=typed_file_search.id,
+        queries=typed_file_search.queries or [],
+        results=json.loads(typed_file_search.model_dump_json())["results"],
+    )
+    code_interpreter = LegacyCodeInterpreterCall(
+        type="code_interpreter_call",
+        id=typed_code_interpreter.id,
+        code=typed_code_interpreter.code or "",
+        container_id=typed_code_interpreter.container_id,
+        outputs=[{"type": "logs", "logs": "42"}],
     )
 
     file_meta = adapter._tool_meta(file_search)

@@ -17,12 +17,7 @@ from agents.strict_schema import ensure_strict_json_schema
 from pydantic import BaseModel, ValidationError
 
 from .base_tool import BaseTool
-from .utils import (
-    build_parameter_object_schema,
-    build_tool_schema,
-    generate_model_from_schema,
-    resolve_url,
-)
+from .utils import build_parameter_object_schema, build_tool_schema, generate_model_from_schema, resolve_url
 
 logger = logging.getLogger(__name__)
 
@@ -88,12 +83,12 @@ class ToolFactory:
             try:
                 # Call the langchain tool
                 result = tool.run(args)
-                return str(result)
+                return result
             except TypeError:
                 # Try with single argument if direct dict fails (langchain specifics)
                 if len(args) == 1:
                     result = tool.run(list(args.values())[0])
-                    return str(result)
+                    return result
                 else:
                     return f"Error parsing input for tool '{tool.__class__.__name__}'. Please open an issue on github."
             except Exception as e:
@@ -251,7 +246,7 @@ class ToolFactory:
                 # Validate parameters
                 try:
                     parsed = param_model_(**param_container) if param_container else param_model_()
-                    param_container = parsed.model_dump()
+                    param_container = parsed.model_dump(mode="json")
                 except ValidationError as e:
                     raise ModelBehaviorError(
                         f"Invalid JSON input in parameters for tool {param_model_.__name__}: {e}"
@@ -263,7 +258,7 @@ class ToolFactory:
                 # Validate request body
                 try:
                     parsed = request_body_model_(**body_payload) if body_payload else request_body_model_()
-                    body_payload = parsed.model_dump()
+                    body_payload = parsed.model_dump(mode="json")
                 except ValidationError as e:
                     raise ModelBehaviorError(
                         f"Invalid JSON input in request body for tool {request_body_model_.__name__}: {e}"
@@ -444,11 +439,9 @@ class ToolFactory:
                 if ctx is not None:
                     tool_instance._context = ctx
                 if inspect.iscoroutinefunction(tool_instance.run):
-                    result = await tool_instance.run()
-                else:
-                    # Always run sync run() in a thread for async compatibility
-                    result = await asyncio.to_thread(tool_instance.run)
-                return str(result)
+                    return await tool_instance.run()
+                # Always run sync run() in a thread for async compatibility
+                return await asyncio.to_thread(tool_instance.run)
             except Exception as e:
                 return f"Error running BaseTool: {e}"
 

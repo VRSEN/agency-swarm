@@ -26,7 +26,8 @@ from agency_swarm.integrations.fastapi_utils.file_handler import upload_from_url
 from agency_swarm.integrations.fastapi_utils.logging_middleware import get_logs_endpoint_impl
 from agency_swarm.messages import MessageFilter
 from agency_swarm.tools.mcp_manager import attach_persistent_mcp_servers
-from agency_swarm.ui.core.agui_adapter import AguiAdapter, serialize
+from agency_swarm.ui.core.agui_adapter import AguiAdapter
+from agency_swarm.utils.serialization import serialize
 
 logger = logging.getLogger(__name__)
 
