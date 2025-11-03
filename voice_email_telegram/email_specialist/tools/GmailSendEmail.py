@@ -14,6 +14,7 @@ class GmailSendEmail(BaseTool):
     """
     Sends an email through Gmail API.
     Can send a saved draft by draft_id or compose and send a new email directly.
+    Automatically appends "Cheers, Ashley" signature to all outgoing emails.
     """
 
     draft_id: str = Field(default="", description="Gmail draft ID to send (if sending an existing draft)")
@@ -27,6 +28,33 @@ class GmailSendEmail(BaseTool):
     cc: str = Field(default="", description="CC recipients, comma-separated")
 
     bcc: str = Field(default="", description="BCC recipients, comma-separated")
+
+    skip_signature: bool = Field(
+        default=False,
+        description="Skip automatic signature append (use for replies or when signature already present)"
+    )
+
+    def _append_signature(self, body: str) -> str:
+        """
+        Appends signature to email body if not already present.
+
+        Args:
+            body: Email body text
+
+        Returns:
+            Body with signature appended
+        """
+        if not body:
+            return "\n\nCheers, Ashley"
+
+        # Check if signature already present
+        signature = "Cheers, Ashley"
+        if signature in body:
+            return body
+
+        # Clean trailing whitespace and append signature
+        cleaned_body = body.rstrip()
+        return f"{cleaned_body}\n\n{signature}"
 
     def run(self):
         """
@@ -56,11 +84,16 @@ class GmailSendEmail(BaseTool):
                     "error": "Missing required fields: to, subject, and body are required"
                 })
 
+            # Append signature to body (unless skipped)
+            email_body = self.body
+            if not self.skip_signature:
+                email_body = self._append_signature(self.body)
+
             # Prepare email parameters
             email_params = {
                 "recipient_email": self.to,
                 "subject": self.subject,
-                "body": self.body,
+                "body": email_body,
                 "is_html": False
             }
 
@@ -98,6 +131,7 @@ class GmailSendEmail(BaseTool):
                     "thread_id": data.get("threadId"),
                     "to": self.to,
                     "subject": self.subject,
+                    "signature_added": not self.skip_signature,
                     "sent_via": "composio",
                     "message": "Email sent successfully via Composio Gmail integration"
                 }, indent=2)
@@ -121,53 +155,67 @@ class GmailSendEmail(BaseTool):
 
 
 if __name__ == "__main__":
-    print("Testing GmailSendEmail...")
+    print("Testing GmailSendEmail with Signature...")
 
-    # Test 1: Send existing draft
-    print("\n1. Send existing draft:")
-    tool = GmailSendEmail(draft_id="draft_abc123")
-    result = tool.run()
-    print(result)
-
-    # Test 2: Compose and send new email
-    print("\n2. Compose and send new email:")
+    # Test 1: Send with automatic signature
+    print("\n1. Send with automatic signature:")
     tool = GmailSendEmail(
         to="john@example.com",
         subject="Meeting Confirmation",
-        body="Hi John,\n\nConfirming our meeting tomorrow at 2 PM.\n\nBest regards,\nSarah",
+        body="Hi John,\n\nConfirming our meeting tomorrow at 2 PM.\n\nBest regards",
     )
     result = tool.run()
     print(result)
 
-    # Test 3: Send with CC and BCC
-    print("\n3. Send with CC and BCC:")
+    # Test 2: Send with signature already present
+    print("\n2. Send with signature already in body (should not duplicate):")
+    tool = GmailSendEmail(
+        to="sarah@example.com",
+        subject="Quick Update",
+        body="Hi Sarah,\n\nJust a quick update.\n\nCheers, Ashley",
+    )
+    result = tool.run()
+    print(result)
+
+    # Test 3: Skip signature
+    print("\n3. Send with skip_signature=True:")
+    tool = GmailSendEmail(
+        to="team@example.com",
+        subject="Automated Report",
+        body="This is an automated report. No signature needed.",
+        skip_signature=True
+    )
+    result = tool.run()
+    print(result)
+
+    # Test 4: Send with CC and BCC
+    print("\n4. Send with CC and BCC:")
     tool = GmailSendEmail(
         to="team@example.com",
         cc="manager@example.com",
         bcc="archive@example.com",
         subject="Team Update",
-        body="Hello team,\n\nHere's this week's update...\n\nBest,\nLead",
+        body="Hello team,\n\nHere's this week's update...",
     )
     result = tool.run()
     print(result)
 
-    # Test 4: Missing required fields
-    print("\n4. Test with missing fields (should error):")
+    # Test 5: Empty body (should add signature only)
+    print("\n5. Empty body (signature only):")
+    tool = GmailSendEmail(
+        to="test@example.com",
+        subject="Test",
+        body="",
+    )
+    result = tool.run()
+    print(result)
+
+    # Test 6: Missing required fields
+    print("\n6. Test with missing fields (should error):")
     tool = GmailSendEmail(
         to="test@example.com",
         subject="Test",
         # Missing body
-    )
-    result = tool.run()
-    print(result)
-
-    # Test 5: Send urgent email
-    print("\n5. Send urgent email:")
-    tool = GmailSendEmail(
-        to="support@hosting.com",
-        subject="URGENT: Server Down",
-        body="Our production server is currently down and affecting all users. "
-        "Please investigate immediately.\n\nSeverity: Critical\nTime: Now\n\nThank you.",
     )
     result = tool.run()
     print(result)
@@ -177,3 +225,5 @@ if __name__ == "__main__":
     print("- Requires COMPOSIO_API_KEY in .env")
     print("- Requires GMAIL_CONNECTION_ID in .env")
     print("- Gmail connected via Composio dashboard")
+    print("- Signature 'Cheers, Ashley' automatically added to all emails")
+    print("- Use skip_signature=True to disable signature for specific emails")
