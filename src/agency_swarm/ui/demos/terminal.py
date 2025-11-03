@@ -86,7 +86,7 @@ class DropdownMenu:
             pointer = "▸ " if idx == self.selected_index else "  "
             label = item.label.ljust(self.max_label_width)
             lines.append((style, f"{pointer}{label}  {item.description}\n"))
-        return lines
+        return cast(AnyFormattedText, lines)
 
 
 def start_terminal(
