@@ -307,20 +307,31 @@ def start_terminal(
         def _(event) -> None:
             buf = event.app.current_buffer
             buf.insert_text("/")
-            buf.start_completion(select_first=True)
+            buf.start_completion(select_first=False)
 
         @bindings.add("@")
         def _(event) -> None:
             buf = event.app.current_buffer
             buf.insert_text("@")
-            buf.start_completion(select_first=True)
+            buf.start_completion(select_first=False)
 
         session = prompt_toolkit.PromptSession(
+            completer=completer,
             history=history,
             key_bindings=bindings,
             enable_history_search=True,
             mouse_support=False,
+            complete_while_typing=True,
+            reserve_space_for_menu=8,
         )
+
+        buffer = session.default_buffer
+
+        def _restart_completion(_: str) -> None:
+            if buffer.text and buffer.text[0] in {"/", "@"}:
+                buffer.start_completion(select_first=False)
+
+        buffer.on_text_changed += _restart_completion
 
         while True:
             # Determine the active recipient for display
@@ -332,12 +343,7 @@ def start_terminal(
             prompt_text = f"👤 USER -> 🤖 {active_recipient}: "
 
             try:
-                message = await session.prompt_async(
-                    prompt_text,
-                    completer=completer,
-                    complete_while_typing=True,
-                    reserve_space_for_menu=8,
-                )
+                message = await session.prompt_async(prompt_text)
             except (KeyboardInterrupt, EOFError):
                 return
 
