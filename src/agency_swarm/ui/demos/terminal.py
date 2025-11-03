@@ -196,6 +196,13 @@ def start_terminal(
                 logger.error(f"Recipient agent {mentioned_agent or 'Unknown'} not found.", exc_info=True)
                 return False
 
+        # If only an agent mention with no message, switch to that agent without sending
+        if recipient_agent is not None and not message:
+            event_converter.handoff_agent = recipient_agent
+            event_converter.console.print(f"[cyan]Switched to {recipient_agent}[/cyan]")
+            event_converter.console.rule()
+            return False
+
         # Clear handoff to correctly display recipient when an explicit target is used
         if recipient_agent is not None and recipient_agent != event_converter.handoff_agent:
             event_converter.handoff_agent = None
@@ -222,6 +229,7 @@ def start_terminal(
 
     async def main_loop():
         # prompt_toolkit is a mandatory dependency; imported at module load
+        nonlocal current_default_recipient
 
         command_help: dict[str, str] = {
             "/help": "Show help",
@@ -239,24 +247,55 @@ def start_terminal(
             "/resume": "/resume",
         }
 
-        class SlashCompleter(Completer):
-            def get_completions(self, document, complete_event) -> Generator[Completion]:
-                text = document.text_before_cursor
-                if not text or not text.startswith("/"):
-                    return
-                key = text
-                entries = list(command_help.keys()) if key == "/" else [c for c in command_help if c.startswith(key)]
-                for cmd in entries:
-                    display = command_display_overrides.get(cmd, cmd)
-                    yield Completion(
-                        text=cmd,
-                        start_position=-len(key),
-                        display=display,
-                        display_meta=command_help[cmd],
-                    )
+        # Track the currently active recipient
+        active_recipient = current_default_recipient
 
-        # Provide slash command suggestions only
-        completer = SlashCompleter()
+        class UnifiedCompleter(Completer):
+            def get_completions(self, document, complete_event) -> Generator[Completion]:
+                nonlocal active_recipient
+                text = document.text_before_cursor
+                if not text:
+                    return
+
+                # Handle slash commands
+                if text.startswith("/"):
+                    key = text
+                    if key == "/":
+                        entries = list(command_help.keys())
+                    else:
+                        entries = [c for c in command_help if c.startswith(key)]
+                    for cmd in entries:
+                        display = command_display_overrides.get(cmd, cmd)
+                        yield Completion(
+                            text=cmd,
+                            start_position=-len(key),
+                            display=display,
+                            display_meta=command_help[cmd],
+                        )
+
+                # Handle agent mentions
+                elif text.startswith("@"):
+                    key = text
+                    # Show all agents if just "@", otherwise filter by prefix
+                    if key == "@":
+                        entries = recipient_agents
+                    else:
+                        search_term = key[1:].lower()
+                        entries = [agent for agent in recipient_agents if agent.lower().startswith(search_term)]
+
+                    for agent in entries:
+                        # Show if this is the currently active agent (including after handoffs)
+                        is_selected = agent == active_recipient
+                        meta = "Currently selected" if is_selected else "Select this agent"
+                        yield Completion(
+                            text=f"@{agent}",
+                            start_position=-len(key),
+                            display=f"@{agent}",
+                            display_meta=meta,
+                        )
+
+        # Provide slash command and agent mention suggestions
+        completer = UnifiedCompleter()
         history = InMemoryHistory()
         bindings = KeyBindings()
 
@@ -270,6 +309,12 @@ def start_terminal(
             buf.insert_text("/")
             buf.start_completion(select_first=True)
 
+        @bindings.add("@")
+        def _(event) -> None:
+            buf = event.app.current_buffer
+            buf.insert_text("@")
+            buf.start_completion(select_first=True)
+
         session = prompt_toolkit.PromptSession(
             history=history,
             key_bindings=bindings,
@@ -278,9 +323,17 @@ def start_terminal(
         )
 
         while True:
+            # Determine the active recipient for display
+            active_recipient = (
+                event_converter.handoff_agent
+                if event_converter.handoff_agent is not None
+                else current_default_recipient
+            )
+            prompt_text = f"👤 USER -> 🤖 {active_recipient}: "
+
             try:
                 message = await session.prompt_async(
-                    "👤 USER: ",
+                    prompt_text,
                     completer=completer,
                     complete_while_typing=True,
                     reserve_space_for_menu=8,
