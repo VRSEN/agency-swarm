@@ -11,8 +11,8 @@ from datetime import datetime
 
 from dotenv import load_dotenv
 
-# Import agency
-from agency import agency
+# Import agency with routing preprocessor
+from agency import agency, get_completion_with_routing
 
 # Import Telegram tools
 from voice_handler.tools.TelegramGetUpdates import TelegramGetUpdates
@@ -95,24 +95,24 @@ class TelegramBotListener:
 
             # Step 3: Send to agency for processing
             self.send_telegram_message(
-                chat_id, f"✅ Got it! Processing: \"{transcript[:50]}...\"\n\nDrafting your email..."
+                chat_id, f"✅ Got it! Processing: \"{transcript[:50]}...\""
             )
 
-            # Process through agency
+            # Process through agency with routing preprocessor
             print(f"🤖 Processing through agency...")
-            response = agency.get_completion(
+            response = get_completion_with_routing(
                 f"""User sent a voice message that was transcribed to:
 
 "{transcript}"
 
-Please process this voice message to extract email intent, draft an appropriate email,
-and send it via Gmail. Provide a summary of what you did."""
+Please process this request and take appropriate action based on what the user is asking for.
+Provide a summary of what you did."""
             )
 
             print(f"✅ Agency response received")
 
             # Step 4: Send response back to user
-            self.send_telegram_message(chat_id, f"✅ Email processed!\n\n{response}")
+            self.send_telegram_message(chat_id, f"✅ Request processed!\n\n{response}")
 
             print(f"✅ Complete workflow finished for chat {chat_id}")
 
@@ -131,17 +131,25 @@ and send it via Gmail. Provide a summary of what you did."""
         # Ignore bot commands for now
         if text.startswith("/"):
             if text == "/start":
-                welcome = """👋 Welcome to Voice Email Assistant!
+                welcome = """👋 Welcome to your MTL Craft Business Assistant!
 
-Send me a voice message describing the email you want to send, and I'll:
-1. Transcribe your voice
-2. Extract the email details
-3. Draft a professional email
-4. Send it via Gmail
+I can help you with:
 
-Example: "Send an email to John about the meeting tomorrow at 2pm"
+📧 **Email Operations**
+- Send emails: "Send an email to John about the meeting"
+- Check inbox: "What's my last email?"
+- Manage emails: "Show unread emails"
 
-Ready when you are! 🎤"""
+🍸 **Business Knowledge**
+- Cocktail recipes: "What's in the butterfly?"
+- Menu queries: "What summer cocktails do we have?"
+- Ingredients: "What cocktails use elderflower?"
+
+⚙️ **Preferences**
+- Settings: "What's my email signature?"
+- Style: "How do I usually sign off?"
+
+Send me a voice message or text - I'll understand what you need! 🎤"""
                 self.send_telegram_message(chat_id, welcome)
             return
 
@@ -150,18 +158,18 @@ Ready when you are! 🎤"""
         try:
             self.send_telegram_message(chat_id, "✅ Processing your request...")
 
-            # Process through agency
-            response = agency.get_completion(
+            # Process through agency with routing preprocessor
+            response = get_completion_with_routing(
                 f"""User sent a text message:
 
 "{text}"
 
-Please process this to extract email intent, draft an appropriate email,
-and send it via Gmail. Provide a summary of what you did."""
+Please process this request and take appropriate action based on what the user is asking for.
+Provide a summary of what you did."""
             )
 
             # Send response back
-            self.send_telegram_message(chat_id, f"✅ Email processed!\n\n{response}")
+            self.send_telegram_message(chat_id, f"✅ Request processed!\n\n{response}")
 
             print(f"✅ Complete workflow finished for chat {chat_id}")
 

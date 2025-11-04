@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 from email_specialist.email_specialist import email_specialist
 from memory_manager.memory_manager import memory_manager
 from voice_handler.voice_handler import voice_handler
+from routing_preprocessor import RouterPreprocessor
 
 from agency_swarm import Agency
 
@@ -19,6 +20,63 @@ agency = Agency(
     ],
     shared_instructions="./agency_manifesto.md",
 )
+
+# Initialize routing preprocessor for deterministic intent classification
+router = RouterPreprocessor()
+
+
+def get_completion_with_routing(user_query: str) -> str:
+    """
+    Process user query with deterministic routing via preprocessor.
+
+    This wrapper ensures that ClassifyIntent ALWAYS runs before CEO
+    makes routing decisions, solving the LLM instruction-following issue.
+
+    Args:
+        user_query: Raw user query string
+
+    Returns:
+        Agency response string, or error message if processing fails
+    """
+    try:
+        # Step 1: Deterministic classification (always happens)
+        routing_result = router.preprocess(user_query)
+
+        # Step 2: Pass enhanced query with explicit routing directive to CEO
+        response = agency.get_completion(routing_result["enhanced_query"])
+
+        return response
+
+    except Exception as e:
+        # Log error and return user-friendly message
+        error_msg = f"I encountered an error processing your request: {str(e)}"
+        print(f"❌ get_completion_with_routing error: {type(e).__name__}: {str(e)}")
+
+        # Fallback: Try without routing preprocessor
+        try:
+            print("⚠️ Falling back to direct agency completion")
+            return agency.get_completion(user_query)
+        except Exception as fallback_error:
+            print(f"❌ Fallback also failed: {str(fallback_error)}")
+            return f"I'm having trouble processing your request. Please try rephrasing or contact support. Error: {str(e)}"
+
+
+# Convenience: Allow both old and new calling patterns
+def get_completion(user_query: str, use_routing: bool = True) -> str:
+    """
+    Get completion from agency with optional routing preprocessor.
+
+    Args:
+        user_query: User query string
+        use_routing: If True, use routing preprocessor (default: True)
+
+    Returns:
+        Agency response string
+    """
+    if use_routing:
+        return get_completion_with_routing(user_query)
+    else:
+        return agency.get_completion(user_query)
 
 if __name__ == "__main__":
     from datetime import datetime
