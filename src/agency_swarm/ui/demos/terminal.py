@@ -368,6 +368,7 @@ def start_terminal(
             mouse_support=False,
             style=dropdown_style,
             full_screen=False,
+            erase_when_done=True,
         )
 
         dropdown_menu.update_invalidator(application.invalidate)
@@ -485,6 +486,12 @@ def start_terminal(
             message_text = cast(str, message)
             if message_text.strip():
                 history.append_string(message_text)
+
+            current_prompt = ""
+            application.invalidate()
+
+            if message_text:
+                event_converter.console.print(f"👤 USER -> 🤖 {active_recipient}: {message_text}")
 
             event_converter.console.rule()
             should_exit = await handle_message(message_text)

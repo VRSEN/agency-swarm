@@ -9,9 +9,11 @@ from unittest.mock import patch
 
 import pytest
 from agents import ModelSettings
+from prompt_toolkit.document import Document
 
 from agency_swarm import Agency, Agent
 from agency_swarm.tools.send_message import SendMessageHandoff
+from agency_swarm.ui.demos import terminal as terminal_module
 from agency_swarm.ui.demos.terminal import start_terminal
 
 
@@ -35,6 +37,29 @@ class MockInputProvider:
     async def async_call(self, prompt="", **kwargs):
         """Mock async prompt for prompt_toolkit."""
         return self(prompt)
+
+
+def _application_factory(provider: MockInputProvider):
+    """Return a PromptToolkit Application stub that replays provider inputs."""
+
+    class _ApplicationStub:
+        def __init__(self, *args, **kwargs):
+            self._provider = provider
+            self._layout = kwargs.get("layout")
+
+        def invalidate(self) -> None:  # noqa: D401 - simple no-op
+            """No-op invalidate used by dropdown integration."""
+
+        async def run_async(self):  # noqa: ANN201 - signature mirrors prompt_toolkit
+            value = await self._provider.async_call()
+            if value is None:
+                value = "/exit"
+            buffer = getattr(self._layout, "current_buffer", None)
+            if buffer is not None:
+                buffer.document = Document(value, len(value))
+            return value
+
+    return _ApplicationStub
 
 
 @pytest.fixture
@@ -88,8 +113,7 @@ class TestTerminalCapsys:
         input_provider = MockInputProvider(["/help", "/exit"])
 
         with patch("builtins.input", input_provider):
-            with patch("prompt_toolkit.PromptSession") as mock_session_class:
-                mock_session_class.return_value.prompt_async = input_provider.async_call
+            with patch("agency_swarm.ui.demos.terminal.Application", new=_application_factory(input_provider)):
                 start_terminal(agency)
 
         captured = capsys.readouterr()
@@ -106,9 +130,7 @@ class TestTerminalCapsys:
         input_provider = MockInputProvider(["/status", "/exit"])
 
         with patch("builtins.input", input_provider):
-            with patch("prompt_toolkit.PromptSession") as mock_session_class:
-                mock_session_class.return_value.prompt_async = input_provider.async_call
-
+            with patch("agency_swarm.ui.demos.terminal.Application", new=_application_factory(input_provider)):
                 start_terminal(agency)
 
         captured = capsys.readouterr()
@@ -123,9 +145,7 @@ class TestTerminalCapsys:
         input_provider = MockInputProvider(["/new", "/exit"])
 
         with patch("builtins.input", input_provider):
-            with patch("prompt_toolkit.PromptSession") as mock_session_class:
-                mock_session_class.return_value.prompt_async = input_provider.async_call
-
+            with patch("agency_swarm.ui.demos.terminal.Application", new=_application_factory(input_provider)):
                 start_terminal(agency)
 
         captured = capsys.readouterr()
@@ -137,9 +157,7 @@ class TestTerminalCapsys:
         input_provider = MockInputProvider(["Hello world", "/exit"])
 
         with patch("builtins.input", input_provider):
-            with patch("prompt_toolkit.PromptSession") as mock_session_class:
-                mock_session_class.return_value.prompt_async = input_provider.async_call
-
+            with patch("agency_swarm.ui.demos.terminal.Application", new=_application_factory(input_provider)):
                 start_terminal(agency)
 
         captured = capsys.readouterr()
@@ -154,9 +172,7 @@ class TestTerminalCapsys:
         input_provider = MockInputProvider(["@Developer help me", "/exit"])
 
         with patch("builtins.input", input_provider):
-            with patch("prompt_toolkit.PromptSession") as mock_session_class:
-                mock_session_class.return_value.prompt_async = input_provider.async_call
-
+            with patch("agency_swarm.ui.demos.terminal.Application", new=_application_factory(input_provider)):
                 start_terminal(agency)
 
         captured = capsys.readouterr()
@@ -170,9 +186,7 @@ class TestTerminalCapsys:
         input_provider = MockInputProvider(["", "   ", "/exit"])
 
         with patch("builtins.input", input_provider):
-            with patch("prompt_toolkit.PromptSession") as mock_session_class:
-                mock_session_class.return_value.prompt_async = input_provider.async_call
-
+            with patch("agency_swarm.ui.demos.terminal.Application", new=_application_factory(input_provider)):
                 start_terminal(agency)
 
         captured = capsys.readouterr()
@@ -183,8 +197,7 @@ class TestTerminalCapsys:
         input_provider = MockInputProvider(["Transfer to Developer", "Hi", "/exit"])
 
         with patch("builtins.input", input_provider):
-            with patch("prompt_toolkit.PromptSession") as mock_session_class:
-                mock_session_class.return_value.prompt_async = input_provider.async_call
+            with patch("agency_swarm.ui.demos.terminal.Application", new=_application_factory(input_provider)):
                 start_terminal(agency)
 
         captured = capsys.readouterr()
@@ -202,6 +215,25 @@ class TestTerminalCapsys:
         assert "🤖 Developer → 👤 user" in output.split("USER: Hi")[-1]
         assert "Dev response:" in output.split("USER: Hi")[-1]
 
+    def test_slash_dropdown_populates_commands(self, agency):
+        """Ensure slash input populates dropdown items."""
+        input_provider = MockInputProvider(["/", "/exit"])
+        captured_labels: list[list[str]] = []
+
+        original_set_items = terminal_module.DropdownMenu.set_items
+
+        def _capture(self, items):  # noqa: ANN001
+            captured_labels.append([item.label for item in items])
+            original_set_items(self, items)
+
+        with patch("builtins.input", input_provider):
+            with patch("agency_swarm.ui.demos.terminal.Application", new=_application_factory(input_provider)):
+                with patch.object(terminal_module.DropdownMenu, "set_items", _capture):
+                    start_terminal(agency)
+
+        assert captured_labels, "Expected dropdown items to be set"
+        assert any(label.startswith("/") for label in captured_labels[0])
+
 
 class TestTerminalEdgeCases:
     """Test edge cases and error handling with agency."""
@@ -211,8 +243,7 @@ class TestTerminalEdgeCases:
         input_provider = MockInputProvider(["@NonExistentAgent help", "/exit"])
 
         with patch("builtins.input", input_provider):
-            with patch("prompt_toolkit.PromptSession") as mock_session_class:
-                mock_session_class.return_value.prompt_async = input_provider.async_call
+            with patch("agency_swarm.ui.demos.terminal.Application", new=_application_factory(input_provider)):
                 start_terminal(agency)
 
         # Check that error was logged
@@ -224,9 +255,7 @@ class TestTerminalEdgeCases:
         input_provider = MockInputProvider([long_message, "/exit"])
 
         with patch("builtins.input", input_provider):
-            with patch("prompt_toolkit.PromptSession") as mock_session_class:
-                mock_session_class.return_value.prompt_async = input_provider.async_call
-
+            with patch("agency_swarm.ui.demos.terminal.Application", new=_application_factory(input_provider)):
                 start_terminal(agency)
 
         captured = capsys.readouterr()
@@ -239,9 +268,7 @@ class TestTerminalEdgeCases:
         input_provider = MockInputProvider([special_message, "/exit"])
 
         with patch("builtins.input", input_provider):
-            with patch("prompt_toolkit.PromptSession") as mock_session_class:
-                mock_session_class.return_value.prompt_async = input_provider.async_call
-
+            with patch("agency_swarm.ui.demos.terminal.Application", new=_application_factory(input_provider)):
                 start_terminal(agency)
 
         captured = capsys.readouterr()
@@ -252,8 +279,7 @@ class TestTerminalEdgeCases:
         """Test handling of bad formatted agent name."""
         input_provider = MockInputProvider(["@SecUrity ExperT_Agent hi", "/exit"])
         with patch("builtins.input", input_provider):
-            with patch("prompt_toolkit.PromptSession") as mock_session_class:
-                mock_session_class.return_value.prompt_async = input_provider.async_call
+            with patch("agency_swarm.ui.demos.terminal.Application", new=_application_factory(input_provider)):
                 start_terminal(agency)
         captured = capsys.readouterr()
         assert "🤖 SecUrity ExperT_Agent → 👤 user" in captured.out
@@ -264,8 +290,7 @@ class TestTerminalEdgeCases:
         input_provider = MockInputProvider(["Use the transfer_to_Security_Expert_Agent tool", "Hi", "/exit"])
 
         with patch("builtins.input", input_provider):
-            with patch("prompt_toolkit.PromptSession") as mock_session_class:
-                mock_session_class.return_value.prompt_async = input_provider.async_call
+            with patch("agency_swarm.ui.demos.terminal.Application", new=_application_factory(input_provider)):
                 start_terminal(agency)
 
         captured = capsys.readouterr()
