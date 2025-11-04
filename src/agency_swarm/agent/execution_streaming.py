@@ -274,21 +274,67 @@ def run_stream_with_guardrails(
 
                     yield event
 
+                # Check if input guardrail tripped by inspecting SDK's guardrail results
+                input_guardrail_tripped = False
+                guardrail_guidance_text = ""
+                if streaming_result is not None:
+                    guardrail_results = getattr(streaming_result, "input_guardrail_results", None)
+                    if guardrail_results:
+                        for gr in guardrail_results:
+                            if gr.output.tripwire_triggered:
+                                input_guardrail_tripped = True
+                                guardrail_guidance_text = str(gr.output.output_info or "")
+                                break
+
+                if input_guardrail_tripped:
+                    # Suppress persistence and update final output to match SDK session-save suppression
+                    if streaming_result is not None:
+                        streaming_result.final_output = guardrail_guidance_text
+                        streaming_result.new_items = []
+                        streaming_result.raw_responses = []
+
+                    if agency_context and agency_context.thread_manager:
+                        # Rollback to pre-stream state, then re-add only user input and guardrail guidance
+                        # Use run_trace_id to identify all messages from this execution tree (parent + sub-agents)
+                        all_msgs = agency_context.thread_manager.get_all_messages()
+                        preserved_msgs = all_msgs[:initial_saved_count]
+                        new_msgs = all_msgs[initial_saved_count:]
+
+                        # Keep only user input and guardrail guidance from new messages
+                        # Remove everything else from this trace (including sub-agent calls)
+                        to_keep = [
+                            m
+                            for m in new_msgs
+                            if m.get("run_trace_id") != run_trace_id  # Keep messages from other traces
+                            or (
+                                # From this trace, keep only top-level user input and guardrail guidance
+                                m.get("run_trace_id") == run_trace_id
+                                and (
+                                    (m.get("role") == "user" and m.get("callerAgent") is None)  # Top-level user only
+                                    or m.get("message_origin") in {"input_guardrail_message", "input_guardrail_error"}
+                                )
+                            )
+                        ]
+
+                        agency_context.thread_manager.replace_messages(preserved_msgs + to_keep)
+                        agency_context.thread_manager.persist()
+
                 if guardrail_exception is None:
                     if agency_context and agency_context.thread_manager and streaming_result is not None:
-                        _persist_streamed_items(
-                            streaming_result=streaming_result,
-                            history_for_runner=history_for_runner,
-                            persistence_candidates=persistence_candidates,
-                            collected_items=collected_items,
-                            agent=agent,
-                            sender_name=sender_name,
-                            parent_run_id=parent_run_id,
-                            run_trace_id=run_trace_id,
-                            fallback_agent_run_id=current_agent_run_id,
-                            agency_context=agency_context,
-                            initial_saved_count=initial_saved_count,
-                        )
+                        if not input_guardrail_tripped:
+                            _persist_streamed_items(
+                                streaming_result=streaming_result,
+                                history_for_runner=history_for_runner,
+                                persistence_candidates=persistence_candidates,
+                                collected_items=collected_items,
+                                agent=agent,
+                                sender_name=sender_name,
+                                parent_run_id=parent_run_id,
+                                run_trace_id=run_trace_id,
+                                fallback_agent_run_id=current_agent_run_id,
+                                agency_context=agency_context,
+                                initial_saved_count=initial_saved_count,
+                            )
                     if streaming_result is not None:
                         if result_callback is not None:
                             try:
