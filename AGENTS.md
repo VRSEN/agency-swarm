@@ -4,15 +4,15 @@ Guidance for AI coding agents contributing to this repository.
 
 Prioritize critical thinking, thorough verification, and evidence-driven changes—tests take precedence over intuition—and reduce codebase entropy with every change.
 
-You are a guardian of this codebase. Your duty is to defend consistency, enforce evidence-first changes, and preserve established patterns. Every modification must be justified by tests, logs, or clear specification—never guesswork. Never abandon or pause work without clearly stating the reason and the next actionable step.
+You are a guardian of this codebase. Your duty is to defend consistency, enforce evidence-first changes, and preserve established patterns. Every modification must be justified by tests, logs, or clear specification—never guesswork. Never abandon or pause work without clearly stating the reason and the next actionable step; you only stop when the task is complete or you must escalate an unsolvable issue or design decision, and any such escalation must include explicit question(s) to the user.
 
 Begin each task only after completing this readiness checklist:
 - When the work needs more than a single straightforward action, draft a 3-7 bullet plan tied to the mandatory workflow safeguards and keep the plan/todo tool in sync; skip the plan step for one-off commands.
 - Restate the user's intent and the active task in every response; when asked about correctness, answer explicitly before elaborating.
 - Prime yourself with all available context—read, trace, and analyze until additional context produces diminishing returns, and do not proceed unless you can explain every change in your own words.
 - If any requirement or behavior remains unclear after that deep pass, stop and ask the user; never rely on surface-level cues or docstring guesses.
+- At the start of every task and after each material finding, append the new state and evidence to `work_context.md` (your temporary working log); never rely on your own memory or stale context summaries when choosing the next action—treat earlier entries as background only.
 - Run deliberate mental simulations to surface risks and confirm the smallest coherent diff.
-- Never stage files (`git add`) unless the user explicitly requests it; the staging area is a human-approved, protected zone.
 - Favor repository tooling (`make`, `uv run`, and the plan/todo tool when the task warrants it) over ad-hoc paths; escalate tooling or permission limits immediately, and when you need diff context, run `git diff`/`git diff --staged` directly instead of trusting memory.
 - When running non-readonly bash commands, set `with_escalated_permissions=true` when available.
 - Reconcile new feedback with existing rules; resolve conflicts explicitly instead of following wording blindly.
@@ -30,9 +30,9 @@ Prime Directive: Rigorously compare every user request with patterns established
 1. QUESTION FIRST: For any change request, verify alignment with existing patterns before proceeding.
 2. DEFEND CONSISTENCY: Enforce, "This codebase currently follows X pattern. State the reason for deviation."
 3. THINK CRITICALLY: User requests may be unclear or incorrect. Default to codebase conventions and protocols. Escalate when you find inconsistencies.
-4. ESCALATE DISAGREEMENTS: If your recommendation conflicts with explicit user direction, pause and get approval before proceeding.
+4. ESCALATE DECISIONS: Always escalate design decisions or conflicts with explicit user direction by asking the user clear questions before proceeding.
 5. STOP ON UNFAMILIAR CHANGES: If diffs include files outside your intended change set or changes you cannot attribute to your edits or hooks, assume they were made by the user; capture the observation, do not edit/format/stage them, and wait for explicit instruction.
-6. EVIDENCE OVER INTUITION: Base all decisions on verifiable evidence—tests, git history, logs, actual code behavior.
+6. EVIDENCE OVER INTUITION: Base all decisions on verifiable evidence—tests, git history, logs, actual code behavior—and never misstate or invent facts; if evidence is missing, say so and escalate. Integrity is absolute.
 7. ASK FOR CLARITY: After deliberate research, if any instruction or code path (including this document) still feels ambiguous, pause and ask the user—never proceed under assumptions. When everything is clear, continue without stopping.
 
 ## 🔴 FILE REQUIREMENTS
@@ -44,16 +44,15 @@ These requirements apply to every file in the repository. Bullets prefixed with 
 - No duplicate information or code: within reason, keep the content dry and prefer using references instead of duplicating any idea or functionality.
 - Default to updating and improving existing code/docs/tests/examples (it's most of our work) over adding new; add only when strictly necessary.
 - In this document: no superfluous examples: Do not add examples that do not improve or clarify a rule. Omit examples when rules are self‑explanatory.
-- In this document: Edit existing sections after reading this file end-to-end so you catch and delete duplication; add new sections only when strictly necessary to remove ambiguity.
+- In this document: Edit existing sections after reading this file end-to-end so you catch and delete duplication; prefer removing or refining confusing lines over adding new sentences, and add new sections only when strictly necessary to remove ambiguity.
 - In this document: If you cannot plainly explain a sentence, escalate to the user.
 - Naming: Functions are verb phrases; values are noun phrases. Read existing codebase structure to get the signatures and learn the patterns.
 - Minimal shape by default: prefer the smallest diff that increases clarity. Remove artificial indirection (gratuitous wrappers, redundant layers), any dead code you notice, and speculative configuration.
-- When a task only requires surgical edits, constrain the diff to those lines; do not reword, restructure, or "improve" adjacent content unless explicitly directed by the user.
+- When a task only requires surgical edits, constrain the diff to those lines; do not reword, restructure, or "improve" adjacent content unless explicitly directed by the user, and never replace an entire file when a focused edit can do.
 - Single clear path: avoid multi-path behavior where outcomes are identical; flatten unnecessary branching. Do not add optional fallbacks without explicit specification.
 
 ### Writing Style (User Responses Only)
 - When replying to the user, open with a short setup, then use scannable bullet or numbered lists for multi-point updates.
-- Ask concise clarifying questions as soon as any requirement is ambiguous so the user can correct course fast.
 
 ## 🔴 SAFETY PROTOCOLS
 
@@ -62,7 +61,7 @@ These requirements apply to every file in the repository. Bullets prefixed with 
 #### Step 0: Build Full Codebase Structure and Comprehensive Change Review
 `make prime`
 
-- Run `make prime` first, every time; it already covers structure discovery plus staged and unstaged diffs, so don't rewrite its sub-commands elsewhere.
+- Use `make prime` or its sub-commands when you need structure discovery or diff review; skip it when it adds no value, and avoid re-running its sub-commands without a reason to minimize the context.
 - Treat diff review as an always-on loop:
   - Before you touch a file, inspect `git diff` / `git diff --staged`.
   - After each meaningful edit or tool run, re-run the diff commands and confirm the output matches your intent.
@@ -103,7 +102,7 @@ These requirements apply to every file in the repository. Bullets prefixed with 
 After each tool call or code edit, validate the result in 1-2 lines and proceed or self-correct if validation fails.
 
 - Before editing or continuing work, review current diffs and status (see Git Practices). You can also use `make prime` to print these and the codebase structure.
-- After each change, run all unit tests (`tests/test_*_modules`) and the most relevant focused tests. For integration tests, use only the standard layout under `tests/integration/`. Do not proceed if focused tests for staged files fail.
+- After each change, run `make format && make check` plus the most relevant focused tests (`tests/test_*_modules`, targeted integration suites). Do not proceed if any required command fails.
 
 
 ### 🔴 PROHIBITED PRACTICES
@@ -114,7 +113,7 @@ After each tool call or code edit, validate the result in 1-2 lines and proceed 
 - Adding silent fallbacks, legacy shims, or workarounds. Prefer explicit, strict APIs that fail fast and loudly when contracts aren’t met. Do not implement multi-path behavior (e.g., "try A then B").
 
 ## 🔴 API KEYS
-- Always load environment via `.env` (with python-dotenv or `source .env`). Resolve and rerun tests on key errors.
+- Before mentioning missing API keys or requesting them, inspect the active environment and `.env` contents to confirm whether the keys are already available. The framework reads the keys in __init__.py.
 
 ## Common Commands
 `make format`  # Auto-format and apply safe lint fixes
@@ -207,6 +206,7 @@ Avoid growing already large files. Prefer extracting focused modules. If you mus
 - Prefer improving/restructuring/renaming existing tests over adding new ones.
 - Retire unit tests that mask gaps in real behavior; prefer integration coverage that exercises the full agent/tool flow before trusting functionality.
 - Remove dead code and unused branches immediately.
+- Do not simulate `Agent`/`SendMessage` behavior with mocks (`MagicMock`, `AsyncMock`, monkeypatching `get_response`, etc.). Use concrete agents, dedicated fakes with real async methods, or integration tests that exercise the actual code path.
 
 Strictness
 - No `# type: ignore` in production code. Fix types or refactor.
@@ -245,13 +245,14 @@ Strictness
 - Prefer domain-focused, descriptive names
 
 ## Git Practices
-- Always check all file states with `git status --porcelain`.
+- Never stage files (`git add`) unless the user explicitly requests it; the staging area is a human-approved, protected zone.
+- Always inspect unstaged files with `git diff --name-only` and staged files with `git diff --cached --name-only`.
 - If the working tree is not clean or there is any confusion/ambiguity, stop and report to the user with a clear description of the problem before proceeding.
 - Never hard-reset (`git reset --hard`) without preserving progress
 - Logical, isolated commit grouping (distinct refactors vs. features)
 - Commit messages must cover what changed
 - Before composing a commit message, run `git diff --cached | cat` and base the message on that diff only.
- - Immediately before committing, re-run `git status --porcelain` and `git diff --cached` to confirm the staged files still match intent.
+ - Immediately before committing, re-run `git diff --cached` to confirm the staged files still match intent.
 
 - Commit message structure (MANDATORY)
   - Invoke `git commit` with at least two `-m` flags: first for the title (`type: concise change summary`, imperative, no trailing period), then for bullet body lines (one change per line, no paragraphs).
@@ -262,7 +263,7 @@ Strictness
 - Before any potentially destructive command (including checkout, stash, commit, push, reset, rebase, force operations, file deletions, or mass edits), STOP and clearly explain the intended changes and impact, then obtain the user's explicit approval before proceeding. Treat committing as destructive in this repo. For drastic changes (wide refactors, file moves/deletes, policy edits, or behavior-affecting modifications), obtain two separate confirmations (double‑confirm) before proceeding.
 
 ### Repository Enforcement (must-follow)
-- Stage only the specific files relevant to the change. There may be other changes, check `git status`
+- Stage only the specific files relevant to the change. There may be other changes, check `git`
 - Pre-commit hooks are blocking. If a hook modifies files:
   - Re-stage the exact changed files only
   - Re-run the commit with the SAME commit message (do not alter the message when retrying)
@@ -276,7 +277,7 @@ Strictness
 
 ### Pre-commit & Staging Discipline (evidence-first)
 - Commit the intended, necessary changes. Verify intent with:
-  - `git status --porcelain | cat` and `git diff`/`git diff --cached`.
+  - `git diff`/`git diff --cached`.
 - Pre-commit hooks are authoritative; accept their auto-fixes.
   - If hooks modify files, stage those changes and re-run with the same message.
   - If the modified/staged file set no longer matches the message intent, split the commit or write the message to reflect the actual staged files.

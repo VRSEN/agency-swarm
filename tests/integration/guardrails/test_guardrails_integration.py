@@ -5,7 +5,6 @@ from agency_swarm import (
     Agent,
     GuardrailFunctionOutput,
     InputGuardrailTripwireTriggered,
-    ModelSettings,
     RunContextWrapper,
     input_guardrail,
     output_guardrail,
@@ -56,9 +55,8 @@ def input_guardrail_agent() -> Agent:
     return Agent(
         name="InputGuardrailAgent",
         instructions="You are a helpful assistant.",
-        model="gpt-4o",
+        model="gpt-5-mini",
         input_guardrails=[require_support_prefix],
-        model_settings=ModelSettings(temperature=0.0),
         throw_input_guardrail_error=False,
     )
 
@@ -74,9 +72,8 @@ def input_guardrail_agency_factory():
         agent = Agent(
             name="InputGuardrailAgent",
             instructions="You are a helpful assistant.",
-            model="gpt-4o",
+            model="gpt-5-mini",
             input_guardrails=[require_support_prefix],
-            model_settings=ModelSettings(temperature=0.0),
             throw_input_guardrail_error=False,
         )
         return Agency(agent)
@@ -89,9 +86,8 @@ def output_guardrail_agent() -> Agent:
     return Agent(
         name="OutputGuardrailAgent",
         instructions=("You are a helpful assistant. Respond with exactly 'foo@example.com' and nothing else."),
-        model="gpt-4o",
+        model="gpt-5-mini",
         output_guardrails=[forbid_email_output],
-        model_settings=ModelSettings(temperature=0.0),
         validation_attempts=1,
     )
 
@@ -106,9 +102,8 @@ def named_wrapper_guardrail_agent() -> Agent:
     return Agent(
         name="NamedWrapperGuardrailAgent",
         instructions="You are a helpful assistant.",
-        model="gpt-4o",
+        model="gpt-5-mini",
         input_guardrails=[guardrail_wrapper],
-        model_settings=ModelSettings(temperature=0.0),
         throw_input_guardrail_error=False,
     )
 
