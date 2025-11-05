@@ -9,8 +9,8 @@ Deletion is permanent and cannot be undone.
 """
 import json
 import os
+import requests
 
-from composio import Composio
 from dotenv import load_dotenv
 from pydantic import Field
 
@@ -69,13 +69,13 @@ class GmailDeleteDraft(BaseTool):
         """
         # Get Composio credentials from environment
         api_key = os.getenv("COMPOSIO_API_KEY")
-        entity_id = os.getenv("GMAIL_ENTITY_ID")
+        connection_id = os.getenv("GMAIL_CONNECTION_ID")
 
         # Validate credentials
-        if not api_key or not entity_id:
+        if not api_key or not connection_id:
             return json.dumps({
                 "success": False,
-                "error": "Missing Composio credentials. Set COMPOSIO_API_KEY and GMAIL_ENTITY_ID in .env",
+                "error": "Missing Composio credentials. Set COMPOSIO_API_KEY and GMAIL_CONNECTION_ID in .env",
                 "draft_id": self.draft_id,
                 "deleted": False
             }, indent=2)
@@ -90,24 +90,31 @@ class GmailDeleteDraft(BaseTool):
             }, indent=2)
 
         try:
-            # Initialize Composio client (VALIDATED PATTERN)
-            client = Composio(api_key=api_key)
-
             # Prepare deletion parameters
             delete_params = {
                 "draft_id": self.draft_id,
                 "user_id": self.user_id
             }
 
-            # Execute GMAIL_DELETE_DRAFT via Composio (VALIDATED PATTERN)
-            result = client.tools.execute(
-                "GMAIL_DELETE_DRAFT",
-                delete_params,
-                user_id=entity_id  # CRITICAL: Uses entity_id for authentication
-            )
+            # Prepare API request
+            url = "https://backend.composio.dev/api/v2/actions/GMAIL_DELETE_DRAFT/execute"
+            headers = {
+                "X-API-Key": api_key,
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "connectedAccountId": connection_id,
+                "input": delete_params
+            }
+
+            # Execute via Composio REST API
+            response = requests.post(url, headers=headers, json=payload, timeout=30)
+            response.raise_for_status()
+
+            result = response.json()
 
             # Check if deletion was successful
-            if result.get("successful"):
+            if result.get("successfull") or result.get("data"):
                 return json.dumps({
                     "success": True,
                     "draft_id": self.draft_id,
@@ -135,6 +142,13 @@ class GmailDeleteDraft(BaseTool):
                     "raw_response": result
                 }, indent=2)
 
+        except requests.exceptions.RequestException as e:
+            return json.dumps({
+                "error": f"API request failed: {str(e)}",
+
+
+                "type": "RequestException"
+            }, indent=2)
         except Exception as e:
             # Handle unexpected errors
             return json.dumps({
@@ -265,7 +279,7 @@ if __name__ == "__main__":
     print("=" * 80)
     print("\nProduction Setup Instructions:")
     print("1. Set COMPOSIO_API_KEY in .env file")
-    print("2. Set GMAIL_ENTITY_ID in .env file (your Composio connected account)")
+    print("2. Set GMAIL_CONNECTION_ID in .env file (your Composio connected account)")
     print("3. Ensure Gmail integration is connected via Composio dashboard")
     print("4. GMAIL_DELETE_DRAFT action must be enabled for your integration")
     print("\nValidated Pattern Used:")

@@ -7,8 +7,8 @@ Uses Composio SDK client.tools.execute() with GMAIL_LIST_LABELS action.
 """
 import json
 import os
+import requests
 
-from composio import Composio
 from dotenv import load_dotenv
 from pydantic import Field
 
@@ -61,30 +61,37 @@ class GmailListLabels(BaseTool):
         """
         # Get Composio credentials
         api_key = os.getenv("COMPOSIO_API_KEY")
-        entity_id = os.getenv("GMAIL_ENTITY_ID")
+        connection_id = os.getenv("GMAIL_CONNECTION_ID")
 
-        if not api_key or not entity_id:
+        if not api_key or not connection_id:
             return json.dumps({
                 "success": False,
-                "error": "Missing Composio credentials. Set COMPOSIO_API_KEY and GMAIL_ENTITY_ID in .env",
+                "error": "Missing Composio credentials. Set COMPOSIO_API_KEY and GMAIL_CONNECTION_ID in .env",
                 "count": 0,
                 "labels": [],
                 "system_labels": [],
                 "custom_labels": []
             }, indent=2)
 
-        try:
-            # Initialize Composio client
-            client = Composio(api_key=api_key)
-
-            # Execute GMAIL_LIST_LABELS via Composio
-            result = client.tools.execute(
-                "GMAIL_LIST_LABELS",
-                {
+        try:            # Execute GMAIL_LIST_LABELS via Composio
+            # Prepare API request
+            url = "https://backend.composio.dev/api/v2/actions/GMAIL_LIST_LABELS/execute"
+            headers = {
+                "X-API-Key": api_key,
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "connectedAccountId": connection_id,
+                "input": {
                     "user_id": self.user_id  # "me" for authenticated user
-                },
-                user_id=entity_id
-            )
+                }
+            }
+
+            # Execute via Composio REST API
+            response = requests.post(url, headers=headers, json=payload, timeout=30)
+            response.raise_for_status()
+
+            result = response.json()
 
             # Extract labels from response
             labels = result.get("data", {}).get("labels", [])
@@ -111,6 +118,13 @@ class GmailListLabels(BaseTool):
                 "custom_count": len(custom_labels)
             }, indent=2)
 
+        except requests.exceptions.RequestException as e:
+            return json.dumps({
+                "error": f"API request failed: {str(e)}",
+
+
+                "type": "RequestException"
+            }, indent=2)
         except Exception as e:
             return json.dumps({
                 "success": False,
@@ -174,5 +188,5 @@ if __name__ == "__main__":
     print("- Use label IDs with GmailFetchEmails (query='label:LABELNAME')")
     print("\nProduction Requirements:")
     print("- Set COMPOSIO_API_KEY in .env")
-    print("- Set GMAIL_ENTITY_ID in .env")
+    print("- Set GMAIL_CONNECTION_ID in .env")
     print("- Gmail account connected via Composio")

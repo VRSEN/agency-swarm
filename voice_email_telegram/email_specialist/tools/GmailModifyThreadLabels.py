@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 import json
 import os
+import requests
 
-from composio import Composio
 from dotenv import load_dotenv
 from pydantic import Field
 
@@ -74,11 +74,11 @@ class GmailModifyThreadLabels(BaseTool):
         """
         # Get Composio credentials
         api_key = os.getenv("COMPOSIO_API_KEY")
-        entity_id = os.getenv("GMAIL_ENTITY_ID")
+        connection_id = os.getenv("GMAIL_CONNECTION_ID")
 
-        if not api_key or not entity_id:
+        if not api_key or not connection_id:
             return json.dumps({
-                "error": "Missing Composio credentials. Set COMPOSIO_API_KEY and GMAIL_ENTITY_ID in .env"
+                "error": "Missing Composio credentials. Set COMPOSIO_API_KEY and GMAIL_CONNECTION_ID in .env"
             })
 
         try:
@@ -92,12 +92,7 @@ class GmailModifyThreadLabels(BaseTool):
             if not self.add_label_ids and not self.remove_label_ids:
                 return json.dumps({
                     "error": "Must specify at least one of: add_label_ids or remove_label_ids"
-                })
-
-            # Initialize Composio client
-            client = Composio(api_key=api_key)
-
-            # Prepare parameters for modifying thread labels
+                })            # Prepare parameters for modifying thread labels
             params = {
                 "thread_id": self.thread_id,
                 "user_id": "me"
@@ -111,14 +106,25 @@ class GmailModifyThreadLabels(BaseTool):
                 params["remove_label_ids"] = self.remove_label_ids
 
             # Execute Gmail modify thread labels via Composio
-            result = client.tools.execute(
-                "GMAIL_MODIFY_THREAD_LABELS",
-                params,
-                user_id=entity_id
-            )
+            # Prepare API request
+            url = "https://backend.composio.dev/api/v2/actions/GMAIL_MODIFY_THREAD_LABELS/execute"
+            headers = {
+                "X-API-Key": api_key,
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "connectedAccountId": connection_id,
+                "input": params
+            }
+
+            # Execute via Composio REST API
+            response = requests.post(url, headers=headers, json=payload, timeout=30)
+            response.raise_for_status()
+
+            result = response.json()
 
             # Format response
-            if result.get("successful"):
+            if result.get("successfull") or result.get("data"):
                 data = result.get("data", {})
 
                 # Count modified messages (if available)
@@ -167,6 +173,13 @@ class GmailModifyThreadLabels(BaseTool):
                     "message": "Failed to modify thread labels"
                 }, indent=2)
 
+        except requests.exceptions.RequestException as e:
+            return json.dumps({
+                "error": f"API request failed: {str(e)}",
+
+
+                "type": "RequestException"
+            }, indent=2)
         except Exception as e:
             return json.dumps({
                 "error": f"Error modifying thread labels: {str(e)}",

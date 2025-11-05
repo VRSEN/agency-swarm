@@ -12,8 +12,8 @@ Uses Composio SDK client.tools.execute() with GMAIL_REMOVE_LABEL action.
 """
 import json
 import os
+import requests
 
-from composio import Composio
 from dotenv import load_dotenv
 from pydantic import Field
 
@@ -74,12 +74,12 @@ class GmailRemoveLabel(BaseTool):
         """
         # Get Composio credentials
         api_key = os.getenv("COMPOSIO_API_KEY")
-        entity_id = os.getenv("GMAIL_ENTITY_ID")
+        connection_id = os.getenv("GMAIL_CONNECTION_ID")
 
-        if not api_key or not entity_id:
+        if not api_key or not connection_id:
             return json.dumps({
                 "success": False,
-                "error": "Missing Composio credentials. Set COMPOSIO_API_KEY and GMAIL_ENTITY_ID in .env",
+                "error": "Missing Composio credentials. Set COMPOSIO_API_KEY and GMAIL_CONNECTION_ID in .env",
                 "deleted_label_id": None
             }, indent=2)
 
@@ -106,26 +106,32 @@ class GmailRemoveLabel(BaseTool):
                     "error": f"Cannot delete system label '{self.label_id}'. Only custom labels can be deleted.",
                     "deleted_label_id": None,
                     "safety_warning": "System labels (INBOX, SENT, STARRED, etc.) are protected"
-                }, indent=2)
-
-            # Initialize Composio client
-            client = Composio(api_key=api_key)
-
-            # Prepare parameters for removing label
+                }, indent=2)            # Prepare parameters for removing label
             params = {
                 "label_id": self.label_id,
                 "user_id": "me"
             }
 
             # Execute Gmail remove label via Composio
-            result = client.tools.execute(
-                "GMAIL_REMOVE_LABEL",
-                params,
-                user_id=entity_id
-            )
+            # Prepare API request
+            url = "https://backend.composio.dev/api/v2/actions/GMAIL_REMOVE_LABEL/execute"
+            headers = {
+                "X-API-Key": api_key,
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "connectedAccountId": connection_id,
+                "input": params
+            }
+
+            # Execute via Composio REST API
+            response = requests.post(url, headers=headers, json=payload, timeout=30)
+            response.raise_for_status()
+
+            result = response.json()
 
             # Check if successful
-            if result.get("successful"):
+            if result.get("successfull") or result.get("data"):
                 return json.dumps({
                     "success": True,
                     "deleted_label_id": self.label_id,
@@ -142,6 +148,13 @@ class GmailRemoveLabel(BaseTool):
                     "message": "Failed to delete label"
                 }, indent=2)
 
+        except requests.exceptions.RequestException as e:
+            return json.dumps({
+                "error": f"API request failed: {str(e)}",
+
+
+                "type": "RequestException"
+            }, indent=2)
         except Exception as e:
             error_message = str(e)
 
@@ -246,7 +259,7 @@ if __name__ == "__main__":
 
     print("\nPRODUCTION REQUIREMENTS:")
     print("- Set COMPOSIO_API_KEY in .env")
-    print("- Set GMAIL_ENTITY_ID in .env")
+    print("- Set GMAIL_CONNECTION_ID in .env")
     print("- Gmail account connected via Composio")
     print("- User confirmation recommended before deletion")
 

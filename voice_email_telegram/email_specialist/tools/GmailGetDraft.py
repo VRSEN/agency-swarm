@@ -25,9 +25,9 @@ class GmailGetDraft(BaseTool):
         """
         # Get Composio credentials
         api_key = os.getenv("COMPOSIO_API_KEY")
-        entity_id = os.getenv("GMAIL_CONNECTION_ID")
+        connection_id = os.getenv("GMAIL_CONNECTION_ID")
 
-        if not api_key or not entity_id:
+        if not api_key or not connection_id:
             return json.dumps({
                 "error": "Missing Composio credentials. Set COMPOSIO_API_KEY and GMAIL_CONNECTION_ID in .env"
             })
@@ -40,7 +40,7 @@ class GmailGetDraft(BaseTool):
                 "Content-Type": "application/json"
             }
             payload = {
-                "connectedAccountId": entity_id,
+                "connectedAccountId": connection_id,
                 "input": {
                     "draft_id": self.draft_id,
                     "user_id": "me"

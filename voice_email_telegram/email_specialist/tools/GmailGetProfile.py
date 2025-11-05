@@ -7,8 +7,8 @@ Uses Composio SDK client.tools.execute() with GMAIL_GET_PROFILE action.
 """
 import json
 import os
+import requests
 
-from composio import Composio
 from dotenv import load_dotenv
 from pydantic import Field
 
@@ -57,12 +57,12 @@ class GmailGetProfile(BaseTool):
         """
         # Get Composio credentials
         api_key = os.getenv("COMPOSIO_API_KEY")
-        entity_id = os.getenv("GMAIL_ENTITY_ID")
+        connection_id = os.getenv("GMAIL_CONNECTION_ID")
 
-        if not api_key or not entity_id:
+        if not api_key or not connection_id:
             return json.dumps({
                 "success": False,
-                "error": "Missing Composio credentials. Set COMPOSIO_API_KEY and GMAIL_ENTITY_ID in .env",
+                "error": "Missing Composio credentials. Set COMPOSIO_API_KEY and GMAIL_CONNECTION_ID in .env",
                 "email_address": None,
                 "messages_total": 0,
                 "threads_total": 0,
@@ -72,18 +72,25 @@ class GmailGetProfile(BaseTool):
                 "user_id": self.user_id
             }, indent=2)
 
-        try:
-            # Initialize Composio client
-            client = Composio(api_key=api_key)
-
-            # Execute GMAIL_GET_PROFILE via Composio
-            result = client.tools.execute(
-                "GMAIL_GET_PROFILE",
-                {
+        try:            # Execute GMAIL_GET_PROFILE via Composio
+            # Prepare API request
+            url = "https://backend.composio.dev/api/v2/actions/GMAIL_GET_PROFILE/execute"
+            headers = {
+                "X-API-Key": api_key,
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "connectedAccountId": connection_id,
+                "input": {
                     "user_id": self.user_id
-                },
-                user_id=entity_id
-            )
+                }
+            }
+
+            # Execute via Composio REST API
+            response = requests.post(url, headers=headers, json=payload, timeout=30)
+            response.raise_for_status()
+
+            result = response.json()
 
             # Extract profile data from response
             profile_data = result.get("data", {})
@@ -111,6 +118,13 @@ class GmailGetProfile(BaseTool):
                 "user_id": self.user_id
             }, indent=2)
 
+        except requests.exceptions.RequestException as e:
+            return json.dumps({
+                "error": f"API request failed: {str(e)}",
+
+
+                "type": "RequestException"
+            }, indent=2)
         except Exception as e:
             return json.dumps({
                 "success": False,
@@ -161,13 +175,13 @@ if __name__ == "__main__":
     print("\n4. Test without credentials (simulated):")
     # Save current env vars
     original_api_key = os.getenv("COMPOSIO_API_KEY")
-    original_entity_id = os.getenv("GMAIL_ENTITY_ID")
+    original_connection_id = os.getenv("GMAIL_CONNECTION_ID")
 
     # Temporarily clear env vars
     if "COMPOSIO_API_KEY" in os.environ:
         del os.environ["COMPOSIO_API_KEY"]
-    if "GMAIL_ENTITY_ID" in os.environ:
-        del os.environ["GMAIL_ENTITY_ID"]
+    if "GMAIL_CONNECTION_ID" in os.environ:
+        del os.environ["GMAIL_CONNECTION_ID"]
 
     tool = GmailGetProfile()
     result = tool.run()
@@ -177,7 +191,7 @@ if __name__ == "__main__":
     if original_api_key:
         os.environ["COMPOSIO_API_KEY"] = original_api_key
     if original_entity_id:
-        os.environ["GMAIL_ENTITY_ID"] = original_entity_id
+        os.environ["GMAIL_CONNECTION_ID"] = original_entity_id
 
     # Test 5: Check mailbox health (message to thread ratio)
     print("\n5. Mailbox health analysis:")
@@ -210,5 +224,5 @@ if __name__ == "__main__":
     print("- Quota and usage monitoring")
     print("\nProduction Requirements:")
     print("- Set COMPOSIO_API_KEY in .env")
-    print("- Set GMAIL_ENTITY_ID in .env")
+    print("- Set GMAIL_CONNECTION_ID in .env")
     print("- Gmail account connected via Composio")

@@ -15,8 +15,8 @@ DISTINCTION:
 """
 import json
 import os
+import requests
 
-from composio import Composio
 from dotenv import load_dotenv
 from pydantic import Field
 
@@ -74,12 +74,12 @@ class GmailDeleteMessage(BaseTool):
         """
         # Get Composio credentials
         api_key = os.getenv("COMPOSIO_API_KEY")
-        entity_id = os.getenv("GMAIL_ENTITY_ID")
+        connection_id = os.getenv("GMAIL_CONNECTION_ID")
 
-        if not api_key or not entity_id:
+        if not api_key or not connection_id:
             return json.dumps({
                 "success": False,
-                "error": "Missing Composio credentials. Set COMPOSIO_API_KEY and GMAIL_ENTITY_ID in .env",
+                "error": "Missing Composio credentials. Set COMPOSIO_API_KEY and GMAIL_CONNECTION_ID in .env",
                 "message_id": self.message_id
             }, indent=2)
 
@@ -91,23 +91,29 @@ class GmailDeleteMessage(BaseTool):
                     "error": "message_id is required and cannot be empty",
                     "message_id": self.message_id,
                     "suggestion": "Provide a valid Gmail message ID"
-                }, indent=2)
-
-            # Initialize Composio client
-            client = Composio(api_key=api_key)
-
-            # Execute GMAIL_DELETE_MESSAGE via Composio
-            result = client.tools.execute(
-                "GMAIL_DELETE_MESSAGE",
-                {
+                }, indent=2)            # Execute GMAIL_DELETE_MESSAGE via Composio
+            # Prepare API request
+            url = "https://backend.composio.dev/api/v2/actions/GMAIL_DELETE_MESSAGE/execute"
+            headers = {
+                "X-API-Key": api_key,
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "connectedAccountId": connection_id,
+                "input": {
                     "message_id": self.message_id,
                     "user_id": "me"  # Gmail API user identifier
-                },
-                user_id=entity_id
-            )
+                }
+            }
+
+            # Execute via Composio REST API
+            response = requests.post(url, headers=headers, json=payload, timeout=30)
+            response.raise_for_status()
+
+            result = response.json()
 
             # Check if successful
-            if result.get("successful") or result.get("data") is not None:
+            if result.get("successfull") or result.get("data") or result.get("data") is not None:
                 return json.dumps({
                     "success": True,
                     "message_id": self.message_id,
@@ -127,6 +133,13 @@ class GmailDeleteMessage(BaseTool):
                     "suggestion": "Verify message_id exists and is not already deleted"
                 }, indent=2)
 
+        except requests.exceptions.RequestException as e:
+            return json.dumps({
+                "error": f"API request failed: {str(e)}",
+
+
+                "type": "RequestException"
+            }, indent=2)
         except Exception as e:
             return json.dumps({
                 "success": False,
@@ -157,7 +170,7 @@ if __name__ == "__main__":
     print("\n" + "=" * 80)
     print("\nTEST REQUIREMENTS:")
     print("- COMPOSIO_API_KEY set in .env")
-    print("- GMAIL_ENTITY_ID set in .env")
+    print("- GMAIL_CONNECTION_ID set in .env")
     print("- Valid Gmail message IDs")
     print("\n⚠️ WARNING: Tests use mock IDs. Replace with real IDs for production testing.")
     print("=" * 80)

@@ -7,8 +7,8 @@ Uses Composio SDK client.tools.execute() with GMAIL_CREATE_LABEL action.
 """
 import json
 import os
+import requests
 
-from composio import Composio
 from dotenv import load_dotenv
 from pydantic import Field
 
@@ -74,12 +74,12 @@ class GmailCreateLabel(BaseTool):
         """
         # Get Composio credentials
         api_key = os.getenv("COMPOSIO_API_KEY")
-        entity_id = os.getenv("GMAIL_ENTITY_ID")
+        connection_id = os.getenv("GMAIL_CONNECTION_ID")
 
-        if not api_key or not entity_id:
+        if not api_key or not connection_id:
             return json.dumps({
                 "success": False,
-                "error": "Missing Composio credentials. Set COMPOSIO_API_KEY and GMAIL_ENTITY_ID in .env",
+                "error": "Missing Composio credentials. Set COMPOSIO_API_KEY and GMAIL_CONNECTION_ID in .env",
                 "label_id": None,
                 "name": self.name
             }, indent=2)
@@ -112,12 +112,7 @@ class GmailCreateLabel(BaseTool):
                     "error": f"Invalid message_list_visibility. Must be one of: {valid_message_visibility}",
                     "label_id": None,
                     "name": self.name
-                }, indent=2)
-
-            # Initialize Composio client
-            client = Composio(api_key=api_key)
-
-            # Prepare parameters for label creation
+                }, indent=2)            # Prepare parameters for label creation
             params = {
                 "name": self.name.strip(),
                 "label_list_visibility": self.label_list_visibility,
@@ -126,11 +121,22 @@ class GmailCreateLabel(BaseTool):
             }
 
             # Execute GMAIL_CREATE_LABEL via Composio
-            result = client.tools.execute(
-                "GMAIL_CREATE_LABEL",
-                params,
-                user_id=entity_id
-            )
+            # Prepare API request
+            url = "https://backend.composio.dev/api/v2/actions/GMAIL_CREATE_LABEL/execute"
+            headers = {
+                "X-API-Key": api_key,
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "connectedAccountId": connection_id,
+                "input": params
+            }
+
+            # Execute via Composio REST API
+            response = requests.post(url, headers=headers, json=payload, timeout=30)
+            response.raise_for_status()
+
+            result = response.json()
 
             # Extract label data from response
             data = result.get("data", {})
@@ -160,6 +166,13 @@ class GmailCreateLabel(BaseTool):
                     "raw_response": data
                 }, indent=2)
 
+        except requests.exceptions.RequestException as e:
+            return json.dumps({
+                "error": f"API request failed: {str(e)}",
+
+
+                "type": "RequestException"
+            }, indent=2)
         except Exception as e:
             error_message = str(e)
 
@@ -277,7 +290,7 @@ if __name__ == "__main__":
     print("3. Use GmailListLabels to see all labels")
     print("\nProduction Requirements:")
     print("- Set COMPOSIO_API_KEY in .env")
-    print("- Set GMAIL_ENTITY_ID in .env")
+    print("- Set GMAIL_CONNECTION_ID in .env")
     print("- Gmail account connected via Composio")
     print("\nRelated Tools:")
     print("- GmailListLabels: List all existing labels")

@@ -15,8 +15,8 @@ Only user-created custom labels can be edited.
 """
 import json
 import os
+import requests
 
-from composio import Composio
 from dotenv import load_dotenv
 from pydantic import Field
 
@@ -99,12 +99,12 @@ class GmailPatchLabel(BaseTool):
         """
         # Get Composio credentials
         api_key = os.getenv("COMPOSIO_API_KEY")
-        entity_id = os.getenv("GMAIL_ENTITY_ID")
+        connection_id = os.getenv("GMAIL_CONNECTION_ID")
 
-        if not api_key or not entity_id:
+        if not api_key or not connection_id:
             return json.dumps({
                 "success": False,
-                "error": "Missing Composio credentials. Set COMPOSIO_API_KEY and GMAIL_ENTITY_ID in .env"
+                "error": "Missing Composio credentials. Set COMPOSIO_API_KEY and GMAIL_CONNECTION_ID in .env"
             }, indent=2)
 
         try:
@@ -195,17 +195,23 @@ class GmailPatchLabel(BaseTool):
                     "success": False,
                     "error": "At least one property must be specified to update (name, visibility, or colors)",
                     "label_id": self.label_id
-                }, indent=2)
+                }, indent=2)            # Execute GMAIL_PATCH_LABEL via Composio
+            # Prepare API request
+            url = "https://backend.composio.dev/api/v2/actions/GMAIL_PATCH_LABEL/execute"
+            headers = {
+                "X-API-Key": api_key,
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "connectedAccountId": connection_id,
+                "input": params
+            }
 
-            # Initialize Composio client
-            client = Composio(api_key=api_key)
+            # Execute via Composio REST API
+            response = requests.post(url, headers=headers, json=payload, timeout=30)
+            response.raise_for_status()
 
-            # Execute GMAIL_PATCH_LABEL via Composio
-            result = client.tools.execute(
-                "GMAIL_PATCH_LABEL",
-                params,
-                user_id=entity_id
-            )
+            result = response.json()
 
             # Extract updated label from response
             label_data = result.get("data", {})
@@ -228,6 +234,13 @@ class GmailPatchLabel(BaseTool):
                 "message": f"Successfully updated {len(updated_properties)} property/properties for label"
             }, indent=2)
 
+        except requests.exceptions.RequestException as e:
+            return json.dumps({
+                "error": f"API request failed: {str(e)}",
+
+
+                "type": "RequestException"
+            }, indent=2)
         except Exception as e:
             return json.dumps({
                 "success": False,
@@ -392,7 +405,7 @@ if __name__ == "__main__":
     print("- ✅ Can modify any user-created custom label")
     print("\nProduction Requirements:")
     print("- Set COMPOSIO_API_KEY in .env")
-    print("- Set GMAIL_ENTITY_ID in .env")
+    print("- Set GMAIL_CONNECTION_ID in .env")
     print("- Gmail account connected via Composio")
     print("- Use GmailListLabels to get label IDs")
     print("\nRelated Tools:")

@@ -56,10 +56,10 @@ class GmailCreateDraft(BaseTool):
         """
         # Get Composio credentials from environment
         api_key = os.getenv("COMPOSIO_API_KEY")
-        entity_id = os.getenv("GMAIL_CONNECTION_ID")
+        connection_id = os.getenv("GMAIL_CONNECTION_ID")
 
         # Validate credentials
-        if not api_key or not entity_id:
+        if not api_key or not connection_id:
             return json.dumps({
                 "success": False,
                 "error": "Missing Composio credentials. Set COMPOSIO_API_KEY and GMAIL_CONNECTION_ID in .env",
@@ -89,7 +89,7 @@ class GmailCreateDraft(BaseTool):
                 "Content-Type": "application/json"
             }
             payload = {
-                "connectedAccountId": entity_id,
+                "connectedAccountId": connection_id,
                 "input": draft_params
             }
 

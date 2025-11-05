@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 import json
 import os
+import requests
 
-from composio import Composio
 from dotenv import load_dotenv
 from pydantic import Field
 
@@ -57,11 +57,11 @@ class GmailAddLabel(BaseTool):
         """
         # Get Composio credentials
         api_key = os.getenv("COMPOSIO_API_KEY")
-        entity_id = os.getenv("GMAIL_ENTITY_ID")
+        connection_id = os.getenv("GMAIL_CONNECTION_ID")
 
-        if not api_key or not entity_id:
+        if not api_key or not connection_id:
             return json.dumps({
-                "error": "Missing Composio credentials. Set COMPOSIO_API_KEY and GMAIL_ENTITY_ID in .env"
+                "error": "Missing Composio credentials. Set COMPOSIO_API_KEY and GMAIL_CONNECTION_ID in .env"
             })
 
         try:
@@ -74,12 +74,7 @@ class GmailAddLabel(BaseTool):
             if not self.label_ids or len(self.label_ids) == 0:
                 return json.dumps({
                     "error": "label_ids is required and must contain at least one label ID"
-                })
-
-            # Initialize Composio client
-            client = Composio(api_key=api_key)
-
-            # Prepare parameters for adding labels
+                })            # Prepare parameters for adding labels
             params = {
                 "message_id": self.message_id,
                 "label_ids": self.label_ids,
@@ -87,14 +82,25 @@ class GmailAddLabel(BaseTool):
             }
 
             # Execute Gmail add label via Composio
-            result = client.tools.execute(
-                "GMAIL_ADD_LABEL_TO_EMAIL",
-                params,
-                user_id=entity_id
-            )
+            # Prepare API request
+            url = "https://backend.composio.dev/api/v2/actions/GMAIL_ADD_LABEL_TO_EMAIL/execute"
+            headers = {
+                "X-API-Key": api_key,
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "connectedAccountId": connection_id,
+                "input": params
+            }
+
+            # Execute via Composio REST API
+            response = requests.post(url, headers=headers, json=payload, timeout=30)
+            response.raise_for_status()
+
+            result = response.json()
 
             # Format response
-            if result.get("successful"):
+            if result.get("successfull") or result.get("data"):
                 data = result.get("data", {})
 
                 return json.dumps({
@@ -112,6 +118,13 @@ class GmailAddLabel(BaseTool):
                     "message": "Failed to add labels to message"
                 }, indent=2)
 
+        except requests.exceptions.RequestException as e:
+            return json.dumps({
+                "error": f"API request failed: {str(e)}",
+
+
+                "type": "RequestException"
+            }, indent=2)
         except Exception as e:
             return json.dumps({
                 "error": f"Error adding labels: {str(e)}",

@@ -2,16 +2,16 @@
 """
 GmailMoveToTrash Tool - Move Gmail messages to trash (soft delete, recoverable).
 
-Based on validated pattern from FINAL_VALIDATION_SUMMARY.md
-Uses Composio SDK client.tools.execute() with GMAIL_MOVE_TO_TRASH action.
+UPDATED: Uses Composio REST API directly instead of SDK (SDK has compatibility issues).
+This approach matches the working GmailFetchEmails.py implementation.
 
 Note: Trash != Permanent delete. Trashed messages can be recovered within 30 days.
 After 30 days, Gmail automatically deletes trashed messages permanently.
 """
 import json
 import os
+import requests
 
-from composio import Composio
 from dotenv import load_dotenv
 from pydantic import Field
 
@@ -43,7 +43,7 @@ class GmailMoveToTrash(BaseTool):
 
     def run(self):
         """
-        Executes GMAIL_MOVE_TO_TRASH via Composio SDK.
+        Executes GMAIL_MOVE_TO_TRASH via Composio REST API.
 
         Returns:
             JSON string with:
@@ -54,12 +54,12 @@ class GmailMoveToTrash(BaseTool):
         """
         # Get Composio credentials
         api_key = os.getenv("COMPOSIO_API_KEY")
-        entity_id = os.getenv("GMAIL_ENTITY_ID")
+        connection_id = os.getenv("GMAIL_CONNECTION_ID")
 
-        if not api_key or not entity_id:
+        if not api_key or not connection_id:
             return json.dumps({
                 "success": False,
-                "error": "Missing Composio credentials. Set COMPOSIO_API_KEY and GMAIL_ENTITY_ID in .env",
+                "error": "Missing Composio credentials. Set COMPOSIO_API_KEY and GMAIL_CONNECTION_ID in .env",
                 "message_id": self.message_id
             }, indent=2)
 
@@ -72,21 +72,28 @@ class GmailMoveToTrash(BaseTool):
                     "message_id": self.message_id
                 }, indent=2)
 
-            # Initialize Composio client
-            client = Composio(api_key=api_key)
-
-            # Execute GMAIL_MOVE_TO_TRASH via Composio
-            result = client.tools.execute(
-                "GMAIL_MOVE_TO_TRASH",
-                {
+            # Prepare API request
+            url = "https://backend.composio.dev/api/v2/actions/GMAIL_MOVE_TO_TRASH/execute"
+            headers = {
+                "X-API-Key": api_key,
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "connectedAccountId": connection_id,
+                "input": {
                     "message_id": self.message_id,
-                    "user_id": "me"  # Gmail API user identifier
-                },
-                user_id=entity_id
-            )
+                    "user_id": "me"
+                }
+            }
+
+            # Execute via Composio REST API
+            response = requests.post(url, headers=headers, json=payload, timeout=30)
+            response.raise_for_status()
+
+            result = response.json()
 
             # Check if successful
-            if result.get("successful") or result.get("data", {}).get("id"):
+            if result.get("successfull") or result.get("data", {}).get("id"):
                 return json.dumps({
                     "success": True,
                     "message_id": self.message_id,
@@ -104,6 +111,13 @@ class GmailMoveToTrash(BaseTool):
                     "status": "Failed to move message to trash"
                 }, indent=2)
 
+        except requests.exceptions.RequestException as e:
+            return json.dumps({
+                "success": False,
+                "error": f"API request failed: {str(e)}",
+                "type": "RequestException",
+                "message_id": self.message_id
+            }, indent=2)
         except Exception as e:
             return json.dumps({
                 "success": False,
@@ -118,7 +132,7 @@ if __name__ == "__main__":
     print("=" * 60)
     print("\nNOTE: This test requires:")
     print("- COMPOSIO_API_KEY set in .env")
-    print("- GMAIL_ENTITY_ID set in .env")
+    print("- GMAIL_CONNECTION_ID set in .env")
     print("- Valid Gmail message IDs")
     print("\nTrash vs Permanent Delete:")
     print("- TRASH: Recoverable for 30 days, auto-deleted after")

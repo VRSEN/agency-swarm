@@ -65,9 +65,9 @@ class GmailFetchEmails(BaseTool):
         """
         # Get Composio credentials
         api_key = os.getenv("COMPOSIO_API_KEY")
-        entity_id = os.getenv("GMAIL_CONNECTION_ID")  # Use connection ID (ca_*) not entity ID
+        connection_id = os.getenv("GMAIL_CONNECTION_ID")  # Use connection ID (ca_*) not entity ID
 
-        if not api_key or not entity_id:
+        if not api_key or not connection_id:
             return json.dumps({
                 "success": False,
                 "error": "Missing Composio credentials. Set COMPOSIO_API_KEY and GMAIL_CONNECTION_ID in .env",
@@ -92,7 +92,7 @@ class GmailFetchEmails(BaseTool):
                 "Content-Type": "application/json"
             }
             payload = {
-                "connectedAccountId": entity_id,
+                "connectedAccountId": connection_id,
                 "input": {
                     "query": self.query,
                     "max_results": self.max_results,
@@ -220,5 +220,5 @@ if __name__ == "__main__":
     print("- 'from:john@example.com is:unread' - Combined filters")
     print("\nProduction Requirements:")
     print("- Set COMPOSIO_API_KEY in .env")
-    print("- Set GMAIL_ENTITY_ID in .env")
+    print("- Set GMAIL_CONNECTION_ID in .env")
     print("- Gmail account connected via Composio")

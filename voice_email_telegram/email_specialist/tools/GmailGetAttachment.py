@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 import json
 import os
+import requests
 
-from composio import Composio
 from dotenv import load_dotenv
 from pydantic import Field
 
@@ -38,11 +38,11 @@ class GmailGetAttachment(BaseTool):
         """
         # Get Composio credentials
         api_key = os.getenv("COMPOSIO_API_KEY")
-        entity_id = os.getenv("GMAIL_ENTITY_ID")
+        connection_id = os.getenv("GMAIL_CONNECTION_ID")
 
-        if not api_key or not entity_id:
+        if not api_key or not connection_id:
             return json.dumps({
-                "error": "Missing Composio credentials. Set COMPOSIO_API_KEY and GMAIL_ENTITY_ID in .env"
+                "error": "Missing Composio credentials. Set COMPOSIO_API_KEY and GMAIL_CONNECTION_ID in .env"
             }, indent=2)
 
         # Validate inputs
@@ -56,22 +56,29 @@ class GmailGetAttachment(BaseTool):
                 "error": "attachment_id is required"
             }, indent=2)
 
-        try:
-            # Initialize Composio client
-            client = Composio(api_key=api_key)
-
-            # Execute Gmail get attachment via Composio
-            result = client.tools.execute(
-                "GMAIL_GET_ATTACHMENT",
-                {
+        try:            # Execute Gmail get attachment via Composio
+            # Prepare API request
+            url = "https://backend.composio.dev/api/v2/actions/GMAIL_GET_ATTACHMENT/execute"
+            headers = {
+                "X-API-Key": api_key,
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "connectedAccountId": connection_id,
+                "input": {
                     "message_id": self.message_id,
                     "attachment_id": self.attachment_id
-                },
-                user_id=entity_id
-            )
+                }
+            }
+
+            # Execute via Composio REST API
+            response = requests.post(url, headers=headers, json=payload, timeout=30)
+            response.raise_for_status()
+
+            result = response.json()
 
             # Check if successful
-            if result.get("successful"):
+            if result.get("successfull") or result.get("data"):
                 attachment_data = result.get("data", {})
 
                 # Extract attachment details
@@ -92,6 +99,13 @@ class GmailGetAttachment(BaseTool):
                     "message": f"Failed to download attachment {self.attachment_id} from message {self.message_id}"
                 }, indent=2)
 
+        except requests.exceptions.RequestException as e:
+            return json.dumps({
+                "error": f"API request failed: {str(e)}",
+
+
+                "type": "RequestException"
+            }, indent=2)
         except Exception as e:
             return json.dumps({
                 "error": f"Error downloading attachment: {str(e)}",
