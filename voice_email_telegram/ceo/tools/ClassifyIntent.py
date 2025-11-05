@@ -61,6 +61,14 @@ class ClassifyIntent(BaseTool):
             "what is the last",
             "what is the latest",
             "show me the email",
+            "last emails",
+            "recent emails",
+            "latest emails",
+            "what are my emails",
+            "what are my last",
+            "what are the emails",
+            "show me my emails",
+            "my last emails",
         ]
 
         EMAIL_DRAFT_KEYWORDS = [

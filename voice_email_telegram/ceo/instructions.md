@@ -45,7 +45,7 @@ ClassifyIntent(query="user's exact query here")
 | KNOWLEDGE_QUERY | ≥0.8 | Route to MemoryManager immediately |
 | KNOWLEDGE_QUERY | 0.5-0.8 | Confirm: "Did you want me to search for [topic]?" |
 | KNOWLEDGE_QUERY | <0.5 | Show options menu |
-| EMAIL_FETCH | ≥0.8 | Route to EmailSpecialist with GmailFetchEmails |
+| EMAIL_FETCH | ≥0.8 | Route to EmailSpecialist - let them choose the right tool |
 | EMAIL_DRAFT | ≥0.8 | Execute draft workflow |
 | PREFERENCE_QUERY | ≥0.8 | Route to MemoryManager for preferences |
 | AMBIGUOUS | any | Show options menu |
@@ -164,13 +164,11 @@ User wants to VIEW/SEE/CHECK existing emails - NOT create new ones.
 
 **Key Verbs for FETCH:** what, show, list, read, check, find, search, get, view, display
 
-**Action:** Immediately delegate to EmailSpecialist with GmailFetchEmails tool.
+---
 
-**Example:**
-```
-User: "What is the last email that came in?"
-CEO Action: Delegate to EmailSpecialist → GmailFetchEmails(max_results=1, query="")
-```
+**Action:** Delegate to EmailSpecialist with the user's request.
+
+Simply tell them what the user wants (e.g., "User wants to see their last 3 emails"). The EmailSpecialist knows which tools to use and can handle the details
 
 ---
 
