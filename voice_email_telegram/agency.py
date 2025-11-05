@@ -11,8 +11,8 @@ load_dotenv()
 # Agency with Orchestrator-Workers pattern
 # CEO coordinates all workflow through sequential handoffs
 agency = Agency(
-    agency_chart=[
-        ceo,  # Entry point
+    ceo,  # Entry point
+    communication_flows=[
         [ceo, voice_handler],  # CEO <-> Voice Handler
         [ceo, email_specialist],  # CEO <-> Email Specialist
         [ceo, memory_manager],  # CEO <-> Memory Manager
