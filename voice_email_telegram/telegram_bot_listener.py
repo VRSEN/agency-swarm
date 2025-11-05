@@ -11,8 +11,8 @@ from datetime import datetime
 
 from dotenv import load_dotenv
 
-# Import agency with routing preprocessor
-from agency import agency, get_completion_with_routing
+# Import agency
+from agency import agency, get_completion
 
 # Import Telegram tools
 from voice_handler.tools.TelegramGetUpdates import TelegramGetUpdates
@@ -98,9 +98,9 @@ class TelegramBotListener:
                 chat_id, f"✅ Got it! Processing: \"{transcript[:50]}...\""
             )
 
-            # Process through agency with routing preprocessor
+            # Process through agency
             print(f"🤖 Processing through agency...")
-            response = get_completion_with_routing(
+            response = get_completion(
                 f"""User sent a voice message that was transcribed to:
 
 "{transcript}"
@@ -158,8 +158,8 @@ Send me a voice message or text - I'll understand what you need! 🎤"""
         try:
             self.send_telegram_message(chat_id, "✅ Processing your request...")
 
-            # Process through agency with routing preprocessor
-            response = get_completion_with_routing(
+            # Process through agency
+            response = get_completion(
                 f"""User sent a text message:
 
 "{text}"
