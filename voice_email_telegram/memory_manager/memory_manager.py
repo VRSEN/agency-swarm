@@ -9,7 +9,7 @@ memory_manager = Agent(
     description="Manages user preferences, supplier information, and contextual memory using Mem0",
     instructions=os.path.join(_current_dir, "instructions.md"),
     tools_folder=os.path.join(_current_dir, "tools"),
-    model="gpt-4o",
+    model="gpt-5",
     temperature=0.5,
     max_completion_tokens=25000,
 )

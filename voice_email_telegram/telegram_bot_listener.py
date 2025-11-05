@@ -159,6 +159,7 @@ Send me a voice message or text - I'll understand what you need! 🎤"""
             self.send_telegram_message(chat_id, "✅ Processing your request...")
 
             # Process through agency
+            print(f"🔍 DEBUG: Calling get_completion with query: {text}")
             response = get_completion(
                 f"""User sent a text message:
 
@@ -167,6 +168,9 @@ Send me a voice message or text - I'll understand what you need! 🎤"""
 Please process this request and take appropriate action based on what the user is asking for.
 Provide a summary of what you did."""
             )
+            print(f"🔍 DEBUG: Agency response type: {type(response)}")
+            print(f"🔍 DEBUG: Agency response length: {len(str(response))}")
+            print(f"🔍 DEBUG: Agency response preview: {str(response)[:200]}")
 
             # Send response back
             self.send_telegram_message(chat_id, f"✅ Request processed!\n\n{response}")

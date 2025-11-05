@@ -9,7 +9,7 @@ voice_handler = Agent(
     description="Processes voice input from Telegram and generates voice confirmations via ElevenLabs",
     instructions=os.path.join(_current_dir, "instructions.md"),
     tools_folder=os.path.join(_current_dir, "tools"),
-    model="gpt-4o",
+    model="gpt-5",
     temperature=0.5,
     max_completion_tokens=25000,
 )
