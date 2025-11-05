@@ -23,11 +23,7 @@ from agency_swarm.streaming.utils import add_agent_name_to_event
 from agency_swarm.tools.mcp_manager import default_mcp_manager
 
 from .execution_guardrails import append_guardrail_feedback, extract_guardrail_texts
-from .execution_stream_persistence import (
-    _persist_run_item_if_needed,
-    _persist_streamed_items,
-    _update_names_from_event,
-)
+from .execution_stream_persistence import _persist_run_item_if_needed, _persist_streamed_items, _update_names_from_event
 from .execution_stream_response import StreamingRunResponse
 
 __all__ = [
@@ -42,6 +38,44 @@ if TYPE_CHECKING:
     from agency_swarm.agent.core import AgencyContext, Agent
 
 logger = logging.getLogger(__name__)
+
+
+def _prune_guardrail_messages(
+    all_messages: list[TResponseInputItem],
+    *,
+    initial_saved_count: int,
+    run_trace_id: str,
+) -> list[TResponseInputItem]:
+    """Return thread history with guardrailed execution branches removed."""
+    guardrail_origins = {"input_guardrail_message", "input_guardrail_error"}
+
+    preserved = list(all_messages[:initial_saved_count])
+    new_messages = list(all_messages[initial_saved_count:])
+
+    guardrail_parent_ids = {
+        cast(dict[str, Any], msg).get("parent_run_id")
+        for msg in new_messages
+        if cast(dict[str, Any], msg).get("message_origin") in guardrail_origins
+    }
+
+    cleaned_tail: list[TResponseInputItem] = []
+    for msg in new_messages:
+        msg_dict = cast(dict[str, Any], msg)
+        if msg_dict.get("run_trace_id") != run_trace_id:
+            cleaned_tail.append(msg)
+            continue
+
+        origin = msg_dict.get("message_origin")
+        if isinstance(origin, str) and origin in guardrail_origins:
+            cleaned_tail.append(msg)
+            continue
+
+        parent_id = msg_dict.get("parent_run_id")
+        role = msg_dict.get("role")
+        if parent_id in guardrail_parent_ids and role == "user":
+            cleaned_tail.append(msg)
+
+    return preserved + cleaned_tail
 
 
 def perform_streamed_run(
@@ -294,29 +328,12 @@ def run_stream_with_guardrails(
                         streaming_result.raw_responses = []
 
                     if agency_context and agency_context.thread_manager:
-                        # Rollback to pre-stream state, then re-add only user input and guardrail guidance
-                        # Use run_trace_id to identify all messages from this execution tree (parent + sub-agents)
-                        all_msgs = agency_context.thread_manager.get_all_messages()
-                        preserved_msgs = all_msgs[:initial_saved_count]
-                        new_msgs = all_msgs[initial_saved_count:]
-
-                        # Keep only user input and guardrail guidance from new messages
-                        # Remove everything else from this trace (including sub-agent calls)
-                        to_keep = [
-                            m
-                            for m in new_msgs
-                            if m.get("run_trace_id") != run_trace_id  # Keep messages from other traces
-                            or (
-                                # From this trace, keep only top-level user input and guardrail guidance
-                                m.get("run_trace_id") == run_trace_id
-                                and (
-                                    (m.get("role") == "user" and m.get("callerAgent") is None)  # Top-level user only
-                                    or m.get("message_origin") in {"input_guardrail_message", "input_guardrail_error"}
-                                )
-                            )
-                        ]
-
-                        agency_context.thread_manager.replace_messages(preserved_msgs + to_keep)
+                        pruned_messages = _prune_guardrail_messages(
+                            agency_context.thread_manager.get_all_messages(),
+                            initial_saved_count=initial_saved_count,
+                            run_trace_id=run_trace_id,
+                        )
+                        agency_context.thread_manager.replace_messages(pruned_messages)
                         agency_context.thread_manager.persist()
 
                 if guardrail_exception is None:
