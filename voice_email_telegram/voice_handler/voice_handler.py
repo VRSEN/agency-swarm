@@ -12,7 +12,6 @@ voice_handler = Agent(
     tools_folder=os.path.join(_current_dir, "tools"),
     model="gpt-5",
     model_settings=ModelSettings(
-        temperature=0.5,
         max_tokens=25000,
         truncation="auto"
     )
