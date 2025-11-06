@@ -267,7 +267,7 @@ async def test_legacy_tool(legacy_tool):
 async def test_schema_conversion():
     agent = Agent(name="test", instructions="test", schemas_folder="tests/data/schemas")
     tool_names = [tool.name for tool in agent.tools]
-    assert "getTimeByTimezone" in tool_names
+    assert "createPaste" in tool_names
 
 
 def test_tools_folder_autoload():

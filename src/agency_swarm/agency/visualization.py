@@ -13,6 +13,20 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _describe_model(model: Any) -> str:
+    """Return a sanitized model representation suitable for visualization."""
+    if model is None:
+        return ""
+    if isinstance(model, str):
+        return model
+
+    model_name = getattr(model, "model", None)
+    if isinstance(model_name, str):
+        return model_name
+
+    return model.__class__.__name__
+
+
 def get_agency_structure(agency: "Agency", include_tools: bool = True) -> dict[str, Any]:
     """Return a ReactFlow-compatible JSON structure describing the agency."""
     from agency_swarm.ui.core.layout_algorithms import LayoutAlgorithms
@@ -39,7 +53,7 @@ def get_agency_structure(agency: "Agency", include_tools: bool = True) -> dict[s
             "toolCount": 0,
             "tools": [],
             "instructions": instructions,
-            "model": agent.model,
+            "model": _describe_model(agent.model),
             "hasSubagents": bool(runtime_state.subagents if runtime_state else {}),
             "capabilities": get_agent_capabilities(agent),
         }

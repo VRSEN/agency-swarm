@@ -1,16 +1,17 @@
-from __future__ import annotations
-
+import base64
 import json
 import logging
+import mimetypes
 from collections.abc import Callable
 from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
+from pathlib import Path
 from typing import Any, Literal, Optional, Union
 
 import httpx
 import jsonref
-from agents import FunctionTool
+from agents import FunctionTool, ToolOutputFileContent, ToolOutputImage
 from agents.run_context import RunContextWrapper
 from agents.strict_schema import ensure_strict_json_schema
 from datamodel_code_generator import DataModelType, PythonVersion
@@ -18,6 +19,102 @@ from datamodel_code_generator.model import get_data_model_types
 from datamodel_code_generator.parser.jsonschema import JsonSchemaParser
 
 logger = logging.getLogger(__name__)
+
+PDF_MIME_TYPE = "application/pdf"
+
+
+def _build_data_url(file_path: Path, mime_type: str) -> str:
+    encoded_file = base64.b64encode(file_path.read_bytes()).decode("utf-8")
+    return f"data:{mime_type};base64,{encoded_file}"
+
+
+def _resolve_mime_type(file_path: Path) -> str:
+    mime_type, _ = mimetypes.guess_type(file_path.name)
+    if not mime_type:
+        raise ValueError(f"Unable to determine MIME type for file: {file_path}")
+    return mime_type
+
+
+def tool_output_image_from_path(
+    path: str | Path,
+    *,
+    detail: Literal["auto", "high", "low"] = "auto",
+) -> ToolOutputImage:
+    """
+    Build a ``ToolOutputImage`` from a local image file by returning a data URL.
+
+    Args:
+        path: Path to the image file on disk.
+        detail: Optional detail hint to forward to the vision model.
+
+    Raises:
+        ValueError: If the file type cannot be resolved from the path.
+    """
+
+    file_path = Path(path)
+    mime_type = _resolve_mime_type(file_path)
+    return ToolOutputImage(image_url=_build_data_url(file_path, mime_type), detail=detail)
+
+
+def tool_output_image_from_file_id(
+    file_id: str,
+    *,
+    detail: Literal["auto", "high", "low"] = "auto",
+) -> ToolOutputImage:
+    """
+    Build a ``ToolOutputImage`` from an OpenAI file ID.
+
+    Args:
+        file_id: openai file id of the image file.
+        detail: Optional detail hint to forward to the vision model.
+    """
+
+    return ToolOutputImage(file_id=file_id, detail=detail)
+
+
+def tool_output_file_from_path(path: str | Path, *, filename: str | None = None) -> ToolOutputFileContent:
+    """
+    Build a ``ToolOutputFileContent`` from a local file by embedding base64 data.
+
+    Args:
+        path: Path to the file on disk.
+        filename: Optional filename hint for the client.
+
+    Raises:
+        ValueError: If the file is not a PDF.
+    """
+
+    file_path = Path(path)
+    if filename and not filename.lower().endswith(".pdf"):
+        raise ValueError(f"Filename must end with .pdf, got: {filename}")
+    mime_type = _resolve_mime_type(file_path)
+    if mime_type != PDF_MIME_TYPE:
+        raise ValueError("Only PDF files are supported.")
+    return ToolOutputFileContent(
+        file_data=_build_data_url(file_path, PDF_MIME_TYPE), filename=filename or file_path.name
+    )
+
+
+def tool_output_file_from_url(url: str) -> ToolOutputFileContent:
+    """
+    Build a ``ToolOutputFileContent`` that references an externally hosted file.
+
+    Args:
+        url: Publicly reachable URL for the file.
+    """
+
+    return ToolOutputFileContent(file_url=url)
+
+
+def tool_output_file_from_file_id(file_id: str) -> ToolOutputFileContent:
+    """
+    Build a ``ToolOutputFileContent`` that references an openai file id.
+
+    Args:
+        file_id: openai file id of the pdf file.
+    """
+
+    return ToolOutputFileContent(file_id=file_id)
 
 
 def from_openapi_schema(

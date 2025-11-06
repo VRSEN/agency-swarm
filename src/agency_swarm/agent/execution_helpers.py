@@ -1,5 +1,6 @@
 import inspect
 import logging
+import re
 from collections.abc import Callable
 from contextlib import AsyncExitStack
 from typing import TYPE_CHECKING, Any
@@ -12,6 +13,7 @@ from agents import (
     Runner,
     RunResult,
     TResponseInputItem,
+    tracing,
 )
 from agents.exceptions import AgentsException
 from agents.items import RunItem, ToolCallItem
@@ -37,6 +39,9 @@ logger = logging.getLogger(__name__)
 Execution helpers (non-streaming): split to keep file size under 500 lines.
 Streaming helpers moved to execution_streaming.py.
 """
+
+
+TRACE_REGEX = re.compile(r"^trace_[a-f0-9]{32}$")
 
 
 async def perform_single_run(
@@ -77,7 +82,7 @@ async def perform_single_run(
 # perform_streamed_run moved to execution_streaming.py
 
 
-async def run_sync_with_guardrails(
+async def run_with_guardrails(
     *,
     agent: "Agent",
     history_for_runner: list[TResponseInputItem],
@@ -89,6 +94,7 @@ async def run_sync_with_guardrails(
     kwargs: dict[str, Any],
     current_agent_run_id: str,
     parent_run_id: str | None,
+    run_trace_id: str,
     validation_attempts: int,
     throw_input_guardrail_error: bool,
 ) -> tuple[RunResult, MasterContext]:
@@ -111,6 +117,7 @@ async def run_sync_with_guardrails(
                 agency_context=agency_context,
                 sender_name=sender_name,
                 parent_run_id=parent_run_id,
+                run_trace_id=run_trace_id,
                 current_agent_run_id=current_agent_run_id,
                 exception=e,
                 include_assistant=True,
@@ -134,6 +141,7 @@ async def run_sync_with_guardrails(
                 agency_context=agency_context,
                 sender_name=sender_name,
                 parent_run_id=parent_run_id,
+                run_trace_id=run_trace_id,
                 current_agent_run_id=current_agent_run_id,
                 exception=e,
                 include_assistant=False,
@@ -251,7 +259,11 @@ def prepare_master_context(
     )
 
 
-def extract_hosted_tool_results_if_needed(agent: "Agent", run_items: list[RunItem]) -> list[TResponseInputItem]:
+def extract_hosted_tool_results_if_needed(
+    agent: "Agent",
+    run_items: list[RunItem],
+    caller_agent: str | None,
+) -> list[TResponseInputItem]:
     """
     Optimized version that only extracts hosted tool results if hosted tools were actually used.
     This prevents expensive parsing on every response when no hosted tools exist.
@@ -274,7 +286,7 @@ def extract_hosted_tool_results_if_needed(agent: "Agent", run_items: list[RunIte
         logger.debug("No hosted tool calls found in run_items")
         return []  # Early exit - no hosted tools used
 
-    return MessageFormatter.extract_hosted_tool_results(agent, run_items)
+    return MessageFormatter.extract_hosted_tool_results(agent, run_items, caller_agent)
 
 
 def setup_execution(
@@ -436,3 +448,69 @@ def cleanup_execution(
     if restore_handoffs is not None:
         agent.handoffs.clear()
         agent.handoffs.extend(restore_handoffs)
+
+
+def get_run_trace_id(run_config: RunConfig | None, agency_context: "AgencyContext | None" = None) -> str:
+    """Extract existing trace id or generate a new one if not present.
+
+    Args:
+        run_config: Optional run configuration that may contain an explicit trace_id override
+        agency_context: Optional agency context containing the thread manager with message history
+
+    Returns:
+        str: The trace ID to use for this run
+
+    The function follows this priority order:
+    1. Explicit trace_id from run_config (allows manual override)
+    2. Active OpenAI trace context (from `with trace()` blocks)
+    3. Most recent run_trace_id from the thread history (preserves continuity)
+    4. Newly generated trace_id (fallback for new conversations)
+    """
+    resolved_trace_id: str | None = None
+    should_assign_trace = False
+
+    # First try to extract from the run config, to allow for override
+    if run_config and hasattr(run_config, "trace_id"):
+        trace_value = getattr(run_config, "trace_id", None)
+        if isinstance(trace_value, str) and trace_value:
+            if TRACE_REGEX.match(trace_value):
+                return trace_value
+            logger.warning(f"Incorrectly formatted trace_id: {trace_value}, ignoring")
+            should_assign_trace = True
+        else:
+            should_assign_trace = True
+
+    # Next check if we're inside an active OpenAI trace() context
+    current_trace = tracing.get_current_trace()
+    current_trace_id = getattr(current_trace, "trace_id", None)
+    if isinstance(current_trace_id, str) and current_trace_id:
+        resolved_trace_id = current_trace_id
+    else:
+        # If not present, try to extract from the thread manager
+        if agency_context:
+            thread_manager = agency_context.thread_manager
+            messages = thread_manager.get_all_messages()
+            if messages:
+                for message in reversed(messages):
+                    trace_from_history = message.get("run_trace_id")
+                    if not trace_from_history:
+                        continue
+                    if not isinstance(trace_from_history, str):
+                        logger.warning("Incorrectly typed trace_id in history, ignoring")
+                        continue
+                    if not TRACE_REGEX.match(trace_from_history):
+                        logger.warning(f"Incorrectly formatted trace_id: {trace_from_history}, ignoring")
+                        continue
+                    resolved_trace_id = trace_from_history
+                    break
+    if resolved_trace_id is None:
+        # If not found, generate a new one
+        resolved_trace_id = tracing.gen_trace_id()
+
+    if should_assign_trace and run_config and hasattr(run_config, "trace_id"):
+        try:
+            run_config.trace_id = resolved_trace_id
+        except Exception:
+            logger.warning("Failed to assign trace_id to run_config override", exc_info=True)
+
+    return resolved_trace_id
