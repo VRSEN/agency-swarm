@@ -87,7 +87,7 @@ jobs:
 
           # The script to run to test the code (adapt accordingly). Required for the test runner.
           # {{file}} placeholder is required and will be replaced by Tusk with the file being tested.
-          testScript: 'cd voice_email_telegram && pytest {{file}} -v'
+          testScript: 'PYTHONPATH=voice_email_telegram:$PYTHONPATH pytest {{file}} -v'
 
           # The runner may run tests in parallel.
           # Set this value to 1 if you know that your tests should not be run concurrently in each environment.
