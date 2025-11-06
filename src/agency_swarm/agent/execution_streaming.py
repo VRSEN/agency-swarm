@@ -48,6 +48,7 @@ def _prune_guardrail_messages(
 ) -> list[TResponseInputItem]:
     """Return thread history with guardrailed execution branches removed."""
     guardrail_origins = {"input_guardrail_message", "input_guardrail_error"}
+    sentinel_trace_ids = {"no-op", "", None}
 
     preserved = list(all_messages[:initial_saved_count])
     new_messages = list(all_messages[initial_saved_count:])
@@ -57,23 +58,63 @@ def _prune_guardrail_messages(
         for msg in new_messages
         if cast(dict[str, Any], msg).get("message_origin") in guardrail_origins
     }
+    guardrail_agent_run_ids = {
+        cast(dict[str, Any], msg).get("agent_run_id")
+        for msg in new_messages
+        if cast(dict[str, Any], msg).get("message_origin") in guardrail_origins
+    }
+    guardrail_agents = {
+        cast(dict[str, Any], msg).get("agent")
+        for msg in new_messages
+        if cast(dict[str, Any], msg).get("message_origin") in guardrail_origins
+    }
+
+    suppressed_parent_ids: set[str | None] = set(guardrail_parent_ids)
+    suppressed_agent_run_ids: set[str | None] = set(guardrail_agent_run_ids)
 
     cleaned_tail: list[TResponseInputItem] = []
     for msg in new_messages:
         msg_dict = cast(dict[str, Any], msg)
-        if msg_dict.get("run_trace_id") != run_trace_id:
+        msg_trace_id = msg_dict.get("run_trace_id")
+        parent_id = msg_dict.get("parent_run_id")
+        agent_run_id = msg_dict.get("agent_run_id")
+        caller_agent = msg_dict.get("callerAgent")
+        agent_name = msg_dict.get("agent")
+        origin = msg_dict.get("message_origin")
+        role = msg_dict.get("role")
+
+        if msg_trace_id != run_trace_id and msg_trace_id not in sentinel_trace_ids:
             cleaned_tail.append(msg)
             continue
 
-        origin = msg_dict.get("message_origin")
+        in_guardrail_branch = False
+        if msg_trace_id == run_trace_id:
+            in_guardrail_branch = True
+        if parent_id in suppressed_parent_ids:
+            in_guardrail_branch = True
+        if isinstance(agent_run_id, str) and agent_run_id in suppressed_agent_run_ids:
+            in_guardrail_branch = True
+        if isinstance(caller_agent, str) and caller_agent in guardrail_agents:
+            in_guardrail_branch = True
+        if isinstance(agent_name, str) and agent_name in guardrail_agents:
+            in_guardrail_branch = True
+
+        if not in_guardrail_branch:
+            cleaned_tail.append(msg)
+            continue
+
         if isinstance(origin, str) and origin in guardrail_origins:
             cleaned_tail.append(msg)
             continue
 
-        parent_id = msg_dict.get("parent_run_id")
-        role = msg_dict.get("role")
-        if parent_id in guardrail_parent_ids and role == "user":
+        if parent_id in suppressed_parent_ids and role == "user":
             cleaned_tail.append(msg)
+            continue
+
+        if isinstance(parent_id, str) and parent_id:
+            suppressed_parent_ids.add(parent_id)
+        if isinstance(agent_run_id, str) and agent_run_id:
+            suppressed_agent_run_ids.add(agent_run_id)
 
     return preserved + cleaned_tail
 
