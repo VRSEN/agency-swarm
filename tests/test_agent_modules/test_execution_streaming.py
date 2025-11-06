@@ -8,6 +8,8 @@ def _build_message(
     parent_run_id: str | None = None,
     agent_run_id: str | None = None,
     run_trace_id: str = "trace_guardrail",
+    caller_agent: str | None = None,
+    agent: str | None = None,
     extra: dict | None = None,
 ) -> dict:
     msg = {
@@ -16,6 +18,8 @@ def _build_message(
         "parent_run_id": parent_run_id,
         "agent_run_id": agent_run_id,
         "run_trace_id": run_trace_id,
+        "callerAgent": caller_agent,
+        "agent": agent,
         "type": "message",
     }
     if extra:
@@ -114,3 +118,36 @@ def test_prune_guardrail_messages_preserves_other_traces() -> None:
     )
 
     assert pruned == [preserved_user, guardrail_message, concurrent_message]
+
+
+def test_prune_guardrail_messages_drops_no_op_trace_descendants() -> None:
+    preserved_user = _build_message(role="user", parent_run_id=None, agent_run_id="agent_run_parent")
+    guardrail_message = _build_message(
+        role="system",
+        message_origin="input_guardrail_message",
+        parent_run_id=None,
+        agent_run_id="agent_run_parent",
+        agent="ParentAgent",
+    )
+    helper_assistant = _build_message(
+        role="assistant",
+        parent_run_id="call_send_message",
+        agent_run_id="agent_run_helper",
+        run_trace_id="no-op",
+        caller_agent="ParentAgent",
+        agent="HelperAgent",
+    )
+
+    all_messages = [
+        preserved_user,
+        guardrail_message,
+        helper_assistant,
+    ]
+
+    pruned = _prune_guardrail_messages(
+        all_messages,
+        initial_saved_count=1,
+        run_trace_id="trace_guardrail",
+    )
+
+    assert pruned == [preserved_user, guardrail_message]
