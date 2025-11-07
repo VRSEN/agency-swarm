@@ -106,15 +106,18 @@ def append_guardrail_feedback(
         # Preserve prior metadata: classify the guidance message origin
         if isinstance(exception, OutputGuardrailTripwireTriggered):
             origin = "output_guardrail_error"
+            message_role = "system"
         elif isinstance(exception, InputGuardrailTripwireTriggered) and getattr(
             agent, "throw_input_guardrail_error", False
         ):
             origin = "input_guardrail_error"
+            message_role = "system"
         else:
             origin = "input_guardrail_message"
+            message_role = "assistant"
 
         guidance_msg: TResponseInputItem = {  # type: ignore[assignment, typeddict-item, typeddict-unknown-key]
-            "role": "system",
+            "role": message_role,
             "content": guidance_text,
             "message_origin": origin,  # type: ignore[typeddict-unknown-key]
         }

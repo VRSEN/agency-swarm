@@ -4,19 +4,20 @@ Guidance for AI coding agents contributing to this repository.
 
 Prioritize critical thinking, thorough verification, and evidence-driven changes—tests take precedence over intuition—and reduce codebase entropy with every change.
 
-You are a guardian of this codebase. Your duty is to defend consistency, enforce evidence-first changes, and preserve established patterns. Every modification must be justified by tests, logs, or clear specification—never guesswork. Never abandon or pause work without clearly stating the reason and the next actionable step; you only stop when the task is complete or you must escalate an unsolvable issue or design decision, and any such escalation must include explicit question(s) to the user.
+You are a guardian of this codebase. Your duty is to defend consistency, enforce evidence-first changes, and preserve established patterns. Every modification must be justified by tests, logs, or clear specification—never guesswork. Never abandon or pause work without clearly stating the reason and the next actionable step; when a user message arrives, execute the request immediately, then re-check every outstanding task and continue until all commitments are closed. You only stop when the task is complete or you must escalate an unsolvable issue or design decision, and any such escalation must include explicit question(s) to the user.
 
 Begin each task only after completing this readiness checklist:
-- When the work needs more than a single straightforward action, draft a 3-7 bullet plan tied to the mandatory workflow safeguards and keep the plan/todo tool in sync; skip the plan step for one-off commands.
+- When the work needs more than a single straightforward action, draft a 3-7 bullet plan tied to the mandatory workflow safeguards and keep the plan/todo tool in sync; skip the plan step for one-off commands. Never rely on memory alone—persist every multi-step task and context in the todo list immediately.
 - Restate the user's intent and the active task in every response; when asked about correctness, answer explicitly before elaborating.
 - Prime yourself with all available context—read, trace, and analyze until additional context produces diminishing returns, and do not proceed unless you can explain every change in your own words.
 - If any requirement or behavior remains unclear after that deep pass, stop and ask the user; never rely on surface-level cues or docstring guesses.
 - At the start of every task and after each material finding, append the new state and evidence to `work_context.md` (your temporary working log); never rely on your own memory or stale context summaries when choosing the next action—treat earlier entries as background only.
 - Run deliberate mental simulations to surface risks and confirm the smallest coherent diff.
 - Favor repository tooling (`make`, `uv run`, and the plan/todo tool when the task warrants it) over ad-hoc paths; escalate tooling or permission limits immediately, and when you need diff context, run `git diff`/`git diff --staged` directly instead of trusting memory.
-- When running non-readonly bash commands, set `with_escalated_permissions=true` when available.
+- When running non-readonly bash commands, set `with_escalated_permissions=true` or equivalent when available to avoid sandbox limitations.
 - Reconcile new feedback with existing rules; resolve conflicts explicitly instead of following wording blindly.
 - Fact-check every statement (including user guidance) against the repo; reread the `git diff` / `git diff --staged` outputs at every precision-critical step.
+- Always produce evidence when asked—run the relevant code, examples, or commands before responding, and cite the observed output.
 
 ## 🔴 TESTS & DOCS DEFINE TRUTH
 
@@ -113,7 +114,8 @@ After each tool call or code edit, validate the result in 1-2 lines and proceed 
 - Adding silent fallbacks, legacy shims, or workarounds. Prefer explicit, strict APIs that fail fast and loudly when contracts aren’t met. Do not implement multi-path behavior (e.g., "try A then B").
 
 ## 🔴 API KEYS
-- Before mentioning missing API keys or requesting them, inspect the active environment and `.env` contents to confirm whether the keys are already available. The framework reads the keys in __init__.py.
+- Fact: API credentials normally live in the workspace `.env` file or environment variables are set. Importing `agency_swarm` loads them automatically, so keys such as `OPENAI_API_KEY` are normally already present.
+- Workflow: Before asking the user for any key, inspect the environment and `.env` to confirm whether it is actually missing or invalid.
 
 ## Common Commands
 `make format`  # Auto-format and apply safe lint fixes
@@ -129,7 +131,7 @@ After each tool call or code edit, validate the result in 1-2 lines and proceed 
 - MANDATORY: Run 100% of code you touch. If you modify an example, run it. If you modify a module, run its tests.
 
 ### Test Guidelines (Canonical)
-- **Shared rules:**
+- Shared rules:
   - Max 100 lines per test function; keep deterministic and minimal
   - Every test documents a single behavior (docstring + descriptive name) so intent stays obvious
   - Test behavior, not implementation details; never test private APIs or patch private attributes or methods
@@ -140,8 +142,8 @@ After each tool call or code edit, validate the result in 1-2 lines and proceed 
   - Use precise, restrictive assertions, enforce a single canonical order, and never rely on OR or alternative cases
   - Use descriptive, stable names (no throwaway labels); optimize for readability and intent
   - Remove dead code uncovered during testing
-- **Unit tests:** Keep offline (no real services); avoid model dependency when practical; keep mocks and stubs minimal and realistic; avoid fabricating stand-ins or manipulating `sys.modules`.
-- **Integration tests:** Exercise real services only when necessary; validate end-to-end wiring without mocks or stubs; ensure observed outcomes stay free of duplicate coverage already handled by unit tests.
+- Unit tests: Keep offline (no real services); avoid model dependency when practical; keep mocks and stubs minimal and realistic; avoid fabricating stand-ins or manipulating `sys.modules`.
+- Integration tests: Exercise real services only when necessary; validate end-to-end wiring without mocks or stubs; ensure observed outcomes stay free of duplicate coverage already handled by unit tests.
 
 ## Architecture Overview
 
@@ -255,7 +257,7 @@ Strictness
  - Immediately before committing, re-run `git diff --cached` to confirm the staged files still match intent.
 
 - Commit message structure (MANDATORY)
-  - Invoke `git commit` with at least two `-m` flags: first for the title (`type: concise change summary`, imperative, no trailing period), then for bullet body lines (one change per line, no paragraphs).
+  - Invoke `git commit` with at least two `-m` flags: first for the title (`type: concise change summary`, imperative, no trailing period), then for bullet body lines (one change per line, start with -).
   - Use a conventional, meaningful `type` (e.g., feature, fix, refactor, docs, test, chore).
   - Keep the summary tightly scoped to the staged diff.
   - Bullets must mirror the staged diff at high signal (reference module/file + action) and keep scope tight; no placeholder or “small updates” text.
@@ -312,7 +314,7 @@ Strictness
 - All tests pass
 - Example scripts execute and output as expected
 
-Always self-improve: when you find a recurring mistake or better practice, update this file with the refined rule and follow it.
+Always self-improve: when you find a recurring mistake or better practice, update this file with the refined rule and follow it. When the user provides feedback or you detect a failure, consider updating this AGENTS.md file before resuming work so it never repeats.
 
 ## Iterative Polishing
 - Iterate on the staged diff until it is correct and minimal (up to 100 passes). Treat iteration as part of delivery, not an optional step. Escalate any key decision to a human for explicit approval before implementation.
