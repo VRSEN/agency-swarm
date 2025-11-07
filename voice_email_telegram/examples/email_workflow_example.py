@@ -13,8 +13,8 @@ This example shows how to:
 - Send replies with automatic signature
 """
 import json
-import sys
 import os
+import sys
 
 # Add parent directory to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -55,7 +55,7 @@ def process_incoming_emails(max_emails=10, user_id="ashley_user_123"):
         return
 
     # Step 2: Auto-learn contacts
-    print(f"\n[2/3] Auto-learning contacts...")
+    print("\n[2/3] Auto-learning contacts...")
     learned_count = 0
     skipped_count = 0
 
@@ -99,7 +99,7 @@ def process_incoming_emails(max_emails=10, user_id="ashley_user_123"):
             print(f"  ❌ Error: {error}")
 
     # Step 3: Summary
-    print(f"\n[3/3] Summary")
+    print("\n[3/3] Summary")
     print(f"  Total emails: {len(emails)}")
     print(f"  Contacts learned: {learned_count}")
     print(f"  Newsletters skipped: {skipped_count}")
@@ -134,7 +134,7 @@ def send_email_with_signature(to, subject, body, skip_signature=False):
     result = json.loads(send_tool.run())
 
     if result.get("success"):
-        print(f"\n✓ Email sent successfully")
+        print("\n✓ Email sent successfully")
         print(f"  Message ID: {result.get('message_id')}")
         print(f"  Signature added: {result.get('signature_added')}")
     else:

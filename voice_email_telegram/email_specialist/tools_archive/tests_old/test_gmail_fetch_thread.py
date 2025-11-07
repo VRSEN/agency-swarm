@@ -50,14 +50,14 @@ def test_valid_thread_fetch():
         print(f"\n✅ SUCCESS: Fetched {response.get('message_count')} messages")
         messages = response.get("messages", [])
         if messages:
-            print(f"\nFirst message preview:")
+            print("\nFirst message preview:")
             first = messages[0]
             print(f"  - From: {first.get('from')}")
             print(f"  - Subject: {first.get('subject')}")
             print(f"  - Date: {first.get('date')}")
             print(f"  - Snippet: {first.get('snippet', '')[:100]}...")
     else:
-        print(f"\n⚠️  Expected behavior - Thread might not exist or API error")
+        print("\n⚠️  Expected behavior - Thread might not exist or API error")
         print(f"Error: {response.get('error')}")
 
     return response
@@ -138,7 +138,7 @@ def test_invalid_thread_id():
     response = json.loads(result)
 
     print("\nValidation:")
-    print(f"✓ Response is valid JSON: True")
+    print("✓ Response is valid JSON: True")
     print(f"✓ Has success field: {('success' in response)}")
     print(f"✓ Has error field: {('error' in response)}")
     print(f"✓ Success is False: {(response.get('success') == False)}")

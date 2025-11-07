@@ -3,8 +3,8 @@ Mem0 Data Exploration Script
 Investigates what user_ids exist and what data is actually stored in Mem0.
 """
 
-import json
 import os
+
 from dotenv import load_dotenv
 from mem0 import MemoryClient
 
@@ -49,7 +49,7 @@ def main():
             if count > 0:
                 results_by_user[user_id] = memories
                 # Show first few memories
-                print(f"  → Sample memories:")
+                print("  → Sample memories:")
                 for i, mem in enumerate(memories[:3]):
                     print(f"     [{i+1}] {mem.get('memory', 'N/A')[:100]}...")
         except Exception as e:

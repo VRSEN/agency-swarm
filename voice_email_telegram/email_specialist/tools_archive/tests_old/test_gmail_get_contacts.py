@@ -13,6 +13,7 @@ Tests all functionality including:
 import json
 import os
 import sys
+
 from dotenv import load_dotenv
 
 # Add parent directory to path for imports
@@ -62,13 +63,13 @@ class TestGmailGetContacts:
             # Success-specific checks
             if expected_success:
                 if "contacts" not in data:
-                    print(f"❌ FAILED: Missing 'contacts' field in successful response")
+                    print("❌ FAILED: Missing 'contacts' field in successful response")
                     self.failed += 1
                     self.tests.append({"name": name, "status": "FAILED", "reason": "Missing contacts field"})
                     return False
 
                 if "count" not in data:
-                    print(f"❌ FAILED: Missing 'count' field in successful response")
+                    print("❌ FAILED: Missing 'count' field in successful response")
                     self.failed += 1
                     self.tests.append({"name": name, "status": "FAILED", "reason": "Missing count field"})
                     return False
@@ -80,7 +81,7 @@ class TestGmailGetContacts:
                     self.tests.append({"name": name, "status": "FAILED", "reason": "Count mismatch"})
                     return False
 
-            print(f"✅ PASSED")
+            print("✅ PASSED")
             self.passed += 1
             self.tests.append({"name": name, "status": "PASSED"})
             return True
@@ -219,12 +220,12 @@ class TestGmailGetContacts:
                 self.failed += 1
                 self.tests.append({"name": "Test 11", "status": "FAILED", "reason": f"Missing fields: {missing_required}"})
             else:
-                print(f"✅ PASSED: Contact has all required fields")
+                print("✅ PASSED: Contact has all required fields")
                 print(f"Contact structure: {json.dumps(contact, indent=2)}")
                 self.passed += 1
                 self.tests.append({"name": "Test 11", "status": "PASSED"})
         else:
-            print(f"⚠️  SKIPPED: No contacts available to verify structure")
+            print("⚠️  SKIPPED: No contacts available to verify structure")
 
         # ============================================================
         # TEST 12: Performance Test (Medium Batch)

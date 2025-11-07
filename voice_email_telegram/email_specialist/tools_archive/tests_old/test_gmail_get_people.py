@@ -11,6 +11,7 @@ Tests all functionality including:
 import json
 import os
 import sys
+
 from dotenv import load_dotenv
 
 # Add parent directory to path for imports

@@ -11,10 +11,10 @@ from datetime import datetime
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from GmailSendDraft import GmailSendDraft
+from dotenv import load_dotenv
 from GmailCreateDraft import GmailCreateDraft
 from GmailListDrafts import GmailListDrafts
-from dotenv import load_dotenv
+from GmailSendDraft import GmailSendDraft
 
 load_dotenv()
 
@@ -147,7 +147,7 @@ class GmailSendDraftTestSuite:
             result_obj = json.loads(result)
 
             print(f"Draft ID: {draft_id}")
-            print(f"User ID: me")
+            print("User ID: me")
             print(f"Response: {json.dumps(result_obj, indent=2)}")
 
             if result_obj.get("success"):

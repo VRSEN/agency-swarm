@@ -36,7 +36,7 @@ def test_basic_label_creation():
             print(f"\n❌ FAILED: {data.get('error')}")
             return False
     except json.JSONDecodeError:
-        print(f"\n❌ FAILED: Invalid JSON response")
+        print("\n❌ FAILED: Invalid JSON response")
         print(result)
         return False
 
@@ -68,7 +68,7 @@ def test_hidden_label():
             print(f"\n❌ FAILED: {data.get('error')}")
             return False
     except json.JSONDecodeError:
-        print(f"\n❌ FAILED: Invalid JSON response")
+        print("\n❌ FAILED: Invalid JSON response")
         print(result)
         return False
 
@@ -95,7 +95,7 @@ def test_hierarchical_label():
             print(f"\n❌ FAILED: {data.get('error')}")
             return False
     except json.JSONDecodeError:
-        print(f"\n❌ FAILED: Invalid JSON response")
+        print("\n❌ FAILED: Invalid JSON response")
         print(result)
         return False
 
@@ -122,7 +122,7 @@ def test_label_with_spaces():
             print(f"\n❌ FAILED: {data.get('error')}")
             return False
     except json.JSONDecodeError:
-        print(f"\n❌ FAILED: Invalid JSON response")
+        print("\n❌ FAILED: Invalid JSON response")
         print(result)
         return False
 
@@ -144,10 +144,10 @@ def test_empty_name_error():
             print("\n✅ SUCCESS: Correctly rejected empty name")
             return True
         else:
-            print(f"\n❌ FAILED: Should reject empty name")
+            print("\n❌ FAILED: Should reject empty name")
             return False
     except json.JSONDecodeError:
-        print(f"\n❌ FAILED: Invalid JSON response")
+        print("\n❌ FAILED: Invalid JSON response")
         print(result)
         return False
 
@@ -172,10 +172,10 @@ def test_invalid_visibility_error():
             print("\n✅ SUCCESS: Correctly rejected invalid visibility")
             return True
         else:
-            print(f"\n❌ FAILED: Should reject invalid visibility")
+            print("\n❌ FAILED: Should reject invalid visibility")
             return False
     except json.JSONDecodeError:
-        print(f"\n❌ FAILED: Invalid JSON response")
+        print("\n❌ FAILED: Invalid JSON response")
         print(result)
         return False
 
@@ -220,13 +220,13 @@ def test_real_world_labels():
             else:
                 # Label might already exist from previous test
                 if "already exists" in data.get("error", "").lower():
-                    print(f"   ⚠️  Already exists (OK)")
+                    print("   ⚠️  Already exists (OK)")
                     results.append(True)
                 else:
                     print(f"   ❌ Failed: {data.get('error')}")
                     results.append(False)
         except json.JSONDecodeError:
-            print(f"   ❌ Invalid response")
+            print("   ❌ Invalid response")
             results.append(False)
 
     success_rate = sum(results) / len(results) * 100

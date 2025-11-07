@@ -3,6 +3,7 @@
 Simple test for GmailCreateLabel - validates structure and error handling.
 """
 import json
+
 from GmailCreateLabel import GmailCreateLabel
 
 

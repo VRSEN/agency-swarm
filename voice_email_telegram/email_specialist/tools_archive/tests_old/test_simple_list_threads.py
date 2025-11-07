@@ -22,7 +22,7 @@ def main():
     print("\n1. Initialize with defaults:")
     print("-" * 70)
     tool = GmailListThreads()
-    print(f"✅ Tool created")
+    print("✅ Tool created")
     print(f"   query: '{tool.query}'")
     print(f"   max_results: {tool.max_results}")
 
@@ -30,7 +30,7 @@ def main():
     print("\n2. Initialize with custom parameters:")
     print("-" * 70)
     tool = GmailListThreads(query="is:unread", max_results=5)
-    print(f"✅ Tool created")
+    print("✅ Tool created")
     print(f"   query: '{tool.query}'")
     print(f"   max_results: {tool.max_results}")
 
@@ -40,7 +40,7 @@ def main():
     tool = GmailListThreads(max_results=150)
     result = tool.run()
     result_data = json.loads(result)
-    print(f"✅ Returns valid JSON:")
+    print("✅ Returns valid JSON:")
     print(json.dumps(result_data, indent=2))
 
     # Test 4: Test with valid parameters (structure test)

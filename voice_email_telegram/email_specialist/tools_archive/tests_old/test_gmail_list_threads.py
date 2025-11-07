@@ -261,7 +261,7 @@ def run_all_tests():
     if passed == total:
         print("\n✅ ALL TESTS PASSED - Tool is production ready!")
     else:
-        print(f"\n❌ SOME TESTS FAILED - Review failures above")
+        print("\n❌ SOME TESTS FAILED - Review failures above")
 
     print("\n" + "=" * 70)
     print("VALIDATED PATTERN COMPLIANCE")

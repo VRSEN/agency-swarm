@@ -129,7 +129,7 @@ def test_label_structure(result_data):
     missing_fields = [field for field in required_fields if field not in first_label]
 
     if not missing_fields:
-        print(f"✅ Test 4 PASSED - Label structure verified")
+        print("✅ Test 4 PASSED - Label structure verified")
         print(f"   Required fields present: {required_fields}")
     else:
         print(f"❌ Test 4 FAILED - Missing fields: {missing_fields}")

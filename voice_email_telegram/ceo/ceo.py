@@ -1,7 +1,8 @@
 import os
 
-from agency_swarm import Agent
 from agents import ModelSettings
+
+from agency_swarm import Agent
 
 _current_dir = os.path.dirname(os.path.abspath(__file__))
 

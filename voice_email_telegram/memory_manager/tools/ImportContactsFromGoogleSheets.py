@@ -11,7 +11,7 @@ import json
 import os
 import re
 from datetime import datetime
-from typing import List, Dict
+from typing import Dict, List
 
 import requests
 from dotenv import load_dotenv

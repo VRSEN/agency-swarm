@@ -15,7 +15,7 @@ Tests cover:
 import json
 import os
 import sys
-from typing import Dict, Any
+from typing import Any, Dict
 
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -408,7 +408,7 @@ class TestGmailDeleteDraft:
         print("COMPREHENSIVE TEST SUITE: GmailDeleteDraft")
         print("=" * 80)
         print(f"\nTesting tool: {GmailDeleteDraft.__name__}")
-        print(f"Test suite: 15 comprehensive tests")
+        print("Test suite: 15 comprehensive tests")
         print("=" * 80)
 
         # Execute all tests

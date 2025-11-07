@@ -12,8 +12,8 @@ import sys
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from GmailMoveToTrash import GmailMoveToTrash
 from GmailFetchEmails import GmailFetchEmails
+from GmailMoveToTrash import GmailMoveToTrash
 
 
 def test_move_single_message():
@@ -81,7 +81,7 @@ def test_batch_trash_spam():
                 fail_count += 1
                 print(f"   ❌ Failed: {message_id}")
 
-        print(f"\nResults:")
+        print("\nResults:")
         print(f"   - Successfully trashed: {success_count}")
         print(f"   - Failed: {fail_count}")
         print(f"   - Total: {len(messages)}")
@@ -117,9 +117,9 @@ def test_trash_old_emails():
                 trashed_ids.append(message_id)
                 print(f"   ✅ Trashed: {message_id}")
 
-        print(f"\nResults:")
+        print("\nResults:")
         print(f"   - Trashed {len(trashed_ids)} old messages")
-        print(f"   - These can be recovered from Trash for 30 days")
+        print("   - These can be recovered from Trash for 30 days")
     else:
         print("\n⚠️  No old emails found")
 

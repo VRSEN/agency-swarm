@@ -6,8 +6,6 @@ Filters out newsletters and promotional emails using multi-indicator detection.
 Stores contact information in Mem0 for future reference.
 """
 import json
-import os
-import re
 from datetime import datetime, timezone
 from email.utils import parseaddr
 

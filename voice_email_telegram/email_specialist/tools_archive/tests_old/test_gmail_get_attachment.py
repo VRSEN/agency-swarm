@@ -5,8 +5,9 @@ Tests the complete workflow: Fetch emails → Get message → Download attachmen
 """
 import json
 import os
-from dotenv import load_dotenv
+
 from composio import Composio
+from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -141,10 +142,10 @@ def test_gmail_attachment_workflow():
             data = attachment_data.get("data", "")
             size = attachment_data.get("size", 0)
 
-            print(f"✅ Attachment downloaded successfully!")
+            print("✅ Attachment downloaded successfully!")
             print(f"   Size: {size} bytes")
             print(f"   Data length: {len(data)} characters (base64)")
-            print(f"   Encoding: base64")
+            print("   Encoding: base64")
 
             # Display first 100 chars of base64 data
             if data:
@@ -155,9 +156,9 @@ def test_gmail_attachment_workflow():
             print("✅ WORKFLOW TEST COMPLETED SUCCESSFULLY!")
             print("="*70)
             print("\nWorkflow Summary:")
-            print(f"1. ✅ Fetched emails with attachments")
-            print(f"2. ✅ Retrieved message details and found attachment_id")
-            print(f"3. ✅ Downloaded attachment data (base64)")
+            print("1. ✅ Fetched emails with attachments")
+            print("2. ✅ Retrieved message details and found attachment_id")
+            print("3. ✅ Downloaded attachment data (base64)")
             print("\nGmailGetAttachment tool is ready for production! 🚀")
 
         else:
@@ -191,10 +192,10 @@ def test_tool_directly():
         result_data = json.loads(result)
 
         if "error" in result_data:
-            print(f"✅ Tool validation works (expected auth error)")
+            print("✅ Tool validation works (expected auth error)")
             print(f"   Error type: {result_data.get('type', 'Unknown')}")
         else:
-            print(f"✅ Tool executed successfully!")
+            print("✅ Tool executed successfully!")
 
     except Exception as e:
         print(f"❌ Tool validation error: {e}")

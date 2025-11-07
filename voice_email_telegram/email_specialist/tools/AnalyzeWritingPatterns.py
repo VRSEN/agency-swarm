@@ -4,10 +4,12 @@ Email Writing Pattern Analysis Tool
 Analyzes Ashley's past emails to extract writing style patterns
 and stores them in Mem0 for the email specialist agent to use.
 """
-from typing import List, Dict, Optional
-from pydantic import Field
 import re
 from collections import Counter
+from typing import Dict, List, Optional
+
+from pydantic import Field
+
 from agency_swarm.tools import BaseTool
 
 
@@ -40,8 +42,8 @@ class AnalyzeWritingPatterns(BaseTool):
         """
         try:
             # Import required tools
-            from .GmailSearchMessages import GmailSearchMessages
             from .GmailFetchEmails import GmailFetchEmails
+            from .GmailSearchMessages import GmailSearchMessages
             from .Mem0AddMemory import Mem0AddMemory
 
             # Build search query based on email type
@@ -72,7 +74,7 @@ class AnalyzeWritingPatterns(BaseTool):
             message_ids = self._extract_message_ids(search_result)
 
             if not message_ids:
-                return f"❌ No message IDs found in search results"
+                return "❌ No message IDs found in search results"
 
             self._log(f"✓ Found {len(message_ids)} emails to analyze")
 

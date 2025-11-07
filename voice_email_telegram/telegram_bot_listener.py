@@ -9,16 +9,15 @@ import os
 import time
 from datetime import datetime
 
-from dotenv import load_dotenv
-
 # Import agency
-from agency import agency, get_completion
+from agency import get_completion
+from dotenv import load_dotenv
+from voice_handler.tools.ParseVoiceToText import ParseVoiceToText
+from voice_handler.tools.TelegramDownloadFile import TelegramDownloadFile
 
 # Import Telegram tools
 from voice_handler.tools.TelegramGetUpdates import TelegramGetUpdates
 from voice_handler.tools.TelegramSendMessage import TelegramSendMessage
-from voice_handler.tools.TelegramDownloadFile import TelegramDownloadFile
-from voice_handler.tools.ParseVoiceToText import ParseVoiceToText
 
 load_dotenv()
 
@@ -38,7 +37,7 @@ class TelegramBotListener:
         print("TELEGRAM BOT LISTENER")
         print("=" * 80)
         print(f"Bot Token: {self.bot_token[:20]}...")
-        print(f"Status: Initializing...")
+        print("Status: Initializing...")
         print("=" * 80)
 
     def send_telegram_message(self, chat_id: int, text: str):
@@ -99,7 +98,7 @@ class TelegramBotListener:
             )
 
             # Process through agency
-            print(f"🤖 Processing through agency...")
+            print("🤖 Processing through agency...")
             response = get_completion(
                 f"""User sent a voice message that was transcribed to:
 
@@ -109,7 +108,7 @@ Please process this request and take appropriate action based on what the user i
 Provide a summary of what you did."""
             )
 
-            print(f"✅ Agency response received")
+            print("✅ Agency response received")
 
             # Step 4: Send response back to user
             self.send_telegram_message(chat_id, f"✅ Request processed!\n\n{response}")

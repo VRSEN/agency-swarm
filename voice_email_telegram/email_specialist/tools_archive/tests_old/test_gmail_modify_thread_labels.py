@@ -13,8 +13,8 @@ from dotenv import load_dotenv
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from tools.GmailModifyThreadLabels import GmailModifyThreadLabels
 from tools.GmailListThreads import GmailListThreads
+from tools.GmailModifyThreadLabels import GmailModifyThreadLabels
 
 load_dotenv()
 
@@ -59,7 +59,7 @@ def main():
         print("Set COMPOSIO_API_KEY and GMAIL_ENTITY_ID in .env file")
         return
 
-    print(f"\n✅ Credentials loaded")
+    print("\n✅ Credentials loaded")
     print(f"Entity ID: {entity_id[:20]}...")
 
     # =========================================================================
@@ -86,7 +86,7 @@ def main():
     test_thread_id = threads[0].get("id")
     thread_snippet = threads[0].get("snippet", "")[:50]
 
-    print(f"\n✅ Using thread for testing:")
+    print("\n✅ Using thread for testing:")
     print(f"   Thread ID: {test_thread_id}")
     print(f"   Snippet: {thread_snippet}...")
 

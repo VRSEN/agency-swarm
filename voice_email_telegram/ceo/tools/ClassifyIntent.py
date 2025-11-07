@@ -1,5 +1,4 @@
 import json
-from typing import Literal
 
 from dotenv import load_dotenv
 from pydantic import Field

@@ -14,7 +14,7 @@ Usage:
 
 import json
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 import requests
 from pydantic import Field
