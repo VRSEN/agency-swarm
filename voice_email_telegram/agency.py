@@ -1,4 +1,5 @@
 from ceo.ceo import ceo
+from ceo.tools.ClassifyIntent import ClassifyIntent
 from dotenv import load_dotenv
 from email_specialist.email_specialist import email_specialist
 from memory_manager.memory_manager import memory_manager
@@ -25,7 +26,9 @@ def get_completion(user_query: str) -> str:
     """
     Get completion from agency using v1.0 API.
 
-    The CEO agent has ClassifyIntent tool which provides deterministic routing.
+    This function implements a routing preprocessor that ALWAYS runs
+    ClassifyIntent before routing to the CEO. This provides deterministic
+    routing and prevents LLM instruction-following issues.
 
     Args:
         user_query: User query string
@@ -33,7 +36,19 @@ def get_completion(user_query: str) -> str:
     Returns:
         Agency response string
     """
-    result = agency.get_response_sync(user_query)
+    # 1. Classify intent first (routing preprocessor)
+    classifier = ClassifyIntent(query=user_query)
+    classification_result = classifier.run()
+
+    # 2. Prepend classification to user query
+    enhanced_query = (
+        f"CLASSIFICATION RESULT:\n{classification_result}\n\n"
+        f"USER QUERY:\n{user_query}"
+    )
+
+    # 3. Route to CEO with enhanced query
+    result = agency.get_response_sync(enhanced_query)
+
     # Extract text from RunResult object
     return result.final_output if hasattr(result, 'final_output') else str(result)
 
