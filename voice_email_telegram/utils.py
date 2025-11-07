@@ -40,6 +40,12 @@ def validate_email(email: str) -> bool:
     if domain.startswith(".") or domain.endswith("."):
         return False
 
+    # Domain parts can only contain alphanumeric, hyphens, and dots
+    # Check for invalid characters in domain
+    allowed_chars = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-")
+    if not all(c in allowed_chars for c in domain):
+        return False
+
     return True
 
 
