@@ -14,6 +14,10 @@ def validate_email(email: str) -> bool:
     if not email or not isinstance(email, str):
         return False
 
+    # RFC 5321: Email addresses cannot contain spaces
+    if " " in email:
+        return False
+
     # RFC 5321: Maximum email length is 254 characters
     if len(email) > 254:
         return False
@@ -50,6 +54,10 @@ def truncate_text(text: str, max_length: int = 100) -> str:
     Returns:
         Truncated text with ... if needed
     """
+    # Handle non-string inputs
+    if not isinstance(text, str):
+        return ""
+
     if not text:
         return ""
 
