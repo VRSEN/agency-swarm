@@ -151,3 +151,67 @@ def test_prune_guardrail_messages_drops_no_op_trace_descendants() -> None:
     )
 
     assert pruned == [preserved_user, guardrail_message]
+
+
+def test_prune_guardrail_messages_drops_nested_agent_user_and_errors() -> None:
+    """SendMessage pseudo-user items should not survive guardrail pruning."""
+    real_user = _build_message(
+        role="user",
+        parent_run_id=None,
+        agent_run_id="agent_run_parent",
+        caller_agent=None,
+        agent="CustomerSupportAgent",
+    )
+    db_user = _build_message(
+        role="user",
+        parent_run_id="call_db",
+        agent_run_id="agent_run_db",
+        caller_agent="CustomerSupportAgent",
+        agent="DatabaseAgent",
+    )
+    email_user = _build_message(
+        role="user",
+        parent_run_id="call_email",
+        agent_run_id="agent_run_email",
+        caller_agent="DatabaseAgent",
+        agent="EmailAgent",
+    )
+    email_guardrail_error = _build_message(
+        role="system",
+        message_origin="input_guardrail_error",
+        parent_run_id="call_email",
+        agent_run_id="agent_run_email",
+        caller_agent="DatabaseAgent",
+        agent="EmailAgent",
+    )
+    db_guardrail_error = _build_message(
+        role="system",
+        message_origin="input_guardrail_error",
+        parent_run_id="call_db",
+        agent_run_id="agent_run_db",
+        caller_agent="CustomerSupportAgent",
+        agent="DatabaseAgent",
+    )
+    top_guardrail_message = _build_message(
+        role="assistant",
+        message_origin="input_guardrail_message",
+        parent_run_id=None,
+        agent_run_id="agent_run_parent",
+        caller_agent=None,
+        agent="CustomerSupportAgent",
+    )
+
+    pruned = prune_guardrail_messages(
+        [
+            real_user,
+            db_user,
+            email_user,
+            email_guardrail_error,
+            db_guardrail_error,
+            top_guardrail_message,
+        ],
+        initial_saved_count=0,
+        run_trace_id="trace_guardrail",
+    )
+
+    assert pruned == [real_user, top_guardrail_message]

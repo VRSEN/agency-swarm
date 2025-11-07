@@ -72,6 +72,7 @@ async def main() -> None:
 
     help_response = await agency.get_response("My password reset link expired yesterday")
     print("Accepted response:", help_response.final_output)  # a real response from the customer-support agent
+    print("History:", agency.thread_manager.get_all_messages())
 
 
 if __name__ == "__main__":

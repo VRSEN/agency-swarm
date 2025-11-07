@@ -104,11 +104,13 @@ def prune_guardrail_messages(
             continue
 
         if isinstance(origin, str) and origin in guardrail_origins:
-            cleaned_tail.append(msg)
+            if caller_agent is None:
+                cleaned_tail.append(msg)
             continue
 
         if parent_id in suppressed_parent_ids and role == "user":
-            cleaned_tail.append(msg)
+            if caller_agent is None:
+                cleaned_tail.append(msg)
             continue
 
         if isinstance(parent_id, str) and parent_id:
