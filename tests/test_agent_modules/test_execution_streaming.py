@@ -1,4 +1,4 @@
-from agency_swarm.agent.execution_streaming import _prune_guardrail_messages
+from agency_swarm.agent.execution_streaming import prune_guardrail_messages
 
 
 def _build_message(
@@ -45,7 +45,7 @@ def test_prune_guardrail_messages_parent_run_only_keeps_user_and_guidance() -> N
         unrelated_other_trace,
     ]
 
-    pruned = _prune_guardrail_messages(
+    pruned = prune_guardrail_messages(
         all_messages,
         initial_saved_count=1,
         run_trace_id="trace_guardrail",
@@ -81,7 +81,7 @@ def test_prune_guardrail_messages_child_run_keeps_trigger_input_and_guidance() -
         function_call,
     ]
 
-    pruned = _prune_guardrail_messages(
+    pruned = prune_guardrail_messages(
         all_messages,
         initial_saved_count=1,
         run_trace_id="trace_guardrail",
@@ -111,7 +111,7 @@ def test_prune_guardrail_messages_preserves_other_traces() -> None:
         concurrent_message,
     ]
 
-    pruned = _prune_guardrail_messages(
+    pruned = prune_guardrail_messages(
         all_messages,
         initial_saved_count=1,
         run_trace_id="trace_guardrail",
@@ -144,7 +144,7 @@ def test_prune_guardrail_messages_drops_no_op_trace_descendants() -> None:
         helper_assistant,
     ]
 
-    pruned = _prune_guardrail_messages(
+    pruned = prune_guardrail_messages(
         all_messages,
         initial_saved_count=1,
         run_trace_id="trace_guardrail",

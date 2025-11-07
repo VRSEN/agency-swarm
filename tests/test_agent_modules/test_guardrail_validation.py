@@ -100,6 +100,48 @@ async def test_input_guardrail_returns_error_non_stream(mock_runner_run, minimal
     assert res.final_output == "Prefix your request with 'Task:'"
     msgs = ctx.thread_manager.get_all_messages()
     roles_contents = [(m.get("role"), m.get("content")) for m in msgs]
-    assert ("system", "Prefix your request with 'Task:'") in roles_contents
-    sys_msgs = [m for m in msgs if m.get("role") == "system"]
-    assert sys_msgs and sys_msgs[-1].get("message_origin") == "input_guardrail_message"
+    assert ("assistant", "Prefix your request with 'Task:'") in roles_contents
+    assistant_msgs = [m for m in msgs if m.get("role") == "assistant"]
+    system_msgs = [m for m in msgs if m.get("role") == "system"]
+    assert assistant_msgs and assistant_msgs[-1].get("message_origin") == "input_guardrail_message"
+    assert not system_msgs
+
+
+@pytest.mark.asyncio
+@patch("agents.Runner.run", new_callable=AsyncMock)
+async def test_input_guardrail_error_no_assistant_messages(mock_runner_run, minimal_agent, mock_thread_manager):
+    """When throw_input_guardrail_error=True, no assistant messages should persist."""
+    agent = minimal_agent
+    agent.throw_input_guardrail_error = True
+
+    class _InRes:
+        output = GuardrailFunctionOutput(
+            output_info="Prefix your request with 'Task:'",
+            tripwire_triggered=True,
+        )
+        guardrail = object()
+
+    mock_runner_run.side_effect = InputGuardrailTripwireTriggered(_InRes())
+
+    ctx = AgencyContext(agency_instance=None, thread_manager=mock_thread_manager, subagents={})
+
+    with pytest.raises(InputGuardrailTripwireTriggered):
+        await agent.get_response(message="Hello", agency_context=ctx)
+
+    msgs = ctx.thread_manager.get_all_messages()
+
+    # Should have exactly 2 messages: user input + system guardrail error
+    assert len(msgs) == 2, f"Expected 2 messages (user + guardrail), got {len(msgs)}: {msgs}"
+
+    # First message: user input
+    assert msgs[0].get("role") == "user"
+    assert msgs[0].get("content") == "Hello"
+
+    # Second message: system guardrail error (not message)
+    assert msgs[1].get("role") == "system"
+    assert "Prefix your request with 'Task:'" in msgs[1].get("content", "")
+    assert msgs[1].get("message_origin") == "input_guardrail_error"
+
+    # Critical: NO assistant messages should be present
+    assistant_msgs = [m for m in msgs if m.get("role") == "assistant"]
+    assert len(assistant_msgs) == 0, f"Expected no assistant messages, but found {len(assistant_msgs)}"

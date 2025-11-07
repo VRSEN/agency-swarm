@@ -158,7 +158,7 @@ agent = Agent(
 
 #### Input Guardrail Return Format
 
-Agent's configuration includes an optional parameter called `throw_input_guardrail_error`, which defines how the guardrail error will be processed and presented to the caller:
+Agent's configuration includes an optional parameter called `throw_input_guardrail_error`, which defines how guardrail guidance is surfaced and persisted:
 ```python
 agent = Agent(
     name="CustomerSupportAgent",
@@ -167,8 +167,12 @@ agent = Agent(
     throw_input_guardrail_error=False,
 )
 ```
-If set to `True`, triggering a guardrail will raise a corresponding exception, as described in the next section.
-If set to `False` (its default value), the guardrail error will be returned to the user/caller agent as if it were a genuine response from the recipient. For example, using the agent above:
+| `throw_input_guardrail_error` | Caller sees                                                                                        | Persisted entry                                                |
+|-------------------------------|----------------------------------------------------------------------------------------------------|----------------------------------------------------------------|
+| `False` (default)             | Guardrail text returned as `final_output` (non-streaming) or as the `message_output_created` event | Assistant message (`message_origin="input_guardrail_message"`) |
+| `True`                        | `InputGuardrailTripwireTriggered` exception                                                        | System message (`message_origin="input_guardrail_error"`)      |
+
+For example, using the agent above with the default setting:
 ```python
 response = await agency.get_response("Hello!")
 print(response.final_output)
@@ -176,7 +180,7 @@ print(response.final_output)
 This will not raise an exception; however, the `response.final_output` will contain the guardrail's error message. In this case, it will be:    
 `"Prefix your request with 'Request:' describing what you need."`     
 
-For streaming responses, it will emit an extra event at the end of the stream in the following format:
+When streaming is enabled and `throw_input_guardrail_error=False` (the default), the final event looks like this:
 ```text
 RunItemStreamEvent(
     name='message_output_created', 
@@ -203,13 +207,7 @@ RunItemStreamEvent(
 ```
 This event will always have an id set to `msg_input_guardrail_guidance`, so you can further differentiate it, if needed.
 
-**When to use:** This feature's primary focus is to simplify building user-facing applications and make the user experience more fluid. 
-When using this feature, you won't have to add any exception handlers for the input guardrails. Instead, users will receive the response as if it were coming from the agent, so they can adjust their input accordingly.
-
-<Note>
-While having this feature turned on produces an agent's response, that response is purely artificial and will not be registered in the thread history.   
-Instead, an appropriate system message will be added in order to log a guardrail error.
-</Note>
+**When to use:** Keep the default (`False`) to keep the experience fluid—callers see the guidance inline as if it came from the agent, and you don't need extra exception handling. Switch to `True` when you prefer to abort the turn, raise `InputGuardrailTripwireTriggered`, and persist only the system guidance entry for stricter flows.
 
 #### Input Guardrail Exceptions
 Unlike output guardrails, if an input guardrail exception is raised (`throw_input_guardrail_error` should be set to `True` for that to happen), the error will be immediately returned back to the user/caller agent.    
@@ -222,17 +220,19 @@ except InputGuardrailTripwireTriggered as e:
     print(f"Validation failed: {e.guardrail_result.output_info}")
 ```
 
-Each triggered guardrail will also leave a corresponding system message containing error message inside of a chat history. Regardless of the `throw_input_guardrail_error` parameter value.
+Each triggered guardrail leaves exactly one guidance entry inside the chat history. With `throw_input_guardrail_error=False`, that entry is the impersonated assistant message (`input_guardrail_message`) and its text matches what the caller receives. With `throw_input_guardrail_error=True`, the guardrail raises an exception and only the system guidance entry (`input_guardrail_error`) remains.
 
 <Note>
 The validation_attempts parameter currently does not apply to input guardrails.
 </Note>
 
 #### Guardrails in message history
-Each guardrail trigger will be represented as a system message in the chat history. 
-Additionally, every message will have a `message_origin` field added to help you differentiate which trigger created the message.   
-There are 3 types: `output_guardrail_error`, `input_guardrail_error`, and `input_guardrail_message`. 
-The latter indicates that the agent had `throw_input_guardrail_error` set to `False` and the system message was displayed to the user as an agent response.
+Each guardrail trigger is recorded in the chat history with a guidance entry. Every entry carries a `message_origin` field so you can determine which guardrail fired (`output_guardrail_error`, `input_guardrail_error`, or `input_guardrail_message`).
+
+| `throw_input_guardrail_error` | Streaming Event                             | Persisted Entry                                               |
+|-------------------------------|---------------------------------------------|---------------------------------------------------------------|
+| `False` (default)             | `message_output_created` with guidance text | Assistant message, `message_origin="input_guardrail_message"` |
+| `True`                        | `{"type": "error", "content": guidance}`    | System message, `message_origin="input_guardrail_error"`      |
 
 <Accordion title="Example system messages for guardrail errors">
 Taken from [examples/guardrail.py](https://github.com/VRSEN/agency-swarm/blob/main/examples/guardrails.py)
@@ -240,7 +240,7 @@ Taken from [examples/guardrail.py](https://github.com/VRSEN/agency-swarm/blob/ma
 [
     // Input guardrail triggered by user input that was presented as assistant message
     {
-        "role": "system",
+        "role": "assistant",
         "content": "Please, prefix your request with 'Support:' describing what you need.",
         "message_origin": "input_guardrail_message",
         "agent": "CustomerSupportAgent",

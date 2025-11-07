@@ -40,7 +40,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def _prune_guardrail_messages(
+def prune_guardrail_messages(
     all_messages: list[TResponseInputItem],
     *,
     initial_saved_count: int,
@@ -369,7 +369,7 @@ def run_stream_with_guardrails(
                         streaming_result.raw_responses = []
 
                     if agency_context and agency_context.thread_manager:
-                        pruned_messages = _prune_guardrail_messages(
+                        pruned_messages = prune_guardrail_messages(
                             agency_context.thread_manager.get_all_messages(),
                             initial_saved_count=initial_saved_count,
                             run_trace_id=run_trace_id,
