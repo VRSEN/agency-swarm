@@ -23,7 +23,7 @@ agency = Agency(
 
 def get_completion(user_query: str) -> str:
     """
-    Get completion from agency.
+    Get completion from agency using v1.0 API.
 
     The CEO agent has ClassifyIntent tool which provides deterministic routing.
 
@@ -33,7 +33,9 @@ def get_completion(user_query: str) -> str:
     Returns:
         Agency response string
     """
-    return agency.get_completion(user_query)
+    result = agency.get_response_sync(user_query)
+    # Extract text from RunResult object
+    return result.final_output if hasattr(result, 'final_output') else str(result)
 
 if __name__ == "__main__":
     from datetime import datetime
@@ -111,7 +113,7 @@ if __name__ == "__main__":
         print(f"{'-' * 80}\n")
 
         try:
-            response = agency.get_completion(test["query"])
+            response = get_completion(test["query"])
             print(response)
 
             results.append(
