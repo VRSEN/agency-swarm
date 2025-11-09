@@ -125,6 +125,20 @@ If `enable_logging=True`, a `/get_logs` endpoint is also added.
 
 Inputs for the tool endpoints will follow their respective schemas.
 
+### Inspecting tool schemas
+
+Before deploying, you can inspect the JSON schema that each tool endpoint expects. Tools created with the `@function_tool` decorator expose their payload definition through `params_json_schema`:
+
+```python
+import json
+
+for tool in [example_tool, test_tool]:
+    print(tool.name)
+    print(json.dumps(tool.params_json_schema, indent=2))
+```
+
+If you are using a `BaseTool`, call `YourTool.model_json_schema()` instead to retrieve the same structure. Logging these schemas before calling `run_fastapi()` mirrors the schema files that older templates generated and gives you the exact body shape to share with downstream clients.
+
 ---
 
 ## API Usage Example
