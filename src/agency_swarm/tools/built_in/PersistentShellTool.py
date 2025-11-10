@@ -45,8 +45,8 @@ class PersistentShellTool(BaseTool):
                 timeout=300,  # 5 minute timeout
             )
 
-            # Update working directory if cd command was used
-            if self.command.strip().startswith("cd "):
+            # Update working directory if cd command was used and succeeded
+            if self.command.strip().startswith("cd ") and result.returncode == 0:
                 # Parse the new directory
                 new_dir = self.command.strip()[3:].strip()
                 if new_dir:

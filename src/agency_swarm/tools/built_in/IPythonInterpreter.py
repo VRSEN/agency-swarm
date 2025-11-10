@@ -26,7 +26,6 @@ class IPythonInterpreter(BaseTool):
         shell = None
         if self._shared_state is not None:
             shell = self._shared_state.get("ipython_shell")
-        print(f"shell: {shell}")
         if shell is None:
             shell = InteractiveShell.instance()
             if self._shared_state is not None:

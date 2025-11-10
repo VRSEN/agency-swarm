@@ -26,7 +26,7 @@ class LoadFileAttachment(BaseTool):
         image_extensions = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".tiff", ".tif", ".svg"}
         return file_path.suffix.lower() in image_extensions
 
-    def run(self):
+    async def run(self):
         """
         Analyzes the file and returns it in the appropriate format.
         If the file doesn't exist, provides a list of available files in the directory.
