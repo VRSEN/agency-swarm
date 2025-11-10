@@ -92,7 +92,11 @@ def create_agent_template(
     reasoning_line = ""
     if reasoning:
         reasoning_import = "\nfrom openai.types.shared import Reasoning"
-        reasoning_line = f'\n        reasoning=Reasoning(effort="{reasoning}"),'
+        # GPT-5 models support summary parameter in Reasoning
+        if model.startswith("gpt-5"):
+            reasoning_line = f'\n        reasoning=Reasoning(effort="{reasoning}", summary="auto"),'
+        else:
+            reasoning_line = f'\n        reasoning=Reasoning(effort="{reasoning}"),'
 
     max_tokens_line = ""
     if max_tokens:
