@@ -181,6 +181,28 @@ print("Response:", tool_response.json())
 
 ---
 
+## Inspecting Tool Schemas
+
+When integrating your tools with external systems or documenting your API, you need to expose the parameter schemas. `ToolFactory.get_openapi_schema()` generates a complete OpenAPI 3.1.0 specification from your tools.
+
+```python
+from agency_swarm.tools import ToolFactory
+
+tools = [MyTool, my_function_tool]
+openapi_schema = ToolFactory.get_openapi_schema(
+    tools,
+    url="https://your-server.com",
+    title="My Tools API",
+    description="OpenAPI schema for my tools"
+)
+```
+
+The method returns a JSON string containing the complete specification with all tool parameters, types, and descriptions.
+
+**Implementation:** `src/agency_swarm/tools/tool_factory.py`
+
+---
+
 ## File Attachments
 
 When using the agency endpoints (`/{your_agency}/get_response` and `/{your_agency}/get_response_stream`), you can attach files in two ways:
