@@ -6,7 +6,7 @@ from io import StringIO
 from IPython.core.interactiveshell import InteractiveShell
 from pydantic import Field
 
-from agency_swarm.tools import BaseTool
+from agency_swarm.tools.base_tool import BaseTool
 
 
 class IPythonInterpreter(BaseTool):

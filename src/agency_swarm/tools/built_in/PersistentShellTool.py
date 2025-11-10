@@ -4,7 +4,7 @@ import subprocess
 
 from pydantic import Field
 
-from agency_swarm.tools import BaseTool
+from agency_swarm.tools.base_tool import BaseTool
 
 
 class PersistentShellTool(BaseTool):

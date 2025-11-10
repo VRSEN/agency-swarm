@@ -2,8 +2,8 @@ from pathlib import Path
 
 from pydantic import Field
 
-from ..base_tool import BaseTool
-from ..utils import tool_output_file_from_path, tool_output_image_from_path
+from agency_swarm.tools.base_tool import BaseTool
+from agency_swarm.tools.utils import tool_output_file_from_path, tool_output_image_from_path
 
 
 class LoadFileAttachment(BaseTool):
