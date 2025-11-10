@@ -251,8 +251,15 @@ class AgentFileManager:
             if self._should_skip_file(file):
                 logger.debug(f"Skipping file '{file}'")
                 continue
+
+            # Only process actual files, not subdirectories
+            full_path = self.agent.files_folder_path / file
+            if not os.path.isfile(full_path):
+                logger.debug(f"Skipping directory '{file}'")
+                continue
+
             file_id = self._upload_file_by_type(
-                self.agent.files_folder_path / file,
+                full_path,
                 wait_for_ingestion=False,
                 pending_ingestions=pending_ingestions,
             )

@@ -22,14 +22,30 @@ class IPythonInterpreter(BaseTool):
     )
 
     async def run(self) -> str:
-        # Retrieve or create persistent shell from shared context
+        # Retrieve or create persistent shell from shared context, keyed by agent name
         shell = None
-        if self._shared_state is not None:
-            shell = self._shared_state.get("ipython_shell")
-        if shell is None:
-            shell = InteractiveShell.instance()
-            if self._shared_state is not None:
-                self._shared_state.set("ipython_shell", shell)
+
+        # Get agent identifier for isolation
+        agent_name = None
+        if self._caller_agent and hasattr(self._caller_agent, "name"):
+            agent_name = self._caller_agent.name
+        elif self.context:
+            agent_name = self.context.current_agent_name
+
+        if self.context and agent_name:
+            # Store shells in a dict keyed by agent name for per-agent isolation
+            shells_dict = self.context.get("ipython_shells", {})
+            shell = shells_dict.get(agent_name)
+
+            if shell is None:
+                # Create a new isolated shell instance for this agent
+                shell = InteractiveShell()
+                shells_dict[agent_name] = shell
+                self.context.set("ipython_shells", shells_dict)
+        else:
+            # Fallback: create a new shell per execution (not persistent)
+            # This happens if we can't identify the agent
+            shell = InteractiveShell()
 
         output = StringIO()
         error = None
