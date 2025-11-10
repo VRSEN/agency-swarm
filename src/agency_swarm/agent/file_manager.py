@@ -515,9 +515,11 @@ class AgentFileManager:
             try:
                 for file in os.listdir(folder_path):
                     if not self._should_skip_file(file):
-                        # Found at least one non-skippable entry
-                        has_processable_files = True
-                        break
+                        full_path = os.path.join(folder_path, file)
+                        # Only count actual files, not subdirectories
+                        if os.path.isfile(full_path):
+                            has_processable_files = True
+                            break
             except OSError as e:
                 logger.debug(f"Agent {self.agent.name}: Error checking files in '{folder_path}': {e}")
                 # If we can't read the folder, optimistically proceed
