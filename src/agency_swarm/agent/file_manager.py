@@ -509,6 +509,27 @@ class AgentFileManager:
             self.agent.files_folder_path = folder_path.resolve()
             return vs_id_match.group(2)
 
+        # Check if folder has any processable files before creating vector store
+        has_processable_files = False
+        if folder_path.exists() and folder_path.is_dir():
+            try:
+                for file in os.listdir(folder_path):
+                    if not self._should_skip_file(file):
+                        # Found at least one non-skippable entry
+                        has_processable_files = True
+                        break
+            except OSError as e:
+                logger.debug(f"Agent {self.agent.name}: Error checking files in '{folder_path}': {e}")
+                # If we can't read the folder, optimistically proceed
+                has_processable_files = True
+
+        if not has_processable_files:
+            logger.info(
+                f"Agent {self.agent.name}: files_folder '{folder_path}' is empty or contains no processable files. "
+                "Skipping vector store creation."
+            )
+            return None
+
         logger.info(
             f"Agent {self.agent.name}: files_folder '{folder_path}' does not specify a Vector Store ID. "
             "Creating a new Vector Store."
