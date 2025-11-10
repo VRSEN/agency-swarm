@@ -1,11 +1,17 @@
+import copy
+import inspect
 import logging
 import os
+import re
 from collections.abc import Callable, Mapping
+from typing import Any
 
 from agents.tool import FunctionTool
 
 from agency_swarm.agency import Agency
 from agency_swarm.agent.core import Agent
+from agency_swarm.tools import BaseTool
+from agency_swarm.tools.utils import generate_model_from_schema
 
 logger = logging.getLogger(__name__)
 
@@ -153,8 +159,15 @@ def run_fastapi(
     if tools and not DRY_RUN:
         for tool in tools:
             tool_name = tool.name if hasattr(tool, "name") else tool.__name__
-            tool_handler = make_tool_endpoint(tool, verify_token)
-            app.add_api_route(f"/tool/{tool_name}", tool_handler, methods=["POST"], name=tool_name)
+            request_model = _build_tool_request_model(tool_name, tool)
+            tool_handler = make_tool_endpoint(tool, verify_token, request_model=request_model)
+            app.add_api_route(
+                f"/tool/{tool_name}",
+                tool_handler,
+                methods=["POST"],
+                name=tool_name,
+                summary=getattr(tool, "description", None),
+            )
             endpoints.append(f"/tool/{tool_name}")
 
     app.add_exception_handler(Exception, exception_handler)
@@ -172,3 +185,27 @@ def run_fastapi(
     logger.info(f"Starting FastAPI {'AG-UI ' if enable_agui else ''}server at http://{host}:{port}")
 
     uvicorn.run(app, host=host, port=port)
+
+
+def _build_tool_request_model(tool_name: str, tool: Any):
+    """Return a Pydantic model describing the tool's request body for OpenAPI."""
+
+    if inspect.isclass(tool) and issubclass(tool, BaseTool):
+        return tool
+
+    if isinstance(tool, FunctionTool):
+        schema = copy.deepcopy(tool.params_json_schema)
+        class_name = _camelize(schema.get("title") or f"{tool_name}_payload")
+        strict = bool(getattr(tool, "strict_json_schema", False))
+        model = generate_model_from_schema(schema, class_name, strict)
+        model.__module__ = __name__
+        return model
+
+    return None
+
+
+def _camelize(value: str) -> str:
+    parts = [part for part in re.split(r"[^0-9a-zA-Z]", value) if part]
+    if not parts:
+        return "Payload"
+    return "".join(part[:1].upper() + part[1:] for part in parts)

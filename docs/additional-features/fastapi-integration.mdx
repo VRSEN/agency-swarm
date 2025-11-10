@@ -127,17 +127,23 @@ Inputs for the tool endpoints will follow their respective schemas.
 
 ### Inspecting tool schemas
 
-Before deploying, you can inspect the JSON schema that each tool endpoint expects. Tools created with the `@function_tool` decorator expose their payload definition through `params_json_schema`:
+`run_fastapi()` exposes a single OpenAPI document that covers every agency and tool endpoint. You can capture the schema before launching the server by requesting the FastAPI app and calling `openapi()`:
 
 ```python
 import json
 
-for tool in [example_tool, test_tool]:
-    print(tool.name)
-    print(json.dumps(tool.params_json_schema, indent=2))
+app = run_fastapi(
+    agencies={"test_agency_1": create_agency_1, "test_agency_2": create_agency_2},
+    tools=[example_tool, test_tool],
+    return_app=True,
+    app_token_env="",
+)
+
+openapi_doc = app.openapi()
+print(json.dumps(openapi_doc["paths"]["/tool/example_tool"], indent=2))
 ```
 
-If you are using a `BaseTool`, call `YourTool.model_json_schema()` instead to retrieve the same structure. Logging these schemas before calling `run_fastapi()` mirrors the schema files that older templates generated and gives you the exact body shape to share with downstream clients.
+When you deploy the server, the same schema is available over HTTP at `/openapi.json`, and the interactive Swagger UI at `/docs` reflects the exact request bodies for every tool—whether it was created with `@function_tool` or inherits from `BaseTool`. Share those endpoints with downstream clients to keep documentation and runtime behavior in sync.
 
 ---
 

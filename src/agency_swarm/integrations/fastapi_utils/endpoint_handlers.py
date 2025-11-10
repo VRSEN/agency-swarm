@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 from agency_swarm import (
     Agency,
     Agent,
+    BaseTool,
     GuardrailFunctionOutput,
     RunContextWrapper,
 )
@@ -214,28 +215,52 @@ def make_stream_endpoint(request_model, agency_factory: Callable[..., Agency], v
 
 
 # Tool endpoint
-def make_tool_endpoint(tool, verify_token, context=None):
-    async def handler(request: Request, token: str = Depends(verify_token)):
+def make_tool_endpoint(tool, verify_token, request_model=None, context=None):
+    if request_model is None:
+        async def handler(request: Request, token: str = Depends(verify_token)):
+            try:
+                data = await request.json()
+                result = await _invoke_tool_with_payload(tool, data, context)
+                return {"response": result}
+            except Exception as e:
+                return JSONResponse(status_code=500, content={"Error": str(e)})
+
+        return handler
+
+    RequestModel = request_model
+
+    async def handler(payload: RequestModel, token: str = Depends(verify_token)):
         try:
-            data = await request.json()
-            # If this is a FunctionTool (from @function_tool), use on_invoke_tool
-            if hasattr(tool, "on_invoke_tool"):
-                input_json = json.dumps(data)
-                result = await tool.on_invoke_tool(context, input_json)
-            elif isinstance(tool, type):
-                tool_instance = tool(**data)
-                result = tool_instance.run()
+            if isinstance(payload, BaseTool):
+                result = payload.run()
                 if asyncio.iscoroutine(result):
                     result = await result
-            else:
-                result = tool(**data)
-                if asyncio.iscoroutine(result):
-                    result = await result
+                return {"response": result}
+
+            data = payload.model_dump() if hasattr(payload, "model_dump") else payload
+            result = await _invoke_tool_with_payload(tool, data, context)
             return {"response": result}
         except Exception as e:
             return JSONResponse(status_code=500, content={"Error": str(e)})
 
     return handler
+
+
+async def _invoke_tool_with_payload(tool, data, context):
+    # If this is a FunctionTool (from @function_tool), use on_invoke_tool
+    if hasattr(tool, "on_invoke_tool"):
+        input_json = json.dumps(data)
+        return await tool.on_invoke_tool(context, input_json)
+    if isinstance(tool, type):
+        tool_instance = tool(**data)
+        result = tool_instance.run()
+        if asyncio.iscoroutine(result):
+            result = await result
+        return result
+    result = tool(**data)
+    if asyncio.iscoroutine(result):
+        result = await result
+    return result
 
 
 def make_agui_chat_endpoint(request_model, agency_factory: Callable[..., Agency], verify_token):
