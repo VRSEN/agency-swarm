@@ -5,6 +5,7 @@ import sys
 
 from agency_swarm.utils.create_agent_template import create_agent_template
 
+from .import_tool import import_tool_command
 from .migrate_agent import migrate_agent_command
 
 
@@ -57,10 +58,36 @@ def main() -> None:
         help="Output directory for the generated agent (default: current directory)",
     )
 
+    # Import tool command
+    import_tool_parser = subparsers.add_parser(
+        "import-tool",
+        help="Import a built-in tool into the current project",
+        usage="agency-swarm import-tool [TOOL_NAME] [--destination DIR] [--list]",
+    )
+    import_tool_parser.add_argument(
+        "tool_name",
+        nargs="?",
+        help="Name of the built-in tool to import (e.g., 'IPythonInterpreter', 'PersistentShellTool')",
+    )
+    import_tool_parser.add_argument(
+        "--directory",
+        default="./tools",
+        help="Destination directory for the tool (default: ./tools)",
+    )
+    import_tool_parser.add_argument(
+        "--list",
+        action="store_true",
+        dest="list_tools",
+        help="List all available built-in tools",
+    )
+
     args = parser.parse_args()
 
     if args.command == "migrate-agent":
         exit_code = migrate_agent_command(args.settings_file, args.output_dir)
+        sys.exit(exit_code)
+    elif args.command == "import-tool":
+        exit_code = import_tool_command(args.tool_name, args.directory, args.list_tools)
         sys.exit(exit_code)
     elif args.command == "create-agent-template":
         try:

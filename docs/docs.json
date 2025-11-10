@@ -1,231 +1,225 @@
 {
-  "$schema": "https://mintlify.com/docs.json",
-  "theme": "maple",
-  "name": "Agency Swarm",
-  "colors": {
-    "primary": "#fcd53b",
-    "light": "#fcd53b",
-    "dark": "#B76E00"
-  },
-  "favicon": "/images/favicon.svg",
-  "navigation": {
-    "tabs": [
-      {
-        "tab": "Framework",
-        "global": {
-          "anchors": [
-            {
-              "anchor": "Discord Community",
-              "href": "https://discord.gg/cw2xBaWfFM",
-              "icon": "discourse"
-            },
-            {
-              "anchor": "Changelog",
-              "href": "https://github.com/VRSEN/agency-swarm/releases",
-              "icon": "timeline"
-            }
-          ]
-        },
-        "groups": [
-          {
-            "group": "Welcome",
-            "pages": [
-              "welcome/overview",
-              "welcome/ai-agency-vs-other-frameworks",
-              {
-                "group": "Get Started",
-                "icon": "rocket",
-                "pages": [
-                  "welcome/installation",
-                  "welcome/getting-started/from-scratch",
-                  "welcome/getting-started/agency-templates",
-                  "welcome/getting-started/cursor-ide"
-                ]
-              }
-            ]
-          },
-          {
-            "group": "Core Framework",
-            "pages": [
-              {
-                "group": "Tools",
-                "icon": "wrench",
-                "pages": [
-                  "core-framework/tools/overview",
-                  {
-                    "group": "Custom Tools",
-                    "icon": "hammer",
-                    "pages": [
-                      "core-framework/tools/custom-tools/step-by-step-guide",
-                      "core-framework/tools/custom-tools/pydantic-is-all-you-need",
-                      "core-framework/tools/custom-tools/multimodal-outputs",
-                      "core-framework/tools/custom-tools/best-practices",
-                      "core-framework/tools/custom-tools/configuration"
+    "$schema": "https://mintlify.com/docs.json",
+    "theme": "maple",
+    "name": "Agency Swarm",
+    "colors": {
+        "primary": "#fcd53b",
+        "light": "#fcd53b",
+        "dark": "#B76E00"
+    },
+    "favicon": "/images/favicon.svg",
+    "navigation": {
+        "tabs": [{
+                "tab": "Framework",
+                "global": {
+                    "anchors": [{
+                            "anchor": "Discord Community",
+                            "href": "https://discord.gg/cw2xBaWfFM",
+                            "icon": "discourse"
+                        },
+                        {
+                            "anchor": "Changelog",
+                            "href": "https://github.com/VRSEN/agency-swarm/releases",
+                            "icon": "timeline"
+                        }
                     ]
-                  },
-                  "core-framework/tools/openapi-schemas",
-                  "core-framework/tools/mcp-integration"
+                },
+                "groups": [{
+                        "group": "Welcome",
+                        "pages": [
+                            "welcome/overview",
+                            "welcome/ai-agency-vs-other-frameworks",
+                            {
+                                "group": "Get Started",
+                                "icon": "rocket",
+                                "pages": [
+                                    "welcome/installation",
+                                    "welcome/getting-started/from-scratch",
+                                    "welcome/getting-started/agency-templates",
+                                    "welcome/getting-started/cursor-ide"
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "group": "Core Framework",
+                        "pages": [{
+                                "group": "Tools",
+                                "icon": "wrench",
+                                "pages": [
+                                    "core-framework/tools/overview",
+                                    "core-framework/tools/built-in-tools",
+                                    {
+                                        "group": "Custom Tools",
+                                        "icon": "hammer",
+                                        "pages": [
+                                            "core-framework/tools/custom-tools/step-by-step-guide",
+                                            "core-framework/tools/custom-tools/pydantic-is-all-you-need",
+                                            "core-framework/tools/custom-tools/multimodal-outputs",
+                                            "core-framework/tools/custom-tools/best-practices",
+                                            "core-framework/tools/custom-tools/configuration"
+                                        ]
+                                    },
+                                    "core-framework/tools/openapi-schemas",
+                                    "core-framework/tools/mcp-integration"
+                                ]
+                            },
+                            {
+                                "group": "Agents",
+                                "icon": "user",
+                                "pages": [
+                                    "core-framework/agents/overview",
+                                    "core-framework/agents/built-in-tools",
+                                    "core-framework/agents/advanced-configuration"
+                                ]
+                            },
+                            {
+                                "group": "Agencies",
+                                "icon": "sitemap",
+                                "pages": [
+                                    "core-framework/agencies/overview",
+                                    "core-framework/agencies/communication-flows",
+                                    "core-framework/agencies/running-agency",
+                                    "core-framework/agencies/visualization"
+                                ]
+                            },
+                            "core-framework/state-management"
+                        ]
+                    },
+                    {
+                        "group": "Additional Features",
+                        "pages": [
+                            "additional-features/agency-context",
+                            "additional-features/few-shot-examples",
+                            "additional-features/input-output-validation",
+                            "additional-features/streaming",
+                            "additional-features/fastapi-integration",
+                            "additional-features/mcp-tools-server",
+                            {
+                                "group": "Custom Communication Flows",
+                                "icon": "comments",
+                                "pages": [
+                                    "additional-features/custom-communication-flows/overview",
+                                    "additional-features/custom-communication-flows/common-use-cases",
+                                    "additional-features/custom-communication-flows/hybrid-patterns"
+                                ]
+                            },
+                            "additional-features/azure-openai",
+                            "additional-features/third-party-models",
+                            "additional-features/deployment-to-production",
+                            "additional-features/observability"
+                        ]
+                    },
+                    {
+                        "group": "References",
+                        "pages": ["references/api"]
+                    },
+                    {
+                        "group": "Contributing",
+                        "pages": ["contributing/contributing"]
+                    },
+                    {
+                        "group": "Migration",
+                        "pages": ["migration/guide"]
+                    },
+                    {
+                        "group": "FAQ",
+                        "pages": ["faq"]
+                    }
                 ]
-              },
-              {
-                "group": "Agents",
-                "icon": "user",
-                "pages": [
-                  "core-framework/agents/overview",
-                  "core-framework/agents/built-in-tools",
-                  "core-framework/agents/advanced-configuration"
-                ]
-              },
-              {
-                "group": "Agencies",
-                "icon": "sitemap",
-                "pages": [
-                  "core-framework/agencies/overview",
-                  "core-framework/agencies/communication-flows",
-                  "core-framework/agencies/running-agency",
-                  "core-framework/agencies/visualization"
-                ]
-              },
-              "core-framework/state-management"
-            ]
-          },
-          {
-            "group": "Additional Features",
-            "pages": [
-              "additional-features/agency-context",
-              "additional-features/few-shot-examples",
-              "additional-features/input-output-validation",
-              "additional-features/streaming",
-              "additional-features/fastapi-integration",
-              "additional-features/mcp-tools-server",
-              {
-                "group": "Custom Communication Flows",
-                "icon": "comments",
-                "pages": [
-                  "additional-features/custom-communication-flows/overview",
-                  "additional-features/custom-communication-flows/common-use-cases",
-                  "additional-features/custom-communication-flows/hybrid-patterns"
-                ]
-              },
-              "additional-features/azure-openai",
-              "additional-features/third-party-models",
-              "additional-features/deployment-to-production",
-              "additional-features/observability"
-            ]
-          },
-          {
-            "group": "References",
-            "pages": ["references/api"]
-          },
-          {
-            "group": "Contributing",
-            "pages": ["contributing/contributing"]
-          },
-          {
-            "group": "Migration",
-            "pages": ["migration/guide"]
-          },
-          {
-            "group": "FAQ",
-            "pages": ["faq"]
-          }
-        ]
-      },
-      {
-        "tab": "Platform",
-        "global": {
-          "anchors": [
-            {
-              "anchor": "Agencii Platform",
-              "href": "https://agencii.ai/signup/",
-              "icon": "globe"
             },
             {
-              "anchor": "Skool Community",
-              "href": "https://www.skool.com/agency-ai/about",
-              "icon": "users"
+                "tab": "Platform",
+                "global": {
+                    "anchors": [{
+                            "anchor": "Agencii Platform",
+                            "href": "https://agencii.ai/signup/",
+                            "icon": "globe"
+                        },
+                        {
+                            "anchor": "Skool Community",
+                            "href": "https://www.skool.com/agency-ai/about",
+                            "icon": "users"
+                        }
+                    ]
+                },
+                "groups": [{
+                        "group": "General",
+                        "icon": "globe",
+                        "pages": ["platform/overview"]
+                    },
+                    {
+                        "group": "Integrations",
+                        "icon": "plug",
+                        "pages": [
+                            "platform/integrations/slack-integration",
+                            "platform/integrations/whatsapp-integration",
+                            "platform/integrations/zapier-integration",
+                            "platform/integrations/web-api",
+                            "platform/integrations/widget"
+                        ]
+                    },
+                    {
+                        "group": "Marketplace",
+                        "icon": "store",
+                        "pages": ["platform/marketplace/onboarding"]
+                    },
+                    {
+                        "group": "Additional Features",
+                        "pages": ["platform/additional-instructions"]
+                    }
+                ],
+                "openapi": {
+                    "source": "/openapi.json",
+                    "directory": "platform/integrations/api"
+                }
+            },
+            {
+                "tab": "Extras",
+                "groups": [{
+                        "group": "Extras",
+                        "pages": ["extras/extras"]
+                    },
+                    {
+                        "group": "Tutorials",
+                        "pages": ["tutorials/tutorials"]
+                    }
+                ]
             }
-          ]
-        },
-        "groups": [
-          {
-            "group": "General",
-            "icon": "globe",
-            "pages": ["platform/overview"]
-          },
-          {
-            "group": "Integrations",
-            "icon": "plug",
-            "pages": [
-              "platform/integrations/slack-integration",
-              "platform/integrations/whatsapp-integration",
-              "platform/integrations/zapier-integration",
-              "platform/integrations/web-api",
-              "platform/integrations/widget"
-            ]
-          },
-          {
-            "group": "Marketplace",
-            "icon": "store",
-            "pages": ["platform/marketplace/onboarding"]
-          },
-          {
-            "group": "Additional Features",
-            "pages": ["platform/additional-instructions"]
-          }
-        ],
-        "openapi": {
-          "source": "/openapi.json",
-          "directory": "platform/integrations/api"
-        }
-      },
-      {
-        "tab": "Extras",
-        "groups": [
-          {
-            "group": "Extras",
-            "pages": ["extras/extras"]
-          },
-          {
-            "group": "Tutorials",
-            "pages": ["tutorials/tutorials"]
-          }
         ]
-      }
-    ]
-  },
-  "logo": {
-    "light": "/images/logo-light.svg",
-    "dark": "/images/logo-dark.svg",
-    "href": "https://agency-swarm.ai"
-  },
-  "appearance": {
-    "default": "dark",
-    "strict": false
-  },
-  "background": {
-    "color": {
-      "dark": "#0C102D"
+    },
+    "logo": {
+        "light": "/images/logo-light.svg",
+        "dark": "/images/logo-dark.svg",
+        "href": "https://agency-swarm.ai"
+    },
+    "appearance": {
+        "default": "dark",
+        "strict": false
+    },
+    "background": {
+        "color": {
+            "dark": "#0C102D"
+        }
+    },
+    "navbar": {
+        "primary": {
+            "type": "github",
+            "href": "https://github.com/VRSEN/agency-swarm"
+        }
+    },
+    "search": {
+        "prompt": "Search Agency Swarm docs"
+    },
+    "seo": {
+        "indexing": "navigable"
+    },
+    "footer": {
+        "socials": {
+            "website": "https://vrsen.ai",
+            "x": "https://x.com/__vrsen__",
+            "github": "https://github.com/VRSEN/agency-swarm",
+            "youtube": "https://youtube.com/@vrsen"
+        }
     }
-  },
-  "navbar": {
-    "primary": {
-      "type": "github",
-      "href": "https://github.com/VRSEN/agency-swarm"
-    }
-  },
-  "search": {
-    "prompt": "Search Agency Swarm docs"
-  },
-  "seo": {
-    "indexing": "navigable"
-  },
-  "footer": {
-    "socials": {
-      "website": "https://vrsen.ai",
-      "x": "https://x.com/__vrsen__",
-      "github": "https://github.com/VRSEN/agency-swarm",
-      "youtube": "https://youtube.com/@vrsen"
-    }
-  }
 }

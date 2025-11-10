@@ -1,0 +1,195 @@
+---
+title: "Built-in Tools"
+description: "Ready-to-use tools that ship with Agency Swarm framework."
+icon: "toolbox"
+---
+
+Agency Swarm includes a set of built-in tools that provide common functionality for your agents. These tools are production-ready and can be used immediately without additional configuration.
+
+## Quick Overview
+
+<CardGroup cols={3}>
+  <Card
+    title="IPythonInterpreter"
+    icon="code"
+  >
+    Execute Python code in an isolated environment with persistent state.
+  </Card>
+
+  <Card
+    title="PersistentShellTool"
+    icon="terminal"
+  >
+    Run shell commands in a persistent terminal session.
+  </Card>
+
+  <Card
+    title="LoadFileAttachment"
+    icon="file"
+  >
+    Load and process local images and PDF files.
+  </Card>
+</CardGroup>
+
+## Tool Details
+
+<Accordion title="IPythonInterpreter" icon="code" defaultOpen>
+
+Executes Python code in an isolated IPython environment with persistent state between calls.
+
+### Use Cases
+
+<CardGroup cols={2}>
+  <Card icon="chart-line">
+    **Data Analysis**
+    Analyze and process datasets
+  </Card>
+  <Card icon="calculator">
+    **Calculations**
+    Perform mathematical and statistical operations
+  </Card>
+  <Card icon="flask">
+    **Testing**
+    Test code snippets in a safe environment
+  </Card>
+  <Card icon="file-code">
+    **Scripts**
+    Run Python scripts and automation
+  </Card>
+</CardGroup>
+
+### Usage Example
+
+```python
+from agency_swarm import Agent
+from agency_swarm.tools import IPythonInterpreter
+
+data_analyst = Agent(
+    name="Data Analyst",
+    description="Analyzes data using Python",
+    instructions="./instructions.md",
+    tools=[IPythonInterpreter]
+)
+```
+
+</Accordion>
+
+<Accordion title="PersistentShellTool" icon="terminal">
+
+Similar to the Agents SDK `LocalShellTool`, but works with any model. Executes shell commands in a persistent terminal session, maintaining state across multiple commands.
+
+### Use Cases
+
+<CardGroup cols={2}>
+  <Card icon="terminal">
+    **CLI Commands**
+    Execute command-line operations
+  </Card>
+  <Card icon="folder-tree">
+    **File Operations**
+    Navigate and manage file systems
+  </Card>
+  <Card icon="github">
+    **Git Operations**
+    Version control and repository management
+  </Card>
+  <Card icon="hammer">
+    **Build Operations**
+    Run build scripts and compile code
+  </Card>
+</CardGroup>
+
+### Usage Example
+
+```python
+from agency_swarm import Agent
+from agency_swarm.tools import PersistentShellTool
+
+devops_agent = Agent(
+    name="DevOps Agent",
+    description="Manages deployment and infrastructure",
+    instructions="./instructions.md",
+    tools=[PersistentShellTool]
+)
+```
+
+</Accordion>
+
+<Accordion title="LoadFileAttachment" icon="file">
+
+Loads local files and returns them in the appropriate format for the agent to view.
+
+<Warning>
+Only supports images and PDF files. For other file types, use the `FileSearch` and `CodeInterpreter` tools from the Agents SDK.
+</Warning>
+
+### Use Cases
+
+<CardGroup cols={2}>
+  <Card icon="image">
+    **Image Processing**
+    Load and analyze image files
+  </Card>
+  <Card icon="file-pdf">
+    **PDF Reading**
+    Extract and process PDF content
+  </Card>
+  <Card icon="upload">
+    **User Files**
+    Handle user-uploaded file attachments
+  </Card>
+  <Card icon="magnifying-glass">
+    **File Analysis**
+    Inspect and analyze local files
+  </Card>
+</CardGroup>
+
+### Usage Example
+
+```python
+from agency_swarm import Agent
+from agency_swarm.tools import LoadFileAttachment
+
+file_processor = Agent(
+    name="File Processor",
+    description="Processes and analyzes local files",
+    instructions="./instructions.md",
+    tools=[LoadFileAttachment]
+)
+```
+
+<Note>
+The agent can use both absolute paths and paths relative to the current working directory. Make sure to instruct your agent accordingly on how to use this tool.
+</Note>
+
+</Accordion>
+
+---
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card
+    title="Custom Tools"
+    icon="hammer"
+    href="/core-framework/tools/custom-tools/step-by-step-guide"
+  >
+    Build your own tools from scratch
+  </Card>
+
+  <Card
+    title="OpenAPI Schemas"
+    icon="file-code"
+    href="/core-framework/tools/openapi-schemas"
+  >
+    Convert APIs into tools
+  </Card>
+
+  <Card
+    title="MCP Integration"
+    icon="plug"
+    href="/core-framework/tools/mcp-integration"
+  >
+    Use Model Context Protocol tools
+  </Card>
+</CardGroup>
