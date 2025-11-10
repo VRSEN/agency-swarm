@@ -61,7 +61,8 @@
                       "core-framework/tools/custom-tools/pydantic-is-all-you-need",
                       "core-framework/tools/custom-tools/multimodal-outputs",
                       "core-framework/tools/custom-tools/best-practices",
-                      "core-framework/tools/custom-tools/configuration"
+                      "core-framework/tools/custom-tools/configuration",
+                      "core-framework/tools/custom-tools/validation"
                     ]
                   },
                   "core-framework/tools/openapi-schemas",
@@ -95,7 +96,7 @@
             "pages": [
               "additional-features/agency-context",
               "additional-features/few-shot-examples",
-              "additional-features/input-output-validation",
+              "additional-features/guardrails",
               "additional-features/streaming",
               "additional-features/fastapi-integration",
               "additional-features/mcp-tools-server",

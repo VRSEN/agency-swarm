@@ -30,7 +30,7 @@ def _build_message(
 def test_prune_guardrail_messages_parent_run_only_keeps_user_and_guidance() -> None:
     preserved_user = _build_message(role="user", parent_run_id=None, agent_run_id="agent_run_parent")
     guardrail_message = _build_message(
-        role="system",
+        role="assistant",
         message_origin="input_guardrail_message",
         parent_run_id=None,
         agent_run_id="agent_run_parent",
@@ -60,9 +60,10 @@ def test_prune_guardrail_messages_child_run_keeps_trigger_input_and_guidance() -
         role="user",
         parent_run_id="call_child",
         agent_run_id="agent_run_child",
+        caller_agent="ParentAgent",
     )
     guardrail_message = _build_message(
-        role="system",
+        role="assistant",
         message_origin="input_guardrail_message",
         parent_run_id="call_child",
         agent_run_id="agent_run_child",
@@ -71,6 +72,7 @@ def test_prune_guardrail_messages_child_run_keeps_trigger_input_and_guidance() -
         role=None,
         parent_run_id="call_child",
         agent_run_id="agent_run_child",
+        caller_agent="ParentAgent",
         extra={"type": "function_call"},
     )
 
@@ -93,7 +95,7 @@ def test_prune_guardrail_messages_child_run_keeps_trigger_input_and_guidance() -
 def test_prune_guardrail_messages_preserves_other_traces() -> None:
     preserved_user = _build_message(role="user", parent_run_id=None, agent_run_id="agent_run_parent")
     guardrail_message = _build_message(
-        role="system",
+        role="assistant",
         message_origin="input_guardrail_message",
         parent_run_id=None,
         agent_run_id="agent_run_parent",
@@ -123,7 +125,7 @@ def test_prune_guardrail_messages_preserves_other_traces() -> None:
 def test_prune_guardrail_messages_drops_no_op_trace_descendants() -> None:
     preserved_user = _build_message(role="user", parent_run_id=None, agent_run_id="agent_run_parent")
     guardrail_message = _build_message(
-        role="system",
+        role="assistant",
         message_origin="input_guardrail_message",
         parent_run_id=None,
         agent_run_id="agent_run_parent",
@@ -151,3 +153,199 @@ def test_prune_guardrail_messages_drops_no_op_trace_descendants() -> None:
     )
 
     assert pruned == [preserved_user, guardrail_message]
+
+
+def test_prune_guardrail_messages_drops_nested_agent_user_and_errors() -> None:
+    """Inter-agent messages are preserved for retry context; only outputs are dropped."""
+    real_user = _build_message(
+        role="user",
+        parent_run_id=None,
+        agent_run_id="agent_run_parent",
+        caller_agent=None,
+        agent="CustomerSupportAgent",
+    )
+    db_user = _build_message(
+        role="user",
+        parent_run_id="call_db",
+        agent_run_id="agent_run_db",
+        caller_agent="CustomerSupportAgent",
+        agent="DatabaseAgent",
+    )
+    email_user = _build_message(
+        role="user",
+        parent_run_id="call_email",
+        agent_run_id="agent_run_email",
+        caller_agent="DatabaseAgent",
+        agent="EmailAgent",
+    )
+    email_guardrail_guidance = _build_message(
+        role="assistant",
+        message_origin="input_guardrail_message",
+        parent_run_id="call_email",
+        agent_run_id="agent_run_email",
+        caller_agent="DatabaseAgent",
+        agent="EmailAgent",
+    )
+    db_guardrail_guidance = _build_message(
+        role="assistant",
+        message_origin="input_guardrail_message",
+        parent_run_id="call_db",
+        agent_run_id="agent_run_db",
+        caller_agent="CustomerSupportAgent",
+        agent="DatabaseAgent",
+    )
+    top_guardrail_message = _build_message(
+        role="assistant",
+        message_origin="input_guardrail_message",
+        parent_run_id=None,
+        agent_run_id="agent_run_parent",
+        caller_agent=None,
+        agent="CustomerSupportAgent",
+    )
+
+    pruned = prune_guardrail_messages(
+        [
+            real_user,
+            db_user,
+            email_user,
+            email_guardrail_guidance,
+            db_guardrail_guidance,
+            top_guardrail_message,
+        ],
+        initial_saved_count=1,
+        run_trace_id="trace_guardrail",
+    )
+
+    assert pruned == [
+        real_user,
+        db_user,
+        email_user,
+        email_guardrail_guidance,
+        db_guardrail_guidance,
+        top_guardrail_message,
+    ]
+
+
+def test_prune_guardrail_messages_preserves_parent_guidance_after_child_guardrail() -> None:
+    """DatabaseAgent guardrail trip (agent-to-agent) should still surface parent guidance."""
+    real_user = _build_message(
+        role="user",
+        parent_run_id=None,
+        agent_run_id="agent_run_parent",
+        caller_agent=None,
+        agent="CustomerSupportAgent",
+    )
+    parent_prompt = _build_message(
+        role="user",
+        parent_run_id="call_db",
+        agent_run_id="agent_run_db",
+        caller_agent="CustomerSupportAgent",
+        agent="DatabaseAgent",
+    )
+    db_guardrail_guidance = _build_message(
+        role="assistant",
+        message_origin="input_guardrail_message",
+        parent_run_id="call_db",
+        agent_run_id="agent_run_db",
+        caller_agent="CustomerSupportAgent",
+        agent="DatabaseAgent",
+    )
+    parent_guidance = _build_message(
+        role="assistant",
+        message_origin="input_guardrail_message",
+        parent_run_id=None,
+        agent_run_id="agent_run_parent",
+        caller_agent=None,
+        agent="CustomerSupportAgent",
+    )
+
+    pruned = prune_guardrail_messages(
+        [real_user, parent_prompt, db_guardrail_guidance, parent_guidance],
+        initial_saved_count=1,
+        run_trace_id="trace_guardrail",
+    )
+
+    assert pruned == [real_user, parent_prompt, db_guardrail_guidance, parent_guidance]
+
+
+def test_prune_guardrail_messages_keeps_child_guardrail_guidance_for_parent() -> None:
+    """Child guardrail guidance (callerAgent set) must stay so parent can adjust."""
+    real_user = _build_message(
+        role="user",
+        parent_run_id=None,
+        agent_run_id="agent_run_parent",
+        caller_agent=None,
+        agent="CustomerSupportAgent",
+    )
+    db_prompt = _build_message(
+        role="user",
+        parent_run_id="call_db",
+        agent_run_id="agent_run_db",
+        caller_agent="CustomerSupportAgent",
+        agent="DatabaseAgent",
+    )
+    db_guardrail_message = _build_message(
+        role="assistant",
+        message_origin="input_guardrail_message",
+        parent_run_id="call_db",
+        agent_run_id="agent_run_db",
+        caller_agent="CustomerSupportAgent",
+        agent="DatabaseAgent",
+    )
+
+    pruned = prune_guardrail_messages(
+        [real_user, db_prompt, db_guardrail_message],
+        initial_saved_count=1,
+        run_trace_id="trace_guardrail",
+    )
+
+    assert pruned == [real_user, db_prompt, db_guardrail_message]
+
+
+def test_prune_guardrail_messages_drops_descendants_after_guardrail() -> None:
+    """Messages spawned after guardrail trip must be removed."""
+    real_user = _build_message(
+        role="user",
+        parent_run_id=None,
+        agent_run_id="agent_run_parent",
+        caller_agent=None,
+        agent="CustomerSupportAgent",
+    )
+    db_user = _build_message(
+        role="user",
+        parent_run_id="call_db",
+        agent_run_id="agent_run_db",
+        caller_agent="CustomerSupportAgent",
+        agent="DatabaseAgent",
+    )
+    email_guardrail_guidance = _build_message(
+        role="assistant",
+        message_origin="input_guardrail_message",
+        parent_run_id="call_email",
+        agent_run_id="agent_run_email",
+        caller_agent="DatabaseAgent",
+        agent="EmailAgent",
+    )
+    descendant_after_guardrail = _build_message(
+        role="assistant",
+        parent_run_id="call_followup",
+        agent_run_id="agent_run_followup",
+        caller_agent="EmailAgent",
+        agent="HelperAgent",
+    )
+    parent_guidance = _build_message(
+        role="assistant",
+        message_origin="input_guardrail_message",
+        parent_run_id=None,
+        agent_run_id="agent_run_parent",
+        caller_agent=None,
+        agent="CustomerSupportAgent",
+    )
+
+    pruned = prune_guardrail_messages(
+        [real_user, db_user, email_guardrail_guidance, descendant_after_guardrail, parent_guidance],
+        initial_saved_count=1,
+        run_trace_id="trace_guardrail",
+    )
+
+    assert pruned == [real_user, email_guardrail_guidance, parent_guidance]

@@ -49,7 +49,7 @@ The new `Agent` class extends the base `agents.Agent` with Agency Swarm-specific
 | Send Message Tool Class *(optional)* | `send_message_tool_class` | Custom SendMessage tool class to use for inter-agent communication. If None, uses the default SendMessage class. Default: `None` |
 | Include Search Results *(optional)* | `include_search_results` | Include search results in FileSearchTool output for citation extraction. Default: `False` |
 | Validation Attempts *(optional)* | `validation_attempts` | Number of retries when an output guardrail trips. Default: `1` |
-| Throw Input Guardrail Error *(optional)* | `throw_input_guardrail_error` | If set to `True`, input guardrail errors raise an exception. If set to `False`, the guardrail message is returned as the agent's response. Default: `False` |
+| Throw Input Guardrail Error *(optional)* | `throw_input_guardrail_error` | Controls input guardrail behavior: `False` enables **friendly mode** (default) where guidance is returned as an assistant message, while `True` enables **strict mode** where guardrail failures raise exceptions. Default: `False` |
 | Handoff Reminder *(optional)* | `handoff_reminder` | Replaces the default handoff reminder system message with a given string. Default: "Transfer completed. You are [recipient_agent_name]. Please continue the task." |
 
 ### Core Agent Parameters

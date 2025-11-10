@@ -1,0 +1,228 @@
+---
+title: "Input Validation"
+description: "Validate tool inputs using Pydantic field and model validators"
+icon: "shield-check"
+---
+
+Tool validation ensures data integrity by enforcing schemas before tools execute. Pydantic validators catch invalid input from LLMs, preventing errors and hallucinations from reaching your tool logic.
+
+## Why Validate Tool Inputs
+
+Without validation, LLMs may provide:
+- Malformed data (e.g., text in numeric fields)
+- Out-of-range values (e.g., negative ages, future dates in the past)
+- Invalid formats (e.g., malformed emails, incorrect URLs)
+- Inconsistent field combinations (e.g., mismatched passwords)
+
+Validators enforce constraints at the schema level, giving the LLM immediate feedback to retry with correct inputs.
+
+## Field Validators
+
+Field validators check individual fields independently. Use `@field_validator` to validate a single field's value.
+
+### Basic Field Validation
+
+```python
+from pydantic import field_validator
+from agency_swarm import BaseTool
+
+class User(BaseTool):
+    """Create a user account."""
+    username: str
+    age: int
+
+    @field_validator('username')
+    @classmethod
+    def validate_username(cls, value):
+        if ' ' in value:
+            raise ValueError('Username must not contain spaces.')
+        if len(value) < 3:
+            raise ValueError('Username must be at least 3 characters.')
+        return value
+
+    @field_validator('age')
+    @classmethod
+    def validate_age(cls, value):
+        if value < 0 or value > 120:
+            raise ValueError('Age must be between 0 and 120.')
+        return value
+
+    def run(self):
+        return f"Created user: {self.username}, age {self.age}"
+```
+
+### Multiple Field Validation
+
+Validate multiple fields with a single validator:
+
+```python
+from pydantic import field_validator
+from agency_swarm import BaseTool
+
+class ScheduleEvent(BaseTool):
+    """Schedule a calendar event."""
+    title: str
+    description: str
+
+    @field_validator('title', 'description')
+    @classmethod
+    def validate_not_empty(cls, value):
+        if not value.strip():
+            raise ValueError('Field cannot be empty or whitespace.')
+        return value.strip()
+
+    def run(self):
+        return f"Scheduled: {self.title}"
+```
+
+### Format Validation
+
+Validate specific formats like URLs or emails:
+
+```python
+from pydantic import field_validator
+from agency_swarm import BaseTool
+import re
+
+class CreateWebhook(BaseTool):
+    """Register a webhook URL."""
+    webhook_url: str
+    notification_email: str
+
+    @field_validator('webhook_url')
+    @classmethod
+    def validate_url(cls, value):
+        url_pattern = r'^https?://.+\..+'
+        if not re.match(url_pattern, value):
+            raise ValueError('Must be a valid HTTP/HTTPS URL.')
+        return value
+
+    @field_validator('notification_email')
+    @classmethod
+    def validate_email(cls, value):
+        email_pattern = r'^[\w\.-]+@[\w\.-]+\.\w+$'
+        if not re.match(email_pattern, value):
+            raise ValueError('Must be a valid email address.')
+        return value
+
+    def run(self):
+        return f"Webhook registered: {self.webhook_url}"
+```
+
+## Model Validators
+
+Model validators validate the entire model, enabling checks across multiple fields. Use `@model_validator` when field validation depends on other fields.
+
+### Cross-Field Validation
+
+```python
+from pydantic import model_validator
+from agency_swarm import BaseTool
+
+class CreateAccount(BaseTool):
+    """Create a new account with password."""
+    username: str
+    password: str
+    confirm_password: str
+
+    @model_validator(mode='after')
+    def check_passwords_match(self):
+        if self.password != self.confirm_password:
+            raise ValueError('Passwords do not match.')
+        if len(self.password) < 8:
+            raise ValueError('Password must be at least 8 characters.')
+        return self
+
+    def run(self):
+        return f"Account created: {self.username}"
+```
+
+### Date Range Validation
+
+```python
+from datetime import date
+from pydantic import model_validator
+from agency_swarm import BaseTool
+
+class BookAppointment(BaseTool):
+    """Book an appointment within a date range."""
+    start_date: date
+    end_date: date
+    reason: str
+
+    @model_validator(mode='after')
+    def validate_date_range(self):
+        if self.start_date >= self.end_date:
+            raise ValueError('Start date must be before end date.')
+        if self.start_date < date.today():
+            raise ValueError('Cannot book appointments in the past.')
+        return self
+
+    def run(self):
+        return f"Appointment booked: {self.start_date} to {self.end_date}"
+```
+
+### Conditional Validation
+
+```python
+from pydantic import model_validator
+from agency_swarm import BaseTool
+
+class ProcessPayment(BaseTool):
+    """Process payment with optional discount code."""
+    amount: float
+    discount_code: str | None = None
+    discount_amount: float | None = None
+
+    @model_validator(mode='after')
+    def validate_discount(self):
+        if self.discount_code and not self.discount_amount:
+            raise ValueError('Discount amount required when discount code is provided.')
+        if self.discount_amount and self.discount_amount >= self.amount:
+            raise ValueError('Discount cannot exceed payment amount.')
+        return self
+
+    def run(self):
+        total = self.amount - (self.discount_amount or 0)
+        return f"Payment processed: ${total:.2f}"
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Specific Error Messages" icon="message">
+    Provide clear, actionable error messages that guide the LLM to correct inputs.
+  </Card>
+
+  <Card title="Fail Fast" icon="bolt">
+    Validate at the schema level before expensive operations or external API calls.
+  </Card>
+
+  <Card title="Normalize Input" icon="arrow-right-arrow-left">
+    Use validators to clean and normalize data (e.g., strip whitespace, lowercase emails).
+  </Card>
+
+  <Card title="Test Validators" icon="vial">
+    Write unit tests for validators to ensure they catch invalid cases and allow valid ones.
+  </Card>
+</CardGroup>
+
+## See Also
+
+<CardGroup cols={2}>
+  <Card title="Tool Best Practices" icon="lightbulb" href="/core-framework/tools/custom-tools/best-practices">
+    General best practices for tool design
+  </Card>
+
+  <Card title="Pydantic Validators" icon="link" href="https://docs.pydantic.dev/latest/usage/validators/">
+    Official Pydantic validators documentation
+  </Card>
+
+  <Card title="Agent Guardrails" icon="shield-halved" href="/additional-features/guardrails">
+    Validate agent inputs and outputs with guardrails
+  </Card>
+
+  <Card title="Tool Configuration" icon="gear" href="/core-framework/tools/custom-tools/configuration">
+    Configure tool behavior and parameters
+  </Card>
+</CardGroup>

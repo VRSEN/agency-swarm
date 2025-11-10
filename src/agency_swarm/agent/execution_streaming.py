@@ -53,30 +53,29 @@ def prune_guardrail_messages(
     preserved = list(all_messages[:initial_saved_count])
     new_messages = list(all_messages[initial_saved_count:])
 
-    guardrail_parent_ids = {
-        cast(dict[str, Any], msg).get("parent_run_id")
-        for msg in new_messages
-        if cast(dict[str, Any], msg).get("message_origin") in guardrail_origins
+    drop_agent_run_ids: set[str] = {
+        cast(str, agent_run_id)
+        for agent_run_id in (
+            cast(dict[str, Any], msg).get("agent_run_id")
+            for msg in new_messages
+            if cast(dict[str, Any], msg).get("message_origin") in guardrail_origins
+        )
+        if isinstance(agent_run_id, str)
     }
-    guardrail_agent_run_ids = {
-        cast(dict[str, Any], msg).get("agent_run_id")
-        for msg in new_messages
-        if cast(dict[str, Any], msg).get("message_origin") in guardrail_origins
+    drop_callers: set[str] = {
+        cast(str, agent)
+        for agent in (
+            cast(dict[str, Any], msg).get("agent")
+            for msg in new_messages
+            if cast(dict[str, Any], msg).get("message_origin") in guardrail_origins
+        )
+        if isinstance(agent, str)
     }
-    guardrail_agents = {
-        cast(dict[str, Any], msg).get("agent")
-        for msg in new_messages
-        if cast(dict[str, Any], msg).get("message_origin") in guardrail_origins
-    }
-
-    suppressed_parent_ids: set[str | None] = set(guardrail_parent_ids)
-    suppressed_agent_run_ids: set[str | None] = set(guardrail_agent_run_ids)
 
     cleaned_tail: list[TResponseInputItem] = []
     for msg in new_messages:
         msg_dict = cast(dict[str, Any], msg)
         msg_trace_id = msg_dict.get("run_trace_id")
-        parent_id = msg_dict.get("parent_run_id")
         agent_run_id = msg_dict.get("agent_run_id")
         caller_agent = msg_dict.get("callerAgent")
         agent_name = msg_dict.get("agent")
@@ -87,34 +86,30 @@ def prune_guardrail_messages(
             cleaned_tail.append(msg)
             continue
 
-        in_guardrail_branch = False
-        if msg_trace_id == run_trace_id:
-            in_guardrail_branch = True
-        if parent_id in suppressed_parent_ids:
-            in_guardrail_branch = True
-        if isinstance(agent_run_id, str) and agent_run_id in suppressed_agent_run_ids:
-            in_guardrail_branch = True
-        if isinstance(caller_agent, str) and caller_agent in guardrail_agents:
-            in_guardrail_branch = True
-        if isinstance(agent_name, str) and agent_name in guardrail_agents:
-            in_guardrail_branch = True
-
-        if not in_guardrail_branch:
-            cleaned_tail.append(msg)
-            continue
-
         if isinstance(origin, str) and origin in guardrail_origins:
             cleaned_tail.append(msg)
             continue
 
-        if parent_id in suppressed_parent_ids and role == "user":
+        if role == "user" and caller_agent is None:
             cleaned_tail.append(msg)
             continue
 
-        if isinstance(parent_id, str) and parent_id:
-            suppressed_parent_ids.add(parent_id)
-        if isinstance(agent_run_id, str) and agent_run_id:
-            suppressed_agent_run_ids.add(agent_run_id)
+        if isinstance(agent_run_id, str) and agent_run_id in drop_agent_run_ids:
+            # Preserve inter-agent messages (violating inputs) for retry context
+            if role == "user":
+                cleaned_tail.append(msg)
+                continue
+            # Drop outputs from guardrailed agents
+            continue
+
+        if isinstance(caller_agent, str) and caller_agent in drop_callers:
+            if isinstance(agent_name, str):
+                drop_callers.add(agent_name)
+            if isinstance(agent_run_id, str):
+                drop_agent_run_ids.add(agent_run_id)
+            continue
+
+        cleaned_tail.append(msg)
 
     return preserved + cleaned_tail
 

@@ -299,7 +299,7 @@ class Agent(BaseAgent[MasterContext]):
             send_message_tool_class (type | None): Custom SendMessage tool override
             include_search_results (bool): Include search results in FileSearchTool output (default False)
             validation_attempts (int): Number of retries when output guardrails trigger (default 1)
-            throw_input_guardrail_error (bool): Raise input guardrail failures as exceptions (default False)
+            throw_input_guardrail_error (bool): Controls input guardrail behavior—False enables friendly mode (guidance as assistant message), True enables strict mode (raises exceptions). Default: False
             handoff_reminder (str | None): Custom reminder text when handing off to another agent
             model (str | Model | None): Model identifier; defaults to agents SDK configuration
             model_settings (ModelSettings | None): Model configuration overrides
@@ -326,7 +326,7 @@ class Agent(BaseAgent[MasterContext]):
 - **`send_message_tool_class`** (type | None): Custom SendMessage tool class for inter-agent communication
 - **`include_search_results`** (bool): Whether FileSearchTool responses include citation context
 - **`validation_attempts`** (int): Retry count for output guardrail enforcement
-- **`throw_input_guardrail_error`** (bool): Raise instead of returning guardrail errors
+- **`throw_input_guardrail_error`** (bool): Controls input guardrail mode—False for friendly (guidance as assistant), True for strict (raises exceptions)
 - **`handoff_reminder`** (str | None): Custom reminder appended to handoff prompts
 - **`tool_concurrency_manager`** (ToolConcurrencyManager): Coordinates concurrent tool execution
 
