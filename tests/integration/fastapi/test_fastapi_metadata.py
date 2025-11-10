@@ -7,6 +7,7 @@ from agents import CodeInterpreterTool, FileSearchTool, ModelSettings, WebSearch
 from fastapi.testclient import TestClient
 from openai.types.responses.tool_param import CodeInterpreter
 from openai.types.shared import Reasoning
+from pydantic import BaseModel
 
 from agency_swarm import Agency, Agent, BaseTool, function_tool, run_fastapi
 from agency_swarm.integrations.fastapi_utils import endpoint_handlers
@@ -165,3 +166,118 @@ def test_metadata_capabilities_empty_for_basic_agent():
     assert basic_agent is not None
     assert "capabilities" in basic_agent["data"]
     assert basic_agent["data"]["capabilities"] == []
+
+
+def test_tool_endpoint_handles_nested_schema():
+    """Test that tool endpoints work with nested Pydantic models."""
+
+    class Address(BaseModel):
+        street: str
+        zip_code: int
+
+    class NestedTool(BaseTool):
+        address: Address
+
+        def run(self) -> str:
+            return self.address.street
+
+    app = run_fastapi(tools=[NestedTool], return_app=True, app_token_env="")
+    client = TestClient(app)
+
+    response = client.post("/tool/NestedTool", json={"address": {"street": "Elm", "zip_code": 90210}})
+
+    assert response.status_code == 200
+    assert response.json() == {"response": "Elm"}
+
+
+def test_openapi_json_includes_nested_schemas():
+    """Verify /openapi.json contains proper schemas for tools with nested models."""
+
+    class Address(BaseModel):
+        street: str
+        zip_code: int
+
+    class NestedTool(BaseTool):
+        address: Address
+
+        def run(self) -> str:
+            return self.address.street
+
+    class SimpleTool(BaseTool):
+        name: str
+        age: int
+
+        def run(self) -> str:
+            return self.name
+
+    app = run_fastapi(tools=[NestedTool, SimpleTool], return_app=True, app_token_env="")
+    client = TestClient(app)
+
+    response = client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    assert "/tool/NestedTool" in schema["paths"]
+    assert "/tool/SimpleTool" in schema["paths"]
+
+    nested_endpoint = schema["paths"]["/tool/NestedTool"]["post"]
+    assert "requestBody" in nested_endpoint
+    nested_schema_ref = nested_endpoint["requestBody"]["content"]["application/json"]["schema"]
+    assert nested_schema_ref["$ref"] == "#/components/schemas/NestedTool"
+
+    assert "NestedTool" in schema["components"]["schemas"]
+    assert "Address" in schema["components"]["schemas"]
+
+    nested_tool_schema = schema["components"]["schemas"]["NestedTool"]
+    assert nested_tool_schema["properties"]["address"]["$ref"] == "#/components/schemas/Address"
+
+    address_schema = schema["components"]["schemas"]["Address"]
+    assert address_schema["type"] == "object"
+    assert "street" in address_schema["properties"]
+    assert "zip_code" in address_schema["properties"]
+    assert address_schema["required"] == ["street", "zip_code"]
+
+
+def test_function_tool_with_nested_schema():
+    """Verify that FunctionTools with nested models work correctly via adapted BaseTool."""
+    from agency_swarm.tools import ToolFactory
+
+    class Address(BaseModel):
+        street: str
+        zip_code: int
+
+    class UserTool(BaseTool):
+        """Create a user with address."""
+
+        name: str
+        address: Address
+
+        def run(self) -> str:
+            return f"{self.name} at {self.address.street}"
+
+    # Adapt the BaseTool to a FunctionTool (simulates what happens in agents)
+    function_tool = ToolFactory.adapt_base_tool(UserTool)
+
+    app = run_fastapi(tools=[function_tool], return_app=True, app_token_env="")
+    client = TestClient(app)
+
+    # Test that the endpoint works
+    response = client.post(
+        "/tool/UserTool", json={"name": "Alice", "address": {"street": "123 Main St", "zip_code": 12345}}
+    )
+    assert response.status_code == 200
+    assert "Alice at 123 Main St" in response.json()["response"]
+
+    # Test that OpenAPI schema includes nested model
+    schema_response = client.get("/openapi.json")
+    assert schema_response.status_code == 200
+    openapi_schema = schema_response.json()
+
+    assert "/tool/UserTool" in openapi_schema["paths"]
+    endpoint_schema = openapi_schema["paths"]["/tool/UserTool"]["post"]
+    assert "requestBody" in endpoint_schema
+
+    # Verify the schema is properly typed (not generic Request)
+    request_schema = endpoint_schema["requestBody"]["content"]["application/json"]["schema"]
+    assert "$ref" in request_schema
+    assert "UserToolRequest" in request_schema["$ref"]

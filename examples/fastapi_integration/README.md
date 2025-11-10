@@ -2,9 +2,11 @@
 
 This example demonstrates how to properly integrate Agency Swarm with FastAPI, including:
 - Serving agencies via HTTP endpoints
+- Serving standalone tools via HTTP endpoints
 - Handling streaming responses with Server-Sent Events (SSE)
 - Properly propagating `agent` and `callerAgent` fields in events
 - Managing conversation history across requests
+- Accessing OpenAPI schemas for tool integration
 
 ## Files
 
@@ -40,6 +42,35 @@ The server will start on http://localhost:8080 with these endpoints:
 - `POST /my-agency/get_response` - Regular response endpoint
 - `POST /my-agency/get_response_stream` - SSE streaming endpoint
 - `GET /my-agency/get_metadata` - Agency structure metadata
+
+### Serving Tools
+
+You can also serve standalone tools via FastAPI:
+
+```python
+from agency_swarm import run_fastapi, BaseTool
+
+class MyTool(BaseTool):
+    """A tool that does something useful."""
+    param1: str
+    param2: int
+
+    def run(self) -> str:
+        return f"Processed {self.param1} with {self.param2}"
+
+run_fastapi(
+    tools=[MyTool],
+    port=8080
+)
+```
+
+This will create:
+- `POST /tool/MyTool` - Tool execution endpoint
+- `GET /openapi.json` - OpenAPI 3.1.0 schema for all tools
+- `GET /docs` - Interactive Swagger UI documentation
+- `GET /redoc` - Alternative ReDoc documentation
+
+The OpenAPI schema includes proper types for nested Pydantic models, making it easy to integrate with external platforms like Agencii.ai.
 
 ### Test with Client
 
