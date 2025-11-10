@@ -131,10 +131,36 @@ def create_agent_template(
         if instructions:
             f.write(instructions)
         else:
-            # Only put heading if no instructions provided
-            content = f"# {agent_name} Instructions\n\n"
-            if agent_description:
-                content += f"You are {agent_name}. {agent_description.replace('"', "'")}\n"
+            # Use structured template
+            role_description = (
+                agent_description.replace('"', "'")
+                if agent_description
+                else "**[insert role, e.g., 'a helpful expert' or 'a creative storyteller'.]**"
+            )
+            content = f"""# Role
+
+You are {role_description}
+
+# Goals
+
+- **[Insert high level goals for the business (e.g., if you are building a report generator agent - increase sales by 10%)]**
+
+# Process
+
+## [Task Name]
+
+**[Provide a step-by-step instructions process on how this task should be performed. Use a numbered list.]**
+
+[...repeat for each task]
+
+# Output Format
+
+- **[Best suited output format for the agent (e.g., "respond concisely and use simple language") or examples.]**
+
+# Additional Notes
+
+- **[Specify any additional notes here, if any. Use bullet points if needed.]**
+"""  # noqa: E501
             f.write(content)
 
     # create folders
