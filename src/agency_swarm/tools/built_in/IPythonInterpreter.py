@@ -146,7 +146,8 @@ class AsyncKernelSession:
                 raise RuntimeError(f"Failed to receive shell reply after {max_attempts} attempts")
 
             try:
-                await asyncio.gather(drain_iopub(), wait_shell_reply())
+                async with asyncio.timeout(timeout):
+                    await asyncio.gather(drain_iopub(), wait_shell_reply())
             except TimeoutError:
                 await self._restart()
                 return ExecResult(
@@ -252,7 +253,7 @@ class IPythonInterpreter(BaseTool):
         ..., description="Python code to execute (multi-line supported, separated with newline character)."
     )
 
-    DEFAULT_TIMEOUT_SECONDS: ClassVar[float] = 10.0
+    DEFAULT_TIMEOUT_SECONDS: ClassVar[float] = 60.0
 
     async def run(self) -> str:
         agent_name = None
