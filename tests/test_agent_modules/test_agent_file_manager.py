@@ -70,6 +70,12 @@ class TestAgentFileManager:
 
         file_manager = AgentFileManager(mock_agent)
 
+        # Define which entries are files vs directories
+        def mock_isfile(path):
+            filename = os.path.basename(path)
+            # __pycache__ is a directory, everything else is a file
+            return filename != "__pycache__"
+
         # Mock the path operations
         with (
             patch("pathlib.Path.exists", return_value=True),
@@ -78,6 +84,7 @@ class TestAgentFileManager:
             patch("pathlib.Path.mkdir"),
             patch("pathlib.Path.rename"),
             patch("os.listdir") as mock_listdir,
+            patch("os.path.isfile", side_effect=mock_isfile),
             patch.object(file_manager, "add_file_search_tool"),
             patch.object(file_manager, "add_code_interpreter_tool"),
         ):
@@ -491,7 +498,7 @@ class TestAgentFileManager:
         assert "Files folder" not in caplog.text
 
     def test_parse_files_folder_creates_vector_store_without_warning(self, tmp_path, caplog):
-        """Create and rename folder on first discovery when directory already exists."""
+        """Create and rename folder on first discovery when directory has files."""
 
         mock_agent = Mock()
         mock_agent.name = "TestAgent"
@@ -503,6 +510,8 @@ class TestAgentFileManager:
 
         original_dir = tmp_path / "files"
         original_dir.mkdir()
+        # Create a file so the folder is not empty
+        (original_dir / "document.txt").write_text("content")
 
         file_manager = AgentFileManager(mock_agent)
 
@@ -510,7 +519,7 @@ class TestAgentFileManager:
             patch.object(AgentFileManager, "upload_file", return_value="file-1"),
             patch.object(AgentFileManager, "add_file_search_tool"),
             patch.object(AgentFileManager, "add_code_interpreter_tool"),
-            patch("os.listdir", return_value=[]),
+            patch("os.listdir", return_value=["document.txt"]),
             caplog.at_level(logging.ERROR),
         ):
             file_manager.parse_files_folder_for_vs_id()
@@ -949,3 +958,111 @@ class TestAgentFileManager:
                 assert "Absolute path instructions" in mock_agent.instructions
         finally:
             os.unlink(tmp_file_path)
+
+    def test_empty_folder_does_not_create_vector_store(self, tmp_path: Path):
+        """Test that empty folders or folders with only skippable files don't create vector stores."""
+        mock_agent = Mock()
+        mock_agent.name = "TestAgent"
+        mock_agent.files_folder = "files"
+        mock_agent.client_sync = Mock()
+        mock_agent.tools = []
+
+        file_manager = AgentFileManager(mock_agent)
+        file_manager.get_class_folder_path = Mock(return_value=str(tmp_path))
+
+        # Create empty files folder
+        files_folder = tmp_path / "files"
+        files_folder.mkdir()
+
+        # Should not create vector store for empty folder
+        result = file_manager._create_or_identify_vector_store(files_folder)
+        assert result is None
+        mock_agent.client_sync.vector_stores.create.assert_not_called()
+
+        # Folder should not be renamed
+        assert files_folder.exists()
+        assert not any(p.name.startswith("files_vs_") for p in tmp_path.iterdir())
+
+    def test_folder_with_only_skippable_files_does_not_create_vector_store(self, tmp_path: Path):
+        """Test that folders with only skippable files (.file, __file) don't create vector stores."""
+        mock_agent = Mock()
+        mock_agent.name = "TestAgent"
+        mock_agent.files_folder = "files"
+        mock_agent.client_sync = Mock()
+        mock_agent.tools = []
+
+        file_manager = AgentFileManager(mock_agent)
+        file_manager.get_class_folder_path = Mock(return_value=str(tmp_path))
+
+        # Create files folder with only skippable files
+        files_folder = tmp_path / "files"
+        files_folder.mkdir()
+        (files_folder / ".hidden_file").write_text("hidden")
+        (files_folder / "__pycache__").mkdir()
+
+        # Should not create vector store for folder with only skippable files
+        result = file_manager._create_or_identify_vector_store(files_folder)
+        assert result is None
+        mock_agent.client_sync.vector_stores.create.assert_not_called()
+
+        # Folder should not be renamed
+        assert files_folder.exists()
+        assert not any(p.name.startswith("files_vs_") for p in tmp_path.iterdir())
+
+    def test_folder_with_only_subdirectories_does_not_create_vector_store(self, tmp_path: Path):
+        """Test that folders containing only subdirectories don't create vector stores."""
+        mock_agent = Mock()
+        mock_agent.name = "TestAgent"
+        mock_agent.files_folder = "files"
+        mock_agent.client_sync = Mock()
+        mock_agent.tools = []
+
+        file_manager = AgentFileManager(mock_agent)
+        file_manager.get_class_folder_path = Mock(return_value=str(tmp_path))
+
+        # Create files folder with only subdirectories
+        files_folder = tmp_path / "files"
+        files_folder.mkdir()
+        (files_folder / "subdir1").mkdir()
+        (files_folder / "subdir2").mkdir()
+
+        # Should not create vector store for folder with only subdirectories
+        result = file_manager._create_or_identify_vector_store(files_folder)
+        assert result is None
+        mock_agent.client_sync.vector_stores.create.assert_not_called()
+
+        # Folder should not be renamed
+        assert files_folder.exists()
+        assert not any(p.name.startswith("files_vs_") for p in tmp_path.iterdir())
+
+    def test_folder_with_files_creates_vector_store(self, tmp_path: Path):
+        """Test that folders with processable files do create vector stores and get renamed."""
+        mock_agent = Mock()
+        mock_agent.name = "TestAgent"
+        mock_agent.files_folder = "files"
+        mock_agent.client_sync = Mock()
+        mock_agent.tools = []
+
+        # Mock vector store creation
+        mock_vs = Mock()
+        mock_vs.id = "vs_abc123456789012"
+        mock_agent.client_sync.vector_stores.create.return_value = mock_vs
+
+        file_manager = AgentFileManager(mock_agent)
+        file_manager.get_class_folder_path = Mock(return_value=str(tmp_path))
+
+        # Create files folder with a processable file
+        files_folder = tmp_path / "files"
+        files_folder.mkdir()
+        (files_folder / "document.txt").write_text("content")
+        (files_folder / ".hidden_file").write_text("hidden")  # Should be ignored
+
+        # Should create vector store for folder with processable files
+        result = file_manager._create_or_identify_vector_store(files_folder)
+        assert result == "vs_abc123456789012"
+        mock_agent.client_sync.vector_stores.create.assert_called_once()
+
+        # Folder should be renamed with VS ID
+        expected_folder = tmp_path / "files_vs_abc123456789012"
+        assert expected_folder.exists()
+        assert not files_folder.exists()

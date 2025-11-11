@@ -52,6 +52,7 @@
                 "icon": "wrench",
                 "pages": [
                   "core-framework/tools/overview",
+                  "core-framework/tools/built-in-tools",
                   {
                     "group": "Custom Tools",
                     "icon": "hammer",

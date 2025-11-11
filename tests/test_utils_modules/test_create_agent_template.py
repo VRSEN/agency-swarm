@@ -35,7 +35,7 @@ class TestCreateAgentTemplate:
         assert (agent_folder / "tools" / "ExampleTool.py").exists()
 
     def test_create_agent_template_without_description(self, tmp_path: Path) -> None:
-        """Test creating agent template without description - should be omitted."""
+        """Test creating agent template without description - should use default placeholder."""
         agent_name = "Simple Agent"
 
         assert create_agent_template(agent_name=agent_name, path=str(tmp_path)) is True
@@ -49,10 +49,15 @@ class TestCreateAgentTemplate:
         assert f'name="{agent_name}"' in agent_content
         assert 'instructions="./instructions.md"' in agent_content
 
-        # Instructions file should only have heading
+        # Instructions file should have structured template with placeholder
         instructions_file = agent_folder / "instructions.md"
         instructions_content = instructions_file.read_text(encoding="utf-8")
-        assert instructions_content == f"# {agent_name} Instructions\n\n"
+        assert "# Role" in instructions_content
+        assert "**[insert role" in instructions_content
+        assert "# Goals" in instructions_content
+        assert "# Process" in instructions_content
+        assert "# Output Format" in instructions_content
+        assert "# Additional Notes" in instructions_content
 
     def test_agent_file_content_structure(self, tmp_path: Path) -> None:
         """Test that generated agent file has correct v1.x structure."""
@@ -85,7 +90,7 @@ class TestCreateAgentTemplate:
         assert "temperature=0.3" in agent_content  # Should have default temperature for non-reasoning model
 
     def test_instructions_file_content(self, tmp_path: Path) -> None:
-        """Test that instructions file has correct content."""
+        """Test that instructions file has correct structured template content."""
         agent_name = "Research Assistant"
         agent_description = "Helps with research tasks"
 
@@ -102,9 +107,14 @@ class TestCreateAgentTemplate:
         instructions_file = agent_folder / "instructions.md"
         instructions_content = instructions_file.read_text(encoding="utf-8")
 
-        assert f"# {agent_name} Instructions" in instructions_content
-        assert f"You are {agent_name}" in instructions_content
+        # Should have structured template sections
+        assert "# Role" in instructions_content
+        assert "You are" in instructions_content
         assert agent_description in instructions_content
+        assert "# Goals" in instructions_content
+        assert "# Process" in instructions_content
+        assert "# Output Format" in instructions_content
+        assert "# Additional Notes" in instructions_content
 
     def test_custom_instructions(self, tmp_path: Path) -> None:
         """Test creating agent with custom instructions."""
@@ -349,10 +359,10 @@ class TestCreateAgentTemplate:
         agent_file = agent_folder / "smart_agent.py"
         agent_content = agent_file.read_text(encoding="utf-8")
 
-        # Should have reasoning import and parameter
+        # Should have reasoning import and parameter with summary for GPT-5
         assert "from openai.types.shared import Reasoning" in agent_content
         assert 'model="gpt-5-mini"' in agent_content
-        assert 'reasoning=Reasoning(effort="high")' in agent_content
+        assert 'reasoning=Reasoning(effort="high", summary="auto")' in agent_content
         # Should NOT have temperature
         assert "temperature=" not in agent_content
 
@@ -385,8 +395,8 @@ class TestCreateAgentTemplate:
         agent_file = agent_folder / "bad_agent.py"
         agent_content = agent_file.read_text(encoding="utf-8")
 
-        # Should have reasoning but no temperature
-        assert 'reasoning=Reasoning(effort="medium")' in agent_content
+        # Should have reasoning with summary for GPT-5 but no temperature
+        assert 'reasoning=Reasoning(effort="medium", summary="auto")' in agent_content
         assert "temperature=" not in agent_content
 
     def test_non_reasoning_model_with_reasoning_shows_error(self, tmp_path: Path, capsys) -> None:
@@ -461,3 +471,72 @@ class TestCreateAgentTemplate:
         captured = capsys.readouterr()
         assert "ERROR: Temperature must be between 0.0 and 2.0" in captured.out
         assert result is False
+
+    def test_description_with_quotes_escaped(self, tmp_path: Path) -> None:
+        """Test that quotes in description are properly escaped in instructions."""
+        agent_name = "Quote Agent"
+        agent_description = 'An agent that uses "quotes" in description'
+
+        assert (
+            create_agent_template(
+                agent_name=agent_name,
+                agent_description=agent_description,
+                path=str(tmp_path),
+            )
+            is True
+        )
+
+        agent_folder = tmp_path / "quote_agent"
+        instructions_file = agent_folder / "instructions.md"
+        instructions_content = instructions_file.read_text(encoding="utf-8")
+
+        # Should have escaped quotes (double quotes converted to single quotes)
+        assert "An agent that uses 'quotes' in description" in instructions_content
+        assert 'An agent that uses "quotes" in description' not in instructions_content
+
+    def test_gpt5_reasoning_includes_summary(self, tmp_path: Path) -> None:
+        """Test that GPT-5 models include summary parameter in Reasoning."""
+        agent_name = "GPT5 Agent"
+
+        assert (
+            create_agent_template(
+                agent_name=agent_name,
+                model="gpt-5-mini",
+                reasoning="high",
+                path=str(tmp_path),
+            )
+            is True
+        )
+
+        agent_folder = tmp_path / "gpt5_agent"
+        agent_file = agent_folder / "gpt5_agent.py"
+        agent_content = agent_file.read_text(encoding="utf-8")
+
+        # Should include summary in Reasoning for GPT-5 models
+        assert 'Reasoning(effort="high", summary="auto")' in agent_content
+        # Should not have temperature for reasoning models
+        assert "temperature=" not in agent_content
+
+    def test_non_gpt5_reasoning_no_summary(self, tmp_path: Path) -> None:
+        """Test that non-GPT-5 reasoning models don't include summary in Reasoning."""
+        agent_name = "O1 Agent"
+
+        assert (
+            create_agent_template(
+                agent_name=agent_name,
+                model="o1-preview",
+                reasoning="high",
+                path=str(tmp_path),
+            )
+            is True
+        )
+
+        agent_folder = tmp_path / "o1_agent"
+        agent_file = agent_folder / "o1_agent.py"
+        agent_content = agent_file.read_text(encoding="utf-8")
+
+        # Should have Reasoning without summary for non-GPT-5 models
+        assert 'Reasoning(effort="high")' in agent_content
+        assert 'summary="auto"' not in agent_content
+        # Should not have temperature for reasoning models
+        assert "temperature=" not in agent_content

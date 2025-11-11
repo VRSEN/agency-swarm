@@ -251,8 +251,15 @@ class AgentFileManager:
             if self._should_skip_file(file):
                 logger.debug(f"Skipping file '{file}'")
                 continue
+
+            # Only process actual files, not subdirectories
+            full_path = self.agent.files_folder_path / file
+            if not os.path.isfile(full_path):
+                logger.debug(f"Skipping directory '{file}'")
+                continue
+
             file_id = self._upload_file_by_type(
-                self.agent.files_folder_path / file,
+                full_path,
                 wait_for_ingestion=False,
                 pending_ingestions=pending_ingestions,
             )
@@ -508,6 +515,29 @@ class AgentFileManager:
 
             self.agent.files_folder_path = folder_path.resolve()
             return vs_id_match.group(2)
+
+        # Check if folder has any processable files before creating vector store
+        has_processable_files = False
+        if folder_path.exists() and folder_path.is_dir():
+            try:
+                for file in os.listdir(folder_path):
+                    if not self._should_skip_file(file):
+                        full_path = os.path.join(folder_path, file)
+                        # Only count actual files, not subdirectories
+                        if os.path.isfile(full_path):
+                            has_processable_files = True
+                            break
+            except OSError as e:
+                logger.debug(f"Agent {self.agent.name}: Error checking files in '{folder_path}': {e}")
+                # If we can't read the folder, optimistically proceed
+                has_processable_files = True
+
+        if not has_processable_files:
+            logger.info(
+                f"Agent {self.agent.name}: files_folder '{folder_path}' is empty or contains no processable files. "
+                "Skipping vector store creation."
+            )
+            return None
 
         logger.info(
             f"Agent {self.agent.name}: files_folder '{folder_path}' does not specify a Vector Store ID. "

@@ -70,6 +70,20 @@ And what this allows you to do, is tackle significantly more complex tasks. Task
 Now, that we understand what tools are, let's cover how you can build your own tools.
 
 
+## Built-in Tools
+
+Agency Swarm ships with several ready-to-use tools:
+
+- **IPythonInterpreter** - Execute Python code in an isolated environment
+- **PersistentShellTool** - Run shell commands with persistent state
+- **LoadFileAttachment** - Load and process local files (images, PDFs)
+
+```python
+from agency_swarm.tools import IPythonInterpreter, PersistentShellTool, LoadFileAttachment
+```
+
+[Learn more about built-in tools →](/core-framework/tools/built-in-tools)
+
 ## 3 Ways to Build Tools
 
 When it comes to building your own tools, you have 3 primary options:
@@ -90,6 +104,14 @@ When it comes to building your own tools, you have 3 primary options:
     href="./openapi-schemas"
   >
     Use public OpenAPI schemas and convert them into tools.
+  </Card>
+
+  <Card
+    title="MCP Integration"
+    icon="plug"
+    href="./mcp-integration"
+  >
+    Connect to MCP servers for advanced capabilities.
   </Card>
 
 </CardGroup>

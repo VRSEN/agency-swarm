@@ -28,6 +28,11 @@ from openai.types.responses.tool_param import (
 )
 
 from .base_tool import BaseTool
+from .built_in import (
+    IPythonInterpreter,
+    LoadFileAttachment,
+    PersistentShellTool,
+)
 from .concurrency import ToolConcurrencyManager
 from .send_message import SendMessage, SendMessageHandoff
 from .tool_factory import ToolFactory
@@ -69,6 +74,10 @@ __all__ = [
     "ToolOutputImageDict",
     "ToolOutputFileContent",
     "ToolOutputFileContentDict",
+    # Built-in tools
+    "LoadFileAttachment",
+    "PersistentShellTool",
+    "IPythonInterpreter",
     # Tool parameter types from OpenAI
     "CodeInterpreter",
     "CodeInterpreterContainer",
