@@ -7,10 +7,18 @@ import weakref
 from dataclasses import dataclass
 from typing import Any, ClassVar
 
-from jupyter_client import AsyncKernelManager
 from pydantic import Field
 
 from agency_swarm.tools.base_tool import BaseTool
+
+# Import jupyter dependencies (will fail with clear error if not installed)
+try:
+    from jupyter_client import AsyncKernelManager  # type: ignore[import-not-found]
+except ImportError as e:
+    raise ImportError(
+        "IPythonInterpreter requires jupyter packages. "
+        "Install them with: pip install agency-swarm[jupyter]"
+    ) from e
 
 
 @dataclass(slots=True)

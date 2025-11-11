@@ -28,11 +28,7 @@ from openai.types.responses.tool_param import (
 )
 
 from .base_tool import BaseTool
-from .built_in import (
-    IPythonInterpreter,
-    LoadFileAttachment,
-    PersistentShellTool,
-)
+from .built_in import LoadFileAttachment, PersistentShellTool
 from .concurrency import ToolConcurrencyManager
 from .send_message import SendMessage, SendMessageHandoff
 from .tool_factory import ToolFactory
@@ -88,3 +84,13 @@ __all__ = [
     "McpAllowedTools",
     "McpRequireApproval",
 ]
+
+
+def __getattr__(name: str):
+    """Lazy import for IPythonInterpreter to handle optional jupyter dependency."""
+    if name == "IPythonInterpreter":
+        from .built_in import IPythonInterpreter
+        # Cache it in globals so subsequent access doesn't trigger __getattr__ again
+        globals()[name] = IPythonInterpreter
+        return IPythonInterpreter
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
