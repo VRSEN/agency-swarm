@@ -1,5 +1,7 @@
 # FastAPI Integration Example
 
+> **Full Guide:** The canonical FastAPI documentation lives in `docs/additional-features/fastapi-integration.mdx`. This README only summarizes the runnable sample.
+
 This example demonstrates how to properly integrate Agency Swarm with FastAPI, including:
 - Serving agencies via HTTP endpoints
 - Serving standalone tools via HTTP endpoints
@@ -45,32 +47,13 @@ The server will start on http://localhost:8080 with these endpoints:
 
 ### Serving Tools
 
-You can also serve standalone tools via FastAPI:
+See the “Serving Standalone Tools” section in `docs/additional-features/fastapi-integration.mdx` for the full walkthrough. In short, calling `run_fastapi(tools=[MyTool])` automatically exposes:
 
-```python
-from agency_swarm import run_fastapi, BaseTool
+- `POST /tool/<ToolName>` – executes the tool with validation
+- `GET /openapi.json` – OpenAPI 3.1.0 schema for agencies + tools
+- `GET /docs` / `GET /redoc` – Swagger UI and ReDoc backed by the same schema
 
-class MyTool(BaseTool):
-    """A tool that does something useful."""
-    param1: str
-    param2: int
-
-    def run(self) -> str:
-        return f"Processed {self.param1} with {self.param2}"
-
-run_fastapi(
-    tools=[MyTool],
-    port=8080
-)
-```
-
-This will create:
-- `POST /tool/MyTool` - Tool execution endpoint
-- `GET /openapi.json` - OpenAPI 3.1.0 schema for all tools
-- `GET /docs` - Interactive Swagger UI documentation
-- `GET /redoc` - Alternative ReDoc documentation
-
-The OpenAPI schema includes proper types for nested Pydantic models, making it easy to integrate with external platforms like Agencii.ai.
+All schemas include nested Pydantic models, so you can connect directly to platforms such as Agencii.ai.
 
 ### Test with Client
 
@@ -82,6 +65,16 @@ This will test all endpoints and show how to:
 - Make requests with conversation history
 - Handle streaming events
 - Extract agent metadata from responses
+
+### Verify Tool Schemas
+
+Run the helper script to confirm `/openapi.json` matches `ToolFactory.get_openapi_schema()`:
+
+```bash
+python print_openapi_schema.py
+```
+
+The script prints the FastAPI `/openapi.json` response followed by the ToolFactory schema so you can diff them directly (no assertions or extra output).
 
 ## Important Notes
 
