@@ -278,8 +278,34 @@ class ToolFactory:
             ],
             "paths": {},
             "components": {
-                "schemas": {},
-                "securitySchemes": {"apiKey": {"type": "apiKey"}},
+                "schemas": {
+                    "ValidationError": {
+                        "title": "ValidationError",
+                        "type": "object",
+                        "properties": {
+                            "loc": {
+                                "title": "Location",
+                                "type": "array",
+                                "items": {"anyOf": [{"type": "string"}, {"type": "integer"}]},
+                            },
+                            "msg": {"title": "Message", "type": "string"},
+                            "type": {"title": "Error Type", "type": "string"},
+                        },
+                        "required": ["loc", "msg", "type"],
+                    },
+                    "HTTPValidationError": {
+                        "title": "HTTPValidationError",
+                        "type": "object",
+                        "properties": {
+                            "detail": {
+                                "title": "Detail",
+                                "type": "array",
+                                "items": {"$ref": "#/components/schemas/ValidationError"},
+                            }
+                        },
+                    },
+                },
+                "securitySchemes": {"HTTPBearer": {"type": "http", "scheme": "bearer"}},
             },
         }
 
@@ -300,13 +326,37 @@ class ToolFactory:
                 defs = openai_schema["parameters"]["$defs"]
                 del openai_schema["parameters"]["$defs"]
 
-            schema["paths"]["/" + openai_schema["name"]] = {
+            request_schema = dict(openai_schema["parameters"])
+            request_schema.setdefault("type", "object")
+            request_schema.setdefault("title", openai_schema["name"])
+            if "description" not in request_schema and "description" in openai_schema:
+                request_schema["description"] = openai_schema["description"]
+            schema["components"]["schemas"][openai_schema["name"]] = request_schema
+
+            summary = openai_schema["name"].replace("_", " ").title()
+            schema["paths"][f"/tool/{openai_schema['name']}"] = {
                 "post": {
-                    "description": openai_schema["description"] if "description" in openai_schema else "",
+                    "summary": summary,
                     "operationId": openai_schema["name"],
-                    "x-openai-isConsequential": False,
-                    "parameters": [],
-                    "requestBody": {"content": {"application/json": {"schema": openai_schema["parameters"]}}},
+                    "security": [{"HTTPBearer": []}],
+                    "responses": {
+                        "200": {
+                            "description": "Successful Response",
+                            "content": {"application/json": {"schema": {}}},
+                        },
+                        "422": {
+                            "description": "Validation Error",
+                            "content": {
+                                "application/json": {"schema": {"$ref": "#/components/schemas/HTTPValidationError"}}
+                            },
+                        },
+                    },
+                    "requestBody": {
+                        "content": {
+                            "application/json": {"schema": {"$ref": f"#/components/schemas/{openai_schema['name']}"}}
+                        },
+                        "required": True,
+                    },
                 }
             }
 
