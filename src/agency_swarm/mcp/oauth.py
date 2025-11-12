@@ -242,50 +242,51 @@ async def default_callback_handler() -> tuple[str, str | None]:
         logger.exception("Failed to parse callback URL")
         raise ValueError(f"Invalid callback URL: {e}") from e
 
-    async def create_oauth_provider(
-        server: MCPServerOAuth,
-        redirect_handler: Callable[[str], Awaitable[None]] | None = None,
-        callback_handler: Callable[[], Awaitable[tuple[str, str | None]]] | None = None,
-    ) -> OAuthClientProvider:
-        """Create OAuth provider for MCP server.
 
-        Args:
-            server: OAuth server configuration
-            redirect_handler: Custom redirect handler (uses default if None)
-            callback_handler: Custom callback handler (uses default if None)
+async def create_oauth_provider(
+    server: MCPServerOAuth,
+    redirect_handler: Callable[[str], Awaitable[None]] | None = None,
+    callback_handler: Callable[[], Awaitable[tuple[str, str | None]]] | None = None,
+) -> OAuthClientProvider:
+    """Create OAuth provider for MCP server.
 
-        Returns:
-            Configured OAuthClientProvider
-        """
-        # Use custom storage if provided (V1 SaaS), otherwise default to FileTokenStorage (V0)
-        if server.storage:
-            storage = server.storage
-        else:
-            storage = FileTokenStorage(
-                cache_dir=server.get_cache_dir(),
-                server_name=server.name,
-            )
+    Args:
+        server: OAuth server configuration
+        redirect_handler: Custom redirect handler (uses default if None)
+        callback_handler: Custom callback handler (uses default if None)
 
-        client_metadata = server.build_client_metadata()
-        client_info = server.build_client_information()
-
-        if client_info and hasattr(storage, "set_client_info"):
-            await storage.set_client_info(client_info)
-
-        # Use provided handlers or defaults
-        redirect_handler = redirect_handler or default_redirect_handler
-        callback_handler = callback_handler or default_callback_handler
-
-        provider = OAuthClientProvider(
-            server_url=server.url,
-            client_metadata=client_metadata,
-            storage=storage,
-            redirect_handler=redirect_handler,
-            callback_handler=callback_handler,
+    Returns:
+        Configured OAuthClientProvider
+    """
+    # Use custom storage if provided (V1 SaaS), otherwise default to FileTokenStorage (V0)
+    if server.storage:
+        storage = server.storage
+    else:
+        storage = FileTokenStorage(
+            cache_dir=server.get_cache_dir(),
+            server_name=server.name,
         )
 
-        logger.info(f"Created OAuth provider for {server.name} at {server.url}")
-        return provider
+    client_metadata = server.build_client_metadata()
+    client_info = server.build_client_information()
+
+    if client_info and hasattr(storage, "set_client_info"):
+        await storage.set_client_info(client_info)
+
+    # Use provided handlers or defaults
+    redirect_handler = redirect_handler or default_redirect_handler
+    callback_handler = callback_handler or default_callback_handler
+
+    provider = OAuthClientProvider(
+        server_url=server.url,
+        client_metadata=client_metadata,
+        storage=storage,
+        redirect_handler=redirect_handler,
+        callback_handler=callback_handler,
+    )
+
+    logger.info(f"Created OAuth provider for {server.name} at {server.url}")
+    return provider
 
 
 class OAuthTokenHooks(RunHooks[MasterContext]):
