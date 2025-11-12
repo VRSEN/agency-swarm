@@ -1,0 +1,156 @@
+"""Local OAuth MCP Example for Agency Swarm.
+
+This example demonstrates how to use OAuth-authenticated MCP servers with Agency Swarm.
+It shows the complete OAuth flow including browser-based authentication and token storage.
+
+Prerequisites:
+    1. Create a GitHub OAuth App at https://github.com/settings/developers
+       - Application name: "Agency Swarm MCP Test"
+       - Homepage URL: http://localhost:8001
+       - Callback URL: http://localhost:3000/callback
+       - Copy the Client ID and generate a Client Secret
+
+    2. Start the OAuth test server:
+       ```bash
+       export GITHUB_CLIENT_ID="your_github_client_id"
+       export GITHUB_CLIENT_SECRET="your_github_client_secret"
+       python examples/utils/oauth_mcp_server.py
+       ```
+
+    3. In another terminal, run this example:
+       ```bash
+       export GITHUB_CLIENT_ID="same_client_id"
+       export GITHUB_CLIENT_SECRET="same_client_secret"
+       python examples/mcp_oauth_local.py
+       ```
+
+The example will:
+    - Open your browser for OAuth authentication
+    - Store tokens in ~/.agency-swarm/mcp-tokens/
+    - Reuse tokens on subsequent runs
+    - Demonstrate using OAuth-protected MCP tools
+"""
+
+import asyncio
+import os
+
+from agency_swarm import Agency, Agent
+from agency_swarm.mcp.oauth import MCPServerOAuth
+
+# Configure OAuth MCP Server
+# Note: You can override these with environment variables
+SERVER_URL = os.getenv("MCP_SERVER_URL", "http://localhost:8001")
+CLIENT_ID = os.getenv("GITHUB_CLIENT_ID", "test_client_id")
+CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET", "test_client_secret")
+
+print("=" * 80)
+print("Agency Swarm - OAuth MCP Example")
+print("=" * 80)
+print(f"\nMCP Server URL: {SERVER_URL}")
+print(f"Client ID: {CLIENT_ID[:20]}..." if len(CLIENT_ID) > 20 else f"Client ID: {CLIENT_ID}")
+print("\nTokens will be stored in: ~/.agency-swarm/mcp-tokens/oauth-test-server_tokens.json")
+print("=" * 80)
+
+# Create OAuth-enabled MCP Server configuration
+oauth_server = MCPServerOAuth(
+    url=f"{SERVER_URL}/mcp",
+    name="oauth-test-server",
+    client_id=CLIENT_ID,
+    client_secret=CLIENT_SECRET,
+    scopes=["user"],  # GitHub OAuth scopes
+    redirect_uri="http://localhost:3000/callback",
+)
+
+# Create Agent with OAuth MCP Server
+oauth_agent = Agent(
+    name="OAuth Test Agent",
+    instructions="""You are a helpful assistant that can access OAuth-protected MCP tools.
+
+    When asked about secret data or protected information:
+    1. Use the get_secret_message tool to retrieve the secret message
+    2. Use the echo_with_auth tool to echo messages with authentication
+    3. Use the get_test_data tool to retrieve protected test data
+
+    Always confirm that you successfully authenticated via OAuth when using these tools.""",
+    description="Agent with OAuth-authenticated MCP server access",
+    model="gpt-4",
+    mcp_servers=[oauth_server],
+)
+
+# Create Agency
+agency = Agency(oauth_agent)
+
+
+async def main():
+    """Run the OAuth example with streaming."""
+    print("\n" + "=" * 80)
+    print("Starting OAuth Flow")
+    print("=" * 80)
+    print("\nIf this is your first time:")
+    print("  1. A browser window will open for OAuth authentication")
+    print("  2. Authorize the application")
+    print("  3. Copy the callback URL from your browser")
+    print("  4. Paste it when prompted")
+    print("\nIf you've authenticated before, tokens will be reused automatically.")
+    print("=" * 80 + "\n")
+
+    # Test message that requires OAuth-protected tools
+    test_message = "Please get the secret message and test data from the OAuth-protected MCP server."
+
+    print(f"\n📤 Sending message: {test_message}\n")
+    print("=" * 80)
+    print("Agent Response (streaming):")
+    print("=" * 80 + "\n")
+
+    try:
+        # Stream the response
+        async for event in agency.get_response_stream(
+            message=test_message,
+            recipient_agent=oauth_agent,
+        ):
+            # Handle different event types
+            if hasattr(event, "data"):
+                print(event.data, end="", flush=True)
+            elif hasattr(event, "content"):
+                print(event.content, end="", flush=True)
+
+        print("\n\n" + "=" * 80)
+        print("✅ OAuth authentication successful!")
+        print("=" * 80)
+
+    except Exception as e:
+        print(f"\n\n❌ Error: {e}")
+        print("\nTroubleshooting:")
+        print("  1. Make sure the OAuth server is running: python examples/utils/oauth_mcp_server.py")
+        print("  2. Check that GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET are set correctly")
+        print("  3. Verify the callback URL matches your GitHub OAuth App: http://localhost:3000/callback")
+        print("  4. Check token cache: ~/.agency-swarm/mcp-tokens/")
+        print("  5. Try deleting cached tokens: rm -rf ~/.agency-swarm/mcp-tokens/")
+
+
+def run_sync():
+    """Synchronous wrapper for running the async example."""
+    asyncio.run(main())
+
+
+if __name__ == "__main__":
+    print("\n" + "=" * 80)
+    print("NOTE: This example requires:")
+    print("  1. GitHub OAuth App created at https://github.com/settings/developers")
+    print("  2. OAuth test server running (examples/utils/oauth_mcp_server.py)")
+    print("  3. Valid OAuth credentials (GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET)")
+    print("=" * 80 + "\n")
+
+    response = input("Ready to continue? (yes/no): ").strip().lower()
+    if response in ("yes", "y"):
+        run_sync()
+    else:
+        print("\nSetup instructions:")
+        print("  1. Create GitHub OAuth App: https://github.com/settings/developers")
+        print("     - Callback URL: http://localhost:3000/callback")
+        print("  2. Export credentials:")
+        print("     export GITHUB_CLIENT_ID='your_client_id'")
+        print("     export GITHUB_CLIENT_SECRET='your_client_secret'")
+        print("  3. Start OAuth server: python examples/utils/oauth_mcp_server.py")
+        print("  4. In another terminal with same env vars:")
+        print("     python examples/mcp_oauth_local.py")
