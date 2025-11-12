@@ -6,15 +6,6 @@ icon: "key"
 
 Many powerful services like Notion, GitHub, and Google Drive require OAuth authentication to access user data. Agency Swarm agents can connect to these services through MCP servers that implement OAuth 2.0 authentication, allowing your agents to work with private, user-specific data securely.
 
-## Why Use OAuth?
-
-OAuth authentication for MCP servers unlocks access to services that require user authorization:
-
-- **Personal Data Access**: Let agents read and write to your Notion workspace, GitHub repositories, or Google Drive files
-- **Secure Authorization**: Users control exactly what data agents can access through OAuth permission scopes
-- **Persistent Sessions**: Agents remember authorization across runs—no need to re-authenticate every time
-- **Multi-Service Integration**: Connect to multiple OAuth-protected services from a single agent
-
 ## When to Use OAuth
 
 Use OAuth-enabled MCP servers when you need agents to:
@@ -64,7 +55,7 @@ All OAuth logic is handled by the [MCP Python SDK](https://github.com/modelconte
 Before using OAuth with MCP servers, you need:
 
 1. **OAuth Application Credentials**: Register an OAuth app with your service provider (e.g., [GitHub OAuth Apps](https://github.com/settings/developers))
-2. **MCP Server**: An MCP server that supports OAuth (see [FastMCP](https://fastmcp.cloud/) for examples with built-in OAuth providers)
+2. **MCP Server**: An MCP server that supports OAuth (see [FastMCP](https://gofastmcp.com/) for examples with built-in OAuth providers)
 3. **Python Environment**: Agency Swarm installed with `pip install agency-swarm`
 
 ### Registering an OAuth Application
