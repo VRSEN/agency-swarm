@@ -305,3 +305,73 @@ result
         # Both stderr and stdout should be captured
         assert "Warning message" in result or "Normal output" in result
         assert "done" in result
+
+
+class TestIPythonInterpreterWorkingDirectory:
+    """Test working_dir parameter functionality."""
+
+    @pytest.mark.asyncio
+    async def test_working_dir_changes_and_restores(self, agent_with_ipython, shared_context, tmp_path):
+        """Test that working_dir changes directory, executes code, and restores directory."""
+        # Create a test file in temp directory
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("hello from temp")
+
+        # Get initial directory
+        tool1 = IPythonInterpreter(code="import os; os.getcwd()")
+        tool1._caller_agent = agent_with_ipython
+        tool1._context = shared_context
+        initial_result = await tool1.run()
+        initial_dir = initial_result.split("Result:")[-1].strip().strip("'\"")
+
+        # Execute code in different directory with expression result
+        tool2 = IPythonInterpreter(
+            code="open('test.txt').read()",
+            working_dir=str(tmp_path)
+        )
+        tool2._caller_agent = agent_with_ipython
+        tool2._context = shared_context
+        result2 = await tool2.run()
+
+        # Verify file was read (proves we were in the right directory)
+        assert "hello from temp" in result2
+
+        # Verify directory was restored
+        tool3 = IPythonInterpreter(code="import os; os.getcwd()")
+        tool3._caller_agent = agent_with_ipython
+        tool3._context = shared_context
+        restored_result = await tool3.run()
+        restored_dir = restored_result.split("Result:")[-1].strip().strip("'\"")
+
+        assert initial_dir == restored_dir
+
+    @pytest.mark.asyncio
+    async def test_working_dir_restores_after_error(self, agent_with_ipython, shared_context, tmp_path):
+        """Test that directory is restored even when code raises an error."""
+        # Get initial directory
+        tool1 = IPythonInterpreter(code="import os; os.getcwd()")
+        tool1._caller_agent = agent_with_ipython
+        tool1._context = shared_context
+        initial_result = await tool1.run()
+        initial_dir = initial_result.split("Result:")[-1].strip().strip("'\"")
+
+        # Execute code that will fail in different directory
+        tool2 = IPythonInterpreter(
+            code="1 / 0",  # This will raise ZeroDivisionError
+            working_dir=str(tmp_path)
+        )
+        tool2._caller_agent = agent_with_ipython
+        tool2._context = shared_context
+        error_result = await tool2.run()
+
+        assert "Error:" in error_result
+        assert "ZeroDivisionError" in error_result
+
+        # Verify directory was still restored
+        tool3 = IPythonInterpreter(code="import os; os.getcwd()")
+        tool3._caller_agent = agent_with_ipython
+        tool3._context = shared_context
+        restored_result = await tool3.run()
+        restored_dir = restored_result.split("Result:")[-1].strip().strip("'\"")
+
+        assert initial_dir == restored_dir
