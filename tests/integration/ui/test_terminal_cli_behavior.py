@@ -1,26 +1,34 @@
 from types import SimpleNamespace
 
 import pytest
+from prompt_toolkit.document import Document
 
 from agency_swarm import Agency, Agent
 from agency_swarm.ui.demos import terminal
 from agency_swarm.ui.demos.launcher import TerminalDemoLauncher
 
 
-def _patch_prompt_session(monkeypatch, inputs):
-    import prompt_toolkit as _pt
+def _patch_application(monkeypatch, inputs):
+    inputs_iter = iter(inputs)
 
-    class _PS:
-        def __init__(self, *a, **k):
-            self._it = inputs
+    class _App:
+        def __init__(self, *args, **kwargs):
+            self._layout = kwargs.get("layout")
 
-        async def prompt_async(self, *a, **k):  # noqa: ANN001, ANN002
+        def invalidate(self):  # noqa: D401 - no-op
+            """No-op invalidate."""
+
+        async def run_async(self):
             try:
-                return next(self._it)
+                value = next(inputs_iter)
             except StopIteration:
-                return "/exit"
+                value = "/exit"
+            buffer = getattr(self._layout, "current_buffer", None)
+            if buffer is not None:
+                buffer.document = Document(value, len(value))
+            return value
 
-    monkeypatch.setattr(_pt, "PromptSession", _PS, raising=True)
+    monkeypatch.setattr(terminal, "Application", _App, raising=True)
 
 
 def _make_agency_with_stream_stub(monkeypatch: pytest.MonkeyPatch):
@@ -50,11 +58,11 @@ def test_cli_help_new_and_stream(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(TerminalDemoLauncher, "save_current_chat", staticmethod(_record_save))
     monkeypatch.setattr(TerminalDemoLauncher, "resume_interactive", staticmethod(lambda *a, **k: None))
 
-    inputs = iter(["/help", "hello there", "/new", "/exit"])  # drive interactive loop deterministically
+    inputs = ["/help", "hello there", "/new", "/exit"]  # drive interactive loop deterministically
 
     agency, calls = _make_agency_with_stream_stub(monkeypatch)
 
-    _patch_prompt_session(monkeypatch, inputs)
+    _patch_application(monkeypatch, inputs)
     terminal.start_terminal(agency, show_reasoning=False)
 
     active_chat = TerminalDemoLauncher.get_current_chat_id()
@@ -78,10 +86,10 @@ def test_cli_resume_switches_chat_id(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(TerminalDemoLauncher, "save_current_chat", staticmethod(_record_save))
     monkeypatch.setattr(TerminalDemoLauncher, "resume_interactive", staticmethod(lambda *a, **k: "chat_resumed"))
 
-    inputs = iter(["/resume", "after resume", "/exit"])  # drive resume then a user message
+    inputs = ["/resume", "after resume", "/exit"]  # drive resume then a user message
 
     agency, calls = _make_agency_with_stream_stub(monkeypatch)
-    _patch_prompt_session(monkeypatch, inputs)
+    _patch_application(monkeypatch, inputs)
     terminal.start_terminal(agency, show_reasoning=False)
 
     assert calls[0] == ("after resume", "Primary", "chat_resumed")
@@ -103,10 +111,10 @@ def test_cli_compact_updates_chat_id(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(TerminalDemoLauncher, "resume_interactive", staticmethod(lambda *a, **k: None))
     monkeypatch.setattr(TerminalDemoLauncher, "compact_thread", staticmethod(_fake_compact))
 
-    inputs = iter(["/compact keep the thread short", "msg", "/exit"])  # compact then message
+    inputs = ["/compact keep the thread short", "msg", "/exit"]  # compact then message
 
     agency, calls = _make_agency_with_stream_stub(monkeypatch)
-    _patch_prompt_session(monkeypatch, inputs)
+    _patch_application(monkeypatch, inputs)
     terminal.start_terminal(agency, show_reasoning=False)
 
     assert calls[0] == ("msg", "Primary", "chat_compacted")
@@ -116,10 +124,10 @@ def test_cli_compact_updates_chat_id(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_cli_agent_mentions(monkeypatch: pytest.MonkeyPatch) -> None:
     TerminalDemoLauncher.set_current_chat_id(None)
 
-    inputs = iter(["@Primary hi there", "/exit"])  # mixed-case mention at start, strict parsing
+    inputs = ["@Primary hi there", "/exit"]  # mixed-case mention at start, strict parsing
 
     agency, calls = _make_agency_with_stream_stub(monkeypatch)
-    _patch_prompt_session(monkeypatch, inputs)
+    _patch_application(monkeypatch, inputs)
     terminal.start_terminal(agency, show_reasoning=False)
 
     msg, recipient, _chat = calls[0]
@@ -130,10 +138,10 @@ def test_cli_agent_mentions(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_cli_agent_mentions_allows_punctuation(monkeypatch: pytest.MonkeyPatch) -> None:
     TerminalDemoLauncher.set_current_chat_id(None)
 
-    inputs = iter(["@Primary, hi there", "/exit"])  # mention immediately followed by punctuation
+    inputs = ["@Primary, hi there", "/exit"]  # mention immediately followed by punctuation
 
     agency, calls = _make_agency_with_stream_stub(monkeypatch)
-    _patch_prompt_session(monkeypatch, inputs)
+    _patch_application(monkeypatch, inputs)
     terminal.start_terminal(agency, show_reasoning=False)
 
     msg, recipient, _chat = calls[0]
@@ -143,10 +151,10 @@ def test_cli_agent_mentions_allows_punctuation(monkeypatch: pytest.MonkeyPatch) 
 
 def test_cli_agent_mentions_prefers_longest_match(monkeypatch: pytest.MonkeyPatch) -> None:
     TerminalDemoLauncher.set_current_chat_id(None)
-    inputs = iter(["@TestAgent hello", "/exit"])  # overlapping names should resolve to the longest match
+    inputs = ["@TestAgent hello", "/exit"]  # overlapping names should resolve to the longest match
 
     agency, calls = _make_agency_with_stream_stub(monkeypatch)
-    _patch_prompt_session(monkeypatch, inputs)
+    _patch_application(monkeypatch, inputs)
     terminal.start_terminal(agency, show_reasoning=False)
 
     msg, recipient, _chat = calls[0]
@@ -156,54 +164,34 @@ def test_cli_agent_mentions_prefers_longest_match(monkeypatch: pytest.MonkeyPatc
 
 def test_cli_status_is_nondestructive(monkeypatch: pytest.MonkeyPatch) -> None:
     TerminalDemoLauncher.set_current_chat_id(None)
-    inputs = iter(["/status", "/exit"])  # status should not stream
+    inputs = ["/status", "/exit"]  # status should not stream
 
     agency, calls = _make_agency_with_stream_stub(monkeypatch)
-    _patch_prompt_session(monkeypatch, inputs)
+    _patch_application(monkeypatch, inputs)
     terminal.start_terminal(agency, show_reasoning=False)
 
     assert calls == []
 
 
 def test_cli_slash_completions_supports_async(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Ensure the prompt completer provides async completions for '/' (bug repro)."""
+    """Ensure the dropdown populates slash command entries for '/' input."""
     TerminalDemoLauncher.set_current_chat_id(None)
 
-    # Capture the completer passed into PromptSession without altering behavior elsewhere.
-    import prompt_toolkit as _pt
-
-    captured: dict[str, object] = {}
-
-    def _PS_capture(*a, **k):  # noqa: ANN001, ANN002
-        class _S:  # minimal async session that records the completer
-            async def prompt_async(self, *aa, **kk):  # noqa: ANN001, ANN002
-                captured["completer"] = kk.get("completer")
-                return "/exit"
-
-        return _S()
-
-    monkeypatch.setattr(_pt, "PromptSession", _PS_capture, raising=True)
+    inputs = ["/", "/exit"]
+    captured: list[list[str]] = []
 
     agency, _calls = _make_agency_with_stream_stub(monkeypatch)
+
+    original_set_items = terminal.DropdownMenu.set_items
+
+    def _capture_set_items(self, items):  # noqa: ANN001
+        captured.append([item.label for item in items])
+        original_set_items(self, items)
+
+    monkeypatch.setattr(terminal.DropdownMenu, "set_items", _capture_set_items)
+    _patch_application(monkeypatch, inputs)
     terminal.start_terminal(agency, show_reasoning=False)
 
-    completer = captured.get("completer")
-    assert completer is not None, "PromptSession did not receive a completer"
-    assert hasattr(completer, "get_completions_async"), "Completer must support async API"
-
-    # Verify that '/' yields at least one slash command completion via the async API.
-    from prompt_toolkit.completion import CompleteEvent
-    from prompt_toolkit.document import Document
-
-    async def _collect():
-        out: list[str] = []
-        async for c in completer.get_completions_async(  # type: ignore[attr-defined]
-            Document("/"), CompleteEvent(text_inserted=True)
-        ):
-            out.append(c.text)
-        return out
-
-    import asyncio
-
-    results = asyncio.run(_collect())
-    assert any(item.startswith("/") for item in results), "Expected slash command suggestions"
+    assert captured, "Dropdown menu never received items"
+    first_labels = captured[0]
+    assert any(label.startswith("/") for label in first_labels)

@@ -2,19 +2,91 @@ import asyncio
 import logging
 import os
 import re
-from collections.abc import Generator
+from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any, cast
 
-import prompt_toolkit as prompt_toolkit
-from prompt_toolkit.completion import Completer, Completion
+from prompt_toolkit import Application
+from prompt_toolkit.buffer import Buffer
+from prompt_toolkit.document import Document
+from prompt_toolkit.filters import Condition
+from prompt_toolkit.formatted_text import AnyFormattedText
 from prompt_toolkit.history import InMemoryHistory
 from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.layout import HSplit, VSplit, Window
+from prompt_toolkit.layout.containers import ConditionalContainer
+from prompt_toolkit.layout.controls import BufferControl, FormattedTextControl
+from prompt_toolkit.layout.layout import Layout
+from prompt_toolkit.styles import Style
+from prompt_toolkit.widgets import Frame
 
 from agency_swarm.agency.core import Agency
 from agency_swarm.utils import is_reasoning_model
 
 from ..core.console_event_adapter import ConsoleEventAdapter
 from .launcher import TerminalDemoLauncher
+
+
+@dataclass
+class DropdownItem:
+    label: str
+    description: str
+    insertion_text: str
+    append_space: bool = False
+
+
+class DropdownMenu:
+    def __init__(self, invalidate: Callable[[], None]) -> None:
+        self._invalidate = invalidate
+        self.visible = False
+        self.items: list[DropdownItem] = []
+        self.selected_index = 0
+        self.max_label_width = 0
+
+    def update_invalidator(self, invalidate: Callable[[], None]) -> None:
+        self._invalidate = invalidate
+
+    def set_items(self, items: list[DropdownItem]) -> None:
+        if items:
+            self.items = items
+            self.max_label_width = max(len(item.label) for item in items)
+            # Preserve selection when possible
+            if self.selected_index >= len(items):
+                self.selected_index = 0
+            self.visible = True
+        else:
+            self.items = []
+            self.max_label_width = 0
+            self.selected_index = 0
+            self.visible = False
+        self._invalidate()
+
+    def hide(self) -> None:
+        if self.visible:
+            self.visible = False
+            self._invalidate()
+
+    def move(self, offset: int) -> None:
+        if not self.visible or not self.items:
+            return
+        self.selected_index = (self.selected_index + offset) % len(self.items)
+        self._invalidate()
+
+    def get_selected(self) -> DropdownItem | None:
+        if not self.items:
+            return None
+        return self.items[self.selected_index]
+
+    def render(self) -> AnyFormattedText:
+        if not self.visible or not self.items:
+            return []
+        lines: list[tuple[str, str]] = []
+        for idx, item in enumerate(self.items):
+            style = "class:dropdown.selected" if idx == self.selected_index else "class:dropdown.item"
+            pointer = "▸ " if idx == self.selected_index else "  "
+            label = item.label.ljust(self.max_label_width)
+            lines.append((style, f"{pointer}{label}  {item.description}\n"))
+        return cast(AnyFormattedText, lines)
 
 
 def start_terminal(
@@ -35,10 +107,7 @@ def start_terminal(
 
     chat_id = TerminalDemoLauncher.start_new_chat(agency_instance)
 
-    event_converter = ConsoleEventAdapter(
-        show_reasoning=show_reasoning,
-        agents=list(agency_instance.agents.keys()),
-    )
+    event_converter = ConsoleEventAdapter(show_reasoning=show_reasoning, agents=list(agency_instance.agents.keys()))
     event_converter.console.rule()
     try:
         cwd = os.getcwd()
@@ -196,6 +265,13 @@ def start_terminal(
                 logger.error(f"Recipient agent {mentioned_agent or 'Unknown'} not found.", exc_info=True)
                 return False
 
+        # If only an agent mention with no message, switch to that agent without sending
+        if recipient_agent is not None and not message:
+            event_converter.handoff_agent = recipient_agent
+            event_converter.console.print(f"[cyan]Switched to {recipient_agent}[/cyan]")
+            event_converter.console.rule()
+            return False
+
         # Clear handoff to correctly display recipient when an explicit target is used
         if recipient_agent is not None and recipient_agent != event_converter.handoff_agent:
             event_converter.handoff_agent = None
@@ -209,9 +285,7 @@ def start_terminal(
                 else current_default_recipient
             )
             async for event in agency_instance.get_response_stream(
-                message=message,
-                recipient_agent=recipient_agent_str,
-                chat_id=chat_id,
+                message=message, recipient_agent=recipient_agent_str, chat_id=chat_id
             ):
                 event_converter.openai_to_message_output(event, recipient_agent_str)
             event_converter.console.rule()
@@ -222,6 +296,7 @@ def start_terminal(
 
     async def main_loop():
         # prompt_toolkit is a mandatory dependency; imported at module load
+        nonlocal current_default_recipient
 
         command_help: dict[str, str] = {
             "/help": "Show help",
@@ -239,24 +314,17 @@ def start_terminal(
             "/resume": "/resume",
         }
 
-        class SlashCompleter(Completer):
-            def get_completions(self, document, complete_event) -> Generator[Completion]:
-                text = document.text_before_cursor
-                if not text or not text.startswith("/"):
-                    return
-                key = text
-                entries = list(command_help.keys()) if key == "/" else [c for c in command_help if c.startswith(key)]
-                for cmd in entries:
-                    display = command_display_overrides.get(cmd, cmd)
-                    yield Completion(
-                        text=cmd,
-                        start_position=-len(key),
-                        display=display,
-                        display_meta=command_help[cmd],
-                    )
+        dropdown_style = Style.from_dict(
+            {
+                "dropdown.window": "",
+                "dropdown.item": "",
+                "dropdown.selected": "reverse",
+                "dropdown.border": "",
+            }
+        )
 
-        # Provide slash command suggestions only
-        completer = SlashCompleter()
+        active_recipient = current_default_recipient
+
         history = InMemoryHistory()
         bindings = KeyBindings()
 
@@ -264,32 +332,169 @@ def start_terminal(
         def _(event) -> None:
             event.app.exit(exception=KeyboardInterrupt)
 
-        @bindings.add("/")
-        def _(event) -> None:
-            buf = event.app.current_buffer
-            buf.insert_text("/")
-            buf.start_completion(select_first=True)
+        buffer = Buffer(history=history)
+        input_control = BufferControl(buffer=buffer, focusable=True)
+        input_window = Window(content=input_control, always_hide_cursor=False)
 
-        session = prompt_toolkit.PromptSession(
-            history=history,
-            key_bindings=bindings,
-            enable_history_search=True,
-            mouse_support=False,
+        current_prompt = ""
+
+        prompt_label_control = FormattedTextControl(lambda: current_prompt, focusable=False)
+        prompt_label_window = Window(
+            content=prompt_label_control,
+            height=1,
+            always_hide_cursor=True,
+            dont_extend_width=True,
         )
 
+        dropdown_menu = DropdownMenu(lambda: None)
+
+        dropdown_container = ConditionalContainer(
+            content=Frame(
+                body=Window(
+                    content=FormattedTextControl(dropdown_menu.render),
+                    style="class:dropdown.window",
+                    always_hide_cursor=True,
+                ),
+                style="class:dropdown.border",
+            ),
+            filter=Condition(lambda: dropdown_menu.visible),
+        )
+
+        root_container = HSplit([VSplit([prompt_label_window, input_window]), dropdown_container])
+
+        application = Application(
+            layout=Layout(root_container, focused_element=input_window),
+            key_bindings=bindings,
+            mouse_support=False,
+            style=dropdown_style,
+            full_screen=False,
+            erase_when_done=True,
+        )
+
+        dropdown_menu.update_invalidator(application.invalidate)
+        dropdown_visible = Condition(lambda: dropdown_menu.visible)
+
+        suspend_refresh = False
+
+        def _refresh_dropdown(_: object | None = None) -> None:
+            nonlocal suspend_refresh
+            if suspend_refresh:
+                suspend_refresh = False
+                return
+            text = buffer.text
+            if not text:
+                dropdown_menu.hide()
+                return
+            if text.startswith("/"):
+                prefix = text[1:].lower()
+                items: list[DropdownItem] = []
+                for cmd, description in command_help.items():
+                    if prefix and not cmd[1:].startswith(prefix):
+                        continue
+                    display_label = command_display_overrides.get(cmd, cmd)
+                    items.append(DropdownItem(label=display_label, description=description, insertion_text=cmd))
+                dropdown_menu.set_items(items)
+            elif text.startswith("@"):
+                prefix = text[1:].lower()
+                items = []
+                for agent in recipient_agents:
+                    if prefix and not agent.lower().startswith(prefix):
+                        continue
+                    description = "Currently selected" if agent == active_recipient else "Select this agent"
+                    items.append(
+                        DropdownItem(
+                            label=f"@{agent}", description=description, insertion_text=f"@{agent}", append_space=True
+                        )
+                    )
+                dropdown_menu.set_items(items)
+            else:
+                dropdown_menu.hide()
+
+        buffer.on_text_changed += _refresh_dropdown
+
+        def _insert_trigger(text: str) -> None:
+            buffer.insert_text(text)
+            _refresh_dropdown()
+
+        @bindings.add("/")
+        def _(event) -> None:
+            _insert_trigger("/")
+
+        @bindings.add("@")
+        def _(event) -> None:
+            _insert_trigger("@")
+
+        @bindings.add("down", filter=dropdown_visible)
+        def _(event) -> None:
+            dropdown_menu.move(1)
+
+        @bindings.add("up", filter=dropdown_visible)
+        def _(event) -> None:
+            dropdown_menu.move(-1)
+
+        def _apply_selection() -> None:
+            nonlocal suspend_refresh
+            selection = dropdown_menu.get_selected()
+            if selection is None:
+                dropdown_menu.hide()
+                return
+            text = selection.insertion_text + (" " if selection.append_space else "")
+            buffer.document = Document(text, len(text))
+            dropdown_menu.hide()
+            suspend_refresh = True
+
+        @bindings.add("tab", filter=dropdown_visible, eager=True)
+        def _(event) -> None:
+            _apply_selection()
+
+        @bindings.add("escape", filter=dropdown_visible, eager=True)
+        def _(event) -> None:
+            dropdown_menu.hide()
+
+        @bindings.add("enter", eager=True)
+        def _(event) -> None:
+            nonlocal suspend_refresh
+            if dropdown_menu.visible:
+                _apply_selection()
+                return
+            result_text = buffer.text
+            dropdown_menu.hide()
+            suspend_refresh = True
+            buffer.reset(Document(""))
+            event.app.exit(result=result_text)
+
         while True:
+            # Determine the active recipient for display
+            active_recipient = (
+                event_converter.handoff_agent
+                if event_converter.handoff_agent is not None
+                else current_default_recipient
+            )
+            current_prompt = f"👤 USER -> 🤖 {active_recipient}: "
+            dropdown_menu.hide()
+            suspend_refresh = False
+            application.invalidate()
+
             try:
-                message = await session.prompt_async(
-                    "👤 USER: ",
-                    completer=completer,
-                    complete_while_typing=True,
-                    reserve_space_for_menu=8,
-                )
+                message = await application.run_async()
             except (KeyboardInterrupt, EOFError):
                 return
 
+            if message is None:
+                return
+
+            message_text = cast(str, message)
+            if message_text.strip():
+                history.append_string(message_text)
+
+            current_prompt = ""
+            application.invalidate()
+
+            if message_text:
+                event_converter.console.print(f"👤 USER -> 🤖 {active_recipient}: {message_text}")
+
             event_converter.console.rule()
-            should_exit = await handle_message(message)
+            should_exit = await handle_message(message_text)
             if should_exit:
                 return
 
