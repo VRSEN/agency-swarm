@@ -110,6 +110,8 @@ _ipython_os.chdir({working_dir!r})
 """
                 chdir_result = await self._execute_single(kc, chdir_code, timeout)
                 if not chdir_result.ok:
+                    # Restart kernel on failure to ensure recovery
+                    await self._restart()
                     return chdir_result
 
             # Execute the actual user code
@@ -195,9 +197,13 @@ _ipython_os.chdir({working_dir!r})
 del _ipython_prev_cwd, _ipython_os
 """
                 restore_result = await self._execute_single(kc, restore_code, timeout)
-                # If restore fails, append warning but return user result
-                if not restore_result.ok and result.ok:
-                    result.stdout += f"\nWarning: Failed to restore directory: {restore_result.evalue}"
+                # If restore fails, restart kernel and append warning
+                if not restore_result.ok:
+                    await self._restart()
+                    if result.ok:
+                        result.stdout += (
+                            f"\nWarning: Failed to restore directory, kernel restarted: {restore_result.evalue}"
+                        )
 
             return result
 
