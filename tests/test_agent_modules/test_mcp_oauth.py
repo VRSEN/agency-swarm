@@ -1,5 +1,4 @@
 """Unit tests for MCP OAuth core functionality."""
-
 from pathlib import Path
 
 import pytest
