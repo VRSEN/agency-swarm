@@ -92,7 +92,7 @@ class AsyncKernelSession:
             await self.shutdown()
             await self.start()
 
-    async def execute(self, code: str, timeout: float = 10.0) -> ExecResult:
+    async def execute(self, code: str, timeout: float = 10.0, working_dir: str | None = None) -> ExecResult:
         """Execute code inside the kernel, collecting stdout, result, and errors."""
         await self._ready.wait()
 
@@ -101,6 +101,20 @@ class AsyncKernelSession:
             if kc is None:
                 return ExecResult(False, ename="KernelError", evalue="Kernel client is not ready")
 
+            # Handle working directory change if requested
+            if working_dir is not None:
+                # Save current directory and change to requested directory
+                chdir_code = f"""import os as _ipython_os
+_ipython_prev_cwd = _ipython_os.getcwd()
+_ipython_os.chdir({working_dir!r})
+"""
+                chdir_result = await self._execute_single(kc, chdir_code, timeout)
+                if not chdir_result.ok:
+                    # Restart kernel on failure to ensure recovery
+                    await self._restart()
+                    return chdir_result
+
+            # Execute the actual user code
             msg_id = kc.execute(
                 code,
                 store_history=False,
@@ -168,7 +182,7 @@ class AsyncKernelSession:
                 return ExecResult(False, ename=exc.__class__.__name__, evalue=str(exc))
 
             ok = got_idle and got_reply and ename is None
-            return ExecResult(
+            result = ExecResult(
                 ok=ok,
                 stdout="".join(stdout_chunks),
                 result_repr=result_repr,
@@ -176,6 +190,72 @@ class AsyncKernelSession:
                 evalue=evalue,
                 traceback=tb_joined,
             )
+
+            # Restore directory if it was changed
+            if working_dir is not None:
+                restore_code = """_ipython_os.chdir(_ipython_prev_cwd)
+del _ipython_prev_cwd, _ipython_os
+"""
+                restore_result = await self._execute_single(kc, restore_code, timeout)
+                # If restore fails, restart kernel and append warning
+                if not restore_result.ok:
+                    await self._restart()
+                    if result.ok:
+                        result.stdout += (
+                            f"\nWarning: Failed to restore directory, kernel restarted: {restore_result.evalue}"
+                        )
+
+            return result
+
+    async def _execute_single(self, kc, code: str, timeout: float) -> ExecResult:
+        """Execute a single code snippet and wait for result (helper for directory changes)."""
+        msg_id = kc.execute(code, store_history=False, allow_stdin=False, stop_on_error=True)
+
+        stdout_chunks: list[str] = []
+        ename: str | None = None
+        evalue: str | None = None
+        tb_joined: str | None = None
+        got_idle = False
+        got_reply = False
+
+        async def drain_iopub() -> None:
+            nonlocal stdout_chunks, ename, evalue, tb_joined, got_idle
+            while True:
+                msg = await kc.get_iopub_msg(timeout=timeout)
+                if msg.get("parent_header", {}).get("msg_id") != msg_id:
+                    continue
+                msg_type = msg["msg_type"]
+                content = msg["content"]
+                if msg_type == "status" and content.get("execution_state") == "idle":
+                    got_idle = True
+                    return
+                if msg_type == "stream" and content.get("name") in ("stdout", "stderr"):
+                    stdout_chunks.append(content.get("text", ""))
+                elif msg_type == "error":
+                    ename = content.get("ename")
+                    evalue = content.get("evalue")
+                    traceback_list = content.get("traceback") or []
+                    tb_joined = "\n".join(traceback_list)
+
+        async def wait_shell_reply() -> None:
+            nonlocal got_reply
+            for _ in range(100):
+                reply = await kc.get_shell_msg(timeout=timeout)
+                if reply.get("parent_header", {}).get("msg_id") == msg_id:
+                    got_reply = True
+                    return
+            raise RuntimeError("Failed to receive shell reply")
+
+        try:
+            async with asyncio.timeout(timeout):
+                await asyncio.gather(drain_iopub(), wait_shell_reply())
+        except TimeoutError:
+            return ExecResult(False, ename="TimeoutError", evalue=f"Timeout after {timeout}s")
+        except Exception as exc:
+            return ExecResult(False, ename=exc.__class__.__name__, evalue=str(exc))
+
+        ok = got_idle and got_reply and ename is None
+        return ExecResult(ok=ok, stdout="".join(stdout_chunks), ename=ename, evalue=evalue, traceback=tb_joined)
 
 
 class AsyncKernelPool:
@@ -199,9 +279,11 @@ class AsyncKernelPool:
                     self._sessions[client_id] = session
         return self._sessions[client_id]
 
-    async def execute(self, client_id: str, code: str, timeout: float = 10.0) -> ExecResult:
+    async def execute(
+        self, client_id: str, code: str, timeout: float = 10.0, working_dir: str | None = None
+    ) -> ExecResult:
         session = await self.get_or_create(client_id)
-        return await session.execute(code, timeout=timeout)
+        return await session.execute(code, timeout=timeout, working_dir=working_dir)
 
     async def shutdown(self, client_id: str) -> None:
         session = self._sessions.pop(client_id, None)
@@ -260,6 +342,13 @@ class IPythonInterpreter(BaseTool):
     code: str = Field(
         ..., description="Python code to execute (multi-line supported, separated with newline character)."
     )
+    working_dir: str | None = Field(
+        None,
+        description=(
+            "Optional directory path to execute code in. Accepts both absolute and relative paths."
+            "The tool will change to this directory before execution and restore the previous directory afterward."
+        ),
+    )
 
     DEFAULT_TIMEOUT_SECONDS: ClassVar[float] = 60.0
 
@@ -280,12 +369,14 @@ class IPythonInterpreter(BaseTool):
                 if pool is None:
                     pool = AsyncKernelPool()
                     self.context.set("ipython_kernel_pool", pool)
-                result = await pool.execute(agent_name, self.code, timeout=timeout)
+                result = await pool.execute(
+                    agent_name, self.code, timeout=timeout, working_dir=self.working_dir
+                )
             else:
                 # Fallback: create ephemeral kernel for this execution
                 session = AsyncKernelSession()
                 await session.start()
-                result = await session.execute(self.code, timeout=timeout)
+                result = await session.execute(self.code, timeout=timeout, working_dir=self.working_dir)
         finally:
             if session is not None:
                 await session.shutdown()
