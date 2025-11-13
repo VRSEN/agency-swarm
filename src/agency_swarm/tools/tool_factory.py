@@ -38,7 +38,8 @@ def _run_coroutine_from_factory(factory: Callable[[], Awaitable[Any]]) -> Any:
 
     def _runner() -> None:
         try:
-            result["value"] = asyncio.run(factory())
+            coro = factory()
+            result["value"] = asyncio.run(coro)  # type: ignore[arg-type]
         except BaseException as exc:  # noqa: BLE001
             error.append(exc)
 
@@ -180,16 +181,17 @@ class ToolFactory:
                         server_for_tools: MCPServer = registered
                     else:
                         try:
-                            server_for_tools = LoopAffineAsyncProxy(registered, manager)  # type: ignore[arg-type]
+                            server_for_tools = LoopAffineAsyncProxy(registered, manager)  # type: ignore[arg-type,assignment]
                         except Exception:
                             server_for_tools = registered
 
-                    return await MCPUtil.get_function_tools(
+                    tools = await MCPUtil.get_function_tools(
                         server_for_tools,
                         convert_schemas_to_strict,
                         run_context,
                         agent_for_fetch,
                     )
+                    return [t for t in tools if isinstance(t, FunctionTool)]
 
                 tools_for_server: list[FunctionTool] = _run_coroutine_from_factory(_fetch_tools)
                 converted_tools.extend(tools_for_server)
