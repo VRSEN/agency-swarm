@@ -1,29 +1,24 @@
+"""Tool factory for converting various tool formats to Agency Swarm tools."""
+
 import asyncio
 import importlib.util
 import inspect
 import json
 import logging
 import sys
-import threading
 import uuid
-from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Union
 
-import httpx
-import jsonref
-from agents import Agent as SDKAgent, FunctionTool, set_tracing_disabled
-from agents.exceptions import ModelBehaviorError
+from agents import Agent as SDKAgent, FunctionTool
 from agents.mcp.server import MCPServer
-from agents.mcp.util import MCPUtil
 from agents.run_context import RunContextWrapper
 from agents.strict_schema import ensure_strict_json_schema
-from pydantic import BaseModel, ValidationError
-
-from agency_swarm.tools.mcp_manager import LoopAffineAsyncProxy, default_mcp_manager
 
 from .base_tool import BaseTool
-from .utils import build_parameter_object_schema, build_tool_schema, generate_model_from_schema, resolve_url
+from .langchain_converter import from_langchain_tool, from_langchain_tools
+from .mcp_converter import from_mcp
+from .openapi_converter import from_openai_schema, from_openapi_schema
 
 if TYPE_CHECKING:
     from agency_swarm.agent.core import Agent as AgencyAgent
@@ -31,30 +26,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def _run_coroutine_from_factory(factory: Callable[[], Awaitable[Any]]) -> Any:
-    """Execute an async coroutine factory from synchronous code."""
-    result: dict[str, Any] = {}
-    error: list[BaseException] = []
-
-    def _runner() -> None:
-        try:
-            coro = factory()
-            result["value"] = asyncio.run(coro)  # type: ignore[arg-type]
-        except BaseException as exc:  # noqa: BLE001
-            error.append(exc)
-
-    thread = threading.Thread(target=_runner, name="tool-factory-mcp-call", daemon=True)
-    thread.start()
-    thread.join()
-
-    if error:
-        raise error[0]
-    if "value" not in result:
-        raise RuntimeError("Coroutine execution did not produce a result")
-    return result["value"]
-
-
 class ToolFactory:
+    """Factory for converting various tool formats to Agency Swarm tools."""
+
     @staticmethod
     def from_langchain_tools(tools: list) -> list[FunctionTool]:
         """
@@ -66,11 +40,7 @@ class ToolFactory:
         Returns:
             A list of FunctionTools.
         """
-        converted_tools = []
-        for tool in tools:
-            converted_tools.append(ToolFactory.from_langchain_tool(tool))
-
-        return converted_tools
+        return from_langchain_tools(tools)
 
     @staticmethod
     def from_langchain_tool(tool) -> FunctionTool:
@@ -83,59 +53,7 @@ class ToolFactory:
         Returns:
             A FunctionTool.
         """
-        try:
-            from langchain_community.tools import format_tool_to_openai_function
-        except ImportError as e:
-            raise ImportError("You must install langchain to use this method.") from e
-
-        if inspect.isclass(tool):
-            tool = tool()
-
-        # Get the OpenAI function schema from langchain tool
-        openai_schema = format_tool_to_openai_function(tool)
-
-        # Extract tool information
-        tool_name = openai_schema.get("name", tool.__class__.__name__)
-        tool_description = openai_schema.get("description", tool.description)
-
-        # Get parameters schema - this should be the full JSON schema for the FunctionTool
-        parameters_schema = openai_schema.get("parameters", {})
-
-        # Ensure proper schema structure for FunctionTool
-        if not parameters_schema:
-            parameters_schema = {"type": "object", "properties": {}, "required": [], "additionalProperties": False}
-
-        # Create the async callback function
-        async def on_invoke_tool(ctx, input_json: str):
-            """Callback function that executes the langchain tool."""
-            try:
-                args = json.loads(input_json) if input_json else {}
-            except Exception as e:
-                return f"Error: Invalid JSON input: {e}"
-            try:
-                # Call the langchain tool
-                result = tool.run(args)
-                return result
-            except TypeError:
-                # Try with single argument if direct dict fails (langchain specifics)
-                if len(args) == 1:
-                    result = tool.run(list(args.values())[0])
-                    return result
-                else:
-                    return f"Error parsing input for tool '{tool.__class__.__name__}'. Please open an issue on github."
-            except Exception as e:
-                return f"Error running LangChain tool: {e}"
-
-        # Create and return the FunctionTool
-        func_tool = FunctionTool(
-            name=tool_name,
-            description=tool_description.strip(),
-            params_json_schema=parameters_schema,
-            on_invoke_tool=on_invoke_tool,
-            strict_json_schema=False,  # LangChain tools are not strict by default
-        )
-
-        return func_tool
+        return from_langchain_tool(tool)
 
     @staticmethod
     def from_mcp(
@@ -143,62 +61,22 @@ class ToolFactory:
         convert_schemas_to_strict: bool = False,
         context: RunContextWrapper[Any] | None = None,
         agent: Union["AgencyAgent", SDKAgent, None] = None,
-    ) -> list[FunctionTool]:
-        """Convert MCP servers into standalone FunctionTool instances."""
-        if not mcp_servers:
-            return []
+        as_base_tool: bool = True,
+    ) -> list[type[BaseTool]] | list[FunctionTool]:
+        """
+        Convert MCP servers into standalone tool instances.
 
-        servers = list(mcp_servers)
-        run_context = context or RunContextWrapper(context=None)
-        agent_for_fetch: SDKAgent
-        if isinstance(agent, SDKAgent):
-            agent_for_fetch = agent
-        else:
-            agent_for_fetch = SDKAgent(name="mcp_tool_loader")
+        Args:
+            mcp_servers: List of MCP servers to convert
+            convert_schemas_to_strict: Whether to convert schemas to strict mode
+            context: Run context wrapper
+            agent: Agent instance
+            as_base_tool: If True, return BaseTool classes; if False, return FunctionTool instances
 
-        converted_tools: list[FunctionTool] = []
-        # Temporarily disable tracing to avoid sdk logging a non-existent error
-        set_tracing_disabled(True)
-        try:
-            for server in servers:
-
-                async def _fetch_tools(current_server: MCPServer = server) -> list[FunctionTool]:
-                    manager = default_mcp_manager
-                    registered = manager.register(current_server) if hasattr(manager, "register") else current_server
-                    if hasattr(manager, "ensure_connected"):
-                        await manager.ensure_connected(registered)
-                    try:
-                        if getattr(registered, "session", None) is None:
-                            await registered.connect()  # type: ignore[call-arg]
-                    except Exception:  # noqa: BLE001
-                        logger.debug(
-                            "Optional direct connect attempt failed for %s", getattr(registered, "name", registered)
-                        )
-
-                    proxy_type = LoopAffineAsyncProxy
-                    is_proxy_instance = isinstance(proxy_type, type) and isinstance(registered, proxy_type)
-                    if is_proxy_instance:
-                        server_for_tools: MCPServer = registered
-                    else:
-                        try:
-                            server_for_tools = LoopAffineAsyncProxy(registered, manager)  # type: ignore[arg-type,assignment]
-                        except Exception:
-                            server_for_tools = registered
-
-                    tools = await MCPUtil.get_function_tools(
-                        server_for_tools,
-                        convert_schemas_to_strict,
-                        run_context,
-                        agent_for_fetch,
-                    )
-                    return [t for t in tools if isinstance(t, FunctionTool)]
-
-                tools_for_server: list[FunctionTool] = _run_coroutine_from_factory(_fetch_tools)
-                converted_tools.extend(tools_for_server)
-        finally:
-            set_tracing_disabled(False)
-
-        return converted_tools
+        Returns:
+            List of BaseTool classes or FunctionTool instances depending on as_base_tool parameter
+        """
+        return from_mcp(mcp_servers, convert_schemas_to_strict, context, agent, as_base_tool)
 
     @staticmethod
     def from_openai_schema(schema: dict[str, Any], function_name: str) -> tuple[type | None, type | None]:
@@ -207,21 +85,7 @@ class ToolFactory:
         Returns:
             A dict with keys 'parameters' and 'request_body' (if present), each mapping to a Pydantic model.
         """
-        param_model = None
-        request_body_model = None
-        strict = schema.get("strict", False)
-        camel_func_name = "".join(word.capitalize() for word in function_name.replace("_", " ").split())
-
-        # Parameters model
-        if "parameters" in schema["properties"] and schema["properties"]["parameters"]:
-            param_model = generate_model_from_schema(schema["properties"]["parameters"], camel_func_name, strict)
-
-        # Request body model (first schema in any content type)
-        request_body_schema = schema.get("properties", {}).get("requestBody", {})
-        if request_body_schema:
-            request_body_model = generate_model_from_schema(request_body_schema, camel_func_name, strict)
-
-        return param_model, request_body_model
+        return from_openai_schema(schema, function_name)
 
     @staticmethod
     def from_openapi_schema(
@@ -245,145 +109,7 @@ class ToolFactory:
         Returns:
             list[FunctionTool]: List of FunctionTool instances generated from the OpenAPI endpoint.
         """
-
-        if isinstance(schema, dict):
-            openapi = jsonref.JsonRef.replace_refs(schema)
-        else:
-            openapi = jsonref.loads(schema)
-
-        headers = {k: v for k, v in (headers or {}).items() if v is not None}
-
-        tools: list[FunctionTool] = []
-
-        for path, verbs in openapi["paths"].items():
-            for verb, verb_spec_ref in verbs.items():
-                verb_spec = jsonref.replace_refs(verb_spec_ref)
-
-                # Build OpenAI-compatible JSON schema
-
-                function_name = verb_spec.get("operationId")
-                description = verb_spec.get("description") or verb_spec.get("summary", "")
-
-                req_body_schema = None
-                if content := verb_spec.get("requestBody", {}).get("content", {}):
-                    for content_obj in content.values():
-                        if "schema" in content_obj:
-                            req_body_schema = content_obj["schema"]
-                            break
-
-                parameters_obj_schema = build_parameter_object_schema(
-                    verb_spec.get("parameters", []),
-                    strict,
-                )
-
-                tool_schema = build_tool_schema(
-                    parameters_obj_schema,
-                    req_body_schema,
-                    strict=strict,
-                    include_strict_flag=True,
-                )
-                tool_schema["strict"] = strict
-
-                # Callback factory (captures current verb & path)
-                on_invoke_tool = ToolFactory._create_invoke_for_path(
-                    path, verb, openapi, tool_schema, function_name, headers, params, timeout
-                )
-
-                tool = FunctionTool(
-                    name=function_name,
-                    description=description,
-                    params_json_schema=tool_schema,
-                    on_invoke_tool=on_invoke_tool,
-                    strict_json_schema=strict,
-                )
-                tools.append(tool)
-
-        return tools
-
-    @staticmethod
-    def _create_invoke_for_path(path, verb, openapi, tool_schema, function_name, headers=None, params=None, timeout=90):
-        """
-        Creates a callback function for a specific path and method.
-        This is a factory function that captures the current values of path and method.
-
-        Parameters:
-            path: The path to create the callback for.
-            verb: The HTTP method to use.
-            openapi: The OpenAPI specification.
-            tool_schema: The schema for the tool.
-            function_name: The function/operation name.
-            headers: Headers to include in the request.
-            params: Additional parameters to include in the request.
-            timeout: HTTP timeout in seconds.
-
-        Returns:
-            An async callback function that makes the appropriate HTTP request.
-        """
-        param_model, request_body_model = ToolFactory.from_openai_schema(tool_schema, function_name)
-        fixed_params = params or {}
-
-        async def _invoke(
-            ctx: RunContextWrapper[Any],
-            input: str,
-            *,
-            verb_: str = verb,
-            path_: str = path,
-            param_model_: type[BaseModel] = param_model,
-            request_body_model_: type[BaseModel] = request_body_model,
-        ):
-            """Actual HTTP call executed by the agent."""
-            payload = json.loads(input) if input else {}
-
-            # split out parts for old-style structure
-            param_container: dict[str, Any] = payload.get("parameters", {})
-
-            if param_model_:
-                # Validate parameters
-                try:
-                    parsed = param_model_(**param_container) if param_container else param_model_()
-                    param_container = parsed.model_dump(mode="json")
-                except ValidationError as e:
-                    raise ModelBehaviorError(
-                        f"Invalid JSON input in parameters for tool {param_model_.__name__}: {e}"
-                    ) from e
-
-            body_payload = payload.get("requestBody")
-
-            if request_body_model_:
-                # Validate request body
-                try:
-                    parsed = request_body_model_(**body_payload) if body_payload else request_body_model_()
-                    body_payload = parsed.model_dump(mode="json")
-                except ValidationError as e:
-                    raise ModelBehaviorError(
-                        f"Invalid JSON input in request body for tool {request_body_model_.__name__}: {e}"
-                    ) from e
-
-            url, remaining_params = resolve_url(openapi["servers"][0]["url"], path_, param_container)
-
-            query_params = {k: v for k, v in remaining_params.items() if v is not None}
-            if fixed_params:
-                query_params = {**query_params, **fixed_params}
-
-            json_body = body_payload if verb_.lower() in {"post", "put", "patch", "delete"} else None
-
-            logger.info(f"Calling URL: {url}\nQuery Params: {query_params}\nJSON Body: {json_body}")
-
-            async with httpx.AsyncClient(timeout=timeout) as client:
-                resp = await client.request(
-                    verb_.upper(),
-                    url,
-                    params=query_params,
-                    json=json_body,
-                    headers=headers,
-                )
-                try:
-                    logger.info(f"Response from {url}: {resp.json()}")
-                    return resp.json()
-                except Exception:
-                    return resp.text
-
-        return _invoke
+        return from_openapi_schema(schema, headers=headers, params=params, strict=strict, timeout=timeout)
 
     @staticmethod
     def from_file(file_path: str | Path) -> list[type[BaseTool] | FunctionTool]:
@@ -521,8 +247,6 @@ class ToolFactory:
         # The on_invoke_tool function
         async def on_invoke_tool(ctx, input_json: str):
             # Parse input_json to dict
-            import json
-
             try:
                 args = json.loads(input_json) if input_json else {}
             except Exception as e:
