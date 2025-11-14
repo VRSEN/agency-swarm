@@ -410,6 +410,8 @@ async def attach_persistent_mcp_servers(agency: Any) -> None:
         servers = getattr(agent, "mcp_servers", None)
         if not isinstance(servers, list):
             continue
+        if _OAUTH_AVAILABLE:
+            _process_oauth_servers(agent, servers)
         for i, srv in enumerate(list(servers)):
             name = getattr(srv, "name", None)
             if not isinstance(name, str) or name == "":
