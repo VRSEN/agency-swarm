@@ -81,7 +81,7 @@ def _create_mcp_base_tool(function_tool: FunctionTool, server_name: str) -> type
             if field_schema["oneOf"]:
                 json_type = field_schema["oneOf"][0].get("type")
 
-        return type_mapping.get(json_type, Any)
+        return type_mapping.get(json_type or "string", Any)
 
     # Recursive function to build nested models
     def build_field_type(field_schema: dict[str, Any], field_name: str, parent_name: str) -> Any:
@@ -197,7 +197,7 @@ def _create_mcp_base_tool(function_tool: FunctionTool, server_name: str) -> type
 
             for attempt in range(max_retries):
                 try:
-                    result = await self._mcp_function_tool.on_invoke_tool(ctx, input_json)
+                    result = await self._mcp_function_tool.on_invoke_tool(ctx, input_json)  # type: ignore[arg-type]
                     return str(result)
                 except Exception as e:
                     last_exception = e
@@ -364,13 +364,21 @@ def from_mcp(
     for idx, srv in enumerate(list(servers)):
         if not isinstance(srv, LoopAffineAsyncProxy):
             proxy = LoopAffineAsyncProxy(srv, default_mcp_manager)
-            servers[idx] = proxy
-            srv = proxy
+            servers[idx] = proxy  # type: ignore[assignment,call-overload]
+            srv = proxy  # type: ignore[assignment]
 
         # Ensure driver is created and connected on the background loop (synchronous)
         default_mcp_manager._ensure_driver(getattr(srv, "_server", srv))
 
     converted_tools: list[type[BaseTool]] | list[FunctionTool] = []
+    
+    # Save the current tracing state before disabling it
+    # The SDK doesn't expose a public getter, so we access the internal provider state
+    # This is necessary to avoid permanently re-enabling tracing if it was already disabled
+    from agents.tracing import get_trace_provider
+    trace_provider = get_trace_provider()
+    original_tracing_disabled = getattr(trace_provider, "_disabled", False)
+    
     # Temporarily disable tracing to avoid sdk logging a non-existent error
     set_tracing_disabled(True)
     try:
@@ -397,7 +405,8 @@ def from_mcp(
                 # Return FunctionTool instances directly
                 converted_tools.extend(function_tools)  # type: ignore[arg-type]
     finally:
-        set_tracing_disabled(False)
+        # Restore the original tracing state instead of unconditionally enabling it
+        set_tracing_disabled(original_tracing_disabled)
 
     return converted_tools
 

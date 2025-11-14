@@ -25,10 +25,10 @@ class classproperty:
         return self.fget(owner)
 
 
-class BaseToolMeta(type(BaseModel)):
+class BaseToolMeta(type(BaseModel)):  # type: ignore[misc]
     """Metaclass for BaseTool that provides a nice __repr__ for the class itself."""
 
-    def __repr__(cls):
+    def __repr__(cls):  # type: ignore[override]
         """Return a detailed representation of the BaseTool class."""
         try:
             import copy
