@@ -218,6 +218,8 @@ class Agent(BaseAgent[MasterContext]):
             current_agent_params.get("supports_framework_tool_wiring", self.supports_framework_tool_wiring)
         )
         self.handoff_reminder = current_agent_params.get("handoff_reminder")
+        self.mcp_oauth_redirect_handler = current_agent_params.get("mcp_oauth_redirect_handler")
+        self.mcp_oauth_callback_handler = current_agent_params.get("mcp_oauth_callback_handler")
 
         # Internal state
         self._openai_client = None

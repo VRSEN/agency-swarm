@@ -145,6 +145,10 @@ OAuth credentials are read from environment variables based on the server `name`
 The `name` field is converted to UPPER_SNAKE_CASE to form the environment variable names. This pattern allows you to configure multiple OAuth servers without conflicts.
 </Note>
 
+### Automatic Callback Capture
+
+When your redirect URI points to `http://localhost:PORT/callback`, Agency Swarm spins up a tiny local HTTP server on that port. The browser redirect lands there automatically, the code/state are captured, and the browser shows a **"You can close this tab"** message. If the port is busy or your redirect URI points somewhere else (for example, your SaaS frontend), the terminal falls back to the classic "paste the callback URL" prompt, so you never get stuck mid-flow.
+
 ### Configuration Options
 
 <ParamField param="url" type="string" required>
@@ -173,6 +177,10 @@ The `name` field is converted to UPPER_SNAKE_CASE to form the environment variab
 
 <ParamField param="storage" type="TokenStorage">
   Custom token storage implementation. If not provided, uses file-based storage (for local development). For SaaS deployments, pass a custom storage backend that implements the MCP SDK's TokenStorage interface.
+</ParamField>
+
+<ParamField param="auth_server_url" type="string">
+  Optional base URL for OAuth discovery. Set this if your authorization endpoints live on a different origin than the MCP endpoint itself (common on SaaS deployments).
 </ParamField>
 
 ## Usage Examples
@@ -408,6 +416,8 @@ agent = Agent(
 )
 ```
 
+> These handler hooks now live directly on the `Agent`, so FastAPI streaming endpoints and AG-UI frontends can pass URLs to the browser via SSE without extra glue code.
+
 ### Pre-Configured Client Credentials
 
 For testing or when you have pre-registered OAuth apps, you can provide credentials directly:
@@ -432,6 +442,8 @@ oauth_server = MCPServerOAuth(
 **Browser-Based Authorization**: First-time authorization requires browser interaction for the OAuth flow. For SaaS deployments with web UI, use custom OAuth handlers to integrate the authorization flow into your frontend (see Advanced Usage).
 
 **Token Security**: Token storage security depends on your chosen backend. File-based storage (V0) uses restrictive file permissions. For SaaS deployments (V1), ensure your custom storage implementation encrypts tokens appropriately.
+
+**SaaS Token Persistence**: Need to stash tokens in Firestore or another secret store? Wire up `OAuthTokenHooks(load_tokens_callback=..., save_tokens_callback=...)` or pass a custom `TokenStorage`. The default storage now calls those callbacks automatically so you can sync tokens without touching disk.
 </Note>
 
 ## See Also
