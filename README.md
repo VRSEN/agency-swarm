@@ -47,6 +47,8 @@ If you hit environment issues, see the [Installation guide](https://agency-swarm
 
 ## Getting Started
 
+> **Recommended**: Follow the [Agency Templates guide](https://agency-swarm.ai/welcome/getting-started/agency-templates)—it walks you through cloning the Agency Starter Template or adapting the Agency Code example before you customize anything.
+
 1. **Set Your OpenAI Key**:
     - Create a `.env` file with `OPENAI_API_KEY=your_key` (auto-loaded), or export it in your shell:
     ```bash
@@ -130,7 +132,7 @@ Define tools using the modern `@function_tool` decorator (recommended), or exten
     )
     ```
 
-    Working from examples and templates:
+    Working from examples:
 
     - Browse `./examples` for runnable demos and patterns you can adapt.
     - Use the `.cursorrules` file at the repo root with your AI coding agent (Cursor, Claude Code, etc.).
@@ -218,6 +220,7 @@ This structure ensures that each agent has its dedicated space with all necessar
 - Agencies overview: https://agency-swarm.ai/core-framework/agencies/overview
 - Communication flows: https://agency-swarm.ai/core-framework/agencies/communication-flows
 - Running an agency: https://agency-swarm.ai/core-framework/agencies/running-agency
+- Agency Templates guide (Starter Template + Agency Code): https://agency-swarm.ai/welcome/getting-started/agency-templates
 - Observability: https://agency-swarm.ai/additional-features/observability
 
 ## Contributing
