@@ -34,7 +34,7 @@ from agency_swarm.agent.file_manager import AgentFileManager
 from agency_swarm.agent.tools import _attach_one_call_guard
 from agency_swarm.context import MasterContext
 from agency_swarm.tools.concurrency import ToolConcurrencyManager
-from agency_swarm.tools.mcp_manager import register_and_connect_agent_servers
+from agency_swarm.tools.mcp_manager import convert_mcp_servers_to_tools
 
 from .context_types import AgencyContext as AgencyContext, AgentRuntimeState
 
@@ -230,8 +230,8 @@ class Agent(BaseAgent[MasterContext]):
         for tool in self.tools:
             _attach_one_call_guard(tool, self)
 
-        # Register and connect MCP servers by default (persistent across runs)
-        register_and_connect_agent_servers(self)
+        # Convert MCP servers to tools and add them to the agent
+        convert_mcp_servers_to_tools(self)
 
     # --- Deprecated Compatibility ---
     @property
