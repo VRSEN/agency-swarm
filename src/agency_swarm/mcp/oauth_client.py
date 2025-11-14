@@ -7,8 +7,10 @@ OAuth client functionality, making it compatible with Agency Swarm's MCP integra
 import logging
 from typing import Any
 
+from agents import Agent as AgentBase, RunContextWrapper
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
+from mcp.types import Tool as MCPTool
 from pydantic import AnyUrl
 
 from .oauth import MCPServerOAuth, create_oauth_provider
@@ -112,8 +114,16 @@ class MCPServerOAuthClient:
             await self.cleanup()
             raise
 
-    async def list_tools(self) -> list[Any]:
+    async def list_tools(
+        self,
+        run_context: RunContextWrapper[Any] | None = None,
+        agent: AgentBase | None = None,
+    ) -> list[MCPTool]:
         """List available tools from OAuth MCP server.
+
+        Args:
+            run_context: Runner context (unused, kept for interface compatibility)
+            agent: Agent requesting the list (unused, kept for interface compatibility)
 
         Returns:
             List of available tools from the MCP server
@@ -128,7 +138,7 @@ class MCPServerOAuthClient:
         logger.debug(f"Listing tools from OAuth MCP server: {self.name}")
         result = await self.session.list_tools()
         logger.info(f"Found {len(result.tools)} tools from {self.name}")
-        return result.tools
+        return list(result.tools)
 
     async def call_tool(self, name: str, arguments: dict[str, Any] | None = None) -> Any:
         """Call an OAuth MCP tool.

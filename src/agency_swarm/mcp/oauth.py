@@ -4,6 +4,8 @@ Provides OAuth 2.0 with PKCE support for MCP servers using the MCP Python SDK's 
 Supports both local development (file-based token storage) and SaaS deployment (callback-based storage).
 """
 
+import asyncio
+import contextlib
 import json
 import logging
 import os
@@ -12,7 +14,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urlparse, urlsplit
 
 from agents import RunHooks, RunResult
 from mcp.client.auth import OAuthClientProvider
@@ -24,6 +26,21 @@ from mcp.shared.auth import (
 from pydantic import AnyUrl
 
 from agency_swarm.context import MasterContext
+
+
+@dataclass
+class TokenCallbackRegistry:
+    """Holds optional load/save callbacks for token persistence."""
+
+    load_callback: Callable[[str], dict[str, Any] | None] | None = None
+    save_callback: Callable[[str, dict[str, Any]], None] | None = None
+
+    def has_callbacks(self) -> bool:
+        """Return True if any callback has been configured."""
+        return self.load_callback is not None or self.save_callback is not None
+
+
+_TOKEN_CALLBACK_REGISTRY = TokenCallbackRegistry()
 
 logger = logging.getLogger(__name__)
 
@@ -39,15 +56,25 @@ def get_default_cache_dir() -> Path:
 class FileTokenStorage:
     """File-based token storage for MCP OAuth."""
 
-    def __init__(self, cache_dir: Path, server_name: str):
+    def __init__(
+        self,
+        cache_dir: Path,
+        server_name: str,
+        server_url: str | None = None,
+        token_callbacks: TokenCallbackRegistry | None = None,
+    ):
         """Initialize file-based token storage.
 
         Args:
             cache_dir: Directory to store token files
             server_name: Unique name for the MCP server (used in filename)
+            server_url: Full MCP endpoint URL (used for callback identification)
+            token_callbacks: Optional callback registry for custom persistence
         """
         self.cache_dir = cache_dir
         self.server_name = server_name
+        self.server_url = server_url or server_name
+        self._token_callbacks = token_callbacks
         self.cache_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
 
         # Separate files for tokens and client info
@@ -56,6 +83,14 @@ class FileTokenStorage:
 
     async def get_tokens(self) -> OAuthToken | None:
         """Get stored tokens."""
+        if self._token_callbacks and self._token_callbacks.load_callback:
+            try:
+                data = self._token_callbacks.load_callback(self.server_url)
+                if data:
+                    return OAuthToken(**data)
+            except Exception:
+                logger.exception("OAuth load_tokens_callback failed")
+
         if not self.token_file.exists():
             return None
 
@@ -74,6 +109,11 @@ class FileTokenStorage:
             logger.info(f"Tokens saved to {self.token_file}")
         except Exception:
             logger.exception(f"Failed to save tokens to {self.token_file}")
+        if self._token_callbacks and self._token_callbacks.save_callback:
+            try:
+                self._token_callbacks.save_callback(self.server_url, tokens.model_dump())
+            except Exception:
+                logger.exception("OAuth save_tokens_callback failed")
 
     async def get_client_info(self) -> OAuthClientInformationFull | None:
         """Get stored client information."""
@@ -111,6 +151,7 @@ class MCPServerOAuth:
         cache_dir: Directory for token storage (uses default if None, V0 only)
         storage: Custom token storage implementation (V1 for SaaS, overrides cache_dir)
         client_metadata: Full OAuth client metadata (overrides simple params)
+        auth_server_url: Base URL for OAuth discovery when different from MCP endpoint
     """
 
     url: str
@@ -122,6 +163,7 @@ class MCPServerOAuth:
     cache_dir: Path | None = None
     storage: Any | None = None
     client_metadata: OAuthClientMetadata | None = None
+    auth_server_url: str | None = None
 
     def _resolve_client_id(self) -> str | None:
         """Return the client_id if provided explicitly or via environment."""
@@ -190,6 +232,16 @@ class MCPServerOAuth:
 
         return OAuthClientInformationFull(**metadata_data)
 
+    def get_auth_server_url(self) -> str | None:
+        """Return the OAuth authorization server base URL."""
+        if self.auth_server_url:
+            return self.auth_server_url
+
+        parsed = urlsplit(self.url)
+        if not parsed.scheme or not parsed.netloc:
+            return None
+        return f"{parsed.scheme}://{parsed.netloc}"
+
 
 async def default_redirect_handler(auth_url: str) -> None:
     """Default handler for OAuth redirect - opens browser.
@@ -202,6 +254,7 @@ async def default_redirect_handler(auth_url: str) -> None:
     print(f"{'=' * 80}")
     print(f"\nOpening browser for authentication: {auth_url}\n")
     print("If the browser doesn't open automatically, please visit the URL above.")
+    print("The terminal will automatically capture the callback or you can paste it manually.")
     print(f"{'=' * 80}\n")
 
     try:
@@ -210,37 +263,157 @@ async def default_redirect_handler(auth_url: str) -> None:
         logger.exception("Failed to open browser")
 
 
-async def default_callback_handler() -> tuple[str, str | None]:
-    """Default handler for OAuth callback - prompts user to paste URL.
+def _parse_callback_response(callback_url: str) -> tuple[str, str | None]:
+    """Parse authorization code and state from a callback URL."""
+    parsed = urlparse(callback_url)
+    params = parse_qs(parsed.query)
+
+    if "error" in params:
+        error = params["error"][0]
+        error_description = params.get("error_description", ["Unknown error"])[0]
+        raise ValueError(f"OAuth error: {error} - {error_description}")
+
+    if "code" not in params:
+        raise ValueError("No authorization code found in callback URL")
+
+    code = params["code"][0]
+    state = params.get("state", [None])[0]
+    return code, state
+
+
+async def _prompt_for_callback_url() -> tuple[str, str | None]:
+    """Prompt the user to paste the callback URL."""
+    print("\nAfter authorizing, you will be redirected to a callback URL.")
+    print("Paste the full URL here if automatic capture does not complete.\n")
+
+    loop = asyncio.get_event_loop()
+    callback_url = await loop.run_in_executor(None, lambda: input("Callback URL: ").strip())
+    return _parse_callback_response(callback_url)
+
+
+def _can_use_local_callback_server(redirect_uri: str) -> bool:
+    """Return True if we can bind a local HTTP server for the redirect URI."""
+    parsed = urlparse(redirect_uri)
+    if parsed.scheme != "http":
+        return False
+
+    host = parsed.hostname or ""
+    return host in {"localhost", "127.0.0.1"}
+
+
+async def _listen_for_callback_once(redirect_uri: str, timeout: float = 300.0) -> tuple[str, str | None]:
+    """Start a local HTTP server and capture the first callback request."""
+    parsed = urlparse(redirect_uri)
+    host = parsed.hostname or "localhost"
+    port = parsed.port or 80
+    path = parsed.path or "/callback"
+    loop = asyncio.get_event_loop()
+    result: asyncio.Future[tuple[str, str | None]] = loop.create_future()
+
+    async def _handle_connection(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        try:
+            data = await reader.readuntil(b"\r\n\r\n")
+        except asyncio.IncompleteReadError:
+            writer.close()
+            await writer.wait_closed()
+            return
+
+        request_line = data.split(b"\r\n", 1)[0].decode(errors="ignore")
+        parts = request_line.split(" ")
+        target = parts[1] if len(parts) >= 2 else ""
+        target_parsed = urlparse(target)
+        # Some browsers send absolute URLs, others only the path.
+        request_path = target_parsed.path or target
+
+        status_line = "HTTP/1.1 200 OK\r\n"
+        body = (
+            "<html><body>"
+            "<h1>You may close this tab.</h1>"
+            "<p>Return to Agency Swarm. The terminal captured your authorization code.</p>"
+            "</body></html>"
+        )
+
+        try:
+            if request_path != path:
+                status_line = "HTTP/1.1 404 Not Found\r\n"
+                body = "<html><body><h1>404 Not Found</h1></body></html>"
+                writer.write(
+                    f"{status_line}Content-Type: text/html\r\nContent-Length: {len(body)}\r\n\r\n{body}".encode()
+                )
+                await writer.drain()
+                writer.close()
+                await writer.wait_closed()
+                return
+
+            params = parse_qs(target_parsed.query)
+            if "code" not in params:
+                status_line = "HTTP/1.1 400 Bad Request\r\n"
+                body = "<html><body><h1>Missing code parameter.</h1></body></html>"
+                writer.write(
+                    f"{status_line}Content-Type: text/html\r\nContent-Length: {len(body)}\r\n\r\n{body}".encode()
+                )
+                await writer.drain()
+                writer.close()
+                await writer.wait_closed()
+                return
+
+            if not result.done():
+                code = params["code"][0]
+                state = params.get("state", [None])[0]
+                result.set_result((code, state))
+
+            writer.write(f"{status_line}Content-Type: text/html\r\nContent-Length: {len(body)}\r\n\r\n{body}".encode())
+            await writer.drain()
+        finally:
+            writer.close()
+            await writer.wait_closed()
+
+    server = await asyncio.start_server(_handle_connection, host=host, port=port)
+    print(f"\nListening for OAuth callback at {redirect_uri}\n")
+
+    try:
+        return await asyncio.wait_for(result, timeout=timeout)
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
+async def default_callback_handler(redirect_uri: str | None = None) -> tuple[str, str | None]:
+    """Default handler for OAuth callback.
+
+    Tries to capture the callback automatically using a local HTTP server and falls
+    back to a manual prompt when automatic capture is not possible.
 
     Returns:
         Tuple of (authorization_code, state)
     """
-    print("\nAfter authorizing, you will be redirected to a callback URL.")
-    print("Please copy the entire URL from your browser and paste it below.\n")
+    redirect_target = redirect_uri or "http://localhost:3000/callback"
+    tasks: list[asyncio.Task[tuple[str, str | None]]] = []
+    server_task: asyncio.Task[tuple[str, str | None]] | None = None
 
-    callback_url = input("Callback URL: ").strip()
+    if _can_use_local_callback_server(redirect_target):
+        try:
+            server_task = asyncio.create_task(_listen_for_callback_once(redirect_target))
+            tasks.append(server_task)
+        except OSError:
+            logger.warning("Local callback server unavailable; falling back to manual entry.")
 
-    try:
-        parsed = urlparse(callback_url)
-        params = parse_qs(parsed.query)
+    prompt_task = asyncio.create_task(_prompt_for_callback_url())
+    tasks.append(prompt_task)
 
-        if "error" in params:
-            error = params["error"][0]
-            error_description = params.get("error_description", ["Unknown error"])[0]
-            raise ValueError(f"OAuth error: {error} - {error_description}")
+    done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
 
-        if "code" not in params:
-            raise ValueError("No authorization code found in callback URL")
+    for task in pending:
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
 
-        code = params["code"][0]
-        state = params.get("state", [None])[0]
-
-        return code, state
-
-    except Exception as e:
-        logger.exception("Failed to parse callback URL")
-        raise ValueError(f"Invalid callback URL: {e}") from e
+    for task in done:
+        try:
+            return task.result()
+        except Exception:
+            logger.exception("OAuth callback handler error")
+            raise
 
 
 async def create_oauth_provider(
@@ -265,6 +438,8 @@ async def create_oauth_provider(
         storage = FileTokenStorage(
             cache_dir=server.get_cache_dir(),
             server_name=server.name,
+            server_url=server.url,
+            token_callbacks=_TOKEN_CALLBACK_REGISTRY,
         )
 
     client_metadata = server.build_client_metadata()
@@ -275,7 +450,12 @@ async def create_oauth_provider(
 
     # Use provided handlers or defaults
     redirect_handler = redirect_handler or default_redirect_handler
-    callback_handler = callback_handler or default_callback_handler
+    if callback_handler is None:
+
+        async def _wrapped_callback_handler() -> tuple[str, str | None]:
+            return await default_callback_handler(server.redirect_uri)
+
+        callback_handler = _wrapped_callback_handler
 
     provider = OAuthClientProvider(
         server_url=server.url,
@@ -285,6 +465,10 @@ async def create_oauth_provider(
         callback_handler=callback_handler,
     )
 
+    auth_base_url = server.get_auth_server_url()
+    if auth_base_url:
+        provider.context.auth_server_url = auth_base_url
+
     logger.info(f"Created OAuth provider for {server.name} at {server.url}")
     return provider
 
@@ -292,8 +476,9 @@ async def create_oauth_provider(
 class OAuthTokenHooks(RunHooks[MasterContext]):
     """RunHooks implementation for OAuth token persistence.
 
-    Allows custom storage backends (e.g., database) for SaaS deployments.
-    For local development, tokens are stored in files by FileTokenStorage.
+    Registering this hook wires the module-level token callbacks so the default
+    FileTokenStorage will call ``load_tokens_callback`` before each connection
+    and ``save_tokens_callback`` whenever new tokens are persisted.
     """
 
     def __init__(
@@ -309,6 +494,10 @@ class OAuthTokenHooks(RunHooks[MasterContext]):
         """
         self._load_tokens_callback = load_tokens_callback
         self._save_tokens_callback = save_tokens_callback
+        if load_tokens_callback:
+            _TOKEN_CALLBACK_REGISTRY.load_callback = load_tokens_callback
+        if save_tokens_callback:
+            _TOKEN_CALLBACK_REGISTRY.save_callback = save_tokens_callback
 
     def on_run_start(self, *, context: MasterContext, **kwargs: Any) -> None:
         """Load OAuth tokens at the start of a run."""
