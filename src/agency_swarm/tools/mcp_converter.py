@@ -371,14 +371,14 @@ def from_mcp(
         default_mcp_manager._ensure_driver(getattr(srv, "_server", srv))
 
     converted_tools: list[type[BaseTool]] | list[FunctionTool] = []
-    
+
     # Save the current tracing state before disabling it
     # The SDK doesn't expose a public getter, so we access the internal provider state
     # This is necessary to avoid permanently re-enabling tracing if it was already disabled
     from agents.tracing import get_trace_provider
     trace_provider = get_trace_provider()
     original_tracing_disabled = getattr(trace_provider, "_disabled", False)
-    
+
     # Temporarily disable tracing to avoid sdk logging a non-existent error
     set_tracing_disabled(True)
     try:
