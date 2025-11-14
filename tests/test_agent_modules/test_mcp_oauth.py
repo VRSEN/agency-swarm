@@ -1,5 +1,7 @@
 """Unit tests for MCP OAuth core functionality."""
+
 from pathlib import Path
+from typing import Any
 
 import pytest
 from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
@@ -7,10 +9,13 @@ from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
 from agency_swarm.mcp.oauth import (
     FileTokenStorage,
     MCPServerOAuth,
+    TokenCallbackRegistry,
     default_callback_handler,
     default_redirect_handler,
     get_default_cache_dir,
 )
+
+TEST_SERVER_URL = "http://localhost:8001/mcp"
 
 
 class TestFileTokenStorage:
@@ -18,7 +23,11 @@ class TestFileTokenStorage:
 
     async def test_token_storage_saves_and_loads_tokens(self, tmp_path: Path) -> None:
         """FileTokenStorage persists and retrieves tokens correctly."""
-        storage = FileTokenStorage(cache_dir=tmp_path, server_name="test-server")
+        storage = FileTokenStorage(
+            cache_dir=tmp_path,
+            server_name="test-server",
+            server_url=TEST_SERVER_URL,
+        )
 
         # Create test token
         test_token = OAuthToken(
@@ -44,14 +53,22 @@ class TestFileTokenStorage:
 
     async def test_token_storage_returns_none_for_missing_file(self, tmp_path: Path) -> None:
         """FileTokenStorage returns None when token file doesn't exist."""
-        storage = FileTokenStorage(cache_dir=tmp_path, server_name="nonexistent")
+        storage = FileTokenStorage(
+            cache_dir=tmp_path,
+            server_name="nonexistent",
+            server_url=TEST_SERVER_URL,
+        )
 
         tokens = await storage.get_tokens()
         assert tokens is None
 
     async def test_client_info_storage(self, tmp_path: Path) -> None:
         """FileTokenStorage persists and retrieves client info correctly."""
-        storage = FileTokenStorage(cache_dir=tmp_path, server_name="test-server")
+        storage = FileTokenStorage(
+            cache_dir=tmp_path,
+            server_name="test-server",
+            server_url=TEST_SERVER_URL,
+        )
 
         # Create test client info
         from pydantic import AnyUrl
@@ -77,7 +94,11 @@ class TestFileTokenStorage:
 
     async def test_storage_handles_corrupted_token_file(self, tmp_path: Path) -> None:
         """FileTokenStorage handles corrupted token files gracefully."""
-        storage = FileTokenStorage(cache_dir=tmp_path, server_name="test-server")
+        storage = FileTokenStorage(
+            cache_dir=tmp_path,
+            server_name="test-server",
+            server_url=TEST_SERVER_URL,
+        )
 
         # Write corrupted JSON
         token_file = tmp_path / "test-server_tokens.json"
@@ -86,6 +107,43 @@ class TestFileTokenStorage:
         # Should return None instead of crashing
         tokens = await storage.get_tokens()
         assert tokens is None
+
+    async def test_token_storage_uses_callbacks(self, tmp_path: Path) -> None:
+        """FileTokenStorage triggers load/save callbacks."""
+        saved_tokens: dict[str, dict[str, str]] = {}
+
+        def load_callback(server_url: str) -> dict[str, str] | None:
+            return saved_tokens.get(server_url)
+
+        def save_callback(server_url: str, data: dict[str, Any]) -> None:  # type: ignore[name-defined]
+            saved_tokens[server_url] = data
+
+        registry = TokenCallbackRegistry(
+            load_callback=load_callback,
+            save_callback=save_callback,
+        )
+        storage = FileTokenStorage(
+            cache_dir=tmp_path,
+            server_name="callback-server",
+            server_url=TEST_SERVER_URL,
+            token_callbacks=registry,
+        )
+
+        test_token = OAuthToken(
+            access_token="cb_access",
+            token_type="Bearer",
+            expires_in=3600,
+            refresh_token="cb_refresh",
+        )
+
+        # Saving should forward to callback
+        await storage.set_tokens(test_token)
+        assert TEST_SERVER_URL in saved_tokens
+
+        # Loading should prefer callback data
+        loaded_token = await storage.get_tokens()
+        assert loaded_token is not None
+        assert loaded_token.access_token == "cb_access"
 
 
 class TestMCPServerOAuth:
