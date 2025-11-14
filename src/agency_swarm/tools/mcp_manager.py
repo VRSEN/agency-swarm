@@ -427,8 +427,9 @@ def convert_mcp_servers_to_tools(agent: "Agent") -> None:
     # Add converted tools to the agent
     for tool_class in converted_tools:
         # Adapt BaseTool to FunctionTool for the agent
-        function_tool = ToolFactory.adapt_base_tool(tool_class)
-        agent.add_tool(function_tool)
+        if isinstance(tool_class, type):
+            function_tool = ToolFactory.adapt_base_tool(tool_class)
+            agent.add_tool(function_tool)
 
     # Clear the mcp_servers list
     agent.mcp_servers.clear()
