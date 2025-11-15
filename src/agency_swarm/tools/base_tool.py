@@ -25,7 +25,53 @@ class classproperty:
         return self.fget(owner)
 
 
-class BaseTool(BaseModel, ABC):
+class BaseToolMeta(type(BaseModel)):  # type: ignore[misc]
+    """Metaclass for BaseTool that provides a nice __repr__ for the class itself."""
+
+    def __repr__(cls):  # type: ignore[override]
+        """Return a detailed representation of the BaseTool class."""
+        try:
+            import copy
+
+            # Get the full schema with all nested definitions
+            schema = cls.model_json_schema()
+
+            # Resolve all $ref references inline for better readability
+            if "$defs" in schema:
+                defs = schema.get("$defs", {})
+
+                def resolve_refs(obj):
+                    """Recursively resolve all $ref references in the schema."""
+                    if isinstance(obj, dict):
+                        if "$ref" in obj:
+                            ref_path = obj["$ref"]
+                            if ref_path.startswith("#/$defs/"):
+                                def_name = ref_path.split("/")[-1]
+                                if def_name in defs:
+                                    # Return a copy of the definition to avoid circular references
+                                    resolved = copy.deepcopy(defs[def_name])
+                                    # Recursively resolve any nested refs
+                                    return resolve_refs(resolved)
+                            return obj
+                        else:
+                            # Recursively process all values in the dict
+                            return {k: resolve_refs(v) for k, v in obj.items()}
+                    elif isinstance(obj, list):
+                        return [resolve_refs(item) for item in obj]
+                    return obj
+
+                # Resolve all refs in the schema
+                schema = resolve_refs(schema)
+                # Remove $defs since everything is now inlined
+                schema.pop("$defs", None)
+
+            return f"{cls.__name__}(description={cls.__doc__!r}, params_json_schema={schema})"
+        except Exception:
+            # Fallback to default repr if schema generation fails
+            return super().__repr__()
+
+
+class BaseTool(BaseModel, ABC, metaclass=BaseToolMeta):
     model_config = {"ignored_types": (classproperty,)}
 
     _caller_agent: Any = None
@@ -48,6 +94,11 @@ class BaseTool(BaseModel, ABC):
             self._context = RunContextWrapper(
                 context=MasterContext(thread_manager=None, agents={}, user_context={}, current_agent_name=None)
             )
+
+    def __repr__(self) -> str:
+        """Return a detailed representation of the BaseTool instance."""
+        schema = self.model_json_schema()
+        return f"{self.__class__.__name__}(description={self.__class__.__doc__!r}, params_json_schema={schema})"
 
     class ToolConfig:
         strict: bool = False
