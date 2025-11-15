@@ -113,6 +113,10 @@ class StreamingRunResponse(AsyncGenerator[StreamEvent | dict[str, Any]]):
             return
         if self._pending_exception is not None and not self._final_future.done():
             self._final_future.set_exception(self._pending_exception)
+            try:
+                self._final_future.exception()
+            except Exception:  # pragma: no cover - defensive
+                pass
             self._pending_exception = None
             self._pending_result = None
             self._pending_result_set = False
@@ -161,6 +165,11 @@ class StreamingRunResponse(AsyncGenerator[StreamEvent | dict[str, Any]]):
                 return
         if not self._final_future.done():
             self._final_future.set_exception(exc)
+        try:
+            if self._final_future.done():
+                self._final_future.exception()
+        except Exception:  # pragma: no cover - defensive
+            pass
         self._pending_result_set = False
 
     @property

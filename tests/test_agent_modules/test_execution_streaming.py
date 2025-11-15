@@ -28,6 +28,15 @@ def _build_message(
 
 
 def test_prune_guardrail_messages_parent_run_only_keeps_user_and_guidance() -> None:
+    """
+    Tree:
+        CustomerSupportAgent (guardrail trips here)
+        └── DatabaseAgent
+            └── EmailAgent
+
+    Guardrail fires before any delegation completes, so the history must collapse to the
+    real user + the guardrail guidance from the root agent.
+    """
     preserved_user = _build_message(role="user", parent_run_id=None, agent_run_id="agent_run_parent")
     guardrail_message = _build_message(
         role="assistant",
@@ -55,6 +64,14 @@ def test_prune_guardrail_messages_parent_run_only_keeps_user_and_guidance() -> N
 
 
 def test_prune_guardrail_messages_child_run_keeps_trigger_input_and_guidance() -> None:
+    """
+    Tree:
+        CustomerSupportAgent
+        └── DatabaseAgent (guardrail fires here)
+
+    The DatabaseAgent's user prompt plus its guidance must remain so the parent knows what
+    to fix, but any generated assistant outputs/function calls are trimmed.
+    """
     preserved_user = _build_message(role="user", parent_run_id=None, agent_run_id="agent_run_parent")
     forwarded_input = _build_message(
         role="user",
@@ -93,6 +110,13 @@ def test_prune_guardrail_messages_child_run_keeps_trigger_input_and_guidance() -
 
 
 def test_prune_guardrail_messages_preserves_other_traces() -> None:
+    """
+    Tree:
+        CustomerSupportAgent (affected trace)
+
+    A parallel trace stays untouched even when the guardrail triggers for the trace under
+    inspection.
+    """
     preserved_user = _build_message(role="user", parent_run_id=None, agent_run_id="agent_run_parent")
     guardrail_message = _build_message(
         role="assistant",
@@ -123,6 +147,14 @@ def test_prune_guardrail_messages_preserves_other_traces() -> None:
 
 
 def test_prune_guardrail_messages_drops_no_op_trace_descendants() -> None:
+    """
+    Tree:
+        ParentAgent
+        └── HelperAgent (run_trace_id=no-op)
+
+    HelperAgent belongs to a no-op trace branch, so it is removed even if it emitted
+    assistant outputs before the guardrail fired elsewhere.
+    """
     preserved_user = _build_message(role="user", parent_run_id=None, agent_run_id="agent_run_parent")
     guardrail_message = _build_message(
         role="assistant",
@@ -156,7 +188,15 @@ def test_prune_guardrail_messages_drops_no_op_trace_descendants() -> None:
 
 
 def test_prune_guardrail_messages_drops_nested_agent_user_and_errors() -> None:
-    """Inter-agent messages are preserved for retry context; only outputs are dropped."""
+    """
+    Tree:
+        CustomerSupportAgent
+        └── DatabaseAgent
+            └── EmailAgent (guardrail fires here, but parent guidance also added)
+
+    Inter-agent *user* messages remain so the next retry has full context, while any
+    assistant/system responses are scoped to the guardrail location.
+    """
     real_user = _build_message(
         role="user",
         parent_run_id=None,
@@ -227,7 +267,14 @@ def test_prune_guardrail_messages_drops_nested_agent_user_and_errors() -> None:
 
 
 def test_prune_guardrail_messages_preserves_parent_guidance_after_child_guardrail() -> None:
-    """DatabaseAgent guardrail trip (agent-to-agent) should still surface parent guidance."""
+    """
+    Tree:
+        CustomerSupportAgent
+        └── DatabaseAgent (guardrail fires here)
+
+    Even when the child trips the guardrail, the parent agent receives its own guidance
+    message that must remain in history so the user can see what to fix.
+    """
     real_user = _build_message(
         role="user",
         parent_run_id=None,
@@ -269,7 +316,14 @@ def test_prune_guardrail_messages_preserves_parent_guidance_after_child_guardrai
 
 
 def test_prune_guardrail_messages_keeps_child_guardrail_guidance_for_parent() -> None:
-    """Child guardrail guidance (callerAgent set) must stay so parent can adjust."""
+    """
+    Tree:
+        CustomerSupportAgent
+        └── DatabaseAgent (guardrail fires here)
+
+    Parent agent still needs to see the child guardrail guidance (callerAgent is set),
+    otherwise replays would lack actionable detail.
+    """
     real_user = _build_message(
         role="user",
         parent_run_id=None,
@@ -303,7 +357,16 @@ def test_prune_guardrail_messages_keeps_child_guardrail_guidance_for_parent() ->
 
 
 def test_prune_guardrail_messages_drops_descendants_after_guardrail() -> None:
-    """Messages spawned after guardrail trip must be removed."""
+    """
+    Tree:
+        CustomerSupportAgent
+        └── DatabaseAgent
+            └── EmailAgent (guardrail fires here)
+                └── HelperAgent (spawned after guardrail)
+
+    Any further delegations triggered after the guardrail trips are removed to keep the
+    tree consistent with the halted execution.
+    """
     real_user = _build_message(
         role="user",
         parent_run_id=None,

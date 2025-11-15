@@ -45,14 +45,58 @@ def prune_guardrail_messages(
     *,
     initial_saved_count: int,
     run_trace_id: str,
+    collapse_to_root: bool = False,
 ) -> list[TResponseInputItem]:
-    """Return thread history with guardrailed execution branches removed."""
+    """
+    Remove descendant message branches recorded after an input guardrail trip.
+
+    Algorithm (evidence of multi-level flows):
+    1. Identify every message tagged with ``input_guardrail_message`` or ``input_guardrail_error``.
+       Their ``agent_run_id`` represents the branch root that must be trimmed and their ``agent``
+       name seeds a caller set so that all delegations spawned from that agent are removed.
+    2. Walk the new tail of the history (messages persisted during the failed streaming turn) and
+       keep only those messages that either belong to other traces, precede the guardrail, or
+       provide essential retry context (user inputs for guarded agents + the guardrail guidance).
+    3. Any message whose ``callerAgent`` is the guardrailed agent (or a descendant) is dropped so
+       that delegated agents disappear entirely when the guardrail fires before the handoff
+       completes. This preserves the illusion that execution stopped at the trip point.
+
+    Example:
+
+    .. code-block:: text
+
+        CustomerSupportAgent (root, run_id=parent)
+        └── DatabaseAgent (run_id=db, caller=CustomerSupportAgent)
+            └── EmailAgent (run_id=email, caller=DatabaseAgent)  <-- guardrail trips here
+
+    - If the guardrail trips at ``EmailAgent``, we keep the CustomerSupportAgent user message,
+      the DatabaseAgent user request (because it is above the lowest guardrail level), and both
+      guardrail guidance messages (Email + propagated CustomerSupport). Only EmailAgent's
+      descendants are removed.
+    - If the guardrail trips immediately at ``CustomerSupportAgent``, the Database/Email branches
+      never survive pruning because their ``callerAgent`` chain originates from the guarded
+      agent, so the final history collapses to only the root user + guidance pair.
+
+    This mirrors the streaming SDK behavior where guardrail-triggered runs suppress session saves
+    for assistant outputs while retaining the actionable context for the next retry. When
+    ``collapse_to_root`` is True (top-level guardrail), the function drops every nested branch and
+    keeps only messages whose ``callerAgent`` is ``None`` so the history reflects exactly what the
+    user saw.
+    """
     guardrail_origins = {"input_guardrail_message", "input_guardrail_error"}
     sentinel_trace_ids = {"no-op", "", None}
 
     preserved = list(all_messages[:initial_saved_count])
     new_messages = list(all_messages[initial_saved_count:])
-
+    if collapse_to_root:
+        root_only = [
+            msg
+            for msg in new_messages
+            if isinstance(msg, dict)
+            and (msg.get("run_trace_id") == run_trace_id or msg.get("run_trace_id") in sentinel_trace_ids)
+            and msg.get("callerAgent") is None
+        ]
+        return preserved + root_only
     drop_agent_run_ids: set[str] = {
         cast(str, agent_run_id)
         for agent_run_id in (
@@ -95,11 +139,9 @@ def prune_guardrail_messages(
             continue
 
         if isinstance(agent_run_id, str) and agent_run_id in drop_agent_run_ids:
-            # Preserve inter-agent messages (violating inputs) for retry context
             if role == "user":
                 cleaned_tail.append(msg)
                 continue
-            # Drop outputs from guardrailed agents
             continue
 
         if isinstance(caller_agent, str) and caller_agent in drop_callers:
@@ -176,6 +218,9 @@ def run_stream_with_guardrails(
 
             event_queue: asyncio.Queue[StreamEvent | dict[str, Any]] = asyncio.Queue(maxsize=10)
             guardrail_exception: BaseException | None = None
+            input_guardrail_from_exception = False
+            exception_guardrail_guidance = ""
+            input_guardrail_exception: InputGuardrailTripwireTriggered | None = None
             collected_items: list[RunItem] = []
             persistence_candidates: list[tuple[RunItem, str, str, str | None]] = []
             streaming_result: RunResultStreaming | None = None
@@ -196,6 +241,8 @@ def run_stream_with_guardrails(
                 sender_name=sender_name,
             ) -> None:
                 nonlocal guardrail_exception, streaming_result
+                nonlocal input_guardrail_from_exception, exception_guardrail_guidance
+                nonlocal input_guardrail_exception
                 local_result = None
                 try:
                     async with AsyncExitStack() as mcp_stack:
@@ -220,6 +267,8 @@ def run_stream_with_guardrails(
                 except OutputGuardrailTripwireTriggered as e:
                     guardrail_exception = e
                 except InputGuardrailTripwireTriggered as e:
+                    input_guardrail_from_exception = True
+                    input_guardrail_exception = e
                     try:
                         _, guidance_text = extract_guardrail_texts(e)
                         append_guardrail_feedback(
@@ -232,8 +281,10 @@ def run_stream_with_guardrails(
                             exception=e,
                             include_assistant=False,
                         )
+                        exception_guardrail_guidance = guidance_text
                     except Exception:
                         guidance_text = str(e)
+                        exception_guardrail_guidance = guidance_text
                     if throw_input_guardrail_error:
                         await event_queue.put({"type": "error", "content": guidance_text})
                     else:
@@ -344,16 +395,17 @@ def run_stream_with_guardrails(
 
                     yield event
 
-                # Check if input guardrail tripped by inspecting SDK's guardrail results
-                input_guardrail_tripped = False
-                guardrail_guidance_text = ""
+                # Check if input guardrail tripped either via exception or SDK results
+                input_guardrail_tripped = input_guardrail_from_exception
+                guardrail_guidance_text = exception_guardrail_guidance
                 if streaming_result is not None:
                     guardrail_results = getattr(streaming_result, "input_guardrail_results", None)
                     if guardrail_results:
                         for gr in guardrail_results:
                             if gr.output.tripwire_triggered:
                                 input_guardrail_tripped = True
-                                guardrail_guidance_text = str(gr.output.output_info or "")
+                                if not guardrail_guidance_text:
+                                    guardrail_guidance_text = str(gr.output.output_info or "")
                                 break
 
                 if input_guardrail_tripped:
@@ -368,11 +420,22 @@ def run_stream_with_guardrails(
                             agency_context.thread_manager.get_all_messages(),
                             initial_saved_count=initial_saved_count,
                             run_trace_id=run_trace_id,
+                            collapse_to_root=sender_name is None,
                         )
                         agency_context.thread_manager.replace_messages(pruned_messages)
                         agency_context.thread_manager.persist()
+                    # Reset flag so subsequent retries (if any) reinitialize
+                    input_guardrail_from_exception = False
+                    exception_guardrail_guidance = ""
 
                 if guardrail_exception is None:
+                    if (
+                        input_guardrail_tripped
+                        and throw_input_guardrail_error
+                        and input_guardrail_exception is not None
+                    ):
+                        wrapper._resolve_exception(input_guardrail_exception)
+                        raise input_guardrail_exception
                     if agency_context and agency_context.thread_manager and streaming_result is not None:
                         if not input_guardrail_tripped:
                             _persist_streamed_items(
