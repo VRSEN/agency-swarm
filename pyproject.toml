@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agency-swarm"
-version = "1.4.0"
+version = "1.4.1"
 description = "Agency Swarm framework"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -93,6 +93,7 @@ packages = ["src/agency_swarm"]
 include = [
     "src/agency_swarm/**/*.py",
     "src/agency_swarm/**/*.ts",
+    "src/agency_swarm/ui/templates/**",
 ]
 
 [tool.ruff]
