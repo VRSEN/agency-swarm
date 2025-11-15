@@ -288,7 +288,7 @@ class TestAgencyVisualizationIntegration:
         with patch("agency_swarm.agency.Agency.visualize") as mock_method:
             mock_method.side_effect = ImportError("Visualization module not available")
             with pytest.raises(ImportError, match="Visualization module not available"):
-                sample_agency.visualize()
+                sample_agency.visualize(open_browser=False)
 
     def test_get_agency_structure_basic(self, sample_agency):
         """Test basic agency structure generation."""
