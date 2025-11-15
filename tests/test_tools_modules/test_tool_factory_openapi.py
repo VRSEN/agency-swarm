@@ -84,8 +84,15 @@ class TestGetOpenapiSchema:
         result = json.loads(result_json)
 
         assert result["info"]["title"] == "Agent Tools"
-        assert "/TestTool" in result["paths"]
-        assert result["paths"]["/TestTool"]["post"]["operationId"] == "TestTool"
+        assert "/tool/TestTool" in result["paths"]
+        post_schema = result["paths"]["/tool/TestTool"]["post"]
+        assert post_schema["operationId"] == "TestTool"
+        assert post_schema["requestBody"]["required"] is True
+        assert (
+            post_schema["responses"]["422"]["content"]["application/json"]["schema"]["$ref"]
+            == "#/components/schemas/HTTPValidationError"
+        )
+        assert result["components"]["securitySchemes"]["HTTPBearer"]["scheme"] == "bearer"
 
     def test_generates_schema_for_function_tool(self):
         async def dummy_tool(ctx, input_json: str):
@@ -101,5 +108,7 @@ class TestGetOpenapiSchema:
         result_json = ToolFactory.get_openapi_schema([function_tool], "https://api.test.com")
         result = json.loads(result_json)
 
-        assert "/dummy_tool" in result["paths"]
-        assert result["paths"]["/dummy_tool"]["post"]["operationId"] == "dummy_tool"
+        assert "/tool/dummy_tool" in result["paths"]
+        post_schema = result["paths"]["/tool/dummy_tool"]["post"]
+        assert post_schema["operationId"] == "dummy_tool"
+        assert post_schema["security"] == [{"HTTPBearer": []}]
