@@ -1,14 +1,19 @@
-from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 from agents import RunConfig
+from agents.agent import Agent as SDKAgent
 from agents.items import MessageOutputItem
 from agents.lifecycle import RunHooks
-from agents.stream_events import RunItemStreamEvent
+from agents.stream_events import (
+    AgentUpdatedStreamEvent,
+    RawResponsesStreamEvent,
+    RunItemStreamEvent,
+)
 from openai.types.responses import ResponseOutputMessage, ResponseOutputText
 
 from agency_swarm import Agency, Agent, StreamingRunResponse
+from agency_swarm.agent.core import AgencyContext
 from agency_swarm.agent.execution_streaming import _persist_streamed_items
 from agency_swarm.messages import MessageFormatter
 
@@ -71,6 +76,59 @@ async def test_get_response_stream_basic():
             assert event.agent == "TestAgent"
             assert hasattr(event, "callerAgent")
             assert event.callerAgent is None
+
+
+@pytest.mark.asyncio
+@patch("agents.Runner.run_streamed")
+async def test_stream_emits_preface_events_before_completion(mock_runner_run_streamed):
+    """Ensure agent_updated/raw_response events still reach listeners when guardrails do not fire."""
+    agent = Agent(name="TestAgent", instructions="Handle streaming")
+
+    # Minimal objects emulating SDK preface events using real stream event types.
+    updated_event = AgentUpdatedStreamEvent(new_agent=SDKAgent(name="PrefaceAgent", instructions="noop"))
+    updated_event.id = "agent_run_preface"
+    raw_response_event = RawResponsesStreamEvent(data={"status": "in_progress"})
+
+    msg_item = MessageOutputItem(
+        raw_item=ResponseOutputMessage(
+            id="msg_final",
+            content=[ResponseOutputText(text="Final", type="output_text", annotations=[])],
+            role="assistant",
+            status="completed",
+            type="message",
+        ),
+        type="message_output_item",
+        agent=None,
+    )
+
+    async def dummy_stream():
+        yield updated_event
+        yield raw_response_event
+        yield RunItemStreamEvent(name="message_output_created", item=msg_item, type="run_item_stream_event")
+
+    class DummyStreamedResult:
+        def __init__(self) -> None:
+            self.final_output = "Final"
+
+        def stream_events(self):
+            return dummy_stream()
+
+        def to_input_list(self):
+            return []
+
+    mock_runner_run_streamed.return_value = DummyStreamedResult()
+
+    stream = agent.get_response_stream("Process this")
+    events = [event async for event in stream]
+
+    assert [getattr(event, "type", None) for event in events] == [
+        "agent_updated_stream_event",
+        "raw_response_event",
+        "run_item_stream_event",
+    ]
+    # Confirm the buffered events still carry through with attribution added.
+    assert getattr(events[0], "agent_run_id", None) == "agent_run_preface"
+    assert getattr(events[1], "type", None) == "raw_response_event"
 
 
 @pytest.mark.asyncio
@@ -306,7 +364,6 @@ async def test_get_response_stream_agent_to_agent_communication(
     Proves that sender/receiver attribution via agent/callerAgent is present,
     enabling downstream flows and UI to render correct attribution.
     """
-    from agency_swarm.agent.core import AgencyContext
 
     async def mock_stream_wrapper():
         yield {"event": "text", "data": "Hello"}
@@ -594,8 +651,13 @@ def test_streaming_forwarded_items_preserve_caller_metadata(monkeypatch, mock_th
     forwarded_payload = dict(forwarded_item.to_input_item())
     forwarded_payload["callerAgent"] = worker.name
 
-    agency_context = SimpleNamespace(thread_manager=mock_thread_manager)
-    stream_result = SimpleNamespace(to_input_list=lambda: [forwarded_payload])
+    agency_context = AgencyContext(agency_instance=MagicMock(), thread_manager=mock_thread_manager)
+
+    class DummyStreamResult:
+        def to_input_list(self) -> list[dict[str, object]]:
+            return [forwarded_payload]
+
+    stream_result = DummyStreamResult()
 
     monkeypatch.setattr(
         "agency_swarm.agent.execution_streaming.MessageFormatter.extract_hosted_tool_results",

@@ -27,7 +27,7 @@ from agency_swarm.context import MasterContext
 from agency_swarm.messages import MessageFormatter
 from agency_swarm.tools.mcp_manager import default_mcp_manager
 
-from .execution_guardrails import _extract_guardrail_texts, append_guardrail_feedback
+from .execution_guardrails import append_guardrail_feedback, extract_guardrail_texts
 
 if TYPE_CHECKING:
     from agency_swarm.agent.core import AgencyContext, Agent
@@ -125,7 +125,7 @@ async def run_with_guardrails(
             if attempts_remaining <= 0:
                 raise e
             try:
-                _assistant_output, _guidance_text = _extract_guardrail_texts(e)
+                _assistant_output, _guidance_text = extract_guardrail_texts(e)
                 logger.info(
                     "Output guardrail tripped. attempts_left=%s guidance=%s",
                     attempts_remaining,
@@ -149,7 +149,7 @@ async def run_with_guardrails(
             if not throw_input_guardrail_error:
                 from agents import RunContextWrapper  # local import to avoid cycle
 
-                _, guidance_text = _extract_guardrail_texts(e)
+                _, guidance_text = extract_guardrail_texts(e)
                 wrapper = RunContextWrapper(master_context_for_run)
                 return (
                     RunResult(

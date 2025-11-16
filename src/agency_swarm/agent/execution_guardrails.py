@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from .core import Agent
 
 
-def _extract_guardrail_texts(e: BaseException) -> tuple[list[TResponseInputItem], str]:
+def extract_guardrail_texts(e: BaseException) -> tuple[list[TResponseInputItem], str]:
     """Return (assistant_output, guidance_text) from a guardrail exception."""
     assistant_output: list[TResponseInputItem] = []
     guidance_text: str = ""
@@ -86,7 +86,7 @@ def append_guardrail_feedback(
     keeping refactored structure. This enables downstream consumers to
     differentiate guidance provenance.
     """
-    assistant_output, guidance_text = _extract_guardrail_texts(exception)
+    assistant_output, guidance_text = extract_guardrail_texts(exception)
 
     if agency_context and agency_context.thread_manager:
         to_persist: list[TResponseInputItem] = []
@@ -106,15 +106,18 @@ def append_guardrail_feedback(
         # Preserve prior metadata: classify the guidance message origin
         if isinstance(exception, OutputGuardrailTripwireTriggered):
             origin = "output_guardrail_error"
+            message_role = "system"
         elif isinstance(exception, InputGuardrailTripwireTriggered) and getattr(
             agent, "throw_input_guardrail_error", False
         ):
             origin = "input_guardrail_error"
+            message_role = "system"
         else:
             origin = "input_guardrail_message"
+            message_role = "assistant"
 
         guidance_msg: TResponseInputItem = {  # type: ignore[assignment, typeddict-item, typeddict-unknown-key]
-            "role": "system",
+            "role": message_role,
             "content": guidance_text,
             "message_origin": origin,  # type: ignore[typeddict-unknown-key]
         }
