@@ -289,6 +289,7 @@ Strictness
 - Pre-commit hooks are authoritative; accept their auto-fixes.
   - If hooks modify files, stage those changes and re-run with the same message.
   - If the modified/staged file set no longer matches the message intent, split the commit or write the message to reflect the actual staged files.
+- Never commit until `make format` and `make check` both pass. If `make format` modifies files, stage those changes before committing.
  - Keep commits minimal and scoped; avoid unrelated changes. Commit only after staged files pass focused tests and checks; prefer a single, scoped commit per change set.
  - After committing, self-verify with `git show --name-only -1` that the commit content matches the message; if not, amend immediately.
 
@@ -323,5 +324,5 @@ Strictness
 Always self-improve: when you find a recurring mistake or better practice, update this file with the refined rule and follow it. When the user provides feedback or you detect a failure, consider updating this AGENTS.md file before resuming work so it never repeats.
 
 ## Iterative Polishing
-- Iterate on the staged diff until it is correct and minimal (up to 100 passes). Treat iteration as part of delivery, not an optional step. Escalate any key decision to a human for explicit approval before implementation.
-- Conclude iteration only when no further measurable improvement is possible and all outstanding tasks are complete.
+- Iterate on the diff by immediately checking the feedback signal (git diff/tests/logs), editing and repeating until the change is correct and minimal; escalate key decisions for approval as needed.
+- Conclude only when no further measurable improvement is possible (the changes are minimal, bug- and regression-free, globally optimal, and adhere to this document's rules) and every outstanding task is closed.

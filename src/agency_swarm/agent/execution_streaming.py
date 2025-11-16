@@ -39,6 +39,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+GUARDRAIL_ORIGINS = {"input_guardrail_message", "input_guardrail_error"}
+SENTINEL_TRACE_IDS = {"no-op", "", None}
+
 
 def prune_guardrail_messages(
     all_messages: list[TResponseInputItem],
@@ -83,75 +86,19 @@ def prune_guardrail_messages(
     keeps only messages whose ``callerAgent`` is ``None`` so the history reflects exactly what the
     user saw.
     """
-    guardrail_origins = {"input_guardrail_message", "input_guardrail_error"}
-    sentinel_trace_ids = {"no-op", "", None}
-
     preserved = list(all_messages[:initial_saved_count])
     new_messages = list(all_messages[initial_saved_count:])
     if collapse_to_root:
-        root_only = [
-            msg
-            for msg in new_messages
-            if isinstance(msg, dict)
-            and (msg.get("run_trace_id") == run_trace_id or msg.get("run_trace_id") in sentinel_trace_ids)
-            and msg.get("callerAgent") is None
-        ]
+        root_only = _collapse_guardrail_history_to_root(new_messages, run_trace_id=run_trace_id)
         return preserved + root_only
-    drop_agent_run_ids: set[str] = {
-        cast(str, agent_run_id)
-        for agent_run_id in (
-            cast(dict[str, Any], msg).get("agent_run_id")
-            for msg in new_messages
-            if cast(dict[str, Any], msg).get("message_origin") in guardrail_origins
-        )
-        if isinstance(agent_run_id, str)
-    }
-    drop_callers: set[str] = {
-        cast(str, agent)
-        for agent in (
-            cast(dict[str, Any], msg).get("agent")
-            for msg in new_messages
-            if cast(dict[str, Any], msg).get("message_origin") in guardrail_origins
-        )
-        if isinstance(agent, str)
-    }
 
-    cleaned_tail: list[TResponseInputItem] = []
-    for msg in new_messages:
-        msg_dict = cast(dict[str, Any], msg)
-        msg_trace_id = msg_dict.get("run_trace_id")
-        agent_run_id = msg_dict.get("agent_run_id")
-        caller_agent = msg_dict.get("callerAgent")
-        agent_name = msg_dict.get("agent")
-        origin = msg_dict.get("message_origin")
-        role = msg_dict.get("role")
-
-        if msg_trace_id != run_trace_id and msg_trace_id not in sentinel_trace_ids:
-            cleaned_tail.append(msg)
-            continue
-
-        if isinstance(origin, str) and origin in guardrail_origins:
-            cleaned_tail.append(msg)
-            continue
-
-        if role == "user" and caller_agent is None:
-            cleaned_tail.append(msg)
-            continue
-
-        if isinstance(agent_run_id, str) and agent_run_id in drop_agent_run_ids:
-            if role == "user":
-                cleaned_tail.append(msg)
-                continue
-            continue
-
-        if isinstance(caller_agent, str) and caller_agent in drop_callers:
-            if isinstance(agent_name, str):
-                drop_callers.add(agent_name)
-            if isinstance(agent_run_id, str):
-                drop_agent_run_ids.add(agent_run_id)
-            continue
-
-        cleaned_tail.append(msg)
+    drop_agent_run_ids, drop_callers = _collect_guardrail_branch_sets(new_messages)
+    cleaned_tail = _filter_guardrail_tail_messages(
+        new_messages,
+        run_trace_id=run_trace_id,
+        drop_agent_run_ids=drop_agent_run_ids,
+        drop_callers=drop_callers,
+    )
 
     return preserved + cleaned_tail
 
@@ -499,3 +446,82 @@ def run_stream_with_guardrails(
 
     wrapper = StreamingRunResponse(_guarded_stream())
     return wrapper
+
+
+def _collapse_guardrail_history_to_root(
+    new_messages: list[TResponseInputItem],
+    *,
+    run_trace_id: str,
+) -> list[TResponseInputItem]:
+    return [
+        msg
+        for msg in new_messages
+        if isinstance(msg, dict)
+        and (msg.get("run_trace_id") == run_trace_id or msg.get("run_trace_id") in SENTINEL_TRACE_IDS)
+        and msg.get("callerAgent") is None
+    ]
+
+
+def _collect_guardrail_branch_sets(
+    new_messages: list[TResponseInputItem],
+) -> tuple[set[str], set[str]]:
+    drop_agent_run_ids: set[str] = set()
+    drop_callers: set[str] = set()
+    for msg in new_messages:
+        msg_dict = cast(dict[str, Any], msg)
+        if msg_dict.get("message_origin") not in GUARDRAIL_ORIGINS:
+            continue
+        agent_run_id = msg_dict.get("agent_run_id")
+        if isinstance(agent_run_id, str):
+            drop_agent_run_ids.add(agent_run_id)
+        agent_name = msg_dict.get("agent")
+        if isinstance(agent_name, str):
+            drop_callers.add(agent_name)
+    return drop_agent_run_ids, drop_callers
+
+
+def _filter_guardrail_tail_messages(
+    new_messages: list[TResponseInputItem],
+    *,
+    run_trace_id: str,
+    drop_agent_run_ids: set[str],
+    drop_callers: set[str],
+) -> list[TResponseInputItem]:
+    cleaned_tail: list[TResponseInputItem] = []
+    for msg in new_messages:
+        msg_dict = cast(dict[str, Any], msg)
+        msg_trace_id = msg_dict.get("run_trace_id")
+        agent_run_id = msg_dict.get("agent_run_id")
+        caller_agent = msg_dict.get("callerAgent")
+        agent_name = msg_dict.get("agent")
+        origin = msg_dict.get("message_origin")
+        role = msg_dict.get("role")
+
+        if msg_trace_id != run_trace_id and msg_trace_id not in SENTINEL_TRACE_IDS:
+            cleaned_tail.append(msg)
+            continue
+
+        if isinstance(origin, str) and origin in GUARDRAIL_ORIGINS:
+            cleaned_tail.append(msg)
+            continue
+
+        if role == "user" and caller_agent is None:
+            cleaned_tail.append(msg)
+            continue
+
+        if isinstance(agent_run_id, str) and agent_run_id in drop_agent_run_ids:
+            if role == "user":
+                cleaned_tail.append(msg)
+                continue
+            continue
+
+        if isinstance(caller_agent, str) and caller_agent in drop_callers:
+            if isinstance(agent_name, str):
+                drop_callers.add(agent_name)
+            if isinstance(agent_run_id, str):
+                drop_agent_run_ids.add(agent_run_id)
+            continue
+
+        cleaned_tail.append(msg)
+
+    return cleaned_tail
