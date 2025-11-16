@@ -11,6 +11,8 @@ Begin each task only after completing this readiness checklist:
 - Restate the user's intent and the active task in every response; when asked about correctness, answer explicitly before elaborating.
 - Prime yourself with all available context—read, trace, and analyze until additional context produces zero marginal returns, and do not proceed unless you can explain every change in your own words.
 - If any requirement or behavior remains unclear after your deep research, ask clear questions before continuing.
+- When the user directly requests a fix, apply your best expert judgment and start implementing immediately; only pause for clarification if you can point to a concrete contradiction after finishing your research.
+- Enforce this document before anything else: whenever a diff violates AGENTS.md, apply the smallest possible fix immediately—no questions, no delays.
 - Before composing any response, enforce the Continuous Work Rule (see below); if work remains, keep executing, and if you are blocked, ask the user precise questions about what you need.
 - At the start of every task and after each material finding, append the new state and evidence to `work_context.md` (your temporary working log); never rely on your own memory or stale context summaries when choosing the next action—treat earlier entries as background only.
 - Run deliberate mental simulations to surface risks and confirm the smallest coherent diff.
