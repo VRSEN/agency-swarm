@@ -15,8 +15,7 @@ class LoadFileAttachment(BaseTool):  # type: ignore[misc]
     """
 
     path: Path = Field(
-        ...,
-        description="Path to the file to load. Can be absolute or relative to the current working directory."
+        ..., description="Path to the file to load. Can be absolute or relative to the current working directory."
     )
 
     def _is_image_file(self, file_path: Path) -> bool:

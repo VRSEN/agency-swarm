@@ -1,4 +1,5 @@
 """Integration tests for PersistentShellTool."""
+
 import os
 import sys
 import tempfile
@@ -265,4 +266,3 @@ class TestChainedCommandsAndEdgeCases:
 
         assert "test" in result
         assert "Working Directory:" in result
-

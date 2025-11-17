@@ -127,6 +127,7 @@ class PersistentMCPServerManager:
                     if queue:
                         # Send shutdown command
                         from concurrent.futures import Future
+
                         fut: Future = Future()
                         queue.put_nowait({"type": "shutdown", "result_fut": fut})
                         # Don't wait for it, just move on

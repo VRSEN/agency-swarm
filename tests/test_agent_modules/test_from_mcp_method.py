@@ -25,9 +25,7 @@ class _DummyServer:
 
 @patch("agents.mcp.util.MCPUtil.get_function_tools", new_callable=AsyncMock)
 @patch("agency_swarm.tools.mcp_manager.default_mcp_manager")
-def test_from_mcp_connects_once_and_reuses_connection(
-    mock_manager, mock_get_function_tools: AsyncMock
-) -> None:
+def test_from_mcp_connects_once_and_reuses_connection(mock_manager, mock_get_function_tools: AsyncMock) -> None:
     server = _DummyServer()
     original_invoke = AsyncMock(return_value="payload")
     function_tool = FunctionTool(
@@ -59,10 +57,9 @@ def test_from_mcp_connects_once_and_reuses_connection(
 @pytest.mark.asyncio
 @patch("agents.mcp.util.MCPUtil.get_function_tools", new_callable=AsyncMock)
 @patch("agency_swarm.tools.mcp_manager.default_mcp_manager")
-async def test_from_mcp_tools_are_invokable(
-    mock_manager, mock_get_function_tools: AsyncMock
-) -> None:
+async def test_from_mcp_tools_are_invokable(mock_manager, mock_get_function_tools: AsyncMock) -> None:
     """Test that tools converted from MCP servers can be invoked correctly."""
+
     async def mock_invoke(ctx, input_json: str):
         return f"Echo: {input_json}"
 
@@ -106,10 +103,9 @@ async def test_from_mcp_tools_are_invokable(
 @pytest.mark.asyncio
 @patch("agents.mcp.util.MCPUtil.get_function_tools", new_callable=AsyncMock)
 @patch("agency_swarm.tools.mcp_manager.default_mcp_manager")
-async def test_from_mcp_base_tools_are_invokable(
-    mock_manager, mock_get_function_tools: AsyncMock
-) -> None:
+async def test_from_mcp_base_tools_are_invokable(mock_manager, mock_get_function_tools: AsyncMock) -> None:
     """Test that BaseTool classes converted from MCP servers can be invoked correctly."""
+
     async def mock_invoke(ctx, input_json: str):
         return f"Echo: {input_json}"
 

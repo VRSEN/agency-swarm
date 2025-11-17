@@ -86,4 +86,3 @@ def from_langchain_tool(tool) -> FunctionTool:
     )
 
     return func_tool
-

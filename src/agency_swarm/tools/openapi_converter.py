@@ -198,4 +198,3 @@ def _create_invoke_for_path(path, verb, openapi, tool_schema, function_name, hea
                 return resp.text
 
     return _invoke
-

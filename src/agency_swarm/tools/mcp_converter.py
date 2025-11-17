@@ -213,10 +213,10 @@ def _create_mcp_base_tool(function_tool: FunctionTool, server_name: str) -> type
                     # Check if it's a connection-related error
                     # Empty or vague error messages often indicate connection issues
                     has_vague_error = (
-                        not error_msg.strip() or  # Completely empty
-                        error_msg.endswith(": ") or  # Ends with ": " (no actual error detail)
-                        error_msg.endswith(":") or  # Ends with ":" (no actual error detail)
-                        len(error_msg.strip()) < 10  # Very short error message
+                        not error_msg.strip()  # Completely empty
+                        or error_msg.endswith(": ")  # Ends with ": " (no actual error detail)
+                        or error_msg.endswith(":")  # Ends with ":" (no actual error detail)
+                        or len(error_msg.strip()) < 10  # Very short error message
                     )
 
                     has_connection_keyword = any(
@@ -247,9 +247,7 @@ def _create_mcp_base_tool(function_tool: FunctionTool, server_name: str) -> type
                         try:
                             await self._attempt_reconnect()
                         except Exception as reconnect_error:
-                            logger.error(
-                                f"Reconnection attempt failed for {server_name}: {reconnect_error}"
-                            )
+                            logger.error(f"Reconnection attempt failed for {server_name}: {reconnect_error}")
 
                         # Retry the tool invocation
                         continue
@@ -282,9 +280,13 @@ def _create_mcp_base_tool(function_tool: FunctionTool, server_name: str) -> type
     MCPBaseTool.__doc__ = function_tool.description or f"MCP tool: {function_tool.name}"
     MCPBaseTool.__name__ = class_name
 
-    # Copy strict setting if available
+    # Create a unique ToolConfig subclass to avoid mutating the shared BaseTool.ToolConfig
     if function_tool.strict_json_schema:
-        MCPBaseTool.ToolConfig.strict = True
+
+        class ToolConfig(BaseTool.ToolConfig):
+            strict: bool = True
+
+        MCPBaseTool.ToolConfig = ToolConfig  # type: ignore[misc]
 
     return MCPBaseTool
 
@@ -376,6 +378,7 @@ def from_mcp(
     # The SDK doesn't expose a public getter, so we access the internal provider state
     # This is necessary to avoid permanently re-enabling tracing if it was already disabled
     from agents.tracing import get_trace_provider
+
     trace_provider = get_trace_provider()
     original_tracing_disabled = getattr(trace_provider, "_disabled", False)
 
@@ -409,4 +412,3 @@ def from_mcp(
         set_tracing_disabled(original_tracing_disabled)
 
     return converted_tools
-
