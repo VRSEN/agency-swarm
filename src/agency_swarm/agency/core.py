@@ -5,6 +5,7 @@ import logging
 import os
 import threading
 import warnings
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from agents import RunConfig, RunHooks, RunResult, Tool, TResponseInputItem
@@ -30,6 +31,21 @@ from .setup import (
 
 if TYPE_CHECKING:
     from agency_swarm.agent.context_types import AgentRuntimeState
+    from agency_swarm.mcp.oauth import MCPServerOAuth as MCPServerOAuthType
+    from agency_swarm.mcp.oauth_client import MCPServerOAuthClient as MCPServerOAuthClientType
+else:
+    MCPServerOAuthType = Any
+    MCPServerOAuthClientType = Any
+
+MCPServerOAuthRuntime: type[MCPServerOAuthType] | None = None
+MCPServerOAuthClientRuntime: type[MCPServerOAuthClientType] | None = None
+
+try:  # pragma: no cover - optional dependency
+    from agency_swarm.mcp.oauth import MCPServerOAuth as MCPServerOAuthRuntime
+    from agency_swarm.mcp.oauth_client import MCPServerOAuthClient as MCPServerOAuthClientRuntime
+except ImportError:  # pragma: no cover - OAuth extras not installed
+    MCPServerOAuthRuntime = None
+    MCPServerOAuthClientRuntime = None
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +85,7 @@ class Agency:
     shared_tools_folder: str | None  # Folder path containing tools for all agents
     shared_files_folder: str | None  # Folder path containing files for all agents
     shared_mcp_servers: list[Any] | None  # MCP servers shared across all agents
+    oauth_token_path: str | None  # Base directory for OAuth token storage
     user_context: dict[str, Any]  # Shared user context for MasterContext
     send_message_tool_class: type | None  # Fallback SendMessage tool class when flows have no override
 
@@ -91,6 +108,7 @@ class Agency:
         load_threads_callback: ThreadLoadCallback | None = None,
         save_threads_callback: ThreadSaveCallback | None = None,
         user_context: dict[str, Any] | None = None,
+        oauth_token_path: str | None = None,
     ):
         """
         Initializes the Agency object.
@@ -124,6 +142,8 @@ class Agency:
             load_threads_callback (ThreadLoadCallback | None, optional): Callable to load conversation threads.
             save_threads_callback (ThreadSaveCallback | None, optional): Callable to save conversation threads.
             user_context (dict[str, Any] | None, optional): Initial shared context accessible to all agents.
+            oauth_token_path (str | None, optional): Base directory for OAuth token storage (defaults to
+                ~/.agency-swarm/mcp-tokens or $AGENCY_SWARM_MCP_CACHE_DIR when omitted).
 
         Raises:
             ValueError: If the agency structure is not defined, or if agent names are duplicated.
@@ -165,6 +185,7 @@ class Agency:
         self.shared_tools_folder = shared_tools_folder
         self.shared_files_folder = shared_files_folder
         self.shared_mcp_servers = shared_mcp_servers
+        self.oauth_token_path = oauth_token_path
         self.thread_manager = ThreadManager(
             load_threads_callback=load_threads_callback, save_threads_callback=save_threads_callback
         )
@@ -173,6 +194,7 @@ class Agency:
         if load_threads_callback and save_threads_callback:
             self.persistence_hooks = PersistenceHooks(load_threads_callback, save_threads_callback)
             logger.info("Persistence hooks enabled.")
+        self._default_run_hooks = self.persistence_hooks
         self.agents = {}
         self.entry_points = []
         register_all_agents_and_set_entry_points(self, _derived_entry_points, _derived_communication_flows)
@@ -190,6 +212,7 @@ class Agency:
         self._communication_tool_classes = _communication_tool_classes
         configure_agents(self, _derived_communication_flows)
         apply_shared_resources(self)
+        self._configure_oauth_support()
         for agent_name, agent_instance in self.agents.items():
             runtime_state = self._agent_runtime_state.get(agent_name)
             agent_instance.refresh_conversation_starters_cache(
@@ -202,6 +225,16 @@ class Agency:
         # Register MCP shutdown at process exit so persistent servers are cleaned in scripts
         if default_mcp_manager.mark_atexit_registered():
             atexit.register(default_mcp_manager.shutdown_sync)
+
+    @property
+    def default_run_hooks(self) -> RunHooks | None:
+        """Return the agency-level hooks applied to each run.
+
+        Notes:
+            The Agents SDK accepts a single RunHooks instance; this agency only
+            returns a single hook (or None).
+        """
+        return self._default_run_hooks
 
     def get_agent_context(self, agent_name: str) -> AgencyContext:
         """Public accessor for the agency context associated with an agent."""
@@ -433,6 +466,33 @@ class Agency:
         from .visualization import copilot_demo
 
         return copilot_demo(self, host, port, frontend_port, cors_origins)
+
+    def _configure_oauth_support(self) -> None:
+        """Apply oauth_token_path for OAuth-enabled servers."""
+        if MCPServerOAuthRuntime is None:
+            return
+
+        cache_dir: Path | None = None
+        if self.oauth_token_path:
+            cache_dir = Path(self.oauth_token_path).expanduser()
+
+        for agent in self.agents.values():
+            servers = getattr(agent, "mcp_servers", None)
+            if not isinstance(servers, list):
+                continue
+            for server in servers:
+                config: Any | None = None
+                if MCPServerOAuthRuntime is not None and isinstance(server, MCPServerOAuthRuntime):
+                    config = server
+                elif MCPServerOAuthClientRuntime is not None and isinstance(server, MCPServerOAuthClientRuntime):
+                    config = server.oauth_config
+                if config is None:
+                    continue
+                if cache_dir and getattr(config, "cache_dir", None) is None:
+                    config.cache_dir = cache_dir
+
+        if cache_dir:
+            default_mcp_manager.update_oauth_cache_dir(cache_dir)
 
     def _schedule_starter_cache_warmup(self) -> None:
         if self._starter_cache_warmup_started:
