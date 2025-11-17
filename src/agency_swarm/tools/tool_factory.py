@@ -6,7 +6,7 @@ import logging
 import sys
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import httpx
 import jsonref
@@ -14,7 +14,9 @@ from agents import FunctionTool
 from agents.exceptions import ModelBehaviorError
 from agents.run_context import RunContextWrapper
 from agents.strict_schema import ensure_strict_json_schema
+from agents.tool import default_tool_error_function
 from pydantic import BaseModel, ValidationError
+from pydantic_core import InitErrorDetails
 
 from .base_tool import BaseTool
 from .utils import build_parameter_object_schema, build_tool_schema, generate_model_from_schema, resolve_url
@@ -23,6 +25,25 @@ logger = logging.getLogger(__name__)
 
 
 class ToolFactory:
+    @staticmethod
+    def _format_value_error(validation_error: ValidationError) -> str | None:
+        """
+        Extract a user-facing message from ValidationError when all failures come from
+        custom value validators (type == "value_error"). Returns the first validator
+        message so that BaseTool mirrors function_tool behavior, or None if there are
+        mixed error types.
+        """
+        errors = validation_error.errors()
+        if not errors:
+            return None
+        if any(err.get("type") != "value_error" for err in errors):
+            return None
+        first_error = errors[0]
+        ctx_error = first_error.get("ctx", {}).get("error")
+        if ctx_error is not None:
+            return str(ctx_error)
+        return first_error.get("msg", "Invalid value")
+
     @staticmethod
     def from_langchain_tools(tools: list) -> list[FunctionTool]:
         """
@@ -442,8 +463,18 @@ class ToolFactory:
                     return await tool_instance.run()
                 # Always run sync run() in a thread for async compatibility
                 return await asyncio.to_thread(tool_instance.run)
+            except ValidationError as e:
+                formatted_msg = ToolFactory._format_value_error(e)
+                if formatted_msg is not None:
+                    return default_tool_error_function(ctx, ValueError(formatted_msg))
+                errors = e.errors()
+                non_value_errors = [err for err in errors if err.get("type") != "value_error"]
+                line_errors = cast(list[InitErrorDetails], non_value_errors or errors)
+                rewritten_error = ValidationError.from_exception_data(f"{name}_args", line_errors)
+                model_error = ModelBehaviorError(f"Invalid JSON input for tool {name}: {rewritten_error}")
+                return default_tool_error_function(ctx, model_error)
             except Exception as e:
-                return f"Error running BaseTool: {e}"
+                return default_tool_error_function(ctx, e)
 
         func_tool = FunctionTool(
             name=name,

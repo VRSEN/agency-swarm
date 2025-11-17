@@ -86,7 +86,7 @@ def specific_send_message_tool(mock_sender_agent, mock_recipient_agent):
 
 
 @pytest.fixture
-def legacy_tool():
+def base_tool():
     # Create a class that inherits from BaseTool
     class TestTool(BaseTool):
         input: str = Field(description="The input to the tool")
@@ -251,13 +251,13 @@ async def test_send_message_input_guardrail_returns_error(mock_sender_agent, moc
 
 
 @pytest.mark.asyncio
-async def test_legacy_tool(legacy_tool):
+async def test_base_tool(base_tool):
     """
     Test that BaseTool can be used via the on_invoke_tool method of the adapted FunctionTool.
     """
     from agency_swarm.tools import ToolFactory
 
-    function_tool = ToolFactory.adapt_base_tool(legacy_tool)
+    function_tool = ToolFactory.adapt_base_tool(base_tool)
     input_json = '{"input": "hello"}'
     result = await function_tool.on_invoke_tool(None, input_json)
     assert result == "hello"
