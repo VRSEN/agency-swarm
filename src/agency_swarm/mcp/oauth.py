@@ -415,6 +415,8 @@ async def default_callback_handler(redirect_uri: str | None = None) -> tuple[str
             logger.exception("OAuth callback handler error")
             raise
 
+    raise RuntimeError("OAuth callback failed: no tasks completed successfully")
+
 
 async def create_oauth_provider(
     server: MCPServerOAuth,
