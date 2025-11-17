@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
@@ -40,8 +41,8 @@ class TestFileTokenStorage:
         # Save token
         await storage.set_tokens(test_token)
 
-        # Verify file exists with secure permissions
-        token_file = tmp_path / "test-server_tokens.json"
+        # Verify file exists with secure permissions in default subdirectory
+        token_file = tmp_path / "default" / "test-server_tokens.json"
         assert token_file.exists()
         assert token_file.stat().st_mode & 0o777 == 0o600
 
@@ -83,8 +84,8 @@ class TestFileTokenStorage:
         # Save client info
         await storage.set_client_info(client_info)
 
-        # Verify file exists
-        client_file = tmp_path / "test-server_client.json"
+        # Verify file exists in default subdirectory
+        client_file = tmp_path / "default" / "test-server_client.json"
         assert client_file.exists()
 
         # Load client info
@@ -230,8 +231,9 @@ class TestMCPServerOAuth:
 class TestOAuthHandlers:
     """Test default OAuth handlers."""
 
-    async def test_redirect_handler_formats_message(self, capsys: pytest.CaptureFixture) -> None:
-        """default_redirect_handler prints formatted message."""
+    @patch("webbrowser.open")
+    async def test_redirect_handler_formats_message(self, mock_webbrowser: Any, capsys: pytest.CaptureFixture) -> None:
+        """default_redirect_handler prints formatted message without opening browser."""
         test_url = "https://github.com/login/oauth/authorize?client_id=test"
 
         await default_redirect_handler(test_url)
@@ -239,6 +241,7 @@ class TestOAuthHandlers:
         captured = capsys.readouterr()
         assert "OAuth Authentication Required" in captured.out
         assert test_url in captured.out
+        mock_webbrowser.assert_called_once_with(test_url)
 
     async def test_callback_handler_parses_valid_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """default_callback_handler extracts code and state from callback URL."""

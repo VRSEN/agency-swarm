@@ -48,7 +48,7 @@ print("Agency Swarm - OAuth MCP Example")
 print("=" * 80)
 print(f"\nMCP Server URL: {SERVER_URL}")
 print(f"Client ID: {CLIENT_ID[:20]}..." if len(CLIENT_ID) > 20 else f"Client ID: {CLIENT_ID}")
-print("\nTokens will be stored in: ~/.agency-swarm/mcp-tokens/oauth-test-server_tokens.json")
+print("\nTokens will be stored in: ./data/default/oauth-test-server_tokens.json")
 print("=" * 80)
 
 # Create OAuth-enabled MCP Server configuration
@@ -77,8 +77,11 @@ oauth_agent = Agent(
     mcp_servers=[oauth_server],
 )
 
-# Create Agency
-agency = Agency(oauth_agent)
+# Create Agency with local token storage
+agency = Agency(
+    oauth_agent,
+    oauth_token_path="./data",  # Tokens stored in ./data/default/
+)
 
 
 async def main():
@@ -124,8 +127,8 @@ async def main():
         print("  1. Make sure the OAuth server is running: python examples/utils/oauth_mcp_server.py")
         print("  2. Check that GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET are set correctly")
         print("  3. Verify the callback URL matches your GitHub OAuth App: http://localhost:3000/callback")
-        print("  4. Check token cache: ~/.agency-swarm/mcp-tokens/")
-        print("  5. Try deleting cached tokens: rm -rf ~/.agency-swarm/mcp-tokens/")
+        print("  4. Check token cache: ./data/default/")
+        print("  5. Try deleting cached tokens: rm -rf ./data/")
 
 
 def run_sync():
