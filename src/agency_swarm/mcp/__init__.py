@@ -3,7 +3,7 @@
 from .oauth import (
     FileTokenStorage,
     MCPServerOAuth,
-    OAuthTokenHooks,
+    OAuthStorageHooks,
     create_oauth_provider,
     default_callback_handler,
     default_redirect_handler,
@@ -15,7 +15,7 @@ __all__ = [
     "FileTokenStorage",
     "MCPServerOAuth",
     "MCPServerOAuthClient",
-    "OAuthTokenHooks",
+    "OAuthStorageHooks",
     "create_oauth_provider",
     "default_callback_handler",
     "default_redirect_handler",
