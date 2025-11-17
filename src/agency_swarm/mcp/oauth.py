@@ -1,7 +1,7 @@
 """OAuth authentication for MCP servers.
 
 Provides OAuth 2.0 with PKCE support for MCP servers using the MCP Python SDK's OAuthClientProvider.
-Supports both local development (file-based token storage) and SaaS deployment (callback-based storage).
+Supports unified local/SaaS token storage via RunHooks and contextvars.
 """
 
 import asyncio
@@ -11,12 +11,12 @@ import logging
 import os
 import webbrowser
 from collections.abc import Awaitable, Callable
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse, urlsplit
 
-from agents import RunHooks, RunResult
 from mcp.client.auth import OAuthClientProvider
 from mcp.shared.auth import (
     OAuthClientInformationFull,
@@ -25,7 +25,8 @@ from mcp.shared.auth import (
 )
 from pydantic import AnyUrl
 
-from agency_swarm.context import MasterContext
+# Contextvar for per-user token isolation
+_user_id_context: ContextVar[str | None] = ContextVar("oauth_user_id", default=None)
 
 
 @dataclass
@@ -54,7 +55,7 @@ def get_default_cache_dir() -> Path:
 
 
 class FileTokenStorage:
-    """File-based token storage for MCP OAuth."""
+    """File-based token storage for MCP OAuth with per-user isolation."""
 
     def __init__(
         self,
@@ -66,23 +67,28 @@ class FileTokenStorage:
         """Initialize file-based token storage.
 
         Args:
-            cache_dir: Directory to store token files
+            cache_dir: Base directory for token storage
             server_name: Unique name for the MCP server (used in filename)
             server_url: Full MCP endpoint URL (used for callback identification)
             token_callbacks: Optional callback registry for custom persistence
         """
-        self.cache_dir = cache_dir
+        self.base_cache_dir = cache_dir
         self.server_name = server_name
         self.server_url = server_url or server_name
         self._token_callbacks = token_callbacks
-        self.cache_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
 
-        # Separate files for tokens and client info
-        self.token_file = self.cache_dir / f"{server_name}_tokens.json"
-        self.client_file = self.cache_dir / f"{server_name}_client.json"
+    def _get_user_cache_dir(self) -> Path:
+        """Get cache directory for current user from contextvar."""
+        user_id = _user_id_context.get()
+        if user_id:
+            user_dir = self.base_cache_dir / user_id
+        else:
+            user_dir = self.base_cache_dir / "default"
+        user_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        return user_dir
 
     async def get_tokens(self) -> OAuthToken | None:
-        """Get stored tokens."""
+        """Get stored tokens for current user."""
         if self._token_callbacks and self._token_callbacks.load_callback:
             try:
                 data = self._token_callbacks.load_callback(self.server_url)
@@ -91,24 +97,30 @@ class FileTokenStorage:
             except Exception:
                 logger.exception("OAuth load_tokens_callback failed")
 
-        if not self.token_file.exists():
+        user_dir = self._get_user_cache_dir()
+        token_file = user_dir / f"{self.server_name}_tokens.json"
+
+        if not token_file.exists():
             return None
 
         try:
-            data = json.loads(self.token_file.read_text())
+            data = json.loads(token_file.read_text())
             return OAuthToken(**data)
         except Exception:
-            logger.exception(f"Failed to load tokens from {self.token_file}")
+            logger.exception(f"Failed to load tokens from {token_file}")
             return None
 
     async def set_tokens(self, tokens: OAuthToken) -> None:
-        """Store tokens."""
+        """Store tokens for current user."""
+        user_dir = self._get_user_cache_dir()
+        token_file = user_dir / f"{self.server_name}_tokens.json"
+
         try:
-            self.token_file.write_text(tokens.model_dump_json(indent=2))
-            self.token_file.chmod(0o600)  # Secure permissions
-            logger.info(f"Tokens saved to {self.token_file}")
+            token_file.write_text(tokens.model_dump_json(indent=2))
+            token_file.chmod(0o600)  # Secure permissions
+            logger.info(f"Tokens saved to {token_file}")
         except Exception:
-            logger.exception(f"Failed to save tokens to {self.token_file}")
+            logger.exception(f"Failed to save tokens to {token_file}")
         if self._token_callbacks and self._token_callbacks.save_callback:
             try:
                 self._token_callbacks.save_callback(self.server_url, tokens.model_dump())
@@ -116,25 +128,61 @@ class FileTokenStorage:
                 logger.exception("OAuth save_tokens_callback failed")
 
     async def get_client_info(self) -> OAuthClientInformationFull | None:
-        """Get stored client information."""
-        if not self.client_file.exists():
+        """Get stored client information for current user."""
+        user_dir = self._get_user_cache_dir()
+        client_file = user_dir / f"{self.server_name}_client.json"
+
+        if not client_file.exists():
             return None
 
         try:
-            data = json.loads(self.client_file.read_text())
+            data = json.loads(client_file.read_text())
             return OAuthClientInformationFull(**data)
         except Exception:
-            logger.exception(f"Failed to load client info from {self.client_file}")
+            logger.exception(f"Failed to load client info from {client_file}")
             return None
 
     async def set_client_info(self, client_info: OAuthClientInformationFull) -> None:
-        """Store client information."""
+        """Store client information for current user."""
+        user_dir = self._get_user_cache_dir()
+        client_file = user_dir / f"{self.server_name}_client.json"
+
         try:
-            self.client_file.write_text(client_info.model_dump_json(indent=2))
-            self.client_file.chmod(0o600)  # Secure permissions
-            logger.info(f"Client info saved to {self.client_file}")
+            client_file.write_text(client_info.model_dump_json(indent=2))
+            client_file.chmod(0o600)  # Secure permissions
+            logger.info(f"Client info saved to {client_file}")
         except Exception:
-            logger.exception(f"Failed to save client info to {self.client_file}")
+            logger.exception(f"Failed to save client info to {client_file}")
+
+
+class OAuthStorageHooks:
+    """RunHooks implementation for OAuth token storage.
+
+    Sets the user_id contextvar from MasterContext at the start of each run,
+    enabling per-user token isolation in FileTokenStorage.
+
+    Usage:
+        from agency_swarm import Agency
+        from agency_swarm.mcp.oauth import OAuthStorageHooks
+
+        agency = Agency(
+            [agent],
+            oauth_token_path="./data",
+            user_context={"user_id": "user_123"},
+            hooks=[OAuthStorageHooks()],
+        )
+    """
+
+    def on_run_start(self, *, context: Any, **kwargs: Any) -> None:
+        """Set user_id contextvar from MasterContext at run start."""
+        user_id = context.user_context.get("user_id") if hasattr(context, "user_context") else None
+        _user_id_context.set(user_id)
+        logger.debug(f"OAuth user_id context set to: {user_id}")
+
+    def on_run_end(self, *, context: Any, result: Any, **kwargs: Any) -> None:
+        """Clear user_id contextvar at run end."""
+        _user_id_context.set(None)
+        logger.debug("OAuth user_id context cleared")
 
 
 @dataclass
@@ -148,8 +196,9 @@ class MCPServerOAuth:
         client_secret: OAuth client secret (reads from env if None)
         scopes: List of OAuth scopes to request
         redirect_uri: OAuth redirect URI for callback
-        cache_dir: Directory for token storage (uses default if None, V0 only)
-        storage: Custom token storage implementation (V1 for SaaS, overrides cache_dir)
+        cache_dir: Directory for token storage (uses default if None)
+        storage: Custom token storage implementation (overrides cache_dir)
+        storage_factory: Factory function to create storage per-request (for multi-tenant)
         client_metadata: Full OAuth client metadata (overrides simple params)
         auth_server_url: Base URL for OAuth discovery when different from MCP endpoint
     """
@@ -162,6 +211,7 @@ class MCPServerOAuth:
     redirect_uri: str = "http://localhost:3000/callback"
     cache_dir: Path | None = None
     storage: Any | None = None
+    storage_factory: Callable[[str, str], Any] | None = None
     client_metadata: OAuthClientMetadata | None = None
     auth_server_url: str | None = None
 
@@ -433,8 +483,10 @@ async def create_oauth_provider(
     Returns:
         Configured OAuthClientProvider
     """
-    # Use custom storage if provided (V1 SaaS), otherwise default to FileTokenStorage (V0)
-    if server.storage:
+    # Prioritize storage creation: storage_factory > storage > FileTokenStorage
+    if server.storage_factory:
+        storage = server.storage_factory(server.name, server.url)
+    elif server.storage:
         storage = server.storage
     else:
         storage = FileTokenStorage(
@@ -473,58 +525,3 @@ async def create_oauth_provider(
 
     logger.info(f"Created OAuth provider for {server.name} at {server.url}")
     return provider
-
-
-class OAuthTokenHooks(RunHooks[MasterContext]):
-    """RunHooks implementation for OAuth token persistence.
-
-    Registering this hook wires the module-level token callbacks so the default
-    FileTokenStorage will call ``load_tokens_callback`` before each connection
-    and ``save_tokens_callback`` whenever new tokens are persisted.
-    """
-
-    def __init__(
-        self,
-        load_tokens_callback: Callable[[str], dict[str, Any] | None] | None = None,
-        save_tokens_callback: Callable[[str, dict[str, Any]], None] | None = None,
-    ):
-        """Initialize OAuth token hooks.
-
-        Args:
-            load_tokens_callback: Function to load tokens for a server URL
-            save_tokens_callback: Function to save tokens for a server URL
-        """
-        self._load_tokens_callback = load_tokens_callback
-        self._save_tokens_callback = save_tokens_callback
-        if load_tokens_callback:
-            _TOKEN_CALLBACK_REGISTRY.load_callback = load_tokens_callback
-        if save_tokens_callback:
-            _TOKEN_CALLBACK_REGISTRY.save_callback = save_tokens_callback
-
-    def on_run_start(self, *, context: MasterContext, **kwargs: Any) -> None:
-        """Load OAuth tokens at the start of a run."""
-        if not self._load_tokens_callback:
-            return
-
-        try:
-            # Load tokens for each MCP connection that has OAuth
-            for server_url in getattr(context, "mcp_servers", {}):
-                tokens_data = self._load_tokens_callback(server_url)
-                if tokens_data:
-                    logger.debug(f"Loaded OAuth tokens for {server_url}")
-        except Exception:
-            logger.exception("Error loading OAuth tokens in on_run_start")
-
-    def on_run_end(self, *, context: MasterContext, result: RunResult, **kwargs: Any) -> None:
-        """Save OAuth tokens at the end of a run."""
-        if not self._save_tokens_callback:
-            return
-
-        try:
-            # Save tokens for each MCP connection that has OAuth
-            for server_url in getattr(context, "mcp_servers", {}):
-                # Tokens are already persisted by FileTokenStorage during the run
-                # This hook is for custom backends (e.g., database)
-                logger.debug(f"OAuth tokens for {server_url} persisted")
-        except Exception:
-            logger.exception("Error saving OAuth tokens in on_run_end")
