@@ -12,14 +12,14 @@ import sys
 
 from pydantic import BaseModel, Field
 
-CURRENT_DIR = os.path.dirname(__file__)
-sys.path.insert(0, os.path.abspath(os.path.join(CURRENT_DIR, "..", "..", "src")))
-sys.path.insert(0, CURRENT_DIR)
+# Path setup for standalone examples
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "src")))
+sys.path.insert(0, os.path.dirname(__file__))
 
-from server import create_agency
+from server import create_agency  # noqa: E402
 
-from agency_swarm import BaseTool, run_fastapi
-from agency_swarm.tools import ToolFactory
+from agency_swarm import BaseTool, run_fastapi  # noqa: E402
+from agency_swarm.tools import ToolFactory  # noqa: E402
 
 
 class GreetingRequest(BaseModel):
