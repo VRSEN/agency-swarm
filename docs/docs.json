@@ -169,7 +169,8 @@
               "platform/integrations/zapier-integration",
               "platform/integrations/n8n-integration",
               "platform/integrations/web-api",
-              "platform/integrations/widget"
+              "platform/integrations/widget",
+              "platform/integrations/mcp-oauth-integration"
             ]
           },
           {

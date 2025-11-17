@@ -175,10 +175,6 @@ When your redirect URI points to `http://localhost:PORT/callback`, Agency Swarm 
   OAuth client secret. If not provided, reads from `{NAME}_CLIENT_SECRET` environment variable
 </ParamField>
 
-<ParamField param="storage" type="TokenStorage">
-  Custom token storage implementation. If not provided, uses file-based storage (for local development). For SaaS deployments, pass a custom storage backend that implements the MCP SDK's TokenStorage interface.
-</ParamField>
-
 <ParamField param="auth_server_url" type="string">
   Optional base URL for OAuth discovery. Set this if your authorization endpoints live on a different origin than the MCP endpoint itself (common on SaaS deployments).
 </ParamField>
@@ -256,45 +252,44 @@ agent = Agent(
 
 Agency Swarm automatically handles OAuth token storage and lifecycle management. Tokens persist across runs, eliminating the need for repeated authorization.
 
-### Storage Options
+### How It Works
 
-<Tabs>
-<Tab title="Local Development (V0)">
-For local development and single-user scenarios, Agency Swarm uses file-based token storage:
-
-- Tokens are saved automatically after authorization
-- Secure file permissions protect token data
-- No configuration required—works out of the box
-
-This is the default behavior and suitable for most development workflows.
-</Tab>
-
-<Tab title="SaaS Deployment (V1)">
-For multi-tenant SaaS deployments, provide a custom storage implementation:
+Tokens are stored in a configurable directory with per-user isolation:
 
 ```python
+from agency_swarm import Agency, Agent
 from agency_swarm.mcp import MCPServerOAuth
-
-# Custom storage implementing MCP SDK's TokenStorage interface
-custom_storage = DatabaseTokenStorage(
-    user_id=current_user.id,
-    db=firestore_client
-)
 
 oauth_server = MCPServerOAuth(
     url="http://localhost:8001/mcp",
     name="github",
-    storage=custom_storage  # Use database instead of files
+    scopes=["repo", "user"]
+)
+
+agent = Agent(name="GitHubAgent", mcp_servers=[oauth_server])
+
+# Configure token storage path
+agency = Agency(
+    [agent],
+    oauth_token_path="./data"  # Tokens saved here, organized by user
 )
 ```
 
-Your custom storage backend receives callbacks for loading and saving tokens, enabling:
-- Per-user token isolation in database
-- Centralized credential management
-- Integration with existing auth systems
+**Storage Structure:**
+```
+./data/
+  default/              # Default user for local development
+    github_tokens.json
+    github_client.json
+  user_123/             # Per-user isolation (SaaS)
+    github_tokens.json
+  user_456/
+    notion_tokens.json
+```
 
-</Tab>
-</Tabs>
+<Note>
+For production SaaS deployments with multiple users, see [MCP OAuth for SaaS/Docker](/platform/integrations/mcp-oauth-integration).
+</Note>
 
 ### Token Lifecycle
 
@@ -443,11 +438,12 @@ oauth_server = MCPServerOAuth(
 
 **Token Security**: Token storage security depends on your chosen backend. File-based storage (V0) uses restrictive file permissions. For SaaS deployments (V1), ensure your custom storage implementation encrypts tokens appropriately.
 
-**SaaS Token Persistence**: Need to stash tokens in Firestore or another secret store? Wire up `OAuthTokenHooks(load_tokens_callback=..., save_tokens_callback=...)` or pass a custom `TokenStorage`. The default storage now calls those callbacks automatically so you can sync tokens without touching disk.
+**SaaS Token Persistence**: For production deployments with FastAPI/Docker, see the [MCP OAuth Integration Guide](/platform/integrations/mcp-oauth-integration) for complete implementation details including custom handlers, per-user token storage, and frontend integration examples.
 </Note>
 
 ## See Also
 
+- [MCP OAuth for SaaS/Docker](/platform/integrations/mcp-oauth-integration) - Production deployment with FastAPI
 - [MCP Integration](/core-framework/tools/mcp-integration) - Overview of MCP server types
 - [MCP Specification](https://github.com/modelcontextprotocol/modelcontextprotocol) - Official MCP protocol docs
 - [FastMCP](https://gofastmcp.com/getting-started/welcome) - Framework for building OAuth-enabled MCP servers
