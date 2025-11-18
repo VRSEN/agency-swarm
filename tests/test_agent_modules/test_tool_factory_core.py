@@ -307,7 +307,7 @@ class TestAdaptBaseTool:
 
     @pytest.mark.asyncio
     async def test_multiple_value_errors_combined(self):
-        """Multiple validator errors should match the function_tool message."""
+        """BaseTool should surface every validator error for the agent."""
 
         class MultiValueTool(BaseTool):
             first: int
@@ -343,7 +343,10 @@ class TestAdaptBaseTool:
         base_result = await adapted_tool.on_invoke_tool(None, payload)
         func_result = await multi_value_function.on_invoke_tool(None, payload)
 
-        assert base_result == func_result
+        assert "First must be non-negative" in base_result
+        assert "Second must be non-negative" in base_result
+        assert base_result.count("must be non-negative") == 2
+        assert func_result.count("must be non-negative") == 1
 
     @pytest.mark.asyncio
     async def test_mixed_value_and_type_errors(self):
