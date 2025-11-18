@@ -10,53 +10,53 @@ Prerequisites:
        - Callback URL: http://localhost:3000/callback
        - Copy the Client ID and generate a Client Secret
 
-    2. Start the OAuth test server:
+    2. Start the OAuth test server (Terminal 1). The GitHub credentials are only
+       required for the server:
        ```bash
        export GITHUB_CLIENT_ID="your_github_client_id"
        export GITHUB_CLIENT_SECRET="your_github_client_secret"
        python examples/utils/oauth_mcp_server.py
        ```
 
-    3. In another terminal, run this example:
+    3. In another terminal (Terminal 2), run this example. No GitHub environment
+       variables are needed for the client because it auto-registers with the MCP server:
        ```bash
-       export GITHUB_CLIENT_ID="same_client_id"
-       export GITHUB_CLIENT_SECRET="same_client_secret"
        python examples/mcp_oauth_local.py
        ```
 
 The example will:
+    - Register itself with the MCP server automatically
     - Open your browser for OAuth authentication
-    - Store tokens in ~/.agency-swarm/mcp-tokens/
+    - Store tokens in ./data/oauth-tokens/default/ by default
     - Reuse tokens on subsequent runs
     - Demonstrate using OAuth-protected MCP tools
 """
 
 import asyncio
 import os
+from pathlib import Path
 
 from agency_swarm import Agency, Agent
 from agency_swarm.mcp.oauth import MCPServerOAuth
 
 # Configure OAuth MCP Server
-# Note: You can override these with environment variables
 SERVER_URL = os.getenv("MCP_SERVER_URL", "http://localhost:8001")
-CLIENT_ID = os.getenv("GITHUB_CLIENT_ID", "test_client_id")
-CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET", "test_client_secret")
+CACHE_DIR = Path(os.getenv("MCP_TOKEN_CACHE_DIR", "./data/oauth-tokens")).expanduser()
+CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 print("=" * 80)
 print("Agency Swarm - OAuth MCP Example")
 print("=" * 80)
 print(f"\nMCP Server URL: {SERVER_URL}")
-print(f"Client ID: {CLIENT_ID[:20]}..." if len(CLIENT_ID) > 20 else f"Client ID: {CLIENT_ID}")
-print("\nTokens will be stored in: ./data/default/oauth-test-server_tokens.json")
+print("Client ID: (auto-assigned per run)")
+print(f"\nTokens will be stored in: {CACHE_DIR / 'default' / 'oauth-test-server_tokens.json'}")
 print("=" * 80)
 
 # Create OAuth-enabled MCP Server configuration
 oauth_server = MCPServerOAuth(
     url=f"{SERVER_URL}/mcp",
     name="oauth-test-server",
-    client_id=CLIENT_ID,
-    client_secret=CLIENT_SECRET,
+    cache_dir=CACHE_DIR,
     scopes=["user"],  # GitHub OAuth scopes
     redirect_uri="http://localhost:3000/callback",
 )
@@ -78,10 +78,7 @@ oauth_agent = Agent(
 )
 
 # Create Agency with local token storage
-agency = Agency(
-    oauth_agent,
-    oauth_token_path="./data",  # Tokens stored in ./data/default/
-)
+agency = Agency(oauth_agent)
 
 
 async def main():
@@ -125,10 +122,14 @@ async def main():
         print(f"\n\n❌ Error: {e}")
         print("\nTroubleshooting:")
         print("  1. Make sure the OAuth server is running: python examples/utils/oauth_mcp_server.py")
-        print("  2. Check that GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET are set correctly")
-        print("  3. Verify the callback URL matches your GitHub OAuth App: http://localhost:3000/callback")
-        print("  4. Check token cache: ./data/default/")
-        print("  5. Try deleting cached tokens: rm -rf ./data/")
+        print("  2. Verify the callback URL matches your GitHub OAuth App: http://localhost:3000/callback")
+        print(f"  3. Check token cache: {CACHE_DIR / 'default'}")
+        print("  4. Try deleting cached tokens:")
+        print(
+            f"     rm -f {CACHE_DIR / 'default' / 'oauth-test-server_client.json'} "
+            f"{CACHE_DIR / 'default' / 'oauth-test-server_tokens.json'}"
+        )
+        print("  5. If the browser shows 'Client Not Registered', delete the files above and rerun.")
 
 
 def run_sync():
@@ -141,7 +142,7 @@ if __name__ == "__main__":
     print("NOTE: This example requires:")
     print("  1. GitHub OAuth App created at https://github.com/settings/developers")
     print("  2. OAuth test server running (examples/utils/oauth_mcp_server.py)")
-    print("  3. Valid OAuth credentials (GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET)")
+    print("     - The GitHub credentials are only needed in the server terminal.")
     print("=" * 80 + "\n")
 
     response = input("Ready to continue? (yes/no): ").strip().lower()
@@ -151,9 +152,7 @@ if __name__ == "__main__":
         print("\nSetup instructions:")
         print("  1. Create GitHub OAuth App: https://github.com/settings/developers")
         print("     - Callback URL: http://localhost:3000/callback")
-        print("  2. Export credentials:")
-        print("     export GITHUB_CLIENT_ID='your_client_id'")
-        print("     export GITHUB_CLIENT_SECRET='your_client_secret'")
-        print("  3. Start OAuth server: python examples/utils/oauth_mcp_server.py")
-        print("  4. In another terminal with same env vars:")
+        print("  2. Start OAuth server: python examples/utils/oauth_mcp_server.py")
+        print("     (ensure GITHUB_CLIENT_ID / GITHUB_CLIENT_SECRET are set in that terminal)")
+        print("  3. In another terminal:")
         print("     python examples/mcp_oauth_local.py")
