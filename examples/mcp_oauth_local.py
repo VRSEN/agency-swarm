@@ -37,7 +37,7 @@ import os
 from pathlib import Path
 
 from agency_swarm import Agency, Agent
-from agency_swarm.mcp.oauth import MCPServerOAuth
+from agency_swarm.mcp.oauth import MCPServerOAuth, _listen_for_callback_once
 
 # Configure OAuth MCP Server
 SERVER_URL = os.getenv("MCP_SERVER_URL", "http://localhost:8001")
@@ -61,6 +61,13 @@ oauth_server = MCPServerOAuth(
     redirect_uri="http://localhost:3000/callback",
 )
 
+
+# Dedicated callback handler that only uses the local HTTP listener.
+async def local_callback_handler() -> tuple[str, str | None]:
+    """Capture GitHub redirect via the built-in local HTTP server."""
+    return await _listen_for_callback_once("http://localhost:3000/callback")
+
+
 # Create Agent with OAuth MCP Server
 oauth_agent = Agent(
     name="OAuth Test Agent",
@@ -75,6 +82,7 @@ oauth_agent = Agent(
     description="Agent with OAuth-authenticated MCP server access",
     model="gpt-4",
     mcp_servers=[oauth_server],
+    mcp_oauth_callback_handler=local_callback_handler,
 )
 
 # Create Agency with local token storage
