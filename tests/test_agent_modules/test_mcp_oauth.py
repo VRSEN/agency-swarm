@@ -1,5 +1,6 @@
 """Unit tests for MCP OAuth core functionality."""
 
+import asyncio
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -268,6 +269,49 @@ class TestOAuthHandlers:
 
         with pytest.raises(ValueError, match="No authorization code found"):
             await default_callback_handler()
+
+    @patch("agency_swarm.mcp.oauth._listen_for_callback_once")
+    async def test_callback_handler_prefers_local_server(
+        self,
+        mock_listen: Any,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """default_callback_handler returns immediately when local listener captures callback."""
+
+        async def fake_prompt() -> tuple[str, str | None]:
+            # Sleep so the server task finishes first; the task will be cancelled.
+            await asyncio.sleep(0.1)
+            return "manual_code", "manual_state"
+
+        async def fake_listen(_: str, timeout: float = 300.0) -> tuple[str, str | None]:
+            return "server_code", "server_state"
+
+        mock_listen.side_effect = fake_listen
+        monkeypatch.setattr("agency_swarm.mcp.oauth._prompt_for_callback_url", fake_prompt)
+
+        code, state = await default_callback_handler("http://localhost:3000/callback")
+
+        assert (code, state) == ("server_code", "server_state")
+        assert mock_listen.await_count == 1
+
+    @patch("agency_swarm.mcp.oauth._listen_for_callback_once")
+    async def test_callback_handler_falls_back_when_listener_unavailable(
+        self,
+        mock_listen: Any,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """default_callback_handler falls back to manual entry if listener cannot start."""
+
+        mock_listen.side_effect = OSError("port already in use")
+
+        async def fake_prompt() -> tuple[str, str | None]:
+            return "manual_code", "manual_state"
+
+        monkeypatch.setattr("agency_swarm.mcp.oauth._prompt_for_callback_url", fake_prompt)
+
+        code, state = await default_callback_handler("http://localhost:9999/callback")
+
+        assert (code, state) == ("manual_code", "manual_state")
 
 
 def test_get_default_cache_dir_respects_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
