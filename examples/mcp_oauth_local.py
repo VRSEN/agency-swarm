@@ -27,7 +27,7 @@ Prerequisites:
 The example will:
     - Register itself with the MCP server automatically
     - Open your browser for OAuth authentication
-    - Store tokens in ./data/oauth-tokens/default/ by default
+    - Store tokens in ./data/oauth-tokens/default/oauth-test-server/ by default
     - Reuse tokens on subsequent runs
     - Demonstrate using OAuth-protected MCP tools
 """
@@ -43,13 +43,14 @@ from agency_swarm.mcp.oauth import MCPServerOAuth, _listen_for_callback_once
 SERVER_URL = os.getenv("MCP_SERVER_URL", "http://localhost:8001")
 CACHE_DIR = Path(os.getenv("MCP_TOKEN_CACHE_DIR", "./data/oauth-tokens")).expanduser()
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
+SERVER_CACHE_DIR = CACHE_DIR / "default" / "oauth-test-server"
 
 print("=" * 80)
 print("Agency Swarm - OAuth MCP Example")
 print("=" * 80)
 print(f"\nMCP Server URL: {SERVER_URL}")
 print("Client ID: (auto-assigned per run)")
-print(f"\nTokens will be stored in: {CACHE_DIR / 'default' / 'oauth-test-server_tokens.json'}")
+print(f"\nTokens will be stored in: {SERVER_CACHE_DIR / 'tokens.json'}")
 print("=" * 80)
 
 # Create OAuth-enabled MCP Server configuration
@@ -131,12 +132,9 @@ async def main():
         print("\nTroubleshooting:")
         print("  1. Make sure the OAuth server is running: python examples/utils/oauth_mcp_server.py")
         print("  2. Verify the callback URL matches your GitHub OAuth App: http://localhost:3000/callback")
-        print(f"  3. Check token cache: {CACHE_DIR / 'default'}")
+        print(f"  3. Check token cache: {SERVER_CACHE_DIR}")
         print("  4. Try deleting cached tokens:")
-        print(
-            f"     rm -f {CACHE_DIR / 'default' / 'oauth-test-server_client.json'} "
-            f"{CACHE_DIR / 'default' / 'oauth-test-server_tokens.json'}"
-        )
+        print(f"     rm -f {SERVER_CACHE_DIR / 'client.json'} {SERVER_CACHE_DIR / 'tokens.json'}")
         print("  5. If the browser shows 'Client Not Registered', delete the files above and rerun.")
 
 
