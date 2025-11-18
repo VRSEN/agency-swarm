@@ -87,6 +87,20 @@ class FileTokenStorage:
         user_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
         return user_dir
 
+    def _get_server_cache_dir(self) -> Path:
+        """Get cache directory for current server under the current user."""
+        server_dir = self._get_user_cache_dir() / self.server_name
+        server_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        return server_dir
+
+    def _legacy_token_file(self) -> Path:
+        """Return legacy flat token file path for migration."""
+        return self._get_user_cache_dir() / f"{self.server_name}_tokens.json"
+
+    def _legacy_client_file(self) -> Path:
+        """Return legacy flat client file path for migration."""
+        return self._get_user_cache_dir() / f"{self.server_name}_client.json"
+
     async def get_tokens(self) -> OAuthToken | None:
         """Get stored tokens for current user."""
         if self._token_callbacks and self._token_callbacks.load_callback:
@@ -97,11 +111,25 @@ class FileTokenStorage:
             except Exception:
                 logger.exception("OAuth load_tokens_callback failed")
 
-        user_dir = self._get_user_cache_dir()
-        token_file = user_dir / f"{self.server_name}_tokens.json"
+        server_dir = self._get_server_cache_dir()
+        token_file = server_dir / "tokens.json"
 
         if not token_file.exists():
-            return None
+            legacy_file = self._legacy_token_file()
+            if not legacy_file.exists():
+                return None
+            try:
+                data = json.loads(legacy_file.read_text())
+                tokens = OAuthToken(**data)
+                token_file.write_text(tokens.model_dump_json(indent=2))
+                token_file.chmod(0o600)
+                with contextlib.suppress(FileNotFoundError):
+                    legacy_file.unlink()
+                logger.info("Migrated legacy OAuth tokens to server-specific directory")
+                return tokens
+            except Exception:
+                logger.exception(f"Failed to migrate tokens from {legacy_file}")
+                return None
 
         try:
             data = json.loads(token_file.read_text())
@@ -112,13 +140,17 @@ class FileTokenStorage:
 
     async def set_tokens(self, tokens: OAuthToken) -> None:
         """Store tokens for current user."""
-        user_dir = self._get_user_cache_dir()
-        token_file = user_dir / f"{self.server_name}_tokens.json"
+        server_dir = self._get_server_cache_dir()
+        token_file = server_dir / "tokens.json"
 
         try:
             token_file.write_text(tokens.model_dump_json(indent=2))
             token_file.chmod(0o600)  # Secure permissions
             logger.info(f"Tokens saved to {token_file}")
+            # Clean up legacy flat file if it exists
+            legacy_file = self._legacy_token_file()
+            with contextlib.suppress(FileNotFoundError):
+                legacy_file.unlink()
         except Exception:
             logger.exception(f"Failed to save tokens to {token_file}")
         if self._token_callbacks and self._token_callbacks.save_callback:
@@ -129,11 +161,25 @@ class FileTokenStorage:
 
     async def get_client_info(self) -> OAuthClientInformationFull | None:
         """Get stored client information for current user."""
-        user_dir = self._get_user_cache_dir()
-        client_file = user_dir / f"{self.server_name}_client.json"
+        server_dir = self._get_server_cache_dir()
+        client_file = server_dir / "client.json"
 
         if not client_file.exists():
-            return None
+            legacy_file = self._legacy_client_file()
+            if not legacy_file.exists():
+                return None
+            try:
+                data = json.loads(legacy_file.read_text())
+                client_info = OAuthClientInformationFull(**data)
+                client_file.write_text(client_info.model_dump_json(indent=2))
+                client_file.chmod(0o600)
+                with contextlib.suppress(FileNotFoundError):
+                    legacy_file.unlink()
+                logger.info("Migrated legacy OAuth client info to server-specific directory")
+                return client_info
+            except Exception:
+                logger.exception(f"Failed to migrate client info from {legacy_file}")
+                return None
 
         try:
             data = json.loads(client_file.read_text())
@@ -144,13 +190,16 @@ class FileTokenStorage:
 
     async def set_client_info(self, client_info: OAuthClientInformationFull) -> None:
         """Store client information for current user."""
-        user_dir = self._get_user_cache_dir()
-        client_file = user_dir / f"{self.server_name}_client.json"
+        server_dir = self._get_server_cache_dir()
+        client_file = server_dir / "client.json"
 
         try:
             client_file.write_text(client_info.model_dump_json(indent=2))
             client_file.chmod(0o600)  # Secure permissions
             logger.info(f"Client info saved to {client_file}")
+            legacy_file = self._legacy_client_file()
+            with contextlib.suppress(FileNotFoundError):
+                legacy_file.unlink()
         except Exception:
             logger.exception(f"Failed to save client info to {client_file}")
 
@@ -451,19 +500,31 @@ async def default_callback_handler(redirect_uri: str | None = None) -> tuple[str
     prompt_task = asyncio.create_task(_prompt_for_callback_url())
     tasks.append(prompt_task)
 
-    done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+    pending: set[asyncio.Task[tuple[str, str | None]]] = set(tasks)
 
-    for task in pending:
-        task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await task
-
-    for task in done:
-        try:
-            return task.result()
-        except Exception:
-            logger.exception("OAuth callback handler error")
-            raise
+    try:
+        while pending:
+            done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
+            for finished in done:
+                try:
+                    result = finished.result()
+                except OSError as exc:
+                    if server_task is not None and finished is server_task:
+                        logger.warning("Local callback server failed (%s); falling back to manual entry.", exc)
+                        continue
+                    logger.exception("OAuth callback handler error")
+                    raise
+                except Exception:
+                    logger.exception("OAuth callback handler error")
+                    raise
+                else:
+                    return result
+    finally:
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
 
     raise RuntimeError("OAuth callback failed: no tasks completed successfully")
 
