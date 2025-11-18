@@ -91,7 +91,7 @@ class TestFileTokenStorageWithContextVar:
         await storage.set_tokens(test_token)
 
         # Verify file created in default subdirectory
-        expected_file = tmp_path / "default" / "test-server_tokens.json"
+        expected_file = tmp_path / "default" / "test-server" / "tokens.json"
         assert expected_file.exists()
 
         # Load token
@@ -121,7 +121,7 @@ class TestFileTokenStorageWithContextVar:
             await storage.set_tokens(test_token)
 
             # Verify file created in user-specific subdirectory
-            expected_file = tmp_path / "user_456" / "test-server_tokens.json"
+            expected_file = tmp_path / "user_456" / "test-server" / "tokens.json"
             assert expected_file.exists()
             assert expected_file.stat().st_mode & 0o777 == 0o600
 
@@ -172,8 +172,8 @@ class TestFileTokenStorageWithContextVar:
         assert loaded2.access_token == "user2_token"
 
         # Verify separate files exist
-        assert (tmp_path / "user1" / "test-server_tokens.json").exists()
-        assert (tmp_path / "user2" / "test-server_tokens.json").exists()
+        assert (tmp_path / "user1" / "test-server" / "tokens.json").exists()
+        assert (tmp_path / "user2" / "test-server" / "tokens.json").exists()
 
         # Clean up
         _user_id_context.set(None)
@@ -204,7 +204,7 @@ class TestFileTokenStorageWithContextVar:
             await storage.set_client_info(client_info)
 
             # Verify file in user-specific directory
-            expected_file = tmp_path / "user_789" / "test-server_client.json"
+            expected_file = tmp_path / "user_789" / "test-server" / "client.json"
             assert expected_file.exists()
 
             # Load client info

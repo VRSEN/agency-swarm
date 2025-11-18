@@ -42,10 +42,12 @@ class TestFileTokenStorage:
         # Save token
         await storage.set_tokens(test_token)
 
-        # Verify file exists with secure permissions in default subdirectory
-        token_file = tmp_path / "default" / "test-server_tokens.json"
+        # Verify file exists with secure permissions in default/server subdirectory
+        token_dir = tmp_path / "default" / "test-server"
+        token_file = token_dir / "tokens.json"
         assert token_file.exists()
         assert token_file.stat().st_mode & 0o777 == 0o600
+        assert token_dir.stat().st_mode & 0o777 == 0o700
 
         # Load token
         loaded_token = await storage.get_tokens()
@@ -85,8 +87,8 @@ class TestFileTokenStorage:
         # Save client info
         await storage.set_client_info(client_info)
 
-        # Verify file exists in default subdirectory
-        client_file = tmp_path / "default" / "test-server_client.json"
+        # Verify file exists in default/server subdirectory
+        client_file = tmp_path / "default" / "test-server" / "client.json"
         assert client_file.exists()
 
         # Load client info
@@ -103,7 +105,8 @@ class TestFileTokenStorage:
         )
 
         # Write corrupted JSON
-        token_file = tmp_path / "test-server_tokens.json"
+        token_file = tmp_path / "default" / "test-server" / "tokens.json"
+        token_file.parent.mkdir(parents=True, exist_ok=True)
         token_file.write_text("invalid json {{{")
 
         # Should return None instead of crashing
@@ -305,6 +308,8 @@ class TestOAuthHandlers:
         mock_listen.side_effect = OSError("port already in use")
 
         async def fake_prompt() -> tuple[str, str | None]:
+            # Delay prompt so the listener task finishes (and fails) first.
+            await asyncio.sleep(0.05)
             return "manual_code", "manual_state"
 
         monkeypatch.setattr("agency_swarm.mcp.oauth._prompt_for_callback_url", fake_prompt)
