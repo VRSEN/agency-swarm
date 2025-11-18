@@ -31,46 +31,56 @@ This follows the same pattern as [FastMCP's OAuth client](https://gofastmcp.com/
 
 ## Architecture
 
-```
-┌─────────────┐          ┌──────────────┐          ┌─────────────┐
-│   Browser   │          │   FastAPI    │          │  MCP Server │
-│   (User)    │          │   (Docker)   │          │  (OAuth)    │
-└──────┬──────┘          └──────┬───────┘          └──────┬──────┘
-       │                        │                         │
-       │  1. POST /stream       │                         │
-       │ ──────────────────────>│                         │
-       │                        │  2. Needs OAuth?        │
-       │                        │ ───────────────────────>│
-       │                        │                         │
-       │  3. SSE: oauth_url     │  4. Returns auth URL    │
-       │ <──────────────────────│<────────────────────────│
-       │                        │                         │
-       │  5. Opens OAuth popup  │                         │
-       │ ─────────────────────> │                         │
-       │                        │                         │
-       │  6. User authorizes    │                         │
-       │ ──────────────────────────────────────────────> │
-       │                        │                         │
-       │  7. Redirect with code │                         │
-       │ <───────────────────────────────────────────────│
-       │                        │                         │
-       │  8. POST /oauth/callback (code)                 │
-       │ ──────────────────────>│                         │
-       │    [webhook writes code to /mnt]                │
-       │                        │                         │
-       │                        │  9. callback_handler    │
-       │                        │     reads code          │
-       │                        │                         │
-       │                        │ 10. Exchange code       │
-       │                        │ ───────────────────────>│
-       │                        │ <───────────────────────│
-       │                        │    (tokens)             │
-       │                        │                         │
-       │                        │ 11. Save tokens to      │
-       │                        │     /mnt/{user}/tokens  │
-       │                        │                         │
-       │ 12. Stream continues   │                         │
-       │ <──────────────────────│                         │
+<Steps>
+<Step title="1. POST /chat/stream">
+User sends a streaming request; FastAPI begins relaying SSE events back to the browser.
+</Step>
+<Step title="2. Tool request">
+FastAPI asks the MCP server to run the selected tool. Cached tokens let the call proceed immediately.
+</Step>
+<Step title="3. OAuth required">
+If tokens are missing or expired, the MCP server responds with an OAuth challenge and returns the authorization URL.
+</Step>
+<Step title="4. SSE redirect">
+FastAPI emits an `oauth_required` SSE so the browser can open the OAuth popup and show the provider's consent screen.
+</Step>
+<Step title="5. User authorizes">
+The user approves scopes. The provider redirects back to FastAPI’s `/oauth/callback` endpoint with `code` and `state`.
+</Step>
+<Step title="6. Code capture">
+FastAPI writes `oauth_code.txt` under `/mnt/oauth-tokens/{user}/{server}/`, satisfying the waiting callback handler.
+</Step>
+<Step title="7. Token exchange">
+FastAPI calls the MCP server again, exchanging the code for access/refresh tokens and persisting them to disk.
+</Step>
+<Step title="8. Resume stream">
+With valid tokens stored, FastAPI retries the tool call and continues streaming assistant events to the browser.
+</Step>
+</Steps>
+
+```mermaid
+sequenceDiagram
+    participant User as Browser/User
+    participant FastAPI as FastAPI (Docker)
+    participant MCP as MCP Server (OAuth)
+
+    User->>FastAPI: 1. POST /chat/stream (SSE)
+    FastAPI->>MCP: 2. Invoke MCP tool
+    alt Tokens cached
+        MCP-->>FastAPI: Tool result
+    else OAuth required
+        MCP-->>FastAPI: auth_required + oauth_url
+        FastAPI-->>User: 3. SSE oauth_required (auth URL)
+        User->>MCP: 4. Approve OAuth scopes
+        MCP-->>User: Redirect with code & state
+        User->>FastAPI: 5. POST /oauth/callback (code)
+        FastAPI->>FastAPI: 6. Write oauth_code.txt to /mnt
+        FastAPI->>MCP: 7. Exchange code for tokens
+        MCP-->>FastAPI: Tokens saved under /mnt/{user}/{server}/
+        FastAPI->>MCP: Retry tool call
+        MCP-->>FastAPI: Tool result
+    end
+    FastAPI-->>User: 8. Stream assistant updates
 ```
 
 ## Workflow
@@ -117,11 +127,13 @@ agency = Agency(
 ```
 /mnt/oauth-tokens/
     {user_id}/
-        github_tokens.json          # Access & refresh tokens
-        github_client.json          # Client metadata
-        github_oauth_code.txt       # Temporary: auth code from webhook
+        github/
+            tokens.json          # Access & refresh tokens
+            client.json          # Client metadata
+            oauth_code.txt       # Temporary: auth code from webhook
     {another_user_id}/
-        github_tokens.json
+        github/
+            tokens.json
 ```
 
 This ensures:
@@ -173,7 +185,7 @@ async def custom_callback_handler() -> tuple[str, str | None]:
     _oauth_events[request_id] = event
     
     # Wait for webhook to write the code file
-    code_file = Path(f"/mnt/oauth-tokens/{user_id}/{server_name}_oauth_code.txt")
+    code_file = Path(f"/mnt/oauth-tokens/{user_id}/{server_name}/oauth_code.txt")
     
     # Wait for the event to be set by webhook
     await event.wait()
@@ -196,10 +208,10 @@ async def oauth_callback(code: str, state: str, user_id: str = Header(..., alias
     server_name = parse_server_from_state(state)  # Your implementation
     
     # Write code to persistent volume
-    code_dir = Path(f"/mnt/oauth-tokens/{user_id}")
+    code_dir = Path(f"/mnt/oauth-tokens/{user_id}/{server_name}")
     code_dir.mkdir(parents=True, exist_ok=True)
     
-    code_file = code_dir / f"{server_name}_oauth_code.txt"
+    code_file = code_dir / "oauth_code.txt"
     code_file.write_text(f"code={code}&state={state}")
     
     # Signal the waiting callback_handler
