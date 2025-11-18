@@ -60,13 +60,13 @@ def run_fastapi(
             make_metadata_endpoint,
             make_response_endpoint,
             make_stream_endpoint,
-            make_tool_endpoint,
         )
         from .fastapi_utils.logging_middleware import (
             RequestTracker,
             setup_enhanced_logging,
         )
         from .fastapi_utils.request_models import BaseRequest, LogRequest, RunAgentInputCustom, add_agent_validator
+        from .fastapi_utils.tool_endpoints import make_tool_endpoint
     except ImportError as e:
         logger.error(f"FastAPI deployment dependencies are missing: {e}. Please install agency-swarm[fastapi] package")
         return

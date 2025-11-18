@@ -1,21 +1,19 @@
-import asyncio
 import json
 import logging
 import time
 from collections.abc import AsyncGenerator, Callable
 from importlib import metadata
-from typing import Any, cast
 
 from ag_ui.core import EventType, MessagesSnapshotEvent, RunErrorEvent, RunFinishedEvent, RunStartedEvent
 from ag_ui.encoder import EventEncoder
 from agents import OpenAIResponsesModel, TResponseInputItem, output_guardrail
 from agents.exceptions import OutputGuardrailTripwireTriggered
 from agents.models._openai_shared import get_default_openai_client
-from fastapi import Depends, HTTPException, Request
+from fastapi import Depends, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from openai import AsyncOpenAI
-from pydantic import BaseModel, ConfigDict, Field, create_model
+from pydantic import BaseModel, Field
 
 from agency_swarm import (
     Agency,
@@ -26,7 +24,6 @@ from agency_swarm import (
 from agency_swarm.integrations.fastapi_utils.file_handler import upload_from_urls
 from agency_swarm.integrations.fastapi_utils.logging_middleware import get_logs_endpoint_impl
 from agency_swarm.messages import MessageFilter
-from agency_swarm.tools import BaseTool
 from agency_swarm.tools.mcp_manager import attach_persistent_mcp_servers
 from agency_swarm.ui.core.agui_adapter import AguiAdapter
 from agency_swarm.utils.serialization import serialize
@@ -202,84 +199,6 @@ def make_stream_endpoint(request_model, agency_factory: Callable[..., Agency], v
             },
         )
 
-    return handler
-
-
-# Tool endpoint
-def make_tool_endpoint(tool, verify_token, context=None):
-    async def generic_handler(request: Request, token: str = Depends(verify_token)):
-        try:
-            data = await request.json()
-            if hasattr(tool, "on_invoke_tool"):
-                input_json = json.dumps(data)
-                result = await tool.on_invoke_tool(context, input_json)
-            elif isinstance(tool, type):
-                tool_instance = tool(**data)
-                result = tool_instance.run()
-                if asyncio.iscoroutine(result):
-                    result = await result
-            else:
-                result = tool(**data)
-                if asyncio.iscoroutine(result):
-                    result = await result
-            return {"response": result}
-        except Exception as e:
-            return JSONResponse(status_code=500, content={"Error": str(e)})
-
-    if isinstance(tool, type) and issubclass(tool, BaseTool):
-        RequestModel: type[BaseModel] = tool
-
-        async def handler(request_data: Any, token: str = Depends(verify_token)):
-            try:
-                data = cast(BaseModel, request_data).model_dump(mode="python", exclude_unset=True)
-                tool_instance = tool(**data)
-                result = tool_instance.run()
-                if asyncio.iscoroutine(result):
-                    result = await result
-                return {"response": result}
-            except Exception as e:
-                return JSONResponse(status_code=500, content={"Error": str(e)})
-
-        # Update annotations at runtime for FastAPI introspection
-        handler.__annotations__["request_data"] = RequestModel
-        return handler
-
-    strict_schema = False
-    if hasattr(tool, "openai_schema"):
-        schema = tool.openai_schema
-        parameters = schema.get("parameters", {})
-        strict_schema = bool(schema.get("strict"))
-    elif hasattr(tool, "params_json_schema"):
-        parameters = tool.params_json_schema
-        strict_schema = bool(getattr(tool, "strict_json_schema", False))
-    else:
-        return generic_handler
-
-    if not parameters:
-        return generic_handler
-
-    tool_name = tool.name if hasattr(tool, "name") else tool.__name__
-    RequestModel = _resolve_schema_with_defs(parameters, tool_name, strict=strict_schema)
-
-    if RequestModel is None:
-        return generic_handler
-
-    async def handler(request_data: Any, token: str = Depends(verify_token)):
-        try:
-            data = cast(BaseModel, request_data).model_dump(mode="python", exclude_unset=True)
-            if hasattr(tool, "on_invoke_tool"):
-                input_json = json.dumps(data)
-                result = await tool.on_invoke_tool(context, input_json)
-            else:
-                result = tool(**data)
-                if asyncio.iscoroutine(result):
-                    result = await result
-            return {"response": result}
-        except Exception as e:
-            return JSONResponse(status_code=500, content={"Error": str(e)})
-
-    # Update annotations at runtime for FastAPI introspection
-    handler.__annotations__["request_data"] = RequestModel
     return handler
 
 
@@ -473,116 +392,3 @@ def _get_agency_swarm_version() -> str | None:
     except metadata.PackageNotFoundError:
         logger.debug("agency-swarm package metadata not found; returning no version")
         return None
-
-
-def _should_forbid_extra(schema_section: dict[str, Any], strict: bool) -> bool:
-    additional_properties = schema_section.get("additionalProperties")
-    if isinstance(additional_properties, bool):
-        return not additional_properties
-    return strict
-
-
-def _create_model_with_config(
-    model_name: str,
-    field_definitions: dict[str, Any],
-    schema_section: dict[str, Any],
-    strict: bool,
-) -> type[BaseModel]:
-    config_kwargs: dict[str, Any] = {}
-    if _should_forbid_extra(schema_section, strict):
-        config_kwargs["__config__"] = ConfigDict(extra="forbid")
-    return create_model(model_name, **config_kwargs, **field_definitions)
-
-
-def _resolve_schema_with_defs(
-    parameters: dict[str, Any],
-    tool_name: str,
-    *,
-    strict: bool = False,
-) -> type[BaseModel] | None:
-    """
-    Build a Pydantic model from a JSON schema that may contain $defs.
-
-    Returns None if the schema has unsupported features (oneOf, allOf, anyOf).
-    """
-    # Check for unsupported union types
-    for field_info in parameters.get("properties", {}).values():
-        if any(keyword in field_info for keyword in ("oneOf", "allOf", "anyOf")):
-            return None
-
-    # Extract $defs and create models for nested schemas
-    defs = parameters.get("$defs", {})
-    def_models: dict[str, type[BaseModel]] = {}
-
-    if defs:
-        for def_name, def_schema in defs.items():
-            # Check if this def has unsupported features
-            if any(keyword in def_schema for keyword in ("oneOf", "allOf", "anyOf")):
-                return None
-
-            # Build field definitions for this nested model
-            nested_fields: dict[str, Any] = {}
-            type_mapping = {
-                "string": str,
-                "number": float,
-                "integer": int,
-                "boolean": bool,
-                "array": list,
-                "object": dict,
-            }
-
-            for prop_name, prop_info in def_schema.get("properties", {}).items():
-                prop_type = type_mapping.get(prop_info.get("type"), str)
-                prop_desc = prop_info.get("description", "")
-                is_required = prop_name in def_schema.get("required", [])
-
-                if is_required:
-                    nested_fields[prop_name] = (prop_type, Field(..., description=prop_desc))
-                else:
-                    default_val = prop_info.get("default", None)
-                    nested_fields[prop_name] = (prop_type | None, Field(default_val, description=prop_desc))
-
-            if nested_fields:
-                def_models[def_name] = _create_model_with_config(def_name, nested_fields, def_schema, strict)
-
-    # Build the main model with resolved references
-    field_definitions: dict[str, Any] = {}
-    type_mapping = {"string": str, "number": float, "integer": int, "boolean": bool, "array": list, "object": dict}
-    properties = parameters.get("properties", {})
-    required = parameters.get("required", [])
-
-    for field_name, field_info in properties.items():
-        # Check for $ref
-        if "$ref" in field_info:
-            ref_path = field_info["$ref"]
-            if ref_path.startswith("#/$defs/"):
-                def_name = ref_path.replace("#/$defs/", "")
-                if def_name in def_models:
-                    field_type = def_models[def_name]
-                    field_desc = field_info.get("description", "")
-                    is_required = field_name in required
-
-                    if is_required:
-                        field_definitions[field_name] = (field_type, Field(..., description=field_desc))
-                    else:
-                        field_definitions[field_name] = (field_type | None, Field(None, description=field_desc))
-                else:
-                    return None  # Referenced def not found
-            else:
-                return None  # External ref not supported
-        else:
-            # Regular field
-            field_type = type_mapping.get(field_info.get("type"), str)
-            field_desc = field_info.get("description", "")
-            is_required = field_name in required and "default" not in field_info
-
-            if is_required:
-                field_definitions[field_name] = (field_type, Field(..., description=field_desc))
-            else:
-                default_val = field_info.get("default", None)
-                field_definitions[field_name] = (field_type | None, Field(default_val, description=field_desc))
-
-    if not field_definitions:
-        return None
-
-    return _create_model_with_config(f"{tool_name}Request", field_definitions, parameters, strict)

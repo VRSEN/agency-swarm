@@ -1,8 +1,10 @@
 import json
+from copy import deepcopy
 
 import pytest
 from agents import FunctionTool
 from agents.exceptions import ModelBehaviorError
+from pydantic import BaseModel
 
 from agency_swarm.tools.base_tool import BaseTool
 from agency_swarm.tools.tool_factory import ToolFactory
@@ -112,3 +114,21 @@ class TestGetOpenapiSchema:
         post_schema = result["paths"]["/tool/dummy_tool"]["post"]
         assert post_schema["operationId"] == "dummy_tool"
         assert post_schema["security"] == [{"HTTPBearer": []}]
+
+    def test_get_openapi_schema_preserves_function_tool_defs(self):
+        class Address(BaseModel):
+            street: str
+            zip_code: int
+
+        class AddressListTool(BaseTool):
+            addresses: list[Address]
+
+            def run(self):
+                return ",".join(addr.street for addr in self.addresses)
+
+        function_tool = ToolFactory.adapt_base_tool(AddressListTool)
+        original_schema = deepcopy(function_tool.params_json_schema)
+
+        ToolFactory.get_openapi_schema([function_tool], "https://api.test.com")
+
+        assert function_tool.params_json_schema == original_schema

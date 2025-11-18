@@ -325,3 +325,35 @@ def test_tool_endpoint_preserves_explicit_nulls():
 
     assert response.status_code == 200
     assert response.json() == {"response": None}
+
+
+def test_function_tool_nested_list_validation_survives_schema_export():
+    """FunctionTools should retain nested list schemas after ToolFactory exports."""
+
+    class Address(BaseModel):
+        street: str
+        zip_code: int
+
+    class AddressListTool(BaseTool):
+        addresses: list[Address]
+
+        def run(self) -> str:
+            return ",".join(addr.street for addr in self.addresses)
+
+    function_tool = ToolFactory.adapt_base_tool(AddressListTool)
+    ToolFactory.get_openapi_schema([function_tool], "https://api.test.com")
+
+    app = run_fastapi(tools=[function_tool], return_app=True, app_token_env="")
+    client = TestClient(app)
+
+    # Missing zip_code inside nested list should raise a FastAPI validation error (422)
+    invalid_response = client.post("/tool/AddressListTool", json={"addresses": [{"street": "Elm"}]})
+    assert invalid_response.status_code == 422
+
+    valid_response = client.post(
+        "/tool/AddressListTool",
+        json={"addresses": [{"street": "Elm", "zip_code": 90210}]},
+    )
+
+    assert valid_response.status_code == 200
+    assert valid_response.json() == {"response": "Elm"}

@@ -5,6 +5,7 @@ import json
 import logging
 import sys
 import uuid
+from copy import deepcopy
 from pathlib import Path
 from typing import Any, cast
 
@@ -312,21 +313,22 @@ class ToolFactory:
         for tool in tools:
             if inspect.isclass(tool) and issubclass(tool, BaseTool):
                 openai_schema = tool.openai_schema
+                parameters_schema = deepcopy(openai_schema["parameters"])
                 logger.debug(f"OpenAPI schema for {tool.__name__}: {openai_schema}")
             elif isinstance(tool, FunctionTool):
-                openai_schema = {}
-                openai_schema["parameters"] = tool.params_json_schema
-                openai_schema["name"] = tool.name
+                parameters_schema = deepcopy(tool.params_json_schema)
+                openai_schema = {
+                    "parameters": parameters_schema,
+                    "name": tool.name,
+                    "description": getattr(tool, "description", ""),
+                }
                 logger.debug(f"OpenAPI schema for {tool.name}: {openai_schema}")
             else:
                 raise TypeError(f"Tool {tool} is not a BaseTool or FunctionTool.")
 
-            defs = {}
-            if "$defs" in openai_schema["parameters"]:
-                defs = openai_schema["parameters"]["$defs"]
-                del openai_schema["parameters"]["$defs"]
+            defs = parameters_schema.pop("$defs", {})
 
-            request_schema = dict(openai_schema["parameters"])
+            request_schema = dict(parameters_schema)
             request_schema.setdefault("type", "object")
             request_schema.setdefault("title", openai_schema["name"])
             if "description" not in request_schema and "description" in openai_schema:
