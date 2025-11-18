@@ -137,6 +137,9 @@ def _resolve_field_type(
     def_models: dict[str, type[BaseModel]],
     strict: bool,
 ) -> Any | None:
+    if any(keyword in field_info for keyword in ("oneOf", "allOf", "anyOf")):
+        return None
+
     if "$ref" in field_info:
         ref_path = field_info["$ref"]
         if not ref_path.startswith("#/$defs/"):

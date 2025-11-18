@@ -357,3 +357,30 @@ def test_function_tool_nested_list_validation_survives_schema_export():
 
     assert valid_response.status_code == 200
     assert valid_response.json() == {"response": "Elm"}
+
+
+def test_function_tool_nested_union_falls_back_to_generic_handler():
+    """Nested unions should bypass the typed request model to avoid false 422 errors."""
+
+    class Contact(BaseModel):
+        identifier: str | int
+
+    class ContainerTool(BaseTool):
+        contact: Contact
+
+        def run(self) -> str:
+            return str(self.contact.identifier)
+
+    function_tool = ToolFactory.adapt_base_tool(ContainerTool)
+
+    app = run_fastapi(tools=[function_tool], return_app=True, app_token_env="")
+    client = TestClient(app)
+
+    response = client.post("/tool/ContainerTool", json={"contact": {"identifier": 99}})
+
+    assert response.status_code == 200
+    assert response.json() == {"response": "99"}
+
+    schema = client.get("/openapi.json").json()
+    endpoint = schema["paths"]["/tool/ContainerTool"]["post"]
+    assert "requestBody" not in endpoint
