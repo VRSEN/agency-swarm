@@ -91,7 +91,7 @@ sequenceDiagram
 ```
 
 <Note>
-FileTokenStorage saves tokens under `~/.agency-swarm/mcp-tokens` by default. Set `AGENCY_SWARM_MCP_CACHE_DIR` or pass `cache_dir=Path("./data/oauth-tokens")` to `MCPServerOAuth` when you need a different directory or multiple token caches per user/account.
+FileTokenStorage saves tokens under `~/.agency-swarm/mcp-tokens` by default. Set `AGENCY_SWARM_MCP_CACHE_DIR` or pass `cache_dir=Path("./data/oauth-tokens")` to `MCPServerOAuth` when you need a different directory or multiple token caches per user/account. Within each cache dir, tokens live in `<user>/<server>/tokens.json` along with `client.json`.
 </Note>
 
 ## Setup Guide
@@ -329,13 +329,16 @@ Skip the hook and `user_id` for single-user/local flows—the storage falls back
 **Storage Structure:**
 ```
 ./data/oauth-tokens/
-  default/              # Default user for local development
-    github_tokens.json
-    github_client.json
-  user_123/             # Per-user isolation (SaaS)
-    github_tokens.json
-  user_456/
-    notion_tokens.json
+  default/                 # Default user for local development
+    github/
+      tokens.json
+      client.json
+    notion/
+      tokens.json
+  user_123/                # Per-user isolation (SaaS)
+    github/
+      tokens.json
+      client.json
 ```
 
 <Note>
