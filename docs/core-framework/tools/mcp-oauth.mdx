@@ -48,6 +48,52 @@ When tokens expire, Agency Swarm automatically refreshes them in the background.
 All OAuth logic is handled by the [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk), which implements OAuth 2.0 standards with PKCE security. Agency Swarm simply integrates this SDK for you.
 </Note>
 
+### Standard Request Flow
+
+Start with this quick mental model:
+
+<Steps>
+<Step title="1. User prompt">
+The agent receives a prompt that requires data behind OAuth.
+</Step>
+<Step title="2. Token check">
+The agent reads cached tokens from its token cache (FileTokenStorage).
+</Step>
+<Step title="3. Browser hop (only if needed)">
+If no valid token exists, the agent launches the OAuth URL so the user can approve access.
+</Step>
+<Step title="4. Tool call">
+With a valid token in place, the agent invokes the MCP tool and returns the secured data.
+</Step>
+</Steps>
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Agent
+    participant Browser
+    participant OAuth as OAuth Provider
+    participant MCP as MCP Server
+
+    User->>Agent: User prompt (needs OAuth data)
+    Agent->>Agent: Read tokens from token cache
+    alt Tokens missing or expired
+        Agent->>Browser: Launch authorization URL
+        Browser->>OAuth: User signs in and approves scopes
+        OAuth-->>Browser: Redirect with code/state
+        Browser->>Agent: Send callback URL/code
+        Agent->>OAuth: Exchange code for access/refresh tokens
+        Agent->>Agent: Save tokens via FileTokenStorage
+    end
+    Agent->>MCP: Invoke OAuth-enabled MCP tool
+    MCP-->>Agent: Return tool result
+    Agent-->>User: Respond with secured data
+```
+
+<Note>
+FileTokenStorage saves tokens under `~/.agency-swarm/mcp-tokens` by default. Set `AGENCY_SWARM_MCP_CACHE_DIR` or pass `cache_dir=Path("./data/oauth-tokens")` to `MCPServerOAuth` when you need a different directory or multiple token caches per user/account.
+</Note>
+
 ## Setup Guide
 
 ### Prerequisites
@@ -254,30 +300,35 @@ Agency Swarm automatically handles OAuth token storage and lifecycle management.
 
 ### How It Works
 
-Tokens are stored in a configurable directory with per-user isolation:
+Tokens live under `~/.agency-swarm/mcp-tokens` unless you override the cache directory. Override globally via `AGENCY_SWARM_MCP_CACHE_DIR`, or per server with `cache_dir`. For SaaS flows, pair `OAuthStorageHooks` with `user_context={"user_id": ...}` so each run writes into its own subfolder:
 
 ```python
+from pathlib import Path
+
 from agency_swarm import Agency, Agent
-from agency_swarm.mcp import MCPServerOAuth
+from agency_swarm.mcp import MCPServerOAuth, OAuthStorageHooks
 
 oauth_server = MCPServerOAuth(
     url="http://localhost:8001/mcp",
     name="github",
-    scopes=["repo", "user"]
+    scopes=["repo", "user"],
+    cache_dir=Path("./data/oauth-tokens"),  # Tokens saved here
 )
 
 agent = Agent(name="GitHubAgent", mcp_servers=[oauth_server])
 
-# Configure token storage path
 agency = Agency(
     [agent],
-    oauth_token_path="./data"  # Tokens saved here, organized by user
+    hooks=[OAuthStorageHooks()],           # Enables per-user isolation
+    user_context={"user_id": "user_123"},  # Optional for SaaS
 )
 ```
 
+Skip the hook and `user_id` for single-user/local flows—the storage falls back to the `default/` directory automatically.
+
 **Storage Structure:**
 ```
-./data/
+./data/oauth-tokens/
   default/              # Default user for local development
     github_tokens.json
     github_client.json
@@ -339,7 +390,8 @@ Agency Swarm includes a test OAuth server for development:
 Register an OAuth app at [GitHub Developer Settings](https://github.com/settings/developers) with callback URL `http://localhost:3000/callback`
 </Step>
 
-<Step title="Export Credentials">
+<Step title="Export Server Credentials">
+In **Terminal 1** (where you will run the MCP server), set the GitHub credentials so FastMCP can complete the upstream OAuth flow:
 ```bash
 export GITHUB_CLIENT_ID="your_github_client_id"
 export GITHUB_CLIENT_SECRET="your_github_client_secret"
@@ -347,7 +399,7 @@ export GITHUB_CLIENT_SECRET="your_github_client_secret"
 </Step>
 
 <Step title="Start Test Server">
-In Terminal 1:
+Still in Terminal 1:
 ```bash
 python examples/utils/oauth_mcp_server.py
 # Server starts at http://localhost:8001
@@ -355,7 +407,7 @@ python examples/utils/oauth_mcp_server.py
 </Step>
 
 <Step title="Run Example Agent">
-In Terminal 2:
+Open **Terminal 2** (no GitHub env vars required) and run:
 ```bash
 python examples/mcp_oauth_local.py
 # Browser opens for OAuth, then agent uses tools
@@ -369,7 +421,7 @@ python examples/mcp_oauth_local.py
 1. Terminal shows: `Opening browser for authentication`
 2. Browser opens to GitHub OAuth page
 3. You click "Authorize"
-4. Terminal prompts: `Paste the callback URL:`
+4. Terminal prompts: `Paste the callback URL:` if automatic capture fails
 5. You paste URL from browser
 6. Terminal shows: `Successfully connected to OAuth MCP server`
 7. Agent calls tools successfully
@@ -380,6 +432,12 @@ python examples/mcp_oauth_local.py
 2. No browser opens
 3. Agent connects immediately
 4. Tools work normally
+</Accordion>
+
+<Accordion title="Troubleshooting">
+- **Client Not Registered (browser error)**: Delete the local cache files (default `~/.agency-swarm/mcp-tokens/default/oauth-test-server_*`) or your custom `cache_dir`, then rerun the client so it re-registers automatically.
+- **Token Cache Location**: Set `AGENCY_SWARM_MCP_CACHE_DIR` or configure `MCPServerOAuth(cache_dir=Path("./data/oauth-tokens"))` if you prefer storing tokens inside your repo.
+- **Callback Issues**: Ensure the redirect URL exactly matches the GitHub OAuth app (`http://localhost:3000/callback`). If the auto listener fails, paste the full callback URL when prompted.
 </Accordion>
 
 ## Advanced Usage

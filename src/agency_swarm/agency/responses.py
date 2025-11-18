@@ -76,7 +76,7 @@ async def get_response(
 
     target_agent = resolve_agent(agency, target_recipient)
 
-    effective_hooks = hooks_override or agency.persistence_hooks
+    effective_hooks = hooks_override or agency.default_run_hooks
 
     # Get agency context for the target agent (stateless context passing)
     agency_context = get_agent_context(agency, target_agent.name)
@@ -205,7 +205,7 @@ def get_response_stream(
 
         target_agent = resolve_agent(agency, target_recipient)
 
-        effective_hooks = hooks_override or agency.persistence_hooks
+        effective_hooks = hooks_override or agency.default_run_hooks
 
         try:
             async with agency.event_stream_merger.create_streaming_context() as streaming_context:
