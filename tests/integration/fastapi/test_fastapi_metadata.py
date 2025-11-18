@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 from agency_swarm import Agency, Agent, BaseTool, function_tool, run_fastapi
 from agency_swarm.integrations.fastapi_utils import endpoint_handlers
+from agency_swarm.tools import ToolFactory
 
 
 @pytest.fixture
@@ -240,7 +241,6 @@ def test_openapi_json_includes_nested_schemas():
 
 def test_function_tool_with_nested_schema():
     """Verify that FunctionTools with nested models work correctly via adapted BaseTool."""
-    from agency_swarm.tools import ToolFactory
 
     class Address(BaseModel):
         street: str
@@ -281,3 +281,47 @@ def test_function_tool_with_nested_schema():
     request_schema = endpoint_schema["requestBody"]["content"]["application/json"]["schema"]
     assert "$ref" in request_schema
     assert "UserToolRequest" in request_schema["$ref"]
+
+
+def test_strict_function_tool_rejects_extra_fields():
+    """Ensure strict tools exposed via FastAPI still validate unexpected inputs."""
+
+    class StrictTool(BaseTool):
+        """Return the given value."""
+
+        class ToolConfig:
+            strict = True
+
+        value: int
+
+        def run(self) -> int:
+            return self.value
+
+    strict_function_tool = ToolFactory.adapt_base_tool(StrictTool)
+
+    app = run_fastapi(tools=[strict_function_tool], return_app=True, app_token_env="")
+    client = TestClient(app)
+
+    response = client.post("/tool/StrictTool", json={"value": 7, "unexpected": "boom"})
+
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert any(item.get("type") == "extra_forbidden" for item in detail)
+
+
+def test_tool_endpoint_preserves_explicit_nulls():
+    """Tools must receive explicit null payloads without them being dropped."""
+
+    class NullableTool(BaseTool):
+        note: str | None = None
+
+        def run(self) -> str | None:
+            return self.note
+
+    app = run_fastapi(tools=[NullableTool], return_app=True, app_token_env="")
+    client = TestClient(app)
+
+    response = client.post("/tool/NullableTool", json={"note": None})
+
+    assert response.status_code == 200
+    assert response.json() == {"response": None}
