@@ -4,6 +4,7 @@ import logging
 import threading
 from collections.abc import Callable
 from concurrent.futures import Future
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
@@ -231,6 +232,45 @@ class PersistentMCPServerManager:
 
     def all(self) -> list[Any]:
         return list(self._servers.values())
+
+    def update_oauth_cache_dir(self, cache_dir: Path | None) -> None:
+        """Update cache_dir for all OAuth-enabled servers registered with this manager."""
+        if not _OAUTH_AVAILABLE:
+            return
+        normalized = None
+        if cache_dir is not None:
+            normalized = cache_dir.expanduser()
+        for server in self._servers.values():
+            self._apply_cache_dir_to_server(server, normalized)
+        # Update drivers as well (LoopAffineAsyncProxy->real server)
+        for entry in self._drivers.values():
+            real_server = entry.get("real")
+            if real_server is not None:
+                self._apply_cache_dir_to_server(real_server, normalized)
+
+    def _apply_cache_dir_to_server(self, server: Any, cache_dir: Path | None) -> None:
+        """Internal helper to apply cache_dir to both configs and instantiated clients."""
+        if server is None:
+            return
+        actual = getattr(server, "_server", server)
+        if _MCPServerOAuth is not None and isinstance(actual, _MCPServerOAuth):
+            oauth_config = cast("MCPServerOAuth", actual)
+            if cache_dir is not None and getattr(oauth_config, "cache_dir", None) is None:
+                oauth_config.cache_dir = cache_dir
+            return
+        try:
+            from agency_swarm.mcp.oauth_client import MCPServerOAuthClient
+        except ImportError:  # pragma: no cover - optional dependency missing
+            return
+
+        if isinstance(actual, MCPServerOAuthClient):
+            config = actual.oauth_config
+            if cache_dir is not None and getattr(config, "cache_dir", None) is None:
+                config.cache_dir = cache_dir
+            oauth_provider = getattr(actual, "_oauth_provider", None)
+            storage = getattr(oauth_provider, "storage", None) if oauth_provider else None
+            if storage and hasattr(storage, "base_cache_dir") and cache_dir is not None:
+                storage.base_cache_dir = cache_dir
 
     def _ensure_bg_loop(self) -> asyncio.AbstractEventLoop:
         if self._bg_loop is not None:

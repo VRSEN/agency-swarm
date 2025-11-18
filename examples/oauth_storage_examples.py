@@ -3,8 +3,8 @@
 This example demonstrates how OAuth tokens are automatically stored with
 per-user isolation using RunHooks and contextvars.
 
-For local development, tokens are stored in ./data/default/
-For SaaS deployment, tokens are stored in /mnt/{user_id}/
+For local development, tokens are stored in ./data/default/{server_name}/
+For SaaS deployment, tokens are stored in /mnt/{user_id}/{server_name}/
 
 No custom storage classes needed - just configure oauth_token_path!
 """
@@ -16,7 +16,7 @@ from agency_swarm.mcp import MCPServerOAuth
 
 
 async def local_example():
-    """Local development: single user, tokens in ./data/default/"""
+    """Local development: single user, tokens in ./data/default/{server}/"""
     print("=" * 80)
     print("LOCAL DEVELOPMENT EXAMPLE")
     print("=" * 80)
@@ -37,10 +37,10 @@ async def local_example():
 
     agency = Agency(
         [agent],
-        oauth_token_path="./data",  # Tokens stored in ./data/default/
+        oauth_token_path="./data",  # Tokens stored in ./data/default/github/
     )
 
-    print("\nTokens will be stored in: ./data/default/")
+    print("\nTokens will be stored in: ./data/default/github/")
     print("On first run, browser will open for OAuth authorization")
     print("Subsequent runs will reuse cached tokens automatically\n")
 
@@ -59,7 +59,7 @@ async def local_example():
 
 
 async def saas_example():
-    """SaaS deployment: multi-user, tokens in /mnt/{user_id}/"""
+    """SaaS deployment: multi-user, tokens in /mnt/{user_id}/{server}/"""
     print("\n" + "=" * 80)
     print("SAAS DEPLOYMENT EXAMPLE")
     print("=" * 80)
@@ -87,7 +87,7 @@ async def saas_example():
         user_context={"user_id": current_user_id},  # Per-user isolation
     )
 
-    print(f"\nTokens will be stored in: /mnt/oauth-tokens/{current_user_id}/")
+    print(f"\nTokens will be stored in: /mnt/oauth-tokens/{current_user_id}/github/")
     print("Each user's tokens are isolated automatically")
     print("Tokens persist across container restarts (if /mnt is mounted)\n")
 

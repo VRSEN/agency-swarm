@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import patch
@@ -9,6 +10,7 @@ from unittest.mock import patch
 import pytest
 
 import agency_swarm.tools.mcp_manager as mcp_manager
+from agency_swarm.mcp import MCPServerOAuth, MCPServerOAuthClient
 from agency_swarm.tools.mcp_manager import LoopAffineAsyncProxy, PersistentMCPServerManager
 
 
@@ -428,3 +430,17 @@ def test_convert_mcp_servers_to_tools(monkeypatch: pytest.MonkeyPatch) -> None:
     }
     assert added_tools == ["a", "b"]
     assert agent.mcp_servers == []
+def test_update_oauth_cache_dir_updates_clients(tmp_path: Path) -> None:
+    manager = PersistentMCPServerManager()
+    server = MCPServerOAuth(url="http://localhost:8001/mcp", name="github")
+    client = MCPServerOAuthClient(server)
+    client._oauth_provider = SimpleNamespace(storage=SimpleNamespace(base_cache_dir=Path("/default-cache")))
+
+    manager.register(server)
+    manager._drivers[client] = {"real": client}
+
+    manager.update_oauth_cache_dir(tmp_path)
+
+    assert server.cache_dir == tmp_path
+    assert client.oauth_config.cache_dir == tmp_path
+    assert client._oauth_provider.storage.base_cache_dir == tmp_path
