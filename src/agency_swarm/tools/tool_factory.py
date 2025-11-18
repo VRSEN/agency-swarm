@@ -6,7 +6,7 @@ import logging
 import sys
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import httpx
 import jsonref
@@ -14,7 +14,9 @@ from agents import FunctionTool
 from agents.exceptions import ModelBehaviorError
 from agents.run_context import RunContextWrapper
 from agents.strict_schema import ensure_strict_json_schema
+from agents.tool import default_tool_error_function
 from pydantic import BaseModel, ValidationError
+from pydantic_core import InitErrorDetails
 
 from .base_tool import BaseTool
 from .utils import build_parameter_object_schema, build_tool_schema, generate_model_from_schema, resolve_url
@@ -206,91 +208,6 @@ class ToolFactory:
         return tools
 
     @staticmethod
-    def _create_invoke_for_path(path, verb, openapi, tool_schema, function_name, headers=None, params=None, timeout=90):
-        """
-        Creates a callback function for a specific path and method.
-        This is a factory function that captures the current values of path and method.
-
-        Parameters:
-            path: The path to create the callback for.
-            verb: The HTTP method to use.
-            openapi: The OpenAPI specification.
-            tool_schema: The schema for the tool.
-            function_name: The function/operation name.
-            headers: Headers to include in the request.
-            params: Additional parameters to include in the request.
-            timeout: HTTP timeout in seconds.
-
-        Returns:
-            An async callback function that makes the appropriate HTTP request.
-        """
-        param_model, request_body_model = ToolFactory.from_openai_schema(tool_schema, function_name)
-        fixed_params = params or {}
-
-        async def _invoke(
-            ctx: RunContextWrapper[Any],
-            input: str,
-            *,
-            verb_: str = verb,
-            path_: str = path,
-            param_model_: type[BaseModel] = param_model,
-            request_body_model_: type[BaseModel] = request_body_model,
-        ):
-            """Actual HTTP call executed by the agent."""
-            payload = json.loads(input) if input else {}
-
-            # split out parts for old-style structure
-            param_container: dict[str, Any] = payload.get("parameters", {})
-
-            if param_model_:
-                # Validate parameters
-                try:
-                    parsed = param_model_(**param_container) if param_container else param_model_()
-                    param_container = parsed.model_dump(mode="json")
-                except ValidationError as e:
-                    raise ModelBehaviorError(
-                        f"Invalid JSON input in parameters for tool {param_model_.__name__}: {e}"
-                    ) from e
-
-            body_payload = payload.get("requestBody")
-
-            if request_body_model_:
-                # Validate request body
-                try:
-                    parsed = request_body_model_(**body_payload) if body_payload else request_body_model_()
-                    body_payload = parsed.model_dump(mode="json")
-                except ValidationError as e:
-                    raise ModelBehaviorError(
-                        f"Invalid JSON input in request body for tool {request_body_model_.__name__}: {e}"
-                    ) from e
-
-            url, remaining_params = resolve_url(openapi["servers"][0]["url"], path_, param_container)
-
-            query_params = {k: v for k, v in remaining_params.items() if v is not None}
-            if fixed_params:
-                query_params = {**query_params, **fixed_params}
-
-            json_body = body_payload if verb_.lower() in {"post", "put", "patch", "delete"} else None
-
-            logger.info(f"Calling URL: {url}\nQuery Params: {query_params}\nJSON Body: {json_body}")
-
-            async with httpx.AsyncClient(timeout=timeout) as client:
-                resp = await client.request(
-                    verb_.upper(),
-                    url,
-                    params=query_params,
-                    json=json_body,
-                    headers=headers,
-                )
-                try:
-                    logger.info(f"Response from {url}: {resp.json()}")
-                    return resp.json()
-                except Exception:
-                    return resp.text
-
-        return _invoke
-
-    @staticmethod
     def from_file(file_path: str | Path) -> list[type[BaseTool] | FunctionTool]:
         """Dynamically imports a BaseTool class from a Python file within a package structure.
 
@@ -442,8 +359,18 @@ class ToolFactory:
                     return await tool_instance.run()
                 # Always run sync run() in a thread for async compatibility
                 return await asyncio.to_thread(tool_instance.run)
+            except ValidationError as e:
+                formatted_msg = ToolFactory._format_value_error(e)
+                if formatted_msg is not None:
+                    return default_tool_error_function(ctx, ValueError(formatted_msg))
+                errors = e.errors()
+                non_value_errors = [err for err in errors if err.get("type") != "value_error"]
+                line_errors = cast(list[InitErrorDetails], non_value_errors or errors)
+                rewritten_error = ValidationError.from_exception_data(f"{name}_args", line_errors)
+                model_error = ModelBehaviorError(f"Invalid JSON input for tool {name}: {rewritten_error}")
+                return default_tool_error_function(ctx, model_error)
             except Exception as e:
-                return f"Error running BaseTool: {e}"
+                return default_tool_error_function(ctx, e)
 
         func_tool = FunctionTool(
             name=name,
@@ -457,3 +384,121 @@ class ToolFactory:
         if hasattr(base_tool.ToolConfig, "one_call_at_a_time"):
             func_tool.one_call_at_a_time = bool(base_tool.ToolConfig.one_call_at_a_time)  # type: ignore[attr-defined]
         return func_tool
+
+    @staticmethod
+    def _format_value_error(validation_error: ValidationError) -> str | None:
+        """
+        Extract a user-facing message when every failure comes from value validators. Returns all messages
+        (tagged with their locations) as a single string so the agent can correct every field at once, or
+        None if mixed error types are present.
+        """
+        errors = validation_error.errors()
+        if not errors:
+            return None
+        if any(err.get("type") != "value_error" for err in errors):
+            return None
+
+        def _message_from_error(error: InitErrorDetails) -> str:
+            ctx_error = error.get("ctx", {}).get("error")
+            if ctx_error is not None:
+                return str(ctx_error)
+            return cast(str, error.get("msg", "Invalid value"))
+
+        if len(errors) == 1:
+            return _message_from_error(cast(InitErrorDetails, errors[0]))
+
+        combined_messages: list[str] = []
+        for error in cast(list[InitErrorDetails], errors):
+            message = _message_from_error(error)
+            loc = error.get("loc") or ()
+            loc_string = ".".join(str(part) for part in loc if part != "__root__")
+            if loc_string:
+                combined_messages.append(f"{loc_string}: {message}")
+            else:
+                combined_messages.append(message)
+        return "; ".join(combined_messages)
+
+    @staticmethod
+    def _create_invoke_for_path(path, verb, openapi, tool_schema, function_name, headers=None, params=None, timeout=90):
+        """
+        Creates a callback function for a specific path and method.
+        This is a factory function that captures the current values of path and method.
+
+        Parameters:
+            path: The path to create the callback for.
+            verb: The HTTP method to use.
+            openapi: The OpenAPI specification.
+            tool_schema: The schema for the tool.
+            function_name: The function/operation name.
+            headers: Headers to include in the request.
+            params: Additional parameters to include in the request.
+            timeout: HTTP timeout in seconds.
+
+        Returns:
+            An async callback function that makes the appropriate HTTP request.
+        """
+        param_model, request_body_model = ToolFactory.from_openai_schema(tool_schema, function_name)
+        fixed_params = params or {}
+
+        async def _invoke(
+            ctx: RunContextWrapper[Any],
+            input: str,
+            *,
+            verb_: str = verb,
+            path_: str = path,
+            param_model_: type[BaseModel] = param_model,
+            request_body_model_: type[BaseModel] = request_body_model,
+        ):
+            """Actual HTTP call executed by the agent."""
+            payload = json.loads(input) if input else {}
+
+            # split out parts for old-style structure
+            param_container: dict[str, Any] = payload.get("parameters", {})
+
+            if param_model_:
+                # Validate parameters
+                try:
+                    parsed = param_model_(**param_container) if param_container else param_model_()
+                    param_container = parsed.model_dump(mode="json")
+                except ValidationError as e:
+                    raise ModelBehaviorError(
+                        f"Invalid JSON input in parameters for tool {param_model_.__name__}: {e}"
+                    ) from e
+
+            body_payload = payload.get("requestBody")
+
+            if request_body_model_:
+                # Validate request body
+                try:
+                    parsed = request_body_model_(**body_payload) if body_payload else request_body_model_()
+                    body_payload = parsed.model_dump(mode="json")
+                except ValidationError as e:
+                    raise ModelBehaviorError(
+                        f"Invalid JSON input in request body for tool {request_body_model_.__name__}: {e}"
+                    ) from e
+
+            url, remaining_params = resolve_url(openapi["servers"][0]["url"], path_, param_container)
+
+            query_params = {k: v for k, v in remaining_params.items() if v is not None}
+            if fixed_params:
+                query_params = {**query_params, **fixed_params}
+
+            json_body = body_payload if verb_.lower() in {"post", "put", "patch", "delete"} else None
+
+            logger.info(f"Calling URL: {url}\nQuery Params: {query_params}\nJSON Body: {json_body}")
+
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                resp = await client.request(
+                    verb_.upper(),
+                    url,
+                    params=query_params,
+                    json=json_body,
+                    headers=headers,
+                )
+                try:
+                    logger.info(f"Response from {url}: {resp.json()}")
+                    return resp.json()
+                except Exception:
+                    return resp.text
+
+        return _invoke
