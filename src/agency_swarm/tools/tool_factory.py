@@ -488,6 +488,7 @@ class ToolFactory:
                 },
             }
 
+    @staticmethod
     def _format_value_error(validation_error: ValidationError) -> str | None:
         """
         Extract a user-facing message when every failure comes from value validators. Returns all messages
@@ -519,6 +520,7 @@ class ToolFactory:
             else:
                 combined_messages.append(message)
         return "; ".join(combined_messages)
+
     @staticmethod
     def _create_invoke_for_path(path, verb, openapi, tool_schema, function_name, headers=None, params=None, timeout=90):
         """
