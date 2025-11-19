@@ -42,7 +42,7 @@ async def test_get_response_stream_basic():
             type="message",
         ),
         type="message_output_item",
-        agent=None,
+        agent=agent,
     )
     msg_item2 = MessageOutputItem(
         raw_item=ResponseOutputMessage(
@@ -53,7 +53,7 @@ async def test_get_response_stream_basic():
             type="message",
         ),
         type="message_output_item",
-        agent=None,
+        agent=agent,
     )
 
     async def dummy_stream():
@@ -98,7 +98,7 @@ async def test_stream_emits_preface_events_before_completion(mock_runner_run_str
             type="message",
         ),
         type="message_output_item",
-        agent=None,
+        agent=agent,
     )
 
     async def dummy_stream():
@@ -146,7 +146,7 @@ async def test_get_response_stream_exposes_run_result(mock_runner_run_streamed):
             type="message",
         ),
         type="message_output_item",
-        agent=None,
+        agent=agent,
     )
 
     async def dummy_stream():
@@ -194,7 +194,7 @@ async def test_agency_stream_propagates_final_output(mock_runner_run_streamed):
             type="message",
         ),
         type="message_output_item",
-        agent=None,
+        agent=agent,
     )
 
     async def dummy_stream():
@@ -248,7 +248,7 @@ async def test_get_response_stream_with_run_config_sets_trace_id(mock_runner_run
             type="message",
         ),
         type="message_output_item",
-        agent=None,
+        agent=agent,
     )
 
     async def dummy_stream():
@@ -294,7 +294,7 @@ async def test_get_response_stream_final_result_processing():
             type="message",
         ),
         type="message_output_item",
-        agent=None,
+        agent=agent,
     )
 
     async def dummy_stream():
@@ -579,7 +579,7 @@ async def test_streaming_persists_hosted_tool_outputs(
             type="message",
         ),
         type="message_output_item",
-        agent=None,
+        agent=minimal_agent,
     )
 
     class DummyStreamedResult:
