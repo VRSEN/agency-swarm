@@ -123,6 +123,37 @@ async def test_agency_get_response_stream_with_hooks(mock_agent):
 
 
 @pytest.mark.asyncio
+async def test_agency_get_response_stream_does_not_mutate_context_override(mock_agent):
+    """Ensure streaming runs leave the caller-provided context untouched."""
+    agency = Agency(mock_agent)
+    context_override = {"test_key": "test_value"}
+    captured_contexts = []
+
+    async def mock_stream():
+        yield {"event": "text", "data": "Hello"}
+        yield {"event": "done"}
+
+    async def mock_get_response_stream(*args, **kwargs):
+        captured_contexts.append(kwargs.get("context_override"))
+        async for event in mock_stream():
+            yield event
+
+    mock_agent.get_response_stream = mock_get_response_stream
+
+    events = []
+    async for event in agency.get_response_stream("Test message", "MockAgent", context_override=context_override):
+        events.append(event)
+
+    # Streaming still works while the user's dict stays clean
+    assert len(events) == 2
+    assert context_override == {"test_key": "test_value"}
+    assert "_streaming_context" not in context_override
+    assert captured_contexts, "The agent should have received a context override."
+    assert captured_contexts[0] is not context_override
+    assert "_streaming_context" in captured_contexts[0]
+
+
+@pytest.mark.asyncio
 async def test_agency_agent_to_agent_communication(mock_agent, mock_agent2):
     """Test agent-to-agent communication through Agency."""
     agency = Agency(mock_agent, communication_flows=[(mock_agent, mock_agent2)])
