@@ -5,7 +5,7 @@ import json
 import logging
 import threading
 from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING, Any, Union
+from typing import TYPE_CHECKING, Any, Literal, Union
 
 from agents import Agent as SDKAgent, FunctionTool, set_tracing_disabled
 from agents.mcp.server import MCPServer
@@ -55,6 +55,40 @@ def _create_mcp_base_tool(function_tool: FunctionTool, server_name: str) -> type
         "object": dict,
     }
 
+    # Helper function to extract validation constraints from JSON schema
+    def extract_field_constraints(field_schema: dict[str, Any]) -> dict[str, Any]:
+        """Extract Pydantic Field constraints from JSON schema."""
+        constraints: dict[str, Any] = {}
+
+        # String constraints
+        if "minLength" in field_schema:
+            constraints["min_length"] = field_schema["minLength"]
+        if "maxLength" in field_schema:
+            constraints["max_length"] = field_schema["maxLength"]
+        if "pattern" in field_schema:
+            constraints["pattern"] = field_schema["pattern"]
+
+        # Numeric constraints (map JSON schema to Pydantic)
+        if "minimum" in field_schema:
+            constraints["ge"] = field_schema["minimum"]
+        if "maximum" in field_schema:
+            constraints["le"] = field_schema["maximum"]
+        if "exclusiveMinimum" in field_schema:
+            constraints["gt"] = field_schema["exclusiveMinimum"]
+        if "exclusiveMaximum" in field_schema:
+            constraints["lt"] = field_schema["exclusiveMaximum"]
+
+        # Array constraints (Pydantic uses min_length/max_length for arrays too)
+        if "minItems" in field_schema:
+            constraints["min_length"] = field_schema["minItems"]
+        if "maxItems" in field_schema:
+            constraints["max_length"] = field_schema["maxItems"]
+
+        # Note: enum and const are handled via type annotations (Literal)
+        # format, items, additionalProperties require special handling
+
+        return constraints
+
     # Helper function to resolve $ref
     def resolve_ref(field_schema: dict[str, Any]) -> dict[str, Any]:
         if "$ref" in field_schema:
@@ -64,9 +98,20 @@ def _create_mcp_base_tool(function_tool: FunctionTool, server_name: str) -> type
                 return defs.get(def_name, field_schema)
         return field_schema
 
-    # Helper function to extract type from schema, handling anyOf/oneOf
+    # Helper function to extract type from schema, handling anyOf/oneOf, enum, const
     def get_field_type(field_schema: dict[str, Any]) -> Any:
-        """Extract Python type from JSON schema, handling unions."""
+        """Extract Python type from JSON schema, handling unions, enums, and const."""
+        # Handle const (single literal value)
+        if "const" in field_schema:
+            const_value = field_schema["const"]
+            return Literal[const_value]  # type: ignore[misc,valid-type]
+
+        # Handle enum (multiple literal values)
+        if "enum" in field_schema:
+            enum_values = field_schema["enum"]
+            if enum_values:
+                # Create a Literal type with all enum values
+                return Literal[tuple(enum_values)]  # type: ignore[misc,valid-type]
         json_type = field_schema.get("type")
 
         # Handle anyOf/oneOf (common for optional fields with null)
@@ -102,20 +147,40 @@ def _create_mcp_base_tool(function_tool: FunctionTool, server_name: str) -> type
                     # Recursively build nested field types
                     nested_type = build_field_type(nested_schema, nested_name, f"{parent_name}_{field_name}")
                     nested_desc = nested_schema.get("description", "")
+                    nested_constraints = extract_field_constraints(nested_schema)
 
                     if nested_name in nested_required:
-                        nested_fields[nested_name] = (nested_type, Field(..., description=nested_desc))
+                        nested_fields[nested_name] = (
+                            nested_type,
+                            Field(..., description=nested_desc, **nested_constraints),
+                        )
                     else:
                         nested_default = nested_schema.get("default")
-                        nested_fields[nested_name] = (nested_type, Field(nested_default, description=nested_desc))
+                        nested_fields[nested_name] = (
+                            nested_type,
+                            Field(nested_default, description=nested_desc, **nested_constraints),
+                        )
 
-                # Create nested model
+                # Create nested model with additionalProperties handling
                 nested_model_name = f"{parent_name}_{field_name}"
-                return create_model(nested_model_name, **nested_fields)
+                # Check if additionalProperties is explicitly set to False
+                additional_props = field_schema.get("additionalProperties")
+                if additional_props is False:
+                    # Import ConfigDict for model configuration
+                    from pydantic import ConfigDict
+
+                    # Create model with extra='forbid' to reject additional properties
+                    return create_model(
+                        nested_model_name,
+                        __config__=ConfigDict(extra="forbid"),
+                        **nested_fields,
+                    )
+                else:
+                    return create_model(nested_model_name, **nested_fields)
             else:
                 return dict
 
-        # Return mapped type for primitives (handles anyOf/oneOf)
+        # Return mapped type for primitives (handles anyOf/oneOf, enum, const)
         return get_field_type(field_schema)
 
     # First, create models for all definitions in $defs using the recursive builder
@@ -131,16 +196,34 @@ def _create_mcp_base_tool(function_tool: FunctionTool, server_name: str) -> type
                     # Use the recursive builder for proper type resolution
                     prop_type = build_field_type(prop_info, prop_name, def_name)
                     prop_desc = prop_info.get("description", "")
+                    prop_constraints = extract_field_constraints(prop_info)
                     is_required = prop_name in def_required
 
                     if is_required:
-                        nested_fields[prop_name] = (prop_type, Field(..., description=prop_desc))
+                        nested_fields[prop_name] = (
+                            prop_type,
+                            Field(..., description=prop_desc, **prop_constraints),
+                        )
                     else:
                         default_val = prop_info.get("default")
-                        nested_fields[prop_name] = (prop_type, Field(default_val, description=prop_desc))
+                        nested_fields[prop_name] = (
+                            prop_type,
+                            Field(default_val, description=prop_desc, **prop_constraints),
+                        )
 
                 if nested_fields:
-                    def_models[def_name] = create_model(def_name, **nested_fields)
+                    # Check if additionalProperties is explicitly set to False
+                    additional_props = def_schema.get("additionalProperties")
+                    if additional_props is False:
+                        from pydantic import ConfigDict
+
+                        def_models[def_name] = create_model(
+                            def_name,
+                            __config__=ConfigDict(extra="forbid"),
+                            **nested_fields,
+                        )
+                    else:
+                        def_models[def_name] = create_model(def_name, **nested_fields)
 
     # Build field definitions for the main Pydantic model
     field_definitions: dict[str, Any] = {}
@@ -153,23 +236,38 @@ def _create_mcp_base_tool(function_tool: FunctionTool, server_name: str) -> type
                 if def_name in def_models:
                     field_type = def_models[def_name]
                     field_description = field_schema.get("description", "")
+                    # Note: $ref usually doesn't have additional constraints, but check anyway
+                    field_constraints = extract_field_constraints(field_schema)
 
                     if field_name in required:
-                        field_definitions[field_name] = (field_type, Field(..., description=field_description))
+                        field_definitions[field_name] = (
+                            field_type,
+                            Field(..., description=field_description, **field_constraints),
+                        )
                     else:
-                        field_definitions[field_name] = (field_type, Field(None, description=field_description))
+                        field_definitions[field_name] = (
+                            field_type,
+                            Field(None, description=field_description, **field_constraints),
+                        )
                     continue
 
         # Build field type recursively
         field_type = build_field_type(field_schema, field_name, class_name)
         field_description = field_schema.get("description", "")
+        field_constraints = extract_field_constraints(field_schema)
 
         # Check if field is required
         if field_name in required:
-            field_definitions[field_name] = (field_type, Field(..., description=field_description))
+            field_definitions[field_name] = (
+                field_type,
+                Field(..., description=field_description, **field_constraints),
+            )
         else:
             default_value = field_schema.get("default")
-            field_definitions[field_name] = (field_type, Field(default_value, description=field_description))
+            field_definitions[field_name] = (
+                field_type,
+                Field(default_value, description=field_description, **field_constraints),
+            )
 
     # Create the base model with fields
     DynamicModel = create_model(class_name, **field_definitions)
@@ -276,9 +374,10 @@ def _create_mcp_base_tool(function_tool: FunctionTool, server_name: str) -> type
             # Delegate to the manager's reconnect method
             await default_mcp_manager.reconnect(server)
 
-    # Set the docstring from the FunctionTool
+    # Set the docstring and proper class names for error messages
     MCPBaseTool.__doc__ = function_tool.description or f"MCP tool: {function_tool.name}"
     MCPBaseTool.__name__ = class_name
+    MCPBaseTool.__qualname__ = class_name  # This is what Pydantic uses in error messages
 
     # Create a unique ToolConfig subclass to avoid mutating the shared BaseTool.ToolConfig
     if function_tool.strict_json_schema:

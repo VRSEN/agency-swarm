@@ -416,10 +416,14 @@ def convert_mcp_servers_to_tools(agent: "Agent") -> None:
     if not isinstance(servers, list) or len(servers) == 0:
         return
 
+    # Read convert_schemas_to_strict from agent's mcp_config
+    mcp_config = getattr(agent, "mcp_config", None) or {}
+    convert_to_strict = mcp_config.get("convert_schemas_to_strict", False)
+
     # Convert MCP servers to BaseTool classes
     converted_tools = ToolFactory.from_mcp(
         servers,
-        convert_schemas_to_strict=False,
+        convert_schemas_to_strict=convert_to_strict,
         context=None,
         agent=agent,
         as_base_tool=True,  # Return BaseTool classes
