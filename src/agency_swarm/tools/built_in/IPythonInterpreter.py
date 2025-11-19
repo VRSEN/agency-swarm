@@ -371,7 +371,7 @@ class IPythonInterpreter(BaseTool):
         result: ExecResult
         session: AsyncKernelSession | None = None
         timeout_value = self.timeout
-        fields_set = getattr(self, "model_fields_set", set())
+        fields_set: set[str] = getattr(self, "model_fields_set", set())
         if "timeout" not in fields_set:
             config_timeout = getattr(self.ToolConfig, "kernel_timeout_seconds", None)
             if config_timeout is not None:
