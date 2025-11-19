@@ -1,11 +1,13 @@
 # ipython_interpreter.py
 """IPython interpreter tool with isolated kernel execution per agent."""
+
 from __future__ import annotations
 
 import asyncio
+import os
 import weakref
 from dataclasses import dataclass
-from typing import Any, ClassVar
+from typing import Any
 
 from pydantic import Field
 
@@ -16,9 +18,12 @@ try:
     from jupyter_client import AsyncKernelManager  # type: ignore[import-not-found]
 except ImportError as e:
     raise ImportError(
-        "IPythonInterpreter requires jupyter packages. "
-        "Install them with: pip install agency-swarm[jupyter]"
+        "IPythonInterpreter requires jupyter packages. Install them with: pip install agency-swarm[jupyter]"
     ) from e
+
+
+# Default timeout for code execution (seconds)
+DEFAULT_TIMEOUT_SECONDS: float = float(os.getenv("PERSISTENT_SHELL_TIMEOUT", "60.0"))
 
 
 @dataclass(slots=True)
@@ -92,7 +97,9 @@ class AsyncKernelSession:
             await self.shutdown()
             await self.start()
 
-    async def execute(self, code: str, timeout: float = 10.0, working_dir: str | None = None) -> ExecResult:
+    async def execute(
+        self, code: str, timeout: float = DEFAULT_TIMEOUT_SECONDS, working_dir: str | None = None
+    ) -> ExecResult:
         """Execute code inside the kernel, collecting stdout, result, and errors."""
         await self._ready.wait()
 
@@ -280,7 +287,7 @@ class AsyncKernelPool:
         return self._sessions[client_id]
 
     async def execute(
-        self, client_id: str, code: str, timeout: float = 10.0, working_dir: str | None = None
+        self, client_id: str, code: str, timeout: float = DEFAULT_TIMEOUT_SECONDS, working_dir: str | None = None
     ) -> ExecResult:
         session = await self.get_or_create(client_id)
         return await session.execute(code, timeout=timeout, working_dir=working_dir)
@@ -349,8 +356,10 @@ class IPythonInterpreter(BaseTool):
             "The tool will change to this directory before execution and restore the previous directory afterward."
         ),
     )
-
-    DEFAULT_TIMEOUT_SECONDS: ClassVar[float] = 60.0
+    timeout: float = Field(
+        DEFAULT_TIMEOUT_SECONDS,
+        description="Maximum execution time in seconds. Code execution will be interrupted if it exceeds this limit.",
+    )
 
     async def run(self) -> str:
         agent_name = None
@@ -359,9 +368,14 @@ class IPythonInterpreter(BaseTool):
         elif self.context:
             agent_name = self.context.current_agent_name
 
-        timeout = getattr(self.ToolConfig, "kernel_timeout_seconds", self.DEFAULT_TIMEOUT_SECONDS)
         result: ExecResult
         session: AsyncKernelSession | None = None
+        timeout_value = self.timeout
+        fields_set: set[str] = getattr(self, "model_fields_set", set())
+        if "timeout" not in fields_set:
+            config_timeout = getattr(self.ToolConfig, "kernel_timeout_seconds", None)
+            if config_timeout is not None:
+                timeout_value = config_timeout
 
         try:
             if self.context and agent_name:
@@ -370,13 +384,20 @@ class IPythonInterpreter(BaseTool):
                     pool = AsyncKernelPool()
                     self.context.set("ipython_kernel_pool", pool)
                 result = await pool.execute(
-                    agent_name, self.code, timeout=timeout, working_dir=self.working_dir
+                    agent_name,
+                    self.code,
+                    timeout=timeout_value,
+                    working_dir=self.working_dir,
                 )
             else:
                 # Fallback: create ephemeral kernel for this execution
                 session = AsyncKernelSession()
                 await session.start()
-                result = await session.execute(self.code, timeout=timeout, working_dir=self.working_dir)
+                result = await session.execute(
+                    self.code,
+                    timeout=timeout_value,
+                    working_dir=self.working_dir,
+                )
         finally:
             if session is not None:
                 await session.shutdown()

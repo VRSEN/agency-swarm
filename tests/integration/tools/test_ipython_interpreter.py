@@ -1,4 +1,7 @@
 """Integration tests for IPythonInterpreter tool with agent isolation."""
+
+import asyncio
+
 import pytest
 from agents.run_context import RunContextWrapper
 
@@ -131,8 +134,6 @@ class TestIPythonInterpreterAgentIsolation:
     @pytest.mark.asyncio
     async def test_concurrent_execution_isolation(self):
         """Test that concurrent executions on different agents maintain isolation."""
-        import asyncio
-
         agent_a = Agent(name="AgentA", description="", instructions="", tools=[IPythonInterpreter])
         agent_b = Agent(name="AgentB", description="", instructions="", tools=[IPythonInterpreter])
 
@@ -262,6 +263,7 @@ result
     @pytest.mark.asyncio
     async def test_timeout_on_infinite_loop(self, shared_context):
         """Test that infinite loops are properly timed out."""
+
         # Create a custom tool class with a short timeout
         class ShortTimeoutInterpreter(IPythonInterpreter):
             class ToolConfig:
@@ -273,7 +275,8 @@ result
         tool._caller_agent = agent
         tool._context = shared_context
 
-        result = await tool.run()
+        # Fail fast if ToolConfig override stops being respected
+        result = await asyncio.wait_for(tool.run(), timeout=5)
 
         assert "Error:" in result
         assert "TimeoutError" in result or "timeout" in result.lower()
@@ -325,10 +328,7 @@ class TestIPythonInterpreterWorkingDirectory:
         initial_dir = initial_result.split("Result:")[-1].strip().strip("'\"")
 
         # Execute code in different directory with expression result
-        tool2 = IPythonInterpreter(
-            code="open('test.txt').read()",
-            working_dir=str(tmp_path)
-        )
+        tool2 = IPythonInterpreter(code="open('test.txt').read()", working_dir=str(tmp_path))
         tool2._caller_agent = agent_with_ipython
         tool2._context = shared_context
         result2 = await tool2.run()
@@ -358,7 +358,7 @@ class TestIPythonInterpreterWorkingDirectory:
         # Execute code that will fail in different directory
         tool2 = IPythonInterpreter(
             code="1 / 0",  # This will raise ZeroDivisionError
-            working_dir=str(tmp_path)
+            working_dir=str(tmp_path),
         )
         tool2._caller_agent = agent_with_ipython
         tool2._context = shared_context
