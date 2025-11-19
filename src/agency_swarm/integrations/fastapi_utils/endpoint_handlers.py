@@ -1,4 +1,3 @@
-import asyncio
 import json
 import logging
 import time
@@ -10,7 +9,7 @@ from ag_ui.encoder import EventEncoder
 from agents import OpenAIResponsesModel, TResponseInputItem, output_guardrail
 from agents.exceptions import OutputGuardrailTripwireTriggered
 from agents.models._openai_shared import get_default_openai_client
-from fastapi import Depends, HTTPException, Request
+from fastapi import Depends, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from openai import AsyncOpenAI
@@ -30,16 +29,6 @@ from agency_swarm.ui.core.agui_adapter import AguiAdapter
 from agency_swarm.utils.serialization import serialize
 
 logger = logging.getLogger(__name__)
-
-
-def _get_agency_swarm_version() -> str | None:
-    """Return the installed agency-swarm version, if available."""
-
-    try:
-        return metadata.version("agency-swarm")
-    except metadata.PackageNotFoundError:
-        logger.debug("agency-swarm package metadata not found; returning no version")
-        return None
 
 
 def get_verify_token(app_token):
@@ -209,31 +198,6 @@ def make_stream_endpoint(request_model, agency_factory: Callable[..., Agency], v
                 "X-Accel-Buffering": "no",
             },
         )
-
-    return handler
-
-
-# Tool endpoint
-def make_tool_endpoint(tool, verify_token, context=None):
-    async def handler(request: Request, token: str = Depends(verify_token)):
-        try:
-            data = await request.json()
-            # If this is a FunctionTool (from @function_tool), use on_invoke_tool
-            if hasattr(tool, "on_invoke_tool"):
-                input_json = json.dumps(data)
-                result = await tool.on_invoke_tool(context, input_json)
-            elif isinstance(tool, type):
-                tool_instance = tool(**data)
-                result = tool_instance.run()
-                if asyncio.iscoroutine(result):
-                    result = await result
-            else:
-                result = tool(**data)
-                if asyncio.iscoroutine(result):
-                    result = await result
-            return {"response": result}
-        except Exception as e:
-            return JSONResponse(status_code=500, content={"Error": str(e)})
 
     return handler
 
@@ -418,3 +382,13 @@ Rules:
     response = await agency.get_response(formatted_messages)
 
     return response.final_output.chat_name
+
+
+def _get_agency_swarm_version() -> str | None:
+    """Return the installed agency-swarm version, if available."""
+
+    try:
+        return metadata.version("agency-swarm")
+    except metadata.PackageNotFoundError:
+        logger.debug("agency-swarm package metadata not found; returning no version")
+        return None

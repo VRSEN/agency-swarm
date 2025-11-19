@@ -60,13 +60,13 @@ def run_fastapi(
             make_metadata_endpoint,
             make_response_endpoint,
             make_stream_endpoint,
-            make_tool_endpoint,
         )
         from .fastapi_utils.logging_middleware import (
             RequestTracker,
             setup_enhanced_logging,
         )
         from .fastapi_utils.request_models import BaseRequest, LogRequest, RunAgentInputCustom, add_agent_validator
+        from .fastapi_utils.tool_endpoints import make_tool_endpoint
     except ImportError as e:
         logger.error(f"FastAPI deployment dependencies are missing: {e}. Please install agency-swarm[fastapi] package")
         return
@@ -154,8 +154,18 @@ def run_fastapi(
         for tool in tools:
             tool_name = tool.name if hasattr(tool, "name") else tool.__name__
             tool_handler = make_tool_endpoint(tool, verify_token)
-            app.add_api_route(f"/tool/{tool_name}", tool_handler, methods=["POST"], name=tool_name)
+            app.add_api_route(
+                f"/tool/{tool_name}",
+                tool_handler,
+                methods=["POST"],
+                name=tool_name,
+                operation_id=tool_name,
+            )
             endpoints.append(f"/tool/{tool_name}")
+
+        base_url = f"http://{host}:{port}"
+        logger.info(f"📋 Tool schemas available at: {base_url}/openapi.json")
+        logger.info(f"   Or use: ToolFactory.get_openapi_schema(tools, '{base_url}') for programmatic access")
 
     app.add_exception_handler(Exception, exception_handler)
 

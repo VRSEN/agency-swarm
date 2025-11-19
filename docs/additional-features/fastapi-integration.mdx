@@ -171,6 +171,8 @@ print("Response:", tool_response.json())
   Each tool is served at:
   - `/tool/ToolClassName` (POST) - for BaseTools
   - `/tool/function_name` (POST) - for FunctionTools
+  - `/openapi.json` (GET) - aggregate schema for every agency and tool endpoint
+  - `/docs` and `/redoc` (GET) - interactive Swagger UI and ReDoc powered by the same OpenAPI spec
 
 - **Logging Endpoint:**
   When `enable_logging=True`:
@@ -178,6 +180,56 @@ print("Response:", tool_response.json())
 
 - **AG-UI Protocol:**
   When `enable_agui=True`, only the streaming endpoint is exposed and follows the AG-UI protocol for enhanced frontend integration.
+
+---
+
+## Inspecting Tool Schemas
+
+When integrating your tools with external systems or documenting your API, you need to expose the parameter schemas. FastAPI automatically serves `/openapi.json`, so you can point tooling (Swagger UI, ReDoc, Agencii.ai, etc.) directly at the running server. The same schema is available programmatically via `ToolFactory.get_openapi_schema()` when you want to export it without starting FastAPI. Both outputs now share the same `/tool/<ToolName>` routes, HTTP Bearer security, and validation error responses, so either endpoint can be consumed interchangeably.
+
+```python
+from agency_swarm.tools import ToolFactory
+
+tools = [MyTool, my_function_tool]
+openapi_schema = ToolFactory.get_openapi_schema(
+    tools,
+    url="https://your-server.com",
+    title="My Tools API",
+    description="OpenAPI schema for my tools"
+)
+```
+
+The method returns a JSON string containing the complete specification with all tool parameters, types, and descriptions.
+
+**Implementation:** `src/agency_swarm/tools/tool_factory.py`
+
+
+### Example: Serving Standalone Tools
+
+```python
+from agency_swarm import BaseTool, run_fastapi
+
+class Address(BaseTool):
+    street: str
+    zip_code: int
+
+    def run(self) -> str:
+        return f"{self.street} {self.zip_code}"
+
+run_fastapi(
+    tools=[Address],
+    host="0.0.0.0",
+    port=8080,
+)
+```
+
+Resulting endpoints:
+
+- `POST /tool/Address` – executes the tool with full Pydantic validation (including nested models)
+- `GET /openapi.json` – full schema for agencies and tools
+- `GET /docs` / `GET /redoc` – interactive exploration powered by `/openapi.json`
+
+See `examples/fastapi_integration/server.py` for a complete multi-agent + tool setup.
 
 ---
 

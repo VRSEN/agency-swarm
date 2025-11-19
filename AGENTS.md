@@ -52,6 +52,7 @@ These requirements apply to every file in the repository. Bullets prefixed with 
 - Clarity over verbosity: Use the fewest words necessary without loss of meaning. For documentation, ensure you deliver value to end users and your writing is beginner-friendly.
 - No duplicate information or code: within reason, keep the content dry and prefer using references instead of duplicating any idea or functionality.
 - Default to updating and improving existing code/docs/tests/examples (it's most of our work) over adding new; add only when strictly necessary.
+- Order modules so public functions/classes appear first. Place any private helpers (prefixed with `_`) after the public APIs so readers see the core logic immediately.
 - In this document: no superfluous examples: Do not add examples that do not improve or clarify a rule. Omit examples when rules are self‑explanatory.
 - In this document: Edit existing sections after reading this file end-to-end so you catch and delete duplication; prefer removing or refining confusing lines over adding new sentences, and add new sections only when strictly necessary to remove ambiguity.
 - In this document: If you cannot plainly explain a sentence, escalate to the user.

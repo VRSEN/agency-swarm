@@ -1,5 +1,8 @@
 """Integration tests for the FastAPI metadata endpoint."""
 
+import json
+from datetime import datetime
+
 import pytest
 
 pytest.importorskip("fastapi.testclient")
@@ -7,9 +10,11 @@ from agents import CodeInterpreterTool, FileSearchTool, ModelSettings, WebSearch
 from fastapi.testclient import TestClient
 from openai.types.responses.tool_param import CodeInterpreter
 from openai.types.shared import Reasoning
+from pydantic import BaseModel
 
 from agency_swarm import Agency, Agent, BaseTool, function_tool, run_fastapi
-from agency_swarm.integrations.fastapi_utils import endpoint_handlers
+from agency_swarm.integrations.fastapi_utils import endpoint_handlers, tool_endpoints
+from agency_swarm.tools import ToolFactory
 
 
 @pytest.fixture
@@ -165,3 +170,266 @@ def test_metadata_capabilities_empty_for_basic_agent():
     assert basic_agent is not None
     assert "capabilities" in basic_agent["data"]
     assert basic_agent["data"]["capabilities"] == []
+
+
+def test_tool_endpoint_handles_nested_schema():
+    """Test that tool endpoints work with nested Pydantic models."""
+
+    class Address(BaseModel):
+        street: str
+        zip_code: int
+
+    class NestedTool(BaseTool):
+        address: Address
+
+        def run(self) -> str:
+            return self.address.street
+
+    app = run_fastapi(tools=[NestedTool], return_app=True, app_token_env="")
+    client = TestClient(app)
+
+    response = client.post("/tool/NestedTool", json={"address": {"street": "Elm", "zip_code": 90210}})
+
+    assert response.status_code == 200
+    assert response.json() == {"response": "Elm"}
+
+
+def test_tool_endpoint_serializes_datetime_for_on_invoke(monkeypatch):
+    """Ensure typed tool endpoints pass JSON strings to on_invoke_tool."""
+
+    class TimestampRequest(BaseModel):
+        timestamp: datetime
+
+    class TimestampFunctionTool:
+        name = "TimestampFunctionTool"
+        openai_schema = {
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "timestamp": {
+                        "type": "string",
+                        "description": "ISO timestamp",
+                    }
+                },
+                "required": ["timestamp"],
+            }
+        }
+
+        calls: list[str] = []
+
+        @staticmethod
+        async def on_invoke_tool(context, input_json: str):
+            TimestampFunctionTool.calls.append(input_json)
+            return "ok"
+
+    def fake_build_request_model(*_, **__):
+        return TimestampRequest
+
+    monkeypatch.setattr(tool_endpoints, "build_request_model", fake_build_request_model)
+    TimestampFunctionTool.calls = []
+
+    app = run_fastapi(tools=[TimestampFunctionTool], return_app=True, app_token_env="")
+    client = TestClient(app)
+
+    response = client.post("/tool/TimestampFunctionTool", json={"timestamp": "2024-05-01T09:30:00Z"})
+
+    assert response.status_code == 200
+    assert response.json() == {"response": "ok"}
+    assert TimestampFunctionTool.calls, "on_invoke_tool should be triggered"
+    payload = json.loads(TimestampFunctionTool.calls[0])
+    assert payload == {"timestamp": "2024-05-01T09:30:00Z"}
+
+
+def test_openapi_json_includes_nested_schemas():
+    """Verify /openapi.json contains proper schemas for tools with nested models."""
+
+    class Address(BaseModel):
+        street: str
+        zip_code: int
+
+    class NestedTool(BaseTool):
+        address: Address
+
+        def run(self) -> str:
+            return self.address.street
+
+    class SimpleTool(BaseTool):
+        name: str
+        age: int
+
+        def run(self) -> str:
+            return self.name
+
+    app = run_fastapi(tools=[NestedTool, SimpleTool], return_app=True, app_token_env="")
+    client = TestClient(app)
+
+    response = client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+
+    assert "/tool/NestedTool" in schema["paths"]
+    assert "/tool/SimpleTool" in schema["paths"]
+
+    nested_endpoint = schema["paths"]["/tool/NestedTool"]["post"]
+    assert "requestBody" in nested_endpoint
+    nested_schema_ref = nested_endpoint["requestBody"]["content"]["application/json"]["schema"]
+    assert nested_schema_ref["$ref"] == "#/components/schemas/NestedTool"
+
+    assert "NestedTool" in schema["components"]["schemas"]
+    assert "Address" in schema["components"]["schemas"]
+
+    nested_tool_schema = schema["components"]["schemas"]["NestedTool"]
+    assert nested_tool_schema["properties"]["address"]["$ref"] == "#/components/schemas/Address"
+
+    address_schema = schema["components"]["schemas"]["Address"]
+    assert address_schema["type"] == "object"
+    assert "street" in address_schema["properties"]
+    assert "zip_code" in address_schema["properties"]
+    assert address_schema["required"] == ["street", "zip_code"]
+
+
+def test_function_tool_with_nested_schema():
+    """Verify that FunctionTools with nested models work correctly via adapted BaseTool."""
+
+    class Address(BaseModel):
+        street: str
+        zip_code: int
+
+    class UserTool(BaseTool):
+        """Create a user with address."""
+
+        name: str
+        address: Address
+
+        def run(self) -> str:
+            return f"{self.name} at {self.address.street}"
+
+    # Adapt the BaseTool to a FunctionTool (simulates what happens in agents)
+    function_tool = ToolFactory.adapt_base_tool(UserTool)
+
+    app = run_fastapi(tools=[function_tool], return_app=True, app_token_env="")
+    client = TestClient(app)
+
+    # Test that the endpoint works
+    response = client.post(
+        "/tool/UserTool", json={"name": "Alice", "address": {"street": "123 Main St", "zip_code": 12345}}
+    )
+    assert response.status_code == 200
+    assert "Alice at 123 Main St" in response.json()["response"]
+
+    # Test that OpenAPI schema includes nested model
+    schema_response = client.get("/openapi.json")
+    assert schema_response.status_code == 200
+    openapi_schema = schema_response.json()
+
+    assert "/tool/UserTool" in openapi_schema["paths"]
+    endpoint_schema = openapi_schema["paths"]["/tool/UserTool"]["post"]
+    assert "requestBody" in endpoint_schema
+
+    # Verify the schema is properly typed (not generic Request)
+    request_schema = endpoint_schema["requestBody"]["content"]["application/json"]["schema"]
+    assert "$ref" in request_schema
+    assert "UserToolRequest" in request_schema["$ref"]
+
+
+def test_strict_function_tool_rejects_extra_fields():
+    """Ensure strict tools exposed via FastAPI still validate unexpected inputs."""
+
+    class StrictTool(BaseTool):
+        """Return the given value."""
+
+        class ToolConfig:
+            strict = True
+
+        value: int
+
+        def run(self) -> int:
+            return self.value
+
+    strict_function_tool = ToolFactory.adapt_base_tool(StrictTool)
+
+    app = run_fastapi(tools=[strict_function_tool], return_app=True, app_token_env="")
+    client = TestClient(app)
+
+    response = client.post("/tool/StrictTool", json={"value": 7, "unexpected": "boom"})
+
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert any(item.get("type") == "extra_forbidden" for item in detail)
+
+
+def test_tool_endpoint_preserves_explicit_nulls():
+    """Tools must receive explicit null payloads without them being dropped."""
+
+    class NullableTool(BaseTool):
+        note: str | None = None
+
+        def run(self) -> str | None:
+            return self.note
+
+    app = run_fastapi(tools=[NullableTool], return_app=True, app_token_env="")
+    client = TestClient(app)
+
+    response = client.post("/tool/NullableTool", json={"note": None})
+
+    assert response.status_code == 200
+    assert response.json() == {"response": None}
+
+
+def test_function_tool_nested_list_validation_survives_schema_export():
+    """FunctionTools should retain nested list schemas after ToolFactory exports."""
+
+    class Address(BaseModel):
+        street: str
+        zip_code: int
+
+    class AddressListTool(BaseTool):
+        addresses: list[Address]
+
+        def run(self) -> str:
+            return ",".join(addr.street for addr in self.addresses)
+
+    function_tool = ToolFactory.adapt_base_tool(AddressListTool)
+    ToolFactory.get_openapi_schema([function_tool], "https://api.test.com")
+
+    app = run_fastapi(tools=[function_tool], return_app=True, app_token_env="")
+    client = TestClient(app)
+
+    # Missing zip_code inside nested list should raise a FastAPI validation error (422)
+    invalid_response = client.post("/tool/AddressListTool", json={"addresses": [{"street": "Elm"}]})
+    assert invalid_response.status_code == 422
+
+    valid_response = client.post(
+        "/tool/AddressListTool",
+        json={"addresses": [{"street": "Elm", "zip_code": 90210}]},
+    )
+
+    assert valid_response.status_code == 200
+    assert valid_response.json() == {"response": "Elm"}
+
+
+def test_function_tool_nested_union_falls_back_to_generic_handler():
+    """Nested unions should bypass the typed request model to avoid false 422 errors."""
+
+    class Contact(BaseModel):
+        identifier: str | int
+
+    class ContainerTool(BaseTool):
+        contact: Contact
+
+        def run(self) -> str:
+            return str(self.contact.identifier)
+
+    function_tool = ToolFactory.adapt_base_tool(ContainerTool)
+
+    app = run_fastapi(tools=[function_tool], return_app=True, app_token_env="")
+    client = TestClient(app)
+
+    response = client.post("/tool/ContainerTool", json={"contact": {"identifier": 99}})
+
+    assert response.status_code == 200
+    assert response.json() == {"response": "99"}
+
+    schema = client.get("/openapi.json").json()
+    endpoint = schema["paths"]["/tool/ContainerTool"]["post"]
+    assert "requestBody" not in endpoint
