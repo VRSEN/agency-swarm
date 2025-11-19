@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import weakref
 from dataclasses import dataclass
 from typing import Any
@@ -22,7 +23,7 @@ except ImportError as e:
 
 
 # Default timeout for code execution (seconds)
-DEFAULT_TIMEOUT_SECONDS: float = 60.0
+DEFAULT_TIMEOUT_SECONDS: float = float(os.getenv("PERSISTENT_SHELL_TIMEOUT", "60.0"))
 
 
 @dataclass(slots=True)
