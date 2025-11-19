@@ -182,6 +182,56 @@ async def test_mcp_validation_metadata_loss(mock_manager, mock_get_function_tool
 @pytest.mark.asyncio
 @patch("agents.mcp.util.MCPUtil.get_function_tools", new_callable=AsyncMock)
 @patch("agency_swarm.tools.mcp_manager.default_mcp_manager")
+async def test_mcp_array_items_are_enforced(mock_manager, mock_get_function_tools: AsyncMock) -> None:
+    """Array schemas must enforce item types when converted to BaseTools."""
+
+    schema_with_array = {
+        "type": "object",
+        "properties": {
+            "tags": {
+                "type": "array",
+                "description": "List of tags",
+                "items": {"type": "string"},
+            }
+        },
+        "required": ["tags"],
+    }
+
+    async def mock_invoke(ctx, input_json: str):
+        return f"Processed: {input_json}"
+
+    function_tool = FunctionTool(
+        name="list_tags",
+        description="Validates tag list",
+        params_json_schema=schema_with_array,
+        on_invoke_tool=mock_invoke,
+        strict_json_schema=False,
+    )
+    mock_get_function_tools.return_value = [function_tool]
+
+    server = _DummyServer()
+    mock_manager.register.return_value = server
+    mock_manager.ensure_connected = AsyncMock()
+    mock_manager.get.return_value = server
+
+    tools = ToolFactory.from_mcp([server], as_base_tool=True)
+    assert len(tools) == 1
+    tool_class = tools[0]
+
+    converted_schema = tool_class.model_json_schema()
+    assert converted_schema["properties"]["tags"]["items"].get("type") == "string"
+
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError, match="string|str"):
+        tool_class(tags=[1, 2])
+
+    tool_class(tags=["alpha", "beta"])
+
+
+@pytest.mark.asyncio
+@patch("agents.mcp.util.MCPUtil.get_function_tools", new_callable=AsyncMock)
+@patch("agency_swarm.tools.mcp_manager.default_mcp_manager")
 async def test_mcp_nested_object_validation_loss(mock_manager, mock_get_function_tools: AsyncMock) -> None:
     """Test that validation constraints are also lost in nested objects and $defs."""
 

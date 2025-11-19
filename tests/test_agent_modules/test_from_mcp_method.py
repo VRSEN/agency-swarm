@@ -1,7 +1,7 @@
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from agents import FunctionTool
+from agents import FunctionTool, ToolOutputImage
 from agents.run_context import RunContextWrapper
 
 from agency_swarm.tools.tool_factory import ToolFactory
@@ -144,3 +144,39 @@ async def test_from_mcp_base_tools_are_invokable(mock_manager, mock_get_function
     result2 = await tool_instance2.run()
 
     assert result2 == 'Echo: {"message": "world"}'
+
+
+@pytest.mark.asyncio
+@patch("agents.mcp.util.MCPUtil.get_function_tools", new_callable=AsyncMock)
+@patch("agency_swarm.tools.mcp_manager.default_mcp_manager")
+async def test_from_mcp_base_tools_preserve_structured_outputs(
+    mock_manager, mock_get_function_tools: AsyncMock
+) -> None:
+    """BaseTool.run must return structured outputs from the underlying FunctionTool."""
+
+    image_output = ToolOutputImage(image_url="https://example.com/sample.png")
+
+    async def mock_invoke(ctx, input_json: str):
+        return image_output
+
+    function_tool = FunctionTool(
+        name="structured",
+        description="returns structured output",
+        params_json_schema={"type": "object", "properties": {}},
+        on_invoke_tool=mock_invoke,
+        strict_json_schema=False,
+    )
+    mock_get_function_tools.return_value = [function_tool]
+
+    server = _DummyServer()
+    mock_manager.register.return_value = server
+    mock_manager.ensure_connected = AsyncMock()
+    mock_manager.get.return_value = server
+
+    tools = ToolFactory.from_mcp([server], as_base_tool=True)
+    tool_class = tools[0]
+
+    tool_instance = tool_class()
+    result = await tool_instance.run()
+
+    assert result is image_output

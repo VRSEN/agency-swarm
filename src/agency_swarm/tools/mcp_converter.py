@@ -136,6 +136,19 @@ def _create_mcp_base_tool(function_tool: FunctionTool, server_name: str) -> type
 
         json_type = field_schema.get("type")
 
+        if json_type == "array":
+            if "prefixItems" in field_schema:
+                raise ValueError("Tuple-style array schemas with prefixItems are not supported")
+            items_schema = field_schema.get("items")
+            if isinstance(items_schema, list):
+                raise ValueError("Tuple-style array schemas with a list of items are not supported")
+
+            item_schema = items_schema if isinstance(items_schema, dict) else None
+            item_annotation: Any = (
+                build_field_type(item_schema, f"{field_name}_item", parent_name) if item_schema else Any
+            )
+            return list[item_annotation]
+
         # Handle object types with properties (nested models)
         if json_type == "object":
             nested_props = field_schema.get("properties", {})
@@ -280,7 +293,7 @@ def _create_mcp_base_tool(function_tool: FunctionTool, server_name: str) -> type
         _mcp_function_tool: FunctionTool = PrivateAttr(default_factory=lambda: function_tool)
         _mcp_server_name: str = PrivateAttr(default_factory=lambda: server_name)
 
-        async def run(self) -> str:
+        async def run(self) -> Any:
             """Execute the MCP tool via the wrapped FunctionTool with automatic reconnection."""
             # Convert instance fields to JSON for the FunctionTool
             args_dict = self.model_dump(exclude={"_mcp_function_tool", "_mcp_server_name"})
@@ -296,7 +309,7 @@ def _create_mcp_base_tool(function_tool: FunctionTool, server_name: str) -> type
             for attempt in range(max_retries):
                 try:
                     result = await self._mcp_function_tool.on_invoke_tool(ctx, input_json)  # type: ignore[arg-type]
-                    return str(result)
+                    return result
                 except Exception as e:
                     last_exception = e
 
@@ -359,9 +372,8 @@ def _create_mcp_base_tool(function_tool: FunctionTool, server_name: str) -> type
 
             # If we get here, all retries failed
             if last_exception:
-                error_details = str(last_exception) if str(last_exception).strip() else repr(last_exception)
-                return f"Error: {error_details}"
-            return "Error: Unknown error occurred"
+                raise last_exception
+            raise RuntimeError("Unknown error occurred")
 
         async def _attempt_reconnect(self) -> None:
             """Attempt to reconnect to the MCP server by delegating to the manager."""
