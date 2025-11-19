@@ -370,6 +370,12 @@ class IPythonInterpreter(BaseTool):
 
         result: ExecResult
         session: AsyncKernelSession | None = None
+        timeout_value = self.timeout
+        fields_set = getattr(self, "model_fields_set", set())
+        if "timeout" not in fields_set:
+            config_timeout = getattr(self.ToolConfig, "kernel_timeout_seconds", None)
+            if config_timeout is not None:
+                timeout_value = config_timeout
 
         try:
             if self.context and agent_name:
@@ -377,12 +383,21 @@ class IPythonInterpreter(BaseTool):
                 if pool is None:
                     pool = AsyncKernelPool()
                     self.context.set("ipython_kernel_pool", pool)
-                result = await pool.execute(agent_name, self.code, timeout=self.timeout, working_dir=self.working_dir)
+                result = await pool.execute(
+                    agent_name,
+                    self.code,
+                    timeout=timeout_value,
+                    working_dir=self.working_dir,
+                )
             else:
                 # Fallback: create ephemeral kernel for this execution
                 session = AsyncKernelSession()
                 await session.start()
-                result = await session.execute(self.code, timeout=self.timeout, working_dir=self.working_dir)
+                result = await session.execute(
+                    self.code,
+                    timeout=timeout_value,
+                    working_dir=self.working_dir,
+                )
         finally:
             if session is not None:
                 await session.shutdown()
