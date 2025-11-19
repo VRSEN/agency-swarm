@@ -190,7 +190,7 @@ def get_response_stream(
 
         try:
             async with agency.event_stream_merger.create_streaming_context() as streaming_context:
-                enhanced_context = context_override or {}
+                enhanced_context = context_override.copy() if context_override else {}
                 enhanced_context["_streaming_context"] = streaming_context
 
                 agency_context = get_agent_context(agency, target_agent.name)
