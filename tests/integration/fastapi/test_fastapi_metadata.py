@@ -1,5 +1,8 @@
 """Integration tests for the FastAPI metadata endpoint."""
 
+import json
+from datetime import datetime
+
 import pytest
 
 pytest.importorskip("fastapi.testclient")
@@ -10,7 +13,7 @@ from openai.types.shared import Reasoning
 from pydantic import BaseModel
 
 from agency_swarm import Agency, Agent, BaseTool, function_tool, run_fastapi
-from agency_swarm.integrations.fastapi_utils import endpoint_handlers
+from agency_swarm.integrations.fastapi_utils import endpoint_handlers, tool_endpoints
 from agency_swarm.tools import ToolFactory
 
 
@@ -189,6 +192,52 @@ def test_tool_endpoint_handles_nested_schema():
 
     assert response.status_code == 200
     assert response.json() == {"response": "Elm"}
+
+
+def test_tool_endpoint_serializes_datetime_for_on_invoke(monkeypatch):
+    """Ensure typed tool endpoints pass JSON strings to on_invoke_tool."""
+
+    class TimestampRequest(BaseModel):
+        timestamp: datetime
+
+    class TimestampFunctionTool:
+        name = "TimestampFunctionTool"
+        openai_schema = {
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "timestamp": {
+                        "type": "string",
+                        "description": "ISO timestamp",
+                    }
+                },
+                "required": ["timestamp"],
+            }
+        }
+
+        calls: list[str] = []
+
+        @staticmethod
+        async def on_invoke_tool(context, input_json: str):
+            TimestampFunctionTool.calls.append(input_json)
+            return "ok"
+
+    def fake_build_request_model(*_, **__):
+        return TimestampRequest
+
+    monkeypatch.setattr(tool_endpoints, "build_request_model", fake_build_request_model)
+    TimestampFunctionTool.calls = []
+
+    app = run_fastapi(tools=[TimestampFunctionTool], return_app=True, app_token_env="")
+    client = TestClient(app)
+
+    response = client.post("/tool/TimestampFunctionTool", json={"timestamp": "2024-05-01T09:30:00Z"})
+
+    assert response.status_code == 200
+    assert response.json() == {"response": "ok"}
+    assert TimestampFunctionTool.calls, "on_invoke_tool should be triggered"
+    payload = json.loads(TimestampFunctionTool.calls[0])
+    assert payload == {"timestamp": "2024-05-01T09:30:00Z"}
 
 
 def test_openapi_json_includes_nested_schemas():

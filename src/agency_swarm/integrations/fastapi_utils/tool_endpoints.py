@@ -67,9 +67,10 @@ def make_tool_endpoint(tool, verify_token, context=None):
 
     async def handler(request_data: Any, token: str = Depends(verify_token)):
         try:
-            data = cast(BaseModel, request_data).model_dump(mode="python", exclude_unset=True)
+            request_model = cast(BaseModel, request_data)
+            data = request_model.model_dump(mode="python", exclude_unset=True)
             if hasattr(tool, "on_invoke_tool"):
-                input_json = json.dumps(data)
+                input_json = request_model.model_dump_json(exclude_unset=True)
                 result = await tool.on_invoke_tool(context, input_json)
             else:
                 result = tool(**data)
