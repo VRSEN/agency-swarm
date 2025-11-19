@@ -177,9 +177,8 @@ class TestAdaptBaseTool:
         mock_ctx = MagicMock()
         callback_result = await result.on_invoke_tool(mock_ctx, "{}")
 
-        assert (
-            callback_result
-            == "An error occurred while running the tool. Please try again. Error: Tool execution failed"
+        assert callback_result == (
+            "An error occurred while running the tool. Please try again. Error: Tool execution failed"
         )
 
     @pytest.mark.asyncio

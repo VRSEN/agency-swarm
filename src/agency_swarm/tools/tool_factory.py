@@ -279,33 +279,7 @@ class ToolFactory:
             ],
             "paths": {},
             "components": {
-                "schemas": {
-                    "ValidationError": {
-                        "title": "ValidationError",
-                        "type": "object",
-                        "properties": {
-                            "loc": {
-                                "title": "Location",
-                                "type": "array",
-                                "items": {"anyOf": [{"type": "string"}, {"type": "integer"}]},
-                            },
-                            "msg": {"title": "Message", "type": "string"},
-                            "type": {"title": "Error Type", "type": "string"},
-                        },
-                        "required": ["loc", "msg", "type"],
-                    },
-                    "HTTPValidationError": {
-                        "title": "HTTPValidationError",
-                        "type": "object",
-                        "properties": {
-                            "detail": {
-                                "title": "Detail",
-                                "type": "array",
-                                "items": {"$ref": "#/components/schemas/ValidationError"},
-                            }
-                        },
-                    },
-                },
+                "schemas": {},
                 "securitySchemes": {"HTTPBearer": {"type": "http", "scheme": "bearer"}},
             },
         }
@@ -326,44 +300,49 @@ class ToolFactory:
             else:
                 raise TypeError(f"Tool {tool} is not a BaseTool or FunctionTool.")
 
-            defs = parameters_schema.pop("$defs", {})
+            request_model_supported = ToolFactory._supports_fastapi_request_model(parameters_schema)
+            defs = parameters_schema.get("$defs", {})
 
-            request_schema = dict(parameters_schema)
-            request_schema.setdefault("type", "object")
-            request_schema.setdefault("title", openai_schema["name"])
-            if "description" not in request_schema and "description" in openai_schema:
-                request_schema["description"] = openai_schema["description"]
-            schema["components"]["schemas"][openai_schema["name"]] = request_schema
+            if request_model_supported:
+                request_schema = deepcopy(parameters_schema)
+                request_schema.pop("$defs", None)
+                request_schema.setdefault("type", "object")
+                request_schema.setdefault("title", openai_schema["name"])
+                if "description" not in request_schema and "description" in openai_schema:
+                    request_schema["description"] = openai_schema["description"]
+                schema["components"]["schemas"][openai_schema["name"]] = request_schema
 
             summary = openai_schema["name"].replace("_", " ").title()
-            schema["paths"][f"/tool/{openai_schema['name']}"] = {
-                "post": {
-                    "summary": summary,
-                    "operationId": openai_schema["name"],
-                    "security": [{"HTTPBearer": []}],
-                    "responses": {
-                        "200": {
-                            "description": "Successful Response",
-                            "content": {"application/json": {"schema": {}}},
-                        },
-                        "422": {
-                            "description": "Validation Error",
-                            "content": {
-                                "application/json": {"schema": {"$ref": "#/components/schemas/HTTPValidationError"}}
-                            },
-                        },
-                    },
-                    "requestBody": {
-                        "content": {
-                            "application/json": {"schema": {"$ref": f"#/components/schemas/{openai_schema['name']}"}}
-                        },
-                        "required": True,
-                    },
+            responses: dict[str, Any] = {
+                "200": {
+                    "description": "Tool executed successfully",
+                    "content": {"application/json": {"schema": {}}},
                 }
             }
 
-            if isinstance(defs, dict):
-                schema["components"]["schemas"].update(defs)
+            post_entry: dict[str, Any] = {
+                "summary": summary,
+                "operationId": openai_schema["name"],
+                "responses": responses,
+                "security": [{"HTTPBearer": []}],
+            }
+
+            if request_model_supported:
+                ToolFactory._ensure_validation_components(schema)
+                responses["422"] = {
+                    "description": "Validation Error",
+                    "content": {"application/json": {"schema": {"$ref": "#/components/schemas/HTTPValidationError"}}},
+                }
+                post_entry["requestBody"] = {
+                    "content": {
+                        "application/json": {"schema": {"$ref": f"#/components/schemas/{openai_schema['name']}"}}
+                    },
+                    "required": True,
+                }
+                if isinstance(defs, dict):
+                    schema["components"]["schemas"].update(defs)
+
+            schema["paths"][f"/tool/{openai_schema['name']}"] = {"post": post_entry}
 
         schema_str = json.dumps(schema, indent=2).replace("#/$defs/", "#/components/schemas/")
 
@@ -438,6 +417,77 @@ class ToolFactory:
         return func_tool
 
     @staticmethod
+    def _supports_fastapi_request_model(parameters_schema: dict[str, Any]) -> bool:
+        properties = parameters_schema.get("properties") or {}
+        if not properties:
+            return False
+        defs = parameters_schema.get("$defs", {})
+        return not ToolFactory._schema_has_polymorphism(parameters_schema, defs, set())
+
+    @staticmethod
+    def _schema_has_polymorphism(
+        schema_section: dict[str, Any],
+        defs: dict[str, Any],
+        visited_defs: set[str],
+    ) -> bool:
+        for keyword in ("oneOf", "anyOf", "allOf"):
+            if keyword in schema_section:
+                return True
+
+        ref = schema_section.get("$ref")
+        if isinstance(ref, str) and ref.startswith("#/$defs/"):
+            def_name = ref.replace("#/$defs/", "")
+            if def_name in visited_defs:
+                return False
+            visited_defs.add(def_name)
+            def_schema = defs.get(def_name)
+            if isinstance(def_schema, dict) and ToolFactory._schema_has_polymorphism(def_schema, defs, visited_defs):
+                return True
+            visited_defs.remove(def_name)
+
+        if "properties" in schema_section and isinstance(schema_section["properties"], dict):
+            for value in schema_section["properties"].values():
+                if isinstance(value, dict) and ToolFactory._schema_has_polymorphism(value, defs, visited_defs):
+                    return True
+
+        if "items" in schema_section and isinstance(schema_section["items"], dict):
+            if ToolFactory._schema_has_polymorphism(schema_section["items"], defs, visited_defs):
+                return True
+
+        return False
+
+    @staticmethod
+    def _ensure_validation_components(schema: dict[str, Any]) -> None:
+        components = schema.setdefault("components", {})
+        schemas = components.setdefault("schemas", {})
+        if "ValidationError" not in schemas:
+            schemas["ValidationError"] = {
+                "title": "ValidationError",
+                "type": "object",
+                "properties": {
+                    "loc": {
+                        "title": "Location",
+                        "type": "array",
+                        "items": {"anyOf": [{"type": "string"}, {"type": "integer"}]},
+                    },
+                    "msg": {"title": "Message", "type": "string"},
+                    "type": {"title": "Error Type", "type": "string"},
+                },
+                "required": ["loc", "msg", "type"],
+            }
+        if "HTTPValidationError" not in schemas:
+            schemas["HTTPValidationError"] = {
+                "title": "HTTPValidationError",
+                "type": "object",
+                "properties": {
+                    "detail": {
+                        "title": "Detail",
+                        "type": "array",
+                        "items": {"$ref": "#/components/schemas/ValidationError"},
+                    }
+                },
+            }
+
     def _format_value_error(validation_error: ValidationError) -> str | None:
         """
         Extract a user-facing message when every failure comes from value validators. Returns all messages
@@ -469,7 +519,6 @@ class ToolFactory:
             else:
                 combined_messages.append(message)
         return "; ".join(combined_messages)
-
     @staticmethod
     def _create_invoke_for_path(path, verb, openapi, tool_schema, function_name, headers=None, params=None, timeout=90):
         """

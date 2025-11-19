@@ -90,11 +90,13 @@ class TestGetOpenapiSchema:
         post_schema = result["paths"]["/tool/TestTool"]["post"]
         assert post_schema["operationId"] == "TestTool"
         assert post_schema["requestBody"]["required"] is True
+        assert post_schema["responses"]["200"]["description"] == "Tool executed successfully"
         assert (
             post_schema["responses"]["422"]["content"]["application/json"]["schema"]["$ref"]
             == "#/components/schemas/HTTPValidationError"
         )
-        assert result["components"]["securitySchemes"]["HTTPBearer"]["scheme"] == "bearer"
+        assert post_schema["security"] == [{"HTTPBearer": []}]
+        assert set(result["components"]["schemas"].keys()) == {"HTTPValidationError", "TestTool", "ValidationError"}
 
     def test_generates_schema_for_function_tool(self):
         async def dummy_tool(ctx, input_json: str):
@@ -114,6 +116,8 @@ class TestGetOpenapiSchema:
         post_schema = result["paths"]["/tool/dummy_tool"]["post"]
         assert post_schema["operationId"] == "dummy_tool"
         assert post_schema["security"] == [{"HTTPBearer": []}]
+        assert "requestBody" not in post_schema
+        assert "422" not in post_schema["responses"]
 
     def test_get_openapi_schema_preserves_function_tool_defs(self):
         class Address(BaseModel):
@@ -132,3 +136,21 @@ class TestGetOpenapiSchema:
         ToolFactory.get_openapi_schema([function_tool], "https://api.test.com")
 
         assert function_tool.params_json_schema == original_schema
+
+    def test_union_function_tool_omits_request_body(self):
+        class Contact(BaseModel):
+            identifier: str | int
+
+        class ContainerTool(BaseTool):
+            contact: Contact
+
+            def run(self):
+                return str(self.contact.identifier)
+
+        function_tool = ToolFactory.adapt_base_tool(ContainerTool)
+        result = json.loads(ToolFactory.get_openapi_schema([function_tool], "https://api.test.com"))
+
+        post_schema = result["paths"]["/tool/ContainerTool"]["post"]
+        assert "requestBody" not in post_schema
+        assert "422" not in post_schema["responses"]
+        assert result["components"]["schemas"] == {}
