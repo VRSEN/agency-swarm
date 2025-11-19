@@ -32,7 +32,7 @@ This follows the same pattern as [FastMCP's OAuth client](https://gofastmcp.com/
 ## Architecture
 
 <Steps>
-<Step title="1. POST /chat/stream">
+<Step title="1. POST /get_response_stream">
 User sends a streaming request; FastAPI begins relaying SSE events back to the browser.
 </Step>
 <Step title="2. Tool request">
@@ -64,7 +64,7 @@ sequenceDiagram
     participant FastAPI as FastAPI (Docker)
     participant MCP as MCP Server (OAuth)
 
-    User->>FastAPI: 1. POST /chat/stream (SSE)
+    User->>FastAPI: 1. POST /get_response_stream (SSE)
     FastAPI->>MCP: 2. Invoke MCP tool
     alt Tokens cached
         MCP-->>FastAPI: Tool result
@@ -85,7 +85,7 @@ sequenceDiagram
 
 ## Workflow
 
-1. **User Initiates Request**: User sends a request to your FastAPI application (e.g., `/chat/stream`).
+1. **User Initiates Request**: User sends a request to your FastAPI application (e.g., `/get_response_stream`).
 2. **Agent Needs OAuth**: Agent attempts to use an MCP tool that requires OAuth.
 3. **Redirect Event**: Your custom `mcp_oauth_redirect_handler` emits an SSE event (e.g., `oauth_required`) with the OAuth authorization URL.
 4. **Frontend Opens OAuth**: Frontend captures the event and opens the OAuth URL in a popup/tab.
@@ -221,7 +221,7 @@ async def oauth_callback(code: str, state: str, user_id: str = Header(..., alias
     
     return {"status": "ok"}
 
-@app.post("/chat/stream")
+@app.post("/get_response_stream")
 async def chat_stream(message: str, user_id: str = Header(..., alias="X-User-Id")):
     """Chat endpoint with OAuth support."""
     oauth_server = MCPServerOAuth(
