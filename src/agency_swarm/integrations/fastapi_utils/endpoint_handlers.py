@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from importlib import metadata
 from pathlib import Path
 
-from ag_ui.core import EventType, MessagesSnapshotEvent, RunErrorEvent, RunFinishedEvent, RunStartedEvent
+from ag_ui.core import BaseEvent, EventType, MessagesSnapshotEvent, RunErrorEvent, RunFinishedEvent, RunStartedEvent
 from ag_ui.encoder import EventEncoder
 from agents import Model, OpenAIChatCompletionsModel, OpenAIResponsesModel, TResponseInputItem, output_guardrail
 from agents.exceptions import OutputGuardrailTripwireTriggered
@@ -669,26 +669,26 @@ def make_agui_chat_endpoint(
 
                 # Store in dict format to avoid converting to classes
                 snapshot_messages = [message.model_dump() for message in request.messages]
-                async for event in agency.get_response_stream(
+                async for stream_event in agency.get_response_stream(
                     message=request.messages[-1].content,
                     context_override=request.user_context,
                     additional_instructions=request.additional_instructions,
                     file_ids=combined_file_ids or None,
                 ):
                     agui_event = agui_adapter.openai_to_agui_events(
-                        event,
+                        stream_event,
                         run_id=request.run_id,
                     )
                     if agui_event:
-                        agui_events = agui_event if isinstance(agui_event, list) else [agui_event]
-                        for agui_evt in agui_events:
-                            if isinstance(agui_evt, MessagesSnapshotEvent):
-                                snapshot_messages.append(agui_evt.messages[0].model_dump())
+                        agui_events: list[BaseEvent] = agui_event if isinstance(agui_event, list) else [agui_event]
+                        for agui_event_item in agui_events:
+                            if isinstance(agui_event_item, MessagesSnapshotEvent):
+                                snapshot_messages.append(agui_event_item.messages[0].model_dump())
                                 yield encoder.encode(
                                     MessagesSnapshotEvent(type=EventType.MESSAGES_SNAPSHOT, messages=snapshot_messages)
                                 )
                             else:
-                                yield encoder.encode(agui_evt)
+                                yield encoder.encode(agui_event_item)
 
                 yield encoder.encode(
                     RunFinishedEvent(
