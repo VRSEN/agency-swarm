@@ -4,7 +4,7 @@ from agents import FunctionTool
 
 from agency_swarm.tools.base_tool import BaseTool
 
-from . import base_tool_adapter, file_loader, langchain, openapi_exporter, openapi_importer
+from . import base_tool_adapter, file_loader, langchain, mcp, openapi_exporter, openapi_importer
 
 
 class ToolFactory:
@@ -23,6 +23,7 @@ class ToolFactory:
     get_openapi_schema = staticmethod(openapi_exporter.get_openapi_schema)
 
     adapt_base_tool = staticmethod(base_tool_adapter.adapt_base_tool)
+    from_mcp = staticmethod(mcp.from_mcp)
 
 
 __all__ = ["ToolFactory", "FunctionTool", "BaseTool"]

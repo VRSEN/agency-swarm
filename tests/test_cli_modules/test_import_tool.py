@@ -104,4 +104,3 @@ def test_import_tool_cancels_on_overwrite_rejection(tmp_path: Path, monkeypatch:
 
     assert exit_code == 0
     assert existing_file.read_text() == "# Old content\n"
-

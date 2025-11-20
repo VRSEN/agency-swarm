@@ -89,4 +89,3 @@ def import_tool_command(tool_name: str | None = None, directory: str = "./tools"
     except Exception as e:
         print(f"\033[91mERROR: Failed to import tool: {e}\033[0m", file=sys.stderr)
         return 1
-

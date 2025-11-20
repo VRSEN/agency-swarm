@@ -198,9 +198,9 @@ class TestLoadFileAttachmentImageFormats:
                 result = await tool.run()
 
                 # Should be treated as image and return ToolOutputImage
-                assert (
-                    hasattr(result, "image_url") or hasattr(result, "file_id")
-                ), f"Extension {ext} should return image"
+                assert hasattr(result, "image_url") or hasattr(result, "file_id"), (
+                    f"Extension {ext} should return image"
+                )
                 assert hasattr(result, "detail")
 
     @pytest.mark.asyncio

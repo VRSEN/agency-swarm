@@ -8,7 +8,7 @@ from pydantic import Field
 from agency_swarm.tools.base_tool import BaseTool
 
 
-class PersistentShellTool(BaseTool):
+class PersistentShellTool(BaseTool):  # type: ignore[misc]
     """
     Execute shell commands locally with persistent working directory.
 
@@ -81,8 +81,9 @@ class PersistentShellTool(BaseTool):
                     new_dir = cmd_stripped[3:].strip()
                     if new_dir:
                         # Remove surrounding quotes if present
-                        if (new_dir.startswith('"') and new_dir.endswith('"')) or \
-                           (new_dir.startswith("'") and new_dir.endswith("'")):
+                        if (new_dir.startswith('"') and new_dir.endswith('"')) or (
+                            new_dir.startswith("'") and new_dir.endswith("'")
+                        ):
                             new_dir = new_dir[1:-1]
 
                         # Expand ~ to home directory

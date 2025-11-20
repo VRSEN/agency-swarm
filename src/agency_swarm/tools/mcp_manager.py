@@ -3,7 +3,10 @@ import inspect
 import logging
 import threading
 from concurrent.futures import Future
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from agency_swarm.agent.core import Agent
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +104,42 @@ class PersistentMCPServerManager:
         # Ensure the per-server driver is running and connected
         async with self._lock:
             self._ensure_driver(server)
+
+    async def reconnect(self, server: Any) -> None:
+        """Force reconnection by clearing the existing driver and creating a new one.
+
+        Args:
+            server: The MCP server to reconnect (can be proxy or real server)
+        """
+        # Unwrap proxy to get real server
+        real_server = getattr(server, "_server", server)
+
+        async with self._lock:
+            # Clear the existing driver if present
+            if real_server in self._drivers:
+                server_name = getattr(real_server, "name", "<unnamed>")
+                logger.info(f"Clearing stale driver for {server_name}")
+                driver_state = self._drivers.pop(real_server)
+
+                # Try to cleanup the old driver gracefully
+                try:
+                    queue = driver_state.get("queue")
+                    if queue:
+                        # Send shutdown command
+                        from concurrent.futures import Future
+
+                        fut: Future = Future()
+                        queue.put_nowait({"type": "shutdown", "result_fut": fut})
+                        # Don't wait for it, just move on
+                except Exception:
+                    pass  # Ignore cleanup errors
+
+            # Clear session to force reconnection
+            if hasattr(real_server, "session"):
+                real_server.session = None
+
+            # Re-create the driver (this will reconnect)
+            self._ensure_driver(real_server)
 
     async def connect_all(self) -> None:
         for server in self._servers.values():
@@ -358,3 +397,38 @@ def register_and_connect_agent_servers(agent: Any) -> None:
 
         # Ensure driver is created and connected on the background loop (synchronous)
         default_mcp_manager._ensure_driver(getattr(srv, "_server", srv))
+
+
+def convert_mcp_servers_to_tools(agent: "Agent") -> None:
+    """Convert agent's MCP servers to FunctionTool instances and add them to the agent's tools.
+
+    This function:
+    1. Converts all MCP servers to FunctionTool instances using ToolFactory.from_mcp
+    2. Adds the converted tools to the agent's tools list
+    3. Clears the agent's mcp_servers list
+
+    Args:
+        agent: The agent instance to process
+    """
+    from agency_swarm.tools.tool_factory import ToolFactory
+
+    servers = getattr(agent, "mcp_servers", None)
+    if not isinstance(servers, list) or len(servers) == 0:
+        return
+
+    # Read convert_schemas_to_strict from agent's mcp_config
+    mcp_config = getattr(agent, "mcp_config", None) or {}
+    convert_to_strict = mcp_config.get("convert_schemas_to_strict", False)
+
+    # Convert MCP servers to FunctionTool instances
+    converted_tools = ToolFactory.from_mcp(
+        servers,
+        convert_schemas_to_strict=convert_to_strict,
+        context=None,
+        agent=agent,
+    )
+    for tool in converted_tools:
+        agent.add_tool(tool)
+
+    # Clear the mcp_servers list
+    agent.mcp_servers.clear()

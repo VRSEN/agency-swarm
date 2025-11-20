@@ -149,6 +149,7 @@ def test_agent_with_mcp_server():
             "command": "npx",
             "args": ["-y", "@modelcontextprotocol/server-filesystem", "."],
         },
+        client_session_timeout_seconds=20,
     )
     agent = Agent(name="MCPAgent", instructions="Test", mcp_servers=[mcp_server])
     capabilities = get_agent_capabilities(agent)
