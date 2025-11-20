@@ -182,15 +182,21 @@ UI flow:
 - Listen for `event: oauth_redirect` and open `auth_url` in the browser.
 - The provider redirects to `/oauth/callback?code=...&state=...`; poll `/oauth/status/{state}` until it returns `status: authorized`, then continue consuming the stream.
 
+<Note>
+Set `redirect_uri` on `MCPServerOAuth` to the publicly reachable URL that forwards to this service’s `/oauth/callback` route (e.g., your ingress hostname plus `/oauth/callback`). You can also set `OAUTH_CALLBACK_URL` or `<SERVER>_REDIRECT_URI` as a fallback. The localhost default is only for development; production deployments must expose that path and route it back to the issuing pod (sticky routing or shared state) or the flow will time out.
+</Note>
+
+<Warning>
+The OAuth state registry lives in-process. Use a single replica or enforce sticky routing to the same pod during the OAuth flow, or back the state registry with a shared store before load-balancing.
+</Warning>
+
 ## Environment Variables
 
 ```bash
 # OAuth credentials (shared across all users)
 GITHUB_CLIENT_ID=your_client_id
 GITHUB_CLIENT_SECRET=your_client_secret
-
-# Your public callback URL (points to webhook)
-OAUTH_CALLBACK_URL=https://agencii.ai/oauth/callback
+OAUTH_CALLBACK_URL=https://your-ingress.example.com/oauth/callback  # optional global fallback
 ```
 
 ## Docker Setup
@@ -205,7 +211,6 @@ services:
     environment:
       - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
       - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
-      - OAUTH_CALLBACK_URL=https://agencii.ai/oauth/callback
     volumes:
       - oauth-tokens:/mnt/oauth-tokens  # Persistent volume
     ports:
