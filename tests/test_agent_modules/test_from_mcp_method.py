@@ -45,8 +45,8 @@ def test_from_mcp_connects_once_and_reuses_connection(mock_manager, mock_get_fun
     mock_manager.ensure_connected = AsyncMock(side_effect=fake_ensure)
     mock_manager.get.return_value = server
 
-    # Test with as_base_tool=False to get FunctionTool instances
-    tools = ToolFactory.from_mcp([server], as_base_tool=False)
+    # Test that from_mcp returns FunctionTool instances
+    tools = ToolFactory.from_mcp([server])
 
     assert len(tools) == 1
     assert server.connect_calls == 1
@@ -77,8 +77,8 @@ async def test_from_mcp_tools_are_invokable(mock_manager, mock_get_function_tool
     mock_manager.ensure_connected = AsyncMock()
     mock_manager.get.return_value = server
 
-    # Test with as_base_tool=False to get FunctionTool instances
-    tools = ToolFactory.from_mcp([server], as_base_tool=False)
+    # Test that from_mcp returns FunctionTool instances
+    tools = ToolFactory.from_mcp([server])
 
     assert len(tools) == 1
     tool = tools[0]
@@ -103,56 +103,10 @@ async def test_from_mcp_tools_are_invokable(mock_manager, mock_get_function_tool
 @pytest.mark.asyncio
 @patch("agents.mcp.util.MCPUtil.get_function_tools", new_callable=AsyncMock)
 @patch("agency_swarm.tools.mcp_manager.default_mcp_manager")
-async def test_from_mcp_base_tools_are_invokable(mock_manager, mock_get_function_tools: AsyncMock) -> None:
-    """Test that BaseTool classes converted from MCP servers can be invoked correctly."""
-
-    async def mock_invoke(ctx, input_json: str):
-        return f"Echo: {input_json}"
-
-    function_tool = FunctionTool(
-        name="echo_tool",
-        description="test tool",
-        params_json_schema={"type": "object", "properties": {"message": {"type": "string"}}},
-        on_invoke_tool=mock_invoke,
-        strict_json_schema=False,
-    )
-    mock_get_function_tools.return_value = [function_tool]
-
-    server = _DummyServer()
-    mock_manager.register.return_value = server
-    mock_manager.ensure_connected = AsyncMock()
-    mock_manager.get.return_value = server
-
-    # Test with as_base_tool=True (default) to get BaseTool classes
-    tools = ToolFactory.from_mcp([server], as_base_tool=True)
-
-    assert len(tools) == 1
-    tool_class = tools[0]
-
-    # Verify tool class properties
-    assert tool_class.__name__ == "EchoTool"
-    assert tool_class.__doc__ == "test tool"
-
-    # Instantiate and invoke the tool
-    tool_instance = tool_class(message="hello")
-    result = await tool_instance.run()
-
-    assert result == 'Echo: {"message": "hello"}'
-
-    # Create another instance and invoke to verify tool can be called multiple times
-    tool_instance2 = tool_class(message="world")
-    result2 = await tool_instance2.run()
-
-    assert result2 == 'Echo: {"message": "world"}'
-
-
-@pytest.mark.asyncio
-@patch("agents.mcp.util.MCPUtil.get_function_tools", new_callable=AsyncMock)
-@patch("agency_swarm.tools.mcp_manager.default_mcp_manager")
-async def test_from_mcp_base_tools_preserve_structured_outputs(
+async def test_from_mcp_function_tools_preserve_structured_outputs(
     mock_manager, mock_get_function_tools: AsyncMock
 ) -> None:
-    """BaseTool.run must return structured outputs from the underlying FunctionTool."""
+    """FunctionTool instances from MCP must preserve structured outputs like ToolOutputImage."""
 
     image_output = ToolOutputImage(image_url="https://example.com/sample.png")
 
@@ -173,10 +127,13 @@ async def test_from_mcp_base_tools_preserve_structured_outputs(
     mock_manager.ensure_connected = AsyncMock()
     mock_manager.get.return_value = server
 
-    tools = ToolFactory.from_mcp([server], as_base_tool=True)
-    tool_class = tools[0]
+    # Get FunctionTool instances from MCP
+    tools = ToolFactory.from_mcp([server])
+    assert len(tools) == 1
+    tool = tools[0]
 
-    tool_instance = tool_class()
-    result = await tool_instance.run()
+    # Verify the tool preserves structured outputs
+    ctx = RunContextWrapper(context=None)
+    result = await tool.on_invoke_tool(ctx, "{}")
 
     assert result is image_output

@@ -400,10 +400,10 @@ def register_and_connect_agent_servers(agent: Any) -> None:
 
 
 def convert_mcp_servers_to_tools(agent: "Agent") -> None:
-    """Convert agent's MCP servers to BaseTool instances and add them to the agent's tools.
+    """Convert agent's MCP servers to FunctionTool instances and add them to the agent's tools.
 
     This function:
-    1. Converts all MCP servers to BaseTool classes using ToolFactory.from_mcp
+    1. Converts all MCP servers to FunctionTool instances using ToolFactory.from_mcp
     2. Adds the converted tools to the agent's tools list
     3. Clears the agent's mcp_servers list
 
@@ -420,21 +420,15 @@ def convert_mcp_servers_to_tools(agent: "Agent") -> None:
     mcp_config = getattr(agent, "mcp_config", None) or {}
     convert_to_strict = mcp_config.get("convert_schemas_to_strict", False)
 
-    # Convert MCP servers to BaseTool classes
+    # Convert MCP servers to FunctionTool instances
     converted_tools = ToolFactory.from_mcp(
         servers,
         convert_schemas_to_strict=convert_to_strict,
         context=None,
         agent=agent,
-        as_base_tool=True,  # Return BaseTool classes
     )
-
-    # Add converted tools to the agent
-    for tool_class in converted_tools:
-        # Adapt BaseTool to FunctionTool for the agent
-        if isinstance(tool_class, type):
-            function_tool = ToolFactory.adapt_base_tool(tool_class)
-            agent.add_tool(function_tool)
+    for tool in converted_tools:
+        agent.add_tool(tool)
 
     # Clear the mcp_servers list
     agent.mcp_servers.clear()
