@@ -207,6 +207,31 @@ class TestMCPServerOAuth:
         assert "refresh_token" in metadata.grant_types
         assert metadata.scope == "user repo"
 
+    def test_redirect_uri_reads_env_when_using_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Uses server-specific env redirect when config is default."""
+        monkeypatch.setenv("TEST_SERVER_REDIRECT_URI", "https://callback.example.com/oauth/callback")
+        config = MCPServerOAuth(url="http://localhost:8001/mcp", name="test-server")
+
+        assert config.get_redirect_uri() == "https://callback.example.com/oauth/callback"
+
+    def test_redirect_uri_reads_global_env_when_server_env_missing(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Uses global OAUTH_CALLBACK_URL when server-specific env is missing."""
+        monkeypatch.setenv("OAUTH_CALLBACK_URL", "https://global.example.com/oauth/callback")
+        config = MCPServerOAuth(url="http://localhost:8001/mcp", name="test-server")
+
+        assert config.get_redirect_uri() == "https://global.example.com/oauth/callback"
+
+    def test_redirect_uri_prefers_explicit_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Explicit redirect_uri beats env override."""
+        monkeypatch.setenv("TEST_SERVER_REDIRECT_URI", "https://callback.example.com/oauth/callback")
+        config = MCPServerOAuth(
+            url="http://localhost:8001/mcp",
+            name="test-server",
+            redirect_uri="https://override.local/callback",
+        )
+
+        assert config.get_redirect_uri() == "https://override.local/callback"
+
     def test_oauth_config_uses_default_cache_dir(self) -> None:
         """MCPServerOAuth uses default cache directory when not specified."""
         config = MCPServerOAuth(
