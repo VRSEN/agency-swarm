@@ -122,6 +122,10 @@ agency = Agency(
 )
 ```
 
+<Note>
+If you skip `oauth_token_path`, Agency falls back to `~/.agency-swarm/mcp-tokens` (or `$AGENCY_SWARM_MCP_CACHE_DIR` when set). Override it when you need a mounted volume or per-environment cache location.
+</Note>
+
 ### Storage Structure
 
 ```
@@ -141,115 +145,42 @@ This ensures:
 - **Persistence**: Tokens survive container restarts (if `/mnt` is a mounted volume).
 - **Flexibility**: Works with any OAuth-enabled MCP server.
 
-## Custom OAuth Handlers
+## FastAPI OAuth (automatic)
 
-For FastAPI/SSE integration, you need custom handlers to pause/resume the stream.
+`run_fastapi` now detects `MCPServerOAuth` servers automatically and wires the OAuth flow for you—no custom handlers or manual `StreamingResponse` wiring required.
 
-### Example Implementation
+- `/oauth/callback` and `/oauth/status/{state}` are created automatically when any agency contains an OAuth-enabled MCP server.
+- Streaming endpoints emit `event: oauth_redirect` with `{state, server, auth_url}` when a user must authorize. Your frontend should open `auth_url`, then poll `/oauth/status/{state}` until `status: authorized`.
+- The callback will receive the provider redirect and wake the in-flight request. Tokens are stored per user when you pass `X-User-Id`.
 
 ```python
-import asyncio
-from collections import defaultdict
-from pathlib import Path
-from typing import Any
-
-from fastapi import FastAPI, Header
-from agency_swarm import Agency, Agent
+from agency_swarm import Agent, Agency, run_fastapi
 from agency_swarm.mcp import MCPServerOAuth
 
-app = FastAPI()
+oauth_server = MCPServerOAuth(
+    url="http://localhost:8001/mcp",
+    name="github",
+    scopes=["repo", "user"],
+)
 
-# Store asyncio.Event objects per request_id
-_oauth_events: dict[str, asyncio.Event] = {}
-_oauth_urls: dict[str, str] = {}
-
-async def custom_redirect_handler(auth_url: str) -> None:
-    """Emit SSE event with OAuth URL to frontend."""
-    # In real implementation, you'd emit this via your SSE stream
-    # For example:
-    # await sse_queue.put({"event": "oauth_required", "data": {"url": auth_url}})
-    
-    # Store URL for this request
-    request_id = get_current_request_id()  # Get from contextvars
-    _oauth_urls[request_id] = auth_url
-    print(f"OAuth URL for request {request_id}: {auth_url}")
-
-async def custom_callback_handler() -> tuple[str, str | None]:
-    """Wait for authorization code from webhook, then return it."""
-    request_id = get_current_request_id()  # Get from contextvars
-    user_id = get_current_user_id()        # Get from contextvars
-    server_name = "github"  # You'd get this from context too
-    
-    # Create event for this request
-    event = asyncio.Event()
-    _oauth_events[request_id] = event
-    
-    # Wait for webhook to write the code file
-    code_file = Path(f"/mnt/oauth-tokens/{user_id}/{server_name}/oauth_code.txt")
-    
-    # Wait for the event to be set by webhook
-    await event.wait()
-    
-    # Read the code
-    if code_file.exists():
-        code_data = code_file.read_text().strip()
-        code_file.unlink()  # Delete after reading
-        
-        # Parse code and state (format: "code=...&state=...")
-        parts = dict(param.split("=") for param in code_data.split("&"))
-        return parts.get("code", ""), parts.get("state")
-    
-    raise ValueError("Authorization code file not found")
-
-@app.post("/oauth/callback")
-async def oauth_callback(code: str, state: str, user_id: str = Header(..., alias="X-User-Id")):
-    """Webhook endpoint: receives OAuth callback and writes code to /mnt."""
-    # Determine which server this is for (from state parameter)
-    server_name = parse_server_from_state(state)  # Your implementation
-    
-    # Write code to persistent volume
-    code_dir = Path(f"/mnt/oauth-tokens/{user_id}/{server_name}")
-    code_dir.mkdir(parents=True, exist_ok=True)
-    
-    code_file = code_dir / "oauth_code.txt"
-    code_file.write_text(f"code={code}&state={state}")
-    
-    # Signal the waiting callback_handler
-    request_id = extract_request_id_from_state(state)  # Your implementation
-    if request_id in _oauth_events:
-        _oauth_events[request_id].set()
-    
-    return {"status": "ok"}
-
-@app.post("/get_response_stream")
-async def chat_stream(message: str, user_id: str = Header(..., alias="X-User-Id")):
-    """Chat endpoint with OAuth support."""
-    oauth_server = MCPServerOAuth(
-        url="http://localhost:8001/mcp",
-        name="github",
-        scopes=["repo", "user"]
-    )
-    
-    agent = Agent(
-        name="GitHubAgent",
-        mcp_servers=[oauth_server],
-        mcp_oauth_redirect_handler=custom_redirect_handler,
-        mcp_oauth_callback_handler=custom_callback_handler,
-    )
-    
-    agency = Agency(
-        [agent],
+def create_agency(load_threads_callback=None):
+    return Agency(
+        Agent(
+            name="GitHubAgent",
+            mcp_servers=[oauth_server],
+        ),
         oauth_token_path="/mnt/oauth-tokens",
-        user_context={"user_id": user_id}
     )
-    
-    response = await agency.get_response(message)
-    return response
+
+run_fastapi(
+    agencies={"github": create_agency},
+)
 ```
 
-<Note>
-**Production Note**: The example above is simplified. In production, you'd use proper context management (contextvars), store state in Redis/DB for multi-container deployments, and handle timeouts/errors robustly.
-</Note>
+UI flow:
+- Start streaming via `POST /github/get_response_stream` with `X-User-Id` to isolate tokens.
+- Listen for `event: oauth_redirect` and open `auth_url` in the browser.
+- The provider redirects to `/oauth/callback?code=...&state=...`; poll `/oauth/status/{state}` until it returns `status: authorized`, then continue consuming the stream.
 
 ## Environment Variables
 
