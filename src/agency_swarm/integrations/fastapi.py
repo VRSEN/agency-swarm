@@ -1,11 +1,17 @@
+from __future__ import annotations
+
 import logging
 import os
 from collections.abc import Callable, Mapping
+from typing import TYPE_CHECKING
 
 from agents.tool import FunctionTool
 
 from agency_swarm.agency import Agency
 from agency_swarm.agent.core import Agent
+
+if TYPE_CHECKING:
+    from agency_swarm.integrations.fastapi_utils.oauth_support import OAuthStateRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +29,7 @@ def run_fastapi(
     enable_logging: bool = False,
     logs_dir: str = "activity-logs",
     allowed_local_file_dirs: list[str] | None = None,
+    oauth_registry: OAuthStateRegistry | None = None,
 ):
     """Launch a FastAPI server exposing endpoints for multiple agencies and tools.
 
@@ -50,6 +57,9 @@ def run_fastapi(
     allowed_local_file_dirs : list[str] | None
         Optional allowlist of directories that local file_urls may read from.
         When omitted, local file access is disabled.
+    oauth_registry :
+        Optional OAuth state registry shared across workers (e.g., Redis-backed).
+        Defaults to in-memory when not provided.
     """
     if (agencies is None or len(agencies) == 0) and (tools is None or len(tools) == 0):
         logger.warning("No endpoints to deploy. Please provide at least one agency or tool.")
@@ -57,7 +67,7 @@ def run_fastapi(
 
     try:
         import uvicorn
-        from fastapi import FastAPI
+        from fastapi import FastAPI, Header, HTTPException
         from fastapi.middleware.cors import CORSMiddleware
 
         from .fastapi_utils.endpoint_handlers import (
@@ -75,6 +85,12 @@ def run_fastapi(
         from .fastapi_utils.logging_middleware import (
             RequestTracker,
             setup_enhanced_logging,
+        )
+        from .fastapi_utils.oauth_support import (
+            FastAPIOAuthConfig,
+            OAuthStateRegistry,
+            has_hosted_mcp_tools_missing_authorization,
+            is_oauth_server,
         )
         from .fastapi_utils.request_models import (
             BaseRequest,
@@ -120,6 +136,9 @@ def run_fastapi(
         allow_headers=["*"],
     )
 
+    oauth_user_header = "X-User-Id"
+    shared_oauth_registry: OAuthStateRegistry | None = oauth_registry
+    oauth_config: FastAPIOAuthConfig | None = None
     endpoints = []
     agency_names = []
 
@@ -137,6 +156,21 @@ def run_fastapi(
 
             # Store agent instances for easy lookup
             preview_instance = agency_factory(load_threads_callback=lambda: [])
+            has_oauth_servers = False
+            agents_map = getattr(preview_instance, "agents", {})
+            if isinstance(agents_map, dict):
+                for agent in agents_map.values():
+                    servers = getattr(agent, "mcp_servers", None)
+                    if isinstance(servers, list) and any(is_oauth_server(srv) for srv in servers):
+                        has_oauth_servers = True
+                        break
+            if not has_oauth_servers and has_hosted_mcp_tools_missing_authorization(preview_instance):
+                has_oauth_servers = True
+            if has_oauth_servers and shared_oauth_registry is None:
+                shared_oauth_registry = OAuthStateRegistry()
+            if has_oauth_servers and oauth_config is None and shared_oauth_registry is not None:
+                oauth_config = FastAPIOAuthConfig(shared_oauth_registry, user_header=oauth_user_header)
+
             AGENT_INSTANCES: dict[str, Agent] = dict(preview_instance.agents.items())
             AgencyRequest = add_agent_validator(BaseRequest, AGENT_INSTANCES)
             agency_metadata = preview_instance.get_metadata()
@@ -149,6 +183,7 @@ def run_fastapi(
                         agency_factory,
                         verify_token,
                         allowed_local_dirs=normalized_allowed_dirs,
+                        oauth_config=oauth_config,
                     ),
                     methods=["POST"],
                 )
@@ -162,6 +197,7 @@ def run_fastapi(
                         agency_factory,
                         verify_token,
                         allowed_local_dirs=normalized_allowed_dirs,
+                        oauth_config=oauth_config,
                     ),
                     methods=["POST"],
                 )
@@ -173,6 +209,7 @@ def run_fastapi(
                         verify_token,
                         run_registry,
                         allowed_local_dirs=normalized_allowed_dirs,
+                        oauth_config=oauth_config,
                     ),
                     methods=["POST"],
                 )
@@ -191,6 +228,36 @@ def run_fastapi(
                 methods=["GET"],
             )
             endpoints.append(f"/{agency_name}/get_metadata")
+
+    if shared_oauth_registry is not None:
+
+        async def oauth_callback(
+            state: str,
+            code: str | None = None,
+            error: str | None = None,
+            error_description: str | None = None,
+            user_id: str | None = Header(default=None, alias=oauth_user_header),
+        ):
+            # Handle OAuth provider error responses (e.g., user denied authorization)
+            if error:
+                flow = await shared_oauth_registry.set_error(
+                    state=state, error=error, error_description=error_description
+                )
+                raise HTTPException(status_code=400, detail=f"OAuth error: {flow.error}")
+            if not code:
+                raise HTTPException(status_code=400, detail="OAuth callback missing authorization code")
+            flow = await shared_oauth_registry.set_code(state=state, code=code, user_id=user_id)
+            if flow.error:
+                raise HTTPException(status_code=400, detail=f"OAuth callback failed: {flow.error}")
+            return {"status": "ok", "state": state, "server_name": flow.server_name}
+
+        async def oauth_status(state: str):
+            return await shared_oauth_registry.get_status(state)
+
+        app.add_api_route("/auth/callback", oauth_callback, methods=["GET"])
+        endpoints.append("/auth/callback")
+        app.add_api_route("/auth/status/{state}", oauth_status, methods=["GET"])
+        endpoints.append("/auth/status/{state}")
 
     if tools:
         for tool in tools:

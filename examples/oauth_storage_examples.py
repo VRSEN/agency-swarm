@@ -6,7 +6,7 @@ per-user isolation using RunHooks and contextvars.
 For local development, tokens are stored in ./data/default/{server_name}/
 For SaaS deployment, tokens are stored in /mnt/{user_id}/{server_name}/
 
-No custom storage classes needed - just configure oauth_token_path!
+Configure oauth_token_path to persist tokens; no custom storage classes required.
 """
 
 import asyncio
@@ -121,7 +121,7 @@ async def main():
     print("=" * 80)
     print("1. Use oauth_token_path to configure base storage directory")
     print("2. Pass user_context={'user_id': user_id} for per-user isolation")
-    print("3. No custom storage classes needed - it just works!")
+    print("3. Built-in storage handles persistence when oauth_token_path is set")
     print("4. Same code works for local dev and SaaS deployment")
     print("=" * 80 + "\n")
 
