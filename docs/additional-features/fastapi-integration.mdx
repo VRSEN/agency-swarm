@@ -386,7 +386,7 @@ If any agent uses `MCPServerOAuth` (or you have a `HostedMCPTool` without `tool_
 You do not need custom handlers—the built-in streaming endpoint carries the OAuth prompts and finishes the run after the callback completes.
 
 <Note>
-Set `redirect_uri` on `MCPServerOAuth` to the publicly reachable URL that forwards to the FastAPI `/auth/callback` route (e.g., your ingress hostname plus `/auth/callback`). You can also set `OAUTH_CALLBACK_URL` or `<SERVER>_REDIRECT_URI` as a fallback. The default (`http://localhost:8000/auth/callback`) matches the FastAPI server's default port; override it if your FastAPI host/port differs and route that path back to the issuing pod (sticky routing or shared state) or the OAuth flow will time out.
+Set `redirect_uri` on `MCPServerOAuth` to the publicly reachable URL that forwards to the FastAPI `/auth/callback` route (for example, your ingress hostname plus `/auth/callback`). You can also set `OAUTH_CALLBACK_URL` or `<SERVER>_REDIRECT_URI` as a fallback. If you do not override it, `MCPServerOAuth` defaults to `http://localhost:3000/callback` for local development. In production, you must expose and route the callback path back to the issuing pod (sticky routing or shared state), or the OAuth flow will time out.
 </Note>
 
 ---
