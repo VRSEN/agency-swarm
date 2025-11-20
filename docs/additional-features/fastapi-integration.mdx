@@ -263,6 +263,17 @@ Store the `run_id` from the `meta` event to use with the cancel endpoint.
 
 ---
 
+### OAuth-enabled agencies
+
+If any agent uses `MCPServerOAuth`, `run_fastapi` automatically:
+- Adds `/oauth/callback` and `/oauth/status/{state}` routes
+- Emits `event: oauth_redirect` with `{state, server, auth_url}` on `/get_response_stream` when a user must authorize
+- Reads `X-User-Id` (if provided) to store tokens per user instead of the shared `default` bucket
+
+You do not need custom handlers—the built-in streaming endpoint carries the OAuth prompts and finishes the run after the callback completes.
+
+---
+
 ## Inspecting Tool Schemas
 
 When integrating your tools with external systems or documenting your API, you need to expose the parameter schemas. FastAPI automatically serves `/openapi.json`, so you can point tooling (Swagger UI, ReDoc, Agencii.ai, etc.) directly at the running server. The same schema is available programmatically via `ToolFactory.get_openapi_schema()` when you want to export it without starting FastAPI. Both outputs now share the same `/tool/<ToolName>` routes, HTTP Bearer security, and validation error responses, so either endpoint can be consumed interchangeably.
