@@ -143,7 +143,8 @@ class Agency:
             load_threads_callback (ThreadLoadCallback | None, optional): Callable to load conversation threads.
             save_threads_callback (ThreadSaveCallback | None, optional): Callable to save conversation threads.
             user_context (dict[str, Any] | None, optional): Initial shared context accessible to all agents.
-            oauth_token_path (str | None, optional): Base directory for OAuth token storage (default: "./data").
+            oauth_token_path (str | None, optional): Base directory for OAuth token storage (defaults to
+                ~/.agency-swarm/mcp-tokens or $AGENCY_SWARM_MCP_CACHE_DIR when omitted).
             **kwargs: Catches other deprecated parameters, issuing warnings if used.
 
         Raises:

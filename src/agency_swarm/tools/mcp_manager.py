@@ -399,11 +399,12 @@ def _process_oauth_servers(agent: Any, servers: list[Any]) -> None:
     # Get custom handlers from agent if provided
     redirect_handler = getattr(agent, "mcp_oauth_redirect_handler", None)
     callback_handler = getattr(agent, "mcp_oauth_callback_handler", None)
-    custom_handlers = {}
+    handler_factory = getattr(agent, "mcp_oauth_handler_factory", None)
+    base_handlers = {}
     if redirect_handler:
-        custom_handlers["redirect"] = redirect_handler
+        base_handlers["redirect"] = redirect_handler
     if callback_handler:
-        custom_handlers["callback"] = callback_handler
+        base_handlers["callback"] = callback_handler
 
     # Convert OAuth configs to OAuth clients
     for i, srv in enumerate(list(servers)):
@@ -422,9 +423,15 @@ def _process_oauth_servers(agent: Any, servers: list[Any]) -> None:
                 logger.info(f"OAuth configured for {oauth_srv.name} (client_id: {client_id[:8]}...)")
 
             # Create OAuth client wrapper
+            server_handlers = base_handlers.copy() if base_handlers else {}
+            if callable(handler_factory):
+                new_handlers = handler_factory(oauth_srv.name)
+                if isinstance(new_handlers, dict):
+                    server_handlers.update(new_handlers)
+            handlers_arg = server_handlers if server_handlers else None
             oauth_client = MCPServerOAuthClient(
                 oauth_srv,
-                custom_handlers if custom_handlers else None,
+                handlers_arg,
             )
 
             # Replace config with actual client
