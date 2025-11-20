@@ -14,7 +14,7 @@ from collections.abc import Awaitable, Callable
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 from urllib.parse import parse_qs, urlparse, urlsplit
 
 from mcp.client.auth import OAuthClientProvider
@@ -252,12 +252,14 @@ class MCPServerOAuth:
         auth_server_url: Base URL for OAuth discovery when different from MCP endpoint
     """
 
+    DEFAULT_REDIRECT_URI: ClassVar[str] = "http://localhost:3000/callback"
+
     url: str
     name: str
     client_id: str | None = None
     client_secret: str | None = None
     scopes: list[str] = field(default_factory=lambda: ["user"])
-    redirect_uri: str = "http://localhost:3000/callback"
+    redirect_uri: str | None = None
     cache_dir: Path | None = None
     storage: Any | None = None
     storage_factory: Callable[[str, str], Any] | None = None
@@ -303,9 +305,10 @@ class MCPServerOAuth:
         if self.client_metadata:
             return self.client_metadata
 
+        redirect_uri = self.get_redirect_uri()
         return OAuthClientMetadata(
             client_name=f"Agency Swarm - {self.name}",
-            redirect_uris=[AnyUrl(self.redirect_uri)],
+            redirect_uris=[AnyUrl(redirect_uri)],
             grant_types=["authorization_code", "refresh_token"],
             response_types=["code"],
             scope=" ".join(self.scopes),
@@ -314,6 +317,17 @@ class MCPServerOAuth:
     def get_client_id_optional(self) -> str | None:
         """Return the resolved client_id without raising."""
         return self._resolve_client_id()
+
+    def get_redirect_uri(self) -> str:
+        """Resolve redirect URI with explicit > server env > global env > default."""
+        if self.redirect_uri:
+            return self.redirect_uri
+        server_env = f"{self.name.upper().replace('-', '_')}_REDIRECT_URI"
+        if os.getenv(server_env):
+            return os.getenv(server_env, self.DEFAULT_REDIRECT_URI)
+        if os.getenv("OAUTH_CALLBACK_URL"):
+            return os.getenv("OAUTH_CALLBACK_URL", self.DEFAULT_REDIRECT_URI)
+        return self.DEFAULT_REDIRECT_URI
 
     def build_client_information(self) -> OAuthClientInformationFull | None:
         """Return prepopulated client information when static credentials exist."""
@@ -568,7 +582,7 @@ async def create_oauth_provider(
     if callback_handler is None:
 
         async def _wrapped_callback_handler() -> tuple[str, str | None]:
-            return await default_callback_handler(server.redirect_uri)
+            return await default_callback_handler(server.get_redirect_uri())
 
         callback_handler = _wrapped_callback_handler
 
