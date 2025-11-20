@@ -66,7 +66,8 @@
                     ]
                   },
                   "core-framework/tools/openapi-schemas",
-                  "core-framework/tools/mcp-integration"
+                  "core-framework/tools/mcp-integration",
+                  "core-framework/tools/mcp-oauth"
                 ]
               },
               {
