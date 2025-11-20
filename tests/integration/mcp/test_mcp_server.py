@@ -108,9 +108,8 @@ async def test_mcp_http_tools_list(mcp_http_server):
     agency = _make_agency_with_local_mcp(mcp_http_server)
     res = await agency.get_response("What tools do you have?")
     text = str(res.final_output).lower()
-    # SampleTool is provided by tests/data/tools/sample_tool.py (converted from sample_tool)
-    normalized = text.replace(" ", "_")
-    assert "sampletool" in normalized
+    # sample_tool is provided by tests/data/tools/sample_tool.py
+    assert "sample_tool" in text or "sample tool" in text
 
 
 @pytest.mark.asyncio
@@ -197,9 +196,8 @@ if __name__ == "__main__":
         res = await agency.get_response("What tools do you have available?")
         response_text = str(res.final_output).lower()
 
-        # Should find TestSampleTool from our stdio server (converted from test_sample_tool)
-        normalized = response_text.replace(" ", "_")
-        assert "testsampletool" in normalized
+        # Should find test_sample_tool from our stdio server
+        assert "test_sample_tool" in response_text or "test sample tool" in response_text
 
     finally:
         # Cleanup
