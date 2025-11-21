@@ -260,6 +260,7 @@ Strictness
 - Always inspect unstaged files with `git diff --name-only` and staged files with `git diff --cached --name-only`.
 - If the working tree is not clean or there is any confusion/ambiguity, report to the user immediately with a clear description of the problem and an explicit question before proceeding.
 - Never hard-reset (`git reset --hard`) without preserving progress
+- Before any rebase or history-editing command, set `GIT_EDITOR` to a non-interactive value (e.g., `true`) so git does not launch an editor in this environment.
 - Logical, isolated commit grouping (distinct refactors vs. features)
 - Commit messages must cover what changed
 - Before composing a commit message, run `git diff --cached | cat` and base the message on that diff only.
