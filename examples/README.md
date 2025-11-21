@@ -27,6 +27,7 @@ This directory contains runnable examples demonstrating key features of Agency S
 - **`fastapi_integration/`** – FastAPI server and client examples
   - `server.py` – FastAPI server with streaming support
   - `client.py` – Client examples for testing endpoints
+- **`interactive/realtime/demo.py`** – Launch the packaged realtime voice/web demo (edit to customize agents)
 - **`mcp_servers.py`** – Using tools from MCP servers (local and hosted)
 - **`connectors.py`** – Google Calendar integration using OpenAI hosted tools
 
