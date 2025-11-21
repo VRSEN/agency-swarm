@@ -300,7 +300,6 @@ Strictness
 - For bug fixes, make sure the new test fails before your fix, then passes after your fix.
 - When committing, base the message on the staged diff and use a title plus bullet body (e.g., `git commit -m "type: summary" -m "- bullet"`).
 - After committing, double-check what you committed with `git show --name-only -1`.
-
 ## Key References
 - `examples/` – v1.x modern usage
 - `docs/migration/guide.mdx` – Breaking changes
