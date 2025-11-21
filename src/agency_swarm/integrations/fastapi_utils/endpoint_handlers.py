@@ -3,8 +3,9 @@ import logging
 import time
 from collections.abc import AsyncGenerator, Callable
 from importlib import metadata
+from typing import Any
 
-from ag_ui.core import EventType, MessagesSnapshotEvent, RunErrorEvent, RunFinishedEvent, RunStartedEvent
+from ag_ui.core import BaseEvent, EventType, MessagesSnapshotEvent, RunErrorEvent, RunFinishedEvent, RunStartedEvent
 from ag_ui.encoder import EventEncoder
 from agents import OpenAIResponsesModel, TResponseInputItem, output_guardrail
 from agents.exceptions import OutputGuardrailTripwireTriggered
@@ -31,6 +32,111 @@ from agency_swarm.utils.serialization import serialize
 logger = logging.getLogger(__name__)
 
 
+def _has_base64_multimodal_output(obj: Any, _visited: set[int] | None = None) -> bool:
+    """Check if an object contains base64 data URLs in ToolOutputImage or ToolOutputFileContent.
+
+    Args:
+        obj: Object to check (dict, list, or any object)
+        _visited: Set of already-visited object IDs for circular reference detection
+
+    Returns:
+        True if object contains base64 multimodal outputs, False otherwise
+    """
+    if _visited is None:
+        _visited = set()
+
+    # Check for circular references
+    obj_id = id(obj)
+    if obj_id in _visited:
+        return False
+
+    if isinstance(obj, dict):
+        _visited.add(obj_id)
+        for key, value in obj.items():
+            # Check ToolOutputImage.image_url if it's a base64 data URL
+            if key == "image_url" and isinstance(value, str) and value.startswith("data:"):
+                _visited.discard(obj_id)
+                return True
+            # Check ToolOutputFileContent.file_data if it's a base64 data URL
+            if key == "file_data" and isinstance(value, str) and value.startswith("data:"):
+                _visited.discard(obj_id)
+                return True
+            # Recursively check nested structures
+            if _has_base64_multimodal_output(value, _visited):
+                _visited.discard(obj_id)
+                return True
+        _visited.discard(obj_id)
+        return False
+    elif isinstance(obj, list):
+        _visited.add(obj_id)
+        for item in obj:
+            if _has_base64_multimodal_output(item, _visited):
+                _visited.discard(obj_id)
+                return True
+        _visited.discard(obj_id)
+        return False
+    else:
+        return False
+
+
+def _filter_messages_with_multimodal_outputs(messages: list[Any]) -> list[Any]:
+    """Filter out messages that contain base64 multimodal outputs and their corresponding tool calls.
+
+    Args:
+        messages: List of messages to filter
+
+    Returns:
+        Filtered list with messages containing base64 multimodal outputs and their tool calls removed
+    """
+    # First pass: identify messages with base64 outputs and collect their call_ids
+    call_ids_to_remove: set[str] = set()
+    indices_to_remove: set[int] = set()
+
+    for i, msg in enumerate(messages):
+        if _has_base64_multimodal_output(msg):
+            indices_to_remove.add(i)
+            # Get call_id from various message formats
+            if isinstance(msg, dict):
+                # Check for tool_call_id (for tool role messages)
+                tool_call_id = msg.get("tool_call_id")
+                if tool_call_id:
+                    call_ids_to_remove.add(str(tool_call_id))
+                # Check for call_id (for function_call_output messages)
+                call_id = msg.get("call_id")
+                if call_id:
+                    call_ids_to_remove.add(str(call_id))
+
+    # Second pass: find and mark tool call messages that correspond to removed tool results
+    for i, msg in enumerate(messages):
+        if i in indices_to_remove:
+            continue
+        if isinstance(msg, dict):
+            msg_type = msg.get("type", "")
+            call_id = msg.get("call_id")
+
+            # Handle function_call messages (they have call_id field)
+            if msg_type == "function_call" and call_id:
+                if str(call_id) in call_ids_to_remove:
+                    indices_to_remove.add(i)
+                    continue
+
+            # Handle messages with tool_calls array (assistant messages with tool calls)
+            tool_calls = msg.get("tool_calls", [])
+            if tool_calls:
+                # Check if any tool call id matches a removed call_id
+                for tool_call in tool_calls:
+                    if isinstance(tool_call, dict):
+                        tool_call_id = tool_call.get("id")
+                    else:
+                        tool_call_id = getattr(tool_call, "id", None)
+                    if tool_call_id and str(tool_call_id) in call_ids_to_remove:
+                        indices_to_remove.add(i)
+                        break
+
+    # Return filtered list excluding marked indices
+    return [msg for i, msg in enumerate(messages) if i not in indices_to_remove]
+
+
 def get_verify_token(app_token):
     auto_error = app_token is not None and app_token != ""
     security = HTTPBearer(auto_error=auto_error)
@@ -46,7 +152,9 @@ def get_verify_token(app_token):
 
 
 # Non‑streaming response endpoint
-def make_response_endpoint(request_model, agency_factory: Callable[..., Agency], verify_token):
+def make_response_endpoint(
+    request_model, agency_factory: Callable[..., Agency], verify_token, drop_base64_messages: bool = True
+):
     async def handler(request: request_model, token: str = Depends(verify_token)):
         if request.chat_history is not None:
             # Chat history is now a flat list
@@ -83,6 +191,8 @@ def make_response_endpoint(request_model, agency_factory: Callable[..., Agency],
         all_messages = agency_instance.thread_manager.get_all_messages()
         new_messages = all_messages[initial_message_count:]  # Only messages added during this request
         filtered_messages = MessageFilter.filter_messages(new_messages)
+        if drop_base64_messages:
+            filtered_messages = _filter_messages_with_multimodal_outputs(filtered_messages)
         result = {"response": response.final_output, "new_messages": filtered_messages}
         if request.file_urls is not None and file_ids_map is not None:
             result["file_ids_map"] = file_ids_map
@@ -98,7 +208,9 @@ def make_response_endpoint(request_model, agency_factory: Callable[..., Agency],
 
 
 # Streaming SSE endpoint
-def make_stream_endpoint(request_model, agency_factory: Callable[..., Agency], verify_token):
+def make_stream_endpoint(
+    request_model, agency_factory: Callable[..., Agency], verify_token, drop_base64_messages: bool = True
+):
     async def handler(request: request_model, token: str = Depends(verify_token)):
         if request.chat_history is not None:
             # Chat history is now a flat list
@@ -152,6 +264,9 @@ def make_stream_endpoint(request_model, agency_factory: Callable[..., Agency], v
                 ):
                     try:
                         data = serialize(event)
+                        # Skip emitting events that contain base64 multimodal outputs
+                        if drop_base64_messages and _has_base64_multimodal_output(data):
+                            continue
                         yield "data: " + json.dumps({"data": data}) + "\n\n"
                     except Exception as e:
                         yield "data: " + json.dumps({"error": f"Failed to serialize event: {e}"}) + "\n\n"
@@ -175,6 +290,8 @@ def make_stream_endpoint(request_model, agency_factory: Callable[..., Agency], v
             new_messages = all_messages[initial_message_count:]  # Only messages added during this request
             # Preserve agent_run_id grouping for UI correlation
             filtered_messages = MessageFilter.filter_messages(new_messages)
+            if drop_base64_messages:
+                filtered_messages = _filter_messages_with_multimodal_outputs(filtered_messages)
             result = {"new_messages": filtered_messages}
             if request.file_urls is not None and file_ids_map is not None:
                 result["file_ids_map"] = file_ids_map
@@ -202,7 +319,9 @@ def make_stream_endpoint(request_model, agency_factory: Callable[..., Agency], v
     return handler
 
 
-def make_agui_chat_endpoint(request_model, agency_factory: Callable[..., Agency], verify_token):
+def make_agui_chat_endpoint(
+    request_model, agency_factory: Callable[..., Agency], verify_token, drop_base64_messages: bool = True
+):
     async def handler(request: request_model, token: str = Depends(verify_token)):
         """Accepts AG-UI `RunAgentInput`, returns an AG-UI event stream."""
 
@@ -266,14 +385,26 @@ def make_agui_chat_endpoint(request_model, agency_factory: Callable[..., Agency]
                     )
                     if agui_event:
                         events = agui_event if isinstance(agui_event, list) else [agui_event]
-                        for event in events:
-                            if isinstance(event, MessagesSnapshotEvent):
-                                snapshot_messages.append(event.messages[0].model_dump())
+                        for agui_event_item in events:
+                            if not isinstance(agui_event_item, BaseEvent):
+                                continue
+                            if isinstance(agui_event_item, MessagesSnapshotEvent):
+                                snapshot_messages.append(agui_event_item.messages[0].model_dump())
+                                messages_to_encode = snapshot_messages
+                                if drop_base64_messages:
+                                    messages_to_encode = _filter_messages_with_multimodal_outputs(snapshot_messages)
                                 yield encoder.encode(
-                                    MessagesSnapshotEvent(type=EventType.MESSAGES_SNAPSHOT, messages=snapshot_messages)
+                                    MessagesSnapshotEvent(type=EventType.MESSAGES_SNAPSHOT, messages=messages_to_encode)
                                 )
                             else:
-                                yield encoder.encode(event)
+                                # Skip events that contain base64 multimodal outputs
+                                if drop_base64_messages:
+                                    event_dict = (
+                                        agui_event_item.model_dump() if hasattr(agui_event_item, "model_dump") else {}
+                                    )
+                                    if _has_base64_multimodal_output(event_dict):
+                                        continue
+                                yield encoder.encode(agui_event_item)
 
                 yield encoder.encode(
                     RunFinishedEvent(

@@ -21,6 +21,7 @@ def run_fastapi(
     enable_agui: bool = False,
     enable_logging: bool = False,
     logs_dir: str = "activity-logs",
+    drop_base64_messages: bool = True,
 ):
     """Launch a FastAPI server exposing endpoints for multiple agencies and tools.
 
@@ -42,6 +43,12 @@ def run_fastapi(
     logs_dir : str
         Directory to store log files when logging is enabled.
         Defaults to 'activity-logs'.
+    drop_base64_messages : bool
+        When enabled, drops entire messages that contain base64-encoded data URLs
+        in tool outputs (ToolOutputImage.image_url and ToolOutputFileContent.file_data).
+        Messages containing such outputs are removed from response history and not
+        emitted in streaming events. This reduces payload size when base64 data
+        is too large. Defaults to True.
     """
     if (agencies is None or len(agencies) == 0) and (tools is None or len(tools) == 0):
         logger.warning("No endpoints to deploy. Please provide at least one agency or tool.")
@@ -125,19 +132,21 @@ def run_fastapi(
                 if enable_agui:
                     app.add_api_route(
                         f"/{agency_name}/get_response_stream",
-                        make_agui_chat_endpoint(RunAgentInputCustom, agency_factory, verify_token),
+                        make_agui_chat_endpoint(
+                            RunAgentInputCustom, agency_factory, verify_token, drop_base64_messages
+                        ),
                         methods=["POST"],
                     )
                     endpoints.append(f"/{agency_name}/get_response_stream")
                 else:
                     app.add_api_route(
                         f"/{agency_name}/get_response",
-                        make_response_endpoint(AgencyRequest, agency_factory, verify_token),
+                        make_response_endpoint(AgencyRequest, agency_factory, verify_token, drop_base64_messages),
                         methods=["POST"],
                     )
                     app.add_api_route(
                         f"/{agency_name}/get_response_stream",
-                        make_stream_endpoint(AgencyRequest, agency_factory, verify_token),
+                        make_stream_endpoint(AgencyRequest, agency_factory, verify_token, drop_base64_messages),
                         methods=["POST"],
                     )
                     endpoints.append(f"/{agency_name}/get_response")
