@@ -652,6 +652,10 @@ async def test_vector_store_cleanup_on_init(real_openai_client: AsyncOpenAI, tmp
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(
+    os.getenv("GITHUB_ACTIONS") == "true",
+    reason="Observed >60s runtime with real OpenAI; skip on GitHub to avoid flaky slowdowns.",
+)
 async def test_file_reupload_on_mtime_update(real_openai_client: AsyncOpenAI, tmp_path: Path):
     """Modifying local file triggers re-upload with a new file_id and VS update."""
     source_file = Path("tests/data/files/favorite_books.txt")

@@ -43,8 +43,8 @@ class TestFastAPIFileProcessing:
                 name="FileProcessorAgent",
                 instructions="""
                 You are a file processing agent. When you receive files, read their content carefully
-                and provide detailed information about what you find. Always include any secret phrases
-                or specific content mentioned in the files.
+                and echo back the exact secret phrases found in the files verbatim—do not paraphrase or invent
+                alternative text. If multiple phrases appear, include them all exactly as written.
                 """,
                 description="Agent that processes and analyzes file content",
                 model="gpt-4.1",
