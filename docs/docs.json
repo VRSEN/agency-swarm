@@ -164,8 +164,7 @@
               "platform/integrations/whatsapp-integration",
               "platform/integrations/zapier-integration",
               "platform/integrations/web-api",
-              "platform/integrations/widget",
-              "platform/integrations/mcp-oauth-integration"
+              "platform/integrations/widget"
             ]
           },
           {
