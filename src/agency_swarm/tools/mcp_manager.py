@@ -2,13 +2,33 @@ import asyncio
 import inspect
 import logging
 import threading
+from collections.abc import Callable
 from concurrent.futures import Future
-from typing import TYPE_CHECKING, Any
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from agency_swarm.agent.core import Agent
+    from agency_swarm.mcp.oauth import MCPServerOAuth
 
 logger = logging.getLogger(__name__)
+
+# OAuth support - imported conditionally to avoid circular imports
+_OAUTH_AVAILABLE = False
+_MCPServerOAuth: type | None = None
+_create_oauth_provider: Callable[..., Any] | None = None
+
+try:
+    from agency_swarm.mcp.oauth import (
+        MCPServerOAuth as _MCPServerOAuth_impl,
+        create_oauth_provider as _create_oauth_provider_impl,
+    )
+
+    _MCPServerOAuth = _MCPServerOAuth_impl
+    _create_oauth_provider = _create_oauth_provider_impl
+    _OAUTH_AVAILABLE = True
+except ImportError:
+    logger.debug("OAuth support not available - install MCP SDK to enable")
 
 
 class PersistentMCPServerManager:
@@ -213,6 +233,45 @@ class PersistentMCPServerManager:
     def all(self) -> list[Any]:
         return list(self._servers.values())
 
+    def update_oauth_cache_dir(self, cache_dir: Path | None) -> None:
+        """Update cache_dir for all OAuth-enabled servers registered with this manager."""
+        if not _OAUTH_AVAILABLE:
+            return
+        normalized = None
+        if cache_dir is not None:
+            normalized = cache_dir.expanduser()
+        for server in self._servers.values():
+            self._apply_cache_dir_to_server(server, normalized)
+        # Update drivers as well (LoopAffineAsyncProxy->real server)
+        for entry in self._drivers.values():
+            real_server = entry.get("real")
+            if real_server is not None:
+                self._apply_cache_dir_to_server(real_server, normalized)
+
+    def _apply_cache_dir_to_server(self, server: Any, cache_dir: Path | None) -> None:
+        """Internal helper to apply cache_dir to both configs and instantiated clients."""
+        if server is None:
+            return
+        actual = getattr(server, "_server", server)
+        if _MCPServerOAuth is not None and isinstance(actual, _MCPServerOAuth):
+            oauth_config = cast("MCPServerOAuth", actual)
+            if cache_dir is not None and getattr(oauth_config, "cache_dir", None) is None:
+                oauth_config.cache_dir = cache_dir
+            return
+        try:
+            from agency_swarm.mcp.oauth_client import MCPServerOAuthClient
+        except ImportError:  # pragma: no cover - optional dependency missing
+            return
+
+        if isinstance(actual, MCPServerOAuthClient):
+            config = actual.oauth_config
+            if cache_dir is not None and getattr(config, "cache_dir", None) is None:
+                config.cache_dir = cache_dir
+            oauth_provider = getattr(actual, "_oauth_provider", None)
+            storage = getattr(oauth_provider, "storage", None) if oauth_provider else None
+            if storage and hasattr(storage, "base_cache_dir") and cache_dir is not None:
+                storage.base_cache_dir = cache_dir
+
     def _ensure_bg_loop(self) -> asyncio.AbstractEventLoop:
         if self._bg_loop is not None:
             return self._bg_loop
@@ -324,6 +383,66 @@ class LoopAffineAsyncProxy:
 default_mcp_manager = PersistentMCPServerManager()
 
 
+def _process_oauth_servers(agent: Any, servers: list[Any]) -> None:
+    """Process OAuth-enabled MCP servers and convert them to authenticated clients.
+
+    Args:
+        agent: The agent instance
+        servers: List of MCP server instances (may include MCPServerOAuth)
+    """
+    if not _OAUTH_AVAILABLE or _MCPServerOAuth is None:
+        return
+
+    # Import OAuth client here to avoid circular import
+    from agency_swarm.mcp.oauth_client import MCPServerOAuthClient
+
+    # Get custom handlers from agent if provided
+    redirect_handler = getattr(agent, "mcp_oauth_redirect_handler", None)
+    callback_handler = getattr(agent, "mcp_oauth_callback_handler", None)
+    handler_factory = getattr(agent, "mcp_oauth_handler_factory", None)
+    base_handlers = {}
+    if redirect_handler:
+        base_handlers["redirect"] = redirect_handler
+    if callback_handler:
+        base_handlers["callback"] = callback_handler
+
+    # Convert OAuth configs to OAuth clients
+    for i, srv in enumerate(list(servers)):
+        if not isinstance(srv, _MCPServerOAuth):
+            continue
+
+        # Cast to help mypy understand the type after isinstance check
+        oauth_srv = cast("MCPServerOAuth", srv)
+
+        logger.info(f"Creating OAuth client for MCP server: {oauth_srv.name}")
+
+        try:
+            # Validate configuration
+            client_id = oauth_srv.get_client_id_optional()
+            if client_id:
+                logger.info(f"OAuth configured for {oauth_srv.name} (client_id: {client_id[:8]}...)")
+
+            # Create OAuth client wrapper
+            server_handlers = base_handlers.copy() if base_handlers else {}
+            if callable(handler_factory):
+                new_handlers = handler_factory(oauth_srv.name)
+                if isinstance(new_handlers, dict):
+                    server_handlers.update(new_handlers)
+            handlers_arg = server_handlers if server_handlers else None
+            oauth_client = MCPServerOAuthClient(
+                oauth_srv,
+                handlers_arg,
+            )
+
+            # Replace config with actual client
+            servers[i] = oauth_client
+            logger.info(f"OAuth client created for {oauth_srv.name}")
+
+        except Exception:
+            logger.exception(f"Failed to create OAuth client for {oauth_srv.name}")
+            raise
+
+
 async def attach_persistent_mcp_servers(agency: Any) -> None:
     """Attach and connect persistent MCP servers to all agents in an agency.
 
@@ -338,6 +457,8 @@ async def attach_persistent_mcp_servers(agency: Any) -> None:
         servers = getattr(agent, "mcp_servers", None)
         if not isinstance(servers, list):
             continue
+        if _OAUTH_AVAILABLE:
+            _process_oauth_servers(agent, servers)
         for i, srv in enumerate(list(servers)):
             name = getattr(srv, "name", None)
             if not isinstance(name, str) or name == "":
@@ -365,10 +486,15 @@ def register_and_connect_agent_servers(agent: Any) -> None:
     This is a synchronous facade that safely handles both sync and async contexts:
     - If an event loop is running, schedules an async task to connect servers.
     - Otherwise, creates a temporary loop to connect synchronously.
+    - Supports OAuth-enabled servers via MCPServerOAuth instances.
     """
     servers = getattr(agent, "mcp_servers", None)
     if not isinstance(servers, list) or len(servers) == 0:
         return
+
+    # Process OAuth servers first
+    if _OAUTH_AVAILABLE:
+        _process_oauth_servers(agent, servers)
 
     server_names = []
     # Replace each server with the persistent instance (by name) if available

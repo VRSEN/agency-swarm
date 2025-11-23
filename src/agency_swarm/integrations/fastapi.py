@@ -49,7 +49,7 @@ def run_fastapi(
 
     try:
         import uvicorn
-        from fastapi import FastAPI
+        from fastapi import FastAPI, Header, HTTPException
         from fastapi.middleware.cors import CORSMiddleware
 
         from .fastapi_utils.endpoint_handlers import (
@@ -65,6 +65,7 @@ def run_fastapi(
             RequestTracker,
             setup_enhanced_logging,
         )
+        from .fastapi_utils.oauth_support import FastAPIOAuthConfig, OAuthStateRegistry, is_oauth_server
         from .fastapi_utils.request_models import BaseRequest, LogRequest, RunAgentInputCustom, add_agent_validator
         from .fastapi_utils.tool_endpoints import make_tool_endpoint
     except ImportError as e:
@@ -97,6 +98,9 @@ def run_fastapi(
         allow_headers=["*"],
     )
 
+    oauth_user_header = "X-User-Id"
+    oauth_registry: OAuthStateRegistry | None = None
+    oauth_config: FastAPIOAuthConfig | None = None
     endpoints = []
     agency_names = []
 
@@ -114,6 +118,17 @@ def run_fastapi(
 
             # Store agent instances for easy lookup
             preview_instance = agency_factory(load_threads_callback=lambda: [])
+            has_oauth_servers = False
+            agents_map = getattr(preview_instance, "agents", {})
+            if isinstance(agents_map, dict):
+                for agent in agents_map.values():
+                    servers = getattr(agent, "mcp_servers", None)
+                    if isinstance(servers, list) and any(is_oauth_server(srv) for srv in servers):
+                        has_oauth_servers = True
+                        break
+            if has_oauth_servers and oauth_registry is None:
+                oauth_registry = OAuthStateRegistry()
+                oauth_config = FastAPIOAuthConfig(oauth_registry, user_header=oauth_user_header)
             if DRY_RUN:
                 # In DRY_RUN, avoid building validators;
                 agency_metadata = preview_instance.get_agency_structure()
@@ -125,19 +140,19 @@ def run_fastapi(
                 if enable_agui:
                     app.add_api_route(
                         f"/{agency_name}/get_response_stream",
-                        make_agui_chat_endpoint(RunAgentInputCustom, agency_factory, verify_token),
+                        make_agui_chat_endpoint(RunAgentInputCustom, agency_factory, verify_token, oauth_config),
                         methods=["POST"],
                     )
                     endpoints.append(f"/{agency_name}/get_response_stream")
                 else:
                     app.add_api_route(
                         f"/{agency_name}/get_response",
-                        make_response_endpoint(AgencyRequest, agency_factory, verify_token),
+                        make_response_endpoint(AgencyRequest, agency_factory, verify_token, oauth_config),
                         methods=["POST"],
                     )
                     app.add_api_route(
                         f"/{agency_name}/get_response_stream",
-                        make_stream_endpoint(AgencyRequest, agency_factory, verify_token),
+                        make_stream_endpoint(AgencyRequest, agency_factory, verify_token, oauth_config),
                         methods=["POST"],
                     )
                     endpoints.append(f"/{agency_name}/get_response")
@@ -149,6 +164,26 @@ def run_fastapi(
                 methods=["GET"],
             )
             endpoints.append(f"/{agency_name}/get_metadata")
+
+    if oauth_registry is not None:
+
+        async def oauth_callback(
+            code: str,
+            state: str,
+            user_id: str | None = Header(default=None, alias=oauth_user_header),
+        ):
+            flow = await oauth_registry.set_code(state=state, code=code, user_id=user_id)
+            if flow.error:
+                raise HTTPException(status_code=400, detail=f"OAuth callback failed: {flow.error}")
+            return {"status": "ok", "state": state, "server_name": flow.server_name}
+
+        async def oauth_status(state: str):
+            return await oauth_registry.get_status(state)
+
+        app.add_api_route("/oauth/callback", oauth_callback, methods=["GET"])
+        endpoints.append("/oauth/callback")
+        app.add_api_route("/oauth/status/{state}", oauth_status, methods=["GET"])
+        endpoints.append("/oauth/status/{state}")
 
     if tools and not DRY_RUN:
         for tool in tools:
