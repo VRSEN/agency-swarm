@@ -175,6 +175,7 @@ Agency Swarm is a multi-agent orchestration framework built on the OpenAI Agents
 - /docs/ is the current reference for v1.x
 
 ### Documentation Rules
+- Treat documentation as a core product: every line must deliver user value, with zero fluff drafted in the first place.
 - All documentation writing and updates MUST follow `docs/mintlify.cursorrules` for formatting, components, links, and page metadata.
 - Always reference the code files relevant to the documented behavior so maintainers know where to look.
 - Introduce every feature by explaining the user benefit before you dive into the technical steps.
@@ -184,6 +185,10 @@ Agency Swarm is a multi-agent orchestration framework built on the OpenAI Agents
 - Avoid filler or repetition so every sentence advances understanding.
 - Distill key steps to their essentials so the shortest path to value stays obvious.
 - Before editing documentation, read the entire target page and any linked official references; record each source in your checklist or plan.
+- List prerequisites and required env vars up front so readers can act immediately.
+- Keep steps tighter than prose: use short sequences that unblock the next action; choose Mintlify components (tabs, accordions, cards) per `docs/mintlify.cursorrules` when they clarify, never as filler.
+- Replace marketing language with concrete, actionable text that answers the three core questions: What is this? So what (why it matters)? Now what (specific next step)?
+- Only add warnings or troubleshooting notes tied to real failure modes you observed or verified.
 
 ## Python Requirements
 - Python >= 3.12 (development on 3.13) — project developed and primarily tested on 3.13; CI ensures 3.12 compatibility.
@@ -258,6 +263,7 @@ Strictness
 - Always inspect unstaged files with `git diff --name-only` and staged files with `git diff --cached --name-only`.
 - If the working tree is not clean or there is any confusion/ambiguity, report to the user immediately with a clear description of the problem and an explicit question before proceeding.
 - Never hard-reset (`git reset --hard`) without preserving progress
+- Before any rebase or history-editing command, set `GIT_EDITOR` to a non-interactive value (e.g., `true`) so git does not launch an editor in this environment.
 - Logical, isolated commit grouping (distinct refactors vs. features)
 - Commit messages must cover what changed
 - Before composing a commit message, run `git diff --cached | cat` and base the message on that diff only.
@@ -311,6 +317,7 @@ Strictness
 
 ## Search Discipline
 - After changes, aggressively search for and clean up related patterns throughout the codebase.
+- If context is unclear, stop and clarify: first, fill information gaps by tracing the repository; if this is insufficient and reliable online information is required, run a targeted web search using an agent with the Agents SDK’s WebSearchTool. If still unclear, confirm any remaining system details directly with the user.
 
 ## End-of-Task Checklist
 - All requirements in this document respected
@@ -321,9 +328,11 @@ Strictness
 - Changes covered by tests (integration/unit or explicit user manual confirmation)
 - All tests pass
 - Example scripts execute and output as expected
+- Before responding, re-read the diff and polish for clarity and completeness; confirm no critical user-facing detail was lost during compression.
 
 Always self-improve: when you find a recurring mistake or better practice, update this file with the refined rule and follow it. When the user provides feedback or you detect a failure, consider updating this AGENTS.md file before resuming work so it never repeats.
 
 ## Iterative Polishing
 - Iterate on the diff by immediately checking the feedback signal (git diff/tests/logs), editing and repeating until the change is correct and minimal; escalate key decisions for approval as needed.
+- Before finalizing, re-read the current diff to confirm clarity and that no user-facing detail was dropped during compression; polish wording/layout until it matches the repo’s patterns.
 - Conclude only when no further measurable improvement is possible (the changes are minimal, bug- and regression-free, globally optimal, and adhere to this document's rules) and every outstanding task is closed.
