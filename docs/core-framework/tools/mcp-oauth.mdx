@@ -4,303 +4,119 @@ description: 'Connect your agents to OAuth-protected services like Notion, GitHu
 icon: "key"
 ---
 
-Many powerful services like Notion, GitHub, and Google Drive require OAuth authentication to access user data. Agency Swarm agents can connect to these services through MCP servers that implement OAuth 2.0 authentication, allowing your agents to work with private, user-specific data securely.
+Connect OAuth-enabled MCP servers so agents can reach user-owned data (GitHub, Notion, Google Drive). This page gives a fast local setup and the few knobs you need to adjust.
 
-## When to Use OAuth
+## Quick start (desktop/localhost)
 
-Use OAuth-enabled MCP servers when you need agents to:
+1) Register an OAuth app with your provider and set the redirect URI to `http://localhost:3000/callback`.
+2) Export your credentials:
+```bash
+export GITHUB_CLIENT_ID="Iv1.abc123..."
+export GITHUB_CLIENT_SECRET="secret123..."
+```
+3) Configure the server and agent:
+```python
+from agency_swarm import Agent, Agency
+from agency_swarm.mcp import MCPServerOAuth
 
-<Card title="Access User-Specific Resources" icon="user">
-Connect to services like Notion, where agents need to work with a specific user's workspace and private pages.
-</Card>
+github = MCPServerOAuth(
+    url="http://localhost:8001/mcp",
+    name="github",  # Drives env var names
+    scopes=["repo", "user"],
+    redirect_uri="http://localhost:3000/callback",
+)
 
-<Card title="Perform Authorized Actions" icon="lock">
-Enable agents to create GitHub issues, update Google Docs, or manage Slack channels on your behalf with proper permissions.
-</Card>
+agent = Agent(
+    name="GitHubAgent",
+    mcp_servers=[github],
+)
 
-<Card title="Maintain User Context" icon="link">
-Let agents work with services that require knowing *who* is making the request, not just *what* is being requested.
-</Card>
-
-## How It Works
-
-OAuth authentication for MCP servers follows a simple flow:
-
-<Steps>
-<Step title="Configure OAuth Server">
-You provide the MCP server URL and OAuth credentials (client ID/secret) when creating your agent.
-</Step>
-
-<Step title="First Authorization">
-The first time your agent connects, it opens your browser for OAuth authorization. You approve the requested permissions on the provider's website (e.g., GitHub, Notion).
-</Step>
-
-<Step title="Token Storage">
-After authorization, Agency Swarm securely saves your OAuth tokens. Subsequent runs reuse these tokens automatically—no browser required.
-</Step>
-
-<Step title="Automatic Refresh">
-When tokens expire, Agency Swarm automatically refreshes them in the background. Your agent keeps working without interruption.
-</Step>
-</Steps>
+agency = Agency([agent])
+print(agency.get_response("List my GitHub repositories"))
+```
 
 <Note>
-All OAuth logic is handled by the [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk), which implements OAuth 2.0 standards with PKCE security. Agency Swarm simply integrates this SDK for you.
+First run opens the browser for consent. Tokens are cached under `~/.agency-swarm/mcp-tokens/default/github/` and are reused automatically on later runs.
+Agency Swarm spins up a tiny local callback listener for localhost redirects; if it cannot capture automatically, you can paste the callback URL in the terminal to continue.
 </Note>
 
-### Standard Request Flow
-
-Start with this quick mental model:
-
-<Steps>
-<Step title="1. User prompt">
-The agent receives a prompt that requires data behind OAuth.
-</Step>
-<Step title="2. Token check">
-The agent reads cached tokens from its token cache (FileTokenStorage).
-</Step>
-<Step title="3. Browser hop (only if needed)">
-If no valid token exists, the agent launches the OAuth URL so the user can approve access.
-</Step>
-<Step title="4. Tool call">
-With a valid token in place, the agent invokes the MCP tool and returns the secured data.
-</Step>
-</Steps>
+## OAuth flow at a glance
 
 ```mermaid
 sequenceDiagram
     participant User
     participant Agent
     participant Browser
-    participant OAuth as OAuth Provider
-    participant MCP as MCP Server
+    participant Provider
+    participant MCP
 
-    User->>Agent: User prompt (needs OAuth data)
-    Agent->>Agent: Read tokens from token cache
-    alt Tokens missing or expired
-        Agent->>Browser: Launch authorization URL
-        Browser->>OAuth: User signs in and approves scopes
-        OAuth-->>Browser: Redirect with code/state
-        Browser->>Agent: Send callback URL/code
-        Agent->>OAuth: Exchange code for access/refresh tokens
-        Agent->>Agent: Save tokens via FileTokenStorage
+    User->>Agent: Prompt needs OAuth data
+    Agent->>Agent: Load cached tokens
+    alt Missing/expired
+        Agent->>Browser: Open auth_url
+        Browser->>Provider: User approves scopes
+        Provider-->>Browser: Redirect with code/state
+        Browser->>Agent: Callback captured or pasted
+        Agent->>Provider: Exchange code for tokens
+        Agent->>Agent: Save tokens to cache
     end
-    Agent->>MCP: Invoke OAuth-enabled MCP tool
-    MCP-->>Agent: Return tool result
-    Agent-->>User: Respond with secured data
+    Agent->>MCP: Call tool with token
+    MCP-->>Agent: Tool result
+    Agent-->>User: Response
 ```
 
-<Note>
-FileTokenStorage saves tokens under `~/.agency-swarm/mcp-tokens` by default. Set `AGENCY_SWARM_MCP_CACHE_DIR` or pass `cache_dir=Path("./data/oauth-tokens")` to `MCPServerOAuth` when you need a different directory or multiple token caches per user/account. Within each cache dir, tokens live in `<user>/<server>/tokens.json` along with `client.json`.
-</Note>
+## What you need
+- OAuth client ID/secret from your provider.
+- An OAuth-capable MCP server (for example, FastMCP).
+- A redirect URI reachable from where the agent runs.
 
-## Setup Guide
-
-### Prerequisites
-
-Before using OAuth with MCP servers, you need:
-
-1. **OAuth Application Credentials**: Register an OAuth app with your service provider (e.g., [GitHub OAuth Apps](https://github.com/settings/developers))
-2. **MCP Server**: An MCP server that supports OAuth (see [FastMCP](https://gofastmcp.com/) for examples with built-in OAuth providers)
-3. **Python Environment**: Agency Swarm installed with `pip install agency-swarm`
-
-### Registering an OAuth Application
-
-Most services require you to register an OAuth application before you can use their API:
-
-<Tabs>
-<Tab title="GitHub">
-1. Go to [GitHub Developer Settings](https://github.com/settings/developers)
-2. Click **"New OAuth App"**
-3. Fill in:
-   - **Application name**: Your agent's name
-   - **Homepage URL**: `http://localhost:3000`
-   - **Authorization callback URL**: `http://localhost:3000/callback`
-4. Save and copy your **Client ID** and generate a **Client Secret**
-5. Export as environment variables:
-   ```bash
-   export GITHUB_CLIENT_ID="Iv1.abc123..."
-   export GITHUB_CLIENT_SECRET="secret123..."
-   ```
-</Tab>
-
-<Tab title="Google">
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a new project or select existing
-3. Enable the APIs you need (Drive API, Gmail API, etc.)
-4. Go to **Credentials** → **Create Credentials** → **OAuth 2.0 Client ID**
-5. Choose **Desktop app** as application type
-6. Copy your **Client ID** and **Client Secret**
-7. Export as environment variables:
-   ```bash
-   export GOOGLE_CLIENT_ID="123-abc.apps.googleusercontent.com"
-   export GOOGLE_CLIENT_SECRET="GOCSPX-..."
-   ```
-</Tab>
-
-<Tab title="Notion">
-1. Go to [Notion Integrations](https://www.notion.so/my-integrations)
-2. Click **"New integration"**
-3. Fill in integration details and select capabilities
-4. Copy your **OAuth client ID** and **client secret**
-5. Export as environment variables:
-   ```bash
-   export NOTION_CLIENT_ID="your_notion_client_id"
-   export NOTION_CLIENT_SECRET="your_notion_client_secret"
-   ```
-</Tab>
-</Tabs>
-
-## Configuration
-
-### Basic OAuth Server Configuration
-
-Configure an OAuth-enabled MCP server using the `MCPServerOAuth` class:
-
-```python
-from agency_swarm import Agent
-from agency_swarm.mcp import MCPServerOAuth
-
-# Configure OAuth MCP server
-oauth_server = MCPServerOAuth(
-    url="http://localhost:8001/mcp",  # MCP server endpoint
-    name="github",                     # Unique name (used for env vars)
-    scopes=["repo", "user"],          # OAuth scopes to request
-    redirect_uri="http://localhost:3000/callback"  # OAuth callback URL
-)
-
-# Create agent with OAuth server
-agent = Agent(
-    name="GitHubAgent",
-    description="Agent that can access GitHub via OAuth",
-    instructions="Use GitHub tools to help users manage repositories",
-    mcp_servers=[oauth_server],  # Add OAuth server here
-    model="gpt-4.1"
-)
-```
-
-### Environment Variable Pattern
-
-OAuth credentials are read from environment variables based on the server `name`:
-
-- Server with `name="github"` reads `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET`
-- Server with `name="notion"` reads `NOTION_CLIENT_ID` and `NOTION_CLIENT_SECRET`
-- Server with `name="my-service"` reads `MY_SERVICE_CLIENT_ID` and `MY_SERVICE_CLIENT_SECRET`
+## Register an OAuth app
+- GitHub: Developer Settings → **New OAuth App**, set callback to `http://localhost:3000/callback`, copy Client ID/Secret.
+- Google: Cloud Console → Credentials → **OAuth client ID** (Desktop), set callback to `http://localhost:3000/callback`, copy Client ID/Secret.
+- Notion: My Integrations → **New integration**, set capabilities, copy client ID/secret.
+Export each as `<NAME>_CLIENT_ID` / `<NAME>_CLIENT_SECRET`.
 
 <Note>
-The `name` field is converted to UPPER_SNAKE_CASE to form the environment variable names. This pattern allows you to configure multiple OAuth servers without conflicts.
+OAuth client flows are implemented by the MCP Python SDK; see https://github.com/modelcontextprotocol/python-sdk for full protocol details.
 </Note>
 
-### Automatic Callback Capture
+## Configuration reference
 
-When your redirect URI points to `http://localhost:PORT/callback`, Agency Swarm spins up a tiny local HTTP server on that port. The browser redirect lands there automatically, the code/state are captured, and the browser shows a **"You can close this tab"** message. If the port is busy or your redirect URI points somewhere else (for example, your SaaS frontend), the terminal falls back to the classic "paste the callback URL" prompt, so you never get stuck mid-flow.
-
-### Configuration Options
+- Naming drives env vars: `name="github"` -> `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET`.
+- Scopes are explicit: pass only what the tool needs (e.g., `["repo", "user"]`).
+- Redirects: keep `http://localhost:3000/callback` for desktop; override `redirect_uri` for hosted flows.
 
 <ParamField param="url" type="string" required>
-  The HTTP endpoint of your MCP server (e.g., `http://localhost:8001/mcp`)
+  MCP server endpoint (e.g., `http://localhost:8001/mcp`)
 </ParamField>
 
 <ParamField param="name" type="string" required>
-  Unique identifier for this server. Used to read OAuth credentials from environment variables (`{NAME}_CLIENT_ID`, `{NAME}_CLIENT_SECRET`)
+  Identifier used to derive env vars (`{NAME}_CLIENT_ID`, `{NAME}_CLIENT_SECRET`)
 </ParamField>
 
 <ParamField param="scopes" type="list[string]">
-  OAuth scopes to request (e.g., `["repo", "user"]` for GitHub). Defaults to `["user"]`
+  OAuth scopes to request. Defaults to `["user"]`.
 </ParamField>
 
 <ParamField param="redirect_uri" type="string">
-  OAuth callback URL. Defaults to `http://localhost:3000/callback`
+  OAuth callback URL. Defaults to `http://localhost:3000/callback`.
 </ParamField>
 
 <ParamField param="client_id" type="string">
-  OAuth client ID. If not provided, reads from `{NAME}_CLIENT_ID` environment variable
+  Override env var lookup for the client ID.
 </ParamField>
 
 <ParamField param="client_secret" type="string">
-  OAuth client secret. If not provided, reads from `{NAME}_CLIENT_SECRET` environment variable
+  Override env var lookup for the client secret.
 </ParamField>
 
 <ParamField param="auth_server_url" type="string">
-  Optional base URL for OAuth discovery. Set this if your authorization endpoints live on a different origin than the MCP endpoint itself (common on SaaS deployments).
+  Set when authorization endpoints live on a different origin than the MCP endpoint.
 </ParamField>
 
-## Usage Examples
+## Token storage and isolation
 
-### Single OAuth Server
-
-```python
-from agency_swarm import Agent, Agency
-from agency_swarm.mcp import MCPServerOAuth
-
-# Configure OAuth server
-github_server = MCPServerOAuth(
-    url="http://localhost:8001/mcp",
-    name="github",
-    scopes=["repo", "user"]
-)
-
-# Create agent
-agent = Agent(
-    name="GitHubAgent",
-    description="Agent with GitHub access",
-    instructions="Help users manage their GitHub repositories",
-    mcp_servers=[github_server],
-    model="gpt-4.1"
-)
-
-# Create agency
-agency = Agency(
-    [agent],
-    shared_instructions="You are a helpful GitHub assistant."
-)
-
-# First run: Browser opens for OAuth authorization
-# Subsequent runs: Uses cached tokens automatically
-response = agency.get_response("List my GitHub repositories")
-print(response)
-```
-
-### Multiple OAuth Servers
-
-Connect to multiple OAuth-protected services in one agent:
-
-```python
-from agency_swarm import Agent
-from agency_swarm.mcp import MCPServerOAuth
-
-# Configure multiple OAuth servers
-github_server = MCPServerOAuth(
-    url="http://localhost:8001/mcp",
-    name="github",
-    scopes=["repo", "user"]
-)
-
-notion_server = MCPServerOAuth(
-    url="http://localhost:8002/mcp",
-    name="notion",
-    scopes=["read", "write"]
-)
-
-# Create agent with multiple OAuth servers
-agent = Agent(
-    name="MultiServiceAgent",
-    description="Agent with GitHub and Notion access",
-    instructions="Help users manage GitHub repos and Notion pages",
-    mcp_servers=[github_server, notion_server],
-    model="gpt-4.1"
-)
-
-# Agent can now use tools from both GitHub and Notion
-```
-
-## Token Persistence
-
-Agency Swarm automatically handles OAuth token storage and lifecycle management. Tokens persist across runs, eliminating the need for repeated authorization.
-
-### How It Works
-
-Tokens live under `~/.agency-swarm/mcp-tokens` unless you override the cache directory. Override globally via `AGENCY_SWARM_MCP_CACHE_DIR`, or per server with `cache_dir`. For SaaS flows, pair `OAuthStorageHooks` with `user_context={"user_id": ...}` so each run writes into its own subfolder:
+Tokens default to `~/.agency-swarm/mcp-tokens/{user}/{server}/`. Set `AGENCY_SWARM_MCP_CACHE_DIR` for a global override or pass `cache_dir` per server. Use hooks to keep SaaS users isolated:
 
 ```python
 from pathlib import Path
@@ -312,199 +128,70 @@ oauth_server = MCPServerOAuth(
     url="http://localhost:8001/mcp",
     name="github",
     scopes=["repo", "user"],
-    cache_dir=Path("./data/oauth-tokens"),  # Tokens saved here
+    cache_dir=Path("./data/oauth-tokens"),
 )
-
-agent = Agent(name="GitHubAgent", mcp_servers=[oauth_server])
 
 agency = Agency(
-    [agent],
-    hooks=[OAuthStorageHooks()],           # Enables per-user isolation
-    user_context={"user_id": "user_123"},  # Optional for SaaS
+    [Agent(name="GitHubAgent", mcp_servers=[oauth_server])],
+    hooks=[OAuthStorageHooks()],
+    user_context={"user_id": "user_123"},
 )
 ```
 
-Skip the hook and `user_id` for single-user/local flows—the storage falls back to the `default/` directory automatically.
-
-**Storage Structure:**
+Per-user layout:
 ```
 ./data/oauth-tokens/
-  default/                 # Default user for local development
-    github/
-      tokens.json
-      client.json
-    notion/
-      tokens.json
-  user_123/                # Per-user isolation (SaaS)
-    github/
-      tokens.json
-      client.json
+  default/github/tokens.json
+  user_123/github/tokens.json
 ```
+Access tokens refresh automatically via the MCP SDK; if a refresh token expires, the flow will prompt for authorization again.
 
-<Note>
-For production SaaS deployments with multiple users, see [MCP OAuth for SaaS/Docker](/platform/integrations/mcp-oauth-integration).
-</Note>
-
-### Token Lifecycle
-
-<Accordion title="First Authorization">
-When you first run an agent with an OAuth server:
-
-1. Browser opens to the OAuth provider (e.g., GitHub)
-2. You approve the requested permissions
-3. You paste the callback URL back into your terminal
-4. Tokens are saved via your configured storage
-</Accordion>
-
-<Accordion title="Subsequent Runs">
-After initial authorization:
-
-1. Tokens are loaded automatically from storage
-2. No browser interaction needed
-3. Agent connects immediately and begins work
-</Accordion>
-
-<Accordion title="Automatic Token Refresh">
-When access tokens expire:
-
-1. Agency Swarm uses the refresh token automatically
-2. New access token is obtained silently
-3. Updated tokens are saved to storage
-4. Agent continues working without interruption
-</Accordion>
-
-<Accordion title="Re-Authorization">
-If refresh tokens expire or become invalid:
-
-1. Browser opens again for re-authorization
-2. You approve permissions again
-3. New tokens are saved to storage
-4. Agent resumes normal operation
-</Accordion>
-
-## Testing OAuth Integration
-
-### Using the Example Test Server
-
-Agency Swarm includes a test OAuth server for development:
-
-<Steps>
-<Step title="Set Up GitHub OAuth App">
-Register an OAuth app at [GitHub Developer Settings](https://github.com/settings/developers) with callback URL `http://localhost:3000/callback`
-</Step>
-
-<Step title="Export Server Credentials">
-In **Terminal 1** (where you will run the MCP server), set the GitHub credentials so FastMCP can complete the upstream OAuth flow:
-```bash
-export GITHUB_CLIENT_ID="your_github_client_id"
-export GITHUB_CLIENT_SECRET="your_github_client_secret"
-```
-</Step>
-
-<Step title="Start Test Server">
-Still in Terminal 1:
-```bash
-python examples/utils/oauth_mcp_server.py
-# Server starts at http://localhost:8001
-```
-</Step>
-
-<Step title="Run Example Agent">
-Open **Terminal 2** (no GitHub env vars required) and run:
-```bash
-python examples/mcp_oauth_local.py
-# Browser opens for OAuth, then agent uses tools
-```
-</Step>
-</Steps>
-
-### Expected Behavior
-
-<Accordion title="First Run">
-1. Terminal shows: `Opening browser for authentication`
-2. Browser opens to GitHub OAuth page
-3. You click "Authorize"
-4. Terminal prompts: `Paste the callback URL:` if automatic capture fails
-5. You paste URL from browser
-6. Terminal shows: `Successfully connected to OAuth MCP server`
-7. Agent calls tools successfully
-</Accordion>
-
-<Accordion title="Second Run">
-1. Terminal shows: `Loading cached OAuth tokens`
-2. No browser opens
-3. Agent connects immediately
-4. Tools work normally
-</Accordion>
-
-<Accordion title="Troubleshooting">
-- **Client Not Registered (browser error)**: Delete the local cache files (default `~/.agency-swarm/mcp-tokens/default/oauth-test-server_*`) or your custom `cache_dir`, then rerun the client so it re-registers automatically.
-- **Token Cache Location**: Set `AGENCY_SWARM_MCP_CACHE_DIR` or configure `MCPServerOAuth(cache_dir=Path("./data/oauth-tokens"))` if you prefer storing tokens inside your repo.
-- **Callback Issues**: Ensure the redirect URL exactly matches the GitHub OAuth app (`http://localhost:3000/callback`). If the auto listener fails, paste the full callback URL when prompted.
-</Accordion>
-
-## Advanced Usage
-
-### Custom OAuth Handlers
-
-For specialized workflows (e.g., web UI integration), provide custom OAuth handlers:
+## Multiple OAuth servers
 
 ```python
 from agency_swarm import Agent
 from agency_swarm.mcp import MCPServerOAuth
 
-async def custom_redirect_handler(auth_url: str) -> None:
-    """Custom handler - could send URL to web UI"""
-    print(f"Authorize at: {auth_url}")
-    # Could emit SSE event, send to frontend, etc.
+github = MCPServerOAuth(url="http://localhost:8001/mcp", name="github", scopes=["repo"])
+notion = MCPServerOAuth(url="http://localhost:8002/mcp", name="notion", scopes=["read", "write"])
 
-async def custom_callback_handler() -> tuple[str, str | None]:
-    """Custom handler - could receive code from web UI"""
-    code = await receive_from_frontend()  # Your custom logic
-    return code, None
-
-# Create agent with custom handlers
-agent = Agent(
-    name="CustomOAuthAgent",
-    mcp_servers=[oauth_server],
-    mcp_oauth_redirect_handler=custom_redirect_handler,
-    mcp_oauth_callback_handler=custom_callback_handler
-)
+agent = Agent(name="MultiServiceAgent", mcp_servers=[github, notion])
 ```
 
-> These handler hooks now live directly on the `Agent`, so FastAPI streaming endpoints and AG-UI frontends can pass URLs to the browser via SSE without extra glue code.
+## Custom handlers for web UIs
 
-### Pre-Configured Client Credentials
-
-For testing or when you have pre-registered OAuth apps, you can provide credentials directly:
+Send the auth URL to your frontend and wait for the code there:
 
 ```python
-oauth_server = MCPServerOAuth(
-    url="http://localhost:8001/mcp",
-    name="test-server",
-    client_id="hardcoded_client_id",      # Skip env var lookup
-    client_secret="hardcoded_secret",     # Skip env var lookup
-    scopes=["read"]
+from agency_swarm import Agent
+from agency_swarm.mcp import MCPServerOAuth
+
+async def send_redirect(auth_url: str) -> None:
+    emit_sse("oauth_required", {"url": auth_url})
+
+async def wait_for_code() -> tuple[str, str | None]:
+    return await poll_frontend()
+
+oauth_server = MCPServerOAuth(url="http://localhost:8001/mcp", name="github", scopes=["repo"])
+
+agent = Agent(
+    name="BrowserlessAgent",
+    mcp_servers=[oauth_server],
+    mcp_oauth_redirect_handler=send_redirect,
+    mcp_oauth_callback_handler=wait_for_code,
 )
 ```
 
-<Note>
-**Security Warning**: Hard-coding credentials is only recommended for local testing. Always use environment variables in production.
-</Note>
+See [MCP OAuth for Production](/platform/integrations/mcp-oauth-integration) for the full FastAPI/Docker flow.
 
-## Limitations
-
-<Note>
-**Browser-Based Authorization**: First-time authorization requires browser interaction for the OAuth flow. For SaaS deployments with web UI, use custom OAuth handlers to integrate the authorization flow into your frontend (see Advanced Usage).
-
-**Token Security**: Token storage security depends on your chosen backend. File-based storage (V0) uses restrictive file permissions. For SaaS deployments (V1), ensure your custom storage implementation encrypts tokens appropriately.
-
-**SaaS Token Persistence**: For production deployments with FastAPI/Docker, see the [MCP OAuth Integration Guide](/platform/integrations/mcp-oauth-integration) for complete implementation details including custom handlers, per-user token storage, and frontend integration examples.
-</Note>
+## Troubleshooting
+- Browser doesn’t open or redirect fails: paste the full callback URL when prompted; confirm it matches the provider config.
+- Credentials rejected: re-export `*_CLIENT_ID` and `*_CLIENT_SECRET`, then delete the cached folder for that server.
+- Wrong storage path: set `AGENCY_SWARM_MCP_CACHE_DIR` or pass `cache_dir=Path(...)` to keep tokens in a specific location.
 
 ## See Also
 
-- [MCP OAuth for SaaS/Docker](/platform/integrations/mcp-oauth-integration) - Production deployment with FastAPI
-- [MCP Integration](/core-framework/tools/mcp-integration) - Overview of MCP server types
-- [MCP Specification](https://github.com/modelcontextprotocol/modelcontextprotocol) - Official MCP protocol docs
-- [FastMCP](https://gofastmcp.com/getting-started/welcome) - Framework for building OAuth-enabled MCP servers
+- [MCP OAuth for SaaS/Docker](/platform/integrations/mcp-oauth-integration)
+- [MCP Integration](/core-framework/tools/mcp-integration)
+- [MCP Specification](https://github.com/modelcontextprotocol/modelcontextprotocol)
+- [FastMCP](https://gofastmcp.com/getting-started/welcome)
