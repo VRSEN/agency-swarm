@@ -9,10 +9,12 @@ from agency_swarm.agency import Agency
 from agency_swarm.agent.core import Agent
 
 if TYPE_CHECKING:
-    from fastapi import FastAPI
+    class FastAPIWithServerUrl(Protocol):
+        """Protocol describing FastAPI with extended openapi() that accepts server_url parameter.
 
-    class FastAPIWithServerUrl(FastAPI, Protocol):
-        """Extended FastAPI with openapi() that accepts server_url parameter."""
+        This Protocol describes the interface we need - a FastAPI instance with
+        an openapi() method that accepts an optional server_url parameter.
+        """
 
         def openapi(self, server_url: str | None = None) -> dict[str, Any]:
             """Generate OpenAPI schema with optional server URL."""
@@ -56,7 +58,7 @@ def run_fastapi(
     """
     if (agencies is None or len(agencies) == 0) and (tools is None or len(tools) == 0):
         logger.warning("No endpoints to deploy. Please provide at least one agency or tool.")
-        return
+        return None
 
     try:
         import uvicorn
@@ -80,7 +82,7 @@ def run_fastapi(
         from .fastapi_utils.tool_endpoints import make_tool_endpoint
     except ImportError as e:
         logger.error(f"FastAPI deployment dependencies are missing: {e}. Please install agency-swarm[fastapi] package")
-        return
+        return None
 
     dry_run_env = os.getenv("DRY_RUN", "")
     DRY_RUN = str(dry_run_env).strip().lower() in {"1", "true", "yes", "on"}
@@ -207,14 +209,15 @@ def run_fastapi(
                 # Clear FastAPI's cached schema after restoring servers
                 app.openapi_schema = None
 
-    app.openapi = patched_openapi
+    app.openapi = patched_openapi  # type: ignore[method-assign]
 
     logger.info("Created endpoints:\n" + "\n".join(endpoints))
 
     if return_app:
-        # Cast to extended type for IDE support - cast()
+        # Cast to Protocol type for IDE support
         return cast("FastAPIWithServerUrl", app)
 
     logger.info(f"Starting FastAPI {'AG-UI ' if enable_agui else ''}server at http://{host}:{port}")
 
     uvicorn.run(app, host=host, port=port)
+    return None  # Never reached, but satisfies type checker
