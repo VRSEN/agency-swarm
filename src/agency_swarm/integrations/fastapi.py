@@ -1,11 +1,22 @@
 import logging
 import os
 from collections.abc import Callable, Mapping
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from agents.tool import FunctionTool
 
 from agency_swarm.agency import Agency
 from agency_swarm.agent.core import Agent
+
+if TYPE_CHECKING:
+    from fastapi import FastAPI
+
+    class FastAPIWithServerUrl(FastAPI, Protocol):
+        """Extended FastAPI with openapi() that accepts server_url parameter."""
+
+        def openapi(self, server_url: str | None = None) -> dict[str, Any]:
+            """Generate OpenAPI schema with optional server URL."""
+            ...
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +32,7 @@ def run_fastapi(
     enable_agui: bool = False,
     enable_logging: bool = False,
     logs_dir: str = "activity-logs",
-):
+) -> "FastAPIWithServerUrl | None":
     """Launch a FastAPI server exposing endpoints for multiple agencies and tools.
 
     Parameters
@@ -174,10 +185,35 @@ def run_fastapi(
         app.add_api_route("/get_logs", make_logs_endpoint(LogRequest, logs_dir, verify_token), methods=["POST"])
         endpoints.append("/get_logs")
 
+    # Patch openapi() to accept optional server_url parameter
+    original_openapi = app.openapi
+
+    def patched_openapi(server_url: str | None = None) -> dict[str, Any]:
+        """Patched openapi() method that accepts an optional server_url parameter.
+
+        Args:
+            server_url: Optional server URL to add to app.servers, which will be included in the schema.
+        """
+        original_servers = getattr(app, "servers", [])
+        try:
+            if server_url:
+                app.servers = [{"url": server_url}]
+                # Clear FastAPI's cached schema so it regenerates with the new servers
+                app.openapi_schema = None
+            return original_openapi()
+        finally:
+            if server_url:
+                app.servers = original_servers
+                # Clear FastAPI's cached schema after restoring servers
+                app.openapi_schema = None
+
+    app.openapi = patched_openapi
+
     logger.info("Created endpoints:\n" + "\n".join(endpoints))
 
     if return_app:
-        return app
+        # Cast to extended type for IDE support - cast()
+        return cast("FastAPIWithServerUrl", app)
 
     logger.info(f"Starting FastAPI {'AG-UI ' if enable_agui else ''}server at http://{host}:{port}")
 

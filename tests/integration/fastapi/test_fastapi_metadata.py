@@ -433,3 +433,25 @@ def test_function_tool_nested_union_falls_back_to_generic_handler():
     schema = client.get("/openapi.json").json()
     endpoint = schema["paths"]["/tool/ContainerTool"]["post"]
     assert "requestBody" not in endpoint
+
+
+def test_openapi_accepts_server_url_parameter(agency_factory):
+    """Verify that app.openapi() accepts an optional server_url parameter and includes it in the schema."""
+
+    app = run_fastapi(agencies={"test_agency": agency_factory}, return_app=True, app_token_env="")
+    test_server_url = "https://example.com/api"
+
+    # Test that openapi() accepts server_url parameter
+    schema_with_server = app.openapi(server_url=test_server_url)
+
+    assert "servers" in schema_with_server
+    assert len(schema_with_server["servers"]) == 1
+    assert schema_with_server["servers"][0]["url"] == test_server_url
+
+    # Test that calling openapi() without server_url doesn't include servers
+    schema_without_server = app.openapi()
+    assert "servers" not in schema_without_server or len(schema_without_server.get("servers", [])) == 0
+
+    # Test that calling with None doesn't add servers
+    schema_with_none = app.openapi(server_url=None)
+    assert "servers" not in schema_with_none or len(schema_with_none.get("servers", [])) == 0
