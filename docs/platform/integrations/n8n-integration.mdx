@@ -16,7 +16,7 @@ n8n is a flexible workflow automation platform that lets you connect dozens of s
 - **Platform API Key** – available under **Settings → API Keys** in the Agencii dashboard.
 - **n8n instance** with permissions to install **Community Nodes**.
 
-## Set up n8n Integration in Agencii
+## Step 1: Set up n8n Integration in Agencii
 
 <Steps>
   <Step title="Create an n8n Platform integration">
@@ -51,7 +51,7 @@ n8n is a flexible workflow automation platform that lets you connect dozens of s
   </Step>
 </Steps>
 
-## Install the Agencii Community Node in n8n
+## Step 2: Install the Agencii Community Node in n8n
 
 <Steps>
   <Step title="Install the node">
@@ -72,7 +72,7 @@ n8n is a flexible workflow automation platform that lets you connect dozens of s
   </Step>
 </Steps>
 
-## Use the Agencii Node in a Workflow
+## Step 3: Use the Agencii Node in a Workflow
 
 The Agencii node exposes a single operation designed to send messages to your agency and receive structured responses.
 
@@ -109,7 +109,5 @@ The Agencii node exposes a single operation designed to send messages to your ag
 - **Human-in-the-loop review** – send form or CRM data to your agency, then route the response into an approval step.
 - **Content generation pipelines** – trigger the Agencii node from schedules or webhooks and store generated content in Google Sheets, Notion, or a database.
 - **Multi-step analysis** – chain multiple Agencii nodes while reusing `sessionId` to keep context across data enrichment, analysis, and recommendation steps.
-
-For more details on the underlying node behavior and advanced patterns, see the [`n8n-nodes-agencii` package on npm](https://www.npmjs.com/package/n8n-nodes-agencii).
 
 
