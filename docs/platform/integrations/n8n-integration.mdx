@@ -1,0 +1,115 @@
+---
+title: "n8n"
+description: "Connect your Agencii agents to n8n workflows using the Agencii community node."
+icon: "plug"
+---
+
+## Feature Overview
+
+n8n is a flexible workflow automation platform that lets you connect dozens of services in visual flows. The Agencii **n8n community node** (`n8n-nodes-agencii`) connects your agents to these workflows so your agencies can receive tasks, run tools, and send back answers directly inside n8n.
+
+<Tip>To protect your privacy and that of your clients, none of your chats, conversations, or messages are stored in our database. 🔒</Tip>
+
+## Prerequisites
+
+- **Agencii Platform account** with at least one deployed agency and agent.
+- **Platform API Key** – available under **Settings → API Keys** in the Agencii dashboard.
+- **n8n instance** with permissions to install **Community Nodes**.
+
+## Set up n8n Integration in Agencii
+
+<Steps>
+  <Step title="Create an n8n Platform integration">
+    1. In the Agencii dashboard, open **Deploy → Platforms** from the sidebar and click **New Platform**.
+
+    ![Create a new platform modal with n8n option](/images/integrations/n8n-integration/n8n-platforms-tab.png)
+
+    2. In the **Create a New Platform** dialog, select **n8n** and click **Create Platform**.
+
+    ![Select n8n as the platform type](/images/integrations/n8n-integration/n8n-create-a-new-platform-modal.png)
+
+    3. On the **Configure n8n Integration** screen, choose:
+       - **Agency** – the agency you want n8n to talk to.
+       - **Default Agent** – the agent that will receive messages from this integration.
+       - **Integration Name** – an internal name that will also help you identify the node inside n8n.
+       - **Integration Description** – optional context for future reference.
+    4. Click **Save and continue**.
+
+    ![Configure n8n integration with agency and default agent](/images/integrations/n8n-integration/n8n-configure-n8n-integration.png)
+  </Step>
+
+  <Step title="Copy integration data for n8n">
+    After saving, you’ll see the **Copy n8n Data** screen. It includes:
+
+    - **NPM package name**: `n8n-nodes-agencii` – used to install the node in n8n Community Nodes.
+    - **Integration ID** – a unique identifier that routes messages from n8n to this specific Agencii integration.
+    - **API Key hint** – your first platform API key (you can manage keys under **Settings → API Keys**).
+
+    ![Copy n8n data showing npm package name, integration ID and API key hint](/images/integrations/n8n-integration/n8n-configure-n8n-copy-step.png)
+
+    Keep the **Integration ID** handy—you’ll paste it into the Agencii node inside n8n.
+  </Step>
+</Steps>
+
+## Install the Agencii Community Node in n8n
+
+<Steps>
+  <Step title="Install the node">
+    ![Install community node modal with n8n-nodes-agencii package name](/images/integrations/n8n-integration/n8n-install-community-node-modal.png)
+    1. In your n8n instance, go to **Settings → Community Nodes**.
+    2. Click **Install** and enter the package name:
+
+       ```bash
+       n8n-nodes-agencii
+       ```
+
+    3. Confirm the installation. After it completes, an **Agencii** node will appear in your n8n node palette.
+
+    ![Agencii node package listed in Community nodes](/images/integrations/n8n-integration/n8n-community-nodes-added-pkg.png)
+
+![Workflow canvas with Agencii node selected from the node list](/images/integrations/n8n-integration/n8n-workflow-add-agencii-node.png)
+
+  </Step>
+</Steps>
+
+## Use the Agencii Node in a Workflow
+
+The Agencii node exposes a single operation designed to send messages to your agency and receive structured responses.
+
+<Steps>
+  <Step title="Configure the Agencii node">
+    1. Add an **Agencii** node to your workflow.
+    
+    ![Agencii Send message to agency node with parameters filled in](/images/integrations/n8n-integration/n8n-send-message-node-params.png)
+    ![Agencii node details with available actions](/images/integrations/n8n-integration/n8n-node-details-panel.png)
+    
+    2. Select your **Agencii API** credentials.
+    3. Under **Resource**, choose **Chat**, and under **Operation**, select **Send Message**.
+    4. Configure the main fields:
+       - **Integration ID** *(required)* – paste the Integration ID from your Agencii n8n Platform integration.
+       - **Message** *(required)* – the prompt or instruction you want your default agent to process.
+       - **Session ID** *(optional)* – reuse the `sessionId` from a previous run to continue the same conversation; leave empty to start a new session.
+
+    
+  </Step>
+
+  <Step title="Understand the node output">
+    The Agencii node returns a JSON payload with (among others):
+
+    - `text` / `response` – the main answer from your agency.
+    - `sessionId` – the session identifier to reuse for multi-turn conversations.
+    - `n8nIntegrationId` – the platform integration that handled the request.
+
+    You can pass these values into downstream nodes (e.g., email, CRM, webhooks) to build complete automations.
+  </Step>
+</Steps>
+
+## Example Use Cases
+
+- **Human-in-the-loop review** – send form or CRM data to your agency, then route the response into an approval step.
+- **Content generation pipelines** – trigger the Agencii node from schedules or webhooks and store generated content in Google Sheets, Notion, or a database.
+- **Multi-step analysis** – chain multiple Agencii nodes while reusing `sessionId` to keep context across data enrichment, analysis, and recommendation steps.
+
+For more details on the underlying node behavior and advanced patterns, see the [`n8n-nodes-agencii` package on npm](https://www.npmjs.com/package/n8n-nodes-agencii).
+
+

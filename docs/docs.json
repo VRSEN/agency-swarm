@@ -162,6 +162,7 @@
               "platform/integrations/slack-integration",
               "platform/integrations/whatsapp-integration",
               "platform/integrations/zapier-integration",
+              "platform/integrations/n8n-integration",
               "platform/integrations/web-api",
               "platform/integrations/widget"
             ]
