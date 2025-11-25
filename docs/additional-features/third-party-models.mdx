@@ -31,13 +31,11 @@ import os
 from agency_swarm import Agent
 from agents.extensions.models.litellm_model import LitellmModel
 
+# Requires GOOGLE_API_KEY environment variable set
 gemini_agent = Agent(
     name="GeminiAgent",
     instructions="You are a helpful assistant",
-    model=LitellmModel(
-      model="gemini/gemini-2.0-flash",
-      api_key=os.getenv("GEMINI_API_KEY")
-    )
+    model="litellm/gemini/gemini-2.0-flash"
 )
 ```
 </Step>
@@ -46,7 +44,6 @@ gemini_agent = Agent(
 Set up your agency and start using third-party models:
 
 ```python
-import asyncio
 from agency_swarm import Agency
 
 agency = Agency(gemini_agent)
@@ -140,7 +137,6 @@ gemini_agent = Agent(
 Set up your agency and start using third-party models:
 
 ```python
-import asyncio
 from agency_swarm import Agency
 
 agency = Agency(gemini_agent)
@@ -163,28 +159,18 @@ import os
 from agency_swarm import Agent
 from agents.extensions.models.litellm_model import LitellmModel
 
+# Requires GOOGLE_API_KEY environment variable set
 gemini_agent = Agent(
     name="GeminiAgent",
     instructions="You are a helpful assistant",
-    model=LitellmModel(
-      model="gemini/gemini-2.0-flash",
-      api_key=os.getenv("GEMINI_API_KEY"),
-      extra_body={"web_search_options": {"search_context_size": "medium"}}
-    )
+    model="litellm/gemini/gemini-2.0-flash"
 )
 
+# Requires XAI_API_KEY environment variable set
 grok_agent = Agent(
     name="GrokAgent",
     instructions="You are a helpful assistant",
-    model=LitellmModel(
-      model="xai/grok-4-0709",
-      api_key=os.getenv("XAI_API_KEY"),
-      extra_body={
-        "search_parameters": {
-          "mode": "on", "returnCitations": True
-        }
-      }
-    )
+    model="litellm/xai/grok-4-0709"
 )
 ```
 
