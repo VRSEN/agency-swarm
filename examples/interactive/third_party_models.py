@@ -29,7 +29,6 @@ import warnings
 
 import litellm
 from agents import ModelSettings
-from agents.extensions.models.litellm_model import LitellmModel
 from dotenv import load_dotenv
 
 from agency_swarm import Agency, Agent
@@ -88,7 +87,7 @@ market_research_agent = Agent(
 
     Use web search extensively to ensure your research is current and comprehensive.
     """,
-    model=LitellmModel(model="gemini/gemini-2.5-pro-preview-03-25"),
+    model="litellm/gemini/gemini-2.5-pro-preview-03-25",
     # Enable gemini's native web search tool
     model_settings=ModelSettings(
         truncation="auto", extra_body={"web_search_options": {"search_context_size": "medium"}}, temperature=0.1
@@ -117,7 +116,7 @@ technical_agent = Agent(
 
     Prioritize speed of development for MVPs while ensuring the foundation can scale.
     """,
-    model=LitellmModel(model="anthropic/claude-sonnet-4-20250514"),
+    model="litellm/anthropic/claude-sonnet-4-20250514",
     model_settings=ModelSettings(temperature=0.0),
 )
 
