@@ -15,6 +15,7 @@ def run_fastapi(
     tools: list[type[FunctionTool]] | None = None,
     host: str = "0.0.0.0",
     port: int = 8000,
+    server_url: str | None = None,
     app_token_env: str = "APP_TOKEN",
     return_app: bool = False,
     cors_origins: list[str] | None = None,
@@ -35,6 +36,9 @@ def run_fastapi(
         Optional tools to expose under ``/tool`` routes.
     host, port, app_token_env, return_app, cors_origins :
         Standard FastAPI configuration options.
+    server_url : str | None
+        Optional base URL to be included in the server OpenAPI schema.
+        Defaults to ``http://{host}:{port}``
     enable_logging : bool
         Enable request tracking and file logging.
         When enabled, adds middleware to track requests and allows conditional
@@ -79,7 +83,14 @@ def run_fastapi(
         logger.warning("App token is not set. Authentication will be disabled.")
     verify_token = get_verify_token(app_token)
 
-    app = FastAPI()
+    if server_url:
+        base_url = server_url
+    elif host == "0.0.0.0":
+        base_url = f"http://localhost:{port}"
+    else:
+        base_url = f"http://{host}:{port}"
+
+    app = FastAPI(servers=[{"url": base_url}])
 
     # Setup logging if enabled
     if enable_logging:
@@ -163,7 +174,6 @@ def run_fastapi(
             )
             endpoints.append(f"/tool/{tool_name}")
 
-        base_url = f"http://{host}:{port}"
         logger.info(f"📋 Tool schemas available at: {base_url}/openapi.json")
         logger.info(f"   Or use: ToolFactory.get_openapi_schema(tools, '{base_url}') for programmatic access")
 
