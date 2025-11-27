@@ -14,6 +14,10 @@ n8n is a flexible workflow automation platform that lets you connect dozens of s
 - **Platform API Key** – available under **Settings → API Keys** in the Agencii dashboard.
 - **n8n instance** with permissions to install **Community Nodes**.
 
+<Note>
+Existing users currently need to use a self-hosted n8n instance to install the Agencii community node, as the `n8n-nodes-agencii` npm package is in the process of verification.
+</Note>
+
 ## Step 1: Set up n8n Integration in Agencii
 
 <Steps>
@@ -46,6 +50,10 @@ n8n is a flexible workflow automation platform that lets you connect dozens of s
     ![Copy n8n data showing npm package name, integration ID and API key hint](/images/integrations/n8n-integration/n8n-configure-n8n-copy-step.png)
 
     Keep the **Integration ID** handy—you’ll paste it into the Agencii node inside n8n.
+
+    <Note>
+    To connect Agencii with n8n, copy the NPM package name above and install it in the **Community Nodes** section of your n8n profile settings. After installation, you can use the **Agencii** node in your workflows. To understand the available actions and properties, please refer to the Agencii n8n documentation page.
+    </Note>
   </Step>
 </Steps>
 
