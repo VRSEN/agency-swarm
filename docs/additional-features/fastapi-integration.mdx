@@ -220,6 +220,7 @@ run_fastapi(
     tools=[Address],
     host="0.0.0.0",
     port=8080,
+    server_url="https://123456789098.ngrok-free.app",
 )
 ```
 
@@ -228,6 +229,8 @@ Resulting endpoints:
 - `POST /tool/Address` – executes the tool with full Pydantic validation (including nested models)
 - `GET /openapi.json` – full schema for agencies and tools
 - `GET /docs` / `GET /redoc` – interactive exploration powered by `/openapi.json`
+
+Pass `server_url` when your server sits behind a proxy or external domain so `/openapi.json` advertises the correct base URL.
 
 See `examples/fastapi_integration/server.py` for a complete multi-agent + tool setup.
 

@@ -433,3 +433,26 @@ def test_function_tool_nested_union_falls_back_to_generic_handler():
     schema = client.get("/openapi.json").json()
     endpoint = schema["paths"]["/tool/ContainerTool"]["post"]
     assert "requestBody" not in endpoint
+
+
+def test_openapi_schema_includes_custom_server_url():
+    """/openapi.json should expose the configured server base URL."""
+
+    class EchoTool(BaseTool):
+        message: str
+
+        def run(self) -> str:
+            return self.message
+
+    app = run_fastapi(
+        tools=[EchoTool],
+        return_app=True,
+        app_token_env="",
+        server_url="https://api.example.com/base",
+    )
+    client = TestClient(app)
+
+    schema = client.get("/openapi.json").json()
+
+    assert schema["servers"] == [{"url": "https://api.example.com/base"}]
+    assert "/tool/EchoTool" in schema["paths"]
