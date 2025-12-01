@@ -46,17 +46,6 @@ Overview of parameters in the new `Agency` class:
 | Save Threads Callback *(optional)* | `save_threads_callback` | A callable to save conversation threads for persistence. Default: `None` |
 | User Context *(optional)* | `user_context` | Initial shared context accessible to all agents during runs. Default: `None` |
 
-### Deprecated Parameters
-
-The following parameters are deprecated and will issue warnings:
-
-- `agency_chart` - Use positional entry points and `communication_flows` instead
-- `shared_files` - Shared file handling is not currently implemented
-- `async_mode` - Asynchronous execution is handled by the underlying SDK
-- `settings_path` & `settings_callbacks` - Responses SDK is now stateless, so agency settings are no longer needed.
-- `threads_callbacks` - Use `load_threads_callback` and `save_threads_callback` directly
-- Agent-level parameters (`temperature`, `top_p`, `max_prompt_tokens`, `max_completion_tokens`, etc.) - Set these directly on each Agent.
-
 ## Example
 
 Quick example of how to create an agency with 3 agents using the new structure:
@@ -79,7 +68,7 @@ agency = Agency(
         (ceo, va),   # CEO can initiate communication with Virtual Assistant
         (dev, va)    # Developer can initiate communication with Virtual Assistant
     ],
-    shared_instructions="You are part of a collaborative agency focused on software development.",
+    shared_instructions="./shared_instructions.md",
     user_context={"project_type": "web_application"}
 )
 ```
