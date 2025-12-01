@@ -10,14 +10,20 @@ Always start with one agent. Never build two agents simultaneously unless you kn
 
 ## Orchestration Patterns
 
-Agency Swarm supports flexible orchestration patterns. Unlike hierarchical frameworks, communication flows are **uniform** and can be defined in any configuration you need.
+Agency Swarm supports flexible orchestration patterns. Unlike all other frameworks, communication flows in Agency Swarm are **uniform**, meaning they can be defined in any way you want.
 
 | Pattern | Description | Reliability | Autonomy | Costs | When to Use |
 |---------|-------------|-------------|----------|-------|-------------|
-| **Handoff** | Control transfers completely to another agent who gets full conversation history | Very High | Low | Lower | Routing queries to specialists; sequential workflows where specialized agents take over completely |
-| **Orchestrator-Worker** | One agent assigns tasks to multiple agents and compiles their responses | Lower (mitigated with guardrails) | Very High | Higher | Complex tasks with multiple components; agents need to collaborate and return results |
+| **Handoff** | Control transfers completely to another agent who continues the conversation | Very High | Low | Lower | Sequential workflows where each step requires tight feedback from the user |
+| **Orchestrator-Worker** | One agent assigns tasks to multiple agents and compiles their responses | Lower (mitigated with guardrails) | Very High | Higher | Complex multi-step tasks with independent not-very-high stakes steps |
 
 _Scroll table to the right to see the full description of each pattern._
+
+**Examples**:
+
+- **Handoff**: Creative script writing with planner and script writer agents - requires tight user feedback at each stage to refine the story direction
+- **Orchestrator-Worker**: News aggregation and research from various sources - quality of individual sources isn't critical, main agent filters and compiles them
+
 
 ## Handoff Pattern
 
@@ -55,8 +61,6 @@ agency = Agency(
 ```
 
 The TriageAgent transfers control completely to the appropriate specialist, who receives full conversation history and continues the interaction. Control does not return to TriageAgent.
-
-For detailed handoff implementations, see [Hybrid Patterns](/additional-features/custom-communication-flows/hybrid-patterns).
 
 ## Orchestrator-Worker Pattern
 
