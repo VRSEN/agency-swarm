@@ -295,6 +295,7 @@ class AgentFileManager:
     def add_file_search_tool(self, vector_store_id: str, file_ids: list[str] | None = None):
         """Ensure FileSearchTool references the given vector_store_id and optionally add file_ids."""
         file_search_tool_exists = any(isinstance(tool, FileSearchTool) for tool in self.agent.tools)
+        agent_include_search_results = getattr(self.agent, "include_search_results", False)
 
         if not file_search_tool_exists:
             logger.info(f"Agent {self.agent.name}: Adding FileSearchTool with vector store ID: '{vector_store_id}'")
@@ -304,7 +305,7 @@ class AgentFileManager:
             # Create FileSearchTool with include_search_results from agent configuration
             file_search_tool = FileSearchTool(
                 vector_store_ids=[vector_store_id],
-                include_search_results=getattr(self.agent, "include_search_results", False),
+                include_search_results=agent_include_search_results,
             )
             self.agent.add_tool(file_search_tool)
             self.agent._associated_vector_store_id = vector_store_id
@@ -312,10 +313,9 @@ class AgentFileManager:
             logger.info(
                 f"Agent {self.agent.name}: FileSearchTool added with vector store ID: "
                 f"'{vector_store_id}' and include_search_results="
-                f"{getattr(self.agent, 'include_search_results', False)}"
+                f"{agent_include_search_results}"
             )
         else:
-            agent_include_search_results = getattr(self.agent, "include_search_results", False)
             for tool in self.agent.tools:
                 if isinstance(tool, FileSearchTool):
                     if not tool.vector_store_ids:
