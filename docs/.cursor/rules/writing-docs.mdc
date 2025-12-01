@@ -1,0 +1,106 @@
+---
+globs: docs/*
+alwaysApply: false
+---
+
+When writing or improving documentation for agency swarm, your primary goal is to **make sure the user sees only the information he wants to see. No more, no less.**
+
+# Agency Swarm Documentation Writing Rules
+
+- Write documentation in an easy to understand conversational language.
+- Use simple language and clear terms.
+- Be brief and to the point.
+- Make documentation actionable. Place code snippets at the top so users can easily copy and paste them. Provide only essential context above the code. Move any complex or detailed explanations to the end of the page.
+- The more important the information is, the higher it should be on the page.
+- Highlight the important parts.
+- Hide complexity under tabs, dropdowns, etc.
+- Split pages into sub pages if needed. Each page must be shorter than 150 lines.
+
+# Mintlify Components Reference
+
+You can utilize various components from mintlify:
+
+## Accordion
+
+Collapsible sections for optional or detailed content:
+
+```mdx
+<Accordion title="Advanced Options" defaultOpen={false}>
+  Content here
+</Accordion>
+```
+
+## Tabs
+
+Switch between different code examples or content:
+
+```mdx
+<Tabs>
+  <Tab title="Python">Python code</Tab>
+  <Tab title="JavaScript">JS code</Tab>
+</Tabs>
+```
+
+## Cards
+
+Highlight key links or concepts:
+
+```mdx
+<Card title="Getting Started" icon="rocket-launch" href="/quickstart">
+  Start building your first agency
+</Card>
+```
+
+## Steps
+
+Display sequential instructions:
+
+```mdx
+<Steps>
+  <Step title="Install">Install the package</Step>
+  <Step title="Configure">Set up your config</Step>
+</Steps>
+```
+
+## CodeGroup
+
+Group related code examples:
+
+````mdx
+<CodeGroup>
+  ```python example.py
+  # Python version
+````
+
+```javascript example.js
+// JS version
+```
+
+</CodeGroup>
+```
+
+## API Components
+
+For API documentation:
+
+```mdx
+<ParamField param="name" type="string" required>
+  Parameter description
+</ParamField>
+
+<ResponseField name="status" type="string">
+  Response field description
+</ResponseField>
+```
+
+# Instructions
+
+## Updating Existing Pages
+
+## Writing New Pages
+
+1. Analyze the information or the relevant code provided by the user.
+
+# References
+
+- [Mintlify Documentation](https://www.mintlify.com/docs/llms.txt) - Check if you need clarification about how mintlify works or looking for any other components.
