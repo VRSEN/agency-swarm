@@ -750,10 +750,12 @@ class TestAgentFileManager:
         mock_agent = Mock()
         mock_agent.name = "TestAgent"
         mock_agent._associated_vector_store_id = "vs_agent789"
+        mock_agent.include_search_results = True
 
         # Add existing FileSearchTool
         mock_file_search_tool = Mock(spec=FileSearchTool)
         mock_file_search_tool.vector_store_ids = ["vs_existing456"]
+        mock_file_search_tool.include_search_results = False
         mock_agent.tools = [mock_file_search_tool]
 
         file_manager = AgentFileManager(mock_agent)
@@ -763,6 +765,24 @@ class TestAgentFileManager:
 
         assert "vs_test123" in mock_file_search_tool.vector_store_ids
         assert "vs_existing456" in mock_file_search_tool.vector_store_ids
+        assert mock_file_search_tool.include_search_results is True
+
+    def test_add_file_search_tool_updates_include_search_results(self):
+        """Existing FileSearchTool should mirror agent include_search_results setting."""
+        mock_agent = Mock()
+        mock_agent.name = "TestAgent"
+        mock_agent._associated_vector_store_id = "vs_agent789"
+        mock_agent.include_search_results = True
+
+        mock_file_search_tool = Mock(spec=FileSearchTool)
+        mock_file_search_tool.vector_store_ids = ["vs_existing456"]
+        mock_file_search_tool.include_search_results = False
+        mock_agent.tools = [mock_file_search_tool]
+
+        file_manager = AgentFileManager(mock_agent)
+        file_manager.add_file_search_tool("vs_existing456")
+
+        assert mock_file_search_tool.include_search_results is True
 
     def test_add_code_interpreter_tool_string_container_warning(self):
         """Test add_code_interpreter_tool with existing tool using string container."""

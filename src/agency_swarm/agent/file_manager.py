@@ -315,6 +315,7 @@ class AgentFileManager:
                 f"{getattr(self.agent, 'include_search_results', False)}"
             )
         else:
+            agent_include_search_results = getattr(self.agent, "include_search_results", False)
             for tool in self.agent.tools:
                 if isinstance(tool, FileSearchTool):
                     if not tool.vector_store_ids:
@@ -333,6 +334,16 @@ class AgentFileManager:
                         logger.info(
                             f"Agent {self.agent.name}: Added vector store ID "
                             f"'{vector_store_id}' to existing FileSearchTool."
+                        )
+                    if (
+                        hasattr(tool, "include_search_results")
+                        and tool.include_search_results != agent_include_search_results
+                    ):
+                        tool.include_search_results = agent_include_search_results
+                        logger.info(
+                            "Agent %s: Updated FileSearchTool include_search_results=%s to match agent configuration.",
+                            self.agent.name,
+                            agent_include_search_results,
                         )
                     if file_ids and vector_store_id:
                         self.add_files_to_vector_store(vector_store_id, file_ids)
