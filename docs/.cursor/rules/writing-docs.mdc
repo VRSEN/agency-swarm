@@ -95,11 +95,46 @@ For API documentation:
 
 # Instructions
 
+## Before Starting
+
+Before starting any task, you **MUST** read the following examples of good written docs files:
+
+- [Tools](docs/core-framework/tools/overview.mdx)
+- [Agents](docs/core-framework/agents/overview.mdx)
+- [Agencies](docs/core-framework/agencies/overview.mdx)
+- [Communication Flows](docs/core-framework/agencies/communication-flows.mdx)
+
+Adhere closely to the writing style and structure in these examples.
+
 ## Updating Existing Pages
+
+1. Analyze the feedback provided by the user and deteremine which specific sections you need to update.
+   - If there is a lot of feedback, create a to-do list for yourself and break it down.
+2. Only update the required parts, do not add anything unrequested. Perform minimal changes, keep everything unaffected by feedback as is.
+3. If asked to move the page, keep consistent folder and file structure, matching the structure in the `./docs/docs.json` file.
+4. Ask the user to review the changes and provide feedback.
 
 ## Writing New Pages
 
 1. Analyze the information or the relevant code provided by the user.
+   - If user has not provided enough information, as the user a set of 3-5 relevant questions about the feature.
+   - For example:
+     - What is the use case for this?
+     - Where can I see relevant files?
+     - Do you have any example code snippets?
+     - Why did you create this feature in the first place?
+     - What does the user have to know before they can start using it?
+     - etc...
+2. Create a new page reference in the `./docs/docs.json` file in the appropriate group and sub group.
+   - If it's unclear where to place the page, ask the user for clarification.
+   - Make sure the folder strcuture in docs folder matches the structure in the `./docs/docs.json` file.
+3. Write the page content using the same path, following all the rules above.
+4. Ask the user to review the page and provide feedback.
+5. Implement any adjustments as needed. See "Updating Existing Pages" section below.
+
+# Additional Notes
+
+-
 
 # References
 

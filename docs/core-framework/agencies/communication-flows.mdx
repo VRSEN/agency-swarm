@@ -4,20 +4,66 @@ description: "Understanding communication flows in Agency Swarm."
 icon: "comments"
 ---
 
-Unlike all other frameworks, communication flows in Agency Swarm are **not hierarchical** or **sequential**. Instead, they are **uniform**, which means you can define them in any way you want.
+<Note>
+Always start with one agent. Never build two agents simultaneously unless you know exactly what you're doing. The more agents you have, the harder it becomes to train them on specific tasks.
+</Note>
 
-## Understanding the Orchestrator Pattern
+## Orchestration Patterns
 
-Agency Swarm implements an **orchestrator pattern** where agents use other agents as tools through the `SendMessage` mechanism. This is fundamentally different from sequential handoffs:
+Agency Swarm supports flexible orchestration patterns. Unlike hierarchical frameworks, communication flows are **uniform** and can be defined in any configuration you need.
 
-- **Control always returns to the calling agent** - When Agent A calls Agent B, Agent B processes the request and returns a response to Agent A
-- **Agents act as specialized tools** - Each agent can be thought of as a specialized tool that another agent can invoke
-- **Orchestrator agents coordinate workflows** - Typically, one agent orchestrates the entire workflow by calling multiple other agents and compiling their responses
+| Pattern | Description | Reliability | Autonomy | Costs | When to Use |
+|---------|-------------|-------------|----------|-------|-------------|
+| **Handoff** | Control transfers completely to another agent who gets full conversation history | Very High | Low | Lower | Routing queries to specialists; sequential workflows where specialized agents take over completely |
+| **Orchestrator-Worker** | One agent assigns tasks to multiple agents and compiles their responses | Lower (mitigated with guardrails) | Very High | Higher | Complex tasks with multiple components; agents need to collaborate and return results |
 
-## Example: Investment Research Platform
+_Scroll table to the right to see the full description of each pattern._
+
+## Handoff Pattern
+
+Control transfers completely to another agent who takes over the interaction. The receiving agent gets full conversation history and continues from there.
 
 ```python
-# Portfolio Manager orchestrates investment research using output_type for structured responses
+from agency_swarm import Agent
+from agency_swarm.tools import SendMessageHandoff
+
+# Triage agent routes to specialists
+triage_agent = Agent(
+    name="TriageAgent",
+    instructions="Assess customer inquiries and route to appropriate specialist",
+)
+
+billing_specialist = Agent(
+    name="BillingSpecialist",
+    description="Handles billing inquiries, payment issues, and invoice questions",
+    instructions="Resolve customer billing issues with full context from previous conversation",
+)
+
+technical_specialist = Agent(
+    name="TechnicalSpecialist",
+    description="Handles technical support and troubleshooting",
+    instructions="Provide technical support with full conversation history",
+)
+
+agency = Agency(
+    triage_agent,
+    communication_flows=[
+        (triage_agent, billing_specialist, SendMessageHandoff),      # Handoff to billing
+        (triage_agent, technical_specialist, SendMessageHandoff),    # Handoff to technical
+    ]
+)
+```
+
+The TriageAgent transfers control completely to the appropriate specialist, who receives full conversation history and continues the interaction. Control does not return to TriageAgent.
+
+For detailed handoff implementations, see [Hybrid Patterns](/additional-features/custom-communication-flows/hybrid-patterns).
+
+## Orchestrator-Worker Pattern
+
+One agent assigns tasks to multiple other agents and compiles their responses. Agents use other agents as specialized tools through the `SendMessage` mechanism. Control always returns to the orchestrator after each delegation.
+
+```python
+# Portfolio Manager orchestrates investment research
 portfolio_manager = Agent(
     name="PortfolioManager",
     instructions="Orchestrate investment research by gathering data, delegating analysis, and compiling recommendations",
@@ -31,48 +77,50 @@ risk_analyst = Agent(
     output_type=RiskAssessment,  # Structured output
 )
 
-# New structure: entry points as positional args, communication flows as keyword arg
+report_generator = Agent(
+    name="ReportGenerator",
+    instructions="Generate professional investment reports",
+    tools=[create_report],
+)
+
 agency = Agency(
     portfolio_manager,  # Entry point and orchestrator
     communication_flows=[
-        (portfolio_manager, risk_analyst),     # Portfolio Manager can request risk analysis
-        (portfolio_manager, report_generator), # Portfolio Manager can request report generation
+        (portfolio_manager, risk_analyst),     # Can request risk analysis
+        (portfolio_manager, report_generator), # Can request report generation
     ]
 )
 ```
 
-In this example, the Portfolio Manager needs responses from both specialists to make an informed investment decision. The RiskAnalyst provides structured risk assessment data using `output_type`, and control always returns to the Portfolio Manager who compiles the final recommendation.
+The Portfolio Manager delegates to specialists, receives their structured responses, and compiles them into a final investment decision.
 
-Updated version of the framework now also supports `>` and `<` symbols to define communication flows in a more intuitive and readable way.
+## Understanding Communication Flows
 
-## Defining Your Own Communication Flows
+Communication flows are defined using tuples in the `communication_flows` parameter:
 
 ```python
 from agency_swarm import Agency
+from agency_swarm.tools import SendMessageHandoff
 
-# New structure with explicit communication flows
 agency = Agency(
     ceo, dev,  # Entry points - agents that can communicate with users
     communication_flows=[
-        (ceo, dev),   # CEO can initiate communication with Developer
-        (ceo > va),   # CEO can initiate communication with Virtual Assistant
-        (va < dev)    # Developer can initiate communication with Virtual Assistant
-        # Or using a single line:
-        # (va < ceo > dev > va),
+        (ceo, dev, SendMessageHandoff),   # CEO can transfer the user to the developer
+        (ceo, dev), # CEO can assign tasks to developer
+        (dev, va) # developer can assign tasks to virtual assistant
     ]
 )
 ```
 
-## Communication Flow Patterns
+Each tuple `(sender, receiver)`, `(sender > receiver)`, or `(receiver < sender)` defines a directional communication path. Entry points are agents that can communicate with users.
 
-Communication flows are established using explicit tuples in the `communication_flows` parameter. Each tuple defined as either `(sender, receiver)` or `(sender > receiver)` or `(receiver < sender)` defines a directional communication path. Entry points are defined as positional arguments to the Agency constructor.
+In the example above, the CEO can transfer the user to the Developer and the developer will proceed to interact with the user directly. 
 
-The CEO can initiate communication and send tasks to the Developer and the Virtual Assistant, and they can respond back in the same thread, but the Developer or VA cannot initiate a conversation and assign tasks to the CEO.
-
-All agents added as entry points can talk to the user. You can add as many levels of communication as you want.
+At the same time, the CEO can assign tasks to both Developer and Virtual Assistant, so they will run in parallel in different threads and come back with their results to the CEO.
 
 ## Under the Hood
 
-Agency Swarm uses a special `SendMessage` tool to allow agents to communicate with each other. By defining communication flows, it adds new recipients to the `SendMessage` function. If you'd like to modify the behavior of this tool, you can do so by creating your own [Custom Communication Flows](/additional-features/custom-communication-flows/overview) (**Advanced**).
+Agency Swarm uses a `SendMessage` tool for inter-agent communication. Defining communication flows adds recipients to this tool.
 
-It's important to understand that each defined communication flow establishes a distinct context for interaction. When the `SendMessage` tool is invoked by a sender agent (e.g., CEO) to a recipient agent (e.g., Developer), this happens within a dedicated conversation thread specific to that CEO-Developer pair. In this thread, the sender agent effectively takes on the role of a "user," and the recipient agent responds as the "assistant." This ensures that the history and context of communication between any two agents are isolated and maintained separately for each specific flow.
+For advanced customization, see [Custom Communication Flows](/additional-features/custom-communication-flows/overview).
+
