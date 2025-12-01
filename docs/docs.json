@@ -87,8 +87,7 @@
                   "core-framework/agencies/running-agency",
                   "core-framework/agencies/visualization"
                 ]
-              },
-              "core-framework/state-management"
+              }
             ]
           },
           {
