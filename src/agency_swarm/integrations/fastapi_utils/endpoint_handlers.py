@@ -1,7 +1,10 @@
+import asyncio
 import json
 import logging
 import time
+import uuid
 from collections.abc import AsyncGenerator, Callable
+from dataclasses import dataclass, field
 from importlib import metadata
 
 from ag_ui.core import EventType, MessagesSnapshotEvent, RunErrorEvent, RunFinishedEvent, RunStartedEvent
@@ -9,7 +12,7 @@ from ag_ui.encoder import EventEncoder
 from agents import OpenAIResponsesModel, TResponseInputItem, output_guardrail
 from agents.exceptions import OutputGuardrailTripwireTriggered
 from agents.models._openai_shared import get_default_openai_client
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from openai import AsyncOpenAI
@@ -21,6 +24,7 @@ from agency_swarm import (
     GuardrailFunctionOutput,
     RunContextWrapper,
 )
+from agency_swarm.agent.execution_stream_response import StreamingRunResponse
 from agency_swarm.integrations.fastapi_utils.file_handler import upload_from_urls
 from agency_swarm.integrations.fastapi_utils.logging_middleware import get_logs_endpoint_impl
 from agency_swarm.messages import MessageFilter
@@ -29,6 +33,49 @@ from agency_swarm.ui.core.agui_adapter import AguiAdapter
 from agency_swarm.utils.serialization import serialize
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ActiveRun:
+    """Tracks an active streaming run for cancellation support."""
+
+    stream: StreamingRunResponse
+    agency: Agency
+    initial_message_count: int
+    cancelled: bool = field(default=False)
+    cancel_mode: str | None = field(default=None)
+    done_event: asyncio.Event = field(default_factory=asyncio.Event)
+
+
+class ActiveRunRegistry:
+    """Async-safe registry for active runs so cancel endpoints see local state."""
+
+    def __init__(self) -> None:
+        self._runs: dict[str, ActiveRun] = {}
+        self._lock = asyncio.Lock()
+
+    async def register(self, run_id: str, run: ActiveRun) -> None:
+        async with self._lock:
+            self._runs[run_id] = run
+
+    async def get(self, run_id: str) -> ActiveRun | None:
+        async with self._lock:
+            return self._runs.get(run_id)
+
+    async def mark_cancelled(self, run_id: str, cancel_mode: str) -> ActiveRun | None:
+        async with self._lock:
+            run = self._runs.get(run_id)
+            if run is not None:
+                run.cancelled = True
+                run.cancel_mode = cancel_mode
+            return run
+
+    async def finish(self, run_id: str) -> ActiveRun | None:
+        async with self._lock:
+            run = self._runs.pop(run_id, None)
+        if run is not None:
+            run.done_event.set()
+        return run
 
 
 def get_verify_token(app_token):
@@ -98,8 +145,17 @@ def make_response_endpoint(request_model, agency_factory: Callable[..., Agency],
 
 
 # Streaming SSE endpoint
-def make_stream_endpoint(request_model, agency_factory: Callable[..., Agency], verify_token):
-    async def handler(request: request_model, token: str = Depends(verify_token)):
+def make_stream_endpoint(
+    request_model,
+    agency_factory: Callable[..., Agency],
+    verify_token,
+    run_registry: ActiveRunRegistry,
+):
+    async def handler(
+        http_request: Request,
+        request: request_model,
+        token: str = Depends(verify_token),
+    ):
         if request.chat_history is not None:
             # Chat history is now a flat list
             def load_callback() -> list:
@@ -139,22 +195,49 @@ def make_stream_endpoint(request_model, agency_factory: Callable[..., Agency], v
         agency_instance = agency_factory(load_threads_callback=load_callback)
         await attach_persistent_mcp_servers(agency_instance)
 
+        # Generate unique run_id for this streaming session
+        run_id = str(uuid.uuid4())
+
         async def event_generator():
             # Capture initial message count to identify new messages
             initial_message_count = len(agency_instance.thread_manager.get_all_messages())
 
+            stream = None
+            active_run: ActiveRun | None = None
             try:
-                async for event in agency_instance.get_response_stream(
+                stream = agency_instance.get_response_stream(
                     message=request.message,
                     recipient_agent=request.recipient_agent,
                     additional_instructions=request.additional_instructions,
                     file_ids=combined_file_ids,
-                ):
+                )
+
+                active_run = ActiveRun(
+                    stream=stream,
+                    agency=agency_instance,
+                    initial_message_count=initial_message_count,
+                )
+                await run_registry.register(run_id, active_run)
+
+                # Now send run_id - client can safely call cancel endpoint
+                yield f"event: meta\ndata: {json.dumps({'run_id': run_id})}\n\n"
+
+                async for event in stream:
+                    # Check if client disconnected (tab close, refresh, etc.)
+                    if await http_request.is_disconnected():
+                        logger.info(f"Client disconnected, cancelling run {run_id}")
+                        stream.cancel(mode="immediate")
+                        if active_run is not None:
+                            active_run.cancelled = True
+                            active_run.cancel_mode = "immediate"
+                        break
+
                     try:
                         data = serialize(event)
                         yield "data: " + json.dumps({"data": data}) + "\n\n"
                     except Exception as e:
                         yield "data: " + json.dumps({"error": f"Failed to serialize event: {e}"}) + "\n\n"
+
             except Exception as exc:
                 if isinstance(exc, OutputGuardrailTripwireTriggered):
                     yield (
@@ -169,25 +252,36 @@ def make_stream_endpoint(request_model, agency_factory: Callable[..., Agency], v
                     )
                 else:
                     yield "data: " + json.dumps({"error": str(exc)}) + "\n\n"
-
-            # Get only new messages added during this request
-            all_messages = agency_instance.thread_manager.get_all_messages()
-            new_messages = all_messages[initial_message_count:]  # Only messages added during this request
-            # Preserve agent_run_id grouping for UI correlation
-            filtered_messages = MessageFilter.filter_messages(new_messages)
-            result = {"new_messages": filtered_messages}
-            if request.file_urls is not None and file_ids_map is not None:
-                result["file_ids_map"] = file_ids_map
-            if request.generate_chat_name:
+            finally:
+                # Ensure registry cleanup happens even if serialization fails (Fix #10)
                 try:
-                    result["chat_name"] = await generate_chat_name(filtered_messages)
-                except Exception as e:
-                    # Do not add errors to the result as they might be mistaken for chat name
-                    logger.error(f"Error generating chat name: {e}")
-            yield "event: messages\ndata: " + json.dumps(result) + "\n\n"
+                    # Get messages generated before cancel/completion
+                    all_messages = agency_instance.thread_manager.get_all_messages()
+                    new_messages = all_messages[initial_message_count:]
+                    # Filter unwanted types and remove orphaned tool calls/outputs
+                    filtered_messages = MessageFilter.filter_messages(new_messages)
+                    filtered_messages = MessageFilter.remove_orphaned_messages(filtered_messages)
 
-            # explicit terminator
-            yield "event: end\ndata: [DONE]\n\n"
+                    # Build result with new messages
+                    result = {"new_messages": filtered_messages, "run_id": run_id}
+                    if active_run is not None and active_run.cancelled:
+                        result["cancelled"] = True
+                    if request.file_urls is not None and file_ids_map is not None:
+                        result["file_ids_map"] = file_ids_map
+                    if request.generate_chat_name:
+                        try:
+                            result["chat_name"] = await generate_chat_name(filtered_messages)
+                        except Exception as e:
+                            logger.error(f"Error generating chat name: {e}")
+
+                    yield "event: messages\ndata: " + json.dumps(result) + "\n\n"
+                    yield "event: end\ndata: [DONE]\n\n"
+                except Exception as e:
+                    logger.error(f"Error building final response: {e}")
+                    yield "data: " + json.dumps({"error": f"Error building response: {e}"}) + "\n\n"
+                    yield "event: end\ndata: [DONE]\n\n"
+                finally:
+                    await run_registry.finish(run_id)
 
         return StreamingResponse(
             event_generator(),
@@ -198,6 +292,58 @@ def make_stream_endpoint(request_model, agency_factory: Callable[..., Agency], v
                 "X-Accel-Buffering": "no",
             },
         )
+
+    return handler
+
+
+# Cancel streaming endpoint
+def make_cancel_endpoint(request_model, verify_token, run_registry: ActiveRunRegistry):
+    """Create a cancel endpoint that stops an active streaming run.
+
+    Returns the messages generated before cancellation.
+    """
+
+    async def handler(request: request_model, token: str = Depends(verify_token)):
+        run_id = request.run_id
+        cancel_mode = request.cancel_mode or "immediate"
+
+        active_run = await run_registry.mark_cancelled(run_id, cancel_mode)
+        if active_run is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Run '{run_id}' not found or already completed",
+            )
+
+        # Mark as cancelled and call cancel on the stream
+        active_run.stream.cancel(mode=cancel_mode)
+        logger.info(f"Cancelled run {run_id} via cancel endpoint (mode={cancel_mode})")
+
+        # Wait for the streaming worker to finish draining events
+        timed_out = False
+        try:
+            await asyncio.wait_for(active_run.done_event.wait(), timeout=60)
+        except TimeoutError:
+            logger.warning("Timed out waiting for run %s to finish cancellation (mode=%s)", run_id, cancel_mode)
+            timed_out = True
+        finally:
+            # Always clean up registry to prevent memory leaks (Fix #1)
+            if timed_out:
+                await run_registry.finish(run_id)
+
+        # Get messages generated before cancel
+        all_messages = active_run.agency.thread_manager.get_all_messages()
+        new_messages = all_messages[active_run.initial_message_count :]
+        # Filter unwanted types and remove orphaned tool calls/outputs
+        filtered_messages = MessageFilter.filter_messages(new_messages)
+        filtered_messages = MessageFilter.remove_orphaned_messages(filtered_messages)
+
+        return {
+            "ok": True,
+            "run_id": run_id,
+            "cancelled": True,
+            "cancel_mode": cancel_mode,
+            "new_messages": filtered_messages,
+        }
 
     return handler
 

@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -52,6 +52,19 @@ class LogRequest(BaseModel):
     """Request model for retrieving logs."""
 
     log_id: str = Field(..., description="The log ID to retrieve")
+
+
+class CancelRequest(BaseModel):
+    """Request model for cancelling an active streaming run."""
+
+    run_id: str = Field(..., description="The run ID returned by the streaming endpoint meta event.")
+    cancel_mode: Literal["immediate", "after_turn"] | None = Field(
+        default=None,
+        description=(
+            'Optional cancel mode. Use "immediate" to stop right away '
+            'or "after_turn" to finish the current turn before stopping.'
+        ),
+    )
 
 
 def add_agent_validator(model, agent_instances):

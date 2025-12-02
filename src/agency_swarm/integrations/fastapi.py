@@ -53,9 +53,11 @@ def run_fastapi(
         from fastapi.middleware.cors import CORSMiddleware
 
         from .fastapi_utils.endpoint_handlers import (
+            ActiveRunRegistry,
             exception_handler,
             get_verify_token,
             make_agui_chat_endpoint,
+            make_cancel_endpoint,
             make_logs_endpoint,
             make_metadata_endpoint,
             make_response_endpoint,
@@ -65,7 +67,13 @@ def run_fastapi(
             RequestTracker,
             setup_enhanced_logging,
         )
-        from .fastapi_utils.request_models import BaseRequest, LogRequest, RunAgentInputCustom, add_agent_validator
+        from .fastapi_utils.request_models import (
+            BaseRequest,
+            CancelRequest,
+            LogRequest,
+            RunAgentInputCustom,
+            add_agent_validator,
+        )
         from .fastapi_utils.tool_endpoints import make_tool_endpoint
     except ImportError as e:
         logger.error(f"FastAPI deployment dependencies are missing: {e}. Please install agency-swarm[fastapi] package")
@@ -130,6 +138,7 @@ def run_fastapi(
                     )
                     endpoints.append(f"/{agency_name}/get_response_stream")
                 else:
+                    run_registry = ActiveRunRegistry()
                     app.add_api_route(
                         f"/{agency_name}/get_response",
                         make_response_endpoint(AgencyRequest, agency_factory, verify_token),
@@ -137,11 +146,22 @@ def run_fastapi(
                     )
                     app.add_api_route(
                         f"/{agency_name}/get_response_stream",
-                        make_stream_endpoint(AgencyRequest, agency_factory, verify_token),
+                        make_stream_endpoint(
+                            AgencyRequest,
+                            agency_factory,
+                            verify_token,
+                            run_registry,
+                        ),
+                        methods=["POST"],
+                    )
+                    app.add_api_route(
+                        f"/{agency_name}/cancel_response_stream",
+                        make_cancel_endpoint(CancelRequest, verify_token, run_registry),
                         methods=["POST"],
                     )
                     endpoints.append(f"/{agency_name}/get_response")
                     endpoints.append(f"/{agency_name}/get_response_stream")
+                    endpoints.append(f"/{agency_name}/cancel_response_stream")
 
             app.add_api_route(
                 f"/{agency_name}/get_metadata",
