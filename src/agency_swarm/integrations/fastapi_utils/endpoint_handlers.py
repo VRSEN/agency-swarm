@@ -76,6 +76,7 @@ def make_response_endpoint(request_model, agency_factory: Callable[..., Agency],
         response = await agency_instance.get_response(
             message=request.message,
             recipient_agent=request.recipient_agent,
+            context_override=request.user_context,
             additional_instructions=request.additional_instructions,
             file_ids=combined_file_ids,
         )
@@ -147,6 +148,7 @@ def make_stream_endpoint(request_model, agency_factory: Callable[..., Agency], v
                 async for event in agency_instance.get_response_stream(
                     message=request.message,
                     recipient_agent=request.recipient_agent,
+                    context_override=request.user_context,
                     additional_instructions=request.additional_instructions,
                     file_ids=combined_file_ids,
                 ):
@@ -258,6 +260,7 @@ def make_agui_chat_endpoint(request_model, agency_factory: Callable[..., Agency]
                 snapshot_messages = [message.model_dump() for message in request.messages]
                 async for event in agency.get_response_stream(
                     message=request.messages[-1].content,
+                    context_override=request.user_context,
                     additional_instructions=request.additional_instructions,
                 ):
                     agui_event = agui_adapter.openai_to_agui_events(

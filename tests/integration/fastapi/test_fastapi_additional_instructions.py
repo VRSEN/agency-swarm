@@ -8,21 +8,6 @@ from fastapi.testclient import TestClient
 from agency_swarm import Agency, Agent, run_fastapi
 
 
-@pytest.fixture
-def agency_factory():
-    """Factory function to create a test agency."""
-
-    def create_agency(load_threads_callback=None, save_threads_callback=None):
-        agent = Agent(name="TestAgent", instructions="Base instructions")
-        return Agency(
-            agent,
-            load_threads_callback=load_threads_callback,
-            save_threads_callback=save_threads_callback,
-        )
-
-    return create_agency
-
-
 def test_non_streaming_additional_instructions(monkeypatch, agency_factory):
     """Test that additional_instructions are passed to non-streaming endpoint."""
     captured_params = {}
