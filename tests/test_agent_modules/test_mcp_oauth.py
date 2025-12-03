@@ -81,7 +81,7 @@ class TestFileTokenStorage:
             client_id="test_client_id",
             client_secret="test_client_secret",
             client_id_issued_at=1234567890,
-            redirect_uris=[AnyUrl("http://localhost:3000/callback")],
+            redirect_uris=[AnyUrl("http://localhost:8000/auth/callback")],
         )
 
         # Save client info
@@ -196,34 +196,34 @@ class TestMCPServerOAuth:
             name="test-server",
             client_id="test_id",
             scopes=["user", "repo"],
-            redirect_uri="http://localhost:3000/callback",
+            redirect_uri="http://localhost:8000/auth/callback",
         )
 
         metadata = config.build_client_metadata()
 
         assert metadata.client_name == "Agency Swarm - test-server"
-        assert str(metadata.redirect_uris[0]) == "http://localhost:3000/callback"
+        assert str(metadata.redirect_uris[0]) == "http://localhost:8000/auth/callback"
         assert "authorization_code" in metadata.grant_types
         assert "refresh_token" in metadata.grant_types
         assert metadata.scope == "user repo"
 
     def test_redirect_uri_reads_env_when_using_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Uses server-specific env redirect when config is default."""
-        monkeypatch.setenv("TEST_SERVER_REDIRECT_URI", "https://callback.example.com/oauth/callback")
+        monkeypatch.setenv("TEST_SERVER_REDIRECT_URI", "https://callback.example.com/auth/callback")
         config = MCPServerOAuth(url="http://localhost:8001/mcp", name="test-server")
 
-        assert config.get_redirect_uri() == "https://callback.example.com/oauth/callback"
+        assert config.get_redirect_uri() == "https://callback.example.com/auth/callback"
 
     def test_redirect_uri_reads_global_env_when_server_env_missing(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Uses global OAUTH_CALLBACK_URL when server-specific env is missing."""
-        monkeypatch.setenv("OAUTH_CALLBACK_URL", "https://global.example.com/oauth/callback")
+        monkeypatch.setenv("OAUTH_CALLBACK_URL", "https://global.example.com/auth/callback")
         config = MCPServerOAuth(url="http://localhost:8001/mcp", name="test-server")
 
-        assert config.get_redirect_uri() == "https://global.example.com/oauth/callback"
+        assert config.get_redirect_uri() == "https://global.example.com/auth/callback"
 
     def test_redirect_uri_prefers_explicit_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Explicit redirect_uri beats env override."""
-        monkeypatch.setenv("TEST_SERVER_REDIRECT_URI", "https://callback.example.com/oauth/callback")
+        monkeypatch.setenv("TEST_SERVER_REDIRECT_URI", "https://callback.example.com/auth/callback")
         config = MCPServerOAuth(
             url="http://localhost:8001/mcp",
             name="test-server",
@@ -274,7 +274,7 @@ class TestOAuthHandlers:
 
     async def test_callback_handler_parses_valid_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """default_callback_handler extracts code and state from callback URL."""
-        callback_url = "http://localhost:3000/callback?code=test_code&state=test_state"
+        callback_url = "http://localhost:8000/auth/callback?code=test_code&state=test_state"
         monkeypatch.setattr("builtins.input", lambda _: callback_url)
 
         code, state = await default_callback_handler()
@@ -284,7 +284,7 @@ class TestOAuthHandlers:
 
     async def test_callback_handler_handles_error_response(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """default_callback_handler raises ValueError for OAuth errors."""
-        callback_url = "http://localhost:3000/callback?error=access_denied&error_description=User+denied+access"
+        callback_url = "http://localhost:8000/auth/callback?error=access_denied&error_description=User+denied+access"
         monkeypatch.setattr("builtins.input", lambda _: callback_url)
 
         with pytest.raises(ValueError, match="OAuth error: access_denied"):
@@ -292,7 +292,7 @@ class TestOAuthHandlers:
 
     async def test_callback_handler_handles_missing_code(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """default_callback_handler raises ValueError when code is missing."""
-        callback_url = "http://localhost:3000/callback"
+        callback_url = "http://localhost:8000/auth/callback"
         monkeypatch.setattr("builtins.input", lambda _: callback_url)
 
         with pytest.raises(ValueError, match="No authorization code found"):
@@ -317,7 +317,7 @@ class TestOAuthHandlers:
         mock_listen.side_effect = fake_listen
         monkeypatch.setattr("agency_swarm.mcp.oauth._prompt_for_callback_url", fake_prompt)
 
-        code, state = await default_callback_handler("http://localhost:3000/callback")
+        code, state = await default_callback_handler("http://localhost:8000/auth/callback")
 
         assert (code, state) == ("server_code", "server_state")
         assert mock_listen.await_count == 1

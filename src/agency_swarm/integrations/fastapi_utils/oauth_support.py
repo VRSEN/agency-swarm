@@ -1,4 +1,5 @@
 import asyncio
+import time
 from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import parse_qs, urlparse
@@ -29,14 +30,25 @@ class OAuthFlowState:
     code: str | None = None
     error: str | None = None
     event: asyncio.Event = field(default_factory=asyncio.Event)
+    created_at: float = field(default_factory=time.time)
 
 
 class OAuthStateRegistry:
     """In-memory registry coordinating OAuth redirects and callbacks."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, expiry_seconds: float | None = 900.0) -> None:
         self._flows: dict[str, OAuthFlowState] = {}
         self._lock = asyncio.Lock()
+        self._expiry_seconds = expiry_seconds
+
+    def _prune_expired_locked(self) -> None:
+        """Remove expired flows to avoid unbounded growth."""
+        if self._expiry_seconds is None:
+            return
+        cutoff = time.time() - self._expiry_seconds
+        expired = [state for state, flow in self._flows.items() if flow.created_at < cutoff]
+        for state in expired:
+            self._flows.pop(state, None)
 
     async def record_redirect(
         self,
@@ -48,6 +60,7 @@ class OAuthStateRegistry:
     ) -> OAuthFlowState:
         """Store redirect details and return the flow state."""
         async with self._lock:
+            self._prune_expired_locked()
             flow = self._flows.get(state)
             if flow is None:
                 flow = OAuthFlowState(state=state, auth_url=auth_url, server_name=server_name, user_id=user_id)
@@ -62,6 +75,7 @@ class OAuthStateRegistry:
     async def set_code(self, *, state: str, code: str, user_id: str | None) -> OAuthFlowState:
         """Persist the authorization code and release any waiters."""
         async with self._lock:
+            self._prune_expired_locked()
             flow = self._flows.get(state)
             if flow is None:
                 flow = OAuthFlowState(state=state, auth_url="", server_name=None, user_id=user_id, code=code)
@@ -78,18 +92,21 @@ class OAuthStateRegistry:
         flow = await self._get_or_raise(state)
         try:
             await asyncio.wait_for(flow.event.wait(), timeout=timeout)
-        except asyncio.TimeoutError as exc:  # pragma: no cover - timeout exercised in runtime paths
+        except TimeoutError as exc:  # pragma: no cover - timeout exercised in runtime paths
             raise OAuthFlowError(f"Timed out waiting for OAuth callback for state={state}") from exc
 
         if flow.error:
             raise OAuthFlowError(flow.error)
         if not flow.code:
             raise OAuthFlowError(f"OAuth callback missing code for state={state}")
+        async with self._lock:
+            self._prune_expired_locked()
         return flow.code, flow.state
 
     async def get_status(self, state: str) -> dict[str, Any]:
         """Return a serializable snapshot for status endpoint."""
         async with self._lock:
+            self._prune_expired_locked()
             flow = self._flows.get(state)
             if flow is None:
                 return {"state": state, "status": "unknown"}
@@ -106,6 +123,7 @@ class OAuthStateRegistry:
 
     async def _get_or_raise(self, state: str) -> OAuthFlowState:
         async with self._lock:
+            self._prune_expired_locked()
             if state not in self._flows:
                 raise OAuthFlowError(f"No OAuth flow registered for state={state}")
             return self._flows[state]

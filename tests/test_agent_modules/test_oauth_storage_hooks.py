@@ -193,7 +193,7 @@ class TestFileTokenStorageWithContextVar:
             client_id="test_client_id",
             client_secret="test_client_secret",
             client_id_issued_at=1234567890,
-            redirect_uris=[AnyUrl("http://localhost:3000/callback")],
+            redirect_uris=[AnyUrl("http://localhost:8000/auth/callback")],
         )
 
         # Set user context

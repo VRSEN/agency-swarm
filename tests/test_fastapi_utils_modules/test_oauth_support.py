@@ -70,6 +70,21 @@ async def test_wait_for_code_times_out_cleanly() -> None:
         await registry.wait_for_code(state="no-callback", timeout=0.01)
 
 
+@pytest.mark.asyncio
+async def test_registry_prunes_expired_states() -> None:
+    registry = OAuthStateRegistry(expiry_seconds=0.01)
+    await registry.record_redirect(
+        state="stale",
+        auth_url="https://idp.example.com/authorize?state=stale",
+        server_name="github",
+        user_id="user-1",
+    )
+
+    await asyncio.sleep(0.02)
+    status = await registry.get_status("stale")
+    assert status["status"] == "unknown"
+
+
 def test_runtime_sets_handler_factory_for_oauth_agents() -> None:
     server = MCPServerOAuth(url="http://localhost:8999/mcp", name="demo", client_id="id", client_secret="secret")
 

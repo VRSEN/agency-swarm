@@ -8,7 +8,7 @@ Connect OAuth-enabled MCP servers so agents can reach user-owned data (GitHub, N
 
 ## Quick start (desktop/localhost)
 
-1) Register an OAuth app with your provider and set the redirect URI to `http://localhost:3000/callback`.
+1) Register an OAuth app with your provider and set the redirect URI to `http://localhost:8000/auth/callback`.
 2) Export your credentials:
 ```bash
 export GITHUB_CLIENT_ID="Iv1.abc123..."
@@ -23,7 +23,7 @@ github = MCPServerOAuth(
     url="http://localhost:8001/mcp",
     name="github",  # Drives env var names
     scopes=["repo", "user"],
-    redirect_uri="http://localhost:3000/callback",
+    redirect_uri="http://localhost:8000/auth/callback",
 )
 
 agent = Agent(
@@ -71,8 +71,8 @@ sequenceDiagram
 - A redirect URI reachable from where the agent runs.
 
 ## Register an OAuth app
-- GitHub: Developer Settings → **New OAuth App**, set callback to `http://localhost:3000/callback`, copy Client ID/Secret.
-- Google: Cloud Console → Credentials → **OAuth client ID** (Desktop), set callback to `http://localhost:3000/callback`, copy Client ID/Secret.
+- GitHub: Developer Settings → **New OAuth App**, set callback to `http://localhost:8000/auth/callback`, copy Client ID/Secret.
+- Google: Cloud Console → Credentials → **OAuth client ID** (Desktop), set callback to `http://localhost:8000/auth/callback`, copy Client ID/Secret.
 - Notion: My Integrations → **New integration**, set capabilities, copy client ID/secret.
 Export each as `<NAME>_CLIENT_ID` / `<NAME>_CLIENT_SECRET`.
 
@@ -84,7 +84,7 @@ OAuth client flows are implemented by the MCP Python SDK; see https://github.com
 
 - Naming drives env vars: `name="github"` -> `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET`.
 - Scopes are explicit: pass only what the tool needs (e.g., `["repo", "user"]`).
-- Redirects: keep `http://localhost:3000/callback` for desktop; override `redirect_uri` for hosted flows.
+- Redirects: keep `http://localhost:8000/auth/callback` for desktop; override `redirect_uri` for hosted flows.
 
 <ParamField param="url" type="string" required>
   MCP server endpoint (e.g., `http://localhost:8001/mcp`)
@@ -99,7 +99,7 @@ OAuth client flows are implemented by the MCP Python SDK; see https://github.com
 </ParamField>
 
 <ParamField param="redirect_uri" type="string">
-  OAuth callback URL. Defaults to `http://localhost:3000/callback`.
+  OAuth callback URL. Defaults to `http://localhost:8000/auth/callback`.
 </ParamField>
 
 <ParamField param="client_id" type="string">
