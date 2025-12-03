@@ -542,6 +542,9 @@ def convert_mcp_servers_to_tools(agent: "Agent") -> None:
     if not isinstance(servers, list) or len(servers) == 0:
         return
 
+    if _OAUTH_AVAILABLE:
+        _process_oauth_servers(agent, servers)
+
     # Read convert_schemas_to_strict from agent's mcp_config
     mcp_config = getattr(agent, "mcp_config", None) or {}
     convert_to_strict = mcp_config.get("convert_schemas_to_strict", False)

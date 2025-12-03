@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 import os
 from collections.abc import Callable, Mapping
@@ -22,6 +24,7 @@ def run_fastapi(
     enable_agui: bool = False,
     enable_logging: bool = False,
     logs_dir: str = "activity-logs",
+    oauth_registry: OAuthStateRegistry | None = None,
 ):
     """Launch a FastAPI server exposing endpoints for multiple agencies and tools.
 
@@ -46,6 +49,9 @@ def run_fastapi(
     logs_dir : str
         Directory to store log files when logging is enabled.
         Defaults to 'activity-logs'.
+    oauth_registry :
+        Optional OAuth state registry shared across workers (e.g., Redis-backed).
+        Defaults to in-memory when not provided.
     """
     if (agencies is None or len(agencies) == 0) and (tools is None or len(tools) == 0):
         logger.warning("No endpoints to deploy. Please provide at least one agency or tool.")
@@ -110,7 +116,7 @@ def run_fastapi(
     )
 
     oauth_user_header = "X-User-Id"
-    oauth_registry: OAuthStateRegistry | None = None
+    shared_oauth_registry: OAuthStateRegistry | None = oauth_registry
     oauth_config: FastAPIOAuthConfig | None = None
     endpoints = []
     agency_names = []
@@ -137,9 +143,10 @@ def run_fastapi(
                     if isinstance(servers, list) and any(is_oauth_server(srv) for srv in servers):
                         has_oauth_servers = True
                         break
-            if has_oauth_servers and oauth_registry is None:
-                oauth_registry = OAuthStateRegistry()
-                oauth_config = FastAPIOAuthConfig(oauth_registry, user_header=oauth_user_header)
+            if has_oauth_servers and shared_oauth_registry is None:
+                shared_oauth_registry = OAuthStateRegistry()
+            if has_oauth_servers and oauth_config is None and shared_oauth_registry is not None:
+                oauth_config = FastAPIOAuthConfig(shared_oauth_registry, user_header=oauth_user_header)
             if DRY_RUN:
                 # In DRY_RUN, avoid building validators;
                 agency_metadata = preview_instance.get_agency_structure()
@@ -176,25 +183,25 @@ def run_fastapi(
             )
             endpoints.append(f"/{agency_name}/get_metadata")
 
-    if oauth_registry is not None:
+    if shared_oauth_registry is not None:
 
         async def oauth_callback(
             code: str,
             state: str,
             user_id: str | None = Header(default=None, alias=oauth_user_header),
         ):
-            flow = await oauth_registry.set_code(state=state, code=code, user_id=user_id)
+            flow = await shared_oauth_registry.set_code(state=state, code=code, user_id=user_id)
             if flow.error:
                 raise HTTPException(status_code=400, detail=f"OAuth callback failed: {flow.error}")
             return {"status": "ok", "state": state, "server_name": flow.server_name}
 
         async def oauth_status(state: str):
-            return await oauth_registry.get_status(state)
+            return await shared_oauth_registry.get_status(state)
 
-        app.add_api_route("/oauth/callback", oauth_callback, methods=["GET"])
-        endpoints.append("/oauth/callback")
-        app.add_api_route("/oauth/status/{state}", oauth_status, methods=["GET"])
-        endpoints.append("/oauth/status/{state}")
+        app.add_api_route("/auth/callback", oauth_callback, methods=["GET"])
+        endpoints.append("/auth/callback")
+        app.add_api_route("/auth/status/{state}", oauth_status, methods=["GET"])
+        endpoints.append("/auth/status/{state}")
 
     if tools and not DRY_RUN:
         for tool in tools:
