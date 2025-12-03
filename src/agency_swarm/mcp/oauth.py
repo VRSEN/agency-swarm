@@ -234,7 +234,7 @@ class OAuthStorageHooks:
         logger.debug("OAuth user_id context cleared")
 
 
-@dataclass
+@dataclass(eq=False)
 class MCPServerOAuth:
     """Configuration for an OAuth-enabled MCP server.
 
@@ -252,7 +252,7 @@ class MCPServerOAuth:
         auth_server_url: Base URL for OAuth discovery when different from MCP endpoint
     """
 
-    DEFAULT_REDIRECT_URI: ClassVar[str] = "http://localhost:3000/callback"
+    DEFAULT_REDIRECT_URI: ClassVar[str] = "http://localhost:8000/auth/callback"
 
     url: str
     name: str
@@ -419,7 +419,7 @@ async def _listen_for_callback_once(redirect_uri: str, timeout: float = 300.0) -
     parsed = urlparse(redirect_uri)
     host = parsed.hostname or "localhost"
     port = parsed.port or 80
-    path = parsed.path or "/callback"
+    path = parsed.path or "/auth/callback"
     loop = asyncio.get_event_loop()
     result: asyncio.Future[tuple[str, str | None]] = loop.create_future()
 
@@ -500,7 +500,7 @@ async def default_callback_handler(redirect_uri: str | None = None) -> tuple[str
     Returns:
         Tuple of (authorization_code, state)
     """
-    redirect_target = redirect_uri or "http://localhost:3000/callback"
+    redirect_target = redirect_uri or "http://localhost:8000/auth/callback"
     tasks: list[asyncio.Task[tuple[str, str | None]]] = []
     server_task: asyncio.Task[tuple[str, str | None]] | None = None
 
