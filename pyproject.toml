@@ -88,13 +88,26 @@ packages = ["src/agency_swarm"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "src/agency_swarm/cli/utils/generate-agent-from-settings.ts" = "agency_swarm/cli/utils/generate-agent-from-settings.ts"
+# Copilot frontend files (explicit to avoid node_modules)
+"src/agency_swarm/ui/demos/copilot/app" = "agency_swarm/ui/demos/copilot/app"
+"src/agency_swarm/ui/demos/copilot/components" = "agency_swarm/ui/demos/copilot/components"
+"src/agency_swarm/ui/demos/copilot/public" = "agency_swarm/ui/demos/copilot/public"
+"src/agency_swarm/ui/demos/copilot/package.json" = "agency_swarm/ui/demos/copilot/package.json"
+"src/agency_swarm/ui/demos/copilot/package-lock.json" = "agency_swarm/ui/demos/copilot/package-lock.json"
+"src/agency_swarm/ui/demos/copilot/next.config.ts" = "agency_swarm/ui/demos/copilot/next.config.ts"
+"src/agency_swarm/ui/demos/copilot/tsconfig.json" = "agency_swarm/ui/demos/copilot/tsconfig.json"
+"src/agency_swarm/ui/demos/copilot/postcss.config.mjs" = "agency_swarm/ui/demos/copilot/postcss.config.mjs"
+"src/agency_swarm/ui/demos/copilot/components.json" = "agency_swarm/ui/demos/copilot/components.json"
+"src/agency_swarm/ui/demos/copilot/next-env.d.ts" = "agency_swarm/ui/demos/copilot/next-env.d.ts"
 
 [tool.hatch.build.targets.sdist]
 include = [
     "src/agency_swarm/**/*.py",
     "src/agency_swarm/**/*.ts",
     "src/agency_swarm/ui/templates/**",
+    "src/agency_swarm/ui/demos/copilot/**",
 ]
+exclude = ["**/node_modules/**"]
 
 [tool.ruff]
 line-length = 120
