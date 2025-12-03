@@ -13,64 +13,80 @@ Agents are the core building blocks of the Agency Swarm framework. Each agent is
     title="Autonomous"
     icon="robot"
   >
-    Agents can determine the next best actions by themselves.
+    Agents can decide the next best action to achieve a goal autonomously within the guardrails.
   </Card>
 
   <Card
-    title="Adaptive"
-    icon="bolt"
+    title="Perceptual"
+    icon="eye"
   >
-    Agents adapt their course of action based on real-time feedback.
+    Agents sense the environment, interpret observations, and self-correct based on feedback.
   </Card>
 
   <Card
-    title="Interactive"
-    icon="wrench"
+    title="Proactive"
+    icon="lightbulb"
   >
-    Agents can manipulate their environment by using tools.
+    Agents can take initiative (monitor, plan, act) and surprise you with the results, or escalate when needed.
   </Card>
 </CardGroup>
 
-In the latest version, agents are built on top of the `agents` SDK to support multi-agent collaboration within an `Agency`. The agent class provides context management, async execution, and streamlined tool integration.
+## Defining AI agents
+
+<Callout type="info" icon="robot" title="What is an AI Agent?">
+**An AI agent is an autonomous, goal-driven system that perceives its environment, dynamically uses tools and APIs to take actions, adapts proactively within guardrails, and can collaborate with other agents or humans.**
+</Callout>
+
+Now, let's breakdown this definition:
+
+- **Autonomous** - Agents define their own execution flow independently without hardcoded logic, unlike traditional workflows
+- **Goal-driven** - Agents are focused on outcomes, rather than on invididual steps
+- **Perceives environment** - Agents observe the real-world and use the feedback to validate its own actions (e.g., a coding agent testing its code)
+- **Dynamic tool use** - Agents generate value through actions rather than just responses (most critical characteristic)
+- **Adapts within guardrails** - Agents balance autonomy with safety constraints for enterprise reliability
+- **Collaboration** - Agents can work seamlessly with other agents or humans in multi-agent systems
 
 ## Agent Parameters
 
-The new `Agent` class extends the base `agents.Agent` with Agency Swarm-specific capabilities:
+In agency swarm, to create an agent, you need to instantiate the `Agent` class. 
 
-### Agency Swarm Specific Parameters
-
-| Name | Parameter | Description |
-|------|-----------|-------------|
-| Files Folder *(optional)* | `files_folder` | Path to a local folder for managing files associated with this agent. If the folder name follows the pattern `*_vs_<vector_store_id>`, files uploaded via `upload_file` will also be added to the specified OpenAI Vector Store, and a `FileSearchTool` will be automatically added. Default: `None` |
-| Tools Folder *(optional)* | `tools_folder` | Path to a directory containing tool definitions. Tools are automatically discovered and loaded from this directory. Supports both BaseTool subclasses and modern FunctionTool instances. Default: `None` |
-| Schemas Folder *(optional)* | `schemas_folder` | Path to a directory containing openapi schema files in .json format. Schemas are automatically converted into FunctionTools. Default: `None` |
-| API headers *(optional)*<br/>API params *(optional)*| `api_headers`<br/><br/>`api_params` | Additional parameters to include into tools converted from OpenAPI schemas. Default: `None` |
-| Description *(optional)* | `description` | A description of the agent's role or purpose, used to convey agent's role to other agents. Default: `None` |
-| Send Message Tool Class *(optional)* | `send_message_tool_class` | Custom SendMessage tool class to use for inter-agent communication. If None, uses the default SendMessage class. Default: `None` |
-| Include Search Results *(optional)* | `include_search_results` | Include search results in FileSearchTool output for citation extraction. Default: `False` |
-| Validation Attempts *(optional)* | `validation_attempts` | Number of retries when an output guardrail trips. Default: `1` |
-| Throw Input Guardrail Error *(optional)* | `throw_input_guardrail_error` | Controls input guardrail behavior: `False` enables **friendly mode** (default) where guidance is returned as an assistant message, while `True` enables **strict mode** where guardrail failures raise exceptions. Default: `False` |
-| Handoff Reminder *(optional)* | `handoff_reminder` | Replaces the default handoff reminder system message with a given string. Default: "Transfer completed. You are [recipient_agent_name]. Please continue the task." |
-
-### Core Agent Parameters
-
+<Tabs>
+  <Tab title="Core Parameters">
 | Name | Parameter | Description |
 |------|-----------|-------------|
 | Name *(required)* | `name` | The name of the agent. |
 | Instructions *(optional)* | `instructions` | The instructions for the agent. Will be used as the "system prompt" when this agent is invoked. Can be a string or a function that dynamically generates instructions. Default: `None` |
+| Description *(optional)* | `description` | A description of the agent's role or purpose, used to convey agent's role to other agents. Default: `None` |
 | Model *(optional)* | `model` | The model implementation to use when invoking the LLM. If not provided, uses agents SDK default model. Current default model can be [found here](https://openai.github.io/openai-agents-python/models). Default: `None` |
-| Model Settings *(optional)* | `model_settings` | Configures model-specific tuning parameters (e.g. temperature, top_p). Default: `ModelSettings()` |
+| Model Settings *(optional)* | `model_settings` | Configures model-specific tuning parameters (e.g. temperature, top_p). See [ModelSettings documentation](https://openai.github.io/openai-agents-python/ref/model_settings/) for details. Default: `ModelSettings()` |
 | Tools *(optional)* | `tools` | A list of tools that the agent can use. Default: `[]` |
+| Tools Folder *(optional)* | `tools_folder` | Path to a directory containing tool definitions. Tools are automatically discovered and loaded from this directory. Supports both BaseTool subclasses and modern FunctionTool instances. Default: `None` |
+| Files Folder *(optional)* | `files_folder` | Path to a local folder for managing files associated with this agent. If the folder name follows the pattern `*_vs_<vector_store_id>`, files uploaded via `upload_file` will also be added to the specified OpenAI Vector Store, and a `FileSearchTool` will be automatically added. Default: `None` |
 | MCP Servers *(optional)* | `mcp_servers` | A list of Model Context Protocol servers that the agent can use. Every time the agent runs, it will include tools from these servers in the list of available tools. Default: `[]` |
-| MCP Config *(optional)* | `mcp_config` | Configuration for MCP servers. Default: `MCPConfig()` |
 | Input Guardrails *(optional)* | `input_guardrails` | A list of checks that run in parallel to the agent's execution, before generating a response. Default: `[]` |
 | Output Guardrails *(optional)* | `output_guardrails` | A list of checks that run on the final output of the agent, after generating a response. Default: `[]` |
 | Output Type *(optional)* | `output_type` | The type of the output object. If not provided, the output will be `str`. In most cases, you should pass a regular Python type (e.g. a dataclass, Pydantic model, TypedDict, etc). Default: `None` |
 
+  </Tab>
+  <Tab title="Additional Parameters">
+| Name | Parameter | Description |
+|------|-----------|-------------|
+| MCP Config *(optional)* | `mcp_config` | Configuration for MCP servers. Default: `MCPConfig()` |
+| API headers *(optional)*<br/>API params *(optional)*| `api_headers`<br/><br/>`api_params` | Additional parameters to include into tools converted from OpenAPI schemas. Default: `None` |
+| Schemas Folder *(optional)* | `schemas_folder` | Path to a directory containing openapi schema files in .json format. Schemas are automatically converted into FunctionTools. Default: `None` |
+| Validation Attempts *(optional)* | `validation_attempts` | Number of retries when an output guardrail trips. Default: `1` |
+| Throw Input Guardrail Error *(optional)* | `throw_input_guardrail_error` | If set to `True`, input guardrail errors raise an exception. If set to `False`, the guardrail message is returned as the agent's response. Default: `False` |
+| Send Message Tool Class *(optional)* | `send_message_tool_class` | Custom SendMessage tool class to use for inter-agent communication. If None, uses the default SendMessage class. Default: `None` |
+| Handoff Reminder *(optional)* | `handoff_reminder` | Replaces the default handoff reminder system message with a given string. Default: "Transfer completed. You are [recipient_agent_name]. Please continue the task." |
+| Include Search Results *(optional)* | `include_search_results` | Include search results in FileSearchTool output for citation extraction. Default: `False` |
+
+  </Tab>
+</Tabs>
+
 <Note>
 To see a full list of agent parameters, refer to [OpenAI documentation]( https://openai.github.io/openai-agents-python/ref/agent/#agents.agent.Agent).
 
-Please note that agent handoff parameters are not supported. To enable handoffs, add the SendMessageHandoff tool class to the agent as [shown here](/additional-features/custom-communication-flows/hybrid-patterns)
+Please note that agent handoff parameters are not supported. To enable handoffs, use `communication_flows` with the SendMessageHandoff tool class as [shown here](/additional-features/custom-communication-flows/overview)
 </Note>
 
 <Warning>
@@ -82,17 +98,18 @@ To start receiving reasoning events for reasoning models, you need to explicitly
 Create a new agent by instantiating the Agent class:
 
 ```python
-from agency_swarm import Agent, ModelSettings
+from agency_swarm import Agent, ModelSettings, Reasoning
 
 example_agent = Agent(
     name="agent_name",
     description="agent_description",
+    model="gpt-5.1",
     instructions="./instructions.md",
     files_folder="./files",
     tools_folder="./tools",
     tools=[],
     model_settings=ModelSettings(
-        temperature=0.3,
+        reasoning=Reasoning(effort="medium"),
     ),
 )
 ```

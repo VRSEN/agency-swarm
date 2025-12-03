@@ -87,8 +87,7 @@
                   "core-framework/agencies/running-agency",
                   "core-framework/agencies/visualization"
                 ]
-              },
-              "core-framework/state-management"
+              }
             ]
           },
           {
@@ -105,8 +104,7 @@
                 "icon": "comments",
                 "pages": [
                   "additional-features/custom-communication-flows/overview",
-                  "additional-features/custom-communication-flows/common-use-cases",
-                  "additional-features/custom-communication-flows/hybrid-patterns"
+                  "additional-features/custom-communication-flows/common-use-cases"
                 ]
               },
               "additional-features/azure-openai",
@@ -152,12 +150,10 @@
         "groups": [
           {
             "group": "General",
-            "icon": "globe",
             "pages": ["platform/overview"]
           },
           {
             "group": "Integrations",
-            "icon": "plug",
             "pages": [
               "platform/integrations/slack-integration",
               "platform/integrations/whatsapp-integration",
