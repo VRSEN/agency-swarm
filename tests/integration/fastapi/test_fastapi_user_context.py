@@ -1,22 +1,93 @@
-from types import SimpleNamespace
+from __future__ import annotations
 
+from collections.abc import Callable
+from copy import deepcopy
+from types import SimpleNamespace
+from typing import Any
+
+import pytest
 from fastapi.testclient import TestClient
 
-from agency_swarm import Agent, run_fastapi
+from agency_swarm import Agency, Agent, run_fastapi
 
 
-def test_non_streaming_user_context(monkeypatch, agency_factory):
-    """Ensure user_context is forwarded to non-streaming endpoint."""
+class ContextTracker:
+    """Keep the latest contexts observed by the test agent."""
 
-    captured_params: dict[str, object] = {}
+    def __init__(self) -> None:
+        self.last_response_context: dict[str, Any] | None = None
+        self.last_stream_context: dict[str, Any] | None = None
 
-    async def fake_get_response(self, message, context_override=None, **kwargs):
-        captured_params["context_override"] = context_override
+    def reset(self) -> None:
+        self.last_response_context = None
+        self.last_stream_context = None
+
+    def record_response(self, context: dict[str, Any] | None) -> None:
+        self.last_response_context = self._snapshot(context)
+
+    def record_stream(self, context: dict[str, Any] | None) -> None:
+        self.last_stream_context = self._snapshot(context)
+
+    @staticmethod
+    def _snapshot(context: dict[str, Any] | None) -> dict[str, Any] | None:
+        return deepcopy(context) if context is not None else None
+
+
+class TrackingAgent(Agent):
+    """Agent subclass that records incoming context instead of calling the LLM."""
+
+    def __init__(self, tracker: ContextTracker):
+        super().__init__(name="TestAgent", instructions="Base instructions")
+        self._tracker = tracker
+
+    async def get_response(
+        self,
+        message,
+        sender_name=None,
+        context_override: dict[str, Any] | None = None,
+        **kwargs: Any,
+    ):
+        self._tracker.record_response(context_override)
         return SimpleNamespace(final_output="Test response", new_items=[])
 
-    monkeypatch.setattr(Agent, "get_response", fake_get_response)
+    def get_response_stream(
+        self,
+        message,
+        sender_name=None,
+        context_override: dict[str, Any] | None = None,
+        **kwargs: Any,
+    ):
+        self._tracker.record_stream(context_override)
 
-    app = run_fastapi(agencies={"test_agency": agency_factory}, return_app=True, app_token_env="")
+        async def _generator():
+            yield {"type": "text", "data": "Test"}
+
+        return _generator()
+
+
+@pytest.fixture
+def recording_agency_factory() -> Callable:
+    tracker = ContextTracker()
+
+    class Factory:
+        def __call__(self, load_threads_callback=None, save_threads_callback=None):
+            tracker.reset()
+            agent = TrackingAgent(tracker)
+            return Agency(
+                agent,
+                load_threads_callback=load_threads_callback,
+                save_threads_callback=save_threads_callback,
+            )
+
+    factory = Factory()
+    factory.tracker = tracker  # type: ignore[attr-defined]
+    return factory
+
+
+def test_non_streaming_user_context(recording_agency_factory):
+    """Ensure user_context is forwarded to non-streaming endpoint."""
+
+    app = run_fastapi(agencies={"test_agency": recording_agency_factory}, return_app=True, app_token_env="")
     client = TestClient(app)
 
     response = client.post(
@@ -25,21 +96,13 @@ def test_non_streaming_user_context(monkeypatch, agency_factory):
     )
 
     assert response.status_code == 200
-    assert captured_params["context_override"] == {"plan": "pro", "user_id": "123"}
+    assert recording_agency_factory.tracker.last_response_context == {"plan": "pro", "user_id": "123"}  # type: ignore[attr-defined]
 
 
-def test_streaming_user_context(monkeypatch, agency_factory):
+def test_streaming_user_context(recording_agency_factory):
     """Ensure user_context is forwarded to streaming endpoint."""
 
-    captured_params: dict[str, object] = {}
-
-    async def fake_get_response_stream(self, message, context_override=None, **kwargs):
-        captured_params["context_override"] = context_override
-        yield {"type": "text", "data": "Test"}
-
-    monkeypatch.setattr(Agent, "get_response_stream", fake_get_response_stream)
-
-    app = run_fastapi(agencies={"test_agency": agency_factory}, return_app=True, app_token_env="")
+    app = run_fastapi(agencies={"test_agency": recording_agency_factory}, return_app=True, app_token_env="")
     client = TestClient(app)
 
     with client.stream(
@@ -50,26 +113,17 @@ def test_streaming_user_context(monkeypatch, agency_factory):
         assert response.status_code == 200
         list(response.iter_lines())
 
-    assert captured_params["context_override"] is not None
-    assert {
-        key: value for key, value in captured_params["context_override"].items() if key != "_streaming_context"
-    } == {"plan": "pro"}
-    assert "_streaming_context" in captured_params["context_override"]
+    stream_context = recording_agency_factory.tracker.last_stream_context  # type: ignore[attr-defined]
+    assert stream_context is not None
+    assert {key: value for key, value in stream_context.items() if key != "_streaming_context"} == {"plan": "pro"}
+    assert "_streaming_context" in stream_context
 
 
-def test_agui_user_context(monkeypatch, agency_factory):
+def test_agui_user_context(recording_agency_factory):
     """Ensure AG-UI streaming endpoint forwards user_context."""
 
-    captured_params: dict[str, object] = {}
-
-    async def fake_get_response_stream(self, message, context_override=None, **kwargs):
-        captured_params["context_override"] = context_override
-        yield {"type": "text", "data": "Test"}
-
-    monkeypatch.setattr(Agent, "get_response_stream", fake_get_response_stream)
-
     app = run_fastapi(
-        agencies={"test_agency": agency_factory},
+        agencies={"test_agency": recording_agency_factory},
         return_app=True,
         app_token_env="",
         enable_agui=True,
@@ -91,28 +145,22 @@ def test_agui_user_context(monkeypatch, agency_factory):
         assert response.status_code == 200
         list(response.iter_lines())
 
-    assert captured_params["context_override"] is not None
-    assert {
-        key: value for key, value in captured_params["context_override"].items() if key != "_streaming_context"
-    } == {"plan": "pro", "customer_tier": "gold"}
-    assert "_streaming_context" in captured_params["context_override"]
+    stream_context = recording_agency_factory.tracker.last_stream_context  # type: ignore[attr-defined]
+    assert stream_context is not None
+    assert {key: value for key, value in stream_context.items() if key != "_streaming_context"} == {
+        "plan": "pro",
+        "customer_tier": "gold",
+    }
+    assert "_streaming_context" in stream_context
 
 
-def test_user_context_defaults_to_none(monkeypatch, agency_factory):
+def test_user_context_defaults_to_none(recording_agency_factory):
     """Requests without user_context should not inject overrides."""
 
-    captured_params: dict[str, object] = {}
-
-    async def fake_get_response(self, message, context_override=None, **kwargs):
-        captured_params["context_override"] = context_override
-        return SimpleNamespace(final_output="Test response", new_items=[])
-
-    monkeypatch.setattr(Agent, "get_response", fake_get_response)
-
-    app = run_fastapi(agencies={"test_agency": agency_factory}, return_app=True, app_token_env="")
+    app = run_fastapi(agencies={"test_agency": recording_agency_factory}, return_app=True, app_token_env="")
     client = TestClient(app)
 
     response = client.post("/test_agency/get_response", json={"message": "Hello"})
 
     assert response.status_code == 200
-    assert captured_params["context_override"] is None
+    assert recording_agency_factory.tracker.last_response_context is None  # type: ignore[attr-defined]
