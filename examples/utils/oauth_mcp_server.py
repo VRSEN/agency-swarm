@@ -7,7 +7,7 @@ Setup:
     1. Create a GitHub OAuth App at https://github.com/settings/developers
        - Application name: "Agency Swarm MCP Test"
        - Homepage URL: http://localhost:8001
-       - Callback URL: http://localhost:3000/callback
+       - Callback URL: http://localhost:8001/auth/callback
 
     2. Set environment variables:
        export GITHUB_CLIENT_ID="your_github_client_id"
@@ -47,7 +47,7 @@ if not CLIENT_ID or not CLIENT_SECRET:
     print("\nTo create a GitHub OAuth App:")
     print("  1. Go to https://github.com/settings/developers")
     print("  2. Click 'New OAuth App'")
-    print("  3. Set callback URL: http://localhost:3000/callback")
+    print("  3. Set callback URL: http://localhost:8001/auth/callback")
     print("  4. Copy Client ID and generate Client Secret")
     exit(1)
 
@@ -140,7 +140,7 @@ if __name__ == "__main__":
     print(f"MCP Endpoint: {BASE_URL}/mcp")
     print(f"Client ID: {CLIENT_ID[:20]}..." if len(CLIENT_ID) > 20 else f"Client ID: {CLIENT_ID}")
     print("\nOAuth Provider: GitHub")
-    print("Callback URL: http://localhost:3000/callback")
+    print("Callback URL: http://localhost:8001/auth/callback")
     print("\nAvailable Tools (all require OAuth):")
     print("  - get_secret_message(): Returns a secret message")
     print("  - oauth_echo(message): Echoes message with auth confirmation")
