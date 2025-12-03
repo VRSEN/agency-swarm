@@ -7,7 +7,7 @@ Prerequisites:
     1. Create a GitHub OAuth App at https://github.com/settings/developers
        - Application name: "Agency Swarm MCP Test"
        - Homepage URL: http://localhost:8001
-       - Callback URL: http://localhost:3000/callback
+       - Callback URL: http://localhost:8001/auth/callback  # FastMCP OAuth proxy callback
        - Copy the Client ID and generate a Client Secret
 
     2. Start the OAuth test server (Terminal 1). The GitHub credentials are only
@@ -59,14 +59,14 @@ oauth_server = MCPServerOAuth(
     name="oauth-test-server",
     cache_dir=CACHE_DIR,
     scopes=["user"],  # GitHub OAuth scopes
-    redirect_uri="http://localhost:3000/callback",
+    redirect_uri="http://localhost:8000/auth/callback",
 )
 
 
 # Dedicated callback handler that only uses the local HTTP listener.
 async def local_callback_handler() -> tuple[str, str | None]:
     """Capture GitHub redirect via the built-in local HTTP server."""
-    return await _listen_for_callback_once("http://localhost:3000/callback")
+    return await _listen_for_callback_once("http://localhost:8000/auth/callback")
 
 
 # Create Agent with OAuth MCP Server
@@ -131,7 +131,9 @@ async def main():
         print(f"\n\n❌ Error: {e}")
         print("\nTroubleshooting:")
         print("  1. Make sure the OAuth server is running: python examples/utils/oauth_mcp_server.py")
-        print("  2. Verify the callback URL matches your GitHub OAuth App: http://localhost:3000/callback")
+        print(
+            "  2. Verify the GitHub OAuth App callback matches the FastMCP server: http://localhost:8001/auth/callback"
+        )
         print(f"  3. Check token cache: {SERVER_CACHE_DIR}")
         print("  4. Try deleting cached tokens:")
         print(f"     rm -f {SERVER_CACHE_DIR / 'client.json'} {SERVER_CACHE_DIR / 'tokens.json'}")
@@ -157,7 +159,7 @@ if __name__ == "__main__":
     else:
         print("\nSetup instructions:")
         print("  1. Create GitHub OAuth App: https://github.com/settings/developers")
-        print("     - Callback URL: http://localhost:3000/callback")
+        print("     - Callback URL: http://localhost:8001/auth/callback")
         print("  2. Start OAuth server: python examples/utils/oauth_mcp_server.py")
         print("     (ensure GITHUB_CLIENT_ID / GITHUB_CLIENT_SECRET are set in that terminal)")
         print("  3. In another terminal:")
