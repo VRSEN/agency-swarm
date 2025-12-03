@@ -85,20 +85,20 @@ dev = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/agency_swarm"]
+artifacts = [
+    # Copilot frontend files (exclude node_modules)
+    "ui/demos/copilot/**/*.ts",
+    "ui/demos/copilot/**/*.tsx",
+    "ui/demos/copilot/**/*.css",
+    "ui/demos/copilot/**/*.json",
+    "ui/demos/copilot/**/*.mjs",
+    "ui/demos/copilot/**/*.ico",
+    "ui/demos/copilot/**/*.svg",
+    "!ui/demos/copilot/node_modules/**",
+]
 
 [tool.hatch.build.targets.wheel.force-include]
 "src/agency_swarm/cli/utils/generate-agent-from-settings.ts" = "agency_swarm/cli/utils/generate-agent-from-settings.ts"
-# Copilot frontend files (explicit to avoid node_modules)
-"src/agency_swarm/ui/demos/copilot/app" = "agency_swarm/ui/demos/copilot/app"
-"src/agency_swarm/ui/demos/copilot/components" = "agency_swarm/ui/demos/copilot/components"
-"src/agency_swarm/ui/demos/copilot/public" = "agency_swarm/ui/demos/copilot/public"
-"src/agency_swarm/ui/demos/copilot/package.json" = "agency_swarm/ui/demos/copilot/package.json"
-"src/agency_swarm/ui/demos/copilot/package-lock.json" = "agency_swarm/ui/demos/copilot/package-lock.json"
-"src/agency_swarm/ui/demos/copilot/next.config.ts" = "agency_swarm/ui/demos/copilot/next.config.ts"
-"src/agency_swarm/ui/demos/copilot/tsconfig.json" = "agency_swarm/ui/demos/copilot/tsconfig.json"
-"src/agency_swarm/ui/demos/copilot/postcss.config.mjs" = "agency_swarm/ui/demos/copilot/postcss.config.mjs"
-"src/agency_swarm/ui/demos/copilot/components.json" = "agency_swarm/ui/demos/copilot/components.json"
-"src/agency_swarm/ui/demos/copilot/next-env.d.ts" = "agency_swarm/ui/demos/copilot/next-env.d.ts"
 
 [tool.hatch.build.targets.sdist]
 include = [
