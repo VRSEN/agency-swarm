@@ -61,10 +61,10 @@ file_ids: list[str] = None
 # Files to download and attach to the agent. Should be provided in a form of a mapping: {"filename_1":"url", "filename_2":"url", ...}
 file_urls: dict[str, str] = None
 additional_instructions: str = None
-user_context: dict[str, Any] = None  # Optional per-request Agency Context merged with the agency's user_context
+user_context: dict[str, Any] = None  # Per-request context accessible via Agency Context
 ```
 
-`user_context` lets you pass structured Agency Context data from your frontend (including AG-UI payloads) without exposing it to the LLM. It is merged with any `user_context` set on the agency instance for that run so tools and hooks can read it.
+`user_context` passes structured data to [Agency Context](/additional-features/agency-context) without exposing it to the LLM. It merges with any `user_context` set on the agency instance.
 
 Additionally, you will need to provide a bearer token in the authorization if you have `"APP_TOKEN"` specified (or a differently named variable if you provided app_token_env). If the token is **not specified** in the env variables, **authentication will be disabled**.
 
