@@ -19,6 +19,7 @@ from prompt_toolkit.layout.controls import BufferControl, FormattedTextControl
 from prompt_toolkit.layout.layout import Layout
 from prompt_toolkit.styles import Style
 from prompt_toolkit.widgets import Frame
+from rich.markup import escape as rich_escape
 
 from agency_swarm.agency.core import Agency
 from agency_swarm.utils import is_reasoning_model
@@ -491,7 +492,7 @@ def start_terminal(
             application.invalidate()
 
             if message_text:
-                event_converter.console.print(f"👤 USER -> 🤖 {active_recipient}: {message_text}")
+                event_converter.console.print(f"👤 USER -> 🤖 {active_recipient}: {rich_escape(message_text)}")
 
             event_converter.console.rule()
             should_exit = await handle_message(message_text)
