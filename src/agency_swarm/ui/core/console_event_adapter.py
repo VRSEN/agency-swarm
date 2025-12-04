@@ -283,7 +283,7 @@ class ConsoleEventAdapter:
 
         header = f"{agent_name} 🛠️  Apply Patch"
         self.console.print(f"[bold]{header}[/bold]")
-        self.console.print(f"{label}: [cyan]{path}[/cyan]")
+        self.console.print(f"{label}: [cyan]{rich_escape(path)}[/cyan]")
 
         if diff:
             syntax = Syntax(diff, "diff", theme="monokai", line_numbers=False, word_wrap=True)
@@ -308,7 +308,7 @@ class ConsoleEventAdapter:
         self.console.print(f"[bold]{header}[/bold]")
 
         if working_dir:
-            self.console.print(f"Working directory: [cyan]{working_dir}[/cyan]")
+            self.console.print(f"Working directory: [cyan]{rich_escape(working_dir)}[/cyan]")
 
         if is_local:
             commands_text = f"$ {' '.join(commands)}"
