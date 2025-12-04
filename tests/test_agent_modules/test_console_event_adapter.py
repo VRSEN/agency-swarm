@@ -231,7 +231,7 @@ def test_apply_patch_call_displays_diff_panel():
 
 
 def test_apply_patch_call_no_diff_panel_for_delete():
-    """Test that delete operations don't show a diff panel."""
+    """Test that delete operations don't show a diff panel but still return True."""
     adapter = ConsoleEventAdapter()
 
     operation = SimpleNamespace(type="delete_file", path="file.txt")
@@ -240,12 +240,30 @@ def test_apply_patch_call_no_diff_panel_for_delete():
 
     with (
         patch.object(adapter.console, "print"),
-        patch.object(adapter.console, "rule"),
+        patch.object(adapter.console, "rule") as mock_rule,
         patch("agency_swarm.ui.core.console_event_adapter.Panel") as mock_panel,
     ):
         adapter.openai_to_message_output(event, recipient_agent="Agent")
 
     mock_panel.assert_not_called()
+    mock_rule.assert_called_once()  # Rule should still be called since content was displayed
+
+
+def test_apply_patch_call_no_operation_no_separator():
+    """Test that apply_patch_call with no operation doesn't print a separator."""
+    adapter = ConsoleEventAdapter()
+
+    item = SimpleNamespace(type="apply_patch_call", operation=None)
+    event = raw_event("response.output_item.done", item=item)
+
+    with (
+        patch.object(adapter.console, "print") as mock_print,
+        patch.object(adapter.console, "rule") as mock_rule,
+    ):
+        adapter.openai_to_message_output(event, recipient_agent="Agent")
+
+    mock_print.assert_not_called()
+    mock_rule.assert_not_called()
 
 
 # --- Tests for shell_call formatting ---
@@ -300,7 +318,7 @@ def test_local_shell_call_displays_header_and_command():
 
 
 def test_shell_call_empty_commands_no_output():
-    """Test that shell_call with empty commands doesn't crash."""
+    """Test that shell_call with empty commands doesn't display anything or separator."""
     adapter = ConsoleEventAdapter()
 
     action = SimpleNamespace(commands=[])
@@ -308,14 +326,15 @@ def test_shell_call_empty_commands_no_output():
     event = raw_event("response.output_item.done", item=item)
 
     with (
-        patch.object(adapter.console, "print"),
-        patch.object(adapter.console, "rule"),
+        patch.object(adapter.console, "print") as mock_print,
+        patch.object(adapter.console, "rule") as mock_rule,
         patch("agency_swarm.ui.core.console_event_adapter.Panel") as mock_panel,
     ):
         adapter.openai_to_message_output(event, recipient_agent="Agent")
 
-    # Should not display anything for empty commands
+    mock_print.assert_not_called()
     mock_panel.assert_not_called()
+    mock_rule.assert_not_called()
 
 
 # --- Tests for Rich escape functionality ---
