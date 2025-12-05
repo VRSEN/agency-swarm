@@ -22,6 +22,7 @@ from openai.types.responses import (
     ResponseFunctionWebSearch,
 )
 
+from agency_swarm.agency.helpers import refresh_shared_instructions
 from agency_swarm.agent.context_types import AgentRuntimeState
 from agency_swarm.context import MasterContext
 from agency_swarm.messages import MessageFormatter
@@ -193,12 +194,18 @@ def run_item_to_tresponse_input_item(item: RunItem) -> TResponseInputItem | None
 
 
 def _resolve_latest_shared_instructions(agency_context: "AgencyContext | None") -> str | None:
-    """Return the freshest shared instructions and keep the context in sync."""
+    """Return the freshest shared instructions and keep the context in sync.
+
+    Hot-reloads shared instructions from file if a source path is stored.
+    """
     if not agency_context:
         return None
 
     agency_instance = getattr(agency_context, "agency_instance", None)
     if agency_instance and hasattr(agency_instance, "shared_instructions"):
+        # Hot-reload shared instructions from file if source path is stored
+        refresh_shared_instructions(agency_instance)
+
         latest = getattr(agency_instance, "shared_instructions", None)
         normalized = latest if isinstance(latest, str) else None
         normalized = normalized or None
@@ -299,6 +306,10 @@ def setup_execution(
     """Common setup logic for both get_response and get_response_stream."""
     # Validate agency instance exists if this is agent-to-agent communication
     _validate_agency_for_delegation(agent, sender_name, agency_context)
+
+    # Hot-reload instructions from file if source path is stored
+    if agent.file_manager:
+        agent.file_manager.refresh_instructions()
 
     # Store original instructions for restoration
     original_instructions = agent.instructions

@@ -3,12 +3,14 @@ import inspect
 import logging
 import os
 from copy import deepcopy
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from agency_swarm.agent.core import AgencyContext, Agent
+
     from .core import Agency
 
-from agency_swarm.agent.core import AgencyContext, Agent
 from agency_swarm.utils.thread import ThreadLoadCallback, ThreadSaveCallback
 
 logger = logging.getLogger(__name__)
@@ -145,15 +147,78 @@ def get_class_folder_path(agency: "Agency") -> str:
     return get_caller_directory(agency)
 
 
+_PATH_LIKE_SUFFIXES = {
+    ".md",
+    ".mdx",
+    ".txt",
+    ".html",
+    ".htm",
+    ".rst",
+    ".pdf",
+    ".json",
+    ".yaml",
+    ".yml",
+    ".csv",
+}
+
+
+def _looks_like_file_path(value: str) -> bool:
+    """Heuristic to determine if a string likely represents a file path."""
+    if "\n" in value:
+        return False
+
+    stripped = value.strip()
+    if not stripped:
+        return False
+
+    if stripped.startswith(("./", "../", "/", "~")):
+        return True
+
+    suffix = Path(stripped).suffix.lower()
+    if suffix in _PATH_LIKE_SUFFIXES:
+        return True
+
+    return False
+
+
 def read_instructions(agency: "Agency", path: str) -> None:
     """
     Reads shared instructions from a specified file and stores them in the agency.
+
+    Stores the absolute source path in agency._shared_instructions_source_path
+    for later hot-reloading via refresh_shared_instructions().
     """
-    with open(path) as f:
-        agency.shared_instructions = f.read()
+    abs_path = Path(path).expanduser().resolve(strict=False)
+    agency._shared_instructions_source_path = str(abs_path)
+    if abs_path.is_file():
+        with open(abs_path) as f:
+            agency.shared_instructions = f.read()
+    else:
+        # Track the path but leave content empty until it exists
+        agency.shared_instructions = ""
 
 
-def get_agent_context(agency: "Agency", agent_name: str) -> AgencyContext:
+def refresh_shared_instructions(agency: "Agency") -> None:
+    """Re-read shared instructions from the source file if one was used during initialization.
+
+    This enables hot-reloading of shared instructions without restarting the process.
+    If no source file path is stored, this method is a no-op.
+    """
+    source_path = getattr(agency, "_shared_instructions_source_path", None)
+    if not source_path:
+        return
+
+    if os.path.isfile(source_path):
+        with open(source_path) as f:
+            agency.shared_instructions = f.read()
+        logger.debug(f"Agency: Refreshed shared instructions from {source_path}")
+    else:
+        logger.warning(
+            f"Agency: Shared instructions source file {source_path} not found, keeping existing shared instructions"
+        )
+
+
+def get_agent_context(agency: "Agency", agent_name: str) -> "AgencyContext":
     """Get the agency context for a specific agent."""
     return agency.get_agent_context(agent_name)
 
@@ -206,7 +271,7 @@ def run_fastapi(
     )
 
 
-def resolve_agent(agency: "Agency", agent_ref: str | Agent) -> Agent:
+def resolve_agent(agency: "Agency", agent_ref: "str | Agent") -> "Agent":
     """
     Resolve an agent reference to an Agent instance.
 
@@ -221,6 +286,9 @@ def resolve_agent(agency: "Agency", agent_ref: str | Agent) -> Agent:
         ValueError: If agent name is not found in agency
         TypeError: If agent_ref is not str or Agent
     """
+    # Import at runtime to avoid circular dependency
+    from agency_swarm.agent.core import Agent
+
     if isinstance(agent_ref, Agent):
         if agent_ref.name in agency.agents and id(agency.agents[agent_ref.name]) == id(agent_ref):
             return agent_ref
