@@ -220,6 +220,7 @@ class Agent(BaseAgent[MasterContext]):
         self._conversation_starters_cache = {}
         self._conversation_starters_fingerprint = None
         self._conversation_starters_warmup_started = False
+        self._mcp_tools_initialized = False
 
         # Initialize execution handler
         self._execution = Execution(self)
@@ -256,12 +257,7 @@ class Agent(BaseAgent[MasterContext]):
         for tool in self.tools:
             _attach_one_call_guard(tool, self)
 
-        # Convert MCP servers to tools and add them to the agent
-        convert_mcp_servers_to_tools(self)
-        if self.include_web_search_sources and any(isinstance(tool, WebSearchTool) for tool in self.tools):
-            existing_includes = list(self.model_settings.response_include or [])
-            if _WEB_SEARCH_SOURCES_INCLUDE not in existing_includes:
-                self.model_settings.response_include = [*existing_includes, _WEB_SEARCH_SOURCES_INCLUDE]
+        # MCP servers are converted lazily on first use to avoid interactive auth at init.
 
         # Refresh after MCP conversion so fingerprint includes MCP-converted tools
         self.refresh_conversation_starters_cache()
@@ -359,6 +355,13 @@ class Agent(BaseAgent[MasterContext]):
         """Parse OpenAPI schemas from the schemas folder and create tools."""
         parse_schemas(self)
 
+    def ensure_mcp_tools(self) -> None:
+        """Lazily convert MCP servers to tools on first use."""
+        if self._mcp_tools_initialized:
+            return
+        convert_mcp_servers_to_tools(self)
+        self._mcp_tools_initialized = True
+
     # --- File Handling ---
     def upload_file(self, file_path: str, include_in_vector_store: bool = True) -> str:
         """Upload a file using the agent's file manager."""
@@ -406,6 +409,9 @@ class Agent(BaseAgent[MasterContext]):
         if agency_context is None:
             agency_context = self._create_minimal_context()
 
+        # Lazily attach MCP tools on demand
+        self.ensure_mcp_tools()
+
         return await self._execution.get_response(
             message=message,
             sender_name=sender_name,
@@ -451,6 +457,9 @@ class Agent(BaseAgent[MasterContext]):
         # If no agency context provided, create a minimal one for standalone usage
         if agency_context is None:
             agency_context = self._create_minimal_context()
+
+        # Lazily attach MCP tools on demand
+        self.ensure_mcp_tools()
 
         return self._execution.get_response_stream(
             message=message,
