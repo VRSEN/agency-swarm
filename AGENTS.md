@@ -258,6 +258,7 @@ Strictness
 - Always inspect unstaged files with `git diff --name-only` and staged files with `git diff --cached --name-only`.
 - If the working tree is not clean or there is any confusion/ambiguity, report to the user immediately with a clear description of the problem and an explicit question before proceeding.
 - Never hard-reset (`git reset --hard`) without preserving progress
+- Before any rebase or history-editing command, set `GIT_EDITOR` to a non-interactive value (e.g., `true`) so git does not launch an editor in this environment.
 - Logical, isolated commit grouping (distinct refactors vs. features)
 - Commit messages must cover what changed
 - Before composing a commit message, run `git diff --cached | cat` and base the message on that diff only.
@@ -293,6 +294,9 @@ Strictness
 - Never commit until `make format` and `make check` both pass. If `make format` modifies files, stage those changes before committing.
  - Keep commits minimal and scoped; avoid unrelated changes. Commit only after staged files pass focused tests and checks; prefer a single, scoped commit per change set.
  - After committing, self-verify with `git show --name-only -1` that the commit content matches the message; if not, amend immediately.
+- Never trust claims without evidence: rerun the relevant tests or commands yourself and inspect logs/diffs before proceeding.
+- Avoid introducing env toggles for core behavior; prefer a single deterministic path that matches product expectations.
+- Prevent init-time network/auth side effects (e.g., MCP OAuth) by deferring such work until the first real request unless explicitly required.
 
 ## Key References
 - `examples/` – v1.x modern usage
