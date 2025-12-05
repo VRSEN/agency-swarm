@@ -406,7 +406,8 @@ class TestMetadataDetails:
             return text
 
         agent = Agent(name="ToolAgent", instructions="Use the tool", tools=[sample_tool])
-        agency = Agency(agent, name="ToolAgency", shared_instructions="shared.md")
+        # Use plain text that doesn't look like a file path (no .md extension, no slashes)
+        agency = Agency(agent, name="ToolAgency", shared_instructions="Shared agency guidelines")
 
         structure = agency.get_agency_structure()
 
@@ -414,7 +415,7 @@ class TestMetadataDetails:
         data = agent_node["data"]
         assert data["toolCount"] == 1
         assert data["tools"][0]["name"] == "sample_tool"
-        assert data["instructions"].startswith("shared.md")
+        assert data["instructions"].startswith("Shared agency guidelines")
 
         meta = structure["metadata"]
         assert meta["agencyName"] == "ToolAgency"
