@@ -36,9 +36,9 @@ else:
     OAuthStorageHooksType = Any
     MCPServerOAuthClientType = Any
 
-MCPServerOAuthRuntime: type[Any] | None
-OAuthStorageHooksRuntime: type[Any] | None
-MCPServerOAuthClientRuntime: type[Any] | None
+MCPServerOAuthRuntime: type[Any] | None = None
+OAuthStorageHooksRuntime: type[Any] | None = None
+MCPServerOAuthClientRuntime: type[Any] | None = None
 
 try:  # pragma: no cover - optional dependency
     from agency_swarm.mcp.oauth import (
