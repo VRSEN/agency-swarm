@@ -464,6 +464,24 @@ def _process_oauth_servers(agent: Any, servers: list[Any]) -> None:
             raise
 
 
+def _sync_oauth_client_handlers(persistent: Any, candidate: Any) -> None:
+    """Update cached OAuth client with per-request handlers from a new instance."""
+    if not _OAUTH_AVAILABLE or _MCPServerOAuthClient is None:
+        return
+
+    existing_client = getattr(persistent, "_server", persistent)
+    new_client = getattr(candidate, "_server", candidate)
+
+    if not isinstance(existing_client, _MCPServerOAuthClient) or not isinstance(new_client, _MCPServerOAuthClient):
+        return
+
+    existing_client._redirect_handler = getattr(new_client, "_redirect_handler", None)
+    existing_client._callback_handler = getattr(new_client, "_callback_handler", None)
+    # Ensure next OAuth provider uses the latest handlers
+    if hasattr(existing_client, "_oauth_provider"):
+        existing_client._oauth_provider = None
+
+
 async def attach_persistent_mcp_servers(agency: Any) -> None:
     """Attach and connect persistent MCP servers to all agents in an agency.
 
@@ -488,6 +506,8 @@ async def attach_persistent_mcp_servers(agency: Any) -> None:
             persistent = default_mcp_manager.get(name)
             if persistent is None:
                 persistent = default_mcp_manager.register(srv)
+            else:
+                _sync_oauth_client_handlers(persistent, srv)
             # Replace the reference so future runs reuse the same object and ensure loop‑affine proxy
             replacement = (
                 persistent
@@ -524,6 +544,8 @@ def register_and_connect_agent_servers(agent: Any) -> None:
         if isinstance(name, str) and name != "" and name not in server_names:
             server_names.append(name)
             persistent = default_mcp_manager.get(name) or default_mcp_manager.register(srv)
+            if persistent is not srv:
+                _sync_oauth_client_handlers(persistent, srv)
             if persistent is not servers[i]:
                 servers[i] = persistent
         elif name in server_names:
