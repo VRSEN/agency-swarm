@@ -97,6 +97,14 @@
               "additional-features/few-shot-examples",
               "additional-features/guardrails",
               "additional-features/streaming",
+              {
+                "group": "Voice Agents",
+                "icon": "microphone",
+                "pages": [
+                  "additional-features/voice-agents/overview",
+                  "additional-features/voice-agents/deployment"
+                ]
+              },
               "additional-features/fastapi-integration",
               "additional-features/mcp-tools-server",
               {
