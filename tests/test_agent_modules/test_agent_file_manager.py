@@ -915,69 +915,47 @@ class TestAgentFileManager:
         )
         assert all("Added file" not in record.getMessage() for record in caplog.records)
 
-    def test_read_instructions_class_relative_path(self):
+    def test_read_instructions_class_relative_path(self, tmp_path: Path):
         """Test read_instructions with class-relative path."""
+        # Create instruction file in tmp_path
+        instructions_file = tmp_path / "instructions.md"
+        instructions_file.write_text("Test instructions content")
+
         mock_agent = Mock()
         mock_agent.instructions = "instructions.md"
+        mock_agent._instructions_source_path = None
 
         file_manager = AgentFileManager(mock_agent)
-        file_manager.get_class_folder_path = Mock(return_value="/base/path")
+        file_manager.get_class_folder_path = Mock(return_value=str(tmp_path))
 
-        # Create temporary file to simulate instructions file
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as tmp_file:
-            tmp_file.write("Test instructions content")
-            tmp_file_path = tmp_file.name
+        # Should read instructions from class-relative path
+        file_manager.read_instructions()
 
-        try:
-            with patch("os.path.normpath") as mock_normpath, patch("os.path.isfile") as mock_isfile:
-                # Mock normpath to return our temp file path
-                mock_normpath.return_value = tmp_file_path
-                mock_isfile.return_value = True
+        assert mock_agent.instructions == "Test instructions content"
+        # Source path should be stored as absolute
+        assert mock_agent._instructions_source_path == str(instructions_file)
 
-                # Should read instructions from class-relative path
-                file_manager.read_instructions()
-
-                assert mock_agent.instructions == "Test instructions content"
-                mock_normpath.assert_called_once()
-        finally:
-            os.unlink(tmp_file_path)
-
-    def test_read_instructions_absolute_path(self):
+    def test_read_instructions_absolute_path(self, tmp_path: Path):
         """Test read_instructions with absolute path when class-relative doesn't exist."""
+        # Create instruction file in tmp_path with absolute path
+        instructions_file = tmp_path / "instructions.md"
+        instructions_file.write_text("Absolute path instructions")
+
         mock_agent = Mock()
-        mock_agent.instructions = "instructions.md"
+        mock_agent.instructions = str(instructions_file)  # Absolute path
+        mock_agent._instructions_source_path = None
 
         file_manager = AgentFileManager(mock_agent)
-        file_manager.get_class_folder_path = Mock(return_value="/base/path")
+        # Use a different directory so class-relative check fails
+        file_manager.get_class_folder_path = Mock(return_value="/nonexistent/base/path")
 
-        # Create temporary file to simulate instructions file
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as tmp_file:
-            tmp_file.write("Absolute path instructions")
-            tmp_file_path = tmp_file.name
+        # Should read instructions from absolute path
+        file_manager.read_instructions()
 
-        try:
-            with patch("os.path.normpath") as mock_normpath, patch("os.path.isfile") as mock_isfile:
-                # Mock normpath to return non-existent path first, then existing absolute path
-                mock_normpath.return_value = "/nonexistent/path"
-
-                def isfile_side_effect(path):
-                    if path == "/nonexistent/path":
-                        return False
-                    elif path == "instructions.md":
-                        # Simulate absolute path check by using our temp file
-                        mock_agent.instructions = tmp_file_path
-                        return True
-                    return False
-
-                mock_isfile.side_effect = isfile_side_effect
-
-                # Should read instructions from absolute path
-                file_manager.read_instructions()
-
-                # Should have read from absolute path
-                assert "Absolute path instructions" in mock_agent.instructions
-        finally:
-            os.unlink(tmp_file_path)
+        # Should have read from absolute path
+        assert mock_agent.instructions == "Absolute path instructions"
+        # Source path should be stored
+        assert mock_agent._instructions_source_path == str(instructions_file)
 
     def test_empty_folder_does_not_create_vector_store(self, tmp_path: Path):
         """Test that empty folders or folders with only skippable files don't create vector stores."""

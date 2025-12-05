@@ -1,8 +1,8 @@
 # --- Core Agency class definition ---
 import atexit
 import logging
-import os
 import warnings
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from agents import RunConfig, RunHooks, RunResult, TResponseInputItem
@@ -16,7 +16,7 @@ from agency_swarm.tools.mcp_manager import default_mcp_manager
 from agency_swarm.utils.thread import ThreadLoadCallback, ThreadManager, ThreadSaveCallback
 
 # Import split module functions
-from .helpers import get_class_folder_path, handle_deprecated_agency_args, read_instructions
+from .helpers import _looks_like_file_path, get_class_folder_path, handle_deprecated_agency_args, read_instructions
 from .setup import (
     configure_agents,
     initialize_agent_runtime_state,
@@ -176,18 +176,29 @@ class Agency:
         # --- Assign Core Attributes ---
         self.name = name
 
+        # Initialize source path tracking for hot-reload
+        self._shared_instructions_source_path: str | None = None
+
         # Handle shared instructions - can be a string or a file path
         if shared_instructions:
-            # Check if it's a file path relative to the class location
-            class_relative_path = os.path.join(get_class_folder_path(self), shared_instructions)
-            if os.path.isfile(class_relative_path):
-                read_instructions(self, class_relative_path)
-            elif os.path.isfile(shared_instructions):
-                # It's an absolute path or relative to CWD
-                read_instructions(self, shared_instructions)
+            shared_value = shared_instructions
+            class_resolved = (Path(get_class_folder_path(self)) / shared_value).expanduser().resolve(strict=False)
+            direct_resolved = Path(shared_value).expanduser().resolve(strict=False)
+            candidate_paths = [class_resolved]
+            if direct_resolved != class_resolved:
+                candidate_paths.append(direct_resolved)
+
+            for candidate in candidate_paths:
+                if candidate.is_file():
+                    read_instructions(self, str(candidate))
+                    break
             else:
-                # It's actual instruction text, not a file path
-                self.shared_instructions = shared_instructions
+                if isinstance(shared_value, str) and _looks_like_file_path(shared_value):
+                    # Track intended path for future hot-reload but preserve provided text
+                    self._shared_instructions_source_path = str(class_resolved)
+                    self.shared_instructions = shared_value
+                else:
+                    self.shared_instructions = shared_value
         else:
             self.shared_instructions = ""
 

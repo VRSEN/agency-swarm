@@ -11,6 +11,7 @@ from openai.types import FileObject
 from openai.types.responses.tool_param import CodeInterpreter
 from openai.types.vector_stores.vector_store_file import LastError, VectorStoreFile
 
+from agency_swarm.agency.helpers import _looks_like_file_path
 from agency_swarm.agent.file_sync import FileSync
 
 if TYPE_CHECKING:
@@ -449,21 +450,72 @@ class AgentFileManager:
                 raise AgentsException(f"Failed to add file {file_id} to Vector Store {vector_store_id}: {e}") from e
 
     def read_instructions(self):
-        if not self.agent.instructions:
+        """Read instructions from file path and store the source path for hot-reloading.
+
+        If instructions is a file path, reads the content and stores the resolved
+        absolute path in agent._instructions_source_path for later refresh_instructions() calls.
+        Callable or non-path instructions are skipped (handled elsewhere).
+        """
+        # Initialize source path tracking if not present
+        if not hasattr(self.agent, "_instructions_source_path"):
+            self.agent._instructions_source_path = None
+
+        instructions_value = self.agent.instructions
+        if instructions_value is None:
+            return
+        if callable(instructions_value):
+            self.agent._instructions_source_path = None
+            return
+        if not isinstance(instructions_value, str | os.PathLike):
+            self.agent._instructions_source_path = None
             return
 
-        # Try class-relative path first
-        class_instructions_path = os.path.normpath(os.path.join(self.get_class_folder_path(), self.agent.instructions))
-        if os.path.isfile(class_instructions_path):
-            with open(class_instructions_path) as f:
-                self.agent.instructions = f.read()
-        elif os.path.isfile(self.agent.instructions):
-            # Try as absolute or CWD-relative path
-            with open(self.agent.instructions) as f:
-                self.agent.instructions = f.read()
-        else:
-            # Keep original instructions if it's not a file path
+        instructions_str = os.fspath(instructions_value).strip()
+        if not instructions_str:
+            self.agent._instructions_source_path = None
             return
+
+        class_instructions_path = (
+            (Path(self.get_class_folder_path()) / instructions_str).expanduser().resolve(strict=False)
+        )
+        direct_path = Path(instructions_str).expanduser().resolve(strict=False)
+        candidate_paths = [class_instructions_path]
+        if direct_path != class_instructions_path:
+            candidate_paths.append(direct_path)
+
+        for path in candidate_paths:
+            if path.is_file():
+                self.agent._instructions_source_path = str(path)
+                with open(path) as f:
+                    self.agent.instructions = f.read()
+                return
+
+        if _looks_like_file_path(instructions_str):
+            # Track intended path for future hot-reload but keep provided text
+            self.agent._instructions_source_path = str(class_instructions_path)
+            return
+
+        self.agent._instructions_source_path = None
+
+    def refresh_instructions(self):
+        """Re-read instructions from the source file if one was used during initialization.
+
+        This enables hot-reloading of instructions without restarting the process.
+        If no source file path is stored, this method is a no-op.
+        """
+        source_path = getattr(self.agent, "_instructions_source_path", None)
+        if not source_path:
+            return
+
+        if os.path.isfile(source_path):
+            with open(source_path) as f:
+                self.agent.instructions = f.read()
+            logger.debug(f"Agent {self.agent.name}: Refreshed instructions from {source_path}")
+        else:
+            logger.warning(
+                f"Agent {self.agent.name}: Instructions source file {source_path} not found, "
+                "keeping existing instructions"
+            )
 
     def get_class_folder_path(self):
         """Get the directory where the agent was instantiated for relative path resolution."""
