@@ -99,7 +99,7 @@ OAuth client flows are implemented by the MCP Python SDK; see https://github.com
 </ParamField>
 
 <ParamField param="redirect_uri" type="string">
-  OAuth callback URL. Defaults to `http://localhost:8000/auth/callback`.
+  OAuth callback URL. Resolution order: explicit param → `{NAME}_REDIRECT_URI` env → `OAUTH_CALLBACK_URL` env → `http://localhost:8000/auth/callback`.
 </ParamField>
 
 <ParamField param="client_id" type="string">
@@ -112,6 +112,22 @@ OAuth client flows are implemented by the MCP Python SDK; see https://github.com
 
 <ParamField param="auth_server_url" type="string">
   Set when authorization endpoints live on a different origin than the MCP endpoint.
+</ParamField>
+
+<ParamField param="cache_dir" type="Path">
+  Directory for token storage. Uses `~/.agency-swarm/mcp-tokens` if not set.
+</ParamField>
+
+<ParamField param="storage" type="object">
+  Custom token storage implementation. Overrides `cache_dir` when provided.
+</ParamField>
+
+<ParamField param="storage_factory" type="Callable[[str, str], object]">
+  Factory function to create storage per-request for multi-tenant scenarios.
+</ParamField>
+
+<ParamField param="client_metadata" type="OAuthClientMetadata">
+  Full OAuth client metadata. Overrides the auto-generated metadata from simple params.
 </ParamField>
 
 ## Token storage and isolation
@@ -167,7 +183,7 @@ from agency_swarm import Agent
 from agency_swarm.mcp import MCPServerOAuth
 
 async def send_redirect(auth_url: str) -> None:
-    emit_sse("oauth_required", {"url": auth_url})
+    emit_sse("oauth_redirect", {"auth_url": auth_url})
 
 async def wait_for_code() -> tuple[str, str | None]:
     return await poll_frontend()

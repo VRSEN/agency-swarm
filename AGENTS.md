@@ -297,6 +297,9 @@ Strictness
 - Never commit until `make format` and `make check` both pass. If `make format` modifies files, stage those changes before committing.
  - Keep commits minimal and scoped; avoid unrelated changes. Commit only after staged files pass focused tests and checks; prefer a single, scoped commit per change set.
  - After committing, self-verify with `git show --name-only -1` that the commit content matches the message; if not, amend immediately.
+- Never trust claims without evidence: rerun the relevant tests or commands yourself and inspect logs/diffs before proceeding.
+- Avoid introducing env toggles for core behavior; prefer a single deterministic path that matches product expectations.
+- Prevent init-time network/auth side effects (e.g., MCP OAuth) by deferring such work until the first real request unless explicitly required.
 
 ## Key References
 - `examples/` – v1.x modern usage
