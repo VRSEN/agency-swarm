@@ -4,6 +4,9 @@ from typing import Any
 from rich.console import Console, Group
 from rich.live import Live
 from rich.markdown import Markdown
+from rich.markup import escape as rich_escape
+from rich.panel import Panel
+from rich.syntax import Syntax
 
 
 class ConsoleEventAdapter:
@@ -61,12 +64,14 @@ class ConsoleEventAdapter:
         sender_emoji = "👤" if sender.lower() == "user" else "🤖"
         receiver_emoji = "👤" if receiver.lower() == "user" else "🤖"
         if msg_type == "function":
-            header = f"{sender_emoji} {sender} 🛠️ Executing Function"
+            header = f"{sender_emoji} {sender} 🛠️  Executing Function"
         elif msg_type == "function_output":
             header = f"{sender} ⚙️ Function Output"
         else:
             header = f"{sender_emoji} {sender} → {receiver_emoji} {receiver}"
-        self.console.print(f"[bold]{header}[/bold]\n{content}")
+        # Escape content for function/function_output to prevent Rich from interpreting brackets as markup
+        display_content = rich_escape(content) if msg_type in ("function", "function_output") else content
+        self.console.print(f"[bold]{header}[/bold]\n{display_content}")
         if add_separator:
             self.console.rule()
 
@@ -263,6 +268,63 @@ class ConsoleEventAdapter:
         self._update_console("function", agent_name, "user", content)
         self.mcp_calls.pop(data.item_id)
 
+    def _format_apply_patch_call(self, item: Any, agent_name: str) -> bool:
+        """Format and display an apply_patch_call with nicely formatted diff. Returns True if content was displayed."""
+        operation = getattr(item, "operation", None)
+        if operation is None:
+            return False
+
+        op_type = getattr(operation, "type", "unknown")
+        path = getattr(operation, "path", "unknown")
+        diff = getattr(operation, "diff", None)
+
+        op_labels = {"create_file": "Creating", "update_file": "Updating", "delete_file": "Deleting"}
+        label = op_labels.get(op_type, "Patching")
+
+        header = f"{agent_name} 🛠️  Apply Patch"
+        self.console.print(f"[bold]{header}[/bold]")
+        self.console.print(f"{label}: [cyan]{rich_escape(path)}[/cyan]")
+
+        if diff:
+            syntax = Syntax(diff, "diff", theme="monokai", line_numbers=False, word_wrap=True)
+            panel = Panel(syntax, title="[bold]Diff[/bold]", border_style="dim", padding=(0, 1))
+            self.console.print(panel)
+
+        return True
+
+    def _format_shell_call(self, item: Any, agent_name: str, is_local: bool = False) -> bool:
+        """Format and display a shell_call or local_shell_call. Returns True if content was displayed."""
+        action = getattr(item, "action", None)
+        if action is None:
+            return False
+
+        commands = getattr(action, "command", None) or getattr(action, "commands", [])
+        if not commands:
+            return False
+
+        working_dir = getattr(action, "working_directory", None) if is_local else None
+        tool_name = "Local Shell" if is_local else "Shell"
+        header = f"{agent_name} 🛠️  {tool_name}"
+        self.console.print(f"[bold]{header}[/bold]")
+
+        if working_dir:
+            self.console.print(f"Working directory: [cyan]{rich_escape(working_dir)}[/cyan]")
+
+        if is_local:
+            commands_text = f"$ {' '.join(commands)}"
+        else:
+            commands_text = "\n".join(f"$ {cmd}" for cmd in commands)
+
+        syntax = Syntax(commands_text, "bash", theme="monokai", line_numbers=False, word_wrap=True)
+        panel = Panel(
+            syntax,
+            title="[bold]Command[/bold]" if is_local else "[bold]Commands[/bold]",
+            border_style="dim",
+            padding=(0, 1),
+        )
+        self.console.print(panel)
+        return True
+
     def _handle_output_item_done(self, data: Any, agent_name: str, speaking_to: str) -> None:
         if self.message_output is not None:
             try:
@@ -306,6 +368,17 @@ class ConsoleEventAdapter:
                 self.reasoning_buffer = ""
 
         item = data.item
+        if getattr(item, "type", "") == "apply_patch_call":
+            if self._format_apply_patch_call(item, agent_name):
+                self.console.rule()
+            return
+
+        item_type = getattr(item, "type", "")
+        if item_type in ("shell_call", "local_shell_call"):
+            if self._format_shell_call(item, agent_name, is_local=(item_type == "local_shell_call")):
+                self.console.rule()
+            return
+
         if hasattr(item, "arguments"):
             if item.name.startswith("send_message"):
                 args = json.loads(item.arguments)

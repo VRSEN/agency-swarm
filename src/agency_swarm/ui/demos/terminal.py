@@ -19,6 +19,7 @@ from prompt_toolkit.layout.controls import BufferControl, FormattedTextControl
 from prompt_toolkit.layout.layout import Layout
 from prompt_toolkit.styles import Style
 from prompt_toolkit.widgets import Frame
+from rich.markup import escape as rich_escape
 
 from agency_swarm.agency.core import Agency
 from agency_swarm.utils import is_reasoning_model
@@ -50,7 +51,6 @@ class DropdownMenu:
         if items:
             self.items = items
             self.max_label_width = max(len(item.label) for item in items)
-            # Preserve selection when possible
             if self.selected_index >= len(items):
                 self.selected_index = 0
             self.visible = True
@@ -100,9 +100,7 @@ def start_terminal(
     if not recipient_agents:
         raise ValueError("Cannot start terminal demo without entry points. Please specify at least one entry point.")
 
-    # Auto-detect show_reasoning if not explicitly provided
     if show_reasoning is None:
-        # Check if any agent in the agency uses a reasoning model
         show_reasoning = any(is_reasoning_model(agent.model) for agent in agency_instance.agents.values())
 
     chat_id = TerminalDemoLauncher.start_new_chat(agency_instance)
@@ -169,7 +167,6 @@ def start_terminal(
             chat_id = chosen
             event_converter.console.print(f"Resumed chat: {chat_id}")
         event_converter.console.rule()
-        # Restore last non-default assistant speaker as active handoff recipient
         try:
             message_history = agency_instance.thread_manager.get_all_messages()
             event_converter.handoff_agent = None
@@ -189,7 +186,6 @@ def start_terminal(
                         event_converter.handoff_agent = None
                     break
         except Exception:
-            # Non-fatal; resume continues without restoring handoff
             event_converter.handoff_agent = None
 
     def _print_status() -> None:
@@ -244,7 +240,6 @@ def start_terminal(
 
         if message.startswith("@"):
             mentioned_agent = agent_match.group(1) if agent_match is not None else None
-            # Sort from longest to shortest to avoid matching partial names
             sorted_agents = sorted(recipient_agents, key=len, reverse=True)
             lowered_message = message.lower()
             for agent in sorted_agents:
@@ -265,14 +260,12 @@ def start_terminal(
                 logger.error(f"Recipient agent {mentioned_agent or 'Unknown'} not found.", exc_info=True)
                 return False
 
-        # If only an agent mention with no message, switch to that agent without sending
         if recipient_agent is not None and not message:
             event_converter.handoff_agent = recipient_agent
             event_converter.console.print(f"[cyan]Switched to {recipient_agent}[/cyan]")
             event_converter.console.rule()
             return False
 
-        # Clear handoff to correctly display recipient when an explicit target is used
         if recipient_agent is not None and recipient_agent != event_converter.handoff_agent:
             event_converter.handoff_agent = None
 
@@ -295,7 +288,6 @@ def start_terminal(
         return False
 
     async def main_loop():
-        # prompt_toolkit is a mandatory dependency; imported at module load
         nonlocal current_default_recipient
 
         command_help: dict[str, str] = {
@@ -309,9 +301,7 @@ def start_terminal(
 
         command_display_overrides: dict[str, str] = {
             "/exit": "/exit (quit)",
-            "/new": "/new",
             "/compact": "/compact [instructions]",
-            "/resume": "/resume",
         }
 
         dropdown_style = Style.from_dict(
@@ -464,7 +454,6 @@ def start_terminal(
             event.app.exit(result=result_text)
 
         while True:
-            # Determine the active recipient for display
             active_recipient = (
                 event_converter.handoff_agent
                 if event_converter.handoff_agent is not None
@@ -491,7 +480,7 @@ def start_terminal(
             application.invalidate()
 
             if message_text:
-                event_converter.console.print(f"👤 USER -> 🤖 {active_recipient}: {message_text}")
+                event_converter.console.print(f"👤 USER -> 🤖 {active_recipient}: {rich_escape(message_text)}")
 
             event_converter.console.rule()
             should_exit = await handle_message(message_text)
