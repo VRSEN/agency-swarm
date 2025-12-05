@@ -376,12 +376,23 @@ def make_agui_chat_endpoint(
 
         encoder = EventEncoder()
 
-        if request.chat_history is not None:
+        # Determine the message source and extract input message
+        # Priority: chat_history (if has content) > messages (if has content)
+        has_chat_history = request.chat_history is not None and len(request.chat_history) > 0
+        has_messages = request.messages is not None and len(request.messages) > 0
+
+        if has_chat_history:
             # Chat history is now a flat list
             def load_callback() -> list:
                 return request.chat_history
 
-        elif request.messages is not None:
+            # Extract input message from last chat_history entry
+            last_chat_msg = request.chat_history[-1]
+            input_message = last_chat_msg.get("content", "")
+            # Snapshot is empty since we're using chat_history format
+            initial_snapshot: list = []
+
+        elif has_messages:
             # Pull the default agent from the agency
             agency = agency_factory()
             default_agent = agency.entry_points[0]
@@ -399,10 +410,18 @@ def make_agui_chat_endpoint(
                         msg["timestamp"] = int(time.time() * 1000)
                 return agui_messages
 
-        else:
+            # Extract input message from last AG-UI message
+            input_message = request.messages[-1].content
+            # Store snapshot in dict format for AG-UI protocol
+            initial_snapshot = [message.model_dump() for message in request.messages]
 
+        else:
+            # No messages available - will return error in event_generator
             def load_callback() -> list:
                 return []
+
+            input_message = None
+            initial_snapshot = []
 
         oauth_runtime = None
         if oauth_config:
@@ -424,13 +443,19 @@ def make_agui_chat_endpoint(
             )
 
             try:
+                # Handle error case: no messages available
+                if input_message is None:
+                    raise ValueError(
+                        "No messages provided. Either 'messages' or 'chat_history' must contain at least one message."
+                    )
+
                 # Create AguiAdapter instance with clean state for this request
                 agui_adapter = AguiAdapter()
 
-                # Store in dict format to avoid converting to classes
-                snapshot_messages = [message.model_dump() for message in request.messages]
+                # Use the pre-computed snapshot
+                snapshot_messages = list(initial_snapshot)
                 async for stream_event in agency.get_response_stream(
-                    message=request.messages[-1].content,
+                    message=input_message,
                     context_override=request.user_context,
                     additional_instructions=request.additional_instructions,
                 ):
