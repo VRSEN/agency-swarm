@@ -242,8 +242,8 @@ class MCPServerOAuth:
     Attributes:
         url: MCP server URL
         name: Unique identifier for this server
-        client_id: OAuth client ID (reads from env if None)
-        client_secret: OAuth client secret (reads from env if None)
+        client_id: OAuth client ID (reads from env if None and use_env_credentials=True)
+        client_secret: OAuth client secret (reads from env if None and use_env_credentials=True)
         scopes: List of OAuth scopes to request
         redirect_uri: OAuth redirect URI for callback
         cache_dir: Directory for token storage (uses default if None)
@@ -251,6 +251,8 @@ class MCPServerOAuth:
         storage_factory: Factory function to create storage per-request (for multi-tenant)
         client_metadata: Full OAuth client metadata (overrides simple params)
         auth_server_url: Base URL for OAuth discovery when different from MCP endpoint
+        use_env_credentials: If False, don't read client_id/secret from environment.
+            Set to False for self-hosted servers using Dynamic Client Registration (DCR).
     """
 
     DEFAULT_REDIRECT_URI: ClassVar[str] = "http://localhost:8000/auth/callback"
@@ -266,11 +268,15 @@ class MCPServerOAuth:
     storage_factory: Callable[[str, str], Any] | None = None
     client_metadata: OAuthClientMetadata | None = None
     auth_server_url: str | None = None
+    use_env_credentials: bool = True
 
     def _resolve_client_id(self) -> str | None:
         """Return the client_id if provided explicitly or via environment."""
         if self.client_id:
             return self.client_id
+
+        if not self.use_env_credentials:
+            return None
 
         env_var = f"{self.name.upper().replace('-', '_')}_CLIENT_ID"
         return os.getenv(env_var)
@@ -290,6 +296,9 @@ class MCPServerOAuth:
         """Get client secret from config or environment."""
         if self.client_secret:
             return self.client_secret
+
+        if not self.use_env_credentials:
+            return None
 
         # Try server-specific env var
         env_var = f"{self.name.upper().replace('-', '_')}_CLIENT_SECRET"

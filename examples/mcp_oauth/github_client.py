@@ -54,12 +54,15 @@ print(f"\nTokens will be stored in: {SERVER_CACHE_DIR / 'tokens.json'}")
 print("=" * 80)
 
 # Create OAuth-enabled MCP Server configuration
+# use_env_credentials=False prevents picking up GITHUB_CLIENT_ID from .env
+# The client will use Dynamic Client Registration (DCR) with the FastMCP server
 oauth_server = MCPServerOAuth(
     url=f"{SERVER_URL}/mcp",
     name="github",
     cache_dir=CACHE_DIR,
     scopes=["user"],  # GitHub OAuth scopes
     redirect_uri="http://localhost:8000/auth/callback",
+    use_env_credentials=False,  # Use DCR, don't read GitHub creds from env
 )
 
 

@@ -189,6 +189,22 @@ class TestMCPServerOAuth:
         with pytest.raises(ValueError, match="No client_id provided"):
             config.get_client_id()
 
+    def test_use_env_credentials_false_ignores_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """MCPServerOAuth ignores env vars when use_env_credentials=False."""
+        monkeypatch.setenv("TEST_SERVER_CLIENT_ID", "env_client_id")
+        monkeypatch.setenv("TEST_SERVER_CLIENT_SECRET", "env_client_secret")
+
+        config = MCPServerOAuth(
+            url="http://localhost:8001/mcp",
+            name="test-server",
+            use_env_credentials=False,
+        )
+
+        # Should return None since env is ignored and no explicit creds
+        assert config.get_client_id_optional() is None
+        assert config.get_client_secret() is None
+        assert config.build_client_information() is None
+
     def test_oauth_config_builds_client_metadata(self) -> None:
         """MCPServerOAuth builds correct client metadata."""
         config = MCPServerOAuth(

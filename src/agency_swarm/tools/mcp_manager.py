@@ -475,11 +475,13 @@ def _sync_oauth_client_handlers(persistent: Any, candidate: Any) -> None:
     if not isinstance(existing_client, _MCPServerOAuthClient) or not isinstance(new_client, _MCPServerOAuthClient):
         return
 
-    existing_client._redirect_handler = getattr(new_client, "_redirect_handler", None)
-    existing_client._callback_handler = getattr(new_client, "_callback_handler", None)
+    # Sync handlers from the new instance to the cached one (cast to Any for dynamic attr access)
+    client: Any = existing_client
+    client._redirect_handler = getattr(new_client, "_redirect_handler", None)
+    client._callback_handler = getattr(new_client, "_callback_handler", None)
     # Ensure next OAuth provider uses the latest handlers
-    if hasattr(existing_client, "_oauth_provider"):
-        existing_client._oauth_provider = None
+    if hasattr(client, "_oauth_provider"):
+        client._oauth_provider = None
 
 
 async def attach_persistent_mcp_servers(agency: Any) -> None:
