@@ -430,9 +430,25 @@ def make_agui_chat_endpoint(
         # Choose / build an agent – here we just create a demo agent each time.
         agency = agency_factory(load_threads_callback=load_callback)
         oauth_runtime = _prepare_oauth_runtime(agency, oauth_runtime, user_id)
-        await attach_persistent_mcp_servers(agency)
 
         async def event_generator() -> AsyncGenerator[str]:
+            queue_task: asyncio.Task | None = (
+                asyncio.create_task(oauth_runtime.next_event()) if oauth_runtime is not None else None
+            )
+
+            async def _emit_oauth(payload: dict[str, Any]) -> AsyncGenerator[str]:
+                event_type = payload.get("type")
+                data = {
+                    "state": payload.get("state"),
+                    "server": payload.get("server"),
+                }
+                if event_type == "oauth_redirect":
+                    data["auth_url"] = payload.get("auth_url")
+                    name = "oauth_redirect"
+                else:
+                    name = "oauth_status"
+                yield f"event: {name}\ndata: {json.dumps(data)}\n\n"
+
             # Emit RUN_STARTED first.
             yield encoder.encode(
                 RunStartedEvent(
@@ -442,6 +458,8 @@ def make_agui_chat_endpoint(
                 )
             )
 
+            stream_events: Any | None = None
+            stream_task: asyncio.Task | None = None
             try:
                 # Handle error case: no messages available
                 if input_message is None:
@@ -449,30 +467,82 @@ def make_agui_chat_endpoint(
                         "No messages provided. Either 'messages' or 'chat_history' must contain at least one message."
                     )
 
+                if oauth_runtime:
+                    connect_task = asyncio.create_task(attach_persistent_mcp_servers(agency))
+                    while True:
+                        wait_set = {connect_task}
+                        if queue_task:
+                            wait_set.add(queue_task)
+                        done, _ = await asyncio.wait(wait_set, return_when=asyncio.FIRST_COMPLETED)
+
+                        if queue_task and queue_task in done:
+                            try:
+                                payload = queue_task.result()
+                                async for oauth_chunk in _emit_oauth(payload):
+                                    yield oauth_chunk
+                            finally:
+                                queue_task = asyncio.create_task(oauth_runtime.next_event())
+
+                        if connect_task in done:
+                            try:
+                                await connect_task
+                            except OAuthFlowError as exc:
+                                if queue_task:
+                                    queue_task.cancel()
+                                yield encoder.encode(RunErrorEvent(type=EventType.RUN_ERROR, message=str(exc)))
+                                return
+                            break
+                else:
+                    await attach_persistent_mcp_servers(agency)
+
                 # Create AguiAdapter instance with clean state for this request
                 agui_adapter = AguiAdapter()
 
                 # Use the pre-computed snapshot
                 snapshot_messages = list(initial_snapshot)
-                async for stream_event in agency.get_response_stream(
+                stream_events = agency.get_response_stream(
                     message=input_message,
                     context_override=request.user_context,
                     additional_instructions=request.additional_instructions,
-                ):
-                    agui_event = agui_adapter.openai_to_agui_events(
-                        stream_event,
-                        run_id=request.run_id,
-                    )
-                    if agui_event:
-                        agui_events: list[BaseEvent] = agui_event if isinstance(agui_event, list) else [agui_event]
-                        for agui_event_item in agui_events:
-                            if isinstance(agui_event_item, MessagesSnapshotEvent):
-                                snapshot_messages.append(agui_event_item.messages[0].model_dump())
-                                yield encoder.encode(
-                                    MessagesSnapshotEvent(type=EventType.MESSAGES_SNAPSHOT, messages=snapshot_messages)
-                                )
-                            else:
-                                yield encoder.encode(agui_event_item)
+                )
+                stream_task = asyncio.create_task(stream_events.__anext__())
+                while stream_task:
+                    wait_set = {stream_task}
+                    if queue_task:
+                        wait_set.add(queue_task)
+
+                    done, _ = await asyncio.wait(wait_set, return_when=asyncio.FIRST_COMPLETED)
+
+                    if queue_task and queue_task in done:
+                        try:
+                            payload = queue_task.result()
+                            async for oauth_chunk in _emit_oauth(payload):
+                                yield oauth_chunk
+                        finally:
+                            queue_task = asyncio.create_task(oauth_runtime.next_event()) if oauth_runtime else None
+
+                    if stream_task in done:
+                        try:
+                            stream_event = stream_task.result()
+                        except StopAsyncIteration:
+                            break
+                        agui_event = agui_adapter.openai_to_agui_events(
+                            stream_event,
+                            run_id=request.run_id,
+                        )
+                        if agui_event:
+                            agui_events: list[BaseEvent] = agui_event if isinstance(agui_event, list) else [agui_event]
+                            for agui_event_item in agui_events:
+                                if isinstance(agui_event_item, MessagesSnapshotEvent):
+                                    snapshot_messages.append(agui_event_item.messages[0].model_dump())
+                                    yield encoder.encode(
+                                        MessagesSnapshotEvent(
+                                            type=EventType.MESSAGES_SNAPSHOT, messages=snapshot_messages
+                                        )
+                                    )
+                                else:
+                                    yield encoder.encode(agui_event_item)
+                        stream_task = asyncio.create_task(stream_events.__anext__())
 
                 yield encoder.encode(
                     RunFinishedEvent(
@@ -489,6 +559,18 @@ def make_agui_chat_endpoint(
                 tb_str = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
                 error_message = f"{str(exc)}\n\nTraceback:\n{tb_str}"
                 yield encoder.encode(RunErrorEvent(type=EventType.RUN_ERROR, message=error_message))
+            finally:
+                if queue_task and not queue_task.done():
+                    queue_task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await queue_task
+                if stream_task and not stream_task.done():
+                    stream_task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await stream_task
+                if stream_events:
+                    with contextlib.suppress(Exception):
+                        await stream_events.aclose()
 
         return StreamingResponse(event_generator(), media_type=encoder.get_content_type())
 
