@@ -5,7 +5,12 @@ from types import SimpleNamespace
 import pytest
 
 from agency_swarm.mcp import MCPServerOAuth, MCPServerOAuthClient
-from agency_swarm.tools.mcp_manager import LoopAffineAsyncProxy, PersistentMCPServerManager
+from agency_swarm.tools.mcp_manager import (
+    LoopAffineAsyncProxy,
+    PersistentMCPServerManager,
+    attach_persistent_mcp_servers,
+    default_mcp_manager,
+)
 
 
 class _DummyServer:
@@ -114,3 +119,43 @@ def test_update_oauth_cache_dir_updates_clients(tmp_path: Path) -> None:
     assert server.cache_dir == tmp_path
     assert client.oauth_config.cache_dir == tmp_path
     assert client._oauth_provider.storage.base_cache_dir == tmp_path
+
+
+@pytest.mark.asyncio
+async def test_attach_persistent_updates_oauth_handlers_per_request() -> None:
+    """Persistent OAuth client should adopt per-request handlers before reuse."""
+    await default_mcp_manager.shutdown()
+
+    try:
+        first_agent = SimpleNamespace(
+            mcp_servers=[MCPServerOAuth(url="http://localhost:8001/mcp", name="github")],
+            mcp_oauth_handler_factory=lambda server_name: {
+                "redirect": lambda auth_url: ("req1", auth_url, server_name),
+                "callback": lambda: ("code1", server_name),
+            },
+        )
+        first_agency = SimpleNamespace(agents={"a": first_agent})
+        await attach_persistent_mcp_servers(first_agency)
+
+        first_client = default_mcp_manager.get("github")
+        first_redirect = getattr(first_client, "_redirect_handler", None)
+
+        second_agent = SimpleNamespace(
+            mcp_servers=[MCPServerOAuth(url="http://localhost:8001/mcp", name="github")],
+            mcp_oauth_handler_factory=lambda server_name: {
+                "redirect": lambda auth_url: ("req2", auth_url, server_name),
+                "callback": lambda: ("code2", server_name),
+            },
+        )
+        second_agency = SimpleNamespace(agents={"a": second_agent})
+        await attach_persistent_mcp_servers(second_agency)
+
+        reused_client = default_mcp_manager.get("github")
+        reused_redirect = getattr(reused_client, "_redirect_handler", None)
+
+        assert reused_client is first_client
+        assert reused_redirect is not None
+        assert reused_redirect is not first_redirect
+        assert reused_redirect("auth-url") == ("req2", "auth-url", "github")
+    finally:
+        await default_mcp_manager.shutdown()
