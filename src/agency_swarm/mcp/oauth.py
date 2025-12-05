@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any, ClassVar
 from urllib.parse import parse_qs, urlparse, urlsplit
 
+from agents import RunHooks
 from mcp.client.auth import OAuthClientProvider
 from mcp.shared.auth import (
     OAuthClientInformationFull,
@@ -204,7 +205,7 @@ class FileTokenStorage:
             logger.exception(f"Failed to save client info to {client_file}")
 
 
-class OAuthStorageHooks:
+class OAuthStorageHooks(RunHooks):  # type: ignore[type-arg]
     """RunHooks implementation for OAuth token storage.
 
     Sets the user_id contextvar from MasterContext at the start of each run,
