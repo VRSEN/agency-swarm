@@ -15,7 +15,7 @@ Prerequisites:
        ```bash
        export GITHUB_CLIENT_ID="your_github_client_id"
        export GITHUB_CLIENT_SECRET="your_github_client_secret"
-       python examples/utils/oauth_mcp_server.py
+       python examples/mcp_oauth/github_server.py
        ```
 
     3. In another terminal (Terminal 2), run this example. No GitHub environment
@@ -27,7 +27,7 @@ Prerequisites:
 The example will:
     - Register itself with the MCP server automatically
     - Open your browser for OAuth authentication
-    - Store tokens in ./data/oauth-tokens/default/oauth-test-server/ by default
+    - Store tokens in ./data/oauth-tokens/default/github/ by default
     - Reuse tokens on subsequent runs
     - Demonstrate using OAuth-protected MCP tools
 """
@@ -43,7 +43,7 @@ from agency_swarm.mcp.oauth import MCPServerOAuth, _listen_for_callback_once
 SERVER_URL = os.getenv("MCP_SERVER_URL", "http://localhost:8001")
 CACHE_DIR = Path(os.getenv("MCP_TOKEN_CACHE_DIR", "./data/oauth-tokens")).expanduser()
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
-SERVER_CACHE_DIR = CACHE_DIR / "default" / "oauth-test-server"
+SERVER_CACHE_DIR = CACHE_DIR / "default" / "github"
 
 print("=" * 80)
 print("Agency Swarm - OAuth MCP Example")
@@ -56,7 +56,7 @@ print("=" * 80)
 # Create OAuth-enabled MCP Server configuration
 oauth_server = MCPServerOAuth(
     url=f"{SERVER_URL}/mcp",
-    name="oauth-test-server",
+    name="github",
     cache_dir=CACHE_DIR,
     scopes=["user"],  # GitHub OAuth scopes
     redirect_uri="http://localhost:8000/auth/callback",
@@ -130,7 +130,7 @@ async def main():
     except Exception as e:
         print(f"\n\n❌ Error: {e}")
         print("\nTroubleshooting:")
-        print("  1. Make sure the OAuth server is running: python examples/utils/oauth_mcp_server.py")
+        print("  1. Make sure the OAuth server is running: python examples/mcp_oauth/github_server.py")
         print(
             "  2. Verify the GitHub OAuth App callback matches the FastMCP server: http://localhost:8001/auth/callback"
         )
@@ -149,7 +149,7 @@ if __name__ == "__main__":
     print("\n" + "=" * 80)
     print("NOTE: This example requires:")
     print("  1. GitHub OAuth App created at https://github.com/settings/developers")
-    print("  2. OAuth test server running (examples/utils/oauth_mcp_server.py)")
+    print("  2. OAuth test server running (examples/mcp_oauth/github_server.py)")
     print("     - The GitHub credentials are only needed in the server terminal.")
     print("=" * 80 + "\n")
 
