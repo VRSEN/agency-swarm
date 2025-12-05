@@ -32,6 +32,7 @@ class MCPServerOAuthClient:
         """
         self.oauth_config = oauth_config
         self.name = oauth_config.name  # Required by mcp_manager
+        self.use_structured_content = False  # Required by Agents SDK MCP util
         self.session: ClientSession | None = None
         self._oauth_provider: Any = None
         self._transport_context: Any = None
