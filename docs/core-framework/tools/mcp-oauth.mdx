@@ -1,43 +1,57 @@
 ---
 title: 'OAuth for MCP Servers'
-description: 'Connect your agents to OAuth-protected services like Notion, GitHub, and Google Drive using MCP.'
+description: 'Let your users connect their own accounts (Gmail, GitHub, Notion) to your AI agents.'
 icon: "key"
 ---
 
-Connect OAuth-enabled MCP servers so agents can reach user-owned data (GitHub, Notion, Google Drive). This page gives a fast local setup and the few knobs you need to adjust.
+## What is this?
 
-## Quick start (desktop/localhost)
+This feature lets **your users** connect their personal accounts to AI agents you build. When a user wants your agent to access their Gmail, GitHub, or Notion, they simply click "Authorize" in their browser—just like signing into any app. The agent then stores their credentials and can access their data on their behalf.
 
-1) Register an OAuth app with your provider and set the redirect URI to `http://localhost:8000/auth/callback`.
-2) Export your credentials:
-```bash
-export GITHUB_CLIENT_ID="Iv1.abc123..."
-export GITHUB_CLIENT_SECRET="secret123..."
-```
-3) Configure the server and agent:
+**Example:** You build a productivity agent. A user asks it to "summarize my unread emails." The agent prompts the user to authorize Gmail access. They click approve, and the agent can now read their inbox. Next time, it just works—no login required until the token expires.
+
+## Why use this?
+
+- **Users authenticate themselves** - You don't need their passwords or API keys
+- **Tokens are stored per user** - Each user's credentials are isolated
+- **Automatic refresh** - Tokens renew automatically; users only re-authorize when needed
+- **Works with any OAuth provider** - GitHub, Google, Notion, and more
+
+## Two types of MCP servers
+
+**Hosted servers** (like Notion) handle OAuth for you—just connect:
 ```python
 from agency_swarm import Agent, Agency
 from agency_swarm.mcp import MCPServerOAuth
 
-github = MCPServerOAuth(
-    url="http://localhost:8001/mcp",
-    name="github",  # Drives env var names
-    scopes=["repo", "user"],
-    redirect_uri="http://localhost:8000/auth/callback",
-)
+notion = MCPServerOAuth(url="https://mcp.notion.com/mcp", name="notion")
 
-agent = Agent(
-    name="GitHubAgent",
-    mcp_servers=[github],
-)
-
+agent = Agent(name="NotionAgent", mcp_servers=[notion])
 agency = Agency([agent])
-print(agency.get_response("List my GitHub repositories"))
+agency.get_response("List my recent Notion pages")  # Browser opens for authorization
+```
+
+**Self-hosted servers** (GitHub, Google) require you to run a FastMCP server with your OAuth credentials:
+```bash
+# Terminal 1: Start the MCP server with your OAuth app credentials
+export GITHUB_CLIENT_ID="Iv1.abc123..."
+export GITHUB_CLIENT_SECRET="secret123..."
+python examples/utils/oauth_mcp_server.py
+```
+```python
+# Terminal 2: Connect your agent
+from agency_swarm import Agent, Agency
+from agency_swarm.mcp import MCPServerOAuth
+
+github = MCPServerOAuth(url="http://localhost:8001/mcp", name="github", scopes=["repo", "user"])
+
+agent = Agent(name="GitHubAgent", mcp_servers=[github])
+agency = Agency([agent])
+agency.get_response("List my repositories")  # Browser opens for authorization
 ```
 
 <Note>
-First run opens the browser for consent. Tokens are cached under `~/.agency-swarm/mcp-tokens/default/github/` and are reused automatically on later runs.
-Agency Swarm spins up a tiny local callback listener for localhost redirects; if it cannot capture automatically, you can paste the callback URL in the terminal to continue.
+First run opens the browser for consent. Tokens are cached under `~/.agency-swarm/mcp-tokens/` and reused automatically. Users only re-authorize when tokens expire.
 </Note>
 
 ## OAuth flow at a glance
@@ -65,20 +79,26 @@ sequenceDiagram
     Agent-->>User: Response
 ```
 
-## What you need
-- OAuth client ID/secret from your provider.
-- An OAuth-capable MCP server (for example, FastMCP).
-- A redirect URI reachable from where the agent runs.
+## Setup requirements
 
-## Register an OAuth app
-- GitHub: Developer Settings → **New OAuth App**, set callback to `http://localhost:8000/auth/callback`, copy Client ID/Secret.
-- Google: Cloud Console → Credentials → **OAuth client ID** (Desktop), set callback to `http://localhost:8000/auth/callback`, copy Client ID/Secret.
-- Notion: My Integrations → **New integration**, set capabilities, copy client ID/secret.
-Export each as `<NAME>_CLIENT_ID` / `<NAME>_CLIENT_SECRET`.
+| Server Type | What you need |
+|-------------|---------------|
+| **Hosted** (Notion) | Just the server URL. OAuth is handled by the provider. |
+| **Self-hosted** (GitHub, Google) | OAuth app credentials (`CLIENT_ID`, `CLIENT_SECRET`) + FastMCP server running. |
 
-<Note>
-OAuth client flows are implemented by the MCP Python SDK; see https://github.com/modelcontextprotocol/python-sdk for full protocol details.
-</Note>
+### Self-hosted: Register an OAuth app
+
+For GitHub/Google, you need to create an OAuth app and run a FastMCP server:
+
+1. **GitHub**: [Developer Settings](https://github.com/settings/developers) → New OAuth App
+   - Callback URL: `http://localhost:8001/auth/callback`
+   - Export: `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`
+
+2. **Google**: [Cloud Console](https://console.cloud.google.com/apis/credentials) → Create Credentials → OAuth client ID
+   - Callback URL: `http://localhost:8002/auth/callback`  
+   - Export: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
+
+Then run the FastMCP server (see `examples/utils/oauth_mcp_server.py` for GitHub, `examples/utils/google_oauth_mcp_server.py` for Google).
 
 ## Configuration reference
 
