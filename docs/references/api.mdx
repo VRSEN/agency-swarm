@@ -34,7 +34,7 @@ class Agency:
             agency_chart: [DEPRECATED] Legacy structure definition; takes precedence if provided
             name: Optional name for the agency
             shared_instructions: Instruction text or file path applied to every agent
-            send_message_tool_class: Default SendMessage tool override for inter-agent communication
+            send_message_tool_class: Fallback SendMessage tool class when a communication flow does not define its own
             load_threads_callback: Callable used to load persisted conversation threads
             save_threads_callback: Callable used to save conversation threads
             user_context: Initial shared context accessible to all agents
@@ -56,7 +56,7 @@ class Agency:
 - **`persistence_hooks`** (PersistenceHooks | None): Optional hooks for loading/saving thread state
 - **`shared_instructions`** (str | None): Instructions prepended to every agent's system prompt
 - **`user_context`** (dict[str, Any]): Shared user-defined context accessible within MasterContext
-- **`send_message_tool_class`** (type | None): Custom SendMessage tool class for all agents
+- **`send_message_tool_class`** (type | None): Fallback SendMessage tool when no flow-specific tool is set
 
 ### Key Methods
 
@@ -296,7 +296,8 @@ class Agent(BaseAgent[MasterContext]):
             schemas_folder (str | Path | None): Directory containing OpenAPI schemas for tool generation
             api_headers (dict[str, dict[str, str]] | None): Per-schema HTTP headers for generated tools
             api_params (dict[str, dict[str, Any]] | None): Per-schema default parameters for generated tools
-            send_message_tool_class (type | None): Custom SendMessage tool override
+            send_message_tool_class (type | None): [Deprecated] Agent-level override; configure SendMessage tools via
+                `communication_flows` on `Agency` instead
             include_search_results (bool): Include search results in FileSearchTool output (default False)
             validation_attempts (int): Number of retries when output guardrails trigger (default 1)
             throw_input_guardrail_error (bool): Controls input guardrail behavior—False enables friendly mode (guidance as assistant message), True enables strict mode (raises exceptions). Default: False
@@ -323,7 +324,7 @@ class Agent(BaseAgent[MasterContext]):
 - **`schemas_folder`** (str | Path | None): Folder scanned for OpenAPI schemas to auto-generate tools
 - **`api_headers` / `api_params`** (dict): Per-schema metadata applied when generating tools
 - **`description`** (str | None): Agent role description for dynamic send_message tools
-- **`send_message_tool_class`** (type | None): Custom SendMessage tool class for inter-agent communication
+- **`send_message_tool_class`** (type | None): [Deprecated] Agent-level override; use `communication_flows` for tool selection
 - **`include_search_results`** (bool): Whether FileSearchTool responses include citation context
 - **`validation_attempts`** (int): Retry count for output guardrail enforcement
 - **`throw_input_guardrail_error`** (bool): Controls input guardrail mode—False for friendly (guidance as assistant), True for strict (raises exceptions)
@@ -435,7 +436,8 @@ def register_subagent(
 
     Parameters:
         recipient_agent: The Agent instance to register as a recipient
-        send_message_tool_class: Optional custom SendMessage override for this pair
+        send_message_tool_class: Optional custom SendMessage override for this pair (deprecated; prefer
+            assigning tool classes in `communication_flows`)
         runtime_state: Optional runtime state container injected by the owning Agency
 
     Raises:

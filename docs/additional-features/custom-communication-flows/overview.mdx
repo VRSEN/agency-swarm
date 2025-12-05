@@ -19,6 +19,7 @@ Agency Swarm contains multiple commonly requested classes for communication flow
 #### Customizing Communication Flows
 
 To select your own custom send message tool, simply provide it as the last argument to the communication flow tuple.
+Agent-level `send_message_tool_class` is deprecated—attach custom tools to the specific flow instead.
 
 ```python
 from agency_swarm import Agent
@@ -88,26 +89,37 @@ By default, whenever a handoff occurs, prior to transferring the chat, a special
 You can customize the reminder message or disable it entirely by defining a custom Handoff class as follows (see [`add_reminder`](https://github.com/VRSEN/agency-swarm/blob/main/src/agency_swarm/tools/send_message.py) and [`handoff_reminder`](https://github.com/VRSEN/agency-swarm/blob/main/src/agency_swarm/agent/core.py) parameters). Set `handoff_reminder` on the agent that receives the handoff so the message appears in its context:
 
 ```python
-from agency_swarm import Agent
+from agency_swarm import Agency, Agent
 from agency_swarm.tools.send_message import SendMessageHandoff
 
 class NoReminderHandoff(SendMessageHandoff):
     add_reminder = False # Set to False to completely remove the extra message
 
-agent = Agent(
-    name="NoReminderAgent",
-    send_message_tool_class=NoReminderHandoff, 
+sender = Agent(name="NoReminderSender")
+recipient = Agent(name="NoReminderAgent")
+
+agency = Agency(
+    sender,
+    recipient,
+    communication_flows=[(sender > recipient, NoReminderHandoff)],
 )
 ```
 
 ```python
-from agency_swarm import Agent
+from agency_swarm import Agency, Agent
 from agency_swarm.tools.send_message import SendMessageHandoff
 
-agent = Agent(
+sender = Agent(name="CustomHandoffSender")
+recipient = Agent(
     name="CustomHandoffAgent",
     # Delivered to this agent whenever it receives a handoff.
     handoff_reminder="You are now the active agent. Summarize received context and answer user query.",
+)
+
+agency = Agency(
+    sender,
+    recipient,
+    communication_flows=[(sender > recipient, SendMessageHandoff)],
 )
 ```
 

@@ -78,10 +78,15 @@ from agency_swarm import Agency, Agent
 agent = Agent(
     name="MyAgent",
     instructions="You are a helpful assistant.",
-    send_message_tool_class=SendMessageWithContext,  # Use your custom class
 )
 
-agency = Agency(agent, communication_flows=[(agent, other_agent)]))
+other_agent = Agent(name="OtherAgent", instructions="Provide supporting context.")
+
+agency = Agency(
+    agent,
+    other_agent,
+    communication_flows=[(agent > other_agent, SendMessageWithContext)],
+)
 ```
 
 <Tip title="Contributing">

@@ -109,7 +109,6 @@ project_manager = Agent(
         "CRITICAL: When you receive responses from team members, include their complete "
         "findings and recommendations in your final output to maintain transparency."
     ),
-    send_message_tool_class=SendMessageHandoff,
     model_settings=ModelSettings(temperature=0),
 )
 
@@ -124,7 +123,6 @@ developer = Agent(
         "When performing handoffs, transfer complete context including all technical details."
     ),
     tools=[review_code_quality, implement_feature],
-    send_message_tool_class=SendMessageHandoff,
     model_settings=ModelSettings(temperature=0),
 )
 
@@ -145,7 +143,7 @@ security_expert = Agent(
 agency = Agency(
     project_manager,
     communication_flows=[
-        (project_manager > developer > security_expert),
+        (project_manager > developer > security_expert, SendMessageHandoff),
     ],
     shared_instructions="Focus on delivering secure, high-quality software. Use project context to prioritize work.",
 )
