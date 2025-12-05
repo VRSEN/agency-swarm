@@ -1,8 +1,4 @@
-"""OAuth-authenticated MCP client for Agency Swarm.
-
-This module provides the MCPServerOAuthClient class that wraps the MCP SDK's
-OAuth client functionality, making it compatible with Agency Swarm's MCP integration.
-"""
+"""OAuth-authenticated MCP client for Agency Swarm."""
 
 import logging
 from typing import Any
@@ -19,23 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 class MCPServerOAuthClient:
-    """OAuth-authenticated MCP server client.
-
-    This class wraps the MCP SDK's OAuth client to provide OAuth authentication
-    for MCP servers. It follows the same interface as MCPServerStdio to work
-    seamlessly with Agency Swarm's existing MCP integration.
-
-    The OAuth flow happens automatically when connecting to the server:
-    1. On first connection, if no tokens exist, the OAuth flow is triggered
-    2. The user is prompted to authenticate via browser
-    3. Tokens are cached locally for subsequent connections
-    4. Token refresh happens automatically when needed
-
-    Attributes:
-        name: Unique identifier for this server (from oauth_config)
-        oauth_config: Configuration for OAuth-enabled MCP server
-        session: Active MCP client session (None until connected)
-    """
+    """OAuth-authenticated MCP server client."""
 
     def __init__(
         self,
@@ -59,6 +39,9 @@ class MCPServerOAuthClient:
         self._session_context: ClientSession | None = None
         self._session_entered = False
 
+        # Track connection state
+        self._authenticated = False
+
         # Extract custom handlers
         custom_handlers = custom_handlers or {}
         self._redirect_handler = custom_handlers.get("redirect")
@@ -68,12 +51,6 @@ class MCPServerOAuthClient:
 
     async def connect(self) -> None:
         """Establish OAuth-authenticated connection to MCP server.
-
-        This method:
-        1. Creates an OAuth provider with token storage
-        2. Connects to the MCP server using streamablehttp_client
-        3. Initializes the MCP session
-        4. Triggers OAuth flow if needed (on first 401 response)
 
         The OAuth flow is handled by the MCP SDK's OAuthClientProvider:
         - Discovers OAuth endpoints
@@ -85,11 +62,11 @@ class MCPServerOAuthClient:
         Raises:
             Exception: If connection or OAuth flow fails
         """
-        if self.session:
-            logger.debug(f"OAuth MCP client {self.name} already connected")
+        if self.session and self._authenticated:
+            logger.debug(f"OAuth MCP client {self.name} already authenticated")
             return
 
-        logger.info(f"Connecting to OAuth MCP server: {self.name} at {self.oauth_config.url}")
+        logger.info(f"Connecting with OAuth to: {self.name} at {self.oauth_config.url}")
 
         try:
             self._oauth_provider = await create_oauth_provider(
@@ -107,7 +84,8 @@ class MCPServerOAuthClient:
             self._session_entered = True
 
             await self.session.initialize()
-            logger.info(f"Successfully connected to OAuth MCP server: {self.name}")
+            self._authenticated = True
+            logger.info(f"Successfully authenticated to OAuth MCP server: {self.name}")
 
         except Exception:
             logger.exception(f"Failed to connect to OAuth MCP server: {self.name}")
@@ -119,7 +97,7 @@ class MCPServerOAuthClient:
         run_context: RunContextWrapper[Any] | None = None,
         agent: AgentBase | None = None,
     ) -> list[MCPTool]:
-        """List available tools from OAuth MCP server.
+        """List available tools from MCP server (OAuth required on HTTP transports).
 
         Args:
             run_context: Runner context (unused, kept for interface compatibility)
@@ -129,19 +107,20 @@ class MCPServerOAuthClient:
             List of available tools from the MCP server
 
         Raises:
-            Exception: If not connected or listing tools fails
+            Exception: If listing tools fails even with OAuth
         """
-        if not self.session:
-            await self.connect()
+        await self.connect()
         assert self.session is not None
-
-        logger.debug(f"Listing tools from OAuth MCP server: {self.name}")
+        logger.debug(f"Listing tools via authenticated session: {self.name}")
         result = await self.session.list_tools()
-        logger.info(f"Found {len(result.tools)} tools from {self.name}")
+        logger.info(f"Found {len(result.tools)} tools from {self.name} (authenticated)")
         return list(result.tools)
 
     async def call_tool(self, name: str, arguments: dict[str, Any] | None = None) -> Any:
-        """Call an OAuth MCP tool.
+        """Call an OAuth MCP tool (requires authentication).
+
+        This method ensures OAuth authentication is complete before calling.
+        This is where OAuth is triggered - not during discovery/schema fetch.
 
         Args:
             name: Name of the tool to call
@@ -151,9 +130,11 @@ class MCPServerOAuthClient:
             Tool execution result
 
         Raises:
-            Exception: If not connected or tool call fails
+            Exception: If OAuth or tool call fails
         """
-        if not self.session:
+        # Tool calls ALWAYS require authenticated session
+        if not self._authenticated:
+            logger.info(f"Tool call requires OAuth, authenticating: {self.name}")
             await self.connect()
         assert self.session is not None
 
@@ -243,13 +224,23 @@ class MCPServerOAuthClient:
     async def cleanup(self) -> None:
         """Cleanup OAuth MCP connection.
 
-        Closes the MCP session and transport context.
+        Closes both discovery and authenticated sessions. Handles cross-task
+        cleanup gracefully since connections may have been made from different tasks.
         """
         logger.info(f"Cleaning up OAuth MCP client: {self.name}")
 
+        # Cleanup discovery session
+        await self._cleanup_discovery()
+
+        # Cleanup authenticated session
         if self._session_context and self._session_entered:
             try:
                 await self._session_context.__aexit__(None, None, None)
+            except RuntimeError as e:
+                if "cancel scope" in str(e).lower() or "different task" in str(e).lower():
+                    logger.debug(f"Session cleanup skipped (different task) for {self.name}")
+                else:
+                    logger.exception(f"Error closing session for {self.name}")
             except Exception:
                 logger.exception(f"Error closing session for {self.name}")
             finally:
@@ -257,10 +248,16 @@ class MCPServerOAuthClient:
 
         self.session = None
         self._session_context = None
+        self._authenticated = False
 
         if self._transport_context and self._transport_entered:
             try:
                 await self._transport_context.__aexit__(None, None, None)
+            except RuntimeError as e:
+                if "cancel scope" in str(e).lower() or "different task" in str(e).lower():
+                    logger.debug(f"Transport cleanup skipped (different task) for {self.name}")
+                else:
+                    logger.exception(f"Error closing transport for {self.name}")
             except Exception:
                 logger.exception(f"Error closing transport for {self.name}")
             finally:
@@ -278,3 +275,7 @@ class MCPServerOAuthClient:
     async def __aexit__(self, exc_type, exc, tb):
         """Async context manager exit."""
         await self.cleanup()
+
+    async def _cleanup_discovery(self) -> None:
+        """Retained for compatibility; discovery is not used for OAuth HTTP transports."""
+        return None

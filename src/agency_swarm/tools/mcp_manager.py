@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 # OAuth support - imported conditionally to avoid circular imports
 _OAUTH_AVAILABLE = False
 _MCPServerOAuth: type | None = None
+_MCPServerOAuthClient: type | None = None
 _create_oauth_provider: Callable[..., Any] | None = None
 
 try:
@@ -23,8 +24,10 @@ try:
         MCPServerOAuth as _MCPServerOAuth_impl,
         create_oauth_provider as _create_oauth_provider_impl,
     )
+    from agency_swarm.mcp.oauth_client import MCPServerOAuthClient as _MCPServerOAuthClient_impl
 
     _MCPServerOAuth = _MCPServerOAuth_impl
+    _MCPServerOAuthClient = _MCPServerOAuthClient_impl
     _create_oauth_provider = _create_oauth_provider_impl
     _OAUTH_AVAILABLE = True
 except ImportError:
@@ -71,12 +74,28 @@ class PersistentMCPServerManager:
         ready_evt = threading.Event()
         # Unwrap proxy to operate on the real server inside the driver (same task)
 
+        # Check if this is an OAuth client (two-phase auth)
+        is_oauth_client = _MCPServerOAuthClient is not None and isinstance(real_server, _MCPServerOAuthClient)
+
         async def _driver():
             # Connect once in this driver task to bind cancel scope and session
             try:
-                if getattr(real_server, "session", None) is None:
-                    logger.info(f"Connecting server {getattr(real_server, 'name', '<unnamed>')}")
-                    await real_server.connect()
+                if getattr(real_server, "session", None) is None and not getattr(
+                    real_server, "_discovery_session", None
+                ):
+                    server_name = getattr(real_server, "name", "<unnamed>")
+                    if is_oauth_client:
+                        # Two-phase auth: defer all connections to on-demand calls
+                        logger.info(
+                            f"Skipping eager discovery connect for OAuth server {server_name}; will connect on demand."
+                        )
+                    else:
+                        # Regular server: full connection
+                        logger.info(f"Connecting server {server_name}")
+                        await real_server.connect()
+            except Exception as conn_err:
+                # Log but don't crash - allow driver to start for retry/recovery
+                logger.error(f"Connection failed for {getattr(real_server, 'name', '<unnamed>')}: {conn_err}")
             finally:
                 ready_evt.set()
 
@@ -116,8 +135,10 @@ class PersistentMCPServerManager:
         if not ready_evt.wait(timeout=self._timeouts.get("connect", 20.0)):
             # Handle timeout explicitly
             raise TimeoutError(f"Server {getattr(server, 'name', '<unnamed>')} failed to connect within timeout")
-        # Track whether this driver created the session to decide who cleans up
-        created_by_driver = getattr(real_server, "session", None) is not None
+        # Track whether this driver created a session (regular or discovery)
+        has_session = getattr(real_server, "session", None) is not None
+        has_discovery = getattr(real_server, "_discovery_session", None) is not None
+        created_by_driver = has_session or has_discovery
         self._drivers[real_server] = {"queue": queue, "real": real_server, "created_by_driver": created_by_driver}
 
     async def ensure_connected(self, server: Any) -> None:
