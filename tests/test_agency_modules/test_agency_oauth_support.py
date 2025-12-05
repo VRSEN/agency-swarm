@@ -11,7 +11,7 @@ from agency_swarm.mcp import MCPServerOAuth, OAuthStorageHooks
 @pytest.fixture(autouse=True)
 def disable_server_registration(monkeypatch: pytest.MonkeyPatch) -> None:
     """Prevent real MCP connections during tests."""
-    monkeypatch.setattr("agency_swarm.agent.core.register_and_connect_agent_servers", lambda *_: None)
+    monkeypatch.setattr("agency_swarm.agent.core.convert_mcp_servers_to_tools", lambda *_: None)
 
 
 def _build_agent_with_oauth_server(server: MCPServerOAuth) -> Agent:
