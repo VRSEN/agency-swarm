@@ -153,14 +153,12 @@ if __name__ == "__main__":
     print("     - The GitHub credentials are only needed in the server terminal.")
     print("=" * 80 + "\n")
 
-    response = input("Ready to continue? (yes/no): ").strip().lower()
-    if response in ("yes", "y"):
-        run_sync()
-    else:
-        print("\nSetup instructions:")
-        print("  1. Create GitHub OAuth App: https://github.com/settings/developers")
-        print("     - Callback URL: http://localhost:8001/auth/callback")
-        print("  2. Start OAuth server: python examples/utils/oauth_mcp_server.py")
-        print("     (ensure GITHUB_CLIENT_ID / GITHUB_CLIENT_SECRET are set in that terminal)")
-        print("  3. In another terminal:")
-        print("     python examples/mcp_oauth_local.py")
+    run_sync()
+
+    # Clean up MCP persistent connections explicitly to avoid atexit scheduling warnings
+    try:
+        from agency_swarm.tools.mcp_manager import default_mcp_manager
+
+        default_mcp_manager.shutdown_sync()
+    except Exception:
+        pass

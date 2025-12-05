@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import json
 import logging
 import time
@@ -260,6 +261,8 @@ def make_stream_endpoint(
             else:
                 await attach_persistent_mcp_servers(agency_instance)
 
+            stream_events = None
+            stream_task: asyncio.Task | None = None
             try:
                 stream_events = agency_instance.get_response_stream(
                     message=request.message,
@@ -268,7 +271,7 @@ def make_stream_endpoint(
                     additional_instructions=request.additional_instructions,
                     file_ids=combined_file_ids,
                 )
-                stream_task: asyncio.Task | None = asyncio.create_task(stream_events.__anext__())
+                stream_task = asyncio.create_task(stream_events.__anext__())
                 while stream_task:
                     wait_set = {stream_task}
                     if queue_task:
@@ -311,6 +314,18 @@ def make_stream_endpoint(
                     )
                 else:
                     yield "data: " + json.dumps({"error": str(exc)}) + "\n\n"
+            finally:
+                if queue_task and not queue_task.done():
+                    queue_task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await queue_task
+                if stream_task and not stream_task.done():
+                    stream_task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await stream_task
+                if stream_events:
+                    with contextlib.suppress(Exception):
+                        await stream_events.aclose()
 
             # Get only new messages added during this request
             all_messages = agency_instance.thread_manager.get_all_messages()
@@ -326,8 +341,6 @@ def make_stream_endpoint(
                 except Exception as e:
                     # Do not add errors to the result as they might be mistaken for chat name
                     logger.error(f"Error generating chat name: {e}")
-            if queue_task:
-                queue_task.cancel()
             yield "event: messages\ndata: " + json.dumps(result) + "\n\n"
 
             # explicit terminator

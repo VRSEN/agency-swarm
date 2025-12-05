@@ -3,11 +3,15 @@ from __future__ import annotations
 import logging
 import os
 from collections.abc import Callable, Mapping
+from typing import TYPE_CHECKING
 
 from agents.tool import FunctionTool
 
 from agency_swarm.agency import Agency
 from agency_swarm.agent.core import Agent
+
+if TYPE_CHECKING:
+    from agency_swarm.integrations.fastapi_utils.oauth_support import OAuthStateRegistry
 
 logger = logging.getLogger(__name__)
 
