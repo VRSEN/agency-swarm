@@ -347,7 +347,7 @@ class AsyncKernelPool:
             pass  # Silent failure in cleanup
 
 
-class IPythonInterpreter(BaseTool):  # type: ignore[misc]
+class IPythonInterpreter(BaseTool):  # type: ignore[metaclass]
     """
     A persistent IPython-style interpreter tool with access to the internet and file system.
 

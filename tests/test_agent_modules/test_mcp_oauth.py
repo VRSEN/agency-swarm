@@ -359,3 +359,65 @@ def test_get_default_cache_dir_uses_home_by_default() -> None:
     cache_dir = get_default_cache_dir()
 
     assert cache_dir == Path.home() / ".agency-swarm" / "mcp-tokens"
+
+
+class TestMCPServerOAuthClientAuthOnly:
+    """Tests for OAuth-only MCPServerOAuthClient behavior."""
+
+    async def test_list_tools_authenticates_then_lists(self, tmp_path: Path) -> None:
+        """list_tools should authenticate and return tools."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from agency_swarm.mcp.oauth_client import MCPServerOAuthClient
+
+        config = MCPServerOAuth(
+            url=TEST_SERVER_URL,
+            name="test-server",
+            client_id="test-id",
+            client_secret="test-secret",
+            cache_dir=tmp_path,
+        )
+        client = MCPServerOAuthClient(config)
+
+        mock_session = MagicMock()
+        mock_result = MagicMock()
+        mock_result.tools = [MagicMock(name="tool1"), MagicMock(name="tool2")]
+        mock_session.list_tools = AsyncMock(return_value=mock_result)
+
+        with patch.object(client, "connect", new_callable=AsyncMock) as mock_connect:
+            mock_connect.side_effect = lambda: setattr(client, "session", mock_session) or setattr(
+                client, "_authenticated", True
+            )
+            tools = await client.list_tools()
+
+        assert len(tools) == 2
+        mock_connect.assert_awaited_once()
+        mock_session.list_tools.assert_awaited_once()
+
+    async def test_call_tool_authenticates_before_call(self, tmp_path: Path) -> None:
+        """call_tool should always ensure OAuth before executing."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from agency_swarm.mcp.oauth_client import MCPServerOAuthClient
+
+        config = MCPServerOAuth(
+            url=TEST_SERVER_URL,
+            name="test-server",
+            client_id="test-id",
+            client_secret="test-secret",
+            cache_dir=tmp_path,
+        )
+        client = MCPServerOAuthClient(config)
+
+        mock_session = MagicMock()
+        mock_result = MagicMock(content=[MagicMock(text="result")])
+        mock_session.call_tool = AsyncMock(return_value=mock_result)
+
+        with patch.object(client, "connect", new_callable=AsyncMock) as mock_connect:
+            mock_connect.side_effect = lambda: setattr(client, "session", mock_session) or setattr(
+                client, "_authenticated", True
+            )
+            await client.call_tool("test_tool", {"arg": "value"})
+
+        mock_connect.assert_awaited_once()
+        mock_session.call_tool.assert_awaited_once_with("test_tool", {"arg": "value"})

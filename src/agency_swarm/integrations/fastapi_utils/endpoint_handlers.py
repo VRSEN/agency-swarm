@@ -575,7 +575,6 @@ def make_stream_endpoint(
 
                 # Now send run_id - client can safely call cancel endpoint
                 yield f"event: meta\ndata: {json.dumps({'run_id': run_id})}\n\n"
-
                 stream_task = asyncio.create_task(stream_events.__anext__())
                 while stream_task:
                     wait_set = {stream_task}

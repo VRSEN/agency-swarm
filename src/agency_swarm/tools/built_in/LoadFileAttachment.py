@@ -6,7 +6,7 @@ from agency_swarm.tools.base_tool import BaseTool
 from agency_swarm.tools.utils import tool_output_file_from_path, tool_output_image_from_path
 
 
-class LoadFileAttachment(BaseTool):  # type: ignore[misc]
+class LoadFileAttachment(BaseTool):  # type: ignore[metaclass]
     """
     Loads a file attachment and returns it in the appropriate format for the agent to view.
     Supports images (jpg, png, gif, etc.) and PDF files.
