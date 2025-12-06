@@ -122,11 +122,16 @@ class MessageFilter:
             msg_type = msg.get("type")
 
             # Pattern 1: call_id linking
-            call_id = msg.get("call_id")
-            if isinstance(call_id, str) and call_id:
-                if msg_type in MessageFilter.CALL_ID_CALL_TYPES:
+            # Note: Call types use 'id' field, output types use 'call_id' field
+            if msg_type in MessageFilter.CALL_ID_CALL_TYPES:
+                # For calls, the identifier is in 'id' field
+                call_id = msg.get("id") or msg.get("call_id")
+                if isinstance(call_id, str) and call_id:
                     call_ids_from_calls.add(call_id)
-                elif msg_type in MessageFilter.CALL_ID_OUTPUT_TYPES:
+            elif msg_type in MessageFilter.CALL_ID_OUTPUT_TYPES:
+                # For outputs, the reference is in 'call_id' field
+                call_id = msg.get("call_id")
+                if isinstance(call_id, str) and call_id:
                     call_ids_from_outputs.add(call_id)
 
             # Pattern 2: approval_request_id linking
@@ -174,7 +179,17 @@ class MessageFilter:
                 continue
 
             # Pattern 1: call_id linked types
-            if msg_type in MessageFilter.CALL_ID_CALL_TYPES | MessageFilter.CALL_ID_OUTPUT_TYPES:
+            if msg_type in MessageFilter.CALL_ID_CALL_TYPES:
+                # For calls, check 'id' field
+                call_id = msg.get("id") or msg.get("call_id")
+                if isinstance(call_id, str) and call_id in matched_call_ids:
+                    kept_entries.append((idx, msg))
+                else:
+                    logger.debug(f"Removing orphaned {msg_type} with id={call_id}")
+                continue
+
+            if msg_type in MessageFilter.CALL_ID_OUTPUT_TYPES:
+                # For outputs, check 'call_id' field
                 call_id = msg.get("call_id")
                 if isinstance(call_id, str) and call_id in matched_call_ids:
                     kept_entries.append((idx, msg))
@@ -199,9 +214,12 @@ class MessageFilter:
                     logger.debug(f"Removing orphaned {msg_type} with approval_request_id={approval_id}")
                 continue
 
-        # Pattern 3: reasoning items must be followed by their original next item.
+        # Pattern 3: reasoning items must be followed by their original next item,
+        # AND items following a reasoning must have that reasoning present.
+        # First pass: identify which reasoning items to remove (missing follower)
         kept_index_set = {idx for idx, _ in kept_entries}
-        final_messages: list[TResponseInputItem] = []
+        removed_reasoning_indices: set[int] = set()
+
         for idx, msg in kept_entries:
             if msg.get("type") == "reasoning":
                 required_idx = idx + 1
@@ -210,7 +228,25 @@ class MessageFilter:
                         "Removing reasoning item %s because its required following item was dropped",
                         msg.get("id"),
                     )
-                    continue
+                    removed_reasoning_indices.add(idx)
+
+        # Second pass: build final list, removing:
+        # 1. Reasoning items without their followers
+        # 2. Items that immediately followed a removed reasoning item
+        final_messages: list[TResponseInputItem] = []
+        for idx, msg in kept_entries:
+            # Skip removed reasoning items
+            if idx in removed_reasoning_indices:
+                continue
+            # Skip items that were supposed to follow a removed reasoning
+            prev_idx = idx - 1
+            if prev_idx in removed_reasoning_indices:
+                logger.info(
+                    "Removing item %s (type=%s) because its required preceding reasoning was dropped",
+                    msg.get("id"),
+                    msg.get("type"),
+                )
+                continue
             final_messages.append(msg)
 
         return final_messages

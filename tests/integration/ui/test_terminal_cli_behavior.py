@@ -195,3 +195,84 @@ def test_cli_slash_completions_supports_async(monkeypatch: pytest.MonkeyPatch) -
     assert captured, "Dropdown menu never received items"
     first_labels = captured[0]
     assert any(label.startswith("/") for label in first_labels)
+
+
+def test_cli_stream_cancellation(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test that ESC key cancels the stream properly."""
+    import asyncio
+
+    TerminalDemoLauncher.set_current_chat_id(None)
+
+    cancel_called = []
+    events_yielded = []
+
+    class FakeStream:
+        """Fake stream that tracks cancellation."""
+
+        def __init__(self):
+            self._cancelled = False
+            self._events = [
+                SimpleNamespace(data=SimpleNamespace(type="response.output_text.delta", delta="one")),
+                SimpleNamespace(data=SimpleNamespace(type="response.output_text.delta", delta="two")),
+                SimpleNamespace(data=SimpleNamespace(type="response.output_text.delta", delta="three")),
+            ]
+            self._index = 0
+
+        def cancel(self, mode: str = "immediate") -> None:
+            self._cancelled = True
+            cancel_called.append(mode)
+
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
+            if self._cancelled or self._index >= len(self._events):
+                raise StopAsyncIteration
+            # Simulate delay to allow ESC check
+            await asyncio.sleep(0.01)
+            event = self._events[self._index]
+            self._index += 1
+            events_yielded.append(event)
+            return event
+
+    agency = Agency(
+        Agent(name="Primary", instructions="x"),
+    )
+
+    def fake_get_response_stream(**_: object):
+        return FakeStream()
+
+    monkeypatch.setattr(agency, "get_response_stream", fake_get_response_stream)
+
+    # Simulate ESC key being pressed after first event
+    esc_check_count = [0]
+
+    class MockEscapeWatcher:
+        """Mock watcher that triggers ESC after first check."""
+
+        def start(self):
+            pass
+
+        def stop(self):
+            pass
+
+        def check(self) -> bool:
+            esc_check_count[0] += 1
+            # Trigger cancel after second check (after first event processed)
+            return esc_check_count[0] >= 2
+
+    monkeypatch.setattr(terminal, "EscapeKeyWatcher", MockEscapeWatcher)
+
+    def _record_save(_: object, chat_id: str) -> None:
+        pass
+
+    monkeypatch.setattr(TerminalDemoLauncher, "save_current_chat", staticmethod(_record_save))
+
+    inputs = ["trigger stream", "/exit"]
+    _patch_application(monkeypatch, inputs)
+    terminal.start_terminal(agency, show_reasoning=False)
+
+    # Verify cancel was called
+    assert cancel_called == ["immediate"], f"Expected cancel to be called, got: {cancel_called}"
+    # Verify stream was interrupted (not all events yielded)
+    assert len(events_yielded) < 3, f"Expected stream to be cancelled early, got {len(events_yielded)} events"

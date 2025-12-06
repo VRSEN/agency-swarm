@@ -2,6 +2,8 @@ import asyncio
 import logging
 import os
 import re
+import sys
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, cast
@@ -21,10 +23,87 @@ from prompt_toolkit.styles import Style
 from prompt_toolkit.widgets import Frame
 
 from agency_swarm.agency.core import Agency
+from agency_swarm.messages import MessageFilter
 from agency_swarm.utils import is_reasoning_model
 
 from ..core.console_event_adapter import ConsoleEventAdapter
 from .launcher import TerminalDemoLauncher
+
+
+class EscapeKeyWatcher:
+    """Cross-platform ESC key detector that runs in background."""
+
+    def __init__(self) -> None:
+        self._escape_pressed = False
+        self._stop = False
+        self._thread: threading.Thread | None = None
+
+    def check(self) -> bool:
+        """Return True if ESC was pressed since last check."""
+        result = self._escape_pressed
+        self._escape_pressed = False
+        return result
+
+    def _poll_windows(self) -> None:
+        """Windows key polling using msvcrt."""
+        import msvcrt
+        import time
+
+        while not self._stop:
+            try:
+                if msvcrt.kbhit():
+                    key = msvcrt.getch()
+                    if key == b"\x1b":  # ESC
+                        self._escape_pressed = True
+                    elif key in (b"\x00", b"\xe0"):
+                        msvcrt.getch()  # Consume extended key
+                else:
+                    time.sleep(0.05)
+            except Exception:
+                break
+
+    def _poll_unix(self) -> None:
+        """Unix key polling using select."""
+        import select
+        import termios
+        import tty
+
+        old_settings = None
+        try:
+            fd = sys.stdin.fileno()
+            old_settings = termios.tcgetattr(fd)
+            tty.setcbreak(fd)
+
+            while not self._stop:
+                if select.select([sys.stdin], [], [], 0.05)[0]:
+                    key = sys.stdin.read(1)
+                    if key == "\x1b":  # ESC
+                        self._escape_pressed = True
+        except Exception:
+            pass
+        finally:
+            if old_settings is not None:
+                try:
+                    termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+                except Exception:
+                    pass
+
+    def start(self) -> None:
+        """Start watching for ESC key in background thread."""
+        import threading
+
+        self._stop = False
+        self._escape_pressed = False
+        target = self._poll_windows if sys.platform == "win32" else self._poll_unix
+        self._thread = threading.Thread(target=target, daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        """Stop the watcher thread and wait for it to finish."""
+        self._stop = True
+        if self._thread is not None:
+            self._thread.join(timeout=0.5)  # Wait up to 0.5s for thread to finish
+            self._thread = None
 
 
 @dataclass
@@ -113,7 +192,8 @@ def start_terminal(
         cwd = os.getcwd()
         banner_name = getattr(agency_instance, "name", None) or "Agency Swarm"
         event_converter.console.print(f"[bold]* Welcome to {banner_name}![/bold]")
-        event_converter.console.print("\n/help for help, /status for your current setup\n")
+        event_converter.console.print("\n/help for help, /status for your current setup")
+        event_converter.console.print("[dim]Press ESC during streaming to cancel[/dim]\n")
         event_converter.console.print(f"cwd: {cwd}\n")
         event_converter.console.rule()
     except Exception:
@@ -276,6 +356,7 @@ def start_terminal(
         if recipient_agent is not None and recipient_agent != event_converter.handoff_agent:
             event_converter.handoff_agent = None
 
+        escape_watcher = EscapeKeyWatcher()
         try:
             recipient_agent_str: str = (
                 recipient_agent
@@ -284,14 +365,44 @@ def start_terminal(
                 if event_converter.handoff_agent is not None
                 else current_default_recipient
             )
-            async for event in agency_instance.get_response_stream(
+            stream = agency_instance.get_response_stream(
                 message=message, recipient_agent=recipient_agent_str, chat_id=chat_id
-            ):
+            )
+            escape_watcher.start()
+
+            cancelled = False
+            async for event in stream:
+                # Check for ESC key press
+                if escape_watcher.check():
+                    event_converter.console.print("\n[yellow]⏹ Cancelling stream...[/yellow]")
+                    stream.cancel(mode="immediate")
+                    cancelled = True
+                    break
+
                 event_converter.openai_to_message_output(event, recipient_agent_str)
+
+            # If cancelled, clean up display and filter orphaned messages
+            if cancelled:
+                # Clean up any live displays from the event converter
+                if event_converter.message_output is not None:
+                    event_converter.message_output.__exit__(None, None, None)
+                    event_converter.message_output = None
+                if event_converter.reasoning_output is not None:
+                    event_converter.reasoning_output.__exit__(None, None, None)
+                    event_converter.reasoning_output = None
+
+                # Filter out orphaned messages (e.g., reasoning without following item)
+                all_messages = agency_instance.thread_manager.get_all_messages()
+                filtered = MessageFilter.filter_messages(all_messages)
+                filtered = MessageFilter.remove_orphaned_messages(filtered)
+                agency_instance.thread_manager.replace_messages(filtered)
+
             event_converter.console.rule()
             TerminalDemoLauncher.save_current_chat(agency_instance, chat_id)
         except Exception as e:
             logger.error(f"Error during streaming: {e}", exc_info=True)
+        finally:
+            escape_watcher.stop()
         return False
 
     async def main_loop():
