@@ -45,18 +45,18 @@ class EscapeKeyWatcher:
         return result
 
     def _poll_windows(self) -> None:
-        """Windows key polling using msvcrt."""
+        """Windows key polling using msvcrt (Windows-only standard library)."""
         import msvcrt
         import time
 
         while not self._stop:
             try:
-                if msvcrt.kbhit():
-                    key = msvcrt.getch()
+                if msvcrt.kbhit():  # type: ignore[attr-defined]
+                    key = msvcrt.getch()  # type: ignore[attr-defined]
                     if key == b"\x1b":  # ESC
                         self._escape_pressed = True
                     elif key in (b"\x00", b"\xe0"):
-                        msvcrt.getch()  # Consume extended key
+                        msvcrt.getch()  # type: ignore[attr-defined]
                 else:
                     time.sleep(0.05)
             except Exception:
