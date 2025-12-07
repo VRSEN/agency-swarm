@@ -122,10 +122,9 @@ class MessageFilter:
             msg_type = msg.get("type")
 
             # Pattern 1: call_id linking
-            # Note: Call types use 'id' field, output types use 'call_id' field
+            # Both call types and output types use 'call_id' for linking
             if msg_type in MessageFilter.CALL_ID_CALL_TYPES:
-                # For calls, the identifier is in 'id' field
-                call_id = msg.get("id") or msg.get("call_id")
+                call_id = msg.get("call_id")
                 if isinstance(call_id, str) and call_id:
                     call_ids_from_calls.add(call_id)
             elif msg_type in MessageFilter.CALL_ID_OUTPUT_TYPES:
@@ -180,12 +179,11 @@ class MessageFilter:
 
             # Pattern 1: call_id linked types
             if msg_type in MessageFilter.CALL_ID_CALL_TYPES:
-                # For calls, check 'id' field
-                call_id = msg.get("id") or msg.get("call_id")
+                call_id = msg.get("call_id")
                 if isinstance(call_id, str) and call_id in matched_call_ids:
                     kept_entries.append((idx, msg))
                 else:
-                    logger.debug(f"Removing orphaned {msg_type} with id={call_id}")
+                    logger.debug(f"Removing orphaned {msg_type} with call_id={call_id}")
                 continue
 
             if msg_type in MessageFilter.CALL_ID_OUTPUT_TYPES:
