@@ -85,8 +85,9 @@ dev = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/agency_swarm"]
+exclude = ["**/node_modules/**", "**/.next/**"]
 artifacts = [
-    # Copilot frontend files (exclude node_modules)
+    # Copilot frontend files
     "ui/demos/copilot/**/*.ts",
     "ui/demos/copilot/**/*.tsx",
     "ui/demos/copilot/**/*.css",
@@ -94,7 +95,6 @@ artifacts = [
     "ui/demos/copilot/**/*.mjs",
     "ui/demos/copilot/**/*.ico",
     "ui/demos/copilot/**/*.svg",
-    "!ui/demos/copilot/node_modules/**",
 ]
 
 [tool.hatch.build.targets.wheel.force-include]
@@ -107,7 +107,7 @@ include = [
     "src/agency_swarm/ui/templates/**",
     "src/agency_swarm/ui/demos/copilot/**",
 ]
-exclude = ["**/node_modules/**"]
+exclude = ["**/node_modules/**", "**/.next/**"]
 
 [tool.ruff]
 line-length = 120
