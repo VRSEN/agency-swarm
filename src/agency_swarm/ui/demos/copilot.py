@@ -34,7 +34,7 @@ class CopilotDemoLauncher:
                 "Running 'npm install' to install frontend dependencies...\033[0m"
             )
             try:
-                subprocess.check_call([npm_exe, "install"], cwd=fe_path)
+                subprocess.check_call([npm_exe, "install", "--legacy-peer-deps"], cwd=fe_path)
                 print(
                     "\033[92m[Copilot Demo] Frontend dependencies installed successfully. "
                     "Frontend might take a few seconds to load.\033[0m"
