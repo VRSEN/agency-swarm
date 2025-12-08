@@ -63,7 +63,7 @@ def test_cli_help_new_and_stream(monkeypatch: pytest.MonkeyPatch) -> None:
     agency, calls = _make_agency_with_stream_stub(monkeypatch)
 
     _patch_application(monkeypatch, inputs)
-    terminal.start_terminal(agency, show_reasoning=False)
+    terminal.start_terminal(agency, show_reasoning=False, reload=False)
 
     active_chat = TerminalDemoLauncher.get_current_chat_id()
     assert isinstance(active_chat, str) and active_chat
@@ -90,7 +90,7 @@ def test_cli_resume_switches_chat_id(monkeypatch: pytest.MonkeyPatch) -> None:
 
     agency, calls = _make_agency_with_stream_stub(monkeypatch)
     _patch_application(monkeypatch, inputs)
-    terminal.start_terminal(agency, show_reasoning=False)
+    terminal.start_terminal(agency, show_reasoning=False, reload=False)
 
     assert calls[0] == ("after resume", "Primary", "chat_resumed")
     assert saved_ids[-1] == "chat_resumed"
@@ -115,7 +115,7 @@ def test_cli_compact_updates_chat_id(monkeypatch: pytest.MonkeyPatch) -> None:
 
     agency, calls = _make_agency_with_stream_stub(monkeypatch)
     _patch_application(monkeypatch, inputs)
-    terminal.start_terminal(agency, show_reasoning=False)
+    terminal.start_terminal(agency, show_reasoning=False, reload=False)
 
     assert calls[0] == ("msg", "Primary", "chat_compacted")
     assert saved_ids[-1] == "chat_compacted"
@@ -128,7 +128,7 @@ def test_cli_agent_mentions(monkeypatch: pytest.MonkeyPatch) -> None:
 
     agency, calls = _make_agency_with_stream_stub(monkeypatch)
     _patch_application(monkeypatch, inputs)
-    terminal.start_terminal(agency, show_reasoning=False)
+    terminal.start_terminal(agency, show_reasoning=False, reload=False)
 
     msg, recipient, _chat = calls[0]
     assert msg == "hi there"
@@ -142,7 +142,7 @@ def test_cli_agent_mentions_allows_punctuation(monkeypatch: pytest.MonkeyPatch) 
 
     agency, calls = _make_agency_with_stream_stub(monkeypatch)
     _patch_application(monkeypatch, inputs)
-    terminal.start_terminal(agency, show_reasoning=False)
+    terminal.start_terminal(agency, show_reasoning=False, reload=False)
 
     msg, recipient, _chat = calls[0]
     assert msg == ", hi there"
@@ -155,7 +155,7 @@ def test_cli_agent_mentions_prefers_longest_match(monkeypatch: pytest.MonkeyPatc
 
     agency, calls = _make_agency_with_stream_stub(monkeypatch)
     _patch_application(monkeypatch, inputs)
-    terminal.start_terminal(agency, show_reasoning=False)
+    terminal.start_terminal(agency, show_reasoning=False, reload=False)
 
     msg, recipient, _chat = calls[0]
     assert msg == "hello"
@@ -168,7 +168,7 @@ def test_cli_status_is_nondestructive(monkeypatch: pytest.MonkeyPatch) -> None:
 
     agency, calls = _make_agency_with_stream_stub(monkeypatch)
     _patch_application(monkeypatch, inputs)
-    terminal.start_terminal(agency, show_reasoning=False)
+    terminal.start_terminal(agency, show_reasoning=False, reload=False)
 
     assert calls == []
 
@@ -190,7 +190,7 @@ def test_cli_slash_completions_supports_async(monkeypatch: pytest.MonkeyPatch) -
 
     monkeypatch.setattr(terminal.DropdownMenu, "set_items", _capture_set_items)
     _patch_application(monkeypatch, inputs)
-    terminal.start_terminal(agency, show_reasoning=False)
+    terminal.start_terminal(agency, show_reasoning=False, reload=False)
 
     assert captured, "Dropdown menu never received items"
     first_labels = captured[0]
@@ -270,7 +270,7 @@ def test_cli_stream_cancellation(monkeypatch: pytest.MonkeyPatch) -> None:
 
     inputs = ["trigger stream", "/exit"]
     _patch_application(monkeypatch, inputs)
-    terminal.start_terminal(agency, show_reasoning=False)
+    terminal.start_terminal(agency, show_reasoning=False, reload=False)
 
     # Verify cancel was called
     assert cancel_called == ["immediate"], f"Expected cancel to be called, got: {cancel_called}"

@@ -1,5 +1,6 @@
 import asyncio
 import inspect
+import io
 import logging
 import os
 import re
@@ -92,11 +93,22 @@ class EscapeKeyWatcher:
                     pass
 
     def start(self) -> None:
-        """Start watching for ESC key in background thread."""
+        """Start watching for ESC key in background thread.
+
+        Gracefully degrades in test environments where stdin is mocked.
+        """
         import threading
 
         self._stop = False
         self._escape_pressed = False
+
+        # Check if stdin is a real terminal (not mocked in tests)
+        try:
+            sys.stdin.fileno()
+        except (io.UnsupportedOperation, AttributeError, OSError):
+            # stdin is mocked/redirected - skip key watching
+            return
+
         target = self._poll_windows if sys.platform == "win32" else self._poll_unix
         self._thread = threading.Thread(target=target, daemon=True)
         self._thread.start()
@@ -110,6 +122,7 @@ class EscapeKeyWatcher:
 
 
 # Environment variable to mark child process in reload mode
+# Values: "0" = initial spawn, "1" = respawn after file change (auto-resume)
 _RELOAD_CHILD_ENV = "_AGENCY_TERMINAL_RELOAD_CHILD"
 
 
@@ -148,10 +161,10 @@ class TerminalReloader:
         self._stop_requested = False
         self._logger = logging.getLogger(__name__)
 
-    def _spawn_child(self) -> subprocess.Popen[bytes]:
+    def _spawn_child(self, is_restart: bool = False) -> subprocess.Popen[bytes]:
         """Spawn a child process running the terminal demo."""
         env = os.environ.copy()
-        env[_RELOAD_CHILD_ENV] = "1"
+        env[_RELOAD_CHILD_ENV] = "1" if is_restart else "0"
 
         # Platform-specific flags
         kwargs: dict[str, Any] = {
@@ -201,10 +214,12 @@ class TerminalReloader:
         def should_watch(change_type: Any, path: str) -> bool:
             return path.endswith((".py", ".md"))
 
+        is_restart = False  # First spawn is not a restart
         try:
             while not self._stop_requested:
                 # Spawn child process
-                self._child_process = self._spawn_child()
+                self._child_process = self._spawn_child(is_restart=is_restart)
+                is_restart = True  # Subsequent spawns are restarts
 
                 # Watch for file changes while child is running
                 try:
@@ -317,7 +332,7 @@ def start_terminal(
     logger = logging.getLogger(__name__)
 
     # Hot reload: if enabled and we're the parent, run the reloader loop
-    if reload and os.environ.get(_RELOAD_CHILD_ENV) != "1":
+    if reload and not os.environ.get(_RELOAD_CHILD_ENV):
         script_path = _get_caller_script_path()
         if script_path is None:
             logger.warning("Could not determine script path for hot reload. Running without reload.")
@@ -336,7 +351,7 @@ def start_terminal(
         # Check if any agent in the agency uses a reasoning model
         show_reasoning = any(is_reasoning_model(agent.model) for agent in agency_instance.agents.values())
 
-    # Auto-resume on hot reload only (load most recent chat)
+    # Auto-resume on hot reload only (not on initial boot)
     resumed_chat_id: str | None = None
     if os.environ.get(_RELOAD_CHILD_ENV) == "1":
         records = TerminalDemoLauncher.list_chat_records()
@@ -544,19 +559,15 @@ def start_terminal(
 
                 event_converter.openai_to_message_output(event, recipient_agent_str)
 
-            # If cancelled, clean up display and filter orphaned messages
+            # If cancelled, clean up display and filter orphaned/duplicate messages
             if cancelled:
-                # Clean up any live displays from the event converter
-                if event_converter.message_output is not None:
-                    event_converter.message_output.__exit__(None, None, None)
-                    event_converter.message_output = None
-                if event_converter.reasoning_output is not None:
-                    event_converter.reasoning_output.__exit__(None, None, None)
-                    event_converter.reasoning_output = None
+                # Clean up any live displays and reset buffers
+                event_converter._cleanup_live_display()
 
-                # Filter out orphaned messages (e.g., reasoning without following item)
+                # Filter out duplicates and orphaned messages
                 all_messages = agency_instance.thread_manager.get_all_messages()
-                filtered = MessageFilter.filter_messages(all_messages)
+                filtered = MessageFilter.remove_duplicates(all_messages)
+                filtered = MessageFilter.filter_messages(filtered)
                 filtered = MessageFilter.remove_orphaned_messages(filtered)
                 agency_instance.thread_manager.replace_messages(filtered)
 

@@ -531,6 +531,14 @@ def run_stream_with_guardrails(
                         forward_task.cancel()
                         with suppress(asyncio.CancelledError):
                             await forward_task
+
+                    # Clean up duplicates and orphans (idempotent - safe to run always)
+                    if agency_context and agency_context.thread_manager:
+                        all_messages = agency_context.thread_manager.get_all_messages()
+                        cleaned = MessageFilter.remove_duplicates(all_messages)
+                        cleaned = MessageFilter.remove_orphaned_messages(cleaned)
+                        agency_context.thread_manager.replace_messages(cleaned)
+                        agency_context.thread_manager.persist()
                 except Exception:
                     pass
 

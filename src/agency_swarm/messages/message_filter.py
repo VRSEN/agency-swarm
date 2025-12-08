@@ -248,3 +248,30 @@ class MessageFilter:
             final_messages.append(msg)
 
         return final_messages
+
+    @staticmethod
+    def remove_duplicates(messages: list[TResponseInputItem]) -> list[TResponseInputItem]:
+        """Remove duplicate messages based on their 'id' field.
+
+        When the same item is added multiple times (e.g., from 'added' and 'done' events),
+        this keeps only the first occurrence.
+
+        Args:
+            messages: List of message dictionaries
+
+        Returns:
+            list[TResponseInputItem]: Messages with duplicates removed
+        """
+        seen_ids: set[str] = set()
+        result: list[TResponseInputItem] = []
+
+        for msg in messages:
+            msg_id = msg.get("id")
+            if isinstance(msg_id, str) and msg_id:
+                if msg_id in seen_ids:
+                    logger.debug(f"Removing duplicate message with id={msg_id}")
+                    continue
+                seen_ids.add(msg_id)
+            result.append(msg)
+
+        return result

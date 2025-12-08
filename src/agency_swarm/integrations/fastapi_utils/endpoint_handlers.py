@@ -258,8 +258,9 @@ def make_stream_endpoint(
                     # Get messages generated before cancel/completion
                     all_messages = agency_instance.thread_manager.get_all_messages()
                     new_messages = all_messages[initial_message_count:]
-                    # Filter unwanted types and remove orphaned tool calls/outputs
-                    filtered_messages = MessageFilter.filter_messages(new_messages)
+                    # Remove duplicates, filter unwanted types, and remove orphaned tool calls/outputs
+                    filtered_messages = MessageFilter.remove_duplicates(new_messages)
+                    filtered_messages = MessageFilter.filter_messages(filtered_messages)
                     filtered_messages = MessageFilter.remove_orphaned_messages(filtered_messages)
 
                     # Build result with new messages
@@ -333,8 +334,9 @@ def make_cancel_endpoint(request_model, verify_token, run_registry: ActiveRunReg
         # Get messages generated before cancel
         all_messages = active_run.agency.thread_manager.get_all_messages()
         new_messages = all_messages[active_run.initial_message_count :]
-        # Filter unwanted types and remove orphaned tool calls/outputs
-        filtered_messages = MessageFilter.filter_messages(new_messages)
+        # Remove duplicates, filter unwanted types, and remove orphaned tool calls/outputs
+        filtered_messages = MessageFilter.remove_duplicates(new_messages)
+        filtered_messages = MessageFilter.filter_messages(filtered_messages)
         filtered_messages = MessageFilter.remove_orphaned_messages(filtered_messages)
 
         return {
@@ -411,15 +413,15 @@ def make_agui_chat_endpoint(request_model, agency_factory: Callable[..., Agency]
                         run_id=request.run_id,
                     )
                     if agui_event:
-                        events = agui_event if isinstance(agui_event, list) else [agui_event]
-                        for event in events:
-                            if isinstance(event, MessagesSnapshotEvent):
-                                snapshot_messages.append(event.messages[0].model_dump())
+                        agui_events = agui_event if isinstance(agui_event, list) else [agui_event]
+                        for agui_evt in agui_events:
+                            if isinstance(agui_evt, MessagesSnapshotEvent):
+                                snapshot_messages.append(agui_evt.messages[0].model_dump())
                                 yield encoder.encode(
                                     MessagesSnapshotEvent(type=EventType.MESSAGES_SNAPSHOT, messages=snapshot_messages)
                                 )
                             else:
-                                yield encoder.encode(event)
+                                yield encoder.encode(agui_evt)
 
                 yield encoder.encode(
                     RunFinishedEvent(
