@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any
 
 from agents import Agent as BaseAgent, GuardrailFunctionOutput, ModelSettings, RunContextWrapper
 from agents.models import get_default_model
+from agents.models.default_models import get_default_model_settings as get_sdk_default_model_settings
 from openai.types.shared import Reasoning
 
 from agency_swarm.agent.attachment_manager import AttachmentManager
@@ -26,6 +27,20 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _INPUT_GUARDRAIL_WRAPPED_ATTR = "_agency_swarm_input_guardrail_wrapped"
+
+# Agency Swarm defaults applied when the SDK leaves a field unset
+_FRAMEWORK_DEFAULT_MODEL_SETTINGS = ModelSettings(truncation="auto")
+
+
+def _get_framework_default_model_settings(model: str | None = None) -> ModelSettings:
+    """Get SDK defaults for a model and layer Agency Swarm defaults on top."""
+    base = get_sdk_default_model_settings(model)
+    updates = {
+        field.name: getattr(_FRAMEWORK_DEFAULT_MODEL_SETTINGS, field.name)
+        for field in dataclasses.fields(ModelSettings)
+        if getattr(base, field.name) is None and getattr(_FRAMEWORK_DEFAULT_MODEL_SETTINGS, field.name) is not None
+    }
+    return dataclasses.replace(base, **updates) if updates else base
 
 
 def handle_deprecated_parameters(kwargs: dict[str, Any]) -> dict[str, Any]:
@@ -212,6 +227,35 @@ def handle_deprecated_parameters(kwargs: dict[str, Any]) -> dict[str, Any]:
         logger.warning(f"Deprecated Agent parameters used: {list(deprecated_args_used.keys())}")
 
     return deprecated_args_used
+
+
+def apply_framework_defaults(kwargs: dict[str, Any]) -> None:
+    """
+    Apply Agency Swarm framework defaults to model settings.
+
+    Layers Agency Swarm defaults (e.g., truncation="auto") on top of the agents
+    SDK defaults, preserving model-specific SDK settings (like GPT-5 reasoning).
+
+    Args:
+        kwargs: The initialization keyword arguments (modified in place)
+    """
+    model_arg = kwargs.get("model")
+    model_name = model_arg if isinstance(model_arg, str) else None
+    base_defaults = _get_framework_default_model_settings(model_name)
+
+    existing_settings = kwargs.get("model_settings")
+    if existing_settings is None:
+        kwargs["model_settings"] = base_defaults
+        return
+
+    if isinstance(existing_settings, dict):
+        existing_settings = ModelSettings(**{k: v for k, v in existing_settings.items() if v is not None})
+
+    if not isinstance(existing_settings, ModelSettings):
+        raise TypeError("model_settings must be a ModelSettings instance or dict")
+
+    # User-specified values override defaults; unset fields inherit framework+SDK defaults
+    kwargs["model_settings"] = base_defaults.resolve(existing_settings)
 
 
 def separate_kwargs(kwargs: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:

@@ -15,7 +15,7 @@ def set_chats_dir(path: str) -> None:
 
 
 def get_chats_dir() -> str:
-    base = _CHATS_DIR or os.environ.get("AGENCY_SWARM_CHATS_DIR") or str(Path.cwd() / ".agency_swarm_chats")
+    base = _CHATS_DIR or os.environ.get("AGENCY_SWARM_CHATS_DIR") or str(Path.cwd() / ".agency_swarm")
     Path(base).mkdir(parents=True, exist_ok=True)
     return base
 

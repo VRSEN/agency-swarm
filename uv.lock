@@ -104,7 +104,7 @@ requires-dist = [
     { name = "mcp", specifier = ">=1.13.1,<2.0.0" },
     { name = "numpy", marker = "python_full_version >= '3.10' and extra == 'voice'", specifier = ">=2.2.0,<3" },
     { name = "openai", specifier = ">=2.2,<3" },
-    { name = "openai-agents", specifier = "==0.6.0" },
+    { name = "openai-agents", specifier = "==0.6.2" },
     { name = "prompt-toolkit", specifier = ">=3.0.0,<4.0.0" },
     { name = "pydantic", specifier = ">=2.11,<3" },
     { name = "python-dotenv", specifier = ">=1.1.1,<2.0.0" },
@@ -1749,7 +1749,7 @@ wheels = [
 
 [[package]]
 name = "openai-agents"
-version = "0.6.0"
+version = "0.6.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "griffe" },
@@ -1760,9 +1760,9 @@ dependencies = [
     { name = "types-requests" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/f8/83/5004ab65dc5fdcf96c53b5a5f18de774897c70ee661320e366c64768f6ca/openai_agents-0.6.0.tar.gz", hash = "sha256:355d365a93c6d2457f2226ff7e9082db439d7776531d8a8d7635e45c59e3cc9a", size = 2009045, upload-time = "2025-11-18T19:06:55.988Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a8/6d/824b78c3161e0204f6fc71b459af64d8c65325a5486bc41b8eedcca7a715/openai_agents-0.6.2.tar.gz", hash = "sha256:1012aee224518292778fb4b07eb9148b0b5efa5cd87fd32ec656296aba885612", size = 2014662, upload-time = "2025-12-04T22:37:28.397Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a1/f4/6418293ef0a1f9e57c261885a86ea2815d5ba385f1b4af5fa48608c1a0c2/openai_agents-0.6.0-py3-none-any.whl", hash = "sha256:a9928e5bea6938141de679ed7f6db9e9595aae05cd9de11b67ed3893a2c1ee07", size = 237412, upload-time = "2025-11-18T19:06:54.162Z" },
+    { url = "https://files.pythonhosted.org/packages/d1/0a/43e24985d9df314d3dfa5f004443e8a15ef2bdcc79718dc74ded5545bf7d/openai_agents-0.6.2-py3-none-any.whl", hash = "sha256:3156637f3eee925268943f5c4b500b3b22b179158b82e7b53ed7ab362edf84d6", size = 238302, upload-time = "2025-12-04T22:37:26.313Z" },
 ]
 
 [[package]]

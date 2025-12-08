@@ -196,6 +196,29 @@ def test_agent_initialization_with_reasoning_effort():
     assert agent.model_settings.reasoning.effort == "medium"
 
 
+def test_agent_initialization_defaults_truncation_to_auto():
+    """Default ModelSettings should prefer truncation='auto'."""
+    agent = Agent(name="TruncDefault", instructions="Test")
+    assert agent.model_settings.truncation == "auto"
+
+
+def test_agent_initialization_preserves_explicit_truncation_disabled():
+    """Explicit truncation='disabled' should not be overwritten by the default."""
+    agent = Agent(
+        name="TruncDisabled",
+        instructions="Test",
+        model_settings=ModelSettings(truncation="disabled"),
+    )
+    assert agent.model_settings.truncation == "disabled"
+
+
+def test_agent_initialization_applies_sdk_model_defaults():
+    """Model-specific SDK defaults (e.g., GPT-5 reasoning) should be preserved."""
+    agent = Agent(name="Gpt5", instructions="Test", model="gpt-5")
+    assert agent.model_settings.reasoning is not None
+    assert agent.model_settings.reasoning.effort == "low"
+
+
 def test_agent_initialization_with_truncation_strategy():
     """Legacy truncation_strategy maps to ModelSettings.truncation."""
     agent = Agent(name="Trunc", instructions="Test", truncation_strategy="auto")
