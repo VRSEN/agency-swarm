@@ -165,12 +165,17 @@ def visualize(
     )
 
 
-def terminal_demo(agency: "Agency", show_reasoning: bool | None = None) -> None:
+def terminal_demo(agency: "Agency", show_reasoning: bool | None = None, reload: bool = True) -> None:
     """
     Run a terminal demo of the agency.
+
+    Args:
+        agency: The Agency instance to run.
+        show_reasoning: Whether to show reasoning output. Auto-detected if None.
+        reload: If True, watch for file changes and automatically restart on changes.
     """
     # Call terminal demo entry directly
-    start_terminal(agency, show_reasoning=show_reasoning)
+    start_terminal(agency, show_reasoning=show_reasoning, reload=reload)
 
 
 def copilot_demo(

@@ -79,6 +79,10 @@ class StreamingRunResponse(AsyncGenerator[StreamEvent | dict[str, Any]]):
         """
         if self._inner is not None:
             self._inner.cancel(mode=mode)
+            # Also set our own state so outer finally blocks see cancellation
+            if self._cancel_state is not None:
+                self._cancel_state["mode"] = mode
+                self._cancel_state["user_requested"] = True
             return
         # Idempotent: skip if already cancelled
         if self._cancel_requested:
@@ -98,11 +102,15 @@ class StreamingRunResponse(AsyncGenerator[StreamEvent | dict[str, Any]]):
         existing_future = self._final_future
         self._inner = other
 
-        # Propagate cancel event and state to inner stream
+        # Propagate cancel event/state bidirectionally so nested wrappers share the same state.
         if self._cancel_event is not None and other._cancel_event is None:
             other._cancel_event = self._cancel_event
+        elif other._cancel_event is not None and self._cancel_event is None:
+            self._cancel_event = other._cancel_event
         if self._cancel_state is not None and other._cancel_state is None:
             other._cancel_state = self._cancel_state
+        elif other._cancel_state is not None and self._cancel_state is None:
+            self._cancel_state = other._cancel_state
 
         if existing_future is not None:
             existing_loop = existing_future.get_loop()

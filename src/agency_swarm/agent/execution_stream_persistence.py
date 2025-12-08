@@ -265,7 +265,11 @@ def _persist_streamed_items(
                 continue
         rebuilt_tail.append(existing_item)
 
-    sanitized_history = preserved_prefix + rebuilt_tail + filtered_items
+    # Remove orphaned items (e.g., function_call without output) before saving
+    combined_new_items = rebuilt_tail + filtered_items
+    combined_new_items = MessageFilter.remove_orphaned_messages(combined_new_items)
+
+    sanitized_history = preserved_prefix + combined_new_items
 
     agency_context.thread_manager.replace_messages(sanitized_history)
     agency_context.thread_manager.persist()

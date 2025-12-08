@@ -155,4 +155,3 @@ async def test_stream_endpoint_cleans_up_on_disconnect(monkeypatch: pytest.Monke
     # Verify cleanup happened
     remaining = await run_registry.get(run_id)
     assert remaining is None, "Active run registry entry must be removed after disconnect"
-

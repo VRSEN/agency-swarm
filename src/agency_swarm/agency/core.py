@@ -474,13 +474,17 @@ class Agency:
 
         return visualize(self, output_file, include_tools, open_browser)
 
-    def terminal_demo(self, show_reasoning: bool | None = None) -> None:
+    def terminal_demo(self, show_reasoning: bool | None = None, reload: bool = True) -> None:
         """
         Run a terminal demo of the agency.
+
+        Args:
+            show_reasoning: Whether to show reasoning output. Auto-detected if None.
+            reload: If True, watch for file changes and automatically restart on changes.
         """
         from .visualization import terminal_demo
 
-        return terminal_demo(self, show_reasoning=show_reasoning)
+        return terminal_demo(self, show_reasoning=show_reasoning, reload=reload)
 
     def copilot_demo(
         self,
