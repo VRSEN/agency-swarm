@@ -536,6 +536,7 @@ def run_stream_with_guardrails(
                     if agency_context and agency_context.thread_manager:
                         all_messages = agency_context.thread_manager.get_all_messages()
                         cleaned = MessageFilter.remove_duplicates(all_messages)
+                        cleaned = MessageFilter.filter_messages(cleaned)
                         cleaned = MessageFilter.remove_orphaned_messages(cleaned)
                         agency_context.thread_manager.replace_messages(cleaned)
                         agency_context.thread_manager.persist()
