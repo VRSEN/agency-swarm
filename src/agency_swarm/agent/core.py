@@ -19,6 +19,7 @@ from openai import AsyncOpenAI, OpenAI
 from agency_swarm.agent import (
     Execution,
     add_tool,
+    apply_framework_defaults,
     handle_deprecated_parameters,
     load_tools_from_folder,
     parse_schemas,
@@ -141,6 +142,9 @@ class Agent(BaseAgent[MasterContext]):
         """
         # Handle deprecated parameters
         handle_deprecated_parameters(kwargs)
+
+        # Apply framework defaults (e.g., truncation="auto")
+        apply_framework_defaults(kwargs)
 
         # examples are appended to instructions
         if "examples" in kwargs:
