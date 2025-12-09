@@ -27,7 +27,7 @@ def coordinator_agent():
             "When delegating, only relay the exact task text and never include unrelated user information."
         ),
         model_settings=ModelSettings(temperature=0.0),
-        model=LitellmModel(model="openai/gpt-4.1", api_key=os.getenv("OPENAI_API_KEY")),
+        model=LitellmModel(model="openai/gpt-5.1", api_key=os.getenv("OPENAI_API_KEY")),
         send_message_tool_class=SendMessageHandoff,
     )
 
@@ -38,7 +38,7 @@ def worker_agent():
         name="Worker",
         instructions=("You perform tasks. When you receive a task, "),
         model_settings=ModelSettings(temperature=0.0),
-        model=LitellmModel(model="openai/gpt-4.1", api_key=os.getenv("OPENAI_API_KEY")),
+        model=LitellmModel(model="openai/gpt-5.1", api_key=os.getenv("OPENAI_API_KEY")),
     )
 
 
@@ -51,7 +51,7 @@ def data_agent():
         ),
         description="Has information about the user.",
         model_settings=ModelSettings(temperature=0.0),
-        model=LitellmModel(model="openai/gpt-4.1", api_key=os.getenv("OPENAI_API_KEY")),
+        model=LitellmModel(model="openai/gpt-5.1", api_key=os.getenv("OPENAI_API_KEY")),
     )
 
 

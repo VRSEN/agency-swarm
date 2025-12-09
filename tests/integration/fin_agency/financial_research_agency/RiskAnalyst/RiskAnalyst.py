@@ -9,5 +9,5 @@ risk_analyst = Agent(
     ),
     instructions="./instructions.md",
     tools_folder="./tools",
-    model="gpt-4.1",
+    model="gpt-5.1",
 )

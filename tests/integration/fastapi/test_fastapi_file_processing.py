@@ -15,6 +15,7 @@ import httpx
 import pytest
 import uvicorn
 from agents import ModelSettings
+from openai.types.shared import Reasoning
 
 from agency_swarm import Agency, Agent
 
@@ -47,9 +48,9 @@ class TestFastAPIFileProcessing:
                 alternative text. If multiple phrases appear, include them all exactly as written.
                 """,
                 description="Agent that processes and analyzes file content",
-                model="gpt-4.1",
+                model="gpt-5.1",
                 model_settings=ModelSettings(
-                    temperature=0,
+                    reasoning=Reasoning(effort="low"),
                 ),
             )
 
