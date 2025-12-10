@@ -15,26 +15,27 @@ from agency_swarm.mcp.oauth import MCPServerOAuth, _listen_for_callback_once
 
 CACHE_DIR = Path("./data/oauth-tokens")
 
-# Notion's MCP server uses its own redirect URI from OAuth discovery
-# We use localhost:8000 to capture the callback locally
-notion = MCPServerOAuth(
-    url="https://mcp.notion.com/mcp",
-    name="notion",
-    cache_dir=CACHE_DIR,
-    redirect_uri="http://localhost:8000/auth/callback",
-)
-
 
 async def local_callback_handler() -> tuple[str, str | None]:
     """Capture OAuth redirect via the built-in local HTTP server."""
     return await _listen_for_callback_once("http://localhost:8000/auth/callback")
 
 
+# Notion's MCP server uses its own redirect URI from OAuth discovery
+# OAuth handlers are configured on MCPServerOAuth, not on Agent
+# We use localhost:8000 to capture the callback locally
+notion = MCPServerOAuth(
+    url="https://mcp.notion.com/mcp",
+    name="notion",
+    cache_dir=CACHE_DIR,
+    redirect_uri="http://localhost:8000/auth/callback",
+    callback_handler=local_callback_handler,
+)
+
 agent = Agent(
     name="NotionAgent",
     instructions="You help with Notion. Use notion-search to find pages.",
     mcp_servers=[notion],
-    mcp_oauth_callback_handler=local_callback_handler,
 )
 
 agency = Agency(agent)
