@@ -21,7 +21,7 @@ Prerequisites:
     3. In another terminal (Terminal 2), run this example. No GitHub environment
        variables are needed for the client because it auto-registers with the MCP server:
        ```bash
-       python examples/mcp_oauth_local.py
+       python examples/mcp_oauth/github_client.py
        ```
 
 The example will:
@@ -53,7 +53,15 @@ print("Client ID: (auto-assigned per run)")
 print(f"\nTokens will be stored in: {SERVER_CACHE_DIR / 'tokens.json'}")
 print("=" * 80)
 
+
+# Dedicated callback handler that only uses the local HTTP listener.
+async def local_callback_handler() -> tuple[str, str | None]:
+    """Capture GitHub redirect via the built-in local HTTP server."""
+    return await _listen_for_callback_once("http://localhost:8000/auth/callback")
+
+
 # Create OAuth-enabled MCP Server configuration
+# OAuth handlers are configured on MCPServerOAuth, not on Agent
 # use_env_credentials=False prevents picking up GITHUB_CLIENT_ID from .env
 # The client will use Dynamic Client Registration (DCR) with the FastMCP server
 oauth_server = MCPServerOAuth(
@@ -63,13 +71,8 @@ oauth_server = MCPServerOAuth(
     scopes=["user"],  # GitHub OAuth scopes
     redirect_uri="http://localhost:8000/auth/callback",
     use_env_credentials=False,  # Use DCR, don't read GitHub creds from env
+    callback_handler=local_callback_handler,
 )
-
-
-# Dedicated callback handler that only uses the local HTTP listener.
-async def local_callback_handler() -> tuple[str, str | None]:
-    """Capture GitHub redirect via the built-in local HTTP server."""
-    return await _listen_for_callback_once("http://localhost:8000/auth/callback")
 
 
 # Create Agent with OAuth MCP Server
@@ -79,14 +82,13 @@ oauth_agent = Agent(
 
     When asked about secret data or protected information:
     1. Use the get_secret_message tool to retrieve the secret message
-    2. Use the echo_with_auth tool to echo messages with authentication
-    3. Use the get_test_data tool to retrieve protected test data
+    2. Use the oauth_echo tool to echo messages with authentication
+    3. Use the get_protected_data tool to retrieve protected test data
 
     Always confirm that you successfully authenticated via OAuth when using these tools.""",
     description="Agent with OAuth-authenticated MCP server access",
     model="gpt-4",
     mcp_servers=[oauth_server],
-    mcp_oauth_callback_handler=local_callback_handler,
 )
 
 # Create Agency with local token storage

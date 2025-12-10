@@ -14,13 +14,13 @@ Setup:
        export GITHUB_CLIENT_SECRET="your_github_client_secret"
 
     3. Run the server:
-       python examples/utils/oauth_mcp_server.py
+       python examples/mcp_oauth/github_server.py
 
 Usage:
     # Start server (Terminal 1)
     export GITHUB_CLIENT_ID="Iv1.abc123..."
     export GITHUB_CLIENT_SECRET="secret123..."
-    python examples/utils/oauth_mcp_server.py
+    python examples/mcp_oauth/github_server.py
 
     # Connect from Agency Swarm (Terminal 2)
     # Use MCPServerOAuth with same credentials
