@@ -455,6 +455,21 @@ class Agency:
 
         return copilot_demo(self, host, port, frontend_port, cors_origins)
 
+    def chatkit_demo(
+        self,
+        host: str = "0.0.0.0",
+        port: int = 8000,
+        frontend_port: int = 3000,
+        cors_origins: list[str] | None = None,
+        open_browser: bool = True,
+    ) -> None:
+        """
+        Run a ChatKit demo of the agency.
+        """
+        from .visualization import chatkit_demo
+
+        return chatkit_demo(self, host, port, frontend_port, cors_origins, open_browser)
+
     def _schedule_starter_cache_warmup(self) -> None:
         if self._starter_cache_warmup_started:
             return

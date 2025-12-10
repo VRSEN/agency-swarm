@@ -20,6 +20,7 @@ def run_fastapi(
     return_app: bool = False,
     cors_origins: list[str] | None = None,
     enable_agui: bool = False,
+    enable_chatkit: bool = False,
     enable_logging: bool = False,
     logs_dir: str = "activity-logs",
     allowed_local_file_dirs: list[str] | None = None,
@@ -40,6 +41,11 @@ def run_fastapi(
     server_url : str | None
         Optional base URL to be included in the server OpenAPI schema.
         Defaults to ``http://{host}:{port}``
+    enable_agui : bool
+        Enable AG-UI protocol compatibility for streaming endpoints.
+    enable_chatkit : bool
+        Enable ChatKit protocol endpoints (adds /{agency}/chatkit routes).
+        ChatKit is OpenAI's pre-built chat UI framework.
     enable_logging : bool
         Enable request tracking and file logging.
         When enabled, adds middleware to track requests and allows conditional
@@ -199,6 +205,17 @@ def run_fastapi(
                 endpoints.append(f"/{agency_name}/get_response_stream")
                 endpoints.append(f"/{agency_name}/cancel_response_stream")
 
+                # Add ChatKit endpoint if enabled
+                if enable_chatkit:
+                    from .fastapi_utils.chatkit_handlers import ChatkitRequest, make_chatkit_endpoint
+
+                    app.add_api_route(
+                        f"/{agency_name}/chatkit",
+                        make_chatkit_endpoint(ChatkitRequest, agency_factory, verify_token),
+                        methods=["POST"],
+                    )
+                    endpoints.append(f"/{agency_name}/chatkit")
+
             app.add_api_route(
                 f"/{agency_name}/get_metadata",
                 make_metadata_endpoint(
@@ -238,7 +255,12 @@ def run_fastapi(
     if return_app:
         return app
 
-    logger.info(f"Starting FastAPI {'AG-UI ' if enable_agui else ''}server at http://{host}:{port}")
+    mode_str = ""
+    if enable_agui:
+        mode_str = "AG-UI "
+    elif enable_chatkit:
+        mode_str = "ChatKit "
+    logger.info(f"Starting FastAPI {mode_str}server at http://{host}:{port}")
 
     # Prefer the non-deprecated websocket stack; gracefully fall back when
     # running against older uvicorn versions that do not support this option.

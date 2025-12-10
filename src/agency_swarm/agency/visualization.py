@@ -201,6 +201,24 @@ def copilot_demo(
     CopilotDemoLauncher.start(agency, host=host, port=port, frontend_port=frontend_port, cors_origins=cors_origins)
 
 
+def chatkit_demo(
+    agency: "Agency",
+    host: str = "0.0.0.0",
+    port: int = 8000,
+    frontend_port: int = 3000,
+    cors_origins: list[str] | None = None,
+    open_browser: bool = True,
+) -> None:
+    """
+    Run a ChatKit demo of the agency.
+    """
+    from agency_swarm.ui.demos.chatkit import ChatkitDemoLauncher
+
+    ChatkitDemoLauncher.start(
+        agency, host=host, port=port, frontend_port=frontend_port, cors_origins=cors_origins, open_browser=open_browser
+    )
+
+
 def _describe_model(model: Any) -> str:
     """Return a sanitized model representation suitable for visualization."""
     if model is None:
