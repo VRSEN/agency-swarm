@@ -30,6 +30,19 @@ from pydantic import AnyUrl
 _user_id_context: ContextVar[str | None] = ContextVar("oauth_user_id", default=None)
 
 
+def set_oauth_user_id(user_id: str | None) -> None:
+    """Set the current user ID for OAuth token isolation.
+
+    This must be called before MCP server connections are established
+    to ensure tokens are stored in the correct per-user directory.
+
+    Args:
+        user_id: The user ID to associate with OAuth tokens, or None for default.
+    """
+    _user_id_context.set(user_id)
+    logger.debug(f"OAuth user_id context set to: {user_id}")
+
+
 @dataclass
 class TokenCallbackRegistry:
     """Holds optional load/save callbacks for token persistence."""
@@ -253,6 +266,8 @@ class MCPServerOAuth:
         auth_server_url: Base URL for OAuth discovery when different from MCP endpoint
         use_env_credentials: If False, don't read client_id/secret from environment.
             Set to False for self-hosted servers using Dynamic Client Registration (DCR).
+        redirect_handler: Custom handler for OAuth redirect (opens browser by default)
+        callback_handler: Custom handler to receive OAuth callback code
     """
 
     DEFAULT_REDIRECT_URI: ClassVar[str] = "http://localhost:8000/auth/callback"
@@ -269,6 +284,8 @@ class MCPServerOAuth:
     client_metadata: OAuthClientMetadata | None = None
     auth_server_url: str | None = None
     use_env_credentials: bool = True
+    redirect_handler: Callable[[str], Awaitable[None]] | None = None
+    callback_handler: Callable[[], Awaitable[tuple[str, str | None]]] | None = None
 
     def _resolve_client_id(self) -> str | None:
         """Return the client_id if provided explicitly or via environment."""
