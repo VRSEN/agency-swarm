@@ -95,6 +95,13 @@ artifacts = [
     "ui/demos/copilot/**/*.mjs",
     "ui/demos/copilot/**/*.ico",
     "ui/demos/copilot/**/*.svg",
+    # ChatKit frontend files
+    "ui/demos/chatkit/**/*.ts",
+    "ui/demos/chatkit/**/*.tsx",
+    "ui/demos/chatkit/**/*.css",
+    "ui/demos/chatkit/**/*.json",
+    "ui/demos/chatkit/**/*.mjs",
+    "ui/demos/chatkit/**/*.html",
 ]
 
 [tool.hatch.build.targets.wheel.force-include]
@@ -104,8 +111,11 @@ artifacts = [
 include = [
     "src/agency_swarm/**/*.py",
     "src/agency_swarm/**/*.ts",
+    "src/agency_swarm/**/*.tsx",
+    "src/agency_swarm/**/*.html",
     "src/agency_swarm/ui/templates/**",
     "src/agency_swarm/ui/demos/copilot/**",
+    "src/agency_swarm/ui/demos/chatkit/**",
 ]
 exclude = ["**/node_modules/**", "**/.next/**"]
 
