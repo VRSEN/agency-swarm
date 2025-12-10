@@ -54,17 +54,42 @@ def get_verify_token(app_token):
     return verify_token
 
 
+def _set_oauth_user_context(user_id: str | None) -> None:
+    """Set the OAuth user ID contextvar for per-user token isolation.
+
+    Must be called BEFORE MCP server connections are established.
+    """
+    if user_id is None:
+        return
+    try:
+        from agency_swarm.mcp.oauth import set_oauth_user_id
+
+        set_oauth_user_id(user_id)
+    except ImportError:
+        pass  # OAuth extras not installed
+
+
 def _prepare_oauth_runtime(
     agency_instance: Agency,
     oauth_runtime: FastAPIOAuthRuntime | None,
     user_id: str | None,
 ) -> FastAPIOAuthRuntime | None:
-    """Attach per-request OAuth helpers and propagate user_id."""
-    if oauth_runtime is None:
-        return None
+    """Attach per-request OAuth helpers and propagate user_id.
+
+    This sets the user_id in both the agency's user_context (for run-time hooks)
+    and the OAuth contextvar (for token storage during MCP server connection).
+    """
+    # Always set OAuth user context for token isolation, even without oauth_runtime
+    _set_oauth_user_context(user_id)
+
+    # Update agency user_context regardless of oauth_runtime
     agency_instance.user_context = dict(getattr(agency_instance, "user_context", {}))
     if user_id is not None:
         agency_instance.user_context["user_id"] = user_id
+
+    if oauth_runtime is None:
+        return None
+
     for agent in agency_instance.agents.values():
         oauth_runtime.install_handler_factory(agent)
     return oauth_runtime
