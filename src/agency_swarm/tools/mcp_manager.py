@@ -417,38 +417,33 @@ def _process_oauth_servers(agent: Any, servers: list[Any]) -> None:
     # Import OAuth client here to avoid circular import
     from agency_swarm.mcp.oauth_client import MCPServerOAuthClient
 
-    # Get custom handlers from agent if provided
-    redirect_handler = getattr(agent, "mcp_oauth_redirect_handler", None)
-    callback_handler = getattr(agent, "mcp_oauth_callback_handler", None)
     handler_factory = getattr(agent, "mcp_oauth_handler_factory", None)
-    base_handlers = {}
-    if redirect_handler:
-        base_handlers["redirect"] = redirect_handler
-    if callback_handler:
-        base_handlers["callback"] = callback_handler
 
     # Convert OAuth configs to OAuth clients
     for i, srv in enumerate(list(servers)):
         if not isinstance(srv, _MCPServerOAuth):
             continue
 
-        # Cast to help mypy understand the type after isinstance check
         oauth_srv = cast("MCPServerOAuth", srv)
-
         logger.info(f"Creating OAuth client for MCP server: {oauth_srv.name}")
 
         try:
-            # Validate configuration
             client_id = oauth_srv.get_client_id_optional()
             if client_id:
                 logger.info(f"OAuth configured for {oauth_srv.name} (client_id: {client_id[:8]}...)")
 
-            # Create OAuth client wrapper
-            server_handlers = base_handlers.copy() if base_handlers else {}
+            # Build handlers: config-level first, then factory overrides (for FastAPI)
+            server_handlers: dict[str, Any] = {}
+            if oauth_srv.redirect_handler:
+                server_handlers["redirect"] = oauth_srv.redirect_handler
+            if oauth_srv.callback_handler:
+                server_handlers["callback"] = oauth_srv.callback_handler
+
             if callable(handler_factory):
                 new_handlers = handler_factory(oauth_srv.name)
                 if isinstance(new_handlers, dict):
                     server_handlers.update(new_handlers)
+
             handlers_arg = server_handlers if server_handlers else None
             oauth_client = MCPServerOAuthClient(
                 oauth_srv,

@@ -8,6 +8,7 @@ from .oauth import (
     default_callback_handler,
     default_redirect_handler,
     get_default_cache_dir,
+    set_oauth_user_id,
 )
 from .oauth_client import MCPServerOAuthClient
 
@@ -20,4 +21,5 @@ __all__ = [
     "default_callback_handler",
     "default_redirect_handler",
     "get_default_cache_dir",
+    "set_oauth_user_id",
 ]

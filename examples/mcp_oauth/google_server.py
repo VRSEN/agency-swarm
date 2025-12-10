@@ -5,14 +5,19 @@ Setup:
        - Application type: Web application
        - Authorized redirect URI: http://localhost:8002/auth/callback
 
-    2. Set environment variables:
+    2. Configure OAuth consent screen:
+       - Go to https://console.cloud.google.com/apis/credentials/consent
+       - Add test users under "Test users" section (required for unverified apps)
+       - Add your email address as a test user
+
+    3. Set environment variables:
        export GOOGLE_CLIENT_ID="your_client_id"
        export GOOGLE_CLIENT_SECRET="your_client_secret"
 
-    3. Run the server:
-       python examples/utils/google_oauth_mcp_server.py
+    4. Run the server:
+       python examples/mcp_oauth/google_server.py
 
-    4. Connect with MCPServerOAuth:
+    5. Connect with MCPServerOAuth:
        MCPServerOAuth(url="http://localhost:8002/mcp", name="google")
 """
 

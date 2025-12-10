@@ -27,7 +27,7 @@ from agency_swarm.mcp import MCPServerOAuth
 notion = MCPServerOAuth(url="https://mcp.notion.com/mcp", name="notion")
 
 agent = Agent(name="NotionAgent", mcp_servers=[notion])
-agency = Agency([agent])
+agency = Agency(agent)
 agency.get_response("List my recent Notion pages")  # Browser opens for authorization
 ```
 
@@ -36,7 +36,7 @@ agency.get_response("List my recent Notion pages")  # Browser opens for authoriz
 # Terminal 1: Start the MCP server with your OAuth app credentials
 export GITHUB_CLIENT_ID="Iv1.abc123..."
 export GITHUB_CLIENT_SECRET="secret123..."
-python examples/utils/oauth_mcp_server.py
+python examples/mcp_oauth/github_server.py
 ```
 ```python
 # Terminal 2: Connect your agent
@@ -46,7 +46,7 @@ from agency_swarm.mcp import MCPServerOAuth
 github = MCPServerOAuth(url="http://localhost:8001/mcp", name="github", scopes=["repo", "user"])
 
 agent = Agent(name="GitHubAgent", mcp_servers=[github])
-agency = Agency([agent])
+agency = Agency(agent)
 agency.get_response("List my repositories")  # Browser opens for authorization
 ```
 
@@ -98,7 +98,7 @@ For GitHub/Google, you need to create an OAuth app and run a FastMCP server:
    - Callback URL: `http://localhost:8002/auth/callback`  
    - Export: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
 
-Then run the FastMCP server (see `examples/utils/oauth_mcp_server.py` for GitHub, `examples/utils/google_oauth_mcp_server.py` for Google).
+Then run the FastMCP server (see `examples/mcp_oauth/github_server.py` for GitHub, `examples/mcp_oauth/google_server.py` for Google).
 
 ## Configuration reference
 
@@ -150,26 +150,33 @@ Then run the FastMCP server (see `examples/utils/oauth_mcp_server.py` for GitHub
   Full OAuth client metadata. Overrides the auto-generated metadata from simple params.
 </ParamField>
 
+<ParamField param="redirect_handler" type="Callable[[str], Awaitable[None]]">
+  Custom async handler for OAuth redirect. Receives the authorization URL to display to users. By default, opens the browser.
+</ParamField>
+
+<ParamField param="callback_handler" type="Callable[[], Awaitable[tuple[str, str | None]]]">
+  Custom async handler to receive the OAuth callback code. Returns a tuple of (code, state). By default, starts a local HTTP server to capture the redirect.
+</ParamField>
+
 ## Token storage and isolation
 
-Tokens default to `~/.agency-swarm/mcp-tokens/{user}/{server}/`. Set `AGENCY_SWARM_MCP_CACHE_DIR` for a global override or pass `cache_dir` per server. Use hooks to keep SaaS users isolated:
+Tokens default to `~/.agency-swarm/mcp-tokens/{user}/{server}/`. Set `AGENCY_SWARM_MCP_CACHE_DIR` for a global override or pass `cache_dir` per server.
+
+For per-user isolation, pass `oauth_token_path` and `user_context`:
 
 ```python
-from pathlib import Path
-
 from agency_swarm import Agency, Agent
-from agency_swarm.mcp import MCPServerOAuth, OAuthStorageHooks
+from agency_swarm.mcp import MCPServerOAuth
 
 oauth_server = MCPServerOAuth(
     url="http://localhost:8001/mcp",
     name="github",
     scopes=["repo", "user"],
-    cache_dir=Path("./data/oauth-tokens"),
 )
 
 agency = Agency(
-    [Agent(name="GitHubAgent", mcp_servers=[oauth_server])],
-    hooks=[OAuthStorageHooks()],
+    Agent(name="GitHubAgent", mcp_servers=[oauth_server]),
+    oauth_token_path="./data/oauth-tokens",
     user_context={"user_id": "user_123"},
 )
 ```
@@ -208,14 +215,16 @@ async def send_redirect(auth_url: str) -> None:
 async def wait_for_code() -> tuple[str, str | None]:
     return await poll_frontend()
 
-oauth_server = MCPServerOAuth(url="http://localhost:8001/mcp", name="github", scopes=["repo"])
-
-agent = Agent(
-    name="BrowserlessAgent",
-    mcp_servers=[oauth_server],
-    mcp_oauth_redirect_handler=send_redirect,
-    mcp_oauth_callback_handler=wait_for_code,
+# OAuth handlers are configured on MCPServerOAuth
+oauth_server = MCPServerOAuth(
+    url="http://localhost:8001/mcp",
+    name="github",
+    scopes=["repo"],
+    redirect_handler=send_redirect,
+    callback_handler=wait_for_code,
 )
+
+agent = Agent(name="BrowserlessAgent", mcp_servers=[oauth_server])
 ```
 
 See [MCP OAuth for Production](/platform/integrations/mcp-oauth-integration) for the full FastAPI/Docker flow.

@@ -186,8 +186,6 @@ class FastAPIOAuthRuntime:
         servers = getattr(agent, "mcp_servers", None)
         if not isinstance(servers, list) or not any(is_oauth_server(srv) for srv in servers):
             return
-        if getattr(agent, "mcp_oauth_redirect_handler", None) or getattr(agent, "mcp_oauth_callback_handler", None):
-            return
         if getattr(agent, "mcp_oauth_handler_factory", None):
             return
 

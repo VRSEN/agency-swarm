@@ -32,6 +32,8 @@ python examples/mcp_oauth/google_server.py
 python examples/mcp_oauth/google_client.py
 ```
 
+**Note:** For Google OAuth, add your email as a test user in the [OAuth consent screen](https://console.cloud.google.com/apis/credentials/consent) (required for unverified apps).
+
 ## Files
 
 | File | Description |
@@ -41,7 +43,6 @@ python examples/mcp_oauth/google_client.py
 | `github_server.py` | FastMCP server with GitHubProvider |
 | `google_client.py` | Connect to self-hosted Google OAuth server |
 | `google_server.py` | FastMCP server with GoogleProvider |
-| `storage_examples.py` | Token storage patterns |
 
 ## Patterns
 

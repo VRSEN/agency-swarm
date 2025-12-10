@@ -1,14 +1,13 @@
-# FastAPI Integration Example
+# FastAPI Integration Examples
 
-> **Full Guide:** The canonical FastAPI documentation lives in `docs/additional-features/fastapi-integration.mdx`. This README only summarizes the runnable sample.
+> **Full Guide:** The canonical FastAPI documentation lives in `docs/additional-features/fastapi-integration.mdx`. This README only summarizes the runnable samples.
 
-This example demonstrates how to properly integrate Agency Swarm with FastAPI, including:
+This directory contains examples demonstrating how to integrate Agency Swarm with FastAPI, including:
 - Serving agencies via HTTP endpoints
 - Serving standalone tools via HTTP endpoints
 - Handling streaming responses with Server-Sent Events (SSE)
 - Properly propagating `agent` and `callerAgent` fields in events
 - Managing conversation history across requests
-- Accessing OpenAPI schemas for tool integration
 
 ## Files
 
@@ -44,6 +43,14 @@ The server will start on http://localhost:8080 with these endpoints:
 - `POST /my-agency/get_response` - Regular response endpoint
 - `POST /my-agency/get_response_stream` - SSE streaming endpoint
 - `GET /my-agency/get_metadata` - Agency structure metadata
+
+### Multi-User Support
+
+Include the `X-User-Id` header for per-user token isolation:
+```python
+headers = {"X-User-Id": "user_123"}
+response = requests.post(url, json=payload, headers=headers)
+```
 
 ### Serving Tools
 
