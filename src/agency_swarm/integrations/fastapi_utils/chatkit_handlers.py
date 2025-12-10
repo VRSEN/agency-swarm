@@ -22,10 +22,6 @@ from agency_swarm.ui.core.chatkit_adapter import ChatkitAdapter
 
 logger = logging.getLogger(__name__)
 
-# In-memory thread storage for conversation history
-# Maps thread_id -> list of messages [{"role": "user"|"assistant", "content": str}]
-_thread_storage: dict[str, list[dict[str, str]]] = {}
-
 
 class ChatkitUserInput(BaseModel):
     """User input for ChatKit messages."""
@@ -57,16 +53,6 @@ class ChatkitRequest(BaseModel):
     context: dict[str, Any] = Field(default_factory=dict)
 
 
-class StreamingResult:
-    """Wrapper for streaming results in ChatKit format."""
-
-    def __init__(self, generator: AsyncGenerator[bytes]) -> None:
-        self.generator = generator
-
-    def __aiter__(self) -> AsyncGenerator[bytes]:
-        return self.generator
-
-
 def _serialize_event(event: dict[str, Any]) -> bytes:
     """Serialize a ChatKit event to SSE format."""
     return f"data: {json.dumps(event)}\n\n".encode()
@@ -90,8 +76,6 @@ def make_chatkit_endpoint(
     Returns:
         FastAPI endpoint handler function
     """
-    # We use request_model parameter for consistency with other handlers
-    # but the actual type is always ChatkitRequest
     _ = request_model  # Mark as used
 
     async def handler(
@@ -99,7 +83,6 @@ def make_chatkit_endpoint(
         token: str = Depends(verify_token),
     ) -> Response:
         """Handle ChatKit protocol requests."""
-        # Parse raw body to handle ChatKit's request format
         body = await request.body()
         try:
             data = json.loads(body) if body else {}
@@ -117,20 +100,11 @@ def make_chatkit_endpoint(
                 media_type="application/json",
             )
 
-        # Generate IDs
         thread_id = params.get("thread_id") or str(uuid.uuid4())
         run_id = str(uuid.uuid4())
         is_new_thread = req_type == "threads.create"
 
-        # Initialize thread storage for new threads
-        if is_new_thread and thread_id not in _thread_storage:
-            _thread_storage[thread_id] = []
-
-        # Create agency instance
-        agency = agency_factory()
-        await attach_persistent_mcp_servers(agency)
-
-        # Extract user message from ChatKit format (params.input.content)
+        # Extract user message
         user_message = ""
         user_input = params.get("input", {})
         if user_input:
@@ -143,93 +117,48 @@ def make_chatkit_endpoint(
                         user_message += part.get("text", "")
 
         if not user_message:
-            # No message to process, return empty thread response
             return Response(
                 content=json.dumps({"thread_id": thread_id, "status": "no_input"}),
                 media_type="application/json",
             )
 
-        # Build message with conversation history for multi-turn support
-        thread_history = _thread_storage.get(thread_id, [])
-        message_input: list[dict[str, str]] = list(thread_history)
-        message_input.append({"role": "user", "content": user_message})
+        agency = agency_factory()
+        await attach_persistent_mcp_servers(agency)
 
         async def event_generator() -> AsyncGenerator[bytes]:
             """Generate ChatKit SSE events from Agency Swarm responses."""
             adapter = ChatkitAdapter()
-            assistant_response_text = ""
 
-            # Emit thread.created if this is a new thread
             if is_new_thread:
                 yield _serialize_event(adapter._create_thread_created_event(thread_id))
 
-            # Create user message item with all required fields
             user_item_id = f"user_{uuid.uuid4().hex[:8]}"
             user_item = {
                 "id": user_item_id,
                 "type": "user_message",
                 "thread_id": thread_id,
                 "created_at": int(time.time()),
-                "content": [
-                    {
-                        "type": "input_text",
-                        "text": user_message,
-                    }
-                ],
+                "content": [{"type": "input_text", "text": user_message}],
                 "attachments": [],
             }
-            # Emit item.done for user message (not item.added - ChatKit expects done for user msgs)
-            yield _serialize_event(
-                {
-                    "type": "thread.item.done",
-                    "item": user_item,
-                }
-            )
+            yield _serialize_event({"type": "thread.item.done", "item": user_item})
 
             try:
-                # Stream Agency Swarm response with conversation history
                 async for event in agency.get_response_stream(
-                    message=message_input,  # type: ignore[arg-type]
+                    message=user_message,
                     context_override=context if context else None,
                 ):
-                    chatkit_event = adapter.openai_to_chatkit_events(
-                        event,
-                        run_id=run_id,
-                        thread_id=thread_id,
-                    )
+                    chatkit_event = adapter.openai_to_chatkit_events(event, run_id=run_id, thread_id=thread_id)
                     if chatkit_event:
                         events = chatkit_event if isinstance(chatkit_event, list) else [chatkit_event]
                         for evt in events:
                             yield _serialize_event(evt)
 
-                    # Collect assistant response text for history
-                    if hasattr(event, "data") and hasattr(event.data, "delta"):
-                        assistant_response_text += event.data.delta or ""
-
             except Exception as exc:
                 logger.exception("Error during ChatKit streaming")
-                yield _serialize_event(
-                    {
-                        "type": "thread.error",
-                        "error": {"message": str(exc)},
-                    }
-                )
+                yield _serialize_event({"type": "thread.error", "error": {"message": str(exc)}})
 
-            # Save conversation to thread storage for multi-turn support
-            if thread_id not in _thread_storage:
-                _thread_storage[thread_id] = []
-            _thread_storage[thread_id].append({"role": "user", "content": user_message})
-            if assistant_response_text:
-                _thread_storage[thread_id].append({"role": "assistant", "content": assistant_response_text})
-
-            # Signal completion
-            yield _serialize_event(
-                {
-                    "type": "thread.run.completed",
-                    "thread_id": thread_id,
-                    "run_id": run_id,
-                }
-            )
+            yield _serialize_event({"type": "thread.run.completed", "thread_id": thread_id, "run_id": run_id})
 
         return StreamingResponse(
             event_generator(),
