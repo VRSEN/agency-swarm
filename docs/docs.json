@@ -98,6 +98,7 @@
               "additional-features/guardrails",
               "additional-features/streaming",
               "additional-features/fastapi-integration",
+              "additional-features/chatkit-integration",
               "additional-features/mcp-tools-server",
               {
                 "group": "Custom Communication Flows",

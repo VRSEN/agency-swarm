@@ -1,0 +1,99 @@
+---
+title: "ChatKit Integration"
+description: "Add a chat UI to your agency with OpenAI ChatKit."
+icon: "comments"
+---
+
+[OpenAI ChatKit](https://platform.openai.com/docs/guides/chatkit) is a React-based chat UI. Agency Swarm includes a ready-to-use demo.
+
+<Warning>
+Requires [Node.js](https://nodejs.org/) v18+ and npm.
+</Warning>
+
+## Quick Start
+
+```python
+from agency_swarm import Agency, Agent
+
+agent = Agent(name="Assistant", instructions="You are helpful.")
+agency = Agency(agent, name="my_agency")
+
+agency.chatkit_demo()  # Opens browser at http://localhost:3000
+```
+
+<Accordion title="Parameters">
+```python
+agency.chatkit_demo(
+    host="0.0.0.0",        # Backend host
+    port=8000,             # Backend port
+    frontend_port=3000,    # Frontend port
+    cors_origins=None,     # CORS origins list
+    open_browser=True,     # Auto-open browser
+)
+```
+</Accordion>
+
+---
+
+## Backend Only
+
+Use `enable_chatkit=True` to expose the ChatKit endpoint without the demo frontend:
+
+```python
+from agency_swarm import Agency, Agent, run_fastapi
+
+def create_agency(**kwargs):
+    agent = Agent(name="Assistant", instructions="You are helpful.")
+    return Agency(agent, name="my_agency")
+
+run_fastapi(agencies={"my_agency": create_agency}, enable_chatkit=True)
+```
+
+This exposes `/{agency_name}/chatkit` for your own ChatKit frontend.
+
+<Accordion title="Connecting Your Frontend">
+
+Point your ChatKit React app to the backend:
+
+```typescript
+const chatkit = useChatKit({
+  api: { url: "http://localhost:8000/my_agency/chatkit" },
+});
+```
+
+Or use a Vite proxy:
+
+```typescript
+// vite.config.ts
+export default defineConfig({
+  server: {
+    proxy: {
+      "/chatkit": {
+        target: "http://localhost:8000",
+        rewrite: (path) => `/my_agency${path}`,
+      },
+    },
+  },
+});
+```
+</Accordion>
+
+---
+
+## Persistence
+
+By default, ChatKit is stateless. For conversation persistence, pass custom `RunHooks` via `hooks_override` parameter in `get_response` or `get_response_stream`:
+
+```python
+from agents import RunHooks
+
+class MyPersistenceHooks(RunHooks):
+    async def on_agent_end(self, context, agent, output):
+        messages = context.context.thread_manager.get_all_messages()
+        db.save(thread_id, messages)  # Save to your database
+
+result = await agency.get_response(
+    message=user_message,
+    hooks_override=MyPersistenceHooks(),
+)
+```

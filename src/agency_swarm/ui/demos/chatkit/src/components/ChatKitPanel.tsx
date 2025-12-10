@@ -2,13 +2,12 @@ import { ChatKit, useChatKit } from "@openai/chatkit-react";
 
 // ChatKit connects to our Agency Swarm backend via the Vite proxy
 const CHATKIT_API_URL = "/chatkit";
-const CHATKIT_API_DOMAIN_KEY = "domain_pk_localhost_dev";
 
 export function ChatKitPanel() {
   const chatkit = useChatKit({
     api: {
       url: CHATKIT_API_URL,
-      domainKey: CHATKIT_API_DOMAIN_KEY,
+      domainKey: "pk_local_dev",  // Required for CustomApiConfig
     },
     theme: {
       colorScheme: "dark",
