@@ -197,8 +197,6 @@ class Agent(BaseAgent[MasterContext]):
         self.validation_attempts = int(current_agent_params.get("validation_attempts", 1))
         self.throw_input_guardrail_error = bool(current_agent_params.get("throw_input_guardrail_error", False))
         self.handoff_reminder = current_agent_params.get("handoff_reminder")
-        self.mcp_oauth_redirect_handler = current_agent_params.get("mcp_oauth_redirect_handler")
-        self.mcp_oauth_callback_handler = current_agent_params.get("mcp_oauth_callback_handler")
 
         # Internal state
         self._openai_client = None
