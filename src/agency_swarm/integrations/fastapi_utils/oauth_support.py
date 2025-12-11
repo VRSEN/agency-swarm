@@ -196,11 +196,13 @@ class FastAPIOAuthRuntime:
         return await self._queue.get()
 
     def install_handler_factory(self, agent: Any) -> None:
-        """Attach per-server handler factory to agents with OAuth servers."""
+        """Attach per-server handler factory to agents with OAuth servers.
+
+        This must be called for each request to ensure OAuth events go to the
+        current request's queue, not a stale one from a previous request.
+        """
         servers = getattr(agent, "mcp_servers", None)
         if not isinstance(servers, list) or not any(is_oauth_server(srv) for srv in servers):
-            return
-        if getattr(agent, "mcp_oauth_handler_factory", None):
             return
 
         def _factory(server_name: str) -> dict[str, Any]:
