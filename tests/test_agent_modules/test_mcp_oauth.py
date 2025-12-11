@@ -12,6 +12,7 @@ from agency_swarm.mcp.oauth import (
     FileTokenStorage,
     MCPServerOAuth,
     TokenCallbackRegistry,
+    _listen_for_callback_once,
     default_callback_handler,
     default_redirect_handler,
     get_default_cache_dir,
@@ -358,6 +359,31 @@ class TestOAuthHandlers:
         code, state = await default_callback_handler("http://localhost:9999/callback")
 
         assert (code, state) == ("manual_code", "manual_state")
+
+    async def test_listen_for_callback_once_handles_oauth_error(self) -> None:
+        """_listen_for_callback_once raises ValueError for OAuth provider errors."""
+        import aiohttp
+
+        port = 18765  # Use a high port unlikely to be in use
+        redirect_uri = f"http://localhost:{port}/auth/callback"
+
+        async def send_error_callback() -> None:
+            await asyncio.sleep(0.05)  # Give server time to start
+            async with aiohttp.ClientSession() as session:
+                url = f"{redirect_uri}?error=access_denied&error_description=User+denied+access&state=test-state"
+                async with session.get(url) as resp:
+                    # Server should return 400 with error message
+                    assert resp.status == 400
+                    body = await resp.text()
+                    assert "access_denied" in body
+
+        # Start listener and error callback concurrently
+        listener_task = asyncio.create_task(_listen_for_callback_once(redirect_uri, timeout=2.0))
+        callback_task = asyncio.create_task(send_error_callback())
+
+        await callback_task
+        with pytest.raises(ValueError, match="OAuth error.*access_denied"):
+            await listener_task
 
 
 def test_get_default_cache_dir_respects_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
