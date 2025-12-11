@@ -65,14 +65,15 @@ class AguiAdapter:
         run_id: str,
     ) -> BaseEvent | list[BaseEvent] | None:
         """Convert a single OpenAI Agents SDK *StreamEvent* into one or more AG-UI events."""
-        state = self._run_state.setdefault(run_id, {"call_id_by_item": {}})
+        state = self._run_state.setdefault(run_id, {"call_id_by_item": {}, "call_id_by_output_index": {}})
         call_id_by_item: dict[str, str] = state["call_id_by_item"]
+        call_id_by_output_index: dict[int, str] = state["call_id_by_output_index"]
 
         logger.debug("Received event: %s", event)
         try:
             converted_event = None
             if getattr(event, "type", None) == "raw_response_event":
-                converted_event = self._handle_raw_response(event.data, call_id_by_item)
+                converted_event = self._handle_raw_response(event.data, call_id_by_item, call_id_by_output_index)
 
             if getattr(event, "type", None) == "run_item_stream_event":
                 converted_event = self._handle_run_item_stream(event)
@@ -222,7 +223,12 @@ class AguiAdapter:
             ],
         )
 
-    def _handle_raw_response(self, oe: Any, call_id_by_item: dict[str, str]) -> BaseEvent | list[BaseEvent] | None:
+    def _handle_raw_response(
+        self,
+        oe: Any,
+        call_id_by_item: dict[str, str],
+        call_id_by_output_index: dict[int, str],
+    ) -> BaseEvent | list[BaseEvent] | None:
         """Translate low-level `raw_response_event.data` into AG-UI events."""
         etype = getattr(oe, "type", "")
 
@@ -251,7 +257,15 @@ class AguiAdapter:
                 if not call_id:
                     logger.warning("raw_response_event ignored: tool call without call_id")
                     return None
-                call_id_by_item[raw_item.id] = call_id
+                # Store call_id by item.id only if it's not the placeholder "__fake_id__"
+                # LiteLLM/Chat Completions models emit "__fake_id__" for all items
+                item_id = getattr(raw_item, "id", None)
+                if item_id and item_id != "__fake_id__":
+                    call_id_by_item[item_id] = call_id
+                # Always store by output_index as fallback for placeholder IDs
+                output_index = getattr(oe, "output_index", None)
+                if output_index is not None:
+                    call_id_by_output_index[int(output_index)] = call_id
                 return ToolCallStartEvent(
                     type=EventType.TOOL_CALL_START,
                     tool_call_id=call_id,
@@ -301,7 +315,15 @@ class AguiAdapter:
         # --- Tool-argument deltas ---------------------------------------------
         if etype in self._TOOL_ARG_DELTA_TYPES:
             item_id = getattr(oe, "item_id", None)
-            call_id = call_id_by_item.get(item_id) if item_id else None
+            # Try item_id lookup first (for real IDs), skip if it's the placeholder
+            call_id = None
+            if item_id and item_id != "__fake_id__":
+                call_id = call_id_by_item.get(item_id)
+            # Fallback to output_index lookup (for LiteLLM/Chat Completions placeholder IDs)
+            if not call_id:
+                output_index = getattr(oe, "output_index", None)
+                if output_index is not None:
+                    call_id = call_id_by_output_index.get(int(output_index))
             if call_id:
                 return ToolCallArgsEvent(
                     type=EventType.TOOL_CALL_ARGS,
