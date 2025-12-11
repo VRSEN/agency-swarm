@@ -103,6 +103,47 @@ def test_runtime_sets_handler_factory_for_oauth_agents() -> None:
     assert callable(handlers["callback"])
 
 
+@pytest.mark.asyncio
+async def test_runtime_handler_factory_updates_on_new_requests() -> None:
+    """Handler factory must be updated for each request to use the correct queue.
+
+    When agents are reused across FastAPI requests (common pattern), each request
+    creates a new FastAPIOAuthRuntime with a fresh event queue. The handler factory
+    must be updated so OAuth events go to the current request's queue, not a stale one.
+    """
+    server = MCPServerOAuth(url="http://localhost:8999/mcp", name="demo", client_id="id", client_secret="secret")
+
+    class DummyAgent:
+        def __init__(self) -> None:
+            self.mcp_servers = [server]
+
+    # Same agent reused across requests (common FastAPI pattern)
+    agent = DummyAgent()
+    registry = OAuthStateRegistry()
+
+    # Request 1: Install handler factory
+    runtime1 = FastAPIOAuthRuntime(registry, user_id="user-1")
+    runtime1.install_handler_factory(agent)
+
+    # Request 2: Should update handler factory to use new runtime's queue
+    runtime2 = FastAPIOAuthRuntime(registry, user_id="user-2")
+    runtime2.install_handler_factory(agent)
+
+    # Trigger OAuth redirect via the handler factory
+    factory = agent.mcp_oauth_handler_factory
+    handlers = factory("demo")
+    await handlers["redirect"]("https://idp.example.com/authorize?state=test-state")
+
+    # Event should go to runtime2's queue (current request), not runtime1's (stale)
+    event = await asyncio.wait_for(runtime2.next_event(), timeout=0.1)
+    assert event["type"] == "oauth_redirect"
+    assert event["state"] == "test-state"
+
+    # runtime1's queue should be empty (stale - not receiving events)
+    with pytest.raises(asyncio.TimeoutError):
+        await asyncio.wait_for(runtime1.next_event(), timeout=0.05)
+
+
 def test_extract_state_from_url_and_detection() -> None:
     auth_url = "https://idp.example.com/authorize?state=abc123&scope=repo"
     assert extract_state_from_url(auth_url) == "abc123"
