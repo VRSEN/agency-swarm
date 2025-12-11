@@ -190,10 +190,20 @@ def run_fastapi(
     if shared_oauth_registry is not None:
 
         async def oauth_callback(
-            code: str,
             state: str,
+            code: str | None = None,
+            error: str | None = None,
+            error_description: str | None = None,
             user_id: str | None = Header(default=None, alias=oauth_user_header),
         ):
+            # Handle OAuth provider error responses (e.g., user denied authorization)
+            if error:
+                flow = await shared_oauth_registry.set_error(
+                    state=state, error=error, error_description=error_description
+                )
+                raise HTTPException(status_code=400, detail=f"OAuth error: {flow.error}")
+            if not code:
+                raise HTTPException(status_code=400, detail="OAuth callback missing authorization code")
             flow = await shared_oauth_registry.set_code(state=state, code=code, user_id=user_id)
             if flow.error:
                 raise HTTPException(status_code=400, detail=f"OAuth callback failed: {flow.error}")
