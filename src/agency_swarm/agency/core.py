@@ -59,7 +59,8 @@ class Agency:
         persistence_hooks (PersistenceHooks | None): Optional hooks for loading/saving thread state.
         shared_instructions (str | None): Optional instructions prepended to every agent's system prompt.
         user_context (dict[str, Any]): A dictionary for shared user-defined context within `MasterContext` during runs.
-        send_message_tool_class (type | None): Default SendMessage tool class override.
+        send_message_tool_class (type | None): Optional fallback SendMessage tool class when no
+            flow-specific tool is provided.
     """
 
     agents: dict[str, Agent]
@@ -69,7 +70,7 @@ class Agency:
     persistence_hooks: PersistenceHooks | None
     shared_instructions: str | None
     user_context: dict[str, Any]  # Shared user context for MasterContext
-    send_message_tool_class: type | None  # Custom SendMessage tool class for all agents
+    send_message_tool_class: type | None  # Fallback SendMessage tool class when flows have no override
 
     _agent_runtime_state: dict[str, "AgentRuntimeState"]
 
@@ -113,8 +114,8 @@ class Agency:
             shared_instructions (str | None, optional): Either direct instruction text or a file path. If a path is
                 provided, the file is read (supports caller-relative, absolute, or CWD-relative paths) and its
                 contents are used as shared instructions prepended to all agents' system prompts.
-            send_message_tool_class (type | None, optional): Custom SendMessage tool for agents lacking their own,
-                enabling custom inter-agent communication patterns.
+            send_message_tool_class (type | None, optional): Fallback SendMessage tool for routes that do not specify
+                a tool via `communication_flows`. Agent-level overrides are deprecated; prefer per-flow configuration.
             load_threads_callback (ThreadLoadCallback | None, optional): Callable to load conversation threads.
             save_threads_callback (ThreadSaveCallback | None, optional): Callable to save conversation threads.
             user_context (dict[str, Any] | None, optional): Initial shared context accessible to all agents.

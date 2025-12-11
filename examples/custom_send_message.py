@@ -1,13 +1,8 @@
 """
 Custom SendMessage Tool with Context Example
 
-Demonstrates how to use different approaches for agent-to-agent communication
-and provides an example of a custom send message tool setup.
-
-Shows three approaches:
-1. Agent-level: Set send_message_tool_class on individual Agents (per-agent customization)
-2. Agency-level: Set send_message_tool_class on Agency (applies to all agents)
-3. Communication flow level: Set send_message_tool_class on a communication flow (per-flow customization)
+Demonstrates how to configure agent-to-agent communication via `communication_flows`
+using a custom SendMessage tool (with an optional agency-level fallback).
 
 Run with: python examples/custom_send_message.py
 """
@@ -90,7 +85,6 @@ coordinator = Agent(
         "complete, word-for-word response text in your final output. Do not summarize, "
         "paraphrase, or omit any details from their responses."
     ),
-    send_message_tool_class=SendMessageWithContext,  # Custom communication for this agent only
     model_settings=ModelSettings(temperature=0.0),
 )
 
@@ -108,33 +102,27 @@ specialist = Agent(
     ),
     tools=[analyze_costs, analyze_performance],
     model_settings=ModelSettings(temperature=0.0),
-    send_message_tool_class=SendMessageHandoff,
 )
 
-# Option 1: Set custom SendMessage class at individual Agent level
 agency = Agency(
     coordinator,
     specialist,
-    communication_flows=[coordinator > specialist, specialist > coordinator],
+    communication_flows=[
+        (coordinator > specialist, SendMessageWithContext),
+        (specialist > coordinator, SendMessageHandoff),
+    ],
     shared_instructions="Use key decisions to guide analysis tool selection.",
 )
 
-# # Option 2: Set custom SendMessage class at Agency level (applies to all agents)
-# # When this option, make sure to comment out custom send_message_tool_class for the coordinator
+# If you want a default communication tool for flows without explicit overrides, set
+# send_message_tool_class on the Agency instead of on individual agents (agent-level
+# configuration is deprecated).
 # agency = Agency(
 #     coordinator,
 #     specialist,
-#     communication_flows=[(coordinator, specialist)],
+#     communication_flows=[coordinator > specialist, specialist > coordinator],
 #     shared_instructions="Use key decisions to guide analysis tool selection.",
-#     send_message_tool_class=SendMessageWithContext,  # Default communication for all agents
-# )
-
-# Option 3: Set custom SendMessage class on communication flow
-# agency = Agency(
-#     coordinator,
-#     specialist,
-#     communication_flows=[(coordinator > specialist, SendMessageWithContext), (specialist > coordinator, SendMessageHandoff)],
-#     shared_instructions="Use key decisions to guide analysis tool selection.",
+#     send_message_tool_class=SendMessageWithContext,
 # )
 
 

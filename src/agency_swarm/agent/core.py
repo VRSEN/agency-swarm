@@ -69,7 +69,7 @@ class Agent(BaseAgent[MasterContext]):
     tools_folder: str | Path | None  # Directory path for automatic tool discovery and loading
     description: str | None
     output_type: type[Any] | None
-    send_message_tool_class: type | None  # Custom SendMessage tool class for inter-agent communication
+    send_message_tool_class: type | None  # DEPRECATED: configure SendMessage tools via communication_flows
     include_search_results: bool = False
     validation_attempts: int = 1
     throw_input_guardrail_error: bool = False
@@ -103,8 +103,8 @@ class Agent(BaseAgent[MasterContext]):
                 {"schema_filename.json": {"header_name": "header_value"}}.
             api_params (dict[str, dict[str, Any]] | None): Per-schema parameters for OpenAPI tools. Format:
                 {"schema_filename.json": {"param_name": "param_value"}}.
-            send_message_tool_class (type | None): Custom SendMessage tool class for inter-agent communication.
-                Note: This parameter can be used to define handoffs by using SendMessageHandoff here.
+            send_message_tool_class (type | None): DEPRECATED. Configure SendMessage tool classes via
+                `communication_flows` on `Agency` instead of setting this per agent.
             include_search_results (bool): Include search results in FileSearchTool output for citation extraction.
                 Defaults to False.
             validation_attempts (int): Number of retries when an output guardrail trips. Defaults to 1.
@@ -497,8 +497,8 @@ class Agent(BaseAgent[MasterContext]):
 
         Args:
             recipient_agent (Agent): The `Agent` instance to register as a recipient.
-            send_message_tool_class: Optional custom send message tool class to use for this specific
-                               agent-to-agent communication. If None, uses agent's default or SendMessage.
+            send_message_tool_class: Optional custom SendMessage tool for this specific communication.
+                               Deprecated—prefer assigning tool classes via `communication_flows`.
             runtime_state: Optional runtime state container injected by the owning Agency
         """
         # Import to avoid circular dependency

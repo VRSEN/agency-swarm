@@ -150,6 +150,14 @@ def handle_deprecated_parameters(kwargs: dict[str, Any]) -> dict[str, Any]:
         )
         deprecated_args_used["refresh_from_id"] = kwargs.pop("refresh_from_id")
 
+    if kwargs.get("send_message_tool_class") is not None:
+        warnings.warn(
+            "'send_message_tool_class' on Agent is deprecated; configure send-message tools via "
+            "`communication_flows` on Agency instead.",
+            DeprecationWarning,
+            stacklevel=3,
+        )
+
     if "return_input_guardrail_errors" in kwargs:
         val = kwargs.pop("return_input_guardrail_errors")
         warnings.warn(

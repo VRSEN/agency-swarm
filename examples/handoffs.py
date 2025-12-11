@@ -83,7 +83,6 @@ dev_lead = Agent(
         "Only use transfer tool once."
     ),
     tools=[implement_feature],
-    send_message_tool_class=SendMessageHandoff,  # default reminder behavior when handing off
     # Reminder shown when DevLead receives a handoff (e.g., from ComplianceOfficer).
     # Default format: "Transfer completed. You are {recipient_agent_name}. Please continue the task."
     handoff_reminder="Compliance review is complete. Confirm deployment steps and attach audit artifacts.",
@@ -99,7 +98,6 @@ security_engineer = Agent(
         "without adding a reminder (disabled)."
     ),
     tools=[security_audit, vulnerability_scan],
-    send_message_tool_class=NoReminderHandoff,  # reminder disabled
     model_settings=ModelSettings(temperature=0.0),
 )
 
@@ -111,16 +109,15 @@ compliance_officer = Agent(
         "When handing back to DevLead, confirm sign-off steps and artifacts—they receive a custom reminder to double-check."
     ),
     tools=[policy_check, generate_compliance_report],
-    send_message_tool_class=SendMessageHandoff,  # default reminder when handing off
     model_settings=ModelSettings(temperature=0.0),
 )
 
 agency = Agency(
     dev_lead,
     communication_flows=[
-        (dev_lead > security_engineer),
-        (security_engineer > compliance_officer),
-        (compliance_officer > dev_lead),
+        (dev_lead > security_engineer, SendMessageHandoff),
+        (security_engineer > compliance_officer, NoReminderHandoff),
+        (compliance_officer > dev_lead, SendMessageHandoff),
     ],
     shared_instructions=(
         "Deliver secure, compliant features. Preserve exact tool outputs in responses and include sign-off details."

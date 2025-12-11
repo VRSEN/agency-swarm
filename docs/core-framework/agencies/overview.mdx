@@ -41,7 +41,7 @@ Overview of parameters in the new `Agency` class:
 | Communication Flows *(optional)* | `communication_flows` | List of (sender, receiver) tuples defining allowed agent-to-agent message paths. Example: `[(ceo, dev), (ceo, va)]`. Default: `None` |
 | Name *(optional)* | `name` | A name for the agency instance. Default: `None` |
 | Shared Instructions *(optional)* | `shared_instructions` | Instructions prepended to all agents' system prompts in a string format or a path to markdown file. Default: `None` |
-| Send Message Tool Class *(optional)* | `send_message_tool_class` | Custom SendMessage tool class to use for all agents that don't have their own send_message_tool_class set. Enables enhanced inter-agent communication patterns. Default: `None` |
+| Send Message Tool Class *(optional)* | `send_message_tool_class` | Fallback SendMessage tool class when a `communication_flows` entry does not specify its own tool. Prefer configuring SendMessage variants directly through `communication_flows`. Default: `None` |
 | Load Threads Callback *(optional)* | `load_threads_callback` | A callable to load conversation threads for persistence. Default: `None` |
 | Save Threads Callback *(optional)* | `save_threads_callback` | A callable to save conversation threads for persistence. Default: `None` |
 | User Context *(optional)* | `user_context` | Initial shared context accessible to all agents during runs. Default: `None` |
