@@ -4,6 +4,7 @@ from agents import FunctionTool, ModelSettings, StopAtTools
 from pydantic import BaseModel, Field
 
 from agency_swarm import Agent
+from agency_swarm.tools import SendMessageHandoff
 
 
 class TaskOutput(BaseModel):
@@ -251,6 +252,7 @@ def test_agent_initialization_misc_deprecations_warn_only():
             file_ids=["f1"],
             file_search=True,
             refresh_from_id="old",
+            send_message_tool_class=SendMessageHandoff,
         )
     assert agent.name == "Misc"
     msgs = ",".join(str(item.message) for item in w)
@@ -259,6 +261,7 @@ def test_agent_initialization_misc_deprecations_warn_only():
     assert "file_ids" in msgs
     assert "file_search" in msgs
     assert "refresh_from_id" in msgs
+    assert "send_message_tool_class" in msgs
 
 
 def test_agent_initialization_adapts_basetool_type():

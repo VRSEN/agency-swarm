@@ -185,13 +185,6 @@ class Agent(BaseAgent[MasterContext]):
         self.api_params = current_agent_params.get("api_params", {})
         self.description = current_agent_params.get("description")
         self.send_message_tool_class = current_agent_params.get("send_message_tool_class")
-        if self.send_message_tool_class is not None:
-            warnings.warn(
-                "'send_message_tool_class' on Agent is deprecated; configure send-message tools via "
-                "`communication_flows` on Agency instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
         self.include_search_results = current_agent_params.get("include_search_results", False)
         self.validation_attempts = int(current_agent_params.get("validation_attempts", 1))
         self.throw_input_guardrail_error = bool(current_agent_params.get("throw_input_guardrail_error", False))
