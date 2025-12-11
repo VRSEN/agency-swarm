@@ -231,11 +231,6 @@ def configure_agents(agency: "Agency", defined_communication_flows: list[tuple[A
     for agent_name, agent_instance in agency.agents.items():
         runtime_state = agency._agent_runtime_state[agent_name]
 
-        # Propagate send_message_tool_class if agent doesn't have one set
-        if agency.send_message_tool_class and not agent_instance.send_message_tool_class:
-            agent_instance.send_message_tool_class = agency.send_message_tool_class
-            logger.debug(f"Applied send_message_tool_class to agent: {agent_name}")
-
         # Register subagents based on the explicit communication map
         allowed_recipients = communication_map.get(agent_name, [])
         if allowed_recipients:

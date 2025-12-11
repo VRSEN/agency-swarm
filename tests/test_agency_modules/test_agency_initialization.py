@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from agency_swarm import Agency, Agent
+from agency_swarm.tools.send_message import SendMessage
 
 # --- Fixtures ---
 
@@ -137,3 +138,14 @@ def test_agency_rejects_global_model(mock_agent):
     with pytest.raises(TypeError, match="Agency no longer accepts a global 'model'"):
         with pytest.warns(DeprecationWarning, match="'model' parameter is deprecated"):
             Agency(mock_agent, model="gpt-4o")
+
+
+class _CustomSendMessage(SendMessage):
+    pass
+
+
+def test_agency_send_message_tool_class_does_not_mutate_agent(mock_agent):
+    """Agency-level SendMessage fallback should not mutate Agent state."""
+    assert mock_agent.send_message_tool_class is None
+    Agency(mock_agent, send_message_tool_class=_CustomSendMessage)
+    assert mock_agent.send_message_tool_class is None
