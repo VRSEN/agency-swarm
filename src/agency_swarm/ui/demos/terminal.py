@@ -1,9 +1,15 @@
 import asyncio
+import inspect
+import io
 import logging
 import os
 import re
+import subprocess
+import sys
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, cast
 
 from prompt_toolkit import Application
@@ -22,10 +28,231 @@ from prompt_toolkit.widgets import Frame
 from rich.markup import escape as rich_escape
 
 from agency_swarm.agency.core import Agency
+from agency_swarm.messages import MessageFilter
 from agency_swarm.utils import is_reasoning_model
 
 from ..core.console_event_adapter import ConsoleEventAdapter
 from .launcher import TerminalDemoLauncher
+
+
+class EscapeKeyWatcher:
+    """Cross-platform ESC key detector that runs in background."""
+
+    def __init__(self) -> None:
+        self._escape_pressed = False
+        self._stop = False
+        self._thread: threading.Thread | None = None
+
+    def check(self) -> bool:
+        """Return True if ESC was pressed since last check."""
+        result = self._escape_pressed
+        self._escape_pressed = False
+        return result
+
+    def _poll_windows(self) -> None:
+        """Windows key polling using msvcrt (Windows-only standard library)."""
+        import msvcrt
+        import time
+
+        while not self._stop:
+            try:
+                if msvcrt.kbhit():  # type: ignore[attr-defined]
+                    key = msvcrt.getch()  # type: ignore[attr-defined]
+                    if key == b"\x1b":  # ESC
+                        self._escape_pressed = True
+                    elif key in (b"\x00", b"\xe0"):
+                        msvcrt.getch()  # type: ignore[attr-defined]
+                else:
+                    time.sleep(0.05)
+            except Exception:
+                break
+
+    def _poll_unix(self) -> None:
+        """Unix key polling using select (Unix-only standard library modules)."""
+        import select
+        import termios
+        import tty
+
+        old_settings = None
+        try:
+            fd = sys.stdin.fileno()
+            old_settings = termios.tcgetattr(fd)  # type: ignore[attr-defined]
+            tty.setcbreak(fd)  # type: ignore[attr-defined]
+
+            while not self._stop:
+                if select.select([sys.stdin], [], [], 0.05)[0]:
+                    key = sys.stdin.read(1)
+                    if key == "\x1b":  # ESC
+                        self._escape_pressed = True
+        except Exception:
+            pass
+        finally:
+            if old_settings is not None:
+                try:
+                    termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)  # type: ignore[attr-defined]
+                except Exception:
+                    pass
+
+    def start(self) -> None:
+        """Start watching for ESC key in background thread.
+
+        Gracefully degrades in test environments where stdin is mocked.
+        """
+        import threading
+
+        self._stop = False
+        self._escape_pressed = False
+
+        # Check if stdin is a real terminal (not mocked in tests)
+        try:
+            sys.stdin.fileno()
+        except (io.UnsupportedOperation, AttributeError, OSError):
+            # stdin is mocked/redirected - skip key watching
+            return
+
+        target = self._poll_windows if sys.platform == "win32" else self._poll_unix
+        self._thread = threading.Thread(target=target, daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        """Stop the watcher thread and wait for it to finish."""
+        self._stop = True
+        if self._thread is not None:
+            self._thread.join(timeout=0.5)  # Wait up to 0.5s for thread to finish
+            self._thread = None
+
+
+# Environment variable to mark child process in reload mode
+# Values: "0" = initial spawn, "1" = respawn after file change (auto-resume)
+_RELOAD_CHILD_ENV = "_AGENCY_TERMINAL_RELOAD_CHILD"
+
+
+def _get_caller_script_path() -> Path | None:
+    """Extract the script path that called start_terminal() using inspect.
+
+    Walks up the stack to find the first file outside the agency_swarm package.
+    """
+    frame = inspect.currentframe()
+    try:
+        caller_frame = frame
+        while caller_frame is not None:
+            caller_file = caller_frame.f_code.co_filename
+            # Skip frames from the agency_swarm package
+            if "agency_swarm" not in caller_file:
+                return Path(caller_file).resolve()
+            caller_frame = caller_frame.f_back
+        return None
+    finally:
+        del frame
+
+
+def _get_watch_directory(script_path: Path) -> Path:
+    """Determine the directory to watch for file changes."""
+    # Watch the directory containing the script (the agency folder)
+    return script_path.parent
+
+
+class TerminalReloader:
+    """Watches for file changes and restarts the terminal demo subprocess."""
+
+    def __init__(self, script_path: Path, watch_dir: Path) -> None:
+        self._script_path = script_path
+        self._watch_dir = watch_dir
+        self._child_process: subprocess.Popen[bytes] | None = None
+        self._stop_requested = False
+        self._logger = logging.getLogger(__name__)
+
+    def _spawn_child(self, is_restart: bool = False) -> subprocess.Popen[bytes]:
+        """Spawn a child process running the terminal demo."""
+        env = os.environ.copy()
+        env[_RELOAD_CHILD_ENV] = "1" if is_restart else "0"
+
+        # Platform-specific flags
+        kwargs: dict[str, Any] = {
+            "env": env,
+            "stdin": sys.stdin,
+            "stdout": sys.stdout,
+            "stderr": sys.stderr,
+        }
+
+        if sys.platform == "win32":
+            # Windows: create in new process group so CTRL_C doesn't propagate to parent
+            kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+
+        # Use the same Python interpreter
+        return subprocess.Popen([sys.executable, str(self._script_path)], **kwargs)
+
+    def _terminate_child(self) -> None:
+        """Terminate the child process gracefully."""
+        if self._child_process is None:
+            return
+
+        try:
+            # Use terminate() on all platforms - it's clean and doesn't affect parent
+            # On Windows: sends TerminateProcess
+            # On Unix: sends SIGTERM
+            self._child_process.terminate()
+
+            # Wait for graceful shutdown
+            try:
+                self._child_process.wait(timeout=2.0)
+            except subprocess.TimeoutExpired:
+                self._child_process.kill()
+                self._child_process.wait()
+        except Exception as e:
+            self._logger.debug(f"Error terminating child: {e}")
+        finally:
+            self._child_process = None
+
+    def run(self) -> None:
+        """Run the reloader loop: watch files and restart child on changes."""
+        from watchfiles import watch
+
+        print(f"\n🔄 Hot reload enabled. Watching: {self._watch_dir}")
+        print("   Changes to .py and .md files will trigger a restart.\n")
+
+        # File filter: only watch .py and .md files
+        def should_watch(change_type: Any, path: str) -> bool:
+            return path.endswith((".py", ".md"))
+
+        is_restart = False  # First spawn is not a restart
+        try:
+            while not self._stop_requested:
+                # Spawn child process
+                self._child_process = self._spawn_child(is_restart=is_restart)
+                is_restart = True  # Subsequent spawns are restarts
+
+                # Watch for file changes while child is running
+                try:
+                    for changes in watch(
+                        self._watch_dir,
+                        watch_filter=should_watch,
+                        stop_event=None,
+                        yield_on_timeout=True,
+                        rust_timeout=500,  # Check every 500ms
+                    ):
+                        # Check if child exited
+                        if self._child_process.poll() is not None:
+                            # Child exited normally (user quit)
+                            return
+
+                        if changes:
+                            # File changes detected
+                            changed_files = [str(Path(path).relative_to(self._watch_dir)) for _, path in changes]
+                            print(f"\n🔄 Detected changes in: {', '.join(changed_files)}")
+                            print("   Reloading...\n")
+                            break
+                except KeyboardInterrupt:
+                    self._stop_requested = True
+                    break
+
+                # Restart: terminate old child and loop to spawn new one
+                self._terminate_child()
+
+        except KeyboardInterrupt:
+            pass
+        finally:
+            self._terminate_child()
 
 
 @dataclass
@@ -92,9 +319,28 @@ class DropdownMenu:
 def start_terminal(
     agency_instance: Agency,
     show_reasoning: bool | None = None,
+    reload: bool = True,
 ) -> None:
-    """Run the terminal demo: input loop, slash commands, and streaming output."""
+    """Run the terminal demo: input loop, slash commands, and streaming output.
+
+    Args:
+        agency_instance: The Agency instance to run.
+        show_reasoning: Whether to show reasoning output. Auto-detected if None.
+        reload: If True, watch for file changes and automatically restart on changes.
+                Uses the same approach as uvicorn --reload.
+    """
     logger = logging.getLogger(__name__)
+
+    # Hot reload: if enabled and we're the parent, run the reloader loop
+    if reload and not os.environ.get(_RELOAD_CHILD_ENV):
+        script_path = _get_caller_script_path()
+        if script_path is None:
+            logger.warning("Could not determine script path for hot reload. Running without reload.")
+        else:
+            watch_dir = _get_watch_directory(script_path)
+            reloader = TerminalReloader(script_path, watch_dir)
+            reloader.run()
+            return
 
     recipient_agents = [str(agent.name) for agent in agency_instance.entry_points]
     if not recipient_agents:
@@ -103,7 +349,16 @@ def start_terminal(
     if show_reasoning is None:
         show_reasoning = any(is_reasoning_model(agent.model) for agent in agency_instance.agents.values())
 
-    chat_id = TerminalDemoLauncher.start_new_chat(agency_instance)
+    # Auto-resume on hot reload only (not on initial boot)
+    resumed_chat_id: str | None = None
+    if os.environ.get(_RELOAD_CHILD_ENV) == "1":
+        records = TerminalDemoLauncher.list_chat_records()
+        if records:
+            most_recent_id = records[0]["chat_id"]
+            if TerminalDemoLauncher.load_chat(agency_instance, most_recent_id):
+                resumed_chat_id = most_recent_id
+
+    chat_id = resumed_chat_id if resumed_chat_id else TerminalDemoLauncher.start_new_chat(agency_instance)
 
     event_converter = ConsoleEventAdapter(show_reasoning=show_reasoning, agents=list(agency_instance.agents.keys()))
     event_converter.console.rule()
@@ -111,8 +366,11 @@ def start_terminal(
         cwd = os.getcwd()
         banner_name = getattr(agency_instance, "name", None) or "Agency Swarm"
         event_converter.console.print(f"[bold]* Welcome to {banner_name}![/bold]")
-        event_converter.console.print("\n/help for help, /status for your current setup\n")
+        event_converter.console.print("\n/help for help, /status for your current setup")
+        event_converter.console.print("[dim]Press ESC during streaming to cancel[/dim]\n")
         event_converter.console.print(f"cwd: {cwd}\n")
+        if resumed_chat_id:
+            event_converter.console.print(f"[green]♻ Resumed conversation: {chat_id}[/green]\n")
         event_converter.console.rule()
     except Exception:
         pass
@@ -269,6 +527,7 @@ def start_terminal(
         if recipient_agent is not None and recipient_agent != event_converter.handoff_agent:
             event_converter.handoff_agent = None
 
+        escape_watcher = EscapeKeyWatcher()
         try:
             recipient_agent_str: str = (
                 recipient_agent
@@ -277,14 +536,40 @@ def start_terminal(
                 if event_converter.handoff_agent is not None
                 else current_default_recipient
             )
-            async for event in agency_instance.get_response_stream(
+            stream = agency_instance.get_response_stream(
                 message=message, recipient_agent=recipient_agent_str, chat_id=chat_id
-            ):
+            )
+            escape_watcher.start()
+
+            cancelled = False
+            async for event in stream:
+                # Check for ESC key press
+                if escape_watcher.check():
+                    event_converter.console.print("\n[yellow]⏹ Cancelling stream...[/yellow]")
+                    stream.cancel(mode="immediate")
+                    cancelled = True
+                    break
+
                 event_converter.openai_to_message_output(event, recipient_agent_str)
+
+            # If cancelled, clean up display and filter orphaned/duplicate messages
+            if cancelled:
+                # Clean up any live displays and reset buffers
+                event_converter._cleanup_live_display()
+
+                # Filter out duplicates and orphaned messages
+                all_messages = agency_instance.thread_manager.get_all_messages()
+                filtered = MessageFilter.remove_duplicates(all_messages)
+                filtered = MessageFilter.filter_messages(filtered)
+                filtered = MessageFilter.remove_orphaned_messages(filtered)
+                agency_instance.thread_manager.replace_messages(filtered)
+
             event_converter.console.rule()
             TerminalDemoLauncher.save_current_chat(agency_instance, chat_id)
         except Exception as e:
             logger.error(f"Error during streaming: {e}", exc_info=True)
+        finally:
+            escape_watcher.stop()
         return False
 
     async def main_loop():

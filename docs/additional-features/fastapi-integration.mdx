@@ -43,9 +43,10 @@ Optionally, you can specify following parameters:
 - enable_logging (default: `False`) - Enable request tracking and expose `/get_logs` endpoint
 - logs_dir (default: `"activity-logs"`) - Directory for log files when logging is enabled
 
-This will create 3 endpoints for the agency:
+This will create 4 endpoints for the agency:
 - `/test_agency/get_response`
 - `/test_agency/get_response_stream`
+- `/test_agency/cancel_response_stream`
 - `/test_agency/get_metadata`
 
 If `enable_logging=True`, a `/get_logs` endpoint is also added.
@@ -117,9 +118,11 @@ run_fastapi(
 This will create the following endpoints:
 - `/test_agency_1/get_response`
 - `/test_agency_1/get_response_stream`
+- `/test_agency_1/cancel_response_stream` (standard mode only; see AG-UI note below)
 - `/test_agency_1/get_metadata`
 - `/test_agency_2/get_response`
 - `/test_agency_2/get_response_stream`
+- `/test_agency_2/cancel_response_stream` (standard mode only; see AG-UI note below)
 - `/test_agency_2/get_metadata`
 - `/tool/ExampleTool` (for BaseTools) or `/tool/example_tool` (for function tools)
 - `/tool/TestTool` (for BaseTools) or `/tool/test_tool` (for function tools)
@@ -164,10 +167,11 @@ print("Response:", tool_response.json())
 
 ## Endpoint Structure
 
-- **Agency Endpoints:**
+- **Agency Endpoints (standard mode):**
   Each agency is served at:
   - `/your_agency_name/get_response` (POST)
   - `/your_agency_name/get_response_stream` (POST, streaming responses)
+  - `/your_agency_name/cancel_response_stream` (POST, not registered when `enable_agui=True`)
   - `/your_agency_name/get_metadata` (GET)
 
 - **Tool Endpoints:**
@@ -182,7 +186,58 @@ print("Response:", tool_response.json())
   - `/get_logs` (POST)
 
 - **AG-UI Protocol:**
-  When `enable_agui=True`, only the streaming endpoint is exposed and follows the AG-UI protocol for enhanced frontend integration.
+  When `enable_agui=True`, only the streaming endpoint is exposed and follows the AG-UI protocol for enhanced frontend integration. The cancel endpoint is not registered in AG-UI mode.
+
+<Note>
+Stream cancellation uses an in-memory registry per process. It requires single-worker deployments (e.g., uvicorn workers=1, the default), otherwise cancel requests routed to a different worker will return 404.
+</Note>
+
+---
+
+## Cancelling Active Streams
+
+The streaming endpoint supports cancellation via two methods:
+
+### 1. Cancel Endpoint
+
+Call the cancel endpoint with the `run_id` received from the streaming response. 
+Optionally include `cancel_mode` (defaults to `immediate`):
+- `immediate` — stop right away and return messages that were fully generated; the in-progress message is discarded.
+- `after_turn` — finish the current turn, then stop.
+
+```python
+import requests
+
+# Cancel an active stream
+cancel_url = "http://127.0.0.1:8000/test_agency/cancel_response_stream"
+payload = {"run_id": "your-run-id", "cancel_mode": "after_turn"}  # cancel_mode is optional
+response = requests.post(cancel_url, json=payload)
+# Returns: {"ok": True, "run_id": "...", "cancelled": True, "cancel_mode": "after_turn", "new_messages": [...]}
+```
+
+### 2. Automatic Cancellation on Disconnect
+
+When a client disconnects (tab close, refresh, network failure), the stream is automatically cancelled.
+
+### Streaming Response with run_id
+
+The streaming endpoint sends a `meta` event first containing the `run_id`:
+
+```
+event: meta
+data: {"run_id": "550e8400-e29b-41d4-a716-446655440000"}
+
+data: {"data": ...}
+data: {"data": ...}
+
+event: messages
+data: {"new_messages": [...], "run_id": "...", "cancelled": false}
+
+event: end
+data: [DONE]
+```
+
+Store the `run_id` from the `meta` event to use with the cancel endpoint.
 
 ---
 

@@ -26,6 +26,7 @@ dependencies = [
     "termcolor>=2.3.0,<3.0.0",
     "types-requests>=2.0,<3",
     "typing-extensions>=4.13,<5",
+    "watchfiles>=1.0.0,<2.0.0",
 ]
 classifiers = [
     "Typing :: Typed",

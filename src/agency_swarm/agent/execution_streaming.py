@@ -143,6 +143,9 @@ def run_stream_with_guardrails(
     """Stream events with output-guardrail retries and guidance persistence."""
 
     wrapper: StreamingRunResponse
+    # Create cancel event at function level so it can be passed to wrapper
+    cancel_requested = asyncio.Event()
+    cancel_state: dict[str, Any] = {"mode": "immediate"}  # Shared state for cancel mode
 
     async def _guarded_stream() -> AsyncGenerator[StreamEvent | dict[str, Any]]:
         nonlocal wrapper
@@ -151,6 +154,12 @@ def run_stream_with_guardrails(
         history_for_runner = initial_history_for_runner
 
         while True:
+            if cancel_state.get("user_requested"):
+                logger.info("Streaming run canceled before start; exiting worker loop")
+                wrapper._resolve_final_result(None)
+                return
+            cancel_requested.clear()
+            cancel_state.pop("run_result", None)
             master_context_for_run._is_streaming = True
             try:
                 master_context_for_run._current_agent_run_id = current_agent_run_id
@@ -182,6 +191,8 @@ def run_stream_with_guardrails(
                 history_for_runner=history_for_runner,
                 master_context_for_run=master_context_for_run,
                 event_queue=event_queue,
+                cancel_requested=cancel_requested,
+                cancel_state=cancel_state,
                 current_agent_run_id=current_agent_run_id,
                 parent_run_id=parent_run_id,
                 agency_context=agency_context,
@@ -208,9 +219,77 @@ def run_stream_with_guardrails(
                             run_config_override=run_config_override,
                             kwargs=kwargs,
                         )
+                        streaming_result = cast(RunResultStreaming, local_result)
+                        cancel_state["run_result"] = streaming_result
 
-                        async for ev in local_result.stream_events():
-                            await event_queue.put(ev)
+                        # OpenAI pattern: call cancel() INSIDE the loop, then continue consuming
+                        # until the generator stops naturally.
+                        # Use manual iteration to check cancel_requested while waiting for events.
+                        cancelled = False
+                        stream_gen = local_result.stream_events()
+
+                        # Create cancel_wait once outside the loop (Fix #4: reduce task churn)
+                        cancel_wait: asyncio.Task[bool] | None = asyncio.create_task(cancel_requested.wait())
+
+                        while True:
+                            # Check for cancellation while waiting for the next event
+                            next_task = asyncio.create_task(stream_gen.__anext__())
+
+                            # Build task set: always include next_task, include cancel_wait if still active
+                            tasks_to_wait: list[asyncio.Task[Any]] = [next_task]
+                            if cancel_wait is not None:
+                                tasks_to_wait.append(cancel_wait)
+
+                            done, pending = await asyncio.wait(
+                                tasks_to_wait,
+                                return_when=asyncio.FIRST_COMPLETED,
+                            )
+
+                            # Handle cancellation request
+                            if cancel_wait is not None and cancel_wait in done and not cancelled:
+                                mode = cancel_state["mode"]
+                                local_result.cancel(mode=mode)
+                                cancelled = True
+                                cancel_wait = None  # Don't reuse after it fired
+
+                                if mode == "immediate":
+                                    # Immediate mode: cancel pending task and exit quickly
+                                    if next_task in pending:
+                                        next_task.cancel()
+                                        with suppress(asyncio.CancelledError, StopAsyncIteration):
+                                            await next_task
+                                else:
+                                    # after_turn mode: wait for pending task to complete (don't lose event)
+                                    if next_task in pending:
+                                        with suppress(asyncio.CancelledError, StopAsyncIteration):
+                                            await next_task
+
+                                    # Queue the event if we got one
+                                    if next_task.done():
+                                        with suppress(asyncio.CancelledError, StopAsyncIteration):
+                                            ev = next_task.result()
+                                            await event_queue.put(ev)
+
+                                    # Drain remaining events (OpenAI: keep polling after cancel)
+                                    async for ev in stream_gen:
+                                        await event_queue.put(ev)
+                                break
+
+                            # Handle next event
+                            if next_task in done:
+                                try:
+                                    ev = next_task.result()
+                                except StopAsyncIteration:
+                                    # Generator exhausted normally - cleanup cancel_wait
+                                    if cancel_wait is not None and not cancel_wait.done():
+                                        cancel_wait.cancel()
+                                        with suppress(asyncio.CancelledError):
+                                            await cancel_wait
+                                    break
+
+                                # Put event to queue
+                                await event_queue.put(ev)
+
                 except OutputGuardrailTripwireTriggered as e:
                     guardrail_exception = e
                 except InputGuardrailTripwireTriggered as e:
@@ -239,13 +318,15 @@ def run_stream_with_guardrails(
                 except Exception as e:
                     await event_queue.put({"type": "error", "content": str(e)})
                 finally:
+                    # Try put with timeout, fall back to put_nowait if consumer stopped
                     try:
-                        if local_result is not None:
-                            streaming_result = cast(RunResultStreaming, local_result)
-                            local_result.cancel()
-                    except Exception:
-                        pass
-                    await event_queue.put(None)
+                        await asyncio.wait_for(event_queue.put(None), timeout=5.0)
+                    except TimeoutError:
+                        try:
+                            event_queue.put_nowait(None)
+                        except asyncio.QueueFull:
+                            pass  # Consumer stopped, sentinel not needed
+                    cancel_state.pop("run_result", None)
 
             worker_task = asyncio.create_task(_streaming_worker())
 
@@ -433,18 +514,40 @@ def run_stream_with_guardrails(
                 raise
             finally:
                 try:
+                    # Signal cooperative cancellation (OpenAI pattern)
+                    cancel_requested.set()
+
+                    # Wait for worker to finish gracefully (with timeout fallback)
                     if not worker_task.done():
-                        worker_task.cancel()
-                        with suppress(asyncio.CancelledError):
-                            await worker_task
+                        try:
+                            await asyncio.wait_for(worker_task, timeout=5.0)
+                        except TimeoutError:
+                            logger.warning("Outer: Worker timeout, force cancelling")
+                            worker_task.cancel()
+                            with suppress(asyncio.CancelledError):
+                                await worker_task
+
                     if not forward_task.done():
                         forward_task.cancel()
                         with suppress(asyncio.CancelledError):
                             await forward_task
+
+                    # Clean up duplicates and orphans (idempotent - safe to run always)
+                    if agency_context and agency_context.thread_manager:
+                        all_messages = agency_context.thread_manager.get_all_messages()
+                        cleaned = MessageFilter.remove_duplicates(all_messages)
+                        cleaned = MessageFilter.filter_messages(cleaned)
+                        cleaned = MessageFilter.remove_orphaned_messages(cleaned)
+                        agency_context.thread_manager.replace_messages(cleaned)
+                        agency_context.thread_manager.persist()
                 except Exception:
                     pass
 
-    wrapper = StreamingRunResponse(_guarded_stream())
+    wrapper = StreamingRunResponse(
+        _guarded_stream(),
+        cancel_event=cancel_requested,
+        cancel_state=cancel_state,
+    )
     return wrapper
 
 

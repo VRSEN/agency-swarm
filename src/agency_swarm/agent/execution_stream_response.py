@@ -32,6 +32,8 @@ class StreamingRunResponse(AsyncGenerator[StreamEvent | dict[str, Any]]):
         *,
         final_future: asyncio.Future[RunResultStreaming | None] | None = None,
         on_resolve: Callable[[RunResultStreaming | None], None] | None = None,
+        cancel_event: asyncio.Event | None = None,
+        cancel_state: dict[str, Any] | None = None,
     ) -> None:
         self._generator = generator
         self._final_future: asyncio.Future[RunResultStreaming | None] | None = final_future
@@ -40,6 +42,9 @@ class StreamingRunResponse(AsyncGenerator[StreamEvent | dict[str, Any]]):
         self._pending_result: RunResultStreaming | None = None
         self._pending_result_set = False
         self._pending_exception: BaseException | None = None
+        self._cancel_event = cancel_event
+        self._cancel_state = cancel_state  # Shared state for cancel mode
+        self._cancel_requested = False  # Track if cancel was already called
 
     def __aiter__(self) -> AsyncGenerator[StreamEvent | dict[str, Any]]:
         self._maybe_bind_loop()
@@ -61,9 +66,51 @@ class StreamingRunResponse(AsyncGenerator[StreamEvent | dict[str, Any]]):
         self._maybe_bind_loop()
         await self._generator.aclose()
 
+    def cancel(self, mode: str = "immediate") -> None:
+        """Signal cancellation to the underlying stream.
+
+        After calling cancel(), continue consuming the stream to allow
+        the cancellation to complete properly. The stream will stop
+        producing events once the cancellation is processed.
+
+        Args:
+            mode: Cancel mode - "immediate" stops right away,
+                  "after_turn" waits for the current turn to complete.
+        """
+        if self._inner is not None:
+            self._inner.cancel(mode=mode)
+            # Also set our own state so outer finally blocks see cancellation
+            if self._cancel_state is not None:
+                self._cancel_state["mode"] = mode
+                self._cancel_state["user_requested"] = True
+            return
+        # Idempotent: skip if already cancelled
+        if self._cancel_requested:
+            logger.debug("cancel() called but cancellation already requested, ignoring")
+            return
+        self._cancel_requested = True
+        if self._cancel_state is not None:
+            self._cancel_state["mode"] = mode
+            self._cancel_state["user_requested"] = True
+            # Note: We don't call local_result.cancel() here directly.
+            # The worker will call it after receiving the cancel signal,
+            # ensuring it can properly drain remaining events from the stream.
+        if self._cancel_event is not None:
+            self._cancel_event.set()
+
     def _adopt_stream(self, other: "StreamingRunResponse") -> None:
         existing_future = self._final_future
         self._inner = other
+
+        # Propagate cancel event/state bidirectionally so nested wrappers share the same state.
+        if self._cancel_event is not None and other._cancel_event is None:
+            other._cancel_event = self._cancel_event
+        elif other._cancel_event is not None and self._cancel_event is None:
+            self._cancel_event = other._cancel_event
+        if self._cancel_state is not None and other._cancel_state is None:
+            other._cancel_state = self._cancel_state
+        elif other._cancel_state is not None and self._cancel_state is None:
+            self._cancel_state = other._cancel_state
 
         if existing_future is not None:
             existing_loop = existing_future.get_loop()

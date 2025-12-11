@@ -114,7 +114,7 @@ class TestTerminalCapsys:
 
         with patch("builtins.input", input_provider):
             with patch("agency_swarm.ui.demos.terminal.Application", new=_application_factory(input_provider)):
-                start_terminal(agency)
+                start_terminal(agency, reload=False)
 
         captured = capsys.readouterr()
         output = captured.out
@@ -131,7 +131,7 @@ class TestTerminalCapsys:
 
         with patch("builtins.input", input_provider):
             with patch("agency_swarm.ui.demos.terminal.Application", new=_application_factory(input_provider)):
-                start_terminal(agency)
+                start_terminal(agency, reload=False)
 
         captured = capsys.readouterr()
         output = captured.out
@@ -146,7 +146,7 @@ class TestTerminalCapsys:
 
         with patch("builtins.input", input_provider):
             with patch("agency_swarm.ui.demos.terminal.Application", new=_application_factory(input_provider)):
-                start_terminal(agency)
+                start_terminal(agency, reload=False)
 
         captured = capsys.readouterr()
         output = captured.out
@@ -158,7 +158,7 @@ class TestTerminalCapsys:
 
         with patch("builtins.input", input_provider):
             with patch("agency_swarm.ui.demos.terminal.Application", new=_application_factory(input_provider)):
-                start_terminal(agency)
+                start_terminal(agency, reload=False)
 
         captured = capsys.readouterr()
         output = captured.out
@@ -173,7 +173,7 @@ class TestTerminalCapsys:
 
         with patch("builtins.input", input_provider):
             with patch("agency_swarm.ui.demos.terminal.Application", new=_application_factory(input_provider)):
-                start_terminal(agency)
+                start_terminal(agency, reload=False)
 
         captured = capsys.readouterr()
         output = captured.out
@@ -187,7 +187,7 @@ class TestTerminalCapsys:
 
         with patch("builtins.input", input_provider):
             with patch("agency_swarm.ui.demos.terminal.Application", new=_application_factory(input_provider)):
-                start_terminal(agency)
+                start_terminal(agency, reload=False)
 
         captured = capsys.readouterr()
         assert "message cannot be empty" in captured.out
@@ -198,7 +198,7 @@ class TestTerminalCapsys:
 
         with patch("builtins.input", input_provider):
             with patch("agency_swarm.ui.demos.terminal.Application", new=_application_factory(input_provider)):
-                start_terminal(agency)
+                start_terminal(agency, reload=False)
 
         captured = capsys.readouterr()
         output = captured.out
@@ -229,7 +229,7 @@ class TestTerminalCapsys:
         with patch("builtins.input", input_provider):
             with patch("agency_swarm.ui.demos.terminal.Application", new=_application_factory(input_provider)):
                 with patch.object(terminal_module.DropdownMenu, "set_items", _capture):
-                    start_terminal(agency)
+                    start_terminal(agency, reload=False)
 
         assert captured_labels, "Expected dropdown items to be set"
         assert any(label.startswith("/") for label in captured_labels[0])
@@ -244,7 +244,7 @@ class TestTerminalEdgeCases:
 
         with patch("builtins.input", input_provider):
             with patch("agency_swarm.ui.demos.terminal.Application", new=_application_factory(input_provider)):
-                start_terminal(agency)
+                start_terminal(agency, reload=False)
 
         # Check that error was logged
         assert "Recipient agent NonExistentAgent not found" in caplog.text
@@ -256,7 +256,7 @@ class TestTerminalEdgeCases:
 
         with patch("builtins.input", input_provider):
             with patch("agency_swarm.ui.demos.terminal.Application", new=_application_factory(input_provider)):
-                start_terminal(agency)
+                start_terminal(agency, reload=False)
 
         captured = capsys.readouterr()
         assert "🤖 TestAgent → 👤 user" in captured.out
@@ -269,7 +269,7 @@ class TestTerminalEdgeCases:
 
         with patch("builtins.input", input_provider):
             with patch("agency_swarm.ui.demos.terminal.Application", new=_application_factory(input_provider)):
-                start_terminal(agency)
+                start_terminal(agency, reload=False)
 
         captured = capsys.readouterr()
         assert "🤖 TestAgent → 👤 user" in captured.out
@@ -280,7 +280,7 @@ class TestTerminalEdgeCases:
         input_provider = MockInputProvider(["@SecUrity ExperT_Agent hi", "/exit"])
         with patch("builtins.input", input_provider):
             with patch("agency_swarm.ui.demos.terminal.Application", new=_application_factory(input_provider)):
-                start_terminal(agency)
+                start_terminal(agency, reload=False)
         captured = capsys.readouterr()
         assert "🤖 SecUrity ExperT_Agent → 👤 user" in captured.out
         assert "Security expert response:" in captured.out
@@ -291,7 +291,7 @@ class TestTerminalEdgeCases:
 
         with patch("builtins.input", input_provider):
             with patch("agency_swarm.ui.demos.terminal.Application", new=_application_factory(input_provider)):
-                start_terminal(agency)
+                start_terminal(agency, reload=False)
 
         captured = capsys.readouterr()
         output = captured.out
