@@ -2,6 +2,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from agents import TResponseInputItem
 from agents.items import MessageOutputItem, RunItem
+from agents.models.fake_id import FAKE_RESPONSES_ID
 
 from agency_swarm.messages import MessageFilter, MessageFormatter
 from agency_swarm.utils.citation_extractor import extract_direct_file_annotations
@@ -140,9 +141,9 @@ def _persist_streamed_items(
     call_map: dict[str, tuple[RunItem, str, str, str | None]] = {}
     for run_item, agent_name, agent_run_id, caller_name in reversed(persistence_candidates):
         run_item_id, call_id = _extract_identifiers(run_item)
-        # Skip placeholder "__fake_id__" from LiteLLM/Chat Completions models
+        # Skip placeholder ID from LiteLLM/Chat Completions models
         # to avoid collision when multiple items share the same placeholder ID
-        if run_item_id and run_item_id != "__fake_id__" and run_item_id not in id_map:
+        if run_item_id and run_item_id != FAKE_RESPONSES_ID and run_item_id not in id_map:
             id_map[run_item_id] = (run_item, agent_name, agent_run_id, caller_name)
         if call_id and call_id not in call_map:
             call_map[call_id] = (run_item, agent_name, agent_run_id, caller_name)
@@ -307,9 +308,9 @@ def _message_key(message: TResponseInputItem) -> tuple[str, str | None, str | No
     if not isinstance(message, dict):
         return None
 
-    # Skip placeholder "__fake_id__" from LiteLLM/Chat Completions models
+    # Skip placeholder ID from LiteLLM/Chat Completions models
     message_id = message.get("id")
-    if isinstance(message_id, str) and message_id and message_id != "__fake_id__":
+    if isinstance(message_id, str) and message_id and message_id != FAKE_RESPONSES_ID:
         return ("id", message_id, message.get("type"))
 
     call_id = message.get("call_id")

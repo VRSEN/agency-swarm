@@ -3,6 +3,7 @@
 import logging
 
 from agents.items import TResponseInputItem
+from agents.models.fake_id import FAKE_RESPONSES_ID
 
 logger = logging.getLogger(__name__)
 
@@ -256,6 +257,9 @@ class MessageFilter:
         When the same item is added multiple times (e.g., from 'added' and 'done' events),
         this keeps only the first occurrence.
 
+        Note: Skips placeholder IDs (FAKE_RESPONSES_ID) from LiteLLM/Chat Completions
+        models since multiple distinct items share that placeholder.
+
         Args:
             messages: List of message dictionaries
 
@@ -267,7 +271,8 @@ class MessageFilter:
 
         for msg in messages:
             msg_id = msg.get("id")
-            if isinstance(msg_id, str) and msg_id:
+            # Skip placeholder IDs - multiple distinct items share it
+            if isinstance(msg_id, str) and msg_id and msg_id != FAKE_RESPONSES_ID:
                 if msg_id in seen_ids:
                     logger.debug(f"Removing duplicate message with id={msg_id}")
                     continue

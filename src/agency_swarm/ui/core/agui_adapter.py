@@ -2,6 +2,8 @@ import json
 import logging
 from typing import Any
 
+from agents.models.fake_id import FAKE_RESPONSES_ID
+
 try:
     from ag_ui.core import (
         AssistantMessage,
@@ -257,10 +259,10 @@ class AguiAdapter:
                 if not call_id:
                     logger.warning("raw_response_event ignored: tool call without call_id")
                     return None
-                # Store call_id by item.id only if it's not the placeholder "__fake_id__"
-                # LiteLLM/Chat Completions models emit "__fake_id__" for all items
+                # Store call_id by item.id only if it's not the placeholder
+                # LiteLLM/Chat Completions models emit FAKE_RESPONSES_ID for all items
                 item_id = getattr(raw_item, "id", None)
-                if item_id and item_id != "__fake_id__":
+                if item_id and item_id != FAKE_RESPONSES_ID:
                     call_id_by_item[item_id] = call_id
                 # Always store by output_index as fallback for placeholder IDs
                 output_index = getattr(oe, "output_index", None)
@@ -317,7 +319,7 @@ class AguiAdapter:
             item_id = getattr(oe, "item_id", None)
             # Try item_id lookup first (for real IDs), skip if it's the placeholder
             call_id = None
-            if item_id and item_id != "__fake_id__":
+            if item_id and item_id != FAKE_RESPONSES_ID:
                 call_id = call_id_by_item.get(item_id)
             # Fallback to output_index lookup (for LiteLLM/Chat Completions placeholder IDs)
             if not call_id:

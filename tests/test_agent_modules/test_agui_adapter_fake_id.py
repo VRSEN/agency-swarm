@@ -9,6 +9,7 @@ and use call_id for correlation instead.
 from types import SimpleNamespace
 
 import pytest
+from agents.models.fake_id import FAKE_RESPONSES_ID
 
 pytest.importorskip("ag_ui")
 from ag_ui.core import ToolCallArgsEvent
@@ -19,8 +20,6 @@ from openai.types.responses.response_function_call_arguments_delta_event import 
 from openai.types.responses.response_output_item_added_event import ResponseOutputItemAddedEvent
 
 from agency_swarm.ui.core.agui_adapter import AguiAdapter
-
-FAKE_RESPONSES_ID = "__fake_id__"
 
 
 def make_raw_event(data):
