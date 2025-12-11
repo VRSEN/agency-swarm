@@ -198,6 +198,7 @@ class Agent(BaseAgent[MasterContext]):
         self._openai_client = None
         self._openai_client_sync = None
         self._tool_concurrency_manager = ToolConcurrencyManager()
+        self._mcp_tools_initialized = False
 
         # Initialize execution handler
         self._execution = Execution(self)
@@ -234,8 +235,7 @@ class Agent(BaseAgent[MasterContext]):
         for tool in self.tools:
             _attach_one_call_guard(tool, self)
 
-        # Convert MCP servers to tools and add them to the agent
-        convert_mcp_servers_to_tools(self)
+        # MCP servers are converted lazily on first use to avoid interactive auth at init
 
     # --- Deprecated Compatibility ---
     @property
@@ -335,6 +335,13 @@ class Agent(BaseAgent[MasterContext]):
         """Parse OpenAPI schemas from the schemas folder and create tools."""
         parse_schemas(self)
 
+    def ensure_mcp_tools(self) -> None:
+        """Lazily convert MCP servers to tools on first use."""
+        if self._mcp_tools_initialized:
+            return
+        convert_mcp_servers_to_tools(self)
+        self._mcp_tools_initialized = True
+
     # --- File Handling ---
     def upload_file(self, file_path: str, include_in_vector_store: bool = True) -> str:
         """Upload a file using the agent's file manager."""
@@ -384,6 +391,9 @@ class Agent(BaseAgent[MasterContext]):
         if agency_context is None:
             agency_context = self._create_minimal_context()
 
+        # Lazily attach MCP tools on demand
+        self.ensure_mcp_tools()
+
         return await self._execution.get_response(
             message=message,
             sender_name=sender_name,
@@ -432,6 +442,9 @@ class Agent(BaseAgent[MasterContext]):
         # If no agency context provided, create a minimal one for standalone usage
         if agency_context is None:
             agency_context = self._create_minimal_context()
+
+        # Lazily attach MCP tools on demand
+        self.ensure_mcp_tools()
 
         return self._execution.get_response_stream(
             message=message,
