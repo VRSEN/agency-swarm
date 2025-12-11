@@ -486,6 +486,23 @@ async def _listen_for_callback_once(redirect_uri: str, timeout: float = 300.0) -
                 return
 
             params = parse_qs(target_parsed.query)
+
+            # Handle OAuth provider error responses (e.g., user denied authorization)
+            if "error" in params:
+                error = params["error"][0]
+                error_description = params.get("error_description", ["Unknown error"])[0]
+                status_line = "HTTP/1.1 400 Bad Request\r\n"
+                body = f"<html><body><h1>OAuth Error</h1><p>{error}: {error_description}</p></body></html>"
+                writer.write(
+                    f"{status_line}Content-Type: text/html\r\nContent-Length: {len(body)}\r\n\r\n{body}".encode()
+                )
+                await writer.drain()
+                writer.close()
+                await writer.wait_closed()
+                if not result.done():
+                    result.set_exception(ValueError(f"OAuth error: {error} - {error_description}"))
+                return
+
             if "code" not in params:
                 status_line = "HTTP/1.1 400 Bad Request\r\n"
                 body = "<html><body><h1>Missing code parameter.</h1></body></html>"
