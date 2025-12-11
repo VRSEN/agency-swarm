@@ -87,6 +87,20 @@ class OAuthStateRegistry:
             flow.event.set()
             return flow
 
+    async def set_error(self, *, state: str, error: str, error_description: str | None = None) -> OAuthFlowState:
+        """Persist an OAuth provider error and release any waiters."""
+        async with self._lock:
+            self._prune_expired_locked()
+            flow = self._flows.get(state)
+            error_msg = f"{error}: {error_description}" if error_description else error
+            if flow is None:
+                flow = OAuthFlowState(state=state, auth_url="", server_name=None, user_id=None, error=error_msg)
+                self._flows[state] = flow
+            else:
+                flow.error = error_msg
+            flow.event.set()
+            return flow
+
     async def wait_for_code(self, *, state: str, timeout: float | None = 300.0) -> tuple[str, str | None]:
         """Wait for the callback to supply an authorization code."""
         flow = await self._get_or_raise(state)
