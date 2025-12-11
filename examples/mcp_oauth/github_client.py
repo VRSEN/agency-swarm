@@ -87,7 +87,6 @@ oauth_agent = Agent(
 
     Always confirm that you successfully authenticated via OAuth when using these tools.""",
     description="Agent with OAuth-authenticated MCP server access",
-    model="gpt-4",
     mcp_servers=[oauth_server],
 )
 
@@ -103,8 +102,7 @@ async def main():
     print("\nIf this is your first time:")
     print("  1. A browser window will open for OAuth authentication")
     print("  2. Authorize the application")
-    print("  3. Copy the callback URL from your browser")
-    print("  4. Paste it when prompted")
+    print("  3. The callback will be captured automatically")
     print("\nIf you've authenticated before, tokens will be reused automatically.")
     print("=" * 80 + "\n")
 

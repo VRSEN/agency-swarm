@@ -52,7 +52,7 @@ class PersistentMCPServerManager:
         # Default timeouts for known methods; unknown methods use a safe default
         self._timeouts: dict[str, float] = {
             "connect": 20.0,
-            "list_tools": 10.0,
+            "list_tools": 30.0,  # Increased for OAuth servers (auth happens on first call)
             "call_tool": 120.0,
             "cleanup": 10.0,
             "list_prompts": 10.0,
