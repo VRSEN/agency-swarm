@@ -326,11 +326,6 @@ def make_cancel_endpoint(request_model, verify_token, run_registry: ActiveRunReg
         except TimeoutError:
             logger.warning("Timed out waiting for run %s to finish cancellation (mode=%s)", run_id, cancel_mode)
             timed_out = True
-        finally:
-            # Always clean up registry to prevent memory leaks (Fix #1)
-            if timed_out:
-                await run_registry.finish(run_id)
-
         # Get messages generated before cancel
         all_messages = active_run.agency.thread_manager.get_all_messages()
         new_messages = all_messages[active_run.initial_message_count :]
@@ -340,11 +335,12 @@ def make_cancel_endpoint(request_model, verify_token, run_registry: ActiveRunReg
         filtered_messages = MessageFilter.remove_orphaned_messages(filtered_messages)
 
         return {
-            "ok": True,
+            "ok": not timed_out,
             "run_id": run_id,
-            "cancelled": True,
+            "cancelled": not timed_out,
             "cancel_mode": cancel_mode,
             "new_messages": filtered_messages,
+            "timed_out": timed_out,
         }
 
     return handler
