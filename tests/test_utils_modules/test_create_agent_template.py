@@ -322,6 +322,19 @@ class TestCreateAgentTemplate:
         init_content = init_file.read_text(encoding="utf-8")
         assert "from .complex_agent_name_with_spaces import complex_agent_name_with_spaces" in init_content
 
+    def test_agent_name_with_dots_preserves_version_digits(self, tmp_path: Path) -> None:
+        """Agent names containing dots should normalize to underscores without dropping digits."""
+        agent_name = "Versioned Agent 1.2"
+
+        assert create_agent_template(agent_name=agent_name, path=str(tmp_path)) is True
+
+        agent_folder = tmp_path / "versioned_agent_1_2"
+        assert agent_folder.exists()
+        assert (agent_folder / "versioned_agent_1_2.py").exists()
+
+        init_content = (agent_folder / "__init__.py").read_text(encoding="utf-8")
+        assert "from .versioned_agent_1_2 import versioned_agent_1_2" in init_content
+
     @patch("builtins.input")
     def test_interactive_input(self, mock_input, tmp_path: Path) -> None:
         """Test interactive input when name not provided."""

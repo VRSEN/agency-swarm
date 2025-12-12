@@ -93,17 +93,40 @@ class FileSync:
 
         orphan_file_ids: list[str] = []
         for vs_file in vs_files:
-            file_id = vs_file.id
+            file_id = getattr(vs_file, "file_id", None) or getattr(vs_file, "id", None)
+            if not isinstance(file_id, str) or not file_id:
+                continue
+
             if file_id in local_file_ids:
                 continue
 
             orphan_file_ids.append(file_id)
 
         for file_id in orphan_file_ids:
-            file_deleted = False
             try:
+                self.agent.client_sync.vector_stores.files.delete(vector_store_id=vs_id, file_id=file_id)
+                logger.info(
+                    "Agent %s: Removed file %s from Vector Store %s (not present locally).",
+                    self.agent.name,
+                    file_id,
+                    vs_id,
+                )
+                self._wait_for_vector_store_file_absence(vector_store_id=vs_id, file_id=file_id)
+            except NotFoundError:
+                pass
+            except Exception as exc:
+                logger.warning(
+                    "Agent %s: Failed to remove file %s from Vector Store %s: %s",
+                    self.agent.name,
+                    file_id,
+                    vs_id,
+                    exc,
+                )
+
+            try:
+                # OpenAI may reject file deletion while it is still attached to a Vector Store,
+                # so detach first (above) and then delete the backing File object.
                 self.agent.client_sync.files.delete(file_id=file_id)
-                file_deleted = True
                 logger.info("Agent %s: Deleted OpenAI file %s as part of sync.", self.agent.name, file_id)
             except NotFoundError:
                 logger.debug("Agent %s: OpenAI file %s already absent during sync.", self.agent.name, file_id)
@@ -117,44 +140,8 @@ class FileSync:
             finally:
                 self._wait_for_openai_file_absence(file_id)
 
-            try:
-                self.agent.client_sync.vector_stores.files.delete(vector_store_id=vs_id, file_id=file_id)
-                logger.info(
-                    "Agent %s: Removed file %s from Vector Store %s (not present locally).",
-                    self.agent.name,
-                    file_id,
-                    vs_id,
-                )
-                self._wait_for_vector_store_file_absence(vector_store_id=vs_id, file_id=file_id)
-            except NotFoundError:
-                if file_deleted:
-                    logger.debug(
-                        "Agent %s: Vector Store %s already detached file %s after OpenAI deletion.",
-                        self.agent.name,
-                        vs_id,
-                        file_id,
-                    )
-                continue
-            except Exception as exc:
-                logger.warning(
-                    "Agent %s: Failed to remove file %s from Vector Store %s: %s",
-                    self.agent.name,
-                    file_id,
-                    vs_id,
-                    exc,
-                )
-
     def remove_file_from_vs_and_oai(self, file_id: str) -> None:
         vs_id = self.agent._associated_vector_store_id
-        try:
-            self.agent.client_sync.files.delete(file_id=file_id)
-        except NotFoundError:
-            pass
-        except Exception as exc:
-            logger.debug(f"Agent {self.agent.name}: Could not delete OpenAI file {file_id}: {exc}")
-        finally:
-            self._wait_for_openai_file_absence(file_id)
-
         if vs_id:
             try:
                 self.agent.client_sync.vector_stores.files.delete(vector_store_id=vs_id, file_id=file_id)
@@ -165,6 +152,15 @@ class FileSync:
                 logger.debug(
                     f"Agent {self.agent.name}: Could not detach file {file_id} from Vector Store {vs_id}: {exc}"
                 )
+
+        try:
+            self.agent.client_sync.files.delete(file_id=file_id)
+        except NotFoundError:
+            pass
+        except Exception as exc:
+            logger.debug(f"Agent {self.agent.name}: Could not delete OpenAI file {file_id}: {exc}")
+        finally:
+            self._wait_for_openai_file_absence(file_id)
 
     def _should_skip_file(self, filename: str) -> bool:
         return filename.startswith(".") or filename.startswith("__")
@@ -297,7 +293,7 @@ class FileSync:
         max_backoff = 5.0
         while time.monotonic() < deadline:
             try:
-                vs_files = self.list_all_vector_store_files(vector_store_id)
+                self.agent.client_sync.vector_stores.files.retrieve(vector_store_id=vector_store_id, file_id=file_id)
             except NotFoundError:
                 return
             except Exception as exc:
@@ -314,11 +310,6 @@ class FileSync:
                 time.sleep(backoff)
                 backoff = min(backoff * 1.7, max_backoff)
                 continue
-
-            remaining_ids = {vs_file.id for vs_file in vs_files}
-            if file_id not in remaining_ids:
-                return
-
             time.sleep(backoff)
             backoff = min(backoff * 1.7, max_backoff)
         if last_error:
