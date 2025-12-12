@@ -6,7 +6,7 @@ ensuring that changes made by one agent are visible to other agents.
 """
 
 import pytest
-from agents import RunContextWrapper, function_tool
+from agents import ModelSettings, RunContextWrapper, function_tool
 
 from agency_swarm import Agency, Agent, MasterContext
 
@@ -37,6 +37,8 @@ async def test_context_sharing_between_agents():
         instructions="You store data in the context.",
         tools=[store_data],
         model="gpt-5-mini",
+        model_settings=ModelSettings(tool_choice="required"),
+        tool_use_behavior="stop_on_first_tool",
     )
 
     agent2 = Agent(
@@ -44,6 +46,8 @@ async def test_context_sharing_between_agents():
         instructions="You retrieve and store data in the context.",
         tools=[get_data, store_data],
         model="gpt-5-mini",
+        model_settings=ModelSettings(tool_choice="required"),
+        tool_use_behavior="stop_on_first_tool",
     )
 
     # Create agency with both agents as entry points
