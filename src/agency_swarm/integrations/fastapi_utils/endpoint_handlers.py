@@ -6,12 +6,14 @@ import uuid
 from collections.abc import AsyncGenerator, Callable
 from dataclasses import dataclass, field
 from importlib import metadata
+from typing import cast
 
 from ag_ui.core import EventType, MessagesSnapshotEvent, RunErrorEvent, RunFinishedEvent, RunStartedEvent
 from ag_ui.encoder import EventEncoder
 from agents import OpenAIResponsesModel, TResponseInputItem, output_guardrail
 from agents.exceptions import OutputGuardrailTripwireTriggered
 from agents.models._openai_shared import get_default_openai_client
+from agents.models.fake_id import FAKE_RESPONSES_ID
 from fastapi import Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -264,6 +266,7 @@ def make_stream_endpoint(
                     filtered_messages = MessageFilter.remove_duplicates(new_messages)
                     filtered_messages = MessageFilter.filter_messages(filtered_messages)
                     filtered_messages = MessageFilter.remove_orphaned_messages(filtered_messages)
+                    filtered_messages = _normalize_new_messages_for_client(filtered_messages)
 
                     # Build result with new messages
                     result = {"new_messages": filtered_messages, "run_id": run_id}
@@ -335,6 +338,7 @@ def make_cancel_endpoint(request_model, verify_token, run_registry: ActiveRunReg
         filtered_messages = MessageFilter.remove_duplicates(new_messages)
         filtered_messages = MessageFilter.filter_messages(filtered_messages)
         filtered_messages = MessageFilter.remove_orphaned_messages(filtered_messages)
+        filtered_messages = _normalize_new_messages_for_client(filtered_messages)
 
         return {
             "ok": not timed_out,
@@ -441,6 +445,45 @@ def make_agui_chat_endpoint(request_model, agency_factory: Callable[..., Agency]
         return StreamingResponse(event_generator(), media_type=encoder.get_content_type())
 
     return handler
+
+
+def _normalize_new_messages_for_client(messages: list[TResponseInputItem]) -> list[TResponseInputItem]:
+    """Normalize server-side message items for client consumption.
+
+    LiteLLM / Chat Completions integrations can emit `id=FAKE_RESPONSES_ID` for multiple distinct
+    items. Client code commonly keys and merges by `id`, so rewrite placeholder ids into stable,
+    unique ids within the final `new_messages` payload while preserving `call_id` linking for tool
+    calls.
+    """
+    normalized: list[TResponseInputItem] = []
+    for idx, msg in enumerate(messages):
+        if not isinstance(msg, dict):
+            normalized.append(msg)
+            continue
+
+        msg_id = msg.get("id")
+        if not (isinstance(msg_id, str) and msg_id == FAKE_RESPONSES_ID):
+            normalized.append(msg)
+            continue
+
+        msg_copy: dict[str, object] = dict(msg)
+
+        call_id = msg_copy.get("call_id")
+        if isinstance(call_id, str) and call_id and call_id != FAKE_RESPONSES_ID:
+            msg_copy["id"] = call_id
+            normalized.append(cast(TResponseInputItem, msg_copy))
+            continue
+
+        agent_run_id = msg_copy.get("agent_run_id")
+        timestamp = msg_copy.get("timestamp")
+        if isinstance(agent_run_id, str) and agent_run_id and isinstance(timestamp, int):
+            msg_copy["id"] = f"msg_{agent_run_id}_{timestamp}"
+        else:
+            msg_copy["id"] = f"msg_{idx}"
+
+        normalized.append(cast(TResponseInputItem, msg_copy))
+
+    return normalized
 
 
 def make_metadata_endpoint(agency_metadata: dict, verify_token):
