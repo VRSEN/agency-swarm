@@ -90,18 +90,16 @@ def test_metadata_includes_agent_capabilities():
                 WebSearchTool(),
             ],
         )
-        # Agent with reasoning model
         agent3 = Agent(
             name="ReasoningAgent",
             instructions="Test",
-            model="gpt-5",
-            model_settings=ModelSettings(reasoning=Reasoning(effort="high")),
+            model="gpt-5.1",
+            model_settings=ModelSettings(reasoning=Reasoning(effort="low")),
         )
-        # Agent with all capabilities
         agent4 = Agent(
             name="FullAgent",
             instructions="Test",
-            model="o1",
+            model="gpt-5.1",
             tools=[CustomTool, FileSearchTool(vector_store_ids=["vs_456"])],
         )
         return Agency(

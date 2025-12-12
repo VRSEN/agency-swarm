@@ -115,9 +115,9 @@ def test_agent_with_reasoning_model_o3():
     assert "reasoning" in capabilities
 
 
-def test_agent_with_reasoning_model_gpt5():
-    """Agent with gpt-5 model has 'reasoning' capability."""
-    agent = Agent(name="ReasoningAgent", instructions="Test", model="gpt-5")
+def test_agent_with_reasoning_model_gpt51():
+    """Agent with gpt-5.1 model has 'reasoning' capability."""
+    agent = Agent(name="ReasoningAgent", instructions="Test", model="gpt-5.1")
     capabilities = get_agent_capabilities(agent)
     assert "reasoning" in capabilities
 
@@ -134,7 +134,7 @@ def test_agent_with_reasoning_parameter():
     agent = Agent(
         name="ReasoningAgent",
         instructions="Test",
-        model="gpt-5",
+        model="gpt-5.1",
         model_settings=ModelSettings(reasoning=Reasoning(effort="high")),
     )
     capabilities = get_agent_capabilities(agent)
@@ -170,7 +170,7 @@ def test_agent_with_all_capabilities():
     agent = Agent(
         name="FullAgent",
         instructions="Test",
-        model="gpt-5",
+        model="gpt-5.1",
         tools=[
             SampleTool,
             FileSearchTool(vector_store_ids=["vs_123"]),
@@ -199,7 +199,7 @@ def test_capabilities_order_is_consistent():
     agent = Agent(
         name="Agent",
         instructions="Test",
-        model="gpt-5",
+        model="gpt-5.1",
         tools=[WebSearchTool(), SampleTool, CodeInterpreterTool(tool_config=CodeInterpreter())],
     )
     capabilities = get_agent_capabilities(agent)

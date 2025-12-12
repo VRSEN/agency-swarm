@@ -4,7 +4,7 @@ from agency_swarm.tools import SendMessage
 
 
 def test_run_fastapi_creates_new_agency_instance(mocker):
-    agent = Agent(name="HelperAgent", instructions="test", model="gpt-4.1")
+    agent = Agent(name="HelperAgent", instructions="test", model="gpt-5.1")
     agency = Agency(agent)
 
     captured = {}
@@ -36,8 +36,8 @@ class CustomSendMessage(SendMessage):
 
 
 def test_run_fastapi_preserves_custom_tool_mappings(mocker):
-    sender = Agent(name="A", instructions="test", model="gpt-4.1")
-    recipient = Agent(name="B", instructions="test", model="gpt-4.1")
+    sender = Agent(name="A", instructions="test", model="gpt-5.1")
+    recipient = Agent(name="B", instructions="test", model="gpt-5.1")
     agency = Agency(sender, recipient, communication_flows=[(sender, recipient, CustomSendMessage)])
 
     captured = {}

@@ -31,7 +31,6 @@ from langfuse import observe  # noqa: E402
 from agency_swarm import (  # noqa: E402
     Agency,
     Agent,
-    ModelSettings,
     RunContextWrapper,
     function_tool,
     trace,
@@ -63,25 +62,22 @@ def create_agency() -> Agency:
         name="CEO",
         instructions="You are the CEO. NEVER execute tasks yourself. Instead, DELEGATE all tasks: coding tasks to Developer and data analysis to DataAnalyst.",
         description="Manages projects and coordinates between team members",
-        model="gpt-4.1",
-        model_settings=ModelSettings(temperature=0.0),
+        model="gpt-5.1",
     )
 
     developer = Agent(
         name="Developer",
         instructions="You are the Developer. Solve coding problems by implementing solutions and writing code.",
         description="Implements technical solutions and writes code",
-        model="gpt-4.1",
-        model_settings=ModelSettings(temperature=0.0),
+        model="gpt-5.1",
     )
 
     analyst = Agent(
         name="DataAnalyst",
         instructions="You are the Data Analyst. Analyze data and provide insights. Always use analyze_dataset in your response to process the dataset.",
         description="Analyzes data and provides insights",
-        model="gpt-4.1",
+        model="gpt-5.1",
         tools=[analyze_dataset],
-        model_settings=ModelSettings(temperature=0.0),
     )
 
     return Agency(

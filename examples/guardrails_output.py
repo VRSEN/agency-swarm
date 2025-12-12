@@ -22,7 +22,7 @@ async def forbid_sensitive_email(
 support_agent = Agent(
     name="SupportPilot",
     instructions="You handle customer support. Official email: support@example.com.",
-    model="gpt-5",
+    model="gpt-5.1",
     output_guardrails=[forbid_sensitive_email],
     validation_attempts=1,  # 1 is the default, set to 0 for immediate fail-fast behavior
 )

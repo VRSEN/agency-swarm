@@ -14,7 +14,6 @@ import tempfile
 from pathlib import Path
 
 import pytest
-from agents import ModelSettings
 
 from agency_swarm import Agency, Agent
 from agency_swarm.utils.citation_extractor import extract_direct_file_citations_from_history
@@ -63,8 +62,7 @@ async def test_file_attachment_citation_extraction():
                     "information from the document. Be precise and reference exact text when "
                     "providing answers."
                 ),
-                model="gpt-4.1",
-                model_settings=ModelSettings(temperature=0.0),  # DETERMINISTIC BEHAVIOR
+                model="gpt-5.1",
             )
 
             # Create agency with the agent
@@ -184,16 +182,14 @@ async def test_file_attachment_vs_vector_store_citation_distinction():
             name="VectorAgent",
             instructions="Use your FileSearch tool to answer questions.",
             files_folder=str(vector_dir),
-            model="gpt-4.1",
-            model_settings=ModelSettings(temperature=0.0),  # DETERMINISTIC
+            model="gpt-5.1",
         )
 
         # Create agent for direct file attachments
         attachment_agent = Agent(
             name="AttachmentAgent",
             instructions="Analyze attached files directly and provide specific citations.",
-            model="gpt-4.1",
-            model_settings=ModelSettings(temperature=0.0),  # DETERMINISTIC
+            model="gpt-5.1",
         )
 
         # Create agencies

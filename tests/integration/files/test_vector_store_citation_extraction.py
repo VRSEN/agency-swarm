@@ -48,8 +48,8 @@ async def test_vector_store_citation_extraction():
             ),
             files_folder=str(temp_path),
             include_search_results=True,
-            model="gpt-4.1",
-            model_settings=ModelSettings(temperature=0.0, tool_choice="file_search"),
+            model="gpt-5.1",
+            model_settings=ModelSettings(tool_choice="file_search"),
             tool_use_behavior="stop_on_first_tool",
         )
 
