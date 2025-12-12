@@ -2,6 +2,7 @@
 import inspect
 import logging
 import os
+from collections.abc import Callable
 from copy import deepcopy
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -179,6 +180,47 @@ def _looks_like_file_path(value: str) -> bool:
         return True
 
     return False
+
+
+def resolve_existing_or_intended_file_path(
+    value: str,
+    *,
+    base_dir_provider: Callable[[], str],
+    log_label: str,
+) -> tuple[str | None, str | None]:
+    """Resolve a string that may be a file path without risking OS filename errors.
+
+    Returns (existing_path, intended_source_path).
+    - existing_path is an absolute path to a file that exists (if found)
+    - intended_source_path is the caller-relative resolved path (for hot-reload tracking) if the value looks like a path
+
+    If the value does not look like a file path, returns (None, None).
+    """
+    if not _looks_like_file_path(value):
+        return None, None
+
+    try:
+        base_dir = base_dir_provider()
+        class_resolved = (Path(base_dir) / value).expanduser().resolve(strict=False)
+        direct_resolved = Path(value).expanduser().resolve(strict=False)
+    except OSError as exc:
+        logger.debug("%s: Skipping path resolution due to OS error: %s", log_label, exc)
+        return None, None
+
+    candidates = [class_resolved]
+    if direct_resolved != class_resolved:
+        candidates.append(direct_resolved)
+
+    for candidate in candidates:
+        try:
+            is_file = candidate.is_file()
+        except OSError:
+            is_file = False
+
+        if is_file:
+            return str(candidate), str(class_resolved)
+
+    return None, str(class_resolved)
 
 
 def read_instructions(agency: "Agency", path: str) -> None:

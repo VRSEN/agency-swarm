@@ -2,7 +2,6 @@
 import atexit
 import logging
 import warnings
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from agents import RunConfig, RunHooks, RunResult, TResponseInputItem
@@ -16,7 +15,12 @@ from agency_swarm.tools.mcp_manager import default_mcp_manager
 from agency_swarm.utils.thread import ThreadLoadCallback, ThreadManager, ThreadSaveCallback
 
 # Import split module functions
-from .helpers import _looks_like_file_path, get_class_folder_path, handle_deprecated_agency_args, read_instructions
+from .helpers import (
+    get_class_folder_path,
+    handle_deprecated_agency_args,
+    read_instructions,
+    resolve_existing_or_intended_file_path,
+)
 from .setup import (
     configure_agents,
     initialize_agent_runtime_state,
@@ -182,23 +186,22 @@ class Agency:
         # Handle shared instructions - can be a string or a file path
         if shared_instructions:
             shared_value = shared_instructions
-            class_resolved = (Path(get_class_folder_path(self)) / shared_value).expanduser().resolve(strict=False)
-            direct_resolved = Path(shared_value).expanduser().resolve(strict=False)
-            candidate_paths = [class_resolved]
-            if direct_resolved != class_resolved:
-                candidate_paths.append(direct_resolved)
-
-            for candidate in candidate_paths:
-                if candidate.is_file():
-                    read_instructions(self, str(candidate))
-                    break
-            else:
-                if isinstance(shared_value, str) and _looks_like_file_path(shared_value):
-                    # Track intended path for future hot-reload but preserve provided text
-                    self._shared_instructions_source_path = str(class_resolved)
+            if isinstance(shared_value, str):
+                existing_path, intended_source_path = resolve_existing_or_intended_file_path(
+                    shared_value,
+                    base_dir_provider=lambda: get_class_folder_path(self),
+                    log_label="Agency: shared_instructions",
+                )
+                if intended_source_path is None:
                     self.shared_instructions = shared_value
+                elif existing_path is not None:
+                    read_instructions(self, existing_path)
                 else:
+                    # Track intended path for future hot-reload but preserve provided text
+                    self._shared_instructions_source_path = intended_source_path
                     self.shared_instructions = shared_value
+            else:
+                self.shared_instructions = shared_value
         else:
             self.shared_instructions = ""
 

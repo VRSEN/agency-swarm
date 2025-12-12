@@ -957,6 +957,29 @@ class TestAgentFileManager:
         # Source path should be stored
         assert mock_agent._instructions_source_path == str(instructions_file)
 
+    def test_read_instructions_ignores_non_path_strings(self):
+        """Non-path instruction strings should not trigger filesystem path resolution."""
+
+        instructions_text = (
+            "You are an agent that can read and analyze text files using FileSearch.\n"
+            "When asked questions about files, always use your FileSearch tool to search through the uploaded documents"
+            ".\nBe direct and specific in your answers based on what you find in the files."
+        )
+
+        mock_agent = Mock()
+        mock_agent.instructions = instructions_text
+        mock_agent._instructions_source_path = None
+
+        file_manager = AgentFileManager(mock_agent)
+        file_manager.get_class_folder_path = Mock(
+            side_effect=AssertionError("get_class_folder_path should not be called")
+        )
+
+        file_manager.read_instructions()
+
+        assert mock_agent.instructions == instructions_text
+        assert mock_agent._instructions_source_path is None
+
     def test_empty_folder_does_not_create_vector_store(self, tmp_path: Path):
         """Test that empty folders or folders with only skippable files don't create vector stores."""
         mock_agent = Mock()

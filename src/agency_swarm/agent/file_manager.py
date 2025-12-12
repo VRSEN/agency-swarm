@@ -11,7 +11,7 @@ from openai.types import FileObject
 from openai.types.responses.tool_param import CodeInterpreter
 from openai.types.vector_stores.vector_store_file import LastError, VectorStoreFile
 
-from agency_swarm.agency.helpers import _looks_like_file_path
+from agency_swarm.agency.helpers import resolve_existing_or_intended_file_path
 from agency_swarm.agent.file_sync import FileSync
 
 if TYPE_CHECKING:
@@ -475,27 +475,23 @@ class AgentFileManager:
             self.agent._instructions_source_path = None
             return
 
-        class_instructions_path = (
-            (Path(self.get_class_folder_path()) / instructions_str).expanduser().resolve(strict=False)
+        existing_path, intended_source_path = resolve_existing_or_intended_file_path(
+            instructions_str,
+            base_dir_provider=self.get_class_folder_path,
+            log_label=f"Agent {getattr(self.agent, 'name', 'unknown')}: instructions",
         )
-        direct_path = Path(instructions_str).expanduser().resolve(strict=False)
-        candidate_paths = [class_instructions_path]
-        if direct_path != class_instructions_path:
-            candidate_paths.append(direct_path)
-
-        for path in candidate_paths:
-            if path.is_file():
-                self.agent._instructions_source_path = str(path)
-                with open(path) as f:
-                    self.agent.instructions = f.read()
-                return
-
-        if _looks_like_file_path(instructions_str):
-            # Track intended path for future hot-reload but keep provided text
-            self.agent._instructions_source_path = str(class_instructions_path)
+        if intended_source_path is None:
+            self.agent._instructions_source_path = None
             return
 
-        self.agent._instructions_source_path = None
+        if existing_path is not None:
+            self.agent._instructions_source_path = existing_path
+            with open(existing_path) as f:
+                self.agent.instructions = f.read()
+            return
+
+        # Track intended path for future hot-reload but keep provided text
+        self.agent._instructions_source_path = intended_source_path
 
     def refresh_instructions(self):
         """Re-read instructions from the source file if one was used during initialization.

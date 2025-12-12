@@ -55,6 +55,7 @@ def test_agency_initialization_shared_instructions(mock_agent):
     instructions_content = "These are shared instructions for all agents."
     agency = Agency(mock_agent, shared_instructions=instructions_content)
     assert agency.shared_instructions == instructions_content
+    assert agency.agents == {"MockAgent": mock_agent}
 
 
 def test_agency_initialization_persistence_hooks(mock_agent):
@@ -119,6 +120,25 @@ def test_agency_shared_instructions_string():
 
     # Should keep the text as-is since it's not a file
     assert agency.shared_instructions == shared_text
+
+
+def test_agency_shared_instructions_multiline_inline_text_does_not_stat_files(mock_agent):
+    """Multiline shared instructions must not be treated like a file path.
+
+    Regression test for OSError: [Errno 36/63] File name too long caused by path
+    resolution and stat() on inline instruction text.
+    """
+
+    long_inline = (
+        "You are a coordinator agent. Your job is to receive tasks and delegate them.\n"
+        "When you receive a task, use the `send_message` tool and select 'Worker' as the recipient.\n"
+        "Always include the full task details in your message. " * 20
+    )
+
+    agency = Agency(mock_agent, shared_instructions=long_inline)
+
+    assert agency.shared_instructions == long_inline
+    assert agency._shared_instructions_source_path is None
 
 
 def test_agency_shared_instructions_none():
