@@ -73,9 +73,12 @@ def create_agent_template(
             print("\033[91mReasoning parameter will be ignored.\033[0m")
         reasoning = None
 
-    # Normalize agent name for folder/file names (lowercase with underscores)
-    folder_name = agent_name.lower().replace(" ", "_").replace("-", "_")
-    class_name = agent_name.replace(" ", "").strip()
+    # Normalize agent name for folder/file names (lowercase with underscores).
+    # Dots are common in version-like agent names (e.g., "Agent 1.2"). Dots are not valid
+    # in Python module names, so normalize them to underscores.
+    normalized_name = agent_name.replace(".", "_")
+    folder_name = normalized_name.lower().replace(" ", "_").replace("-", "_")
+    class_name = normalized_name.replace(" ", "").replace("-", "").replace(".", "").strip()
 
     # Create folder using pathlib for cross-platform compatibility
     base_path = Path(path)
