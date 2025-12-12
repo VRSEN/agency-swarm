@@ -27,6 +27,7 @@ from .setup import (
 
 if TYPE_CHECKING:
     from agency_swarm.agent.context_types import AgentRuntimeState
+    from agency_swarm.realtime.agency import RealtimeAgency
 
 logger = logging.getLogger(__name__)
 
@@ -254,6 +255,20 @@ class Agency:
         if agent_name not in self._agent_runtime_state:
             raise ValueError(f"No runtime state found for agent: {agent_name}")
         return self._agent_runtime_state[agent_name]
+
+    def to_realtime(self, agent: "Agent | str | None" = None) -> "RealtimeAgency":
+        """Create a `RealtimeAgency` wrapper around this agency."""
+        from agency_swarm.realtime.agency import RealtimeAgency
+
+        resolved_agent: Agent | None
+        if agent is None or isinstance(agent, Agent):
+            resolved_agent = agent
+        else:
+            resolved_agent = self.agents.get(agent)
+            if resolved_agent is None:
+                raise ValueError(f"Agent '{agent}' is not registered in this agency.")
+
+        return RealtimeAgency(self, agent=resolved_agent)
 
     # Import and bind methods from split modules with proper type hints
     async def get_response(
