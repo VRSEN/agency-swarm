@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from agency_swarm import Agency, Agent
+from agency_swarm.agent.constants import AGENT_REALTIME_VOICES
 from agency_swarm.tools.send_message import SendMessage
 
 # --- Fixtures ---
@@ -149,3 +150,46 @@ def test_agency_send_message_tool_class_does_not_mutate_agent(mock_agent):
     assert mock_agent.send_message_tool_class is None
     Agency(mock_agent, send_message_tool_class=_CustomSendMessage)
     assert mock_agent.send_message_tool_class is None
+
+
+def test_agency_randomizes_agent_voices_with_seed():
+    agent_a = Agent(name="AgentA", instructions="Respond with short answers.")
+    agent_b = Agent(name="AgentB", instructions="Provide detailed explanations.")
+
+    Agency(
+        agent_a,
+        agent_b,
+        randomize_agent_voices=True,
+        voice_random_seed=21,
+    )
+
+    assert agent_a.voice in AGENT_REALTIME_VOICES
+    assert agent_b.voice in AGENT_REALTIME_VOICES
+    assert agent_a.voice != agent_b.voice
+
+    clone_a = Agent(name="AgentA", instructions="Respond with short answers.")
+    clone_b = Agent(name="AgentB", instructions="Provide detailed explanations.")
+    Agency(
+        clone_a,
+        clone_b,
+        randomize_agent_voices=True,
+        voice_random_seed=21,
+    )
+
+    assert (agent_a.voice, agent_b.voice) == (clone_a.voice, clone_b.voice)
+
+
+def test_agency_randomization_respects_explicit_voice():
+    anchored = Agent(name="Anchored", instructions="Maintain voice.", voice="echo")
+    floating = Agent(name="Floating", instructions="Experiment with voices.")
+
+    Agency(
+        anchored,
+        floating,
+        randomize_agent_voices=True,
+        voice_random_seed=5,
+    )
+
+    assert anchored.voice == "echo"
+    assert floating.voice in AGENT_REALTIME_VOICES
+    assert floating.voice != "echo"

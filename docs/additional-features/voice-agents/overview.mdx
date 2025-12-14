@@ -1,0 +1,84 @@
+---
+title: "Overview"
+description: "Design voice-first assistants with the same Agency Swarm agents you already use."
+icon: "microphone"
+---
+
+Agency Swarm reuses your existing `Agent` definitions for voice. This page shows how to adapt agents for spoken conversations; deployment lives on the dedicated [Deployment](./deployment) guide.
+
+## What you can build
+
+- **Phone receptionist** — answers calls, routes to specialists, captures caller details.
+- **Live support triage** — gathers context, lets callers interrupt, and escalates to a human or another agent.
+- **Language coach** — listens, corrects pronunciation, and keeps the dialogue short and encouraging.
+
+## Prerequisites
+
+- Access to OpenAI Realtime models (`gpt-realtime` or `gpt-realtime-mini` are the recommended latest options).
+- `agency-swarm` with FastAPI extras:
+
+```bash
+pip install "agency-swarm[fastapi]"
+```
+
+## Define your agent (same API)
+
+You keep using the standard `Agent` class—voice agents are regular agents with the same tools, handoffs, and instructions.
+
+```python
+from agency_swarm import Agent, function_tool
+
+@function_tool
+def lookup_order(order_id: str) -> str:
+    """Return a short order status by ID."""
+    return f"Order {order_id} has shipped and will arrive soon."
+
+voice_agent = Agent(
+    name="Voice Concierge",
+    instructions=(
+        "You are a friendly concierge. Answer in one or two sentences and offer to look up order "
+        "details when the caller mentions a number."
+    ),
+    tools=[lookup_order],
+    voice="nova",
+)
+```
+
+<Tip>
+Keep using the same agent definitions—add `voice=` only when you care about the spoken persona.
+</Tip>
+
+Set `voice` to any of the OpenAI realtime voices: `alloy`, `ash`, `coral`, `echo`, `fable`, `onyx`, `nova`, `sage`, or `shimmer`. Each agent can declare its own voice, and the realtime bridge keeps it consistent across handoffs. If you prefer variety without manual assignments, construct your agency with `randomize_agent_voices=True`; any agent missing an explicit voice receives a deterministic random pick at initialization.
+
+## Add handoffs (optional)
+
+Handoffs work exactly as they do in text mode. Register your flows once and they will carry over to voice sessions.
+
+```python
+from agency_swarm import Agency, Agent
+from agency_swarm.tools import SendMessageHandoff
+
+billing = Agent(name="Billing", instructions="Handle billing questions briefly.")
+faq = Agent(name="FAQ", instructions="Answer frequently asked questions.")
+
+concierge = Agent(
+    name="Concierge",
+    instructions="Greet the caller, collect intent, then hand off when a specialist is needed.",
+)
+
+agency = Agency(
+    concierge,
+    communication_flows=[
+        (concierge > billing, SendMessageHandoff),
+        (concierge > faq, SendMessageHandoff),
+    ],
+)
+```
+
+When the concierge invokes `SendMessageHandoff`, the realtime session routes audio and tool access to the designated specialist agent.
+
+## Next steps
+
+- Try the [realtime browser demo](https://github.com/VRSEN/agency-swarm/tree/main/examples/interactive/realtime)
+- [Deploy your agents](./deployment) for phone calls using Twilio.
+- Review OpenAI’s realtime [Quickstart](https://openai.github.io/openai-agents-python/realtime/quickstart/) and [Guide](https://openai.github.io/openai-agents-python/realtime/guide/) for protocol details—Agency Swarm builds on those primitives.

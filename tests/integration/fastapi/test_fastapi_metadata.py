@@ -454,3 +454,21 @@ def test_openapi_schema_includes_custom_server_url():
 
     assert schema["servers"] == [{"url": "https://api.example.com/base"}]
     assert "/tool/EchoTool" in schema["paths"]
+
+
+def test_run_fastapi_registers_realtime_endpoint():
+    """Realtime endpoints are mounted when enable_realtime is True."""
+
+    def create_agency(load_threads_callback=None, save_threads_callback=None):
+        agent = Agent(name="VoiceAgent", instructions="Assist callers.", voice="ash")
+        return Agency(agent, load_threads_callback=load_threads_callback, save_threads_callback=save_threads_callback)
+
+    app = run_fastapi(
+        agencies={"test_agency": create_agency},
+        return_app=True,
+        app_token_env="",
+        enable_realtime=True,
+    )
+
+    route_paths = {route.path for route in app.routes}
+    assert "/test_agency/realtime" in route_paths

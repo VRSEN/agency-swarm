@@ -1,0 +1,91 @@
+---
+title: "Deployment"
+description: "Run the realtime FastAPI bridge, serve the bundled web client, and connect Twilio phone calls."
+icon: "server"
+---
+
+Use this guide once your agent is ready and you want to host a realtime bridge or connect phone infrastructure. It builds on the [Overview](./overview) and assumes your agents are ready for deployment.
+
+## Host the FastAPI bridge
+
+`run_realtime` starts a FastAPI app that proxies between your Agency Swarm agents and the OpenAI Realtime API. The helper already converts your agency to the realtime runtime, exposes a `/realtime` websocket, and streams events back to callers.
+
+```python
+from agency_swarm import Agency
+from agency_swarm.integrations import run_realtime
+from voice_agent import voice_agent
+
+agency = Agency(voice_agent)
+
+run_realtime(
+    agency=agency,
+    model="gpt-realtime",
+    host="0.0.0.0",
+    port=8000,
+    turn_detection={"type": "server_vad"},
+)
+```
+
+```bash
+python app.py
+```
+
+The server prints every incoming websocket connection. When your agents declare `voice=`, the bridge carries that choice automatically; omit the parameter for the entry agent to inherit its own voice. Supply `cors_origins` when you deploy behind a browser client that runs on a different domain.
+
+<Tip>
+`run_realtime(..., return_app=True)` returns the FastAPI `app` object if you want to mount it inside an existing application rather than start a dedicated Uvicorn process.
+</Tip>
+
+## Serve voice endpoints from `run_fastapi`
+
+Keep your existing REST endpoints and add realtime voice routes with one flag:
+
+```python
+run_fastapi(
+    agencies={"support": create_agency},
+    enable_realtime=True,
+    realtime_options={
+        "model": "gpt-realtime",
+        "turn_detection": {"type": "server_vad", "interrupt_response": True},
+    },
+    enable_logging=True,
+)
+```
+
+`enable_realtime=True` mounts `/support/realtime` alongside the normal JSON endpoints. Pass `realtime_options` when you want to override model settings (they map directly to `run_realtime` keyword arguments). Authentication and logging apply to the new websocket route automatically.
+
+## Serve the packaged browser client
+
+The static site in `src/agency_swarm/ui/demos/realtime/app` is bundled with the library. Point it at your server by editing `examples/interactive/realtime/demo.py` or by hosting the static files yourself:
+
+```bash
+python -m agency_swarm.ui.demos.realtime.app.server
+```
+
+This mounts the frontend and websocket bridge under the same process—ideal for internal demos or QA.
+
+## Twilio phone calls
+
+Pass a Twilio number to `run_realtime` to expose a media-stream bridge. The helper exposes `/incoming-call` (returns TwiML) and `/twilio/media-stream` for bidirectional audio.
+
+```python
+run_realtime(
+    agency=agency,
+    model="gpt-realtime",
+    twilio_number="+15551234567",
+    twilio_audio_format="g711_ulaw",
+    twilio_greeting="Connecting you to the assistant.",
+)
+```
+
+Deployment checklist:
+
+1. Start the server (with extras installed) and expose it publicly, e.g. `ngrok http 8000`.
+2. In the Twilio Console, set your phone number’s voice webhook to `https://<public-host>/incoming-call`.
+3. Call the number—the helper streams audio in both directions and reuses your existing tools and handoffs.
+
+For a lower-level implementation (custom playback tracking, fine-grained buffering), see `src/agency_swarm/ui/demos/realtime/twilio/README.md`.
+
+<Note>
+Store your Twilio account SID and auth token in a local `.env`, export them before launching the demo, and keep `OPENAI_API_KEY` alongside them. The packaged server reads standard environment variables; no credentials live in source control.
+</Note>

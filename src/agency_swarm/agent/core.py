@@ -2,7 +2,7 @@ import logging
 import os
 import warnings
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast
 
 from agents import (
     Agent as BaseAgent,
@@ -29,6 +29,7 @@ from agency_swarm.agent import (
 )
 from agency_swarm.agent.agent_flow import AgentFlow
 from agency_swarm.agent.attachment_manager import AttachmentManager
+from agency_swarm.agent.constants import AGENT_REALTIME_VOICES, AgentVoice
 from agency_swarm.agent.execution_streaming import StreamingRunResponse
 from agency_swarm.agent.file_manager import AgentFileManager
 from agency_swarm.agent.tools import _attach_one_call_guard
@@ -72,6 +73,7 @@ class Agent(BaseAgent[MasterContext]):
     include_search_results: bool = False
     validation_attempts: int = 1
     throw_input_guardrail_error: bool = False
+    voice: AgentVoice | None
 
     # --- Internal State ---
     _associated_vector_store_id: str | None = None
@@ -192,6 +194,16 @@ class Agent(BaseAgent[MasterContext]):
         self.validation_attempts = int(current_agent_params.get("validation_attempts", 1))
         self.throw_input_guardrail_error = bool(current_agent_params.get("throw_input_guardrail_error", False))
         self.handoff_reminder = current_agent_params.get("handoff_reminder")
+        voice_value = current_agent_params.get("voice")
+        if voice_value is None:
+            self.voice = None
+        else:
+            if voice_value not in AGENT_REALTIME_VOICES:
+                raise ValueError(
+                    f"Invalid voice '{voice_value}' for agent '{self.name}'. "
+                    f"Valid options: {', '.join(AGENT_REALTIME_VOICES)}."
+                )
+            self.voice = cast(AgentVoice, voice_value)
 
         # Internal state
         self._openai_client = None
