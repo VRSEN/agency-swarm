@@ -1,4 +1,3 @@
-import inspect
 import logging
 import os
 import warnings
@@ -16,6 +15,7 @@ from agents import (
 )
 from openai import AsyncOpenAI, OpenAI
 
+from agency_swarm.agency.helpers import get_external_caller_directory
 from agency_swarm.agent import (
     Execution,
     add_tool,
@@ -509,28 +509,7 @@ class Agent(BaseAgent[MasterContext]):
 
     def _get_caller_directory(self) -> str:
         """Get the directory where this agent is being instantiated (caller's directory)."""
-        try:
-            # Get the agency_swarm package path for comparison (we're already in it)
-            agency_swarm_path = os.path.dirname(os.path.abspath(__file__))
-
-            # Walk up the call stack to find the first frame outside of agency_swarm package
-            frame = inspect.currentframe()
-            while frame is not None:
-                frame_module = inspect.getmodule(frame)
-                if frame_module and hasattr(frame_module, "__file__") and frame_module.__file__:
-                    module_path = os.path.dirname(os.path.abspath(frame_module.__file__))
-                    # Check if module is outside the agency_swarm package directory
-                    if not module_path.startswith(agency_swarm_path):
-                        return os.path.dirname(os.path.abspath(frame.f_code.co_filename))
-                frame = frame.f_back
-        except Exception:
-            pass
-        finally:
-            # Prevent reference cycles
-            del frame
-
-        # Fall back to current working directory
-        return os.getcwd()
+        return get_external_caller_directory(internal_package="agency_swarm")
 
     def get_class_folder_path(self) -> str:
         """Return the absolute path to the folder where this agent was instantiated."""

@@ -10,7 +10,11 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from agency_swarm import Agency, Agent
-from agency_swarm.agency.helpers import read_instructions, refresh_shared_instructions
+from agency_swarm.agency.helpers import (
+    read_instructions,
+    refresh_shared_instructions,
+    resolve_existing_or_intended_file_path,
+)
 
 
 class TestSharedInstructionsHotReload:
@@ -241,6 +245,34 @@ class TestReadInstructions:
         # Path should be absolute
         assert os.path.isabs(mock_agency._shared_instructions_source_path)
         assert mock_agency.shared_instructions == "Test content"
+
+
+class TestResolveExistingOrIntendedFilePath:
+    """Unit tests for resolve_existing_or_intended_file_path helper."""
+
+    def test_existing_file_found_via_direct_path_tracks_direct_path(self, tmp_path: Path):
+        """When a file is found via CWD/direct resolution, the tracked source path must match it."""
+        base_dir = tmp_path / "base"
+        cwd_dir = tmp_path / "cwd"
+        base_dir.mkdir()
+        cwd_dir.mkdir()
+
+        target = cwd_dir / "manifesto.md"
+        target.write_text("hello")
+
+        original_cwd = os.getcwd()
+        try:
+            os.chdir(cwd_dir)
+            existing_path, source_path = resolve_existing_or_intended_file_path(
+                "manifesto.md",
+                base_dir_provider=lambda: str(base_dir),
+                log_label="test",
+            )
+        finally:
+            os.chdir(original_cwd)
+
+        assert existing_path == str(target.resolve())
+        assert source_path == str(target.resolve())
 
 
 class TestModuleLevelImport:

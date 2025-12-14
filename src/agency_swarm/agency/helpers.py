@@ -1,4 +1,6 @@
 # --- Agency helper utility functions ---
+import functools
+import importlib
 import inspect
 import logging
 import os
@@ -15,6 +17,50 @@ if TYPE_CHECKING:
 from agency_swarm.utils.thread import ThreadLoadCallback, ThreadSaveCallback
 
 logger = logging.getLogger(__name__)
+
+
+def get_external_caller_directory(*, internal_package: str = "agency_swarm") -> str:
+    """Return the directory of the first caller outside this package.
+
+    Used to resolve relative paths (e.g. "./instructions.md") against the user's module file.
+    Falls back to the current working directory when no file-backed caller is found.
+    """
+    internal_root = _get_package_root(internal_package)
+    if internal_root is None:
+        return os.getcwd()
+
+    frame = None
+    try:
+        frame = inspect.currentframe()
+        while frame is not None:
+            filename = frame.f_code.co_filename
+            if filename and not filename.startswith("<"):
+                module_path = Path(filename).resolve(strict=False)
+                if not module_path.is_relative_to(internal_root):
+                    return str(module_path.parent)
+
+            frame = frame.f_back
+    except Exception:
+        pass
+    finally:
+        # Prevent reference cycles
+        del frame
+
+    return os.getcwd()
+
+
+@functools.lru_cache(maxsize=8)
+def _get_package_root(package_name: str) -> Path | None:
+    try:
+        module = importlib.import_module(package_name)
+    except Exception:
+        return None
+
+    module_file = getattr(module, "__file__", None)
+    if not module_file:
+        return None
+
+    return Path(module_file).resolve(strict=False).parent
 
 
 def handle_deprecated_agency_args(
@@ -116,28 +162,7 @@ def handle_deprecated_agency_args(
 
 def get_caller_directory(agency: "Agency") -> str:
     """Get the directory where this agency is being instantiated (caller's directory)."""
-    try:
-        # Get the agency_swarm package path for comparison (we're already in it)
-        agency_swarm_path = os.path.dirname(os.path.abspath(__file__))
-
-        # Walk up the call stack to find the first frame outside of agency_swarm package
-        frame = inspect.currentframe()
-        while frame is not None:
-            frame_module = inspect.getmodule(frame)
-            if frame_module and hasattr(frame_module, "__file__") and frame_module.__file__:
-                module_path = os.path.dirname(os.path.abspath(frame_module.__file__))
-                # Check if module is outside the agency_swarm package directory
-                if not module_path.startswith(agency_swarm_path):
-                    return os.path.dirname(os.path.abspath(frame.f_code.co_filename))
-            frame = frame.f_back
-    except Exception:
-        pass
-    finally:
-        # Prevent reference cycles
-        del frame
-
-    # Fall back to current working directory
-    return os.getcwd()
+    return get_external_caller_directory(internal_package="agency_swarm")
 
 
 def get_class_folder_path(agency: "Agency") -> str:
@@ -218,7 +243,8 @@ def resolve_existing_or_intended_file_path(
             is_file = False
 
         if is_file:
-            return str(candidate), str(class_resolved)
+            # If the file exists, track the exact existing path for hot-reload.
+            return str(candidate), str(candidate)
 
     return None, str(class_resolved)
 
