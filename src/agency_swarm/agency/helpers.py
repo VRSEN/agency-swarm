@@ -9,6 +9,8 @@ from copy import deepcopy
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from agents import Agent as SDKAgent
+
 if TYPE_CHECKING:
     from agency_swarm.agent.core import AgencyContext, Agent
 
@@ -173,40 +175,6 @@ def get_class_folder_path(agency: "Agency") -> str:
     return get_caller_directory(agency)
 
 
-_PATH_LIKE_SUFFIXES = {
-    ".md",
-    ".mdx",
-    ".txt",
-    ".html",
-    ".htm",
-    ".rst",
-    ".pdf",
-    ".json",
-    ".yaml",
-    ".yml",
-    ".csv",
-}
-
-
-def _looks_like_file_path(value: str) -> bool:
-    """Heuristic to determine if a string likely represents a file path."""
-    if "\n" in value:
-        return False
-
-    stripped = value.strip()
-    if not stripped:
-        return False
-
-    if stripped.startswith(("./", "../", "/", "~")):
-        return True
-
-    suffix = Path(stripped).suffix.lower()
-    if suffix in _PATH_LIKE_SUFFIXES:
-        return True
-
-    return False
-
-
 def resolve_existing_or_intended_file_path(
     value: str,
     *,
@@ -217,17 +185,33 @@ def resolve_existing_or_intended_file_path(
 
     Returns (existing_path, intended_source_path).
     - existing_path is an absolute path to a file that exists (if found)
-    - intended_source_path is the caller-relative resolved path (for hot-reload tracking) if the value looks like a path
+    - intended_source_path is the caller-relative resolved path (for hot-reload tracking) when the input is an
+      explicit path (e.g. starts with ./, ../, /, ~). This avoids treating plain text like 'shared.md' as a file path.
 
-    If the value does not look like a file path, returns (None, None).
+    If the value is plain text (or ambiguous and non-explicit), returns (None, None) unless a file exists at the
+    resolved location.
     """
-    if not _looks_like_file_path(value):
+    if "\n" in value:
         return None, None
+
+    stripped = value.strip()
+    if not stripped:
+        return None, None
+
+    # Only track non-existing paths for hot-reload when the user explicitly passed a path-like value.
+    is_explicit_path = stripped.startswith(("./", "../", "/", "~"))
+    if not is_explicit_path:
+        # Avoid treating normal instruction text as a path.
+        # A single token can still be treated as a path if the file exists.
+        if any(ch.isspace() for ch in stripped):
+            return None, None
+        if len(stripped) > 200:
+            return None, None
 
     try:
         base_dir = base_dir_provider()
-        class_resolved = (Path(base_dir) / value).expanduser().resolve(strict=False)
-        direct_resolved = Path(value).expanduser().resolve(strict=False)
+        class_resolved = (Path(base_dir) / stripped).expanduser().resolve(strict=False)
+        direct_resolved = Path(stripped).expanduser().resolve(strict=False)
     except OSError as exc:
         logger.debug("%s: Skipping path resolution due to OS error: %s", log_label, exc)
         return None, None
@@ -246,7 +230,9 @@ def resolve_existing_or_intended_file_path(
             # If the file exists, track the exact existing path for hot-reload.
             return str(candidate), str(candidate)
 
-    return None, str(class_resolved)
+    if is_explicit_path:
+        return None, str(class_resolved)
+    return None, None
 
 
 def read_instructions(agency: "Agency", path: str) -> None:
@@ -354,10 +340,7 @@ def resolve_agent(agency: "Agency", agent_ref: "str | Agent") -> "Agent":
         ValueError: If agent name is not found in agency
         TypeError: If agent_ref is not str or Agent
     """
-    # Import at runtime to avoid circular dependency
-    from agency_swarm.agent.core import Agent
-
-    if isinstance(agent_ref, Agent):
+    if isinstance(agent_ref, SDKAgent):
         if agent_ref.name in agency.agents and id(agency.agents[agent_ref.name]) == id(agent_ref):
             return agent_ref
         else:

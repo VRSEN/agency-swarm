@@ -1,3 +1,4 @@
+import os
 from unittest.mock import MagicMock
 
 import pytest
@@ -9,21 +10,17 @@ from agency_swarm.tools.send_message import SendMessage
 
 
 @pytest.fixture
-def mock_agent():
-    """Provides a mocked Agent instance for testing."""
-    agent = MagicMock(spec=Agent)
-    agent.name = "MockAgent"
-    agent.send_message_tool_class = None  # Add missing attribute
-    return agent
+def mock_agent(monkeypatch: pytest.MonkeyPatch) -> Agent:
+    """Provides a real Agent instance for testing."""
+    monkeypatch.setenv("DRY_RUN", "1")
+    return Agent(name="MockAgent", instructions="Mock instructions", model="gpt-5-mini")
 
 
 @pytest.fixture
-def mock_agent2():
-    """Provides a second mocked Agent instance for testing."""
-    agent = MagicMock(spec=Agent)
-    agent.name = "MockAgent2"
-    agent.send_message_tool_class = None  # Add missing attribute
-    return agent
+def mock_agent2(monkeypatch: pytest.MonkeyPatch) -> Agent:
+    """Provides a second real Agent instance for testing."""
+    monkeypatch.setenv("DRY_RUN", "1")
+    return Agent(name="MockAgent2", instructions="Mock instructions 2", model="gpt-5-mini")
 
 
 # --- Agency Initialization Tests ---
@@ -70,15 +67,9 @@ def test_agency_initialization_persistence_hooks(mock_agent):
 def test_agency_duplicate_agent_names_forbidden():
     """Test that Agency raises ValueError when trying to register two agents with
     the same name but different instances."""
-    # Create two different mock agents with the same name
-    agent1 = MagicMock(spec=Agent)
-    agent1.name = "DuplicateName"
-
-    agent2 = MagicMock(spec=Agent)
-    agent2.name = "DuplicateName"
-
-    # Verify they are different instances
-    assert id(agent1) != id(agent2)
+    os.environ["DRY_RUN"] = "1"
+    agent1 = Agent(name="DuplicateName", instructions="A", model="gpt-5-mini")
+    agent2 = Agent(name="DuplicateName", instructions="B", model="gpt-5-mini")
 
     # Attempting to create an Agency with two agents having the same name should raise ValueError
     with pytest.raises(ValueError, match=r"Duplicate agent name 'DuplicateName' with different instances found"):

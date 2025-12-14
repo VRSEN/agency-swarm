@@ -126,12 +126,12 @@ class TestInstructionsHotReload:
         # Don't create file yet
 
         with patch.object(Agent, "get_class_folder_path", return_value=str(tmp_path)):
-            agent = Agent(name="TestAgent", instructions="future_instructions.md")
+            agent = Agent(name="TestAgent", instructions="./future_instructions.md")
 
         # Path should be stored even though file doesn't exist
         assert agent._instructions_source_path is not None
         # Instructions should remain the provided text (not cleared)
-        assert agent.instructions == "future_instructions.md"
+        assert agent.instructions == "./future_instructions.md"
 
         # Now create the file
         instructions_file.write_text("Created later")

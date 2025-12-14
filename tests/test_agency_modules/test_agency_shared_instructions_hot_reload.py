@@ -111,12 +111,12 @@ class TestSharedInstructionsHotReload:
         agent = Agent(name="TestAgent", instructions="Be helpful")
 
         with patch("agency_swarm.agency.core.get_class_folder_path", return_value=str(tmp_path)):
-            agency = Agency(agent, shared_instructions="future_manifesto.md")
+            agency = Agency(agent, shared_instructions="./future_manifesto.md")
 
         # Path should be stored even though file doesn't exist
         assert agency._shared_instructions_source_path is not None
         # Instructions should remain the provided text (not cleared)
-        assert agency.shared_instructions == "future_manifesto.md"
+        assert agency.shared_instructions == "./future_manifesto.md"
 
         # Now create the file
         manifesto_file.write_text("Created later")

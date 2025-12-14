@@ -1,4 +1,8 @@
-from unittest.mock import MagicMock
+import os
+import tempfile
+import warnings
+from pathlib import Path
+from unittest.mock import MagicMock, PropertyMock, patch
 
 from agents import FunctionTool, ModelSettings, StopAtTools
 from pydantic import BaseModel, Field
@@ -105,18 +109,13 @@ def test_agent_initialization_with_all_parameters():
     tool1 = MagicMock(spec=FunctionTool)
     tool1.name = "tool1"
 
-    # TEST-ONLY SETUP: Create test directory to enable FileSearchTool auto-addition
-    import tempfile
-    from pathlib import Path
-    from unittest.mock import PropertyMock, patch
-
+    # TEST-ONLY SETUP: Create test directory to enable FileSearchTool auto-addition.
+    # Ensure DRY_RUN does not disable vector store wiring for this unit test.
     # Create a temporary test directory
     with tempfile.TemporaryDirectory(prefix="test_files_") as temp_dir_str:
         temp_dir = Path(temp_dir_str)
         test_file = temp_dir / "test.txt"
         test_file.write_text("test content for FileSearchTool")
-
-        import warnings
 
         # Mock the OpenAI client to avoid API key requirement
         mock_vector_store = MagicMock()
@@ -133,6 +132,7 @@ def test_agent_initialization_with_all_parameters():
 
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
+            os.environ.pop("DRY_RUN", None)
             with patch.object(Agent, "client_sync", new_callable=PropertyMock) as mock_client_sync:
                 mock_client_sync.return_value = mock_client
                 agent = Agent(
