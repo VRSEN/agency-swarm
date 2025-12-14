@@ -5,6 +5,7 @@ import subprocess
 from pathlib import Path
 
 from agency_swarm import Agency
+from agency_swarm.integrations.fastapi import run_fastapi
 
 
 class CopilotDemoLauncher:
@@ -17,8 +18,6 @@ class CopilotDemoLauncher:
         cors_origins: list[str] | None = None,
     ) -> None:
         """Launch the Copilot UI demo with backend and frontend servers."""
-        from agency_swarm.integrations.fastapi import run_fastapi
-
         fe_path = Path(__file__).parent / "copilot"
 
         npm_exe = shutil.which("npm") or shutil.which("npm.cmd")

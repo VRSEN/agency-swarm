@@ -2,36 +2,10 @@ import logging
 import os
 from collections.abc import Callable, Mapping
 
-import uvicorn
 from agents.tool import FunctionTool
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 
 from agency_swarm.agency import Agency
 from agency_swarm.agent.core import Agent
-from agency_swarm.integrations.fastapi_utils.endpoint_handlers import (
-    ActiveRunRegistry,
-    exception_handler,
-    get_verify_token,
-    make_agui_chat_endpoint,
-    make_cancel_endpoint,
-    make_logs_endpoint,
-    make_metadata_endpoint,
-    make_response_endpoint,
-    make_stream_endpoint,
-)
-from agency_swarm.integrations.fastapi_utils.logging_middleware import (
-    RequestTracker,
-    setup_enhanced_logging,
-)
-from agency_swarm.integrations.fastapi_utils.request_models import (
-    BaseRequest,
-    CancelRequest,
-    LogRequest,
-    RunAgentInputCustom,
-    add_agent_validator,
-)
-from agency_swarm.integrations.fastapi_utils.tool_endpoints import make_tool_endpoint
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +49,38 @@ def run_fastapi(
     """
     if (agencies is None or len(agencies) == 0) and (tools is None or len(tools) == 0):
         logger.warning("No endpoints to deploy. Please provide at least one agency or tool.")
+        return
+
+    try:
+        import uvicorn
+        from fastapi import FastAPI
+        from fastapi.middleware.cors import CORSMiddleware
+
+        from .fastapi_utils.endpoint_handlers import (
+            ActiveRunRegistry,
+            exception_handler,
+            get_verify_token,
+            make_agui_chat_endpoint,
+            make_cancel_endpoint,
+            make_logs_endpoint,
+            make_metadata_endpoint,
+            make_response_endpoint,
+            make_stream_endpoint,
+        )
+        from .fastapi_utils.logging_middleware import (
+            RequestTracker,
+            setup_enhanced_logging,
+        )
+        from .fastapi_utils.request_models import (
+            BaseRequest,
+            CancelRequest,
+            LogRequest,
+            RunAgentInputCustom,
+            add_agent_validator,
+        )
+        from .fastapi_utils.tool_endpoints import make_tool_endpoint
+    except ImportError as e:
+        logger.error(f"FastAPI deployment dependencies are missing: {e}. Please install agency-swarm[fastapi] package")
         return
 
     dry_run_env = os.getenv("DRY_RUN", "")

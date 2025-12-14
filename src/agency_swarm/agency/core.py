@@ -18,7 +18,7 @@ from agency_swarm.tools.mcp_manager import default_mcp_manager
 from agency_swarm.utils.files import get_external_caller_directory
 from agency_swarm.utils.thread import ThreadLoadCallback, ThreadManager, ThreadSaveCallback
 
-from .helpers import handle_deprecated_agency_args, read_instructions
+from .helpers import handle_deprecated_agency_args, read_instructions, run_fastapi as run_fastapi_helper
 from .setup import (
     configure_agents,
     initialize_agent_runtime_state,
@@ -446,9 +446,7 @@ class Agency:
             Optional list of allowed CORS origins passed through to
             :func:`run_fastapi`.
         """
-        from .helpers import run_fastapi
-
-        return run_fastapi(self, host, port, app_token_env, cors_origins, enable_agui)
+        return run_fastapi_helper(self, host, port, app_token_env, cors_origins, enable_agui)
 
     def get_agency_structure(self, include_tools: bool = True) -> dict[str, Any]:
         """Return a ReactFlow-compatible JSON structure describing the agency."""

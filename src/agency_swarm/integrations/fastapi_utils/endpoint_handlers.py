@@ -30,7 +30,7 @@ from agency_swarm import (
 from agency_swarm.agent.execution_stream_response import StreamingRunResponse
 from agency_swarm.integrations.fastapi_utils.file_handler import upload_from_urls
 from agency_swarm.integrations.fastapi_utils.logging_middleware import get_logs_endpoint_impl
-from agency_swarm.messages import MessageFilter
+from agency_swarm.messages import MessageFilter, MessageFormatter
 from agency_swarm.tools.mcp_manager import attach_persistent_mcp_servers
 from agency_swarm.ui.core.agui_adapter import AguiAdapter
 from agency_swarm.utils.serialization import serialize
@@ -535,8 +535,6 @@ async def generate_chat_name(new_messages: list[TResponseInputItem]):
             output_info=output_info,
             tripwire_triggered=tripwire_triggered,
         )
-
-    from agency_swarm.messages import MessageFormatter
 
     formatted_messages = str(MessageFormatter.strip_agency_metadata(new_messages))  # type: ignore[arg-type]
     if len(formatted_messages) > 1000:
