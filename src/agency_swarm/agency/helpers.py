@@ -231,6 +231,10 @@ def resolve_existing_or_intended_file_path(
             return str(candidate), str(candidate)
 
     if is_explicit_path:
+        # For tilde and absolute paths, use direct_resolved since they're
+        # semantically absolute and shouldn't be joined with base_dir
+        if stripped.startswith(("~", "/")):
+            return None, str(direct_resolved)
         return None, str(class_resolved)
     return None, None
 

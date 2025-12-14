@@ -274,6 +274,41 @@ class TestResolveExistingOrIntendedFilePath:
         assert existing_path == str(target.resolve())
         assert source_path == str(target.resolve())
 
+    def test_tilde_path_resolves_to_home_directory(self, tmp_path: Path):
+        """Tilde paths must resolve to home directory, not be joined with base_dir.
+
+        Regression test: ~/file.md was incorrectly resolved as <base_dir>/~/file.md
+        instead of expanding ~ to the user's home directory.
+        """
+        from pathlib import Path as P
+
+        existing_path, source_path = resolve_existing_or_intended_file_path(
+            "~/manifesto.md",
+            base_dir_provider=lambda: str(tmp_path),
+            log_label="test",
+        )
+
+        # File doesn't exist, so existing_path should be None
+        assert existing_path is None
+        # source_path should be the expanded home path, not <tmp_path>/~/manifesto.md
+        assert source_path is not None
+        assert "~" not in source_path  # No literal tilde
+        assert source_path == str(P("~/manifesto.md").expanduser().resolve())
+
+    def test_absolute_path_not_joined_with_base_dir(self, tmp_path: Path):
+        """Absolute paths should resolve directly, not joined with base_dir."""
+        existing_path, source_path = resolve_existing_or_intended_file_path(
+            "/etc/nonexistent_manifesto.md",
+            base_dir_provider=lambda: str(tmp_path),
+            log_label="test",
+        )
+
+        assert existing_path is None
+        # Should resolve to the absolute path directly
+        assert source_path is not None
+        assert source_path.startswith("/")
+        assert str(tmp_path) not in source_path
+
 
 class TestModuleLevelImport:
     """Test that refresh_shared_instructions is importable at module level."""
