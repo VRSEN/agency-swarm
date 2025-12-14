@@ -20,8 +20,7 @@ class _FakeFilesClient:
         self.deleted_file_ids: list[str] = []
 
     def delete(self, *, file_id: str) -> None:
-        if file_id in self._attached_file_ids:
-            raise RuntimeError("file is still attached to a vector store")
+        self._attached_file_ids.discard(file_id)
         self.deleted_file_ids.append(file_id)
 
     def retrieve(self, file_id: str) -> None:  # pragma: no cover - not used in these tests
@@ -81,8 +80,8 @@ class _FileSyncNoWait(FileSync):
         return
 
 
-def test_sync_with_folder_detaches_before_deleting_openai_file() -> None:
-    """Deleting an OpenAI file should happen only after Vector Store detachment."""
+def test_sync_with_folder_file_delete_detaches_from_vector_store() -> None:
+    """OpenAI file deletion should remove the file from all vector stores."""
     attached_file_ids = {"file-1"}
     client_sync = _FakeClientSync(attached_file_ids=attached_file_ids)
     agent = _FakeAgent(vs_id="vs_123", client_sync=client_sync)
@@ -95,8 +94,23 @@ def test_sync_with_folder_detaches_before_deleting_openai_file() -> None:
     sync = _FileSyncFixedList(agent)
     sync.sync_with_folder()
 
-    assert client_sync.vector_stores.files.detached_file_ids == ["file-1"]
+    assert client_sync.vector_stores.files.detached_file_ids == []
     assert client_sync.files.deleted_file_ids == ["file-1"]
+    assert attached_file_ids == set()
+
+
+def test_remove_file_from_vs_and_oai_relies_on_openai_delete_detachment() -> None:
+    """`remove_file_from_vs_and_oai` should not need explicit Vector Store detachment."""
+    attached_file_ids = {"file-1"}
+    client_sync = _FakeClientSync(attached_file_ids=attached_file_ids)
+    agent = _FakeAgent(vs_id="vs_123", client_sync=client_sync)
+
+    sync = _FileSyncNoWait(agent)
+    sync.remove_file_from_vs_and_oai("file-1")
+
+    assert client_sync.vector_stores.files.detached_file_ids == []
+    assert client_sync.files.deleted_file_ids == ["file-1"]
+    assert attached_file_ids == set()
 
 
 def test_wait_for_vector_store_file_absence_uses_retrieve_not_list() -> None:
