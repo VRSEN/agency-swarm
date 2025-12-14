@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import time
+import traceback
 import uuid
 from collections.abc import AsyncGenerator, Callable
 from dataclasses import dataclass, field
@@ -435,8 +436,6 @@ def make_agui_chat_endpoint(request_model, agency_factory: Callable[..., Agency]
                 )
 
             except Exception as exc:
-                import traceback
-
                 # Surface error as AG-UI event so the frontend can react.
                 tb_str = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
                 error_message = f"{str(exc)}\n\nTraceback:\n{tb_str}"

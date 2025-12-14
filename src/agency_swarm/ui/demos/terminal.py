@@ -1,4 +1,5 @@
 import asyncio
+import importlib
 import inspect
 import io
 import logging
@@ -7,9 +8,11 @@ import re
 import subprocess
 import sys
 import threading
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from types import ModuleType
 from typing import Any, cast
 
 from prompt_toolkit import Application
@@ -26,6 +29,7 @@ from prompt_toolkit.layout.layout import Layout
 from prompt_toolkit.styles import Style
 from prompt_toolkit.widgets import Frame
 from rich.markup import escape as rich_escape
+from watchfiles import watch
 
 from agency_swarm.agency.core import Agency
 from agency_swarm.messages import MessageFilter
@@ -33,6 +37,11 @@ from agency_swarm.utils import is_reasoning_model
 
 from ..core.console_event_adapter import ConsoleEventAdapter
 from .launcher import TerminalDemoLauncher
+
+_MSVCRT = importlib.import_module("msvcrt") if sys.platform == "win32" else None
+_SELECT = importlib.import_module("select") if sys.platform != "win32" else None
+_TERMIOS = importlib.import_module("termios") if sys.platform != "win32" else None
+_TTY = importlib.import_module("tty") if sys.platform != "win32" else None
 
 
 class EscapeKeyWatcher:
@@ -51,17 +60,20 @@ class EscapeKeyWatcher:
 
     def _poll_windows(self) -> None:
         """Windows key polling using msvcrt (Windows-only standard library)."""
-        import msvcrt
-        import time
+        if _MSVCRT is None:
+            return
+
+        msvcrt_module = cast(ModuleType, _MSVCRT)
+        msvcrt_any = cast(Any, msvcrt_module)
 
         while not self._stop:
             try:
-                if msvcrt.kbhit():  # type: ignore[attr-defined]
-                    key = msvcrt.getch()  # type: ignore[attr-defined]
+                if msvcrt_any.kbhit():
+                    key = msvcrt_any.getch()
                     if key == b"\x1b":  # ESC
                         self._escape_pressed = True
                     elif key in (b"\x00", b"\xe0"):
-                        msvcrt.getch()  # type: ignore[attr-defined]
+                        msvcrt_any.getch()
                 else:
                     time.sleep(0.05)
             except Exception:
@@ -69,18 +81,25 @@ class EscapeKeyWatcher:
 
     def _poll_unix(self) -> None:
         """Unix key polling using select (Unix-only standard library modules)."""
-        import select
-        import termios
-        import tty
+        if None in (_SELECT, _TERMIOS, _TTY):
+            return
+
+        select_module = cast(ModuleType, _SELECT)
+        termios_module = cast(ModuleType, _TERMIOS)
+        tty_module = cast(ModuleType, _TTY)
+
+        select_any = cast(Any, select_module)
+        termios_any = cast(Any, termios_module)
+        tty_any = cast(Any, tty_module)
 
         old_settings = None
         try:
             fd = sys.stdin.fileno()
-            old_settings = termios.tcgetattr(fd)  # type: ignore[attr-defined]
-            tty.setcbreak(fd)  # type: ignore[attr-defined]
+            old_settings = termios_any.tcgetattr(fd)
+            tty_any.setcbreak(fd)
 
             while not self._stop:
-                if select.select([sys.stdin], [], [], 0.05)[0]:
+                if select_any.select([sys.stdin], [], [], 0.05)[0]:
                     key = sys.stdin.read(1)
                     if key == "\x1b":  # ESC
                         self._escape_pressed = True
@@ -89,7 +108,7 @@ class EscapeKeyWatcher:
         finally:
             if old_settings is not None:
                 try:
-                    termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)  # type: ignore[attr-defined]
+                    termios_any.tcsetattr(fd, termios_any.TCSADRAIN, old_settings)
                 except Exception:
                     pass
 
@@ -98,8 +117,6 @@ class EscapeKeyWatcher:
 
         Gracefully degrades in test environments where stdin is mocked.
         """
-        import threading
-
         self._stop = False
         self._escape_pressed = False
 
@@ -206,8 +223,6 @@ class TerminalReloader:
 
     def run(self) -> None:
         """Run the reloader loop: watch files and restart child on changes."""
-        from watchfiles import watch
-
         print(f"\n🔄 Hot reload enabled. Watching: {self._watch_dir}")
         print("   Changes to .py and .md files will trigger a restart.\n")
 
