@@ -35,12 +35,14 @@ class _FakeVectorStoreFilesClient:
     def __init__(self, *, attached_file_ids: set[str]) -> None:
         self._attached_file_ids = attached_file_ids
         self.detached_file_ids: list[str] = []
+        self.retrieve_calls: list[tuple[str, str]] = []
 
     def delete(self, *, vector_store_id: str, file_id: str) -> None:
         self._attached_file_ids.discard(file_id)
         self.detached_file_ids.append(file_id)
 
     def retrieve(self, *, vector_store_id: str, file_id: str) -> None:
+        self.retrieve_calls.append((vector_store_id, file_id))
         if file_id not in self._attached_file_ids:
             raise NotFoundError(
                 "not found",
@@ -70,23 +72,13 @@ class _FakeAgent:
         self.file_manager = None
 
 
-class _FileSyncNoWait(FileSync):
-    def _wait_for_openai_file_absence(self, file_id: str, timeout_seconds: float = 120.0) -> None:
-        return
-
-    def _wait_for_vector_store_file_absence(
-        self, *, vector_store_id: str, file_id: str, timeout_seconds: float = 120.0
-    ) -> None:
-        return
-
-
 def test_sync_with_folder_file_delete_detaches_from_vector_store() -> None:
     """OpenAI file deletion should remove the file from all vector stores."""
     attached_file_ids = {"file-1"}
     client_sync = _FakeClientSync(attached_file_ids=attached_file_ids)
     agent = _FakeAgent(vs_id="vs_123", client_sync=client_sync)
 
-    class _FileSyncFixedList(_FileSyncNoWait):
+    class _FileSyncFixedList(FileSync):
         def list_all_vector_store_files(self, vector_store_id: str) -> list[object]:
             assert vector_store_id == "vs_123"
             return [_VectorStoreFile(file_id="file-1", id="vsf_1")]
@@ -105,7 +97,7 @@ def test_remove_file_from_vs_and_oai_relies_on_openai_delete_detachment() -> Non
     client_sync = _FakeClientSync(attached_file_ids=attached_file_ids)
     agent = _FakeAgent(vs_id="vs_123", client_sync=client_sync)
 
-    sync = _FileSyncNoWait(agent)
+    sync = FileSync(agent)
     sync.remove_file_from_vs_and_oai("file-1")
 
     assert client_sync.vector_stores.files.detached_file_ids == []
@@ -113,9 +105,9 @@ def test_remove_file_from_vs_and_oai_relies_on_openai_delete_detachment() -> Non
     assert attached_file_ids == set()
 
 
-def test_wait_for_vector_store_file_absence_uses_retrieve_not_list() -> None:
-    """Absence polling should use retrieve (list can be stale)."""
-    attached_file_ids: set[str] = set()
+def test_remove_file_from_vs_and_oai_polls_vector_store_via_retrieve() -> None:
+    """Removal waits should poll Vector Store via retrieve, not list."""
+    attached_file_ids = {"file-1"}
     client_sync = _FakeClientSync(attached_file_ids=attached_file_ids)
     agent = _FakeAgent(vs_id="vs_123", client_sync=client_sync)
 
@@ -124,7 +116,9 @@ def test_wait_for_vector_store_file_absence_uses_retrieve_not_list() -> None:
             raise AssertionError("list should not be used for absence polling")
 
     sync = _FileSyncNoList(agent)
-    sync._wait_for_vector_store_file_absence(vector_store_id="vs_123", file_id="file-1", timeout_seconds=0.01)
+    sync.remove_file_from_vs_and_oai("file-1")
+
+    assert client_sync.vector_stores.files.retrieve_calls == [("vs_123", "file-1")]
 
 
 def test_sync_with_folder_skips_invalid_vector_store_file_ids() -> None:
@@ -133,7 +127,7 @@ def test_sync_with_folder_skips_invalid_vector_store_file_ids() -> None:
     client_sync = _FakeClientSync(attached_file_ids=attached_file_ids)
     agent = _FakeAgent(vs_id="vs_123", client_sync=client_sync)
 
-    class _FileSyncFixedList(_FileSyncNoWait):
+    class _FileSyncFixedList(FileSync):
         def list_all_vector_store_files(self, vector_store_id: str) -> list[object]:
             return [
                 _VectorStoreFile(file_id=None, id=123),
