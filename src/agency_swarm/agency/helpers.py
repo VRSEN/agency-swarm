@@ -1,11 +1,6 @@
 # --- Agency helper utility functions ---
-import functools
-import importlib
-import inspect
 import logging
-import os
 from copy import deepcopy
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from agents import Agent as SDKAgent
@@ -18,50 +13,6 @@ if TYPE_CHECKING:
 from agency_swarm.utils.thread import ThreadLoadCallback, ThreadSaveCallback
 
 logger = logging.getLogger(__name__)
-
-
-def get_external_caller_directory(*, internal_package: str = "agency_swarm") -> str:
-    """Return the directory of the first caller outside this package.
-
-    Used to resolve relative paths (e.g. "./instructions.md") against the user's module file.
-    Falls back to the current working directory when no file-backed caller is found.
-    """
-    internal_root = _get_package_root(internal_package)
-    if internal_root is None:
-        return os.getcwd()
-
-    frame = None
-    try:
-        frame = inspect.currentframe()
-        while frame is not None:
-            filename = frame.f_code.co_filename
-            if filename and not filename.startswith("<"):
-                module_path = Path(filename).resolve(strict=False)
-                if not module_path.is_relative_to(internal_root):
-                    return str(module_path.parent)
-
-            frame = frame.f_back
-    except Exception:
-        pass
-    finally:
-        # Prevent reference cycles
-        del frame
-
-    return os.getcwd()
-
-
-@functools.lru_cache(maxsize=8)
-def _get_package_root(package_name: str) -> Path | None:
-    try:
-        module = importlib.import_module(package_name)
-    except Exception:
-        return None
-
-    module_file = getattr(module, "__file__", None)
-    if not module_file:
-        return None
-
-    return Path(module_file).resolve(strict=False).parent
 
 
 def handle_deprecated_agency_args(
@@ -159,11 +110,6 @@ def handle_deprecated_agency_args(
         logger.warning(f"Unknown parameter '{key}' passed to Agency constructor.")
 
     return final_load_threads_callback, final_save_threads_callback, deprecated_args_used
-
-
-def get_class_folder_path(agency: "Agency") -> str:
-    """Return the absolute path of the directory where this agency was instantiated."""
-    return get_external_caller_directory()
 
 
 def read_instructions(agency: "Agency", path: str) -> None:

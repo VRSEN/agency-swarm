@@ -13,10 +13,12 @@ from agency_swarm.agent.execution_streaming import StreamingRunResponse
 from agency_swarm.hooks import PersistenceHooks
 from agency_swarm.streaming.utils import EventStreamMerger
 from agency_swarm.tools.mcp_manager import default_mcp_manager
-from agency_swarm.utils.thread import ThreadLoadCallback, ThreadManager, ThreadSaveCallback
 
 # Import split module functions
-from .helpers import get_class_folder_path, handle_deprecated_agency_args, read_instructions
+from agency_swarm.utils.files import get_external_caller_directory
+from agency_swarm.utils.thread import ThreadLoadCallback, ThreadManager, ThreadSaveCallback
+
+from .helpers import handle_deprecated_agency_args, read_instructions
 from .setup import (
     configure_agents,
     initialize_agent_runtime_state,
@@ -179,7 +181,7 @@ class Agency:
         # Handle shared instructions - can be a string or a file path
         if shared_instructions:
             # Check if it's a file path relative to the class location
-            class_relative_path = os.path.join(get_class_folder_path(self), shared_instructions)
+            class_relative_path = os.path.join(get_external_caller_directory(), shared_instructions)
             if os.path.isfile(class_relative_path):
                 read_instructions(self, class_relative_path)
             elif os.path.isfile(shared_instructions):

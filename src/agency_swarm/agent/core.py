@@ -508,6 +508,6 @@ class Agent(BaseAgent[MasterContext]):
 
     def get_class_folder_path(self) -> str:
         """Return the absolute path to the folder where this agent was instantiated."""
-        from agency_swarm.agency.helpers import get_external_caller_directory
+        from agency_swarm.utils.files import get_external_caller_directory
 
         return get_external_caller_directory()
