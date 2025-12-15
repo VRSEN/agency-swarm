@@ -4,11 +4,12 @@ import logging
 import time
 from collections.abc import Mapping
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from agents.exceptions import AgentsException
 from openai import NotFoundError, OpenAI
 from openai._types import NOT_GIVEN, omit
+from openai.types.vector_stores import VectorStoreFile
 
 logger = logging.getLogger(__name__)
 
@@ -42,9 +43,9 @@ class FileSync:
                     logger.debug(f"Agent {self.agent.name}: Skipping file id parse for {entry.name}: {e}")
         return local_ids
 
-    def list_all_vector_store_files(self, vector_store_id: str) -> list[Any]:
+    def list_all_vector_store_files(self, vector_store_id: str) -> list[VectorStoreFile]:
         client: OpenAI = self.agent.client_sync
-        all_files: list[Any] = []
+        all_files: list[VectorStoreFile] = []
         after_cursor: str | None = None
         while True:
             resp = client.vector_stores.files.list(
@@ -93,10 +94,7 @@ class FileSync:
 
         orphan_file_ids: list[str] = []
         for vs_file in vs_files:
-            file_id = getattr(vs_file, "file_id", None) or getattr(vs_file, "id", None)
-            if not isinstance(file_id, str) or not file_id:
-                continue
-
+            file_id = vs_file.id
             if file_id in local_file_ids:
                 continue
 

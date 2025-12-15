@@ -10,8 +10,7 @@ from agency_swarm.agent.file_sync import FileSync
 
 @dataclass(frozen=True)
 class _VectorStoreFile:
-    file_id: str | None = None
-    id: object | None = None
+    id: str
 
 
 class _FakeFilesClient:
@@ -81,7 +80,7 @@ def test_sync_with_folder_file_delete_detaches_from_vector_store() -> None:
     class _FileSyncFixedList(FileSync):
         def list_all_vector_store_files(self, vector_store_id: str) -> list[object]:
             assert vector_store_id == "vs_123"
-            return [_VectorStoreFile(file_id="file-1", id="vsf_1")]
+            return [_VectorStoreFile(id="file-1")]
 
     sync = _FileSyncFixedList(agent)
     sync.sync_with_folder()
@@ -119,24 +118,3 @@ def test_remove_file_from_vs_and_oai_polls_vector_store_via_retrieve() -> None:
     sync.remove_file_from_vs_and_oai("file-1")
 
     assert client_sync.vector_stores.files.retrieve_calls == [("vs_123", "file-1")]
-
-
-def test_sync_with_folder_skips_invalid_vector_store_file_ids() -> None:
-    """Vector store file entries without a valid string file id should be ignored."""
-    attached_file_ids: set[str] = set()
-    client_sync = _FakeClientSync(attached_file_ids=attached_file_ids)
-    agent = _FakeAgent(vs_id="vs_123", client_sync=client_sync)
-
-    class _FileSyncFixedList(FileSync):
-        def list_all_vector_store_files(self, vector_store_id: str) -> list[object]:
-            return [
-                _VectorStoreFile(file_id=None, id=123),
-                _VectorStoreFile(file_id="", id=""),
-                _VectorStoreFile(file_id=None, id=None),
-            ]
-
-    sync = _FileSyncFixedList(agent)
-    sync.sync_with_folder()
-
-    assert client_sync.vector_stores.files.detached_file_ids == []
-    assert client_sync.files.deleted_file_ids == []
