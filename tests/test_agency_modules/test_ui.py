@@ -2,6 +2,7 @@
 Tests for Agency Swarm visualization functionality.
 """
 
+import os
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
@@ -457,3 +458,36 @@ class TestMetadataDetails:
         assert len(ids) == len(set(ids))
         labels = [n["data"]["label"] for n in tool_nodes]
         assert "tavily-server" in labels and "youtube-server" in labels
+
+
+def test_copilot_demo_launcher_sets_client_facing_backend_url():
+    """Copilot demo must not use 0.0.0.0 or trailing slash for the frontend URL."""
+    from agency_swarm.ui.demos.copilot import CopilotDemoLauncher
+
+    agency = Agency(Agent(name="CEO", instructions="test"), name="CopilotDemoAgency")
+
+    expected = "http://localhost:8000/CopilotDemoAgency/get_response_stream"
+
+    original_path_exists = Path.exists
+
+    def fake_exists(self: Path) -> bool:
+        if self.name == "node_modules":
+            return True
+        return original_path_exists(self)
+
+    class _DummyProc:
+        def terminate(self) -> None:
+            return None
+
+    with (
+        patch("shutil.which", return_value="/usr/bin/npm"),
+        patch.object(Path, "exists", fake_exists),
+        patch("subprocess.Popen", return_value=_DummyProc()) as popen,
+        patch("agency_swarm.integrations.fastapi.run_fastapi", return_value=None),
+    ):
+        os.environ.pop("NEXT_PUBLIC_AG_UI_BACKEND_URL", None)
+        CopilotDemoLauncher.start(agency, host="0.0.0.0", port=8000)
+
+        assert os.environ["NEXT_PUBLIC_AG_UI_BACKEND_URL"] == expected
+        _args, kwargs = popen.call_args
+        assert "stdout" not in kwargs and "stderr" not in kwargs

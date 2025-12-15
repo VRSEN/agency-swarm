@@ -44,15 +44,15 @@ class CopilotDemoLauncher:
                     f"Failed to install frontend dependencies in {fe_path}. Please check your npm setup and try again."
                 ) from e
 
-        os.environ["NEXT_PUBLIC_AG_UI_BACKEND_URL"] = (
-            f"http://{host}:{port}/{getattr(agency_instance, 'name', None) or 'agency'}/get_response_stream/"
-        )
+        # Bind to 0.0.0.0 but advertise a client-connectable URL for the frontend.
+        # Also avoid a trailing slash: FastAPI will 307-redirect, which can break SSE clients.
+        client_host = "localhost" if host == "0.0.0.0" else host
+        agency_name = getattr(agency_instance, "name", None) or "agency"
+        os.environ["NEXT_PUBLIC_AG_UI_BACKEND_URL"] = f"http://{client_host}:{port}/{agency_name}/get_response_stream"
 
         proc = subprocess.Popen(
             [npm_exe, "run", "dev", "--", "-p", str(frontend_port)],
             cwd=fe_path,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.STDOUT,
         )
         atexit.register(proc.terminate)
         print(
