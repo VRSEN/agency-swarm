@@ -47,6 +47,7 @@ class MessageFormatter:
         agent_run_id: str | None = None,
         parent_run_id: str | None = None,
         run_trace_id: str | None = None,
+        timestamp: int | None = None,
     ) -> TResponseInputItem:
         """Add agency-specific metadata to a message.
 
@@ -56,6 +57,7 @@ class MessageFormatter:
             caller_agent: The sender agent name (None for user)
             agent_run_id: The current agent's execution ID
             parent_run_id: The calling agent's execution ID
+            timestamp: Optional timestamp (microseconds since epoch). If None, uses current time.
 
         Returns:
             dict[str, Any]: Message with added metadata
@@ -71,7 +73,12 @@ class MessageFormatter:
             modified_message["run_trace_id"] = run_trace_id  # type: ignore[typeddict-unknown-key]
         # Use microsecond precision to reduce timestamp collisions
         # time.time() returns seconds since epoch; multiply to get microseconds
-        modified_message["timestamp"] = int(time.time() * 1_000_000)  # type: ignore[typeddict-unknown-key]
+        # Priority: explicit timestamp param > existing timestamp in message > generate new
+        if timestamp is not None:
+            modified_message["timestamp"] = timestamp  # type: ignore[typeddict-unknown-key]
+        elif "timestamp" not in modified_message:
+            modified_message["timestamp"] = int(time.time() * 1_000_000)  # type: ignore[typeddict-unknown-key]
+        # else: preserve existing timestamp in the message
         # Add type field if not present (for easier parsing/navigation)
         if "type" not in modified_message:
             modified_message["type"] = "message"  # type: ignore[arg-type]
