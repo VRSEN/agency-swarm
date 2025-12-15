@@ -254,6 +254,8 @@ Strictness
 - Prefer domain-focused, descriptive names
 
 ## Git Practices
+- **Establish dashboard first**: Before any git operation, run `git branch --show-current`, `git status --short`, `git diff --name-only`, and `git diff --cached --name-only` to know exactly where you are and what has changed.
+- **Never merge directly to protected branches**: Always create PRs for merging to `main` or other protected branches—direct merges are prohibited.
 - Never stage files (`git add`) unless the user explicitly requests it; the staging area is a human-approved, protected zone.
 - Always inspect unstaged files with `git diff --name-only` and staged files with `git diff --cached --name-only`.
 - If the working tree is not clean or there is any confusion/ambiguity, report to the user immediately with a clear description of the problem and an explicit question before proceeding.
@@ -278,6 +280,7 @@ Strictness
   - Re-run the commit with the SAME commit message (do not alter the message when retrying)
 - Prefer TDD for behavioral changes:
   - When practical, add a failing test first; then implement the fix and capture the pass.
+  - For regression tests on fix branches, prove value by checking out just the test file to the target branch (e.g., `git checkout fix-branch -- tests/path/test_file.py`) and running it—it must fail. Then apply the fix and confirm it passes.
   - For docs/formatting and clearly non-functional edits, use common sense—validate with CI instead of adding tests.
 - Eliminate duplication immediately. Prefer consolidating tests/code instead of leaving placeholders.
 - Test naming and scope:
