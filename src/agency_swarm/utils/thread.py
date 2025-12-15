@@ -202,15 +202,14 @@ class ThreadManager:
         return self._store.get_conversation_between(agent, caller_agent)
 
     def get_all_messages(self) -> list[TResponseInputItem]:
-        """Get all messages in the store, properly ordered.
+        """Get all messages in the store.
 
         Returns:
-            list[TResponseInputItem]: All messages in chronological order
+            list[TResponseInputItem]: All messages in semantic order (insertion order)
         """
-        messages = self._store.messages.copy()
-        # Sort by timestamp to maintain chronological order
-        messages.sort(key=lambda m: cast(dict, m).get("timestamp", 0) or 0)  # Ensure numeric return
-        return messages
+        # Return in insertion order
+        # Timestamps are preserved for diagnostic purposes but don't drive ordering.
+        return self._store.messages.copy()
 
     def _save_messages(self) -> None:
         """Save all messages using the callback if configured."""
